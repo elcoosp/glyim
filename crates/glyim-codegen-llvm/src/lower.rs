@@ -1292,9 +1292,22 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 ProjectionElem::Downcast(variant_idx) => {
                     let layout_computer =
                         FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
-                    let layout = layout_computer
-                        .layout_of(current_ty)
-                        .expect("layout_of failed for downcast");
+                    // P2-B8 (KNOWN_GAPS §8.2): a layout failure here is a
+                    // compiler bug (the ADT was registered but its layout
+                    // could not be computed — e.g. an unsized payload, a
+                    // recursive field cycle past the depth guard, or a
+                    // primitive `Param` that monomorphization missed).
+                    // `expect()` on that turned it into an opaque ICE with
+                    // no diagnostic context. Emit an `internal_error`
+                    // diagnostic instead so the message names the type.
+                    let layout = match layout_computer.layout_of(current_ty) {
+                        Ok(l) => l,
+                        Err(e) => {
+                            return Err(vec![GlyimDiagnostic::internal_error(format!(
+                                "layout_of failed for downcast on {current_ty:?}: {e:?}"
+                            ))]);
+                        }
+                    };
                     if let VariantsShape::Multiple {
                         tag_size,
                         tag_align,
