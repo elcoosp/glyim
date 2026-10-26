@@ -54,9 +54,23 @@
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
+/// Default upper bound on the cache's on-disk size.
+///
+/// **P1-O2 (KNOWN_GAPS §7):** the cache previously grew unbounded — every
+/// distinct (source, target, opt, has_main) combination left a `.o` file
+/// in `objects/` forever. Long-running users (or a busy CI host) would
+/// silently fill the disk. This default (~1 GiB) is enough for tens of
+/// thousands of normal compiles and small enough that a developer laptop
+/// notices nothing. Overridable via `GLYIM_CACHE_MAX_BYTES`.
+pub const DEFAULT_MAX_BYTES: u64 = 1 << 30; // 1 GiB
+
 /// A content-addressed object-file cache.
 pub struct CompileCache {
     root: PathBuf,
+    /// Upper bound on total on-disk size of `objects/`, in bytes. `None`
+    /// disables eviction entirely (useful for tests that don't want to
+    /// touch the filesystem).
+    max_bytes: Option<u64>,
 }
 
 impl CompileCache {
@@ -67,7 +81,11 @@ impl CompileCache {
         // miss and `store` will no-op, which is exactly the "no cache"
         // behaviour. Never fatal.
         let _ = std::fs::create_dir_all(root.join("objects"));
-        Self { root }
+        let max_bytes = match std::env::var("GLYIM_CACHE_MAX_BYTES") {
+            Ok(v) => v.parse::<u64>().ok(),
+            Err(_) => Some(DEFAULT_MAX_BYTES),
+        };
+        Self { root, max_bytes }
     }
 
     /// Open the cache at the process-wide default location.
@@ -214,12 +232,154 @@ impl CompileCache {
             let _ = std::fs::rename(&tmp, &dest);
         }
         let _ = std::fs::remove_file(&tmp);
+        // P1-O2: trim the cache to `max_bytes`. Best-effort — a failure to
+        // read a directory entry, stat a file, or remove an old object is
+        // not fatal (a missed eviction just means the cache is slightly
+        // over budget for one more run).
+        self.evict_if_needed();
+    }
+
+    /// Evict oldest files from `objects/` until total size is under
+    /// `max_bytes` (or the directory is empty). The current `store` call
+    /// has already renamed the fresh object into place, so this never
+    /// evicts the object we just wrote unless `max_bytes` is somehow
+    /// smaller than that file itself (in which case the caller asked for
+    /// a cache smaller than a single object — deleting the newly-written
+    /// file would be more hostile than briefly exceeding the budget).
+    ///
+    /// **P1-O2 (KNOWN_GAPS §7).** Called once per `store`; no background
+    /// task, no per-store directory walk when under budget.
+    fn evict_if_needed(&self) {
+        let Some(max) = self.max_bytes else { return };
+        let Ok(entries) = std::fs::read_dir(self.objects_dir()) else { return };
+
+        struct Entry {
+            path: PathBuf,
+            size: u64,
+            mtime: std::time::SystemTime,
+        }
+        let mut files: Vec<Entry> = Vec::new();
+        let mut total: u64 = 0;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            // Skip non-objects (`.tmp` files from concurrent writers,
+            // subdirectories, etc.). The `.o` suffix is the write-time
+            // contract from `object_path`.
+            if path.extension().and_then(|s| s.to_str()) != Some("o") {
+                continue;
+            }
+            let Ok(meta) = entry.metadata() else { continue };
+            if !meta.is_file() {
+                continue;
+            }
+            total = total.saturating_add(meta.len());
+            let mtime = meta
+                .modified()
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+            files.push(Entry { path, size: meta.len(), mtime });
+        }
+        if total <= max {
+            return;
+        }
+        // Oldest first. Ties broken by path so behaviour is deterministic.
+        files.sort_by(|a, b| a.mtime.cmp(&b.mtime).then_with(|| a.path.cmp(&b.path)));
+        let mut removed = 0u64;
+        for entry in files {
+            if total <= max {
+                break;
+            }
+            if std::fs::remove_file(&entry.path).is_ok() {
+                total -= entry.size;
+                removed += entry.size;
+            }
+        }
+        let _ = removed; // suppress unused on the no-eviction path
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // P1-O2 (KNOWN_GAPS §7): eviction. Write N objects, each 1 KiB, into
+    // a cache with max_bytes = 2 KiB, and assert that only ~2 KiB survive.
+    // Uses a manual max_bytes override so GLYIM_CACHE_MAX_BYTES in the
+    // surrounding environment doesn't affect the test.
+    #[test]
+    fn cache_evicts_oldest_files_when_over_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        // Open, then force a tiny budget. `open` already picked up the
+        // env-based default; override here.
+        let mut cache = CompileCache::open(dir.path());
+        cache.max_bytes = Some(2048);
+
+        // Write 6 distinct 1 KiB objects.
+        let src_dir = dir.path().join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        let mut keys: Vec<String> = Vec::new();
+        for i in 0..6 {
+            let src = src_dir.join(format!("src{i}.bin"));
+            let body = vec![b'x'; 1024];
+            std::fs::write(&src, &body).unwrap();
+            let key = format!("key{i}");
+            cache.store(&key, &src);
+            keys.push(key);
+            // Ensure distinct mtimes so oldest-first is deterministic on
+            // filesystems with 1 s mtime granularity.
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+
+        // Sum the surviving .o files.
+        let entries = std::fs::read_dir(cache.objects_dir()).unwrap();
+        let mut total: u64 = 0;
+        let mut surviving_keys: Vec<String> = Vec::new();
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.extension().and_then(|s| s.to_str()) != Some("o") {
+                continue;
+            }
+            let meta = entry.metadata().unwrap();
+            total += meta.len();
+            if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                surviving_keys.push(stem.to_string());
+            }
+        }
+        assert!(
+            total <= 2048,
+            "cache should be <= 2 KiB after eviction, is {} bytes; survivors: {:?}",
+            total,
+            surviving_keys
+        );
+        // Newest (key5) must survive — it was just stored.
+        assert!(
+            cache.lookup("key5").is_some(),
+            "newest object must survive eviction; survivors: {:?}",
+            surviving_keys
+        );
+        // Oldest (key0) must be gone.
+        assert!(
+            cache.lookup("key0").is_none(),
+            "oldest object must be evicted; survivors: {:?}",
+            surviving_keys
+        );
+    }
+
+    // P1-O2: when under budget, no files are evicted.
+    #[test]
+    fn cache_does_not_evict_under_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = CompileCache::open(dir.path()); // DEFAULT_MAX_BYTES = 1 GiB
+        let src_dir = dir.path().join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        for i in 0..3 {
+            let src = src_dir.join(format!("src{i}.bin"));
+            std::fs::write(&src, vec![b'y'; 100]).unwrap();
+            cache.store(&format!("k{i}"), &src);
+        }
+        for i in 0..3 {
+            assert!(cache.lookup(&format!("k{i}")).is_some());
+        }
+    }
 
     #[test]
     fn key_is_stable_and_input_sensitive() {
