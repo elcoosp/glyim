@@ -11,8 +11,14 @@ path = "src/bin/glyip.rs"
 
 [features]
 registry = ["reqwest", "flate2", "tar"]
-llvm = []
 default = ["registry"]
+# P2-A7 (KNOWN_GAPS §8.1): removed the dead `llvm = []` feature. It was
+# declared but never referenced by any `cfg(feature = "llvm")` — the
+# codegen backend is a non-optional dependency (`glyim-codegen-llvm`).
+# The only mention of the string in the codebase was a *comment* in
+# `commands.rs:715` noting that the old `#[cfg(feature = "llvm")]` gate
+# was removed. Keeping a `--features llvm` in the manifest that has no
+# effect is a foot-gun: users could enable it and expect LLVM codegen.
 
 [dependencies]
 semver = { workspace = true }
