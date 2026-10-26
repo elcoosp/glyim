@@ -3497,8 +3497,37 @@ impl<'a> FnCtxt<'a> {
                 let allowed = builtin_ok || adt_ok || user_impl_ok;
                 if allowed {
                     if mn == "into" {
-                        let var = self.infer.new_ty_var(self.ctx);
-                        let out_ty = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
+                        // P1-C1 (production-readiness plan §6, `into` tail).
+                        // Mirror the `clone` arm's Copy path: for a direct
+                        // Copy receiver (no reference wrapper), the only
+                        // sound lowering is a plain operand use (identity
+                        // conversion), so the resolved output type is the
+                        // receiver type itself. Without this,
+                        // `let y: i32 = x.into();` on `x: i32` resolved to
+                        // the stdlib blanket impl `impl<T> Into<T> for T`
+                        // (FnDefId 477, convert.g), whose body is not
+                        // collected into the mono set — LLVM emitted a
+                        // `declare` with no `define` and the linker failed
+                        // with `Undefined symbols: ___glyim_fn_477`.
+                        //
+                        // The Copy path is *not* applied to `&T` receivers:
+                        // `&i32.into()` would otherwise return `&i32` yet
+                        // lowering still sees a Copy sentinel and emits a
+                        // `Use` of the reference, which is only correct for
+                        // `&T -> &T`. Non-direct-Copy receivers keep the
+                        // existing fresh-infer-var shape; the caller's
+                        // use-site unification will bind it to the intended
+                        // target.
+                        let is_direct_copy = !matches!(
+                            self.ctx.ty_kind(step_ty),
+                            TyKind::Ref(_, _, _)
+                        ) && self.ctx.is_copy(step_ty);
+                        let out_ty = if is_direct_copy {
+                            step_ty
+                        } else {
+                            let var = self.infer.new_ty_var(self.ctx);
+                            self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)))
+                        };
                         let fn_id = FnDefId::from_raw(u32::MAX - 1);
                         return Some((out_ty, fn_id));
                     }
@@ -4174,10 +4203,59 @@ impl<'a> FnCtxt<'a> {
                 TyKind::Adt(id, _) if matches!(id.to_raw(), 1020 | 1040 | 1050)
             )
         };
+        // P1-C1 (`into` tail): Copy primitive receivers must consult
+        // `try_builtin_method` *before* the user-impl scan. Otherwise
+        // `i32.into()` resolves to the stdlib blanket impl
+        // `impl<T> Into<T> for T` (convert.g), whose body is not
+        // collected into the mono set — LLVM emits a `declare` with no
+        // `define` and the linker fails with `Undefined symbols:
+        // ___glyim_fn_477`. This has to be a *pre-check* (not just the
+        // `candidates.is_empty()` fallback further down) because the
+        // impl scan finds the blanket impl before that fallback runs.
+        //
+        // The set is deliberately narrow: arithmetic primitives plus
+        // `bool`/`char`, along with their `Ref`/`RawPtr`/`Tuple`/
+        // `FnPtr`/`FnDef` forms. ADT receivers (including user-defined
+        // Copy structs) are excluded so a user `impl Into<X> for
+        // MyStruct` is not shadowed by the sentinel.
+        let is_primitive_copy_shape = |this: &Self, t: Ty| -> bool {
+            let direct = matches!(
+                this.ctx.ty_kind(t),
+                TyKind::Int(_)
+                    | TyKind::Uint(_)
+                    | TyKind::Float(_)
+                    | TyKind::Bool
+                    | TyKind::Char
+                    | TyKind::RawPtr(_, _)
+                    | TyKind::Tuple(_)
+                    | TyKind::FnPtr(_)
+                    | TyKind::FnDef(_, _)
+            );
+            if direct {
+                return true;
+            }
+            matches!(
+                this.ctx.ty_kind(t),
+                TyKind::Ref(_, inner, _)
+                    if matches!(
+                        this.ctx.ty_kind(*inner),
+                        TyKind::Int(_)
+                            | TyKind::Uint(_)
+                            | TyKind::Float(_)
+                            | TyKind::Bool
+                            | TyKind::Char
+                            | TyKind::RawPtr(_, _)
+                            | TyKind::Tuple(_)
+                            | TyKind::FnPtr(_)
+                            | TyKind::FnDef(_, _)
+                    )
+            )
+        };
         if matches!(
             self.ctx.ty_kind(recv_ty),
             TyKind::Slice(_) | TyKind::Array(..) | TyKind::String
         ) || is_builtin_adt(self, recv_ty)
+            || is_primitive_copy_shape(self, recv_ty)
             || matches!(
                 self.ctx.ty_kind(recv_ty),
                 TyKind::Ref(_, inner, _)
