@@ -133,6 +133,35 @@ jobs:
       - name: Run runtime tests (verifies Windows process signaling, Phase 6.4)
         run: cargo nextest run -p glyim-runtime
 
+  # P2-O6 (KNOWN_GAPS §8.4): MSRV gate.
+  #
+  # `rust-version = "1.85"` in the root `Cargo.toml` is a *promise*. Before
+  # this job, nothing in CI checked it — a `cargo update` or a new
+  # nightly-only language feature could land and silently break MSRV.
+  #
+  # `cargo check --workspace --all-targets` (not `cargo test`) is
+  # intentional: MSRV is about "does this compile on the declared
+  # minimum", and running the whole test suite on 1.85 would multiply
+  # the runtime without adding MSRV coverage. `--all-targets` catches
+  # MSRV regressions in test code too, not just in lib/bin crates.
+  #
+  # LLVM 23 is a hard dependency of the workspace (per README), so we
+  # install it exactly like the other jobs. The `llvm.sh` installer
+  # is independent of the Rust toolchain's version.
+  msrv:
+    name: MSRV (1.85)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LLVM 23
+        <<: *llvm23-ubuntu
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv-1.85
+      - name: cargo check (MSRV 1.85)
+        run: cargo check --workspace --all-targets
   miri-check:
     name: Miri (nightly, type/check crates)
     runs-on: ubuntu-latest
