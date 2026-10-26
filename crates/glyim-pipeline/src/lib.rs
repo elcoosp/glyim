@@ -141,6 +141,34 @@ pub(crate) struct PreparedCompilation {
     pub pre_opt_bodies: Vec<(String, Arc<Body>)>,
     /// Non-error diagnostics accumulated during the front half.
     pub warnings: Vec<GlyimDiagnostic>,
+    /// P2-A3: bodies removed by `body_is_raw_generic` before emission.
+    /// Empty in the common case (empirically: a typical stdlib `hello.g`
+    /// compile drops zero). Each entry names the mangled symbol a call
+    /// site would reference, and the reason the filter matched.
+    ///
+    /// **Status: infrastructure only.** The field is populated on every
+    /// compile but has no consumer yet — `PreparedCompilation` is
+    /// `pub(crate)`, so external crates (including the CLI) cannot read
+    /// it. The full P2-A3 story ("correlate a link-time
+    /// `undefined symbol __glyim_fn_XXX` with this filter") requires
+    /// either exposing this field on `CompileArtifacts` or emitting a
+    /// per-symbol warning into the diagnostic sink. That last mile is
+    /// deferred to a dedicated session. Recording the drops now is the
+    /// prerequisite, so the follow-up is a small wiring change rather
+    /// than a re-plumb.
+    #[allow(dead_code)]
+    pub dropped_raw_generic: Vec<DroppedRawGenericBody>,
+}
+
+/// P2-A3: one body dropped by `Pipeline::prepare_compilation`'s
+/// raw-generic filter. See [`PreparedCompilation::dropped_raw_generic`].
+#[derive(Debug, Clone)]
+pub struct DroppedRawGenericBody {
+    /// Mangled symbol a call site would reference (e.g. `__glyim_fn_42`).
+    /// Matches a linker's `Undefined symbols:` line.
+    pub symbol: String,
+    /// Human-readable reason the filter matched.
+    pub reason: &'static str,
 }
 
 /// Load a crate's source into the VFS and **flatten its external modules**.
@@ -799,12 +827,41 @@ impl Pipeline {
         // (return_ty is `Param`/`Bound`/`Projection`) before emission. These
         // leak through mono and would ICE `fn_abi_of` on `UnknownType(Param)`.
         // See `body_is_raw_generic` for why we only test the return type.
+        //
+        // P2-A3: every dropped symbol is recorded on `dropped_raw_generic`
+        // (returned on `PreparedCompilation`) so a downstream link error
+        // (`undefined symbol __glyim_fn_XXX`) can be correlated with this
+        // filter instead of being a silent mystery. The `GLYIM_TMP_FILT`
+        // env-gated `eprintln!` trace is preserved unchanged.
+        let mut dropped_raw_generic: Vec<DroppedRawGenericBody> = Vec::new();
         {
             let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
             let ty_ctx_ref = ty_ctx_guard.as_ref();
-            let before = all_bodies.len();
-            all_bodies.retain(|(_sym, b)| !body_is_raw_generic(b, ty_ctx_ref));
-            let dropped = before - all_bodies.len();
+            let mut kept: Vec<(String, Arc<Body>)> = Vec::new();
+            for (sym, body) in std::mem::take(&mut all_bodies) {
+                if body_is_raw_generic(&body, ty_ctx_ref) {
+                    let reason = match ty_ctx_ref.ty_kind(body.return_ty) {
+                        glyim_type::TyKind::Param(_) => {
+                            "return type is a generic parameter"
+                        }
+                        glyim_type::TyKind::Bound(_, _) => {
+                            "return type is a bound variable"
+                        }
+                        glyim_type::TyKind::Projection(_) => {
+                            "return type is an associated-type projection"
+                        }
+                        _ => "return type is unmonomorphizable",
+                    };
+                    dropped_raw_generic.push(DroppedRawGenericBody {
+                        symbol: sym,
+                        reason,
+                    });
+                } else {
+                    kept.push((sym, body));
+                }
+            }
+            all_bodies = kept;
+            let dropped = dropped_raw_generic.len();
             if dropped > 0 && std::env::var_os("GLYIM_TMP_FILT").is_some() {
                 eprintln!(
                     "[GLYIM_FILT] dropped {} raw-generic bodies from all_bodies",
@@ -840,6 +897,7 @@ impl Pipeline {
             all_bodies,
             pre_opt_bodies,
             warnings,
+            dropped_raw_generic,
         })
     }
 
