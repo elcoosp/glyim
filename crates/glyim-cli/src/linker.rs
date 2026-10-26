@@ -111,6 +111,25 @@ impl LinkerInvoker for MsvcLinker {
     }
 }
 
+/// P1-O3 (KNOWN_GAPS §7): probe whether `name` is a runnable program on
+/// the current `PATH`. Used only to pick a sensible default linker on
+/// Windows; a false negative just means the fallback name is used, which
+/// still surfaces a clean "linker not found" error if neither exists.
+fn which_on_path(name: &str) -> bool {
+    if cfg!(not(target_os = "windows")) {
+        return Command::new("which")
+            .arg(name)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+    }
+    Command::new("where")
+        .arg(name)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 /// Assemble the flat flag string from structured `LinkArgs` (plan §18.2):
 /// `-L<path>` for each search path, then `-l<name>` for each requested
 /// library, then the extra object files, and finally free-form `user_flags`.
@@ -174,15 +193,23 @@ pub fn find_runtime_staticlib() -> Option<std::path::PathBuf> {
     } else {
         "release"
     };
-    let candidates = [
-        std::path::PathBuf::from("target")
-            .join(profile)
-            .join("libglyim_runtime.a"),
-        std::path::PathBuf::from("..")
-            .join("target")
-            .join(profile)
-            .join("libglyim_runtime.a"),
-    ];
+    // P1-O3 (KNOWN_GAPS §7): MSVC's convention is `glyim_runtime.lib`,
+    // not Unix's `libglyim_runtime.a`. The pre-fix code only tried the
+    // Unix-style name, so `--emit=exec` on Windows never found a
+    // runtime library and link failed with `undefined reference to
+    // glyim_alloc` (or similar). Try both names in every search path;
+    // on Unix the `.lib` variants don't exist so this is a no-op.
+    let names = ["libglyim_runtime.a", "glyim_runtime.lib"];
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    for name in names.iter() {
+        candidates.push(std::path::PathBuf::from("target").join(profile).join(name));
+        candidates.push(
+            std::path::PathBuf::from("..")
+                .join("target")
+                .join(profile)
+                .join(name),
+        );
+    }
     for c in &candidates {
         if c.exists() {
             return Some(c.clone());
@@ -190,13 +217,15 @@ pub fn find_runtime_staticlib() -> Option<std::path::PathBuf> {
     }
     if let Ok(exe) = std::env::current_exe() {
         for ancestor in exe.ancestors() {
-            let candidate = ancestor.join("libglyim_runtime.a");
-            if candidate.exists() {
-                return Some(candidate);
-            }
-            let sibling = ancestor.join(profile).join("libglyim_runtime.a");
-            if sibling.exists() {
-                return Some(sibling);
+            for name in names.iter() {
+                let candidate = ancestor.join(name);
+                if candidate.exists() {
+                    return Some(candidate);
+                }
+                let sibling = ancestor.join(profile).join(name);
+                if sibling.exists() {
+                    return Some(sibling);
+                }
             }
         }
     }
@@ -213,8 +242,20 @@ pub fn link_with_args(
     target_triple: Option<&str>,
 ) -> Result<(), String> {
     // Detect platform to choose default linker
+    // P1-O3 (KNOWN_GAPS §7): on Windows, prefer `lld-link.exe` (shipped
+    // with LLVM 23, which every Glyim install already requires for the
+    // codegen backend) over MSVC's `link.exe`; fall back to `link.exe`
+    // when lld-link isn't on PATH. Callers that set `--linker` still win.
+    // The probe is a cheap `where` / `which` — failure means "not on
+    // PATH", not "not installed somewhere else". If neither is found,
+    // default to `link.exe` and let the actual invocation surface the
+    // missing-linker error, exactly as the pre-fix code did on Unix.
     let default_linker = if cfg!(target_os = "windows") {
-        "link.exe"
+        if which_on_path("lld-link.exe") {
+            "lld-link.exe"
+        } else {
+            "link.exe"
+        }
     } else {
         "cc"
     };
