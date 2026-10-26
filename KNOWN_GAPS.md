@@ -925,7 +925,7 @@ misalignment at the source. The fix is likely a one-line change in the
 alignment lookup — the layout engine (`glyim-layout`) already knows the
 correct per-field alignment; the codegen just isn't consulting it.
 
-#### 3.5.6 — P1-C6 CLOSED (struct-variant patterns) + P1-C1 second half CLOSED (Vec::clone)
+#### 3.5.6 — P1-C6 CLOSED (struct-variant patterns) + P1-C1 CLOSED (clone + into, all paths)
 
 Two of the outstanding issues resolved this session:
 
@@ -991,8 +991,48 @@ Verified (both backends):
 
 Fixture: `tests/run-pass/behavior/vec_clone.g`
 
-**Not pushed** at the time of writing (per user instruction); both
-commits are local-ahead-of-origin at `0793fd61`.
+**P1-C1 third path — `into` on Copy primitives** — `5a39f52e`.
+
+`let y: i32 = x.into();` on `x: i32` (with `--with-stdlib`) resolved
+to the stdlib blanket impl `impl<T> Into<T> for T` in
+`crates/glyim-lang-core/lib/convert.g` (FnDefId 477). That impl's
+*body* is not collected into the mono set, so `--emit=exec` produced
+an object with a `declare @__glyim_fn_477` and no `define`, and the
+link failed with `Undefined symbols: ___glyim_fn_477`. Without
+`--with-stdlib` the sentinel path was already correct (`u32::MAX - 1`
+→ `lower_rvalue.rs:562`'s `is_copy_sentinel` arm → plain `Use` of the
+operand), so the bug was invisible to every no-stdlib test.
+
+Root cause was **ordering**, not lowering. `resolve_method_call`
+(typing, `check_expr.rs`) has two calls into `try_builtin_method`:
+a pre-check guard (for slice/array/str/builtin-ADT receivers) that
+runs *before* the user-impl scan, and a fallback that runs only when
+`candidates.is_empty()`. Primitive receivers fell through the
+pre-check (no primitive arm), so the impl scan found the bodyless
+blanket impl and returned it — `try_builtin_method` never saw the
+call.
+
+Two changes in `crates/glyim-typeck/src/check_expr.rs`:
+
+  * `try_builtin_method`'s `into` arm now returns the receiver type
+    as the output type when `is_copy(step_ty)` and the receiver is
+    not behind a reference; the fresh-infer-var shape is preserved
+    for `&T` and non-Copy receivers.
+  * The pre-check guard now also matches `Int`/`Uint`/`Float`/
+    `Bool`/`Char`/`RawPtr`/`Tuple`/`FnPtr`/`FnDef`, plus references
+    to any of them, so `try_builtin_method` sees primitive receivers
+    before the impl scan does.
+
+Verification (both deltas are loud when broken):
+  * `let y: i32 = x.into();` on `x: i32` → 42 (was a link error)
+  * `let _y: u32 = x.into();` on `x: i32` → `[T0001] mismatched types:
+    i32 vs u32` (would silently become 0 if the `is_copy` guard
+    returned a fresh infer var)
+  * `x.clone()` on `i32` → 7 (no regression)
+  * `--emit=exec` with and without `--with-stdlib`, LLVM backend
+  * Full workspace: 4605/4605
+
+Fixture: `tests/run-pass/behavior/into_copy_primitive.g`
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
