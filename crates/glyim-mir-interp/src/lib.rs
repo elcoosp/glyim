@@ -444,6 +444,18 @@ impl<'tcx> Interpreter<'tcx> {
                 let v = self.builtin_deref(&receiver)?;
                 Ok(Some(v.clone()))
             }
+            // BC-IS-POWER-OF-TWO (P1-C2): shared by u8/u32/u64/usize.
+            // Rust semantics: x != 0 && (x & (x - 1)) == 0.
+            (_, "is_power_of_two") => {
+                let v = self.builtin_deref(&receiver)?;
+                let n: u128 = match &v {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                let r = n != 0 && (n & (n.wrapping_sub(1))) == 0;
+                Ok(Some(InterpValue::Bool(r)))
+            }
             (1050, "clear") | (1061, "clear") => {
                 let v = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
                     *v = InterpValue::String(String::new());

@@ -4694,6 +4694,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 | "pop"
                 | "insert"
                 | "reserve"
+                | "is_power_of_two"
                 | "is_some"
                 | "is_none"
                 | "is_ok"
@@ -5420,6 +5421,90 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             return Ok(true);
         }
 
+        // BC-IS-POWER-OF-TWO (P1-C2): `u8/u32/u64/usize::is_power_of_two()
+        // -> bool`. Rust semantics: `x != 0 && (x & (x - 1)) == 0`.
+        // Needed by stdlib `alloc.g`'s `Layout::from_size_align` (which
+        // validates the alignment), which in turn is required by every
+        // allocation path (`Box::new`, `Vec::with_capacity`, ...).
+        if method == "is_power_of_two" {
+            let Some(recv_op) = args.first() else {
+                return Ok(false);
+            };
+            let recv_v = self.lower_operand(recv_op)?;
+            if !recv_v.is_int_value() {
+                return Ok(false);
+            }
+            let iv = recv_v.into_int_value();
+            let zero = iv.get_type().const_zero();
+            let one = iv.get_type().const_int(1, false);
+            let is_zero = self
+                .builder
+                .build_int_compare(inkwell::IntPredicate::EQ, iv, zero, "ipo_zero")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "is_power_of_two eq: {e:?}"
+                    ))]
+                })?;
+            let minus_one = self
+                .builder
+                .build_int_sub(iv, one, "ipo_m1")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "is_power_of_two sub: {e:?}"
+                    ))]
+                })?;
+            let and = self
+                .builder
+                .build_and(iv, minus_one, "ipo_and")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "is_power_of_two and: {e:?}"
+                    ))]
+                })?;
+            let and_zero = self
+                .builder
+                .build_int_compare(inkwell::IntPredicate::EQ, and, zero, "ipo_andz")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "is_power_of_two andz: {e:?}"
+                    ))]
+                })?;
+            let not_zero = self
+                .builder
+                .build_not(is_zero, "ipo_nz")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "is_power_of_two not: {e:?}"
+                    ))]
+                })?;
+            let result = self
+                .builder
+                .build_and(not_zero, and_zero, "ipo_res")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "is_power_of_two final and: {e:?}"
+                    ))]
+                })?;
+            let dp = self.place_ptr(destination)?;
+            self.builder
+                .build_store(dp, result)
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "is_power_of_two store: {e:?}"
+                    ))]
+                })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("is_power_of_two target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "is_power_of_two branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
         // BC-CLEAR: `Vec::<T>::clear` / `String::clear` / `str::clear`.
         // BC-ITER: `<[T]>::iter(&self) -> &[T]` and `iter_mut`.
         // For the slice receivers (`&[T]`/`&mut [T]`) this is pure
