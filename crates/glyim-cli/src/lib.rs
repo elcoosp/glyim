@@ -208,21 +208,64 @@ with the input file and the backtrace.",
 /// diagnostic on its own line, suitable for editor/LSP consumption.
 fn print_diagnostics(diags: &[glyim_diag::GlyimDiagnostic], format: &str) {
     if format == "json" {
+        // P1-O5 (KNOWN_GAPS §5): JSON diagnostics schema v1.
+        //
+        // Each diagnostic is emitted as **one JSON object per line** on
+        // **stdout** (Rust's `--message-format=json` convention — a
+        // consumer piping stdout gets clean, machine-parseable records;
+        // stderr is reserved for human-readable notes and is empty in
+        // JSON mode).
+        //
+        // Schema:
+        //   {
+        //     "version": 1,                // bump on incompatible change
+        //     "code": "T0001",             // ErrorCode Display (unchanged)
+        //     "severity": "error",         // lowercase; error/warning/note/help
+        //     "message": "...",
+        //     "spans": [
+        //       {
+        //         "file": 4294967295,      // FileId raw (mirrors the
+        //                                  // compiler's internal id — LSP
+        //                                  // maps it back to a path via
+        //                                  // the file's SourceMap, same as
+        //                                  // `--error-format=human`'s
+        //                                  // `FileId(N)` display)
+        //         "lo": 114788,            // byte offset
+        //         "hi": 114805
+        //       }, ...
+        //     ]
+        //   }
+        //
+        // Previously: no `version`, no `file`, severity was `Debug`
+        // (capital "Error" instead of lowercase — mismatched against
+        // common editor / CI JSON schemas), and the output went to
+        // stderr (Rust puts it on stdout).
         for d in diags {
             let spans: Vec<serde_json::Value> = std::iter::once(&d.span.primary)
                 .chain(d.span.secondary.iter().map(|(s, _)| s))
                 .map(|s| {
                     let r = s.range();
-                    serde_json::json!({ "lo": r.start, "hi": r.end })
+                    serde_json::json!({
+                        "file": s.file.to_raw(),
+                        "lo": r.start,
+                        "hi": r.end,
+                    })
                 })
                 .collect();
+            let severity_str = match d.severity {
+                glyim_diag::DiagSeverity::Error => "error",
+                glyim_diag::DiagSeverity::Warning => "warning",
+                glyim_diag::DiagSeverity::Note => "note",
+                glyim_diag::DiagSeverity::Help => "help",
+            };
             let obj = serde_json::json!({
+                "version": 1,
                 "code": format!("{}", d.code),
-                "severity": format!("{:?}", d.severity),
+                "severity": severity_str,
                 "message": d.message,
                 "spans": spans,
             });
-            eprintln!("{}", obj);
+            println!("{}", obj);
         }
     } else {
         for d in diags {
