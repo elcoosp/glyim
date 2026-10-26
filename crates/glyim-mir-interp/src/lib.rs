@@ -225,6 +225,40 @@ impl<'tcx> Interpreter<'tcx> {
     /// writes `value` into the destination and jumps to `target`),
     /// `Ok(None)` when the callee is not a builtin this dispatcher knows,
     /// `Err` for a genuine runtime failure (e.g. `unwrap` on `None`).
+    /// P1-C2 batch 1: infer the receiver's bit-width from the operand's
+    /// local type. Required by the bit-manipulation intrinsics
+    /// (`leading_zeros`, `trailing_zeros`, `count_zeros`, `next_power_of_two`)
+    /// whose semantics depend on the integer width for `x == 0` and the
+    /// overflow case. Projected places return `None` (the caller surfaces
+    /// an explicit panic rather than silently miscompiling).
+    fn operand_bit_width(&self, op: Option<&Operand>) -> Option<u32> {
+        let op = op?;
+        let place = match op {
+            Operand::Copy(p) | Operand::Move(p) => p,
+            _ => return None,
+        };
+        if !place.projection.is_empty() {
+            return None;
+        }
+        let decl = self
+            .local_decls
+            .as_slice()
+            .get(place.local.to_raw() as usize)?;
+        match self.tcx.ty_kind(decl.ty) {
+            glyim_type::TyKind::Uint(glyim_core::primitives::UintTy::U8) => Some(8),
+            glyim_type::TyKind::Uint(glyim_core::primitives::UintTy::U16) => Some(16),
+            glyim_type::TyKind::Uint(glyim_core::primitives::UintTy::U32) => Some(32),
+            glyim_type::TyKind::Uint(glyim_core::primitives::UintTy::U64) => Some(64),
+            glyim_type::TyKind::Uint(glyim_core::primitives::UintTy::Usize) => Some(64),
+            glyim_type::TyKind::Int(glyim_core::primitives::IntTy::I8) => Some(8),
+            glyim_type::TyKind::Int(glyim_core::primitives::IntTy::I16) => Some(16),
+            glyim_type::TyKind::Int(glyim_core::primitives::IntTy::I32) => Some(32),
+            glyim_type::TyKind::Int(glyim_core::primitives::IntTy::I64) => Some(64),
+            glyim_type::TyKind::Int(glyim_core::primitives::IntTy::Isize) => Some(64),
+            _ => None,
+        }
+    }
+
     fn try_call_builtin(
         &mut self,
         callee_id: &DefId,
@@ -455,6 +489,107 @@ impl<'tcx> Interpreter<'tcx> {
                 };
                 let r = n != 0 && (n & (n.wrapping_sub(1))) == 0;
                 Ok(Some(InterpValue::Bool(r)))
+            }
+            // P1-C2 batch 1: `count_ones` / `count_zeros` / `leading_zeros`
+            // / `trailing_zeros` / `next_power_of_two` on unsigned integers.
+            // Rust semantics on the zero case: `leading_zeros(0) == width`,
+            // `trailing_zeros(0) == width`; `next_power_of_two(0) == 1`.
+            // Overflow of `next_power_of_two` (x > 2^(width-1)) wraps to 0
+            // to mirror the LLVM backend's current behavior; the fixture
+            // does not exercise that case.
+            (_, "count_ones") => {
+                let v = self.builtin_deref(&receiver)?;
+                let n: u128 = match &v {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                Ok(Some(InterpValue::Uint(n.count_ones() as u128)))
+            }
+            (_, "count_zeros") => {
+                let v = self.builtin_deref(&receiver)?;
+                let n: u128 = match &v {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
+                    InterpError::Panic(
+                        "interp: count_zeros: cannot determine receiver bit width".into(),
+                    )
+                })?;
+                let mask: u128 = (1u128 << width) - 1;
+                let trimmed = n & mask;
+                Ok(Some(InterpValue::Uint(
+                    (width as u128) - (trimmed.count_ones() as u128),
+                )))
+            }
+            (_, "leading_zeros") => {
+                let v = self.builtin_deref(&receiver)?;
+                let n: u128 = match &v {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
+                    InterpError::Panic(
+                        "interp: leading_zeros: cannot determine receiver bit width".into(),
+                    )
+                })?;
+                let mask: u128 = (1u128 << width) - 1;
+                let trimmed = n & mask;
+                let lz: u128 = if trimmed == 0 {
+                    width as u128
+                } else {
+                    (width as u128) - (128u128 - (trimmed.leading_zeros() as u128))
+                };
+                Ok(Some(InterpValue::Uint(lz)))
+            }
+            (_, "trailing_zeros") => {
+                let v = self.builtin_deref(&receiver)?;
+                let n: u128 = match &v {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
+                    InterpError::Panic(
+                        "interp: trailing_zeros: cannot determine receiver bit width".into(),
+                    )
+                })?;
+                let mask: u128 = (1u128 << width) - 1;
+                let trimmed = n & mask;
+                let tz: u128 = if trimmed == 0 {
+                    width as u128
+                } else {
+                    trimmed.trailing_zeros() as u128
+                };
+                Ok(Some(InterpValue::Uint(tz)))
+            }
+            (_, "next_power_of_two") => {
+                let v = self.builtin_deref(&receiver)?;
+                let n: u128 = match &v {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
+                    InterpError::Panic(
+                        "interp: next_power_of_two: cannot determine receiver bit width".into(),
+                    )
+                })?;
+                let result: u128 = if n <= 1 {
+                    1
+                } else {
+                    let x_minus_1 = n - 1;
+                    let bits_used = 128u32 - x_minus_1.leading_zeros();
+                    if bits_used >= width {
+                        0
+                    } else {
+                        1u128 << bits_used
+                    }
+                };
+                Ok(Some(InterpValue::Uint(result)))
             }
             (1050, "clear") | (1061, "clear") => {
                 let v = self.mutate_receiver(arg_operands.first(), args.first(), |v| {

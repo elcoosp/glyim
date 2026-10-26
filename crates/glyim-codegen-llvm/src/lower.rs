@@ -4708,6 +4708,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 | "insert"
                 | "reserve"
                 | "is_power_of_two"
+                | "count_ones"
+                | "count_zeros"
+                | "leading_zeros"
+                | "trailing_zeros"
+                | "next_power_of_two"
                 | "is_some"
                 | "is_none"
                 | "is_ok"
@@ -5513,6 +5518,244 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
                             "is_power_of_two branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+        // BC-P1-C2-BATCH1: unsigned-integer bit-manipulation intrinsics.
+        // `count_ones` / `count_zeros` / `leading_zeros` / `trailing_zeros` /
+        // `next_power_of_two`. Each routes through the LLVM intrinsic
+        // (`llvm.ctpop.iN`, `llvm.ctlz.iN`, `llvm.cttz.iN`), declared on
+        // demand per bit width. Rust semantics for the zero case:
+        // `leading_zeros(0) == bit_width`, `trailing_zeros(0) == bit_width`
+        // (the `is_zero_poison` argument on ctlz/cttz is `false`).
+        //
+        // `next_power_of_two(x)` uses `1 << (bit_width - ctlz(x - 1))` with
+        // a `select` on `x <= 1` (so `x == 0` and `x == 1` both yield 1).
+        // Overflow (`x > 2^(bit_width - 1)`) is currently a poison-shift
+        // (release-style wrap to 0); a follow-up will emit an overflow
+        // trap. Batch 1 fixture does not exercise the overflow case.
+        if matches!(
+            method.as_str(),
+            "count_ones"
+                | "count_zeros"
+                | "leading_zeros"
+                | "trailing_zeros"
+                | "next_power_of_two"
+        ) {
+            let Some(recv_op) = args.first() else {
+                return Ok(false);
+            };
+            let recv_v = self.lower_operand(recv_op)?;
+            if !recv_v.is_int_value() {
+                return Ok(false);
+            }
+            let iv = recv_v.into_int_value();
+            let int_ty = iv.get_type();
+            let width = int_ty.get_bit_width();
+            let width_iv = int_ty.const_int(width as u64, false);
+            let one_iv = int_ty.const_int(1, false);
+            let bool_ty = self.context.bool_type();
+            let false_flag: inkwell::values::BasicMetadataValueEnum<'ctx> =
+                bool_ty.const_zero().into();
+
+            let result_iv: inkwell::values::IntValue<'ctx> = match method.as_str() {
+                "count_ones" => {
+                    let fn_ty = int_ty.fn_type(&[int_ty.into()], false);
+                    let name = format!("llvm.ctpop.i{width}");
+                    let fv = self
+                        .module
+                        .get_function(&name)
+                        .unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    self.builder
+                        .build_call(fv, &[iv.into()], "popc")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "count_ones call: {e:?}"
+                            ))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error("count_ones void")]
+                        })?
+                        .into_int_value()
+                }
+                "count_zeros" => {
+                    let fn_ty = int_ty.fn_type(&[int_ty.into()], false);
+                    let name = format!("llvm.ctpop.i{width}");
+                    let fv = self
+                        .module
+                        .get_function(&name)
+                        .unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    let popc = self
+                        .builder
+                        .build_call(fv, &[iv.into()], "cz_popc")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "count_zeros call: {e:?}"
+                            ))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error("count_zeros void")]
+                        })?
+                        .into_int_value();
+                    self.builder.build_int_sub(width_iv, popc, "cz_sub").map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "count_zeros sub: {e:?}"
+                        ))]
+                    })?
+                }
+                "leading_zeros" => {
+                    let fn_ty = int_ty.fn_type(&[int_ty.into(), bool_ty.into()], false);
+                    let name = format!("llvm.ctlz.i{width}");
+                    let fv = self
+                        .module
+                        .get_function(&name)
+                        .unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    self.builder
+                        .build_call(fv, &[iv.into(), false_flag], "lz")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "leading_zeros call: {e:?}"
+                            ))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error("leading_zeros void")]
+                        })?
+                        .into_int_value()
+                }
+                "trailing_zeros" => {
+                    let fn_ty = int_ty.fn_type(&[int_ty.into(), bool_ty.into()], false);
+                    let name = format!("llvm.cttz.i{width}");
+                    let fv = self
+                        .module
+                        .get_function(&name)
+                        .unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    self.builder
+                        .build_call(fv, &[iv.into(), false_flag], "tz")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "trailing_zeros call: {e:?}"
+                            ))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error("trailing_zeros void")]
+                        })?
+                        .into_int_value()
+                }
+                "next_power_of_two" => {
+                    let x_minus_1 = self
+                        .builder
+                        .build_int_sub(iv, one_iv, "npo_sub")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "next_power_of_two sub: {e:?}"
+                            ))]
+                        })?;
+                    let fn_ty = int_ty.fn_type(&[int_ty.into(), bool_ty.into()], false);
+                    let name = format!("llvm.ctlz.i{width}");
+                    let fv = self
+                        .module
+                        .get_function(&name)
+                        .unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    let lz = self
+                        .builder
+                        .build_call(fv, &[x_minus_1.into(), false_flag], "npo_lz")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "next_power_of_two ctlz: {e:?}"
+                            ))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error(
+                                "next_power_of_two ctlz void",
+                            )]
+                        })?
+                        .into_int_value();
+                    let shift = self
+                        .builder
+                        .build_int_sub(width_iv, lz, "npo_shift")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "next_power_of_two shift: {e:?}"
+                            ))]
+                        })?;
+                    let pow2 = self
+                        .builder
+                        .build_left_shift(one_iv, shift, "npo_pow2")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "next_power_of_two shl: {e:?}"
+                            ))]
+                        })?;
+                    let x_le_1 = self
+                        .builder
+                        .build_int_compare(inkwell::IntPredicate::ULE, iv, one_iv, "npo_le1")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "next_power_of_two cmp: {e:?}"
+                            ))]
+                        })?;
+                    self.builder
+                        .build_select(x_le_1, one_iv, pow2, "npo_sel")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "next_power_of_two select: {e:?}"
+                            ))]
+                        })?
+                        .into_int_value()
+                }
+                _ => unreachable!(),
+            };
+
+            let dest_ty = self.place_ty(destination);
+            let dest_int_ty = self.llvm_type_for_ty(dest_ty)?.into_int_type();
+            let stored = if result_iv.get_type() == dest_int_ty {
+                result_iv
+            } else if result_iv.get_type().get_bit_width() > dest_int_ty.get_bit_width() {
+                self.builder
+                    .build_int_truncate(result_iv, dest_int_ty, "bint_trunc")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "{} trunc: {e:?}",
+                            method
+                        ))]
+                    })?
+            } else {
+                self.builder
+                    .build_int_z_extend(result_iv, dest_int_ty, "bint_zext")
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "{} zext: {e:?}",
+                            method
+                        ))]
+                    })?
+            };
+            let dp = self.place_ptr(destination)?;
+            self.builder.build_store(dp, stored).map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "{} store: {e:?}",
+                    method
+                ))]
+            })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("bit intrinsic target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "{} branch: {e:?}",
+                            method
                         ))]
                     })?;
             }
