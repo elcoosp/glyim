@@ -993,3 +993,61 @@ Fixture: `tests/run-pass/behavior/vec_clone.g`
 
 **Not pushed** at the time of writing (per user instruction); both
 commits are local-ahead-of-origin at `0793fd61`.
+
+#### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
+
+Investigated 2026-10-26 during session 19. The audit's P2-B1
+(*"For-loop fallback executes body once with a dummy binding when
+`next: None`"*) framed this as a silent miscompile reachable from
+ordinary source. It is not.
+
+**What the fallback actually fires for.** The `ExprKind::For` lowering
+arm `next: None` (in `lower_rvalue.rs`) fires only when BOTH:
+  * typeck did not attach a resolved `Iterator::next` to the `For`
+    THIR node, AND
+  * `LowerCtx::iterator_next_fn` returned `None` for the iterable.
+
+For real user code, neither condition holds: typeck's "not iterable"
+gate in `check_expr.rs` runs *before* lowering and rejects a concrete
+non-iterable head with `[T0001] <ty> is not iterable` (verified:
+`for x in 5` fails at typeck, never reaching lowering). When a real
+`Iterator::next` exists, typeck threads it through the THIR node
+(the "Phase 1 GLYIM_DESTUB_PLAN" wiring).
+
+The fallback fires in exactly two situations:
+
+  1. **Raw generic templates.** `prepare_compilation` lowers every
+     body once (to catch type errors even in unused generics). A
+     body like stdlib `Iterator::last(self)` → `for x in self` where
+     `self: I` and `I: Iterator` reaches the fallback because `I`
+     isn't monomorphised yet. The whole body is then *discarded* by
+     the pipeline's `body_is_raw_generic` filter — the "silent body-
+     once" never becomes MIR for codegen.
+
+  2. **Mock test contexts** that construct a `thir::For` node by hand
+     without a `Next` (the 3 tests in `glyim-lower::tests::for_loop*`).
+
+**Attempted fix (reverted).** Adding `GlyimDiagnostic::internal_error`
+in the fallback arm fires on case (1) above — the stdlib generic
+`for x in self` bodies. That broke `stdlib_full_probe`,
+`glyip run`, `with_stdlib_flag_is_accepted`, and `ui_corpus` in one
+shot. Guarding the diagnostic to only concrete iterable types would
+avoid case (1) but reintroduces the same false-positive risk elsewhere
+in the pipeline wherever generics are lowered speculatively.
+
+**Correct characterisation.** The fallback is a **defensive escape
+hatch for a compiler-bug class**, not a live user-facing miscompile.
+The audit's P2-B1 "silent miscompile" severity is inflated: no
+reachable user program triggers it. If a future typeck regression
+bypasses the not-iterable gate, the correct fix is in *typeck*
+(assert that every `For` reaching lowering has a `next` or an array/
+range/`as_slice` shape), not a lower-time diagnostic.
+
+**What to do if the audit is re-applied.** Before wiring a diagnostic
+into the fallback, prove that stdlib raw-generic bodies aren't
+affected (`stdlib_full_probe` + `glyip run` + `ui_corpus` all still
+green). The naive fix, tried and reverted this session, does not pass
+that bar.
+
+**Status.** Reviewed, no change needed. Documented to prevent a
+future session from repeating the reverted attempt.
