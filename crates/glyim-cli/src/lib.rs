@@ -493,10 +493,17 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
         .with_opt_level(args.opt_level)
         .with_opt_for_size(false)
         .with_lto(lto);
-    // Only emit a C-ABI `main` entry symbol for `--emit=exec`; a cdylib or
-    // plain object must not carry a `main` (it would be an unused/conflicting
-    // entry point). `obj`/`cdylib` consumers link `main` themselves if needed.
-    if let (Some(main_id), EmitKind::Exec | EmitKind::Obj) = (entry_main, emit) {
+    // P2-A6 (KNOWN_GAPS §8.1): only emit a C-ABI `main` entry symbol for
+    // `--emit=exec`. A cdylib or plain object must not carry a `main` — it
+    // would be an unused/conflicting entry point, and `obj`/`cdylib`
+    // consumers link `main` themselves if needed. Before this fix the
+    // match included `EmitKind::Obj`, so `--emit=obj` produced an object
+    // with `main` (contradicting this comment), AND that object shared a
+    // compile-cache key with `--emit=cdylib` (whose cache key records
+    // `has_entry_main=false` because the key only checks `Exec`) —
+    // meaning a cached `--emit=cdylib` object and a cached `--emit=obj`
+    // object with the *same input* would be silently mixed up.
+    if let (Some(main_id), EmitKind::Exec) = (entry_main, emit) {
         llvm = llvm.with_entry_main(main_id);
     }
 
