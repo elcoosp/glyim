@@ -162,16 +162,43 @@ pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
                 panic_msg,
                 backtrace,
             );
-            let path = std::env::temp_dir().join("glyim-ice.txt");
-            let _ = std::fs::write(&path, &report);
+            // P1-O4 (KNOWN_GAPS §5): use a unique ICE path instead of the
+            // fixed `glyim-ice.txt` (which two concurrent compilations would
+            // overwrite for each other, and which a symlink could redirect).
+            // `tempfile::Builder::keep` creates a unique file with the given
+            // prefix and returns its path.
+            let ice_path = tempfile::Builder::new()
+                .prefix("glyim-ice-")
+                .suffix(".txt")
+                .tempfile()
+                .ok()
+                .and_then(|f| f.keep().ok().map(|(_, p)| p));
+            let path_display = match &ice_path {
+                Some(p) => {
+                    let _ = std::fs::write(p, &report);
+                    p.display().to_string()
+                }
+                None => {
+                    // Fallback if tempfile fails — still try the old path.
+                    let p = std::env::temp_dir().join("glyim-ice.txt");
+                    let _ = std::fs::write(&p, &report);
+                    p.display().to_string()
+                }
+            };
             eprintln!(
                 "error: glyim panicked (ICE). Backtrace saved to {}:
 
 please file a bug report at <https://github.com/elcoosp/glyim/issues> \
 with the input file and the backtrace.",
-                path.display()
+                path_display
             );
-            Err(vec![glyim_diag::GlyimDiagnostic::internal_error(report)])
+            // P1-O4: an ICE is a compiler bug, not a user error — exit 101
+            // (Rust's conventional ICE code) so scripts can distinguish it
+            // from a compile error (1) or CLI misuse (2). The message above
+            // is the user-facing signal; the returned diagnostics are kept
+            // for API compatibility but are not re-printed.
+            let _ = glyim_diag::GlyimDiagnostic::internal_error(report);
+            std::process::exit(101);
         }
     }
 }
