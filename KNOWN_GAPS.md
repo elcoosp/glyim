@@ -1611,6 +1611,67 @@ Verified:
   * `cargo nextest run -p glyip` — 213/213 (211 existing + P2-F1 #3 + this test)
   * full workspace — 4611/4611
 
+#### 3.5.15 — P2-F4: git dependencies cloned full history
+
+CLOSED (`995b30c7`). `GitCommandFetcher::fetch` in `crates/glyip/src/dep.rs`
+did a full-history `git clone --no-checkout <url>` for a fresh cache
+entry, and `git fetch --all` on an existing one. For the common case —
+a dependency pinned at one tag or branch — that transferred every commit
+since the repository was created. Cargo avoids this with shallow clones;
+`glyip` did not.
+
+**Fix — shallow-first, full-history fallback.** The four git arg vectors
+are now produced by pure helper functions (`shallow_clone_args`,
+`full_clone_args`, `shallow_fetch_args`), and `fetch` uses them in this
+order:
+
+  * **Fresh clone.** `git clone --no-checkout --depth 1 <url> <dest>`.
+    If the server refuses (rare — some self-hosted git servers disable
+    shallow support), fall back to a full clone with a `tracing::warn!`
+    naming the URL so a slow clone is self-explaining.
+  * **Non-tip rev.** When the requested `rev` is not the default-branch
+    tip (a tag, a non-default branch), a best-effort
+    `git fetch --depth 1 origin <rev>` pulls it. Failure is deliberately
+    non-fatal here: the subsequent `git checkout <rev>` fails loudly if
+    the rev really is unreachable, which is the correct conservative
+    behavior — a partial clone that silently omits the target should
+    not "succeed".
+  * **Existing clone.** `git fetch --depth 1 origin <rev>` instead of
+    `fetch --all`. Same reasoning and same fallback.
+
+**Reachable-SHA caveat.** `git fetch --depth 1 origin <sha>` requires
+the server to advertise `uploadpack.allowReachableSHA1InWant`. GitHub,
+GitLab, and Gitea enable it; some bare self-hosted servers do not. On
+refusal, the fresh-clone path falls back to `full_clone_args` (which
+does not need it, since `clone` will contain every reachable commit),
+and the existing-clone path falls back to `fetch --all`. Neither case
+is worse than before — both were already `--depth`-free. The `warn!`
+naming the URL is what makes a "why is this still slow" report
+traceable.
+
+**Scope of testability.** The helpers are `pub(crate)`, and 3 new unit
+tests in `glyip::tests::dep_git` assert:
+
+  * `shallow_clone_args` contains exactly `["clone", "--no-checkout",
+    "--depth", "1", <url>, <dest>]`.
+  * `full_clone_args` deliberately lacks `--depth` — the point of the
+    fallback is to not be shallow.
+  * `shallow_fetch_args` is `["fetch", "--depth", "1", "origin",
+    <rev>]` and explicitly does *not* contain `--all` — that
+    distinction is the entire bug.
+
+`fetch` itself is not exercised end-to-end in unit tests (it shells out
+to the system `git`); the helpers were extracted precisely so the arg
+vectors could be pinned without a real server. The `MockGitFetcher`
+operates one layer up, at the `GitFetcher` trait, so it cannot see the
+git invocation. This split is documented as a known coverage boundary,
+not an oversight.
+
+Verified:
+  * `cargo check -p glyip --tests` — warning-free
+  * `cargo nextest run -p glyip` — 216/216 (213 existing + 3 new)
+  * full workspace — 4614/4614
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
