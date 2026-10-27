@@ -456,3 +456,100 @@ fn path_dep_stored_relative_to_project_dir() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+
+/// P2-F2: a registry client that reports a non-default `base_url_display`.
+/// The `fetch_index` and `download_crate` impls are `unimplemented!()`
+/// because the test never calls them — the resolver's lockfile-write path
+/// is reached via a pre-populated local `CrateIndex`, and only
+/// `base_url_display` matters for provenance.
+#[derive(Debug)]
+struct CustomUrlRegistryClient {
+    url: String,
+}
+
+impl RegistryClient for CustomUrlRegistryClient {
+    fn base_url_display(&self) -> String {
+        self.url.clone()
+    }
+
+    fn fetch_index(&self, _name: &str) -> crate::error::GlyipResult<IndexEntry> {
+        unimplemented!("test never fetches from the registry")
+    }
+
+    fn download_crate(
+        &self,
+        _name: &str,
+        _version: &str,
+        _expected_checksum: Option<&str>,
+        _dest: &Path,
+    ) -> crate::error::GlyipResult<PathBuf> {
+        unimplemented!("test never downloads")
+    }
+}
+
+#[test]
+fn custom_registry_url_recorded_in_lockfile() {
+    // P2-F2: `CrateSource::Registry { url }` must record the *actual*
+    // registry the crate was resolved against, not a hardcoded public-index
+    // URL. Before this fix, a user pointing glyip at a corporate mirror got
+    // a lockfile claiming every dep came from `https://index.glyim.dev`.
+    let custom = "https://internal-mirror.example/glyim";
+
+    let mut index = CrateIndex::new();
+    index.insert(IndexEntry {
+        name: "widget".to_string(),
+        versions: vec!["1.0.0".to_string()],
+        dependencies: Default::default(),
+        checksums: HashMap::new(),
+    });
+
+    let resolver = DependencyResolver::new(index).with_registry_client(Box::new(
+        CustomUrlRegistryClient {
+            url: custom.to_string(),
+        },
+    ));
+
+    let project_dir = TempDir::new().unwrap();
+    let config = GlyipToml {
+        package: PackageConfig {
+            name: "root".to_string(),
+            version: "0.1.0".to_string(),
+            edition: "2024".to_string(),
+            authors: Vec::new(),
+            description: None,
+            bin: None,
+            lib: None,
+        },
+        dependencies: {
+            let mut m = BTreeMap::new();
+            m.insert(
+                "widget".to_string(),
+                Dependency::Simple("1.0.0".to_string()),
+            );
+            m
+        },
+        dev_dependencies: BTreeMap::new(),
+    };
+
+    let lock = resolver.resolve(&config, project_dir.path()).unwrap();
+
+    let widget = lock
+        .get_crate("widget", "1.0.0")
+        .expect("widget must be in lockfile");
+
+    match &widget.source {
+        CrateSource::Registry { url, .. } => {
+            assert_eq!(
+                url, custom,
+                "P2-F2: lockfile must record the actual registry URL, \
+                 not the hardcoded public index"
+            );
+            assert_ne!(
+                url, "https://index.glyim.dev",
+                "P2-F2: the public-index URL must not appear when a \
+                 custom registry client was attached"
+            );
+        }
+        other => panic!("expected CrateSource::Registry, got {other:?}"),
+    }
+}

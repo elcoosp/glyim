@@ -712,6 +712,30 @@ impl DependencyResolver {
     /// Returns the [`LockedCrate`] plus the list of its own dependencies
     /// `(name, version_req, path)` so the caller can enqueue them for
     /// transitive resolution.
+    /// P2-F2: the base URL to record in a `CrateSource::Registry` entry.
+    ///
+    /// Prefers the attached `RegistryClient`'s `base_url_display()` so the
+    /// lockfile records the *actual* registry the crate was resolved
+    /// against (e.g. a corporate mirror, or a test mock). Falls back to
+    /// the public index only if no client is present — but that case is
+    /// unreachable in `resolve_registry_dep` today, since the same function
+    /// returns `DependencyNotFound` before reaching the lockfile-write
+    /// branch when `registry_client.is_none()`. The fallback is defensive
+    /// so a future caller cannot accidentally write an empty URL.
+    ///
+    /// Before this fix, the URL was hardcoded to `"https://index.glyim.dev"`
+    /// at the `CrateSource::Registry` construction site, so a user
+    /// resolving against a custom registry got a correct *download* (the
+    /// client used its own `self.base_url`) but a wrong *lockfile
+    /// provenance* entry — anyone reading the lockfile would see the
+    /// public index, not where the crate actually came from.
+    fn current_registry_base_url(&self) -> String {
+        self.registry_client
+            .as_ref()
+            .map(|c| c.base_url_display())
+            .unwrap_or_else(|| "https://index.glyim.dev".to_string())
+    }
+
     fn resolve_registry_dep(
         &self,
         name: &str,
@@ -789,7 +813,10 @@ impl DependencyResolver {
                     name: name.to_string(),
                     version,
                     source: CrateSource::Registry {
-                        url: "https://index.glyim.dev".to_string(),
+                        // P2-F2: record the actual registry the client
+                        // resolved against, not a hardcoded public-index
+                        // URL. See `current_registry_base_url`.
+                        url: self.current_registry_base_url(),
                         checksum,
                     },
                     dependencies: sub_deps
