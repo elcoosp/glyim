@@ -1103,6 +1103,67 @@ Verified (both backends, `--with-stdlib`):
 
 Fixture: `tests/run-pass/behavior/bit_methods_batch1.g`
 
+#### 3.5.8 — P1-C2 batch 1.5: full bit family; hardcoded-id fragility removed
+
+Two related changes, in two commits:
+
+**`9f9f2ed7` — hardcoded builtin id eliminated.**
+
+`lower_rvalue.rs` (for-loop desugaring) synthesized a call to
+`Vec::<T>::as_slice` by writing `FnDefId::from_raw(9144)` — a
+literal number that depended on the *registration order* in
+`TyCtxMut::register_builtin_methods`. Any added, removed, or
+reordered entry in that table shifted the id and made the
+synthesized call link against `__glyim_fn_XXXX` with no body. It was
+correct only by luck, and only until the next registry edit.
+
+Replaced with `TyCtx::builtin_method_fn_id(adt, name)` — a new
+reverse-lookup over the existing `builtin_fn_index` (linear scan;
+negligible cost on a compile-time lookup). The call site now says
+`.expect("Vec::as_slice builtin must be registered ...")`, so a
+future registry mistake is a clean panic with an actionable message
+at the exact call site instead of an undefined symbol at link time.
+
+**`f0a09d44` — bit-method family completed.**
+
+Three defects closed in `ty_ctx_mut.rs` and both backends:
+
+  * A *duplicate* `prim_bit_methods` block re-registered the same 14
+    entries into a second range of `next_builtin_fn_id` slots. The
+    second registration was dead (the first wins by later `.insert`
+    into `primitive_method_fns`, and the ids were never referenced).
+    Deleted — net saves 14 id slots.
+  * `leading_ones` / `trailing_ones` were not registered at all.
+    Any call was `[T0001] no method ... found`. Added to the
+    registry, LLVM dispatch (via `llvm.ctlz` / `llvm.cttz` of the
+    inverted value), and the interpreter (same identity, mask to
+    width so the zero case matches Rust).
+  * `u8` and `u64` were under-provisioned: `u8` had only
+    `is_power_of_two`; `u64` had 2 of 6. Both filled to full
+    8-method coverage (`is_power_of_two`, `next_power_of_two`,
+    `leading_zeros`, `trailing_zeros`, `count_ones`, `count_zeros`,
+    `leading_ones`, `trailing_ones`). Return types follow Rust:
+    bit-count methods return `u32`; `next_power_of_two` returns the
+    receiver type (`u8::next_power_of_two -> u8` is the exceptional
+    one the LLVM arm truncates to).
+
+The `prim_bit_methods` vec now holds 32 bit entries plus the 12
+pre-existing `min`/`max`/`clamp`/`abs` entries (44 total); each
+registration consumes one `next_builtin_fn_id` slot, so the range
+shifted +18 versus HEAD~2 — exactly the shift the hardcoded-id fix
+was landed first to survive.
+
+Verified (both backends, `--with-stdlib`):
+  * all 32 (type, method) pairs from the new fixture
+    (`bit_methods_full.g`) -> 0
+  * `Vec::push` / `Vec::len` on a fresh `Vec<i32>` -> 2
+  * for-loop desugaring after the registry shift -> 0
+  * `raw_vec.g` `next_power_of_two().max(8)` (the original reason
+    the 12 min/max entries existed) still resolves
+  * full workspace: 4605/4605
+
+Fixture: `tests/run-pass/behavior/bit_methods_full.g`
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
