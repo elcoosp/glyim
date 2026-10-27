@@ -1183,21 +1183,61 @@ impl GitFetcher for GitCommandFetcher {
 
     fn fetch(&self, url: &str, rev: &str, dest: &Path) -> GlyipResult<PathBuf> {
         let clone_target = dest.join(repo_cache_name(url));
-        if clone_target.join(".git").exists() {
-            // Existing clone: fetch latest and checkout the requested rev.
-            self.git(&["fetch", "--all"], Some(&clone_target))?;
+        let existing = clone_target.join(".git").exists();
+
+        if existing {
+            // P2-F4: shallow fetch of the *specific* revision. `--depth 1
+            // origin <rev>` transfers only the objects needed to reach that
+            // commit, versus the previous `fetch --all` which pulled every
+            // branch/tag/commit since the last sync. Fall back to full fetch
+            // when the server refuses a shallow SHA fetch (a few self-hosted
+            // servers require `uploadpack.allowReachableSHA1InWant`).
+            let shallow = self.git(&shallow_fetch_args(rev), Some(&clone_target));
+            if shallow.is_err() {
+                tracing::warn!(
+                    url = url,
+                    rev = rev,
+                    "shallow fetch refused by remote; falling back to full fetch --all (P2-F4)"
+                );
+                self.git(&["fetch", "--all"], Some(&clone_target))?;
+            }
         } else {
             std::fs::create_dir_all(&clone_target)?;
-            self.git(
-                &[
-                    "clone",
-                    "--no-checkout",
-                    url,
-                    clone_target.to_str().unwrap(),
-                ],
-                None,
-            )?;
+            let dest_str = clone_target
+                .to_str()
+                .ok_or_else(|| {
+                    GlyipError::RegistryError(
+                        "git cache path is not valid UTF-8".to_string(),
+                    )
+                })?
+                .to_string();
+
+            // P2-F4: shallow clone first. `--depth 1` fetches only the tip
+            // of the default branch, dropping the entire repository history.
+            // Then fetch the specific `rev` (if it is not the tip) at depth
+            // 1. This turns a typical "clone a crate at tag v1.0.0" from
+            // "transfer every commit since the project started" into
+            // "transfer the one tree at v1.0.0".
+            let shallow = self.git(&shallow_clone_args(url, &dest_str), None);
+            if shallow.is_err() {
+                tracing::warn!(
+                    url = url,
+                    "shallow clone refused by remote; falling back to full clone (P2-F4)"
+                );
+                // A failed shallow clone may leave a partial directory.
+                std::fs::remove_dir_all(&clone_target).ok();
+                std::fs::create_dir_all(&clone_target)?;
+                self.git(&full_clone_args(url, &dest_str), None)?;
+            } else {
+                // Best-effort depth-1 fetch of the target rev when it is not
+                // the default-branch tip (e.g. a tag or non-default branch).
+                // Failure is non-fatal: if the server refuses, the checkout
+                // below fails loudly with a `git checkout` error rather than
+                // pretending success.
+                let _ = self.git(&shallow_fetch_args(rev), Some(&clone_target));
+            }
         }
+
         // Resolve a symbolic rev (e.g. HEAD or a branch name) to a concrete commit.
         let resolved = if rev == "HEAD" {
             let out = self.git(&["rev-parse", "HEAD"], Some(&clone_target))?;
@@ -1209,3 +1249,27 @@ impl GitFetcher for GitCommandFetcher {
         Ok(clone_target)
     }
 }
+
+/// P2-F4: the `git clone` argument vector for a shallow clone.
+///
+/// Extracted from `fetch()` so a unit test can assert the `--depth 1` flag
+/// is present without shelling out to a real `git` binary. Shallow-first
+/// was added because the previous full clone transferred the entire
+/// repository history for a crate pinned at a single tag.
+pub(crate) fn shallow_clone_args<'a>(url: &'a str, dest: &'a str) -> Vec<&'a str> {
+    vec!["clone", "--no-checkout", "--depth", "1", url, dest]
+}
+
+/// P2-F4: fallback `git clone` arguments (full history). Used when the
+/// server refuses a shallow clone — some self-hosted git servers disable
+/// shallow support entirely.
+pub(crate) fn full_clone_args<'a>(url: &'a str, dest: &'a str) -> Vec<&'a str> {
+    vec!["clone", "--no-checkout", url, dest]
+}
+
+/// P2-F4: the `git fetch` argument vector for a shallow fetch of a single
+/// revision.
+pub(crate) fn shallow_fetch_args<'a>(rev: &'a str) -> Vec<&'a str> {
+    vec!["fetch", "--depth", "1", "origin", rev]
+}
+

@@ -405,3 +405,52 @@ fn conflict_error_names_both_requesters() {
         other => panic!("expected DependencyConflict, got {other:?}"),
     }
 }
+
+// P2-F4 regression tests. Extracted from `fetch()` as pure functions
+// precisely so the shallow-clone flags can be asserted without a real
+// `git` binary. The integration behavior (that `fetch` actually invokes
+// these arg vectors) is not covered by an automated test — GitCommandFetcher
+// shells out to the system `git`, and the mock operates at the
+// `GitFetcher` trait level, above where the args are constructed.
+
+#[test]
+fn p2_f4_shallow_clone_args_carry_depth_one() {
+    let args = crate::dep::shallow_clone_args("https://example.com/repo", "/tmp/x");
+    assert_eq!(
+        args,
+        vec!["clone", "--no-checkout", "--depth", "1", "https://example.com/repo", "/tmp/x"],
+        "shallow clone must specify --depth 1 and --no-checkout"
+    );
+    assert!(
+        args.windows(2).any(|w| w == ["--depth", "1"]),
+        "P2-F4: --depth 1 must be present"
+    );
+}
+
+#[test]
+fn p2_f4_full_clone_args_lack_depth() {
+    let args = crate::dep::full_clone_args("https://example.com/repo", "/tmp/x");
+    assert_eq!(
+        args,
+        vec!["clone", "--no-checkout", "https://example.com/repo", "/tmp/x"],
+        "full-clone fallback must NOT specify --depth (that's the whole point)"
+    );
+    assert!(
+        !args.contains(&"--depth"),
+        "the full-clone path is the fallback — depth flag must be absent"
+    );
+}
+
+#[test]
+fn p2_f4_shallow_fetch_args_target_specific_rev() {
+    let args = crate::dep::shallow_fetch_args("abc123def456");
+    assert_eq!(
+        args,
+        vec!["fetch", "--depth", "1", "origin", "abc123def456"],
+        "shallow fetch must target `origin <rev>` at depth 1"
+    );
+    assert!(
+        !args.contains(&"--all"),
+        "P2-F4: shallow fetch must NOT pull all refs (that was the bug)"
+    );
+}
