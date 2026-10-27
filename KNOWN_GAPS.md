@@ -1164,6 +1164,45 @@ Verified (both backends, `--with-stdlib`):
 
 Fixture: `tests/run-pass/behavior/bit_methods_full.g`
 
+#### 3.5.9 — P2-B2: bytecode backend silent-zero on unrecognized const kinds
+
+CLOSED. `crates/glyim-codegen/src/lib.rs::emit_operand` had a catch-all
+arm that emitted `OP_LOAD_CONST 0` for every `MirConstKind` it did not
+explicitly handle. `StaticRef` (a reference to a `static` item) and
+`Variant` (an enum-variant constant) fell through that arm — so a
+`static` read or a non-folded variant reference produced `0` instead
+of the address / discriminant. Silent wrong code, exactly the class
+P2-B2 called out.
+
+The same file already rejected `ConstRef` explicitly (`T114-PATCHED-BC`)
+with the reasoning that const evaluation must fold named constants
+before codegen. `StaticRef`/`Variant` were simply not given the same
+treatment.
+
+Both remaining silent arms now hard-error:
+
+  * `MirConstKind::VirtualMethod { .. }` — matches the LLVM backend,
+    which already had a hard rejection for this case (a
+    devirtualization bug is a compiler bug, not a lowering gap).
+  * catch-all `_` — a `GlyimDiagnostic::internal_error` that prints
+    the exact `MirConstKind` variant (`{:?}`) that reached codegen, so
+    a future report names the missing fold rather than showing a
+    mystery zero.
+
+Reachability check: the bytecode test corpus (`cargo nextest run
+-p glyim-codegen -p glyim-bytecode-vm`, 187 tests) passes unchanged
+with both arms hard-erroring, which confirms neither
+`StaticRef`/`Variant` (nor `VirtualMethod` post-devirtualization) is
+reachable in current lowering. The rejection is defensive: it
+converts a *hypothetical* silent miscompile into an immediate, named
+compiler error at the moment a future lowering change starts
+producing these kinds.
+
+Verified:
+  * `cargo nextest run -p glyim-codegen -p glyim-bytecode-vm` ->
+    187/187
+  * full workspace -> 4605/4605
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
