@@ -1372,6 +1372,83 @@ Verified this commit:
   * no caller relied on the dummy (grep — zero hits in `tests/` or
     `assertions/`)
 
+#### 3.5.12 — P1-C2 batch 2a: wrapping arithmetic (add/sub/mul)
+
+`wrapping_add` / `wrapping_sub` / `wrapping_mul` were registered in
+`TyCtxMut::register_builtin_methods` (for `u64`, `u32`, `usize`) but
+had no lowering in either backend — every call hit the P1-C2 gate
+(`builtin method ... is resolved by the type checker but not
+implemented by the LLVM backend`). Additionally `wrapping_add` was
+missing from the registry entirely for `u32`, so
+`(5 as u32).wrapping_add(3 as u32)` failed at typeck with
+`[T0001] no method`.
+
+**What was added.**
+
+  * `ty_ctx_mut.rs` — three registry entries: `wrapping_mul` for
+    u64/u32/usize (was absent), and `wrapping_add` for u32 (was
+    absent; other types already had it). The wrapping-method matrix
+    is now complete for the three unsigned receiver types the
+    registry already covered: 3 types x 3 ops = 9 entries.
+  * `codegen-llvm/src/lower.rs::try_lower_builtin_intrinsic` — a new
+    arm that folds `wrapping_add`/`wrapping_sub`/`wrapping_mul` to
+    `build_int_add`/`build_int_sub`/`build_int_mul`. LLVM integer
+    ops wrap on overflow *by definition*, so this is identical to
+    what the plain `+`/`-`/`*` operators compile to today. The two
+    will diverge only when overflow checking lands (the driver's
+    `overflow-checks` config is not yet threaded into the LLVM
+    backend, so `a + b` and `a.wrapping_add(b)` currently emit the
+    same instruction). The arm exists so that future divergence has
+    a single place to change.
+  * `mir-interp/src/lib.rs::try_call_builtin` — an arm keyed on
+    `(_, "wrapping_add" | "wrapping_sub" | "wrapping_mul")`.
+    Performs the op at infinite `u128` precision, then masks to the
+    receiver width (via the existing `operand_bit_width` helper,
+    added in §3.5.7 for the bit-manipulation family). Both the
+    `InterpValue::Uint` and `InterpValue::Int` receiver shapes are
+    handled by the shared extraction match.
+
+**Not in this batch — `saturating_*` and `checked_*`.**
+
+Those are a separate shape, not a copy-paste of the wrapping arm:
+
+  * `saturating_add` / `saturating_sub` / `saturating_mul` need an
+    overflow *detection* path (`llvm.uadd.with.overflow.iN` /
+    `llvm.usub.with.overflow.iN`), followed by a `select` that
+    chooses between the truncated result and `MIN`/`MAX` of the
+    receiver type. The interp side is simple (`u128` then clamp),
+    but the LLVM side needs `build_int_compare` on the overflow
+    flag plus `build_select`.
+  * `checked_add` / `checked_sub` / `checked_mul` additionally need
+    to construct an `Option<T>`: the runtime shape of the result is
+    `(tag, payload)` in the interpreter (`Aggregate([Uint(tag),
+    Uint(payload)])`) and a `{ iN, i8 }` LLVM struct on the native
+    side. The `is_power_of_two` and bit-manipulation arms are the
+    closest precedent for the LLVM intrinsic declaration and the
+    destination-store pattern, but neither constructs an enum. This
+    is where `Option` layout lives and is best done as its own
+    batch.
+
+**Also not in this batch — signed integers.**
+
+The registry covers `u64` / `u32` / `usize` only. Signed
+`wrapping_*` on `i32` / `i64` / `isize` would need registry entries
+plus a small interp change (the width mask must be applied to the
+signed-magnitude result before reconstructing the `InterpValue::Int`).
+Not required by any caller today; the registry-first pattern (§3.5.7
+and this batch) makes adding them a one-line-per-type change.
+
+**Verified.**
+
+The new fixture `wrapping_arith.g` exercises all three ops across
+all three receiver types, both in-range and at wrap boundaries
+(`u32::MAX + 1 = 0`, `u32::MAX * 2 = MAX - 1`, `0u64 - 1 = u64::MAX`,
+and the analogous `usize` cases). Compiles and runs to exit 0 on both
+the interp backend (default `--emit=exec`) and the LLVM backend
+(`GLYIM_LLVM=1 --emit=exec`). Full workspace: 4609/4609.
+
+Fixture: `tests/run-pass/behavior/wrapping_arith.g`
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
