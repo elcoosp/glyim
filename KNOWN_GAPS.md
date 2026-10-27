@@ -1449,12 +1449,11 @@ the interp backend (default `--emit=exec`) and the LLVM backend
 
 Fixture: `tests/run-pass/behavior/wrapping_arith.g`
 
-#### 3.5.13 — P2-F1: glyip dependency-resolution hardening (4 of 5 items)
+#### 3.5.13 — P2-F1: glyip dependency-resolution hardening (all 5 items CLOSED)
 
 The audit enumerated five independent hardening items in `glyip`'s
-dependency resolver and lockfile writer. Four were small enough to
-land as one commit (`fdfd4496`); the fifth requires a signature change
-through the resolver and is deferred (see below).
+dependency resolver and lockfile writer. All five are now closed: four
+in `fdfd4496`, the fifth (signature change) in `3727824a`.
 
 **CLOSED — `deny_unknown_fields` on config structs.**
 
@@ -1518,33 +1517,99 @@ worse than not indexing the target at all. A future iteration could
 follow-once with a visited-canonical-paths set; the current behavior
 is deliberate.
 
-**DEFERRED — absolute paths in the lockfile for path dependencies.**
+**CLOSED — relative paths in the lockfile for path dependencies.**
 
-`CrateSource::Path { path }` currently stores the full absolute path
-(`resolve_path_dep` in `dep.rs` at `path.to_string_lossy()`). This
-makes a lockfile checked into a repository non-portable: a collaborator
-on a different machine sees their ancestor's `/Users/alice/...` path
-and a CI run sees `/home/runner/...`, and neither can reproduce the
-build without hand-editing the lockfile.
+`CrateSource::Path { path }` stored the full absolute path
+(`resolve_path_dep` in `dep.rs` at `path.to_string_lossy()`), making a
+lockfile checked into a repository non-portable: a collaborator on a
+different machine saw the generating machine's `/Users/alice/...`
+path, and CI saw `/home/runner/...`. Neither could reproduce the build
+without hand-editing the lockfile.
 
-The fix is to store the path *relative to the project directory* when
-possible (falling back to absolute only for paths outside the project
-tree, which is itself a suspicious case). That requires threading
-`project_dir: &Path` into `resolve_path_dep` — currently a `&self`
-method without that parameter. Two callers (`resolve_dependencies`
-and the recursive sub-dependency call) would need to pass it through.
-Signature change of a small function, but touches the resolver's
-call graph and the `LockedCrate` construction path; better as its own
-reviewable commit than folded into the four above.
+`resolve_path_dep` now takes `project_dir: &Path` (threaded from
+`resolve`, which already had it as a parameter — one call site). The
+stored path is `path.strip_prefix(project_dir)` when the dep lives
+inside the project tree, falling back to the absolute form only for
+paths *outside* the tree — those are necessarily unportable, and
+inventing a relative path that does not resolve from the project
+directory would be worse than recording the absolute one. An empty
+relative path (dep *is* the project root) also falls back to absolute,
+so the field is never an empty string.
+
+Lockfiles generated *before* this fix still contain absolute paths;
+they parse identically (the field is a plain `String`), and their
+resolver call sites still work — a future migration could rewrite
+on read, but that's a policy decision, not part of this fix.
+
+New regression test `glyip::tests::dep_resolution::
+path_dep_stored_relative_to_project_dir` creates a project with a
+nested `libs/util` path dep, resolves it, and asserts the lockfile
+stores exactly `"libs/util"` (relative), not the absolute
+`/tmp/.../libs/util`.
 
 **Verified.**
 
   * `cargo check -p glyip` — clean
-  * `cargo nextest run -p glyip` — 211/211
-  * full workspace — 4609/4609
+  * `cargo nextest run -p glyip` — 212/212 (211 existing + 1 new P2-F1 #3 test)
+  * full workspace — 4610/4610
   * no test depended on the old behaviors (pre-flight greps returned
     zero hits for `repo_cache_name` output assertions, unknown-field
     acceptance, or symlink traversal)
+
+#### 3.5.14 — P2-F2: registry URL in lockfile was hardcoded to the public index
+
+CLOSED (`99ffe61e`). `RegistryClient::base_url_display` exists precisely
+so a client can report the registry it actually resolves against — the
+`HttpRegistryClient` impl returns its own `self.base_url`, so a
+corporate mirror or a test mock correctly reports a non-default URL.
+But the one *consumer* of that method inside the resolver
+(`resolve_registry_dep` in `dep.rs`) ignored it and hardcoded
+`"https://index.glyim.dev"` at the `CrateSource::Registry { url }`
+construction site.
+
+Consequence: a user pointing glyip at a custom registry got a correct
+*download* (the client used its own `self.base_url` for the HTTP
+request) but a wrong *lockfile provenance* entry — anyone reading
+`Glyip.lock` saw the public index, not where the crate actually came
+from. That silently breaks any workflow that uses the lockfile to
+decide "is this dependency coming from our internal mirror?". The
+audit's framing ("T192 patch applied to only one of two sites") was
+accurate: `HttpRegistryClient::base_url_display` was the fixed site,
+the resolver's write path was the unfixed one.
+
+**Fix.** New `DependencyResolver::current_registry_base_url` helper
+returns `self.registry_client.as_ref().map(|c| c.base_url_display())`,
+falling back to the public index only when no client is attached. The
+fallback is unreachable in `resolve_registry_dep` today (that function
+returns `DependencyNotFound` when `registry_client.is_none()` *before*
+reaching the lockfile-write branch), but kept as a defensive
+`unwrap_or_else` so a future caller cannot write an empty URL. The
+`CrateSource::Registry { url }` site now calls the helper.
+
+**Verified divergence.** New test
+`glyip::tests::dep_resolution::custom_registry_url_recorded_in_lockfile`
+attaches a `CustomUrlRegistryClient` whose `base_url_display` returns
+`"https://internal-mirror.example/glyim"`, resolves a version dependency
+against a local `CrateIndex`, and asserts the lockfile's
+`CrateSource::Registry.url` equals the custom URL and is *not* the
+public default. It also asserts the public URL is absent (a stronger
+check than equality, so a future reintroduction of the hardcode is
+caught even if the custom URL coincidentally equals some other value).
+
+This test uses `unimplemented!()` for `fetch_index` / `download_crate`
+on the mock — the resolver never calls them for a locally-indexed
+crate, and the panic is the intended trip-wire if that assumption ever
+changes.
+
+Existing behavior for the default case is unchanged:
+`HttpRegistryClient::base_url_display` already returns
+`"https://index.glyim.dev"` when constructed with that URL, so the six
+existing tests that assert on the default URL in the lockfile still
+pass.
+
+Verified:
+  * `cargo nextest run -p glyip` — 213/213 (211 existing + P2-F1 #3 + this test)
+  * full workspace — 4611/4611
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
