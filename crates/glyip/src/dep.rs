@@ -612,7 +612,7 @@ impl DependencyResolver {
                     }
                 });
                 if let Some(ref abs) = abs_path {
-                    self.resolve_path_dep(&name, abs)?
+                    self.resolve_path_dep(&name, abs, project_dir)?
                 } else {
                     unreachable!("path.is_some() but abs_path is None")
                 }
@@ -816,10 +816,22 @@ impl DependencyResolver {
     /// Returns the [`LockedCrate`] plus the sub-project's own dependencies
     /// `(name, version_req, path)` (read from its `Glyip.toml`) so the caller
     /// can enqueue them for transitive resolution.
+    /// Resolve a single path dependency.
+    ///
+    /// P2-F1: `project_dir` is the lockfile-writing root. The `path` field
+    /// stored in `CrateSource::Path` is written **relative to `project_dir`**
+    /// when the dependency lives inside the project tree, so a committed
+    /// `Glyip.lock` is portable across machines (previously it embedded
+    /// absolute paths from whatever machine generated it, breaking
+    /// collaborators and CI). Paths *outside* the project tree stay
+    /// absolute — they are necessarily unportable, and rewriting them would
+    /// fabricate a relative path that does not resolve from the project
+    /// directory.
     fn resolve_path_dep(
         &self,
         name: &str,
         path: &Path,
+        project_dir: &Path,
     ) -> GlyipResult<(LockedCrate, Vec<(String, Option<String>, Option<PathBuf>)>)> {
         let config = GlyipToml::read_from_dir(path).unwrap_or_else(|_| GlyipToml {
             package: crate::config::PackageConfig {
@@ -844,11 +856,25 @@ impl DependencyResolver {
             ));
         }
 
+        // P2-F1: store the path relative to the project root when possible.
+        // `path` is already the fully-resolved absolute path (the caller
+        // joined it with `project_dir` or an ancestor crate's base dir), so
+        // stripping the project prefix yields the portable form. Empty
+        // relative path (dep *is* the project root — impossible in practice,
+        // but strip_prefix returns `""` for equal paths on all targets)
+        // falls back to the absolute form so we never emit an empty string.
+        let stored_path = path
+            .strip_prefix(project_dir)
+            .ok()
+            .filter(|rel| !rel.as_os_str().is_empty())
+            .map(|rel| rel.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.to_string_lossy().into_owned());
+
         let locked = LockedCrate {
             name: name.to_string(),
             version: config.package.version.clone(),
             source: CrateSource::Path {
-                path: path.to_string_lossy().to_string(),
+                path: stored_path,
             },
             dependencies: sub_deps
                 .iter()

@@ -399,4 +399,60 @@ fn mock_registry_download_count() {
     let dir = TempDir::new().unwrap();
     mock.download_crate("counted", "0.1.0", None, dir.path()).unwrap();
     assert_eq!(mock.download_count(), 1);
+
+
 }
+
+#[test]
+fn path_dep_stored_relative_to_project_dir() {
+    // P2-F1: a `Glyip.lock` checked into a repo must not embed absolute
+    // filesystem paths from whatever machine generated it. When a path
+    // dependency lives inside the project tree, the stored form is the
+    // path *relative to the project directory*.
+    let tmp = std::env::temp_dir().join(format!(
+        "glyip_p2f1_relpath_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let project_dir = tmp.join("myproject");
+    let dep_dir = project_dir.join("libs").join("util");
+    std::fs::create_dir_all(&dep_dir).unwrap();
+
+    // Dep crate's manifest.
+    let dep_toml = "[package]\nname = \"util\"\nversion = \"0.1.0\"\n";
+    std::fs::write(dep_dir.join("Glyip.toml"), dep_toml).unwrap();
+
+    // Project manifest depending on it via a relative path.
+    let project_toml = "[package]\nname = \"myproject\"\nversion = \"0.1.0\"\n\
+                        [dependencies]\nutil = { path = \"libs/util\" }\n";
+    std::fs::write(project_dir.join("Glyip.toml"), project_toml).unwrap();
+
+    let cfg = GlyipToml::read_from_dir(&project_dir).unwrap();
+    let resolver = DependencyResolver::new_no_index();
+    let lock = resolver.resolve(&cfg, &project_dir).unwrap();
+
+    let util = lock
+        .get_crate("util", "0.1.0")
+        .expect("util must appear in lockfile");
+    match &util.source {
+        CrateSource::Path { path } => {
+            let p = std::path::Path::new(path);
+            assert!(
+                p.is_relative(),
+                "P2-F1: stored path should be relative to project_dir, got {path:?} \
+                 (absolute would break lockfile portability across machines)"
+            );
+            assert_eq!(
+                path, "libs/util",
+                "expected exactly the project-relative form; got {path:?}"
+            );
+        }
+        other => panic!("expected CrateSource::Path, got {other:?}"),
+    }
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
