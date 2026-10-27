@@ -1449,6 +1449,103 @@ the interp backend (default `--emit=exec`) and the LLVM backend
 
 Fixture: `tests/run-pass/behavior/wrapping_arith.g`
 
+#### 3.5.13 — P2-F1: glyip dependency-resolution hardening (4 of 5 items)
+
+The audit enumerated five independent hardening items in `glyip`'s
+dependency resolver and lockfile writer. Four were small enough to
+land as one commit (`fdfd4496`); the fifth requires a signature change
+through the resolver and is deferred (see below).
+
+**CLOSED — `deny_unknown_fields` on config structs.**
+
+`GlyipToml`, `PackageConfig`, `BinTarget`, `LibTarget` (`crates/glyip/
+src/config.rs`) previously accepted arbitrary unknown TOML keys silently
+— a typo like `[package] descripton = "..."` was ignored, the field
+defaulted to `None`, and the user was left with the (correctly)
+default-constructed value wondering why their setting had no effect.
+All four now have `#[serde(deny_unknown_fields)]`, so the same typo
+is a parse error naming the unknown key.
+
+No test depended on unknown-field acceptance (verified by grep across
+`crates/glyip/tests/`), so this was purely additive.
+
+**CLOSED — path-aware visited key for cycle detection.**
+
+`DependencyResolver::resolve` in `dep.rs` uses a `HashSet<String>`
+(`visited`) to dedupe crates across the breadth-first dependency walk.
+The key was `format!("{name}-{version}(git)")` — so *two different
+path dependencies whose `Glyip.toml` declared the same `[package]
+name`* collided on the name-only key: the second was silently treated
+as already-visited, and its transitive dependencies were never
+enqueued. The lockfile that resulted was *incomplete but well-formed*
+— no error, just missing entries.
+
+The key now includes the resolved path when one exists:
+`format!("{name}@{path}(path)")`. Same name + same path still
+dedupes (correct — re-visiting one directory is a real cycle or
+diamond); same name + different paths no longer collides. The
+registry/git branches are unchanged (their name/version keys were
+already unique because the registry can only hold one version of a
+given name — the resolver does not support version multimapping yet,
+see `P2-F6`).
+
+**CLOSED — `DefaultHasher` → SHA-256 for git cache directory names.**
+
+`repo_cache_name(url)` (`dep.rs`) derives the shared git-cache
+directory name from the repository URL. It previously used
+`std::collections::hash_map::DefaultHasher`, whose output the Rust
+docs explicitly disclaim as unstable across compiler versions and
+whose seed is randomized in some configurations. That meant the "shared
+cache" could silently miss — the same URL hashed to a different
+directory after a toolchain bump, re-cloning the repository on every
+resolve. It now uses `sha2::Sha256` over the URL bytes and takes the
+first 16 bytes (32 hex chars, well under the 255-byte filename limit).
+`sha2 = "0.11.0"` is already a `glyip` dependency (used for tarball
+checksum verification); no new crate.
+
+**CLOSED — symlink guard in the fingerprint file walker.**
+
+`collect_files_recursive` (`fingerprint.rs`) walks a directory tree to
+build a content hash for change detection. It used
+`entry.path().is_dir()`, which *follows symlinks* — a symlink pointing
+at an ancestor directory recursed until stack overflow. The walker now
+uses `entry.file_type()`, which reports the link itself (not its
+target), and skips any symlink unconditionally. This is the
+conservative choice: following a symlink would make the fingerprint
+depend on files outside the crate directory (so external edits would
+invalidate the cache but the walker would not see them), which is
+worse than not indexing the target at all. A future iteration could
+follow-once with a visited-canonical-paths set; the current behavior
+is deliberate.
+
+**DEFERRED — absolute paths in the lockfile for path dependencies.**
+
+`CrateSource::Path { path }` currently stores the full absolute path
+(`resolve_path_dep` in `dep.rs` at `path.to_string_lossy()`). This
+makes a lockfile checked into a repository non-portable: a collaborator
+on a different machine sees their ancestor's `/Users/alice/...` path
+and a CI run sees `/home/runner/...`, and neither can reproduce the
+build without hand-editing the lockfile.
+
+The fix is to store the path *relative to the project directory* when
+possible (falling back to absolute only for paths outside the project
+tree, which is itself a suspicious case). That requires threading
+`project_dir: &Path` into `resolve_path_dep` — currently a `&self`
+method without that parameter. Two callers (`resolve_dependencies`
+and the recursive sub-dependency call) would need to pass it through.
+Signature change of a small function, but touches the resolver's
+call graph and the `LockedCrate` construction path; better as its own
+reviewable commit than folded into the four above.
+
+**Verified.**
+
+  * `cargo check -p glyip` — clean
+  * `cargo nextest run -p glyip` — 211/211
+  * full workspace — 4609/4609
+  * no test depended on the old behaviors (pre-flight greps returned
+    zero hits for `repo_cache_name` output assertions, unknown-field
+    acceptance, or symlink traversal)
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
