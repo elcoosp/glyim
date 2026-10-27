@@ -4711,6 +4711,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 | "wrapping_add"
                 | "wrapping_sub"
                 | "wrapping_mul"
+                | "saturating_add"
+                | "saturating_sub"
+                | "saturating_mul"
                 | "count_ones"
                 | "count_zeros"
                 | "leading_zeros"
@@ -5523,6 +5526,161 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
                             "is_power_of_two branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+        // BC-P1-C2-BATCH2B: `saturating_add` / `saturating_sub` /
+        // `saturating_mul` on unsigned integers.
+        //
+        // `saturating_add` / `saturating_sub` use LLVM's saturating
+        // intrinsics (`llvm.uadd.sat.iN` / `llvm.usub.sat.iN`, available
+        // since LLVM 8) — a single instruction on most targets, exact
+        // semantics: clamp at 0 / MAX rather than wrap.
+        //
+        // `saturating_mul` has no direct LLVM saturating intrinsic, so the
+        // arm uses `llvm.umul.with.overflow.iN` (returns `{iN, i1}`), then
+        // `select(overflow, MAX, product)`. Same result, one extra select.
+        if matches!(
+            method.as_str(),
+            "saturating_add" | "saturating_sub" | "saturating_mul"
+        ) {
+            let Some(recv_op) = args.first() else {
+                return Ok(false);
+            };
+            let Some(rhs_op) = args.get(1) else {
+                return Ok(false);
+            };
+            let recv_v = self.lower_operand(recv_op)?;
+            let rhs_v = self.lower_operand(rhs_op)?;
+            if !recv_v.is_int_value() || !rhs_v.is_int_value() {
+                return Ok(false);
+            }
+            let lhs_iv = recv_v.into_int_value();
+            let rhs_iv = rhs_v.into_int_value();
+            let int_ty = lhs_iv.get_type();
+            let width = int_ty.get_bit_width();
+            let max_val = int_ty.const_all_ones();
+            let bool_ty = self.context.bool_type();
+            let false_flag: inkwell::values::BasicMetadataValueEnum<'_> =
+                bool_ty.const_zero().into();
+
+            let result_iv: inkwell::values::IntValue<'_> = match method.as_str() {
+                "saturating_add" => {
+                    let fn_ty = int_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
+                    let name = format!("llvm.uadd.sat.i{width}");
+                    let fv = self
+                        .module
+                        .get_function(&name)
+                        .unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    self.builder
+                        .build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "sat_add")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "saturating_add call: {e:?}"
+                            ))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error("saturating_add void")]
+                        })?
+                        .into_int_value()
+                }
+                "saturating_sub" => {
+                    let fn_ty = int_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
+                    let name = format!("llvm.usub.sat.i{width}");
+                    let fv = self
+                        .module
+                        .get_function(&name)
+                        .unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    self.builder
+                        .build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "sat_sub")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "saturating_sub call: {e:?}"
+                            ))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error("saturating_sub void")]
+                        })?
+                        .into_int_value()
+                }
+                "saturating_mul" => {
+                    let result_struct_ty =
+                        self.context.struct_type(&[int_ty.into(), bool_ty.into()], false);
+                    let fn_ty =
+                        result_struct_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
+                    let name = format!("llvm.umul.with.overflow.i{width}");
+                    let fv = self
+                        .module
+                        .get_function(&name)
+                        .unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    let call = self
+                        .builder
+                        .build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "sat_mul")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "saturating_mul call: {e:?}"
+                            ))]
+                        })?;
+                    let struct_val = call
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error("saturating_mul void")]
+                        })?
+                        .into_struct_value();
+                    let product = self
+                        .builder
+                        .build_extract_value(struct_val, 0, "sat_mul_prod")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "saturating_mul extract product: {e:?}"
+                            ))]
+                        })?
+                        .into_int_value();
+                    let overflow = self
+                        .builder
+                        .build_extract_value(struct_val, 1, "sat_mul_ovf")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "saturating_mul extract overflow: {e:?}"
+                            ))]
+                        })?
+                        .into_int_value();
+                    self.builder
+                        .build_select(overflow, max_val, product, "sat_mul_sel")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "saturating_mul select: {e:?}"
+                            ))]
+                        })?
+                        .into_int_value()
+                }
+                _ => unreachable!(),
+            };
+
+            let _ = false_flag; // reserved for a signed variant that needs it
+
+            let dp = self.place_ptr(destination)?;
+            self.builder.build_store(dp, result_iv).map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "{} store: {e:?}",
+                    method
+                ))]
+            })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("saturating target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "{} branch: {e:?}",
+                            method
                         ))]
                     })?;
             }

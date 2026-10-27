@@ -233,18 +233,30 @@ impl<'tcx> Interpreter<'tcx> {
     /// an explicit panic rather than silently miscompiling).
     fn operand_bit_width(&self, op: Option<&Operand>) -> Option<u32> {
         let op = op?;
-        let place = match op {
-            Operand::Copy(p) | Operand::Move(p) => p,
-            _ => return None,
+        // P1-C2 batch 2b hotfix: the receiver of a builtin method call can
+        // be either a place (Copy/Move of a local) or a constant (a literal
+        // passed directly — e.g. `(65536u32).saturating_mul(x)`). The
+        // original implementation only handled places and returned `None`
+        // for constants, which the caller turned into an `InterpError::Panic`
+        // — so any test whose receiver was a *literal* panicked under
+        // mir-interp while working under LLVM (LLVM doesn't call this
+        // helper). Fixed by reading the type off the constant directly.
+        // This also retroactively fixes the wrapping arm from batch 2a,
+        // which had the same latent gap.
+        let ty = match op {
+            Operand::Copy(p) | Operand::Move(p) => {
+                if !p.projection.is_empty() {
+                    return None;
+                }
+                let decl = self
+                    .local_decls
+                    .as_slice()
+                    .get(p.local.to_raw() as usize)?;
+                decl.ty
+            }
+            Operand::Constant(c) => c.ty,
         };
-        if !place.projection.is_empty() {
-            return None;
-        }
-        let decl = self
-            .local_decls
-            .as_slice()
-            .get(place.local.to_raw() as usize)?;
-        match self.tcx.ty_kind(decl.ty) {
+        match self.tcx.ty_kind(ty) {
             glyim_type::TyKind::Uint(glyim_core::primitives::UintTy::U8) => Some(8),
             glyim_type::TyKind::Uint(glyim_core::primitives::UintTy::U16) => Some(16),
             glyim_type::TyKind::Uint(glyim_core::primitives::UintTy::U32) => Some(32),
@@ -612,6 +624,46 @@ impl<'tcx> Interpreter<'tcx> {
                     (width as u128) - (128u128 - (inverted.leading_zeros() as u128))
                 };
                 Ok(Some(InterpValue::Uint(lo)))
+            }
+            // P1-C2 batch 2b: saturating arithmetic on unsigned integers.
+            // `saturating_add` / `saturating_sub` / `saturating_mul`.
+            // `u128::saturating_*` clamps at u128's bounds, so the
+            // width-specific clamp to `(1 << width) - 1` must be applied
+            // *after* — otherwise an `a + b` that fits in u128 but not the
+            // receiver width would silently exceed the width's range.
+            // For sub, u128 saturating_sub already clamps at 0, matching
+            // the width-independent unsigned behavior.
+            (_, "saturating_add") | (_, "saturating_sub") | (_, "saturating_mul") => {
+                let a = self.builtin_deref(&receiver)?;
+                let b = args.get(1).cloned().unwrap_or(InterpValue::Unit);
+                let a_n: u128 = match &a {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                let b_n: u128 = match &b {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
+                    InterpError::Panic(format!(
+                        "interp: {}: cannot determine receiver bit width",
+                        method
+                    ))
+                })?;
+                let max: u128 = if width >= 128 {
+                    u128::MAX
+                } else {
+                    (1u128 << width) - 1
+                };
+                let result: u128 = match method.as_str() {
+                    "saturating_add" => a_n.saturating_add(b_n).min(max),
+                    "saturating_sub" => a_n.saturating_sub(b_n),
+                    "saturating_mul" => a_n.saturating_mul(b_n).min(max),
+                    _ => unreachable!(),
+                };
+                Ok(Some(InterpValue::Uint(result)))
             }
             // P1-C2 batch 2a: wrapping arithmetic on unsigned integers.
             // Rust semantics: the operation is performed at infinite
