@@ -1274,6 +1274,104 @@ through the interpreter's value flow, which itself is close to
 adding `InterpValue::Slice` — reinforcing that the deferred
 refactor is the real fix.
 
+#### 3.5.11 — P2-A2: mock drift closed; production fallback hardened (partial)
+
+Investigated 2026-10-27. The audit described P2-A2 as two related
+problems; the split turned out to be unequal, and one half was already
+addressed in a prior session.
+
+**Mock half — CLOSED (`4df457eb`).**
+
+`crates/glyim-test/src/mock/lower_ctx.rs::MockLowerCtx` implemented
+`LowerCtx::fn_sig` and `LowerCtx::const_value` as *always-succeed*
+returning a plausible-looking dummy (`() -> ()` and `Unit`
+respectively) for every id. Any test exercising call lowering or
+const-eval lowering would silently run against an ABI / value that
+never appears in a real compile — a test that *looked* like it
+validated behavior but only validated "the mock made up an answer".
+This is the drift the audit named.
+
+Post-fix contract (mirrored from §3.5.9 / §3.5.10's defensive-
+reject pattern):
+
+  * `fn_sig(def_id)` returns `Some(sig)` iff the test called
+    `add_fn_sig(def_id, sig)` first; otherwise **panics** with the
+    exact id and a message naming `add_fn_sig`.
+  * `const_value(def_id, substs)` returns `Some(val)` iff the test
+    called `add_const_value(def_id, val)` first; otherwise **panics**
+    with the exact id and a message naming `add_const_value`.
+
+Four new unit tests in `crates/glyim-test/src/mock/lower_ctx.rs
+::p2_a2_tests` pin both directions: two `#[test]`s prove the
+positive path (registered → returned), two `#[should_panic]`s prove
+the negative path (unregistered → panic with the right message).
+Adding a fifth, sixth, ..., Nth consumer that needs a signature now
+**requires** an explicit `add_fn_sig` call in the test setup, which
+makes the dependency visible in the test source instead of hidden
+in the mock's fallback.
+
+No existing caller relied on the dummy: grep for `fn_sig` /
+`const_value` in `crates/glyim-test/src/tests/` and
+`crates/glyim-test/src/assertions/` returned zero hits, so the panic
+contract change is a pure tightening of an unreachable path. Workspace
+test count goes 4605 → 4609 (+4 new unit tests); all 4609 pass.
+
+**Production half — PARTIALLY CLOSED (prior session).**
+
+`PipelineLowerCtx::adt_def` in
+`crates/glyim-pipeline/src/pipeline_context.rs` is *not* the naive
+`AdtDef { variants: vec![], kind: Struct }` the audit describes. It
+currently:
+
+  1. consults `ty_ctx.adt_def(id)` first and, when the ADT *is*
+     registered, builds a real `AdtDef` with correct per-field types
+     for struct/enum/union (this is what fixes struct-update /
+     aggregate field counts — a prior bug where `variants[0]` came
+     back empty).
+  2. falls back to HIR items for a struct/enum not yet in `ty_ctx`,
+     synthesising error-typed fields — this preserves the pre-`typeck`
+     shape so lowering can still emit aggregate initialisers before
+     full type resolution.
+  3. `warn!`s (tracing) and returns empty `AdtDef` only when the id
+     is *neither* in `ty_ctx` *nor* in HIR — the true "compiler bug"
+     case.
+
+This is a substantial hardening versus the audit's description. The
+remaining P2-A2 gap is narrower: the "true compiler bug" arm still
+**returns empty `AdtDef` after logging** rather than surfacing a
+`GlyimDiagnostic::internal_error` to the caller. Fixing that fully
+would require changing the `LowerCtx::adt_def` signature from
+`AdtDef` to `Result<AdtDef, Vec<GlyimDiagnostic>>` (or similar) — every
+caller in the lowering pipeline, the mock, and 3 test files would need
+to thread the error path. That is a multi-file signature refactor with
+the same shape as `InterpValue::Slice` (§3.5.10 / P2-B3), not a small
+defensive patch.
+
+**Interim state is safe:** the `warn!` fires under the standard
+`tracing` env-filter, so a caller hitting the true-bug path sees a
+log line naming the ADT id rather than silent miscompilation. `warn!`
+is not a structured `GlyimDiagnostic`, which means it does not
+appear in `--emit=mir` / `--emit=llvm-ir` output the way diagnostics
+do — that is the residual gap.
+
+**Deferred follow-up:** if a future session takes the production-half
+closing, the natural scope is exactly:
+  a. Change `LowerCtx::adt_def` return to `CompResult<AdtDef>` (or
+     introduce an `adt_def_checked` companion for the "must succeed"
+     callers).
+  b. Push the error path through the ~4 lowering call sites that
+     currently do `.adt_def(id)` and index into `variants[0]`.
+  c. Add a compile-fail fixture exercising the true-bug path (an
+     ADT id that is in neither `ty_ctx` nor HIR — reachable via
+     synthetic test setup only, so the fixture would be a unit test,
+     not a `.g` file).
+
+Verified this commit:
+  * `cargo nextest run -p glyim-test --tests` — 4 new tests pass
+  * full workspace — 4609/4609, up from 4605 (+4 unit tests)
+  * no caller relied on the dummy (grep — zero hits in `tests/` or
+    `assertions/`)
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
