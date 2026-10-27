@@ -1672,6 +1672,60 @@ Verified:
   * `cargo nextest run -p glyip` — 216/216 (213 existing + 3 new)
   * full workspace — 4614/4614
 
+#### 3.5.16 — P2-F6: resolver semantics were undocumented
+
+CLOSED. The audit's framing was "greedy BFS, no backtracking, single
+version per name — undocumented." The first two are exactly what the
+code does; the third turned out to be subtler than the audit implied and
+worth stating precisely.
+
+**What the code actually does.**
+
+  * `DependencyResolver::resolve` (`dep.rs`) is a breadth-first walk from
+    the root manifest, `visit_stack.pop_front()` per node.
+  * `select_best_version` picks the highest SemVer-matching candidate —
+    deterministically, by parsing and sorting, not by trusting the
+    registry index's JSON order.
+  * There is no backtracking: the first version chosen for a name is not
+    re-examined if a later requirement disagrees.
+  * `Lockfile::add_crate` keys entries by `format!("{name}-{version}")`,
+    so the data structure *can* hold two versions of the same crate name
+    — same as Cargo's lockfile format.
+  * But `check_version_conflicts` (the post-resolution validation) does
+    `lockfile.crates().find(|c| c.name == *name)` — first match only —
+    and verifies *every* gathered requirement against that one version.
+    If two versions were somehow both locked, only the first (BTreeMap
+    lexicographic order) is checked.
+
+So the effective behavior is "single version per name, enforced by a
+post-hoc check" rather than "the lockfile cannot represent multimapping".
+The audit's one-line framing was directionally right but would mislead
+anyone who looked at the `BTreeMap<String, LockedCrate>` and concluded
+multimapping worked. A diamond dependency where two crates require
+mutually-incompatible versions of the same crate therefore surfaces as
+`GlyipError::DependencyConflict` — which already names the crate, every
+distinct requirement, and every `(requester, requirement)` edge — rather
+than compiling two copies as Cargo would.
+
+**What was added.** A new `#### Dependency resolution semantics`
+subsection under `### The glyip Build Tool` in `README.md`, covering:
+greedy BFS with no backtracking; the single-version-per-name enforcement
+and its mechanism; deterministic version selection; cycle detection and
+the path-keyed visited set (cross-referencing the P2-F1 fix); and the
+"when does this differ from Cargo" framing — flat lists and agreeing
+diamonds resolve identically, disagreeing diamonds are a hard error.
+
+**Not changed.** No code changes. The semantics are deliberate; the gap
+was that a user (or a future maintainer reading `Lockfile`) had to
+reverse-engineer them from the resolver. Documenting is the correct fix
+— adding backtracking would be a different, much larger project, and
+the `DependencyConflict` diagnostic already makes the current limit
+actionable.
+
+Verified:
+  * `git diff --stat README.md` — one file, documentation only
+  * no test count change (docs)
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
