@@ -1089,17 +1089,40 @@ impl BytecodeBackend {
                         bc.extend_from_slice(&0i64.to_le_bytes());
                         self.const_is_int.borrow_mut().push(true);
                     }
-                    // Devirtualized by monomorphization before codegen; should
-                    // not survive to this point. Treated as a unit placeholder.
+                    // Devirtualized by monomorphization before codegen. The
+                    // LLVM backend hard-errors on this (lower.rs's
+                    // `MirConstKind::VirtualMethod` arm); the bytecode arm
+                    // used to silently emit a zero placeholder (P2-B2). Make
+                    // it match the LLVM backend's loud rejection.
                     MirConstKind::VirtualMethod { .. } => {
-                        bc.push(OP_LOAD_CONST);
-                        bc.extend_from_slice(&0i64.to_le_bytes());
-                        self.const_is_int.borrow_mut().push(true);
+                        return Err(vec![GlyimDiagnostic::internal_error(
+                            "internal compiler error: MirConstKind::VirtualMethod \
+                             reached bytecode codegen (not devirtualized)"
+                                .to_string(),
+                        )]);
                     }
+                    // P2-B2: `StaticRef` and `Variant` were being silently
+                    // lowered to a zero `OP_LOAD_CONST` — every static
+                    // reference and every enum-variant constant produced
+                    // `0` instead of the address / discriminant the caller
+                    // expected. Both LLVM and the const evaluator fold
+                    // these to a concrete value before codegen, so reaching
+                    // this arm means the folding step was bypassed; the
+                    // resulting miscompile was silent. Reject explicitly
+                    // (mirroring the `ConstRef` arm above) so the failure
+                    // is loud and traceable rather than a wrong value.
+                    //
+                    // The arm names the exact variant so a future report
+                    // says which lowering path needs the missing fold.
                     _ => {
-                        bc.push(OP_LOAD_CONST);
-                        bc.extend_from_slice(&0i64.to_le_bytes());
-                        self.const_is_int.borrow_mut().push(true);
+                        return Err(vec![GlyimDiagnostic::internal_error(format!(
+                            "mir const kind {:?} reached bytecode codegen: \
+                             it must be folded to a concrete MirConstKind \
+                             value by const evaluation / lowering before \
+                             codegen (P2-B2). The bytecode backend used to \
+                             silently emit 0 for this kind.",
+                            mir_const.kind
+                        ))]);
                     }
                 }
                 Ok(())
