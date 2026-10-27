@@ -310,6 +310,56 @@ test_helpers = { path = "../test_helpers" }
 > [!TIP]
 > The resolver performs real SemVer 2.0 matching (caret, tilde, wildcard, and comparison operators), detects dependency cycles, and reports version conflicts with the full set of requesters that disagree.
 
+#### Dependency resolution semantics
+
+`glyip`'s resolver is deliberately simpler than Cargo's. Knowing the
+differences up front saves debugging a resolution failure that is not a
+bug:
+
+**Greedy breadth-first, no backtracking.** The resolver walks the
+dependency graph breadth-first from the root manifest. When it encounters
+`foo = "1.0"`, it picks the highest version of `foo` that satisfies that
+requirement *at that moment*, records it, and moves on. If a later
+transitive dependency needs an incompatible version of `foo`, the resolver
+does **not** go back and try a lower version of the first requirement —
+it reports a conflict. Cargo's backtracking resolver would try
+alternatives; `glyip`'s does not.
+
+**One version per crate name.** Although `Glyip.lock` keys entries by
+`name-version` (so the data structure *could* hold `foo-1.0.0` and
+`foo-2.0.0` simultaneously, as Cargo's lockfile does), the conflict check
+that runs at the end of resolution looks up the first entry matching a
+crate name and verifies every requirement seen in the graph against it.
+In practice this enforces a single resolved version per name: two
+incompatible requirements for the same crate are a hard
+`DependencyConflict` error, not a multimapping.
+
+That error names the crate, every distinct requirement gathered, and
+every `(requester, requirement)` edge — so a diamond dependency where two
+crates disagree is diagnosable without re-running with extra logging.
+
+**Deterministic version selection.** "Highest matching version" is
+computed by parsing every candidate and sorting by SemVer precedence, not
+by trusting the registry index's JSON listing order. An unparseable or
+unsatisfiable requirement surfaces as `DependencyNotFound` rather than
+silently falling back to "latest" — a typo in a version string is an
+error, not a surprise upgrade.
+
+**Cycle detection.** The visited set is keyed by
+`name@path(path)` for path dependencies and `name-version(git)` for
+registry and git dependencies. A cycle (crate A path-depends on B, B
+path-depends on A) is caught by the visited check before infinite
+recursion. Two path dependencies with the same declared `[package] name`
+but different directories are correctly treated as distinct crates —
+they resolve independently rather than colliding on the name alone.
+
+**What this means in practice.** For the common shapes — a flat
+dependency list, or a diamond where everyone agrees on a major version —
+`glyip` resolves the same graph Cargo would. The divergence is when two
+dependents require mutually-incompatible versions: Cargo would compile
+both copies; `glyip` stops with an error naming both requesters. That is
+a deliberate scope limit, not an oversight.
+
 ---
 
 ## Language Tour
