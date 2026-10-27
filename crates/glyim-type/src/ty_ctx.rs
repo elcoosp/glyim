@@ -837,6 +837,28 @@ impl TyCtx {
         self.builtin_fn_index.get(&id).copied()
     }
 
+    /// Reverse-lookup: find a builtin method's `FnDefId` by receiver
+    /// `AdtId` and method name (e.g. `(AdtId(1020), "as_slice")` ->
+    /// `FnDefId(9144)`). Linear scan over `builtin_fn_index`, which is
+    /// O(hundreds) — call sites are compile-time lookups during lowering,
+    /// not per-instruction hot paths.
+    ///
+    /// Exists to replace a *hardcoded* builtin id at
+    /// `glyim-lower/src/lower_rvalue.rs` (the for-loop desugaring's
+    /// synthetic `Vec::as_slice` call). The hardcode was correct only so
+    /// long as no code changed the registration order in
+    /// `TyCtxMut::register_builtin_methods` — any added or removed entry
+    /// silently shifted the id and produced `undefined symbol
+    /// __glyim_fn_XXXX` at link time. This lookup makes the dependency
+    /// explicit and the failure mode a clean `None` (`.expect` in the
+    /// caller with a clear message).
+    pub fn builtin_method_fn_id(&self, adt: AdtId, method_name: &str) -> Option<FnDefId> {
+        self.builtin_fn_index
+            .iter()
+            .find(|(_, (a, n))| *a == adt && self.name_str(*n) == method_name)
+            .map(|(id, _)| *id)
+    }
+
     /// Inherent (non-trait) impl method lookup for `Type::method(args)`
     /// path calls on concrete ADTs.
     pub fn inherent_method(&self, adt_id: AdtId, name: Name) -> Option<FnDefId> {

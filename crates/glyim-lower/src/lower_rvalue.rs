@@ -1044,8 +1044,33 @@ impl<'a> MirBuilder<'a> {
                                         // reads word 0 = ptr, word 2 = len,
                                         // returns a `{ptr, len}` fat
                                         // pointer).
-                                        let as_slice_fn =
-                                            glyim_core::def_id::FnDefId::from_raw(9144);
+                                        //
+                                        // Name-based lookup (not a
+                                        // hardcoded `FnDefId::from_raw`):
+                                        // the id depends on registration
+                                        // order in
+                                        // `TyCtxMut::register_builtin_methods`,
+                                        // which any change to the builtin
+                                        // method tables shifts. A hardcoded
+                                        // id was correct only until the next
+                                        // registry edit; when it moved, the
+                                        // synthesized call linked against
+                                        // `__glyim_fn_XXXX` with no body. The
+                                        // lookup converts that class of bug
+                                        // into a clean `.expect` with a
+                                        // message at the exact call site.
+                                        let as_slice_fn = self
+                                            .ctx
+                                            .ty_ctx()
+                                            .builtin_method_fn_id(
+                                                glyim_core::def_id::AdtId::from_raw(1020),
+                                                "as_slice",
+                                            )
+                                            .expect(
+                                                "Vec::as_slice builtin must be registered by \
+                                                 TyCtxMut::register_builtin_methods — this is \
+                                                 a compiler bug (for-loop desugaring depends on it)",
+                                            );
                                         let substs = self.ctx.ty_ctx().intern_substitution(
                                             vec![glyim_type::GenericArg::Ty(elem_t)],
                                         );
