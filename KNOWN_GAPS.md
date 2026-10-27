@@ -1726,6 +1726,49 @@ Verified:
   * `git diff --stat README.md` — one file, documentation only
   * no test count change (docs)
 
+#### 3.5.17 — P1-C2 batch 2b: interp `operand_bit_width` returned None for constant receivers
+
+Fixed in the batch-2b commit chain. The mir-interp helper `operand_bit_width`
+(introduced in batch 1 / §3.5.7 to support the bit-manipulation family)
+returned `None` for `Operand::Constant` — it only handled `Operand::Copy` /
+`Operand::Move` of a local place. Callers (the wrapping arm from batch 2a
+and the saturating arm from batch 2b) turn `None` into `InterpError::Panic`
+with a "cannot determine receiver bit width" message.
+
+**Why this went unnoticed.** Every pre-existing fixture whose receiver was
+a numeric literal wrote that literal through a *local* first:
+
+    let a: u32 = 5;
+    a.count_ones()  // receiver is Copy(local), operand_bit_width works
+
+Or through a `let x = 5 as u32;` cast, which also creates a local. The
+constant-receiver shape:
+
+    (65536u32).saturating_mul(65536u32)  // receiver is Constant(65536)
+
+was never exercised in the corpus. Under `--emit=exec` (LLVM path, which
+doesn't call `operand_bit_width`) it works; under mir-interp (which the
+`run-pass` corpus uses to execute the compiled program) it panics with
+exit 101.
+
+**Fixed.** `operand_bit_width` now reads `c.ty` directly off the
+`Operand::Constant`. Same match on `TyKind::Uint` / `TyKind::Int` that the
+place-based branch used. Fixes both the saturating arm and the batch-2a
+wrapping arm, which had the identical latent bug — no wrapping fixture
+happened to use a constant receiver, but the bug was there for one line
+of fixture away.
+
+**Verified.** Full workspace green at 4614/4614 (including
+`run_pass_corpus` exercising `saturating_arith.g` with its constant-
+receiver shape).
+
+Separately, while building this fix, a **real compiler gap** surfaced:
+`let x = 4294967296 as u64;` silently wraps to 0 in glyim. Rust rejects
+out-of-range unsuffixed integer literals (`error: literal out of range
+for i32`) because the default type of `4294967296` is `i32` and the value
+doesn't fit. glyim silently wraps. That is *not* what this fix addresses —
+it's a typeck issue, tracked as its own open item.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
