@@ -550,7 +550,22 @@ impl DependencyResolver {
         // Process dependencies breadth-first, enqueuing each resolved crate's
         // own (transitive) dependencies.
         while let Some((name, version_req, path, base)) = visit_stack.pop_front() {
-            let key = if let Some(ref v) = version_req {
+            // P2-F1: the visited set must distinguish *path* deps with the
+            // same crate name. Before this, `foo = { path = "a" }` and
+            // `bar = { path = "b" }` where `a/Glyip.toml` and `b/Glyip.toml`
+            // both declare `[package] name = "foo"` would collide: the second
+            // one's key (`foo(git)`) matched the first, was treated as
+            // already-visited, and its dependencies were silently never
+            // enqueued. The lockfile then had a `foo` entry with `bar`'s
+            // transitive deps missing — an incomplete lockfile with no error.
+            //
+            // Fix: include the resolved path in the key when present. Same
+            // crate name + same path still dedupes (correct: re-visiting the
+            // same directory is a real cycle / diamond); same name + different
+            // paths no longer collides.
+            let key = if let Some(ref p) = path {
+                format!("{}@{}(path)", name, p.display())
+            } else if let Some(ref v) = version_req {
                 format!("{}-{}(git)", name, v)
             } else {
                 format!("{}(git)", name)
@@ -1039,12 +1054,20 @@ fn global_git_cache_dir() -> PathBuf {
 }
 
 /// Derive a filesystem-safe directory name for a git URL (stable hash).
+///
+/// P2-F1: previously used `std::collections::hash_map::DefaultHasher`,
+/// whose output is not stable across Rust versions (the docs explicitly
+/// disclaim stability) and whose seed is randomized in some configurations.
+/// That meant the "shared git cache" could silently miss — the same URL
+/// hashed to a different directory after a toolchain bump, re-cloning the
+/// repo each time. SHA-256 of the URL is deterministic, stable, and
+/// collision-resistant. First 16 bytes = 32 hex chars, well under the
+/// 255-byte filesystem limit.
 fn repo_cache_name(url: &str) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut h = DefaultHasher::new();
-    url.hash(&mut h);
-    format!("{:x}", h.finish())
+    let mut hasher = Sha256::new();
+    hasher.update(url.as_bytes());
+    let digest = hasher.finalize();
+    digest[..16].iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 /// Production [`GitFetcher`] that drives the system `git` binary.

@@ -328,8 +328,24 @@ fn collect_files_recursive(dir: &Path, extension: &str, out: &mut Vec<PathBuf>) 
         return;
     };
     for entry in entries.flatten() {
+        // P2-F1: guard against symlink cycles. `entry.path().is_dir()`
+        // follows symlinks, so a link pointing at an ancestor directory
+        // recurses until stack overflow. `DirEntry::file_type()` does NOT
+        // follow symlinks, so `is_symlink()` identifies the cycle
+        // candidates. Symlinks are skipped entirely rather than followed
+        // once — fingerprint stability is more important than indexing
+        // the symlink's target (which would also make the fingerprint
+        // depend on files outside the crate directory). A future iteration
+        // could follow once with a visited-canonical-paths set; skipping
+        // is the conservative choice.
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_symlink() {
+            continue;
+        }
         let path = entry.path();
-        if path.is_dir() {
+        if file_type.is_dir() {
             collect_files_recursive(&path, extension, out);
         } else if path.extension().is_some_and(|e| e == extension) {
             out.push(path);

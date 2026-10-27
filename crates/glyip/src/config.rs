@@ -17,6 +17,7 @@ fn default_version() -> String {
 
 /// Root configuration for a Glyim project.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct GlyipToml {
     /// Package metadata.
     pub package: PackageConfig,
@@ -30,6 +31,7 @@ pub struct GlyipToml {
 
 /// Package metadata section.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct PackageConfig {
     /// Crate name.
     pub name: String,
@@ -55,6 +57,7 @@ pub struct PackageConfig {
 
 /// A binary target inside the package.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct BinTarget {
     /// Binary name.
     pub name: String,
@@ -65,6 +68,7 @@ pub struct BinTarget {
 
 /// A library target inside the package.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct LibTarget {
     /// Source file path (relative to project root).
     #[serde(default)]
