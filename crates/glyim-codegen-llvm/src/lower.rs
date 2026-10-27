@@ -4712,6 +4712,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 | "count_zeros"
                 | "leading_zeros"
                 | "trailing_zeros"
+                | "leading_ones"
+                | "trailing_ones"
                 | "next_power_of_two"
                 | "is_some"
                 | "is_none"
@@ -5542,6 +5544,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 | "count_zeros"
                 | "leading_zeros"
                 | "trailing_zeros"
+                | "leading_ones"
+                | "trailing_ones"
                 | "next_power_of_two"
         ) {
             let Some(recv_op) = args.first() else {
@@ -5712,6 +5716,64 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             vec![GlyimDiagnostic::internal_error(format!(
                                 "next_power_of_two select: {e:?}"
                             ))]
+                        })?
+                        .into_int_value()
+                }
+                "leading_ones" => {
+                    let inverted = self
+                        .builder
+                        .build_not(iv, "lo_inv")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "leading_ones not: {e:?}"
+                            ))]
+                        })?;
+                    let fn_ty = int_ty.fn_type(&[int_ty.into(), bool_ty.into()], false);
+                    let name = format!("llvm.ctlz.i{width}");
+                    let fv = self
+                        .module
+                        .get_function(&name)
+                        .unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    self.builder
+                        .build_call(fv, &[inverted.into(), false_flag], "lo")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "leading_ones call: {e:?}"
+                            ))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error("leading_ones void")]
+                        })?
+                        .into_int_value()
+                }
+                "trailing_ones" => {
+                    let inverted = self
+                        .builder
+                        .build_not(iv, "to_inv")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "trailing_ones not: {e:?}"
+                            ))]
+                        })?;
+                    let fn_ty = int_ty.fn_type(&[int_ty.into(), bool_ty.into()], false);
+                    let name = format!("llvm.cttz.i{width}");
+                    let fv = self
+                        .module
+                        .get_function(&name)
+                        .unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    self.builder
+                        .build_call(fv, &[inverted.into(), false_flag], "to")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "trailing_ones call: {e:?}"
+                            ))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error("trailing_ones void")]
                         })?
                         .into_int_value()
                 }

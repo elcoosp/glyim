@@ -591,6 +591,50 @@ impl<'tcx> Interpreter<'tcx> {
                 };
                 Ok(Some(InterpValue::Uint(result)))
             }
+            (_, "leading_ones") => {
+                let v = self.builtin_deref(&receiver)?;
+                let n: u128 = match &v {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
+                    InterpError::Panic(
+                        "interp: leading_ones: cannot determine receiver bit width".into(),
+                    )
+                })?;
+                let mask: u128 = (1u128 << width) - 1;
+                let trimmed = n & mask;
+                let inverted = (!trimmed) & mask;
+                let lo: u128 = if inverted == 0 {
+                    width as u128
+                } else {
+                    (width as u128) - (128u128 - (inverted.leading_zeros() as u128))
+                };
+                Ok(Some(InterpValue::Uint(lo)))
+            }
+            (_, "trailing_ones") => {
+                let v = self.builtin_deref(&receiver)?;
+                let n: u128 = match &v {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
+                    InterpError::Panic(
+                        "interp: trailing_ones: cannot determine receiver bit width".into(),
+                    )
+                })?;
+                let mask: u128 = (1u128 << width) - 1;
+                let trimmed = n & mask;
+                let inverted = (!trimmed) & mask;
+                let to: u128 = if inverted == 0 {
+                    width as u128
+                } else {
+                    inverted.trailing_zeros() as u128
+                };
+                Ok(Some(InterpValue::Uint(to)))
+            }
             (1050, "clear") | (1061, "clear") => {
                 let v = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
                     *v = InterpValue::String(String::new());

@@ -2713,14 +2713,32 @@ impl TyCtxMut {
             (usize_ty, "trailing_zeros", vec![], u32_ty),
             (usize_ty, "count_ones", vec![], u32_ty),
             (usize_ty, "count_zeros", vec![], u32_ty),
+            (usize_ty, "leading_ones", vec![], u32_ty),
+            (usize_ty, "trailing_ones", vec![], u32_ty),
             (u32_ty, "is_power_of_two", vec![], bool_ty),
             (u32_ty, "next_power_of_two", vec![], u32_ty),
             (u32_ty, "leading_zeros", vec![], u32_ty),
             (u32_ty, "trailing_zeros", vec![], u32_ty),
             (u32_ty, "count_ones", vec![], u32_ty),
+            (u32_ty, "count_zeros", vec![], u32_ty),
+            (u32_ty, "leading_ones", vec![], u32_ty),
+            (u32_ty, "trailing_ones", vec![], u32_ty),
             (u64_ty, "is_power_of_two", vec![], bool_ty),
             (u64_ty, "next_power_of_two", vec![], u64_ty),
+            (u64_ty, "leading_zeros", vec![], u32_ty),
+            (u64_ty, "trailing_zeros", vec![], u32_ty),
+            (u64_ty, "count_ones", vec![], u32_ty),
+            (u64_ty, "count_zeros", vec![], u32_ty),
+            (u64_ty, "leading_ones", vec![], u32_ty),
+            (u64_ty, "trailing_ones", vec![], u32_ty),
             (u8_ty, "is_power_of_two", vec![], bool_ty),
+            (u8_ty, "next_power_of_two", vec![], u8_ty),
+            (u8_ty, "leading_zeros", vec![], u32_ty),
+            (u8_ty, "trailing_zeros", vec![], u32_ty),
+            (u8_ty, "count_ones", vec![], u32_ty),
+            (u8_ty, "count_zeros", vec![], u32_ty),
+            (u8_ty, "leading_ones", vec![], u32_ty),
+            (u8_ty, "trailing_ones", vec![], u32_ty),
             // Script 225: min/max/abs/clamp on integer receivers. The stdlib's
             // raw_vec.g calls `required_cap.next_power_of_two().max(8)`; without
             // these, the receiver is a valid `Uint(Usize)` but the method
@@ -2743,45 +2761,6 @@ impl TyCtxMut {
             if std::env::var("GLYIM_DBG_FNID").is_ok() {
                 eprintln!("[FNID] prim_bit fn_id={} name={}", fn_id.to_raw(), name);
             }
-            self.next_builtin_fn_id += 1;
-            let n = self.resolver.intern(name);
-            let inputs_subst =
-                self.intern_substitution(inputs.iter().map(|t| GenericArg::Ty(*t)).collect());
-            let sig = FnSig {
-                inputs: inputs_subst,
-                output,
-                c_variadic: false,
-                unsafety: glyim_core::primitives::Safety::Safe,
-                abi: glyim_core::primitives::Abi::Glyim,
-            };
-            self.fn_sigs.insert(fn_id, sig.clone());
-            self.primitive_method_fns.insert((recv_ty, n), (fn_id, sig));
-        }
-
-        // Bit / power-of-two / zero helper methods on the primitive
-        // numeric types. Registered here (keyed on the primitive `Ty`) so
-        // that `usize::next_power_of_two`, `u32::is_power_of_two`, etc.
-        // resolve inside the stdlib's `raw_vec.g` / `alloc.g` without
-        // requiring a real impl block on a primitive type (which the
-        // language does not permit).
-        let prim_bit_methods: Vec<(Ty, &str, Vec<Ty>, Ty)> = vec![
-            (usize_ty, "is_power_of_two", vec![], bool_ty),
-            (usize_ty, "next_power_of_two", vec![], usize_ty),
-            (usize_ty, "leading_zeros", vec![], u32_ty),
-            (usize_ty, "trailing_zeros", vec![], u32_ty),
-            (usize_ty, "count_ones", vec![], u32_ty),
-            (usize_ty, "count_zeros", vec![], u32_ty),
-            (u32_ty, "is_power_of_two", vec![], bool_ty),
-            (u32_ty, "next_power_of_two", vec![], u32_ty),
-            (u32_ty, "leading_zeros", vec![], u32_ty),
-            (u32_ty, "trailing_zeros", vec![], u32_ty),
-            (u32_ty, "count_ones", vec![], u32_ty),
-            (u64_ty, "is_power_of_two", vec![], bool_ty),
-            (u64_ty, "next_power_of_two", vec![], u64_ty),
-            (u8_ty, "is_power_of_two", vec![], bool_ty),
-        ];
-        for (recv_ty, name, inputs, output) in prim_bit_methods {
-            let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
             self.next_builtin_fn_id += 1;
             let n = self.resolver.intern(name);
             let inputs_subst =
