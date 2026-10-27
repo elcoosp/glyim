@@ -1203,6 +1203,77 @@ Verified:
     187/187
   * full workspace -> 4605/4605
 
+#### 3.5.10 — P2-B3: interp `Vec<T>::as_slice` truncates non-u8 elements (scope corrected)
+
+Investigated 2026-10-27. Attempted a defensive reject (the same
+pattern as P2-B2 / §3.5.9) and reverted it after the full corpus run
+showed the reject was too aggressive. The audit described this as a
+clean "wrong for non-u8 payloads" bug; the actual shape is narrower
+and more interesting.
+
+**The model.** `mir-interp` represents a `Vec<T>` as
+`Aggregate([Aggregate(elements), Uint(len)])` and its
+`(1020, "as_slice")` arm produces a `InterpValue::String` whose
+*characters* are the low byte of each element
+(`char::from_u32((n as u32) & 0xff)`). This was written for
+`Vec<u8>` (where the byte-as-char String *is* the memory image) and
+has never been correct for larger element types — but the way in
+which it is wrong is element-type dependent:
+
+  * **`Vec<u8>::as_slice()` — correct.** Element type is `u8`, so
+    truncation is identity. Both `.len()` and content access work.
+  * **`Vec<non-u8>::as_slice()` — `.len()` correct, content wrong.**
+    Each element still produces exactly one char, so `slice.len()`
+    equals the element count. But the *character* carries only the
+    low byte — `Vec<u32> [0x1234_5678]` becomes the char
+    `U+0078`, not a 4-byte payload. Reading the slice as a `&[u32]`
+    (via `to_vec`, `copy_from_slice`, indexing) produces truncated
+    values.
+
+**Why the blanket reject failed.** An earlier attempt added a guard
+in the `as_slice` arm that rejected any non-`u8` element type with
+`InterpError::Panic`. It broke 6 run-pass fixtures in the corpus:
+
+    for_loop_over_slice.g, for_loop_over_vec_ref.g,
+    slice_copy_from_slice_len.g, slice_split_at_len.g,
+    slice_to_vec.g, vec_as_slice_len.g
+
+All six exercise `.len()` on a `Vec<u32>` / `Vec<i32>` slice — the
+one operation this model gets *right*. Rejecting the entire arm to
+fix a content bug also broke the length-only cases, which are the
+common path in stdlib (`for _ in v.as_slice()`, `slice.split_at(n)`
+checques, `if v.as_slice().len() > k`). The guard was reverted in
+full (tree confirmed identical to `fb628719`, corpus re-run at
+4605/4605).
+
+**Correct fix (deferred).** The only shape that is right for every
+element type is `InterpValue::Slice(Vec<InterpValue>)` — a real
+sequence-of-values representation, not a byte-string facade. It
+requires touching every `match InterpValue` in `mir-interp` (the
+constant folder, `builtin_deref`, `enum_payload`,
+`read_place`/`write_place` projections, `vec_len`, `vec_push`,
+`vec_pop`, the `String` arms that mirror the same layout, and the
+`(1020, "to_vec")` arm). That is a multi-site refactor of its own,
+not a one-file patch. Tracked as the remaining scope of P2-B3.
+
+**Interim contract.** Content access on a non-`u8` slice *is wrong
+under interp today*, and this entry is the honest record of that.
+The LLVM backend handles `as_slice` correctly for every element
+type (fat-pointer pass-through), so any workflow that needs
+non-`u8` slice content should use `--emit=exec` (the default) or
+the LLVM backend explicitly. The 6 fixtures above stay green
+because they use the length-only path.
+
+**Diagnostic note.** A future partial fix should differ from the
+failed attempt: reject only when the slice is *consumed as
+content* (e.g. from `to_vec`, `from_utf8`, index read into a
+non-u8 element), not when `as_slice` is called. Doing it at the
+consumption site leaves the length-only path working. That requires
+tracking "this `InterpValue::String` was produced by a Vec slice"
+through the interpreter's value flow, which itself is close to
+adding `InterpValue::Slice` — reinforcing that the deferred
+refactor is the real fix.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
