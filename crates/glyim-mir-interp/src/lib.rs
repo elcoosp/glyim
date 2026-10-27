@@ -613,6 +613,46 @@ impl<'tcx> Interpreter<'tcx> {
                 };
                 Ok(Some(InterpValue::Uint(lo)))
             }
+            // P1-C2 batch 2a: wrapping arithmetic on unsigned integers.
+            // Rust semantics: the operation is performed at infinite
+            // precision and the result is truncated to the receiver's
+            // width. The receiver's type determines the width (via
+            // `operand_bit_width`), so the same arm handles u32/u64/usize
+            // uniformly. Signed variants would need to sign-extend the
+            // result through the same mask (an int receiver goes through
+            // the `InterpValue::Int` path of the extraction match).
+            (_, "wrapping_add") | (_, "wrapping_sub") | (_, "wrapping_mul") => {
+                let a = self.builtin_deref(&receiver)?;
+                let b = args.get(1).cloned().unwrap_or(InterpValue::Unit);
+                let a_n: u128 = match &a {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                let b_n: u128 = match &b {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
+                    InterpError::Panic(format!(
+                        "interp: {}: cannot determine receiver bit width",
+                        method
+                    ))
+                })?;
+                let mask: u128 = if width >= 128 {
+                    u128::MAX
+                } else {
+                    (1u128 << width) - 1
+                };
+                let result: u128 = match method.as_str() {
+                    "wrapping_add" => a_n.wrapping_add(b_n) & mask,
+                    "wrapping_sub" => a_n.wrapping_sub(b_n) & mask,
+                    "wrapping_mul" => a_n.wrapping_mul(b_n) & mask,
+                    _ => unreachable!(),
+                };
+                Ok(Some(InterpValue::Uint(result)))
+            }
             (_, "trailing_ones") => {
                 let v = self.builtin_deref(&receiver)?;
                 let n: u128 = match &v {

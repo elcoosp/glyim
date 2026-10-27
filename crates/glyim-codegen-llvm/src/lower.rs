@@ -4708,6 +4708,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 | "insert"
                 | "reserve"
                 | "is_power_of_two"
+                | "wrapping_add"
+                | "wrapping_sub"
+                | "wrapping_mul"
                 | "count_ones"
                 | "count_zeros"
                 | "leading_zeros"
@@ -5520,6 +5523,76 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
                             "is_power_of_two branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+        // BC-P1-C2-BATCH2A: `wrapping_add` / `wrapping_sub` / `wrapping_mul`.
+        // LLVM integer ops wrap on overflow *by definition* — the language-
+        // level distinction between `a + b` and `a.wrapping_add(b)` only
+        // matters once codegen starts emitting `llvm.{s,u}add.with.overflow`
+        // for the plain operators. It does not yet (the driver's
+        // `overflow-checks` config is not threaded into this backend), so
+        // the two compile identically *today*; this arm exists to satisfy
+        // the registry→lowering contract and to be the one place that
+        // changes when overflow checking lands.
+        //
+        // The operands are the receiver (`args[0]`) and the explicit
+        // argument (`args[1]`), both of the same integer type (enforced
+        // by typeck). `build_int_add` / `build_int_sub` / `build_int_mul`
+        // produce the truncated (wrapped) result directly; no explicit
+        // masking is needed on this side.
+        if matches!(
+            method.as_str(),
+            "wrapping_add" | "wrapping_sub" | "wrapping_mul"
+        ) {
+            let Some(recv_op) = args.first() else {
+                return Ok(false);
+            };
+            let Some(rhs_op) = args.get(1) else {
+                return Ok(false);
+            };
+            let recv_v = self.lower_operand(recv_op)?;
+            let rhs_v = self.lower_operand(rhs_op)?;
+            if !recv_v.is_int_value() || !rhs_v.is_int_value() {
+                return Ok(false);
+            }
+            let lhs_iv = recv_v.into_int_value();
+            let rhs_iv = rhs_v.into_int_value();
+            let result = match method.as_str() {
+                "wrapping_add" => {
+                    self.builder.build_int_add(lhs_iv, rhs_iv, "wadd")
+                }
+                "wrapping_sub" => {
+                    self.builder.build_int_sub(lhs_iv, rhs_iv, "wsub")
+                }
+                "wrapping_mul" => {
+                    self.builder.build_int_mul(lhs_iv, rhs_iv, "wmul")
+                }
+                _ => unreachable!(),
+            }
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "{}: {e:?}",
+                    method
+                ))]
+            })?;
+            let dp = self.place_ptr(destination)?;
+            self.builder.build_store(dp, result).map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "{} store: {e:?}",
+                    method
+                ))]
+            })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("wrapping target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "{} branch: {e:?}",
+                            method
                         ))]
                     })?;
             }

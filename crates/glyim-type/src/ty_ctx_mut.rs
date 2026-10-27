@@ -2786,12 +2786,15 @@ impl TyCtxMut {
             (u64_ty, "saturating_sub", vec![u64_ty], u64_ty),
             (u64_ty, "wrapping_add", vec![u64_ty], u64_ty),
             (u64_ty, "wrapping_sub", vec![u64_ty], u64_ty),
+            (u64_ty, "wrapping_mul", vec![u64_ty], u64_ty),
             // u32
             (u32_ty, "checked_add", vec![u32_ty], option_u32_ty),
             (u32_ty, "checked_sub", vec![u32_ty], option_u32_ty),
             (u32_ty, "saturating_sub", vec![u32_ty], u32_ty),
             (u32_ty, "saturating_add", vec![u32_ty], u32_ty),
+            (u32_ty, "wrapping_add", vec![u32_ty], u32_ty),
             (u32_ty, "wrapping_sub", vec![u32_ty], u32_ty),
+            (u32_ty, "wrapping_mul", vec![u32_ty], u32_ty),
             // usize
             (usize_ty, "checked_add", vec![usize_ty], option_usize_ty),
             (usize_ty, "checked_sub", vec![usize_ty], option_usize_ty),
@@ -2800,6 +2803,7 @@ impl TyCtxMut {
             (usize_ty, "saturating_sub", vec![usize_ty], usize_ty),
             (usize_ty, "wrapping_add", vec![usize_ty], usize_ty),
             (usize_ty, "wrapping_sub", vec![usize_ty], usize_ty),
+            (usize_ty, "wrapping_mul", vec![usize_ty], usize_ty),
         ];
         for (recv_ty, name, inputs, output) in prim_entries {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
