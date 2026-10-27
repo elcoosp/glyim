@@ -1769,6 +1769,68 @@ for i32`) because the default type of `4294967296` is `i32` and the value
 doesn't fit. glyim silently wraps. That is *not* what this fix addresses —
 it's a typeck issue, tracked as its own open item.
 
+#### 3.5.18 — OPEN: out-of-range unsuffixed integer literals wrap silently
+
+Discovered 2026-10-27 while building the saturating-arithmetic fixture
+(§3.5.17). Not fixed in that session — it is a distinct typeck issue and
+warrants its own change.
+
+**Reproduction.**
+
+    let a = 4294967296;          // compiles; a == 0
+    let b = 4294967296 as u64;   // compiles; b == 0
+
+Rust rejects both with `error: literal out of range for \`i32\``. The
+default type of an unsuffixed integer literal is `i32`; a value that does
+not fit is a hard error, *before* any surrounding cast is considered.
+`4294967296 as u64` in Rust is still an error for the same reason — the
+cast applies to the already-typed `i32`, and the literal could never be
+`i32`.
+
+`glyim` accepts both and wraps to 0. That is silent wrong-value
+compilation on code Rust rejects, so it is worse than the "clean-reject"
+bars this project has been holding to elsewhere.
+
+**What already works.** `lower_literal_with_diags`
+(`glyim-hir/src/lower/lower_expr.rs`) *does* reject literals that
+overflow `i128`/`u128` — `[X####] literal too large` with a test at
+`number_suffix.rs:test_int_literal_overflow_reports_error`. But
+`4294967296` fits `i128` comfortably; the truncation happens later, when
+inference defaults an unbound `Infer(Int)` to `Ty::I32`
+(`resolve_ty_shallow`, per the Scripts 442/452 note in `zonk.rs`).
+
+**Why it was not fixed now.** The value *is* preserved correctly through
+HIR (`Literal::Int(i128, None)`) and THIR (the MIR trace shows
+`MirConst { kind: Int(4294967296), ty: <u64> }`). The wrap is specifically
+at the default-and-narrow step. A correct fix needs a check that runs
+after inference has resolved the literal's type — i.e. in `zonk` — where
+both the raw `i128` value and the concrete `TyKind::Int(_)`/`Uint(_)` are
+in scope, then a range comparison against `IntTy`/`UintTy` bounds, then a
+new diagnostic. That is a typeck change of its own, not a one-liner, and
+deserves the full explore-patch-verify cycle rather than being bolted
+onto a session already 11 commits deep.
+
+**Shape of the fix (for a future session).**
+
+  1. `zonk_body` walks every `thir::ExprKind::Literal(thir::Literal::Int(v))`;
+     when `expr.ty` resolves to a concrete `Int(_)`/`Uint(_)`, compare `v`
+     against that type's range.
+  2. On overflow, emit a `GlyimDiagnostic` naming the literal, its value,
+     the inferred type, and the range — mirroring Rust's
+     `literal out of range for \`i32\``.
+  3. Keep the existing `i128`-overflow check in HIR (it fires first for
+     truly absurd literals and is already tested).
+  4. Fixture: a `compile-fail` case for `let a = 4294967296;` and one
+     confirming `let a = 4294967296u64;` still compiles and yields the
+     right value.
+
+**Interim.** Every fixture in the tree that needs a wide literal uses an
+explicit suffix (`4294967296u64`), which types correctly and compiles to
+the right value. The wrap only affects *unsuffixed* literals. The
+`saturating_arith.g` fixture has a comment explaining why every literal
+carries a suffix, so the constraint is documented at the point a future
+author would trip over it.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
