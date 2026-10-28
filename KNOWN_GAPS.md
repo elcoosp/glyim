@@ -2331,84 +2331,100 @@ with a direct probe before designing a fix around it. Here that probe
 (`fn main() -> i32 { 300 }` → `$?`) took ten seconds and prevented a
 "fix" that would have broken correctness.
 
-#### 3.5.22 — OPEN: `println!` format-arg inside `Drop::drop` substitutes empty
+#### 3.5.22 — OPEN: `println!`/`format!` format-argument substitution emits empty for runtime values (both backends)
 
-Discovered 2026-10-28 while investigating TEST-5. The TEST-5 premise
-("the harness silently drops `--backend=bytecode`") turned out to be
-about a *dead fixture* — `tests/runtime/drop_order.g` was in a
-directory no runner scans (the runtime driver only walks
-`tests/runtime/m5/`, the corpus only walks `tests/run-pass/`). Moving
-it into the corpus and dropping the dead flag revealed this bug:
+Discovered 2026-10-28 (session 22). Originally surfaced by moving a
+dead fixture into the corpus, then narrowed by direct probes. The bug
+is **much larger** than the fixture that found it.
 
-    impl Drop for WithDrop {
-        fn drop(&mut self) { println!("drop {}", self.id); }
+**Minimal reproduction.**
+
+    fn main() -> i32 {
+        let x = 42;
+        println!("value {}", x);
+        0
     }
 
-Expected stdout (LIFO drop order, `_b` then `_a`):
+Compiled with `--with-stdlib --emit=exec` (LLVM backend, default),
+running produces:
 
-    drop 2
-    drop 1
+    value
 
-Actual stdout:
+That is: the literal text `"value "` (including the trailing space) is
+emitted, and the `{}` substitution for `x = 42` renders as **empty**.
+Byte-level output (`od -c`): `v a l u e space \n`.
 
-    drop
-    drop
+**Scope confirmed so far.**
 
-**Drop order is correct** — two drops fire, in the right sequence. Only
-the `{}` substitution for `self.id` is broken: the format argument
-renders as an empty string. The literal text `"drop "` (including the
-trailing space) is emitted correctly, so `println!` itself runs.
+  * **Both backends.** `GLYIM_LLVM=1` (explicit) and the default
+    `--emit=exec` (LLVM) both show it. The corpus runs via mir-interp
+    and shows it too (that was the original observation, from the
+    `Drop` fixture). So this is not backend-specific.
+  * **Not `Drop`-specific.** The original fixture put the format call
+    inside `Drop::drop`, but the minimal reproducer is an ordinary
+    `main` with an ordinary local. `Drop` was a red herring.
+  * **Not format-string-parsing-specific.** The literal text survives
+    correctly; only the *argument* is lost. So the format string is
+    being split at `{}` and the pieces emitted, but the substitution
+    value never reaches the output.
 
-**Narrowing done so far.** The fixture only fails through
-**mir-interp** — the corpus harness executes it via the interpreter
-(`interpreter_runner.rs`), so the bug is in the interp's handling of a
-format arg whose source is `&mut self` inside a `Drop`-glue call. Not
-verified whether the LLVM backend also gets this wrong; that needs a
-`--emit=exec` probe of the same program, which the original fixture's
-`--backend=bytecode` flag previously prevented from being meaningful.
+**Why it survived until now.** Every existing `run-pass` fixture that
+asserts on stdout uses a literal-only message (`println!("hello")`,
+`println!("drop 2")`). No fixture in the corpus asserted on a `{}`
+substitution of a *runtime* value. The whole class was untested. This
+is precisely what TEST-1 (add `// check-stderr:` matchers; 232/239
+run-pass fixtures currently assert only exit code) was intended to
+catch — TEST-1 is not implemented.
 
-**Why it was not fixed now.** Two independent questions the fix
-depends on:
+**Where the bug can be.** Three possibilities, in rough order of
+likelihood:
 
-  1. Does the LLVM backend produce `drop 2\ndrop 1` for this program?
-     If yes, only interp is wrong (interp bug, local fix). If no, both
-     backends are wrong and the bug is in lowering or in the format
-     macro expansion (much larger).
-  2. Where in the interp's Drop-glue path does `self` lose its
-     argument-read fidelity? The `Drop` call is `drop_in_place(self)`
-     synthesised by lowering; `self.id` is a field read through `&mut
-     self`. Whether the bug is in the field read, the format-arg
-     capture, or the `println!` expansion needs its own probe.
+  1. **`println!` macro expansion.** `glyim-meta`'s
+     `t084_format_with_substitution_yields_empty_string` test
+     (existing, passing) literally asserts the current behaviour is
+     "empty string for substitution", which means the bug was
+     *enshrined as a test expectation*. See that test — it may need
+     to be fixed at the same time as the expander.
+  2. **Lowering of the format call.** If the macro expands to
+     something like `print_str("value "); display(x)` and the second
+     call is dropped or lowers to a no-op, that would produce exactly
+     this output. `crates/glyim-lower/src/lower_rvalue.rs`'s call
+     lowering is the place to check.
+  3. **`Display` impl dispatch for primitives.** If the format arg
+     lowers to a `Display::fmt(x)` call and the impl for `i32` is a
+     stub, the arg renders empty.
 
-Answering (1) is ten seconds: compile the fixture with `--emit=exec`
-and run. That is the right first step for a follow-up session.
+**First investigation steps (for the next session).**
 
-**Interim.** The fixture is **not** committed (reverted). Any new
-`run-pass` fixture using `println!("{}", field)` inside `Drop` will hit
-this. Existing fixtures that drop with *literal-only* messages
-(`drop_runs_once.g`, `drop_with_owning_field.g`) pass — they don't
-exercise format substitution. The pre-existing `tests/runtime/
-drop_order.g` remains where it was, still dead, still carrying the
-inert `--backend=bytecode` flag (see TEST-5 note below).
+  1. Run `println!("{}", 42)` with a **literal integer** as the arg,
+     not a variable. If `42` also renders empty, it's not a
+     capture/operand-passing bug.
+  2. Expand the macro: check what `println!("value {}", x)` lowers to
+     in MIR (`--emit=mir`). Look for the `display`/`to_string` call
+     and whether the argument operand is being passed.
+  3. Read `glyim-meta`'s `t084_format_with_substitution_yields_empty_string`
+     test — if it asserts empty output, that's the test to change and
+     the expander to fix in the same commit.
+  4. Once the fix is in, add the first `check-stdout: value 42` fixture
+     to the corpus (TEST-1's pattern).
 
-**TEST-5 status after this investigation.** The plan said "parse
-`--backend` in the harness flag parser". That would be cosmetic: the
-harness has no bytecode-VM *execution* path (grepped `glyim-test/src/`
-— no `Module::from_mir_bodies`, no bytecode interpreter wiring), so
-parsing the flag could only ever forward it to a backend that can emit
-opcodes the harness cannot run. The plan's fix would silently change
-nothing. The real resolutions are:
+**Interim.** Any new fixture asserting on `println!("...{}...", x)`
+will fail. Existing fixtures are unaffected (they don't test this).
+The dead `tests/runtime/drop_order.g` remains where it was; it can be
+deleted or kept as a note, but no fixture in the tree currently
+exercises this path.
 
-  * **Wire the bytecode VM into the harness** (requires TEST-4's
-    `Module::from_mir_bodies`). Multi-session.
-  * **Delete the dead fixture and the inert flag.** Removes the
-    confusion without pretending to solve anything.
-  * **Document and defer** — this entry.
+**TEST-5 status (unchanged by this entry).** The `--backend=bytecode`
+flag on that dead fixture is inert because the harness has no
+bytecode-VM execution path (`glyim-test/src/` has no
+`Module::from_mir_bodies`, no VM driver). The correct resolution is
+TEST-4 (three-backend differential, requires wiring the VM in), not
+"parse the flag".
 
-TEST-5 is therefore reclassified: not "parse the flag", but "the
-bytecode flag cannot work in the harness until the VM is wired in".
-Tracked here rather than as a standalone §3.x because the resolution
-depends on TEST-4.
+**Session-end state.** 30 unpushed commits. This bug is a real
+correctness issue that warrants its own session: probable location is
+the `println!` expander plus its (currently-passing) expectation test,
+both in `glyim-meta`.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
