@@ -232,6 +232,75 @@ pub fn find_runtime_staticlib() -> Option<std::path::PathBuf> {
     None
 }
 
+/// Symbol names that only the runtime staticlib (`glyim-runtime`) provides.
+/// A link error mentioning one of these is most likely a stale
+/// `libglyim_runtime.a` — one built from older runtime source than the
+/// current compiler. P1-O8 exists to turn that confusing failure mode
+/// (`undefined reference to \`glyim_stdout_write\``) into an actionable
+/// message.
+const RUNTIME_SYMBOLS: &[&str] = &[
+    "glyim_alloc",
+    "glyim_dealloc",
+    "glyim_drop_in_place",
+    "glyim_panic",
+    "glyim_stdout_write",
+    "glyim_stdout_flush",
+    "glyim_stderr_write",
+    "glyim_stderr_flush",
+    "glyim_string_from_bytes",
+    "glyim_string_push_str",
+    "glyim_slice_to_vec",
+];
+
+/// Pure function over `(err, runtime_path)` so tests can exercise the
+/// annotation without a filesystem. The public wrapper below supplies
+/// `runtime_path` from [`find_runtime_staticlib`].
+///
+/// If `err` mentions a runtime symbol, append a hint naming the static
+/// library path, its mtime, and the rebuild command. Otherwise return
+/// `err` unchanged — a non-runtime link failure (`printf`, system libs)
+/// is not this hint's problem.
+fn annotate_link_error_if_stale_runtime_with(
+    err: String,
+    runtime_path: Option<&std::path::Path>,
+) -> String {
+    if !RUNTIME_SYMBOLS.iter().any(|s| err.contains(s)) {
+        return err;
+    }
+    let Some(path) = runtime_path else {
+        // No runtime lib at all: the `find_runtime_staticlib` "not found"
+        // path elsewhere already reported the real cause. Don't pile on.
+        return err;
+    };
+    let mtime = std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| format!("{}s since epoch", d.as_secs()))
+        .unwrap_or_else(|| "unknown".to_string());
+    format!(
+        "{err}\n\n\
+         Hint: the link step could not resolve `glyim_*` runtime symbols.\n\
+         The static library being linked is:\n  {}\n  (mtime: {})\n\
+         If that library was built from older `glyim-runtime` source than the\n\
+         current compiler, its ABI will not match. Rebuild it with:\n\n    \
+         cargo build -p glyim-runtime\n\n\
+         (or `cargo build -p glyim-runtime --release` for release builds),\n\
+         then retry.",
+        path.display(),
+        mtime,
+    )
+}
+
+/// Public wrapper: consult [`find_runtime_staticlib`] and delegate to the
+/// pure annotator. Call at every `link_with_args` failure site so a stale
+/// runtime is diagnosed at the moment it fails.
+pub fn annotate_link_error_if_stale_runtime(err: String) -> String {
+    let path = find_runtime_staticlib();
+    annotate_link_error_if_stale_runtime_with(err, path.as_deref())
+}
+
+
 /// Link using structured `LinkArgs` (plan §18.2): emits `-L`/`-l`/objects
 /// before appending any user-supplied flags.
 pub fn link_with_args(
@@ -655,5 +724,65 @@ mod tests {
             result.unwrap_err().contains("at least one per-CGU bitcode input"),
             "error should name the empty-input condition"
         );
+    }
+}
+
+
+#[cfg(test)]
+mod annotate_tests {
+    use super::annotate_link_error_if_stale_runtime_with;
+
+    fn sample_gnu_err() -> String {
+        "ld: undefined reference to `glyim_stdout_write'\n".to_string()
+    }
+
+    #[test]
+    fn appends_hint_when_runtime_symbol_mentioned() {
+        let path = std::path::Path::new("/tmp/fake/libglyim_runtime.a");
+        let out = annotate_link_error_if_stale_runtime_with(sample_gnu_err(), Some(path));
+        assert!(out.contains("glyim_stdout_write"));
+        assert!(out.contains("Hint:"));
+        assert!(out.contains("cargo build -p glyim-runtime"));
+        assert!(out.contains("/tmp/fake/libglyim_runtime.a"));
+    }
+
+    #[test]
+    fn leaves_non_runtime_errors_unchanged() {
+        let err = "ld: undefined reference to `printf'".to_string();
+        let out = annotate_link_error_if_stale_runtime_with(
+            err.clone(),
+            Some(std::path::Path::new("/tmp/x.a")),
+        );
+        assert_eq!(out, err, "no runtime symbol → no annotation");
+    }
+
+    #[test]
+    fn leaves_alone_when_no_runtime_lib() {
+        let err = sample_gnu_err();
+        let out = annotate_link_error_if_stale_runtime_with(err.clone(), None);
+        assert_eq!(out, err, "no runtime path → don't append misleading hint");
+    }
+
+    #[test]
+    fn ld64_error_also_matches() {
+        let err = "Undefined symbols for architecture arm64:\n  \
+                   \"_glyim_alloc\", referenced from:\n      __glyim_fn_1\n"
+            .to_string();
+        let out = annotate_link_error_if_stale_runtime_with(
+            err,
+            Some(std::path::Path::new("/x.a")),
+        );
+        assert!(out.contains("cargo build -p glyim-runtime"));
+    }
+
+    #[test]
+    fn msvc_lnk2019_also_matches() {
+        let err = "error LNK2019: unresolved external symbol glyim_panic referenced in function main"
+            .to_string();
+        let out = annotate_link_error_if_stale_runtime_with(
+            err,
+            Some(std::path::Path::new("/x.lib")),
+        );
+        assert!(out.contains("cargo build -p glyim-runtime"));
     }
 }

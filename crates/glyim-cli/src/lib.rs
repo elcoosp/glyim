@@ -674,11 +674,12 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
                 args.target.as_deref(),
             )
             .map_err(|e| {
+                let annotated = linker::annotate_link_error_if_stale_runtime(e);
                 vec![glyim_diag::GlyimDiagnostic::internal_error(format!(
                     "ThinLTO: failed to merge {} thin-linked objects into {}: {}",
                     thin_objects.len(),
                     object_path.display(),
-                    e
+                    annotated
                 ))]
             })?;
         }
@@ -785,7 +786,10 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             args.linker.as_deref(),
             args.target.as_deref(),
         )
-        .map_err(|e| vec![glyim_diag::GlyimDiagnostic::internal_error(&e)])?;
+        .map_err(|e| {
+            let annotated = linker::annotate_link_error_if_stale_runtime(e);
+            vec![glyim_diag::GlyimDiagnostic::internal_error(&annotated)]
+        })?;
     }
 
     Ok(())
@@ -837,7 +841,10 @@ fn finalize_after_object(
             args.linker.as_deref(),
             args.target.as_deref(),
         )
-        .map_err(|e| vec![glyim_diag::GlyimDiagnostic::internal_error(&e)])?;
+        .map_err(|e| {
+            let annotated = linker::annotate_link_error_if_stale_runtime(e);
+            vec![glyim_diag::GlyimDiagnostic::internal_error(&annotated)]
+        })?;
     }
     Ok(())
 }
