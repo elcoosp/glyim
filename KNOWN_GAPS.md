@@ -2547,6 +2547,79 @@ and comparing, then check (2) by grepping for hardcoded `FnDefId` refs
 in the type/typeck crates, then check (3) by unsetting `RUSTC_WRAPPER`
 for one build.
 
+**Ninth attempt (2026-10-28) — nine layers, one per attempt.**
+Working with `RUSTC_WRAPPER=""` to eliminate kache from the picture
+(the single most useful tool discovered this session), the five-piece
+fix compiles, type-checks, and runs — but produces `value ` (empty)
+instead of `value 42`. The `.ll` shows why:
+
+    %local_3 = alloca { ptr, i64 }, align 8      ; <-- 16-byte &str
+    store { ptr, i64 } zeroinitializer, ptr %local_3, align 8
+    ...
+    %fat_len = extractvalue { ptr, i64 } %load, 1   ; <-- reads 0
+
+Three separate things are wrong at once, and the fix touches all
+three:
+
+  1. **`local_3` is `{ptr, i64}`** (a `&str`, 16 bytes), not
+     `{[3 x i64]}` (a `String`, 24 bytes). `sig.output` for the
+     `to_string` FnSig is `string_ty` = `Adt(1050, [])`, which
+     `llvm_type_for_ty` lowers to `{ [3 x i64] }`. So either
+     `sig.output` isn't reaching this local's type, or the caller
+     allocates the destination from a different source.
+  2. **No call at all.** `grep -c glyim_int_to_string` on the `.ll` is
+     0 — the helper is never invoked, so nothing writes to `local_3`.
+  3. **The call is silently dropped.** `try_lower_builtin_intrinsic`
+     returns `Ok(false)` (the primitive `FnDefId` is **not in
+     `builtin_fn_index`** — that map only contains `(AdtId, Name)`
+     pairs registered through `builtin_method_fns`, and
+     `primitive_method_fns` is a separate table that the dispatcher
+     never consults). The caller of `try_lower_builtin_intrinsic`
+     then emits nothing and continues, leaving the destination
+     zero-initialized.
+
+**The nine layers, in the order attempts discovered them:**
+
+  1. `to_string` on primitives returns the `u32::MAX - 2` sentinel
+  2. The sentinel lowers to `MirConstKind::Error` (zero value)
+  3. `String::to_string`'s registry entry produces `TyKind::String`,
+     not `Adt(1050)` — used as the branch's `out_ty`
+  4. The registry needs entries for each primitive (`i32`, `u32`, `u64`,
+     `usize`)
+  5. `try_builtin_method`'s `to_owned`/`to_string` branch must consult
+     `lookup_primitive_method` before the sentinel fallback
+  6. **kache replays stale rlibs across `git checkout` reversions** —
+     every earlier "isolated test passed / full test failed" was two
+     different cached states, not a real contradiction
+  7. The typeck branch's `out_ty` must be `sig.output`, not a hardcoded
+     `TyKind::String` (which is `str`, not `String`)
+  8. `builtin_fn_index` doesn't contain primitive methods — the LLVM
+     dispatcher's first line (`builtin_fn_id(fn_id)` → `Some((adt,
+     name))`) returns `None`, so the entire `to_string` arm never runs
+  9. The dispatcher's `Ok(false)` return causes the caller to drop the
+     call silently, leaving the destination uninitialized
+
+**Why this is not one session.** Layers 1-7 were each discovered and
+fixed this session. Layer 8 needs `primitive_method_fns` bridged into
+`builtin_fn_index` (or the dispatcher taught to consult both tables).
+Layer 9 needs the `Ok(false)` path to be a *loud* failure or a real
+`Call`, not a silent drop. Both are changes in
+`glyim-codegen-llvm/lower.rs`'s dispatch shape, and layer 9 in
+particular is a class of bug worth its own audit — "when a builtin
+dispatcher declines, what happens to the call?" is a question whose
+answer applies to every `try_lower_builtin_intrinsic` arm, not just
+`to_string`.
+
+**The kache discovery is the session's most transferable finding.**
+Every contradictory result across eight attempts was kache replaying
+an artifact from a prior state. `RUSTC_WRAPPER=""` for one build made
+attempt 9 the first one whose output reflected the current source.
+Recorded here for its own sake: **when a bisect produces results that
+cannot be reconciled with the source on disk, disable the compiler
+wrapper for one build.** This is the same class of hazard as a stale
+`libglyim_runtime.a` (§3.5.26) — a caching layer between you and the
+source.
+
 **Workflow lesson (recorded for its own sake):** the earlier isolated
 test that "passed" was measuring `--emit=mir`, which does not exercise
 the same path as `--emit=exec`. Comparing the two emit modes across two
