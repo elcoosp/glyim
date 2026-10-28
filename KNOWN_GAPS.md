@@ -2331,6 +2331,85 @@ with a direct probe before designing a fix around it. Here that probe
 (`fn main() -> i32 { 300 }` → `$?`) took ten seconds and prevented a
 "fix" that would have broken correctness.
 
+#### 3.5.22 — OPEN: `println!` format-arg inside `Drop::drop` substitutes empty
+
+Discovered 2026-10-28 while investigating TEST-5. The TEST-5 premise
+("the harness silently drops `--backend=bytecode`") turned out to be
+about a *dead fixture* — `tests/runtime/drop_order.g` was in a
+directory no runner scans (the runtime driver only walks
+`tests/runtime/m5/`, the corpus only walks `tests/run-pass/`). Moving
+it into the corpus and dropping the dead flag revealed this bug:
+
+    impl Drop for WithDrop {
+        fn drop(&mut self) { println!("drop {}", self.id); }
+    }
+
+Expected stdout (LIFO drop order, `_b` then `_a`):
+
+    drop 2
+    drop 1
+
+Actual stdout:
+
+    drop
+    drop
+
+**Drop order is correct** — two drops fire, in the right sequence. Only
+the `{}` substitution for `self.id` is broken: the format argument
+renders as an empty string. The literal text `"drop "` (including the
+trailing space) is emitted correctly, so `println!` itself runs.
+
+**Narrowing done so far.** The fixture only fails through
+**mir-interp** — the corpus harness executes it via the interpreter
+(`interpreter_runner.rs`), so the bug is in the interp's handling of a
+format arg whose source is `&mut self` inside a `Drop`-glue call. Not
+verified whether the LLVM backend also gets this wrong; that needs a
+`--emit=exec` probe of the same program, which the original fixture's
+`--backend=bytecode` flag previously prevented from being meaningful.
+
+**Why it was not fixed now.** Two independent questions the fix
+depends on:
+
+  1. Does the LLVM backend produce `drop 2\ndrop 1` for this program?
+     If yes, only interp is wrong (interp bug, local fix). If no, both
+     backends are wrong and the bug is in lowering or in the format
+     macro expansion (much larger).
+  2. Where in the interp's Drop-glue path does `self` lose its
+     argument-read fidelity? The `Drop` call is `drop_in_place(self)`
+     synthesised by lowering; `self.id` is a field read through `&mut
+     self`. Whether the bug is in the field read, the format-arg
+     capture, or the `println!` expansion needs its own probe.
+
+Answering (1) is ten seconds: compile the fixture with `--emit=exec`
+and run. That is the right first step for a follow-up session.
+
+**Interim.** The fixture is **not** committed (reverted). Any new
+`run-pass` fixture using `println!("{}", field)` inside `Drop` will hit
+this. Existing fixtures that drop with *literal-only* messages
+(`drop_runs_once.g`, `drop_with_owning_field.g`) pass — they don't
+exercise format substitution. The pre-existing `tests/runtime/
+drop_order.g` remains where it was, still dead, still carrying the
+inert `--backend=bytecode` flag (see TEST-5 note below).
+
+**TEST-5 status after this investigation.** The plan said "parse
+`--backend` in the harness flag parser". That would be cosmetic: the
+harness has no bytecode-VM *execution* path (grepped `glyim-test/src/`
+— no `Module::from_mir_bodies`, no bytecode interpreter wiring), so
+parsing the flag could only ever forward it to a backend that can emit
+opcodes the harness cannot run. The plan's fix would silently change
+nothing. The real resolutions are:
+
+  * **Wire the bytecode VM into the harness** (requires TEST-4's
+    `Module::from_mir_bodies`). Multi-session.
+  * **Delete the dead fixture and the inert flag.** Removes the
+    confusion without pretending to solve anything.
+  * **Document and defer** — this entry.
+
+TEST-5 is therefore reclassified: not "parse the flag", but "the
+bytecode flag cannot work in the harness until the VM is wired in".
+Tracked here rather than as a standalone §3.x because the resolution
+depends on TEST-4.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
