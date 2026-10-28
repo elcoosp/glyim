@@ -1189,3 +1189,120 @@ fn walk_ty_resolved(infer: &InferenceTable, ctx: &TyCtx, ty: Ty, f: &mut impl Fn
         _ => {}
     }
 }
+
+
+// ---------------------------------------------------------------------------
+// §3.5.18: unsuffixed integer literals whose value does not fit the type
+// that inference settled on.
+// ---------------------------------------------------------------------------
+
+/// Reject unsuffixed integer literals whose value does not fit the type
+/// inference assigned them.
+///
+/// `let a = 4294967296;` parses as `Int(4294967296, None)` (hint = None).
+/// No context constrains the type, so inference defaults it to `i32` — but
+/// `4294967296` does not fit i32. Rust reports `literal out of range`;
+/// glyim silently wraps to 0 at codegen (the THIR literal keeps the full
+/// i128; only MIR codegen's i32 store truncates it).
+///
+/// **When.** After `zonk_bodies`, every `Expr.ty` is concrete, and the
+/// literal's raw i128 is untouched. So we compare the raw value against
+/// the resolved type's bounds.
+///
+/// **Scope (deliberately narrow).** Only the *direct* initializer of a
+/// `let`, or the *direct* expression of an `Stmt::Expr`. A literal nested
+/// inside a call, binary op, if-condition, etc. still wraps silently.
+/// Broadening the walk requires mirroring `zonk_expr`'s full match, which
+/// is larger than this fix. Documented in `KNOWN_GAPS.md` §3.5.18.
+///
+/// **Suffixed literals are not checked here** — `4294967296i32` is a
+/// different error (explicit suffix that does not fit). Also §3.5.18
+/// scope.
+pub fn check_literal_ranges(
+    ctx: &TyCtx,
+    bodies: &[(glyim_core::def_id::LocalDefId, thir::Body)],
+) -> Vec<glyim_diag::GlyimDiagnostic> {
+    use glyim_core::primitives::{IntTy, UintTy};
+    use glyim_type::TyKind;
+
+    fn check_expr(
+        ctx: &TyCtx,
+        expr: &thir::Expr,
+        diags: &mut Vec<glyim_diag::GlyimDiagnostic>,
+    ) {
+        let value: i128 = match &expr.kind {
+            thir::ExprKind::Literal(thir::Literal::Int(v, None)) => *v,
+            thir::ExprKind::Literal(thir::Literal::Uint(v, None)) => {
+                if *v > i128::MAX as u128 {
+                    return; // already caught by HIR's i128 overflow check
+                }
+                *v as i128
+            }
+            _ => return,
+        };
+
+        match ctx.ty_kind(expr.ty) {
+            TyKind::Int(int_ty) => {
+                // TODO(isize): honour target pointer width. 64 matches every
+                // current glyim target; wiring `TargetInfo` through would be
+                // part of the broader §3.5.18 work.
+                let width: u32 = match *int_ty {
+                    IntTy::I8 => 8,
+                    IntTy::I16 => 16,
+                    IntTy::I32 => 32,
+                    IntTy::I64 => 64,
+                    IntTy::Isize => 64,
+                };
+                let max = (1i128 << (width - 1)) - 1;
+                let min = -(1i128 << (width - 1));
+                if value < min || value > max {
+                    diags.push(glyim_diag::GlyimDiagnostic::type_error(
+                        expr.span,
+                        format!(
+                            "integer literal `{value}` does not fit `{ty}` \
+                             (range {min}..={max}); add an explicit suffix \
+                             (e.g. `{value}u64`) or annotate the binding",
+                            ty = int_ty.name(),
+                        ),
+                    ));
+                }
+            }
+            TyKind::Uint(uint_ty) => {
+                let width: u32 = match *uint_ty {
+                    UintTy::U8 => 8,
+                    UintTy::U16 => 16,
+                    UintTy::U32 => 32,
+                    UintTy::U64 => 64,
+                    UintTy::Usize => 64,
+                };
+                let max = (1i128 << width) - 1;
+                if value < 0 || value > max {
+                    diags.push(glyim_diag::GlyimDiagnostic::type_error(
+                        expr.span,
+                        format!(
+                            "integer literal `{value}` does not fit `{ty}` \
+                             (range 0..={max}); add an explicit suffix or \
+                             annotate the binding",
+                            ty = uint_ty.name(),
+                        ),
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut diags = Vec::new();
+    for (_owner, body) in bodies {
+        for stmt in &body.stmts {
+            match stmt {
+                thir::Stmt::Let {
+                    init: Some(expr), ..
+                } => check_expr(ctx, expr, &mut diags),
+                thir::Stmt::Expr { expr } => check_expr(ctx, expr, &mut diags),
+                _ => {}
+            }
+        }
+    }
+    diags
+}

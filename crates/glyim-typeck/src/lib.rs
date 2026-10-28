@@ -1218,6 +1218,11 @@ pub fn typeck_crate(
     // though unification had long since bound it to `i32`, and the LLVM
     // backend subsequently ICEd on the raw variable.
     zonk::zonk_bodies(&infer, &frozen_ctx, &mut thir_bodies);
+    // §3.5.18: after zonk, every literal's type is concrete — flag
+    // unsuffixed literals whose value does not fit their inferred type.
+    // Without this, `let a = 4294967296;` type-checks as i32 and wraps
+    // to 0 at codegen (a Rust error, a silent wrong value here).
+    diagnostics.extend(zonk::check_literal_ranges(&frozen_ctx, &thir_bodies));
     // Debug-only invariant: no THIR body may carry an int/float inference
     // variable after zonking. A failure here means a new `Ty` slot was added
     // to THIR without extending `zonk::walk_*`. Caught at the *source* —
