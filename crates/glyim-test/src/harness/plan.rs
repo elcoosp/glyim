@@ -75,6 +75,9 @@ impl TestRunner {
                 std::env::var("CI").ok().as_deref(),
                 std::env::var("GLYIM_BLESS").ok().as_deref(),
             ),
+            no_skip: resolve_no_skip_flag(
+                std::env::var("GLYIM_TEST_NO_SKIP").ok().as_deref(),
+            ),
             verbose: std::env::var("GLYIM_TEST_SHOW_OUTPUT").is_ok(),
         })
     }
@@ -118,6 +121,14 @@ fn resolve_bless_flag(ci: Option<&str>, bless: Option<&str>) -> bool {
     bless_requested
 }
 
+/// TEST-3: resolve `GLYIM_TEST_NO_SKIP`. When set, a fixture whose
+/// declared needs are unmet (`needs-llvm`, `only-target`) produces a
+/// hard failure instead of a silent `Ignored` — CI coverage, not a pass
+/// pretending to be one.
+fn resolve_no_skip_flag(no_skip: Option<&str>) -> bool {
+    no_skip.is_some()
+}
+
 /// TestPlan.
 pub struct TestPlan {
     /// Struct.
@@ -132,6 +143,8 @@ pub struct TestPlan {
     pub use_pipeline: bool,
     /// Struct.
     pub bless: bool,
+    /// TEST-3: unmet needs become hard failures.
+    pub no_skip: bool,
     /// Struct.
     pub verbose: bool,
 }
@@ -164,6 +177,7 @@ impl TestPlan {
         let executor = TestExecutor::new(
             self.default_timeout,
             self.bless,
+            self.no_skip,
             self.verbose,
             self.max_concurrent,
             self.use_pipeline,
@@ -248,5 +262,29 @@ mod resolve_bless_flag_tests {
         // diagnosed at the point of misconfiguration, not as an
         // unexplained "snapshots didn't update".
         let _ = resolve_bless_flag(Some("true"), Some("1"));
+    }
+}
+
+
+#[cfg(test)]
+mod resolve_no_skip_flag_tests {
+    use super::resolve_no_skip_flag;
+
+    #[test]
+    fn unset_is_false() {
+        assert!(!resolve_no_skip_flag(None));
+    }
+
+    #[test]
+    fn set_to_1_is_true() {
+        assert!(resolve_no_skip_flag(Some("1")));
+    }
+
+    #[test]
+    fn set_to_any_value_is_true() {
+        // Same rule as the CI check for bless: presence, not value.
+        assert!(resolve_no_skip_flag(Some("true")));
+        assert!(resolve_no_skip_flag(Some("0")));
+        assert!(resolve_no_skip_flag(Some("")));
     }
 }

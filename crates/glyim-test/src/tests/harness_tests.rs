@@ -485,8 +485,9 @@ fn test_run_parallel_collects_results_with_progress_reporting() {
 
     let executor = TestExecutor::new(
         std::time::Duration::from_secs(30),
-        false,
-        false,
+        false, // bless
+        false, // no_skip
+        false, // verbose
         4,
         false, // frontend-only compiler (no LLVM needed)
     );

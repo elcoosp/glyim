@@ -49,6 +49,9 @@ pub struct TestResult {
 pub struct TestExecutor {
     default_timeout: Duration,
     bless: bool,
+    /// TEST-3: unmet fixture needs become hard failures instead of
+    /// silent `Ignored`. Set by `TestPlan.no_skip`.
+    no_skip: bool,
     verbose: bool,
     max_concurrent: usize,
     target_triple: String,
@@ -60,6 +63,7 @@ impl TestExecutor {
     pub fn new(
         default_timeout: Duration,
         bless: bool,
+        no_skip: bool,
         verbose: bool,
         max_concurrent: usize,
         use_pipeline: bool,
@@ -82,6 +86,7 @@ impl TestExecutor {
         Self {
             default_timeout,
             bless,
+            no_skip,
             verbose,
             max_concurrent,
             // Default to the *host* triple, not a hardcoded Linux one. Fixtures
@@ -124,6 +129,7 @@ impl TestExecutor {
                         r,
                         Arc::clone(&self.compiler),
                         self.bless,
+            self.no_skip,
                         self.target_triple.clone(),
                     )
                 })
@@ -140,6 +146,7 @@ impl TestExecutor {
         let tests_c: Vec<Arc<DiscoveredTest>> = tests.to_vec();
         let compiler = Arc::clone(&self.compiler);
         let bless = self.bless;
+        let no_skip = self.no_skip;
         let target_triple = self.target_triple.clone();
 
         // Progress reporting (plan §24.1): as each parallel task finishes, send
@@ -188,6 +195,7 @@ impl TestExecutor {
                                 r,
                                 Arc::clone(&comp),
                                 bless,
+                                no_skip,
                                 tgt.clone(),
                             );
                             let _ = tx.send((res.test.name.clone(), res.outcome.clone()));
@@ -208,6 +216,7 @@ fn execute_test(
     revision: String,
     compiler: Arc<dyn TestCompiler>,
     bless: bool,
+    no_skip: bool,
     target_triple: String,
 ) -> TestResult {
     let span = tracing::info_span!("test", name = %test.name, revision = %revision);
@@ -225,10 +234,20 @@ fn execute_test(
     }
 
     if test.config.needs_llvm && std::env::var("GLYIM_LLVM").is_err() {
+        let outcome = if no_skip {
+            TestOutcome::Failed {
+                reason: crate::error::FailureReason::NeedUnsatisfiable {
+                    need: "needs-llvm".to_string(),
+                    detail: "GLYIM_LLVM is not set".to_string(),
+                },
+            }
+        } else {
+            TestOutcome::Ignored
+        };
         return TestResult {
             test,
             revision,
-            outcome: TestOutcome::Ignored,
+            outcome,
             duration: start.elapsed(),
             diagnostics: Vec::new(),
         };
@@ -237,10 +256,20 @@ fn execute_test(
     if let Some(ref target) = test.config.only_target
         && target != &target_triple
     {
+        let outcome = if no_skip {
+            TestOutcome::Failed {
+                reason: crate::error::FailureReason::NeedUnsatisfiable {
+                    need: "only-target".to_string(),
+                    detail: format!("fixture requires {target}, host is {target_triple}"),
+                },
+            }
+        } else {
+            TestOutcome::Ignored
+        };
         return TestResult {
             test,
             revision,
-            outcome: TestOutcome::Ignored,
+            outcome,
             duration: start.elapsed(),
             diagnostics: Vec::new(),
         };

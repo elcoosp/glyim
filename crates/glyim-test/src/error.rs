@@ -115,6 +115,23 @@ pub enum FailureReason {
         /// Struct.
         message: String,
     },
+    /// TEST-3: a fixture declared an unmet need (`needs-llvm`,
+    /// `only-target = …`) and `GLYIM_TEST_NO_SKIP=1` asked the harness to
+    /// treat that as a failure rather than silently ignoring the fixture.
+    ///
+    /// Without the env var, unmet needs produce `TestOutcome::Ignored` —
+    /// correct for local development (a macOS dev without LLVM should not
+    /// see 60 failures) but wrong for CI, where a fixture that never ran
+    /// is a coverage gap pretending to be a pass. `GLYIM_TEST_NO_SKIP=1`
+    /// makes that gap visible.
+    NeedUnsatisfiable {
+        /// The need that was not met, e.g. `"needs-llvm"` or
+        /// `"only-target"`.
+        need: String,
+        /// Human-readable detail: what was required vs. what was
+        /// available.
+        detail: String,
+    },
     /// Variant.
     RunFailed {
         /// Struct.
@@ -206,6 +223,13 @@ impl std::fmt::Display for FailureReason {
             }
             Self::RunTimeout { timeout_secs } => {
                 write!(f, "run exceeded {}s timeout", timeout_secs)
+            }
+            Self::NeedUnsatisfiable { need, detail } => {
+                write!(
+                    f,
+                    "required {} not satisfied: {} (GLYIM_TEST_NO_SKIP=1 makes this a hard failure)",
+                    need, detail
+                )
             }
         }
     }
