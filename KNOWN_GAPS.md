@@ -2008,6 +2008,92 @@ string method set (Vec/Slice/str/Box/UnsafeCell/Option/Result methods
 not yet implemented — each with its own shape, tracked separately in
 the plan).
 
+#### 3.5.20 — OPEN: P2-A4 empty-CGU fallback — real bug, fix belongs in pipeline not discovery
+
+Attempted 2026-10-27. Reverted. The bug is real and reproduced;
+the fix landed in the wrong layer.
+
+**Reproduction (confirmed).** A library crate — no `main`, no
+`#[start]`, no `#[no_mangle]`, no `#[used]` static — compiled with
+`--emit=obj` produced an object where a generic fn call inside a
+non-generic fn had:
+
+    ___glyim_fn_1_21_1    (U, undefined)
+    ___glyim_fn_2         (T, defined)
+
+The defined body is pre-substitution, emitted under the plain
+`__glyim_fn_2` symbol; the call site inside it is monomorphized and
+references `__glyim_fn_1_21_1`, which was never collected because
+`MonoCtx::collect(&[], ...)` was a no-op when the root set was empty.
+A `--emit=obj` artifact that cannot be linked against is exactly the
+bug P2-A4 describes.
+
+**Attempted fix (reverted).** In `glyim-lower/src/discovery.rs`,
+`discover_mono_roots` was extended: when `items.is_empty()` (the
+existing "no entry points" warning case), synthesize a `MonoItem::Fn`
+root for every `ItemKind::Fn` in `hir.items` at empty substitution.
+The theory: a library's callable surface is every `fn`, so this is
+the natural entry-point equivalent.
+
+**Why it was reverted.** Two classes of regression:
+
+  1. `tests::root_discovery::{t02_no_entry_points_warning,
+     t05_fn_not_main_not_detected, t09_unknown_attribute_not_detected}`
+     fail — they assert the *pre-fix* discovery contract (no entry
+     point → empty root set). That is expected and could be updated.
+  2. **`stdlib_full_probe::assembled_stdlib_compiles` fails** — the
+     stdlib is itself a library crate. Synthesizing a root for every
+     stdlib fn makes `compile_file_to_mir` monomorphize the entire
+     stdlib surface at once, which is not a legal workload (and not
+     what a library's `--emit=obj` build should do).
+
+Regression (2) is the disproof of the placement. `discover_mono_roots`
+answers "which roots does this *crate's entry-point set* declare" —
+that is a discovery question, and its answer for a library really is
+"none." The behavior P2-A4 needs is "when *the pipeline still has to
+emit an object* and the root set is empty, synthesize enough roots to
+produce a self-contained artifact." That is a pipeline policy, not
+a discovery result.
+
+**Correct fix (for a future session).** In
+`crates/glyim-pipeline/src/lib.rs`'s `if cgus.is_empty()` fallback
+branch (around `:800`), replace the current `mir_bodies_map` sweep
+with:
+
+  1. Build a synthetic root set (every `ItemKind::Fn` at empty substs;
+     same shape as the reverted code, but computed here, not in
+     discovery).
+  2. Run a fresh `MonoCtx::collect(&synthetic_roots, &body_provider,
+     &drop_provider)` with the same providers, `def_to_module`, and
+     `pre_subst_bodies` the primary pass used.
+  3. Use the resulting `items()` — which now carry `MonoItemData`
+     symbols (`__glyim_fn_N_0_1` for generic instantiations) — as
+     `all_bodies`, instead of re-deriving plain symbols from
+     `mir_bodies_map`.
+
+This keeps `discover_mono_roots` semantics intact (the 3 root-discovery
+tests pass unchanged), fixes the library-`--emit=obj` object, and does
+**not** change `compile_file_to_mir` behavior for library crates like
+stdlib (the `cgus.is_empty()` branch is only reached from the emit
+path when roots were empty *and* mono produced nothing — which is a
+strict subset of the discovery-empty case).
+
+Scope estimate: ~50-80 lines in `pipeline/lib.rs` plus the fresh
+provider plumbing. Not a one-liner, but localized.
+
+**Probe to use as the acceptance test.** `--emit=obj` on:
+
+    pub fn generic_id<T>(x: T) -> T { x }
+    pub fn caller() -> i32 { generic_id(7) }
+
+must produce an object where `nm -u <obj> | grep glyim_fn` is empty.
+Executable output must remain byte-stable (currently: defined
+`__glyim_fn_1_21_1` and `__glyim_fn_2`, no undefined).
+
+**Interim state.** Unchanged from before the attempt. The library-
+`--emit=obj` artifact is still not link-safe. This is a documented
+open bug, not a regression.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
