@@ -122,11 +122,26 @@ fn interpret_bodies(
 
     let result = interpreter.run_body(main_body);
 
+    // TEST-7 (corrected): populate stdout/stderr from the interpreter's FFI
+    // buffers **before** branching on the result. The previous shape only
+    // read these buffers in the `Ok(())` arm, so a program that printed and
+    // then panicked lost all its output in the interpreter path — a real
+    // fidelity gap that showed up as `stdout: []` on a `println! + assert!`
+    // fixture while native execution correctly showed `before`. Hoisting the
+    // two calls fixes it for both arms.
+    //
+    // NOTE on exit-code masking (below): the plan's original TEST-7 text
+    // said "don't mask to `& 0xff`", but that recommendation was **wrong**.
+    // A real executable's exit status is `status & 0xff` at the OS boundary:
+    // `fn main() -> i32 { 300 }` exits **44** natively (verified). The
+    // interpreter's `(v as i64 & 0xff) as i32` matches that, so the mask is
+    // correct fidelity, not a bug. Only the stdout/stderr-on-panic handling
+    // needed changing; the mask stays.
+    stdout = String::from_utf8_lossy(interpreter.get_stdout()).into_owned();
+    stderr = String::from_utf8_lossy(interpreter.get_stderr()).into_owned();
+
     match result {
         Ok(()) => {
-            // T140-PATCHED-IO: surface FFI-captured output.
-            stdout = String::from_utf8_lossy(interpreter.get_stdout()).into_owned();
-            stderr = String::from_utf8_lossy(interpreter.get_stderr()).into_owned();
             // A `main` that returns `i32` (the common case) surfaces its value
             // through `get_return_value`; the runtime then turns it into the
             // process exit code, mirroring a real executable. A `main` that
