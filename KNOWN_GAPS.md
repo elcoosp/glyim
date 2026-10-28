@@ -2469,6 +2469,91 @@ one of:
 Reverted in full (all five files via `git checkout`). Corpus green
 throughout; no regression shipped.
 
+**Diagnostic result (2026-10-28, later).** Registry + typeck applied
+alone — no runtime helpers, no interp arm, no LLVM arm — pass all four
+MIR probes (`main` alone, `42.to_string()`, `+as_str()`, full
+`println!("value {}", 42)`) and `--emit=exec` gates cleanly on the
+LLVM-not-implemented diagnostic. Which means **the mismatch in attempt 2
+was not caused by typeck**. Two candidates remain:
+
+  1. One of the three *other* pieces (runtime helper insertion, interp
+     arm, LLVM arm) perturbs typeck through some cross-crate coupling.
+     This is implausible — all three are Rust source in crates typeck
+     doesn't depend on.
+  2. **Stale incremental build.** Attempt 2 was run after multiple
+     apply/revert cycles in the same shell session; `git checkout` on
+     the type/typeck sources does not invalidate cargo's fingerprints
+     for the *dependent* crates. A stale `libglyim_type.rlib` or
+     `libglyim_typeck.rlib` from an intermediate state could explain a
+     typeck diagnostic that the current source cannot produce.
+
+Hypothesis (2) is far more likely. Retest with a forced rebuild of the
+affected crates before drawing any conclusion.
+
+**Retest result — hypothesis (2) DISPROVED.** `cargo clean -p` on all
+six affected crates (removed 850 files, 1.9 GiB), full rebuild (26.9 s),
+then the probe: **the mismatch reproduces**. So it is not a stale
+incremental artifact.
+
+That leaves a genuine contradiction:
+
+| Configuration | `--emit=mir` | `--emit=exec` |
+|---|---|---|
+| registry + typeck only | rc=0 (clean) | GATE (to_string not in LLVM) |
+| all five pieces | rc=0 (clean) | **T0001 mismatch** |
+
+Same registry entries, same typeck change, same 4 IDs shifted in both
+runs. The isolated run is clean; the full run fails at typeck. Adding
+runtime helpers, an interp arm, and an LLVM arm should have **zero**
+effect on typeck — `glyim-typeck` does not depend on `glyim-runtime`,
+`glyim-mir-interp`, or `glyim-codegen-llvm`, and none of those three
+edits change any type, signature, or registry entry.
+
+**Candidate explanations, none yet verified:**
+
+  1. **`--emit=mir` does not run the same typeck.** Possible if the
+     MIR path short-circuits a check the exec path runs, or vice versa.
+     The `has_errors()` calls at `lib.rs:395/427/435/598/632/642/674/755`
+     suggest typeck errors gate the pipeline uniformly, but the MIR emit
+     path may reach a different post-typeck stage.
+  2. **A hardcoded `FnDefId(9xxx)` somewhere** that the 4-entry registry
+     shift remaps. §3.5.8 was exactly this class (`Vec::as_slice` →
+     `9144`). Both the isolated and full runs have the same shift, so
+     this would have to be triggered by *something else* the full run
+     does — but there is no obvious candidate.
+  3. **`kache` (RUSTC_WRAPPER) caching MIR or typeck output** keyed on
+     something that does not include one of the five files. The forced
+     `cargo clean` should have bypassed it, but the wrapper sits above
+     cargo's fingerprint check, so a kache hit on *any* crate in the
+     chain could replay an old artifact.
+  4. **Non-determinism** in a hash map iteration order that the extra
+     registry entries perturb. `primitive_method_fns` is a `HashMap`;
+     adding 4 entries changes iteration order. Code that scans
+     `primitive_method_fns` for a *name* rather than a key (there are
+     two such scans at `ty_ctx_mut.rs:1386` and `:1431`) could pick a
+     different entry after the shift. That is the only mechanism I can
+     see where a purely-additive registry change produces a *different*
+     resolution outcome — and it would explain why the isolated and full
+     runs differ if the full run's binary had a different `HashMap`
+     seed (random per process).
+
+Candidate (4) is the most plausible of the four and is testable: run
+the probe twice in a row and see if the result is stable.
+
+**Not fixed.** The five-piece revert is clean; tree at `5c28205b` plus
+this entry. §3.5.22's fix remains open with the diagnostic front-loading
+recorded — next session should test (4) by running the probe repeatedly
+and comparing, then check (2) by grepping for hardcoded `FnDefId` refs
+in the type/typeck crates, then check (3) by unsetting `RUSTC_WRAPPER`
+for one build.
+
+**Workflow lesson (recorded for its own sake):** the earlier isolated
+test that "passed" was measuring `--emit=mir`, which does not exercise
+the same path as `--emit=exec`. Comparing the two emit modes across two
+different sets of applied changes, without holding the *emit mode*
+constant, produced an apparent contradiction that cost an extra cycle.
+Hold emit mode constant when bisecting.
+
 **Next step is a diagnostic, not a fix.** Emit MIR for
 `println!("value {}", 42)` and read the exact call shape the expander
 produced: which `FnDefId` is `push_str`, what signature the registry
