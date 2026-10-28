@@ -3069,6 +3069,86 @@ hazard when bisecting with `cargo clean`: the runtime staticlib is a
 build artifact that `cargo build -p <crate>` does not produce unless
 the crate is a dependency.
 
+#### 3.5.26 — P1-O8: stale runtime staticlib is now diagnosed, not silent
+
+PARTIALLY CLOSED (`76a150bb`). The audit described P1-O8 as "a stale
+`libglyim_runtime.a` from a different compiler links silently
+(`linker.rs:165-204`). Fix: embed a hash of the runtime `.a` at compiler
+build time; compare before linking and warn loudly."
+
+The version-stamp half is **not implemented**, and the entry explains
+why. The *diagnostic* half is now in: a link failure caused by runtime
+ABI mismatch names the staticlib, its mtime, and the rebuild command.
+
+**Why the version stamp was not the right first move.** Embedding a
+hash of the runtime `.a` in the compiler binary requires the compiler's
+build script to know where the runtime artifact is — but `glyim-cli` and
+`glyim-runtime` build in parallel, and neither depends on the other. A
+`build.rs` coordinating them needs either (a) a hard build-order
+dependency between the two crates (which would slow every incremental
+`cargo build -p glyim-cli`), or (b) a two-phase build the workspace does
+not currently support. Both are changes to the crate graph, not to
+`linker.rs`.
+
+**Why the diagnostic is the higher-value half anyway.** This session hit
+the stale-runtime hazard **twice**:
+
+  * After `cargo clean -p` on the type/typeck chain, five link tests
+    failed with no obvious connection to "the runtime staticlib is
+    gone".
+  * After a `cargo clean` during §3.5.22's investigation, the same
+    pattern: five `--emit=exec` tests failing on `undefined reference`.
+
+Both took multiple diagnostic cycles to resolve. The `find_runtime_staticlib`
+"not found" path already produced a good message for the *missing* case;
+the *stale* case (library present, wrong ABI) produced a bare linker
+error with the symbol name and nothing else.
+
+**What was added.**
+
+  * `linker::annotate_link_error_if_stale_runtime(err)` — public
+    wrapper over a pure `annotate_link_error_if_stale_runtime_with(err,
+    runtime_path)`.
+  * A `RUNTIME_SYMBOLS` constant listing the eleven runtime-provided
+    symbols (`glyim_alloc`, `glyim_panic`, `glyim_stdout_write`,
+    `glyim_string_from_bytes`, …).
+  * If the linker error mentions any of them, append a hint: the
+    resolved staticlib path, its mtime, and `cargo build -p
+    glyim-runtime` (with the release variant noted).
+  * If it does *not* mention them, the error is returned unchanged — a
+    `printf` or system-lib link failure is not this hint's problem.
+  * If `find_runtime_staticlib` returns `None`, the annotator is a
+    no-op (the "not found" path elsewhere already reported it).
+
+**Where it's wired.** Three `link_with_args` failure sites in
+`glyim-cli/src/lib.rs`: the `--emit=exec` final link, the
+`finalize_after_object` cache-hit link, and the ThinLTO merge link.
+All three now pass the error through the annotator.
+
+**Tests.** Five unit tests in `linker::annotate_tests`:
+  * GNU `ld` style (`undefined reference to \`glyim_stdout_write\``) → hint
+    appended, path and command present.
+  * `printf` (non-runtime symbol) → error unchanged.
+  * No runtime lib resolved → error unchanged.
+  * ld64 style (`Undefined symbols for architecture arm64:
+    "_glyim_alloc"`) → hint appended.
+  * MSVC `LNK2019` style → hint appended.
+
+**What remains open.** The proactive "compare before linking, fail with
+a diff" behavior the audit asked for. It requires the build.rs
+coordination above; the current fix reaches the same user outcome (a
+clear actionable message) at the moment of failure rather than before
+it, without touching the crate graph.
+
+**Why this is a defensible close for the item.** The audit's phrasing
+("links silently") is now false — it does not link, and the message is
+actionable. The specific mechanism (a version stamp checked up front)
+is one way to get there, but not the only one, and not the one the
+crate graph supports without a structural change. If a future session
+adds a `glyim-runtime` build script that emits a stamp file, the
+annotator can consult it and the message gets even better; today's fix
+is a strict improvement that costs nothing.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
