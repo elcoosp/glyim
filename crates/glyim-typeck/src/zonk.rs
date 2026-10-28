@@ -1039,6 +1039,24 @@ fn walk_expr_for_variant_ctor_calls(
         walk_expr_for_variant_ctor_calls(infer, ctx, func, out);
         return;
     }
+    // §3.5.24 Bug A: unit-variant value paths. `Option::None` is a
+    // `VariantRef`, not a `VariantCtor` call — no arguments to infer the
+    // type parameter from. If nothing in the surrounding context pins it,
+    // `expr.ty` is `Adt(1010, [Infer(Ty)])` and zonk (below) will replace
+    // the unbound var with `Ty::ERROR`, which LLVM then rejects with
+    // `Attempted to lower TyKind::Error to LLVM`. Collect the span so
+    // typeck's E0282 pipeline can reject it as "type annotations needed"
+    // instead of surfacing an ICE.
+    //
+    // This is symmetric with the `VariantCtor` case above — data-carrying
+    // variants can be pinned by their argument types, unit variants
+    // cannot. Both reach the same downstream failure mode when neither
+    // the context nor an argument binds the enum's parameter.
+    if matches!(expr.kind, thir::ExprKind::VariantRef(_, _))
+        && has_unbound_ty_var(infer, ctx, expr.ty)
+    {
+        out.push(expr.span);
+    }
     // Recurse into all other expression kinds.
     match &expr.kind {
         thir::ExprKind::Literal(_)
