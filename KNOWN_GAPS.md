@@ -2427,6 +2427,62 @@ stdlib compilation at those integer sites. The fix has to come with
 either (a) a working primitive `to_string`, or (b) stdlib rewrites that
 avoid integer formatting.
 
+**Attempt 2 (2026-10-28) — all five pieces, new failure mode.**
+
+The full fix was attempted: runtime digit-conversion helpers
+(`glyim_int_to_string` / `glyim_uint_to_string`), registry entries for
+four primitives, the typeck primitive-lookup, the interp arm, and an
+LLVM branch calling the helpers. All compiled (`cargo check
+--workspace` clean). The corpus stayed green. But the actual probe
+failed with a **new** error, not the old one:
+
+    [T0001] mismatched types: expected integer type, found &str @115103..115127
+
+Somewhere in the format expander's output path, a `&str` is now being
+consumed where an integer is expected. The `println!("value {}", 42)`
+expansion (per `glyim-meta`'s `try_interp`) is:
+
+    { let mut __glyim_fmt = String::new();
+      __glyim_fmt.push_str("value ");
+      __glyim_fmt.push_str((42).to_string().as_str());
+      __glyim_fmt }
+
+With `to_string` on `i32` now returning `String` (not the old sentinel
+that produced `Ty::ERROR`), `.as_str()` should be `&str` and
+`push_str(&str)` should accept it. The `expected integer type` suggests
+one of:
+
+  * `String::push_str` is registered with an integer-typed parameter
+    somewhere (wrong; it should take `str`), and the typeck mismatch is
+    caught there.
+  * The registry entry returns `string_ty` but `string_ty` in
+    `register_builtin_methods`'s local scope is not the builtin
+    `String` — maybe it's shadowed or resolved to a different ADT.
+  * `as_str` on the String receiver isn't registered for the return
+    type `to_string` now produces, so `.as_str()` resolves to some
+    fallback that yields an integer.
+  * The span `115103..115127` is inside the **stdlib** (`io.g`'s
+    `println!` macro definition or a `push_str` call), not the user
+    source — in which case the incompatibility is between the stdlib's
+    declared `push_str` signature and the new `to_string` return type.
+
+Reverted in full (all five files via `git checkout`). Corpus green
+throughout; no regression shipped.
+
+**Next step is a diagnostic, not a fix.** Emit MIR for
+`println!("value {}", 42)` and read the exact call shape the expander
+produced: which `FnDefId` is `push_str`, what signature the registry
+gives it, and what `to_string`'s return type resolves to. That will
+say which of the four hypotheses above holds. Only then is the fix
+mechanical.
+
+**Why the previous `str_ty` vs `string_ty` decision matters here.** An
+earlier attempt (session 22, before the revert) used `str_ty` — a
+16-byte `&str` — which is a buffer overrun for a helper writing 24
+bytes. This attempt used `string_ty` (24-byte owned String) and got a
+type mismatch instead. Both are wrong in different ways; the correct
+choice depends on what `.as_str()` and `push_str` actually expect.
+
 **Fix path for the next session, in order.**
 
   1. **Register `to_string` for integer primitives** in
