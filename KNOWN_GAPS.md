@@ -2643,30 +2643,65 @@ already uses for the annotation-needed diagnostic — see
 "type annotations needed" rather than `Ty::ERROR`. Likely one new arm
 in the existing annotation-needed pipeline rather than a new pass.
 
-**Bug B — turbofish on a variant path drops the type argument.** Even
+**Bug B — turbofish on a unit-variant path is lost before typeck.** Even
 explicitly annotating the variant does not help:
 
-    let b: i32 = if let Option::Some(_) = Option::<i32>::None { 1 } else { 7 };
+    let o = Option::<i32>::None;    // plain let — ICEs
+    let b: i32 = if let Option::Some(_) = Option::<i32>::None { 1 } else { 7 };  // ICEs
 
-still ICEs at LLVM codegen. But:
+Both fail. But:
 
     let none_val: Option<i32> = Option::None;
-    let b: i32 = if let Option::Some(_) = none_val { 1 } else { 7 };
+    let b: i32 = if let Option::Some(_) = none_val { 1 } else { 7 };  // works, 7
 
-works correctly (exit 7). So the bug is specifically in how
-`Option::<i32>::None` — turbofish on an enum-variant *path expression* —
-resolves. The explicit `i32` type argument does not reach the variant
-construction: the emitted `Aggregate(Adt(1010), VariantIdx(0),
-Substitution(len=0))` in MIR has an empty substitution instead of one
-carrying `i32`. Compare with the working `Some(42)` case, which emits
-`Substitution(index=21, len=1)`.
+So this is **not** `if let`-specific — it's the turbofish itself.
+Verified by MIR: `Aggregate(Adt(1010), VariantIdx(0), Substitution(index=0,
+len=0))` — the substitution is empty and `$3: Adt1010<<error>>`.
 
-Where to look: `check_path`'s variant-path arm (`check_expr.rs`,
-`ExprKind::Path` → variant resolution) likely discards the
-`PathSegment`'s generic arguments when the resolved target is a variant
-rather than a type. The turbofish is parsed (or should be — worth
-checking with a `--emit=mir` on a simpler case) but not threaded into
-the `thir::ExprKind::VariantRef` / `VariantCtor` substitution.
+**What was ruled out.**
+
+An attempted fix changed `check_path`'s fallback `enum_path` construction
+(`unify.rs` ~285) from `generic_args: None` to
+`path.segments[0].generic_args.clone()`. It compiled, corpus stayed
+green, but the ICE persisted unchanged — MIR still showed empty substs.
+That commit was reverted as a **no-op for this bug** (the code change is
+arguably correct on its own merits, but it does not fix Bug B).
+
+**Where the turbofish is supposed to be handled.** `lower_expr.rs`
+~1075-1122 has an explicit `UsePath`-nested-type-args branch, with a
+comment reading: *"Turbofish type args nested inside the `UsePath` node
+(`f::<i32>`, `Vec::<T>::new`). The parser places the `PathType` node as
+a sibling of the `Ident` token within the `UsePath`, so the outer
+`is_type_node` branch below never sees it; without this arm the args
+were silently dropped and the path reached typeck with `generic_args:
+None`."* That machinery exists and was added for exactly this case, yet
+MIR shows empty substs for `Option::<i32>::None`.
+
+**So the failure is one of:**
+
+  1. The parser does not produce the `UsePath`-with-sibling-`PathType`
+     shape for `Option::<i32>::None` specifically (maybe it produces a
+     different node kind for a turbofish on a *unit variant* than for a
+     function path like `f::<i32>`).
+  2. The `pending_args` flush at `lower_expr.rs:1075-1078` attaches the
+     args to the wrong segment for a multi-segment turbofish path
+     (`flush_pending` runs on the *next* ident, so `Option::<i32>::None`
+     might end up with args on `None` instead of `Option`).
+  3. `check_path`'s variant arm reads args from `path.segments.iter()`
+     (line ~186) but the path it receives has been rebuilt or cloned
+     somewhere between the parser and this call, losing them.
+
+**First diagnostic step for a follow-up:** dump HIR for
+`let o = Option::<i32>::None;`. If the HIR `Path` shows
+`segments[0].generic_args = Some([i32])`, the loss is in typeck; if it
+shows `None`, the loss is in parser/lowering. That single dump narrows
+the three hypotheses to one, and takes about ten minutes.
+
+**Why not fixed now.** Three probes (plain-let, match, if-let) all
+reproduce; one attempted fix compiled clean and changed nothing; the
+HIR-side machinery *looks* correct but evidently is not being reached.
+That is exactly the shape of a bug that needs the HIR dump first, not
+more guessing at which of three plausible sites is wrong.
 
 **Fixture state.** `tests/run-pass/behavior/if_let_some_none.g` has been
 rewritten to use the **valid** `let`-annotated form (which exercises
