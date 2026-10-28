@@ -71,10 +71,51 @@ impl TestRunner {
             default_timeout: self.timeout,
             max_concurrent: self.max_concurrent,
             use_pipeline: self.use_pipeline,
-            bless: std::env::var("GLYIM_BLESS").is_ok(),
+            bless: resolve_bless_flag(
+                std::env::var("CI").ok().as_deref(),
+                std::env::var("GLYIM_BLESS").ok().as_deref(),
+            ),
             verbose: std::env::var("GLYIM_TEST_SHOW_OUTPUT").is_ok(),
         })
     }
+}
+
+/// Resolve the `GLYIM_BLESS` flag with a CI safety gate (TEST-6).
+///
+/// `GLYIM_BLESS=1` tells the UI-test harness to *overwrite* the
+/// `.expected` snapshot files instead of comparing against them, and to
+/// report `Passed` for every fixture it rewrote (`strategy.rs`
+/// `UiTestStrategy::evaluate`). That is the right behavior for a local
+/// re-bless after an intentional diagnostic change, and a **hazard in
+/// CI**: a stale or accidental `GLYIM_BLESS` in the CI environment would
+/// turn every snapshot mismatch into a silent rewrite, so the job would
+/// pass while discarding regressions.
+///
+/// This helper centralises the decision so it is testable without
+/// touching the process environment. Contract:
+///
+///   * `CI` unset, `GLYIM_BLESS` unset  -> `false` (compare mode)
+///   * `CI` unset, `GLYIM_BLESS` set    -> `true`  (local bless)
+///   * `CI` set,   `GLYIM_BLESS` unset  -> `false` (compare mode)
+///   * `CI` set,   `GLYIM_BLESS` set    -> **panic** — refuse to bless
+///                                          in CI; the caller must
+///                                          unset one or the other
+///
+/// The panic (rather than a silent `false`) is deliberate: a
+/// misconfigured CI job should fail loudly with an actionable message,
+/// not quietly stop blessing and leave the user wondering why their
+/// snapshots didn't update. `CI`'s presence is checked with `.is_some()`
+/// so any non-empty value counts, matching how GitHub Actions / GitLab /
+/// Circle set it.
+fn resolve_bless_flag(ci: Option<&str>, bless: Option<&str>) -> bool {
+    let bless_requested = bless.is_some();
+    let in_ci = ci.is_some();
+    if bless_requested && in_ci {
+        panic!(
+            "GLYIM_BLESS is set but CI is also set: refusing to bless              snapshots in CI. `GLYIM_BLESS=1` rewrites `.expected` files              and reports every fixture as passing, which would silently              hide regressions. Unset GLYIM_BLESS for the CI run (or, for              a deliberate re-bless, run locally with CI unset)."
+        );
+    }
+    bless_requested
 }
 
 /// TestPlan.
@@ -170,4 +211,42 @@ pub struct TestSummary {
     pub failed: usize,
     /// Struct.
     pub ignored: usize,
+}
+
+
+#[cfg(test)]
+mod resolve_bless_flag_tests {
+    use super::resolve_bless_flag;
+
+    #[test]
+    fn neither_set_is_false() {
+        assert!(!resolve_bless_flag(None, None));
+    }
+
+    #[test]
+    fn bless_only_is_true() {
+        assert!(resolve_bless_flag(None, Some("1")));
+    }
+
+    #[test]
+    fn ci_only_is_false() {
+        assert!(!resolve_bless_flag(Some("true"), None));
+    }
+
+    #[test]
+    fn empty_strings_still_count_as_set() {
+        // Both env vars are checked with `.is_some()`, not `.is_ok_and(!="")`:
+        // an empty value still means "the operator asked for it".
+        assert!(!resolve_bless_flag(Some(""), None));
+        assert!(resolve_bless_flag(None, Some("")));
+    }
+
+    #[test]
+    #[should_panic(expected = "refusing to bless")]
+    fn ci_and_bless_together_panics() {
+        // The gate itself — must fail loudly so a misconfigured CI job is
+        // diagnosed at the point of misconfiguration, not as an
+        // unexplained "snapshots didn't update".
+        let _ = resolve_bless_flag(Some("true"), Some("1"));
+    }
 }
