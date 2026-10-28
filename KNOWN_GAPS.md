@@ -2996,6 +2996,79 @@ B remain open and are not currently exercised by any fixture (which is
 why they survived). Adding compile-fail fixtures for them is part of
 the fix, not part of this entry's cleanup.
 
+#### 3.5.25 — P2-B7: `unsafe` was parsed then discarded; `FnItem::is_unsafe` lied
+
+CLOSED. The audit described P2-B7 as "`unsafe` token parsed then dropped
+with no lint" and suggested either a `-W unsafe-ignored` warning or
+documentation. The actual bug was narrower and more concrete: the parser
+*did* preserve the keyword in the syntax tree, HIR *had* a field for it
+(`FnItem::is_unsafe`), and `lower_item.rs` **hardcoded that field to
+`false`**.
+
+**Why the keyword never reached the field.** `parse_item`
+(`crates/glyim-frontend/src/parser/item.rs:9`) handles `unsafe` by
+calling `self.bump()` *before* `self.start_node(SyntaxKind::FnDef)`.
+So in the syntax tree, `KwUnsafe` is a **sibling** of the `FnDef`
+node, not a child:
+
+    SourceFile@0..16
+      KwUnsafe@0..6 "unsafe"
+      Whitespace@6..7 " "
+      FnDef@7..16
+        KwFn@7..9 "fn"
+        ...
+
+`lower_fn` builds `is_const` / `is_async` by iterating
+`node.children_with_tokens()` — which is correct for those two, because
+`parse_fn_def` consumes `const` / `async` *inside* the `FnDef` node.
+`unsafe` follows a different path and never appears in that iteration.
+The field was set to a literal `false` at construction.
+
+**Consequence.** No downstream consumer reads `is_unsafe` today
+(verified by grep — only construction sites and test structs). So the
+bug was latent: a field that claims to describe every fn, silently
+returning `false` for `unsafe fn`. Any future `unsafe` audit, security
+pass, or `-W unsafe` lint would have been built on a lie.
+
+**Fix.** `lower_item.rs` now walks `node.prev_sibling_or_token()`,
+skipping trivia, and sets `is_unsafe` when it finds `KwUnsafe` before
+the first non-trivia token. Precedent for this walk is
+`lower_pat.rs:41`, which uses `prev_sibling_or_token` for pattern
+modifiers. The field is now populated from the actual source.
+
+**Known limitation.** For `unsafe pub fn f()`, the sibling chain from
+`FnDef` back is `[Whitespace, KwPub, Whitespace, KwUnsafe]`. The walk
+stops at `KwPub` (first non-trivia) and returns `false` — technically
+wrong. But `unsafe pub fn` is non-idiomatic (Rust's convention is `pub
+unsafe fn`), the parser's own `parse_item` accepts `pub unsafe` as the
+normal order, and no fixture or stdlib source uses the reversed form.
+Documented here rather than fixed; if a caller ever needs it, the walk
+becomes "scan all preceding modifiers until `fn` or another item".
+
+**Why not a lint.** The audit suggested `-W unsafe-ignored`. That is a
+separate, larger feature: a warning needs a diagnostic category, a
+way to suppress it per-block, and a decision about whether the parser
+or typeck owns it. Populating `is_unsafe` correctly is the
+precondition — a lint that fires on a field that is always `false`
+would be nonsense. The lint remains a legitimate P2-B7 follow-up; this
+entry closes the data-integrity half.
+
+**Verified:**
+  * `unsafe fn f() {}` → `is_unsafe == true`
+  * `fn f() {}` → `is_unsafe == false`
+  * full workspace: 4624/4624
+
+Regression tests: `glyim-hir::tests::lower_fn::unsafe_fn_sets_is_unsafe`
+and `::plain_fn_is_not_unsafe`.
+
+**Note on the five `glyim-cli` link failures during verification.** Not
+related to this change — the `cargo clean -p` from the §3.5.22
+investigation had removed `target/debug/libglyim_runtime.a`. Rebuilding
+`glyim-runtime` restored all five. Recorded because it is a recurring
+hazard when bisecting with `cargo clean`: the runtime staticlib is a
+build artifact that `cargo build -p <crate>` does not produce unless
+the crate is a dependency.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
