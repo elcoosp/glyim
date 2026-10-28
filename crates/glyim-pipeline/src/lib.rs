@@ -370,6 +370,13 @@ impl Pipeline {
         path: &Path,
         codegen_units: Option<usize>,
         proc_registry: Option<&glyim_proc_macro::Registry>,
+        // P2-A4: whether the caller will emit a relocatable object. Only
+        // the object-emit path needs a self-contained artifact (no
+        // undefined `__glyim_fn_*` symbols). Analysis-only paths
+        // (`compile_file_to_mir`, `--emit=llvm-ir`, `--emit=mir`) pass
+        // `false` and keep the pre-P2-A4 fallback behavior, so library
+        // crates like stdlib are not forcibly monomorphized.
+        emit_object: bool,
     ) -> CompResult<PreparedCompilation> {
         let sink = DiagSink::new();
         let sink_cell = RefCell::new(sink);
@@ -798,16 +805,72 @@ impl Pipeline {
         // fallback (no mono roots) uses the legacy plain form since those
         // bodies were never substituted.
         let all_bodies: Vec<(String, Arc<Body>)> = if cgus.is_empty() {
-            mir_bodies_map
-                .into_iter()
-                .map(|(_def_id, body)| {
-                    let sym = format!(
-                        "__glyim_fn_{}",
-                        body.owner.local_id.to_raw()
-                    );
-                    (sym, body)
-                })
-                .collect()
+            // P2-A4: library crate (no entry points). The primary mono pass
+            // above ran with an empty root set, so `mono_items` is empty and
+            // `cgus` is empty. Emitting pre-substitution bodies under plain
+            // `__glyim_fn_N` symbols leaves their generic call sites
+            // (`__glyim_fn_N_i_j`) undefined — see KNOWN_GAPS §3.5.20.
+            //
+            // Fix: run mono a second time with a synthetic root covering
+            // every body actually lowered (`mir_bodies_map` keys — valid
+            // `DefId`s, not HIR item indices; the HIR-index path was
+            // attempt 3's bug and produced a single dummy `LocalDefId(0)`
+            // symbol). Mono's normal transitive discovery then collects
+            // every generic instantiation a root body references, and
+            // `MonoItemData.symbol` carries the exact mangled form lowering
+            // emits for the call site.
+            //
+            // Gated on `emit_object` so analysis-only paths
+            // (`compile_file_to_mir` etc.) are unaffected — monomorphizing
+            // the full stdlib surface is not legal for those
+            // (`stdlib_full_probe` regression, KNOWN_GAPS §3.5.20).
+            let synthesized: Option<Vec<(String, Arc<Body>)>> = if emit_object {
+                let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
+                let ty_ctx_ref = ty_ctx_guard.as_ref();
+                let empty_subst = glyim_type::Substitution::empty();
+                let mut synthetic_roots: Vec<glyim_lower::mono::MonoItem> = Vec::new();
+                for def_id in mir_bodies_map.keys() {
+                    synthetic_roots.push(glyim_lower::mono::MonoItem::Fn {
+                        def_id: glyim_core::def_id::FnDefId::from_raw(
+                            def_id.local_id.to_raw(),
+                        ),
+                        substs: empty_subst,
+                    });
+                }
+                if synthetic_roots.is_empty() {
+                    None
+                } else {
+                    let mut synth_ctx = MonoCtx::new();
+                    synth_ctx.with_ty_ctx(ty_ctx_ref);
+                    let body_provider =
+                        make_mir_body_provider(&mir_bodies_map, &sink_cell, ty_ctx_ref);
+                    let drop_provider = make_drop_glue_provider(ty_ctx_ref);
+                    synth_ctx.with_pre_subst_bodies(&mir_bodies_map);
+                    synth_ctx.collect(&synthetic_roots, &body_provider, &drop_provider);
+                    Some(
+                        synth_ctx
+                            .items()
+                            .iter()
+                            .map(|item| (item.symbol.clone(), item.body.clone()))
+                            .collect(),
+                    )
+                }
+            } else {
+                None
+            };
+            match synthesized {
+                Some(v) if !v.is_empty() => v,
+                _ => mir_bodies_map
+                    .into_iter()
+                    .map(|(_def_id, body)| {
+                        let sym = format!(
+                            "__glyim_fn_{}",
+                            body.owner.local_id.to_raw()
+                        );
+                        (sym, body)
+                    })
+                    .collect(),
+            }
         } else {
             cgus.iter()
                 .flat_map(|cgu_indices| {
@@ -915,7 +978,7 @@ impl Pipeline {
         codegen_units: Option<usize>,
         proc_registry: Option<&glyim_proc_macro::Registry>,
     ) -> CompResult<CompileArtifacts> {
-        let prepared = Self::prepare_compilation(db, path, codegen_units, proc_registry)?;
+        let prepared = Self::prepare_compilation(db, path, codegen_units, proc_registry, true)?;
         let out_path = if output_path.as_os_str().is_empty() {
             Path::new("output.o")
         } else {
@@ -1006,7 +1069,7 @@ pub fn compile_file_to_mir(
     // second, weaker language definition reachable via fuzz_compile and
     // glyip test discovery. prepare_compilation runs every phase with the
     // same diagnostics.
-    let prepared = Pipeline::prepare_compilation(db, path, None, None)?;
+    let prepared = Pipeline::prepare_compilation(db, path, None, None, false)?;
     let mut bodies = std::collections::HashMap::with_capacity(prepared.all_bodies.len());
     for (_symbol, body) in prepared.all_bodies {
         bodies.insert(body.owner, body);
@@ -1044,7 +1107,7 @@ pub fn emit_mir(
     // Every other emit mode already routes through
     // `prepare_compilation` for exactly this reason (see
     // `emit_llvm_ir`'s comment).
-    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry)?;
+    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry, false)?;
 
     // `all_bodies` carries `(symbol, body)` pairs; the MIR dump is keyed
     // by the body's owner `DefId`, and `format_body` prints the owner's
@@ -1074,7 +1137,7 @@ pub fn emit_llvm_ir(
     // `MonoCtx::collect` — so generic stdlib definitions reached codegen with
     // `TyKind::Param` in their locals and `fn_abi_of` ICEd with
     // `UnknownType`. Any new emit mode MUST go through `prepare_compilation`.
-    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry)?;
+    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry, false)?;
 
     // Emit *every* monomorphized body (previously only `mir_bodies[0]` was
     // emitted, silently dropping the rest of the crate from the IR).
@@ -1108,7 +1171,7 @@ pub fn emit_asm(
     // Route through the shared front half (`prepare_compilation`) — see
     // `emit_llvm_ir` for why the standalone chain was wrong (it skipped
     // monomorphization, so generic bodies ICEd in `fn_abi_of`).
-    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry)?;
+    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry, false)?;
     let backend = LlvmBackend::with_db(db).with_debug_info(false);
     backend
         .emit_assembly(&prepared.all_bodies, output)
