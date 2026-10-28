@@ -1274,6 +1274,38 @@ through the interpreter's value flow, which itself is close to
 adding `InterpValue::Slice` — reinforcing that the deferred
 refactor is the real fix.
 
+**Attempt 2 (2026-10-27) — `InterpValue::Slice`, and why it is bigger
+than a variant swap.** The variant was added, every exhaustiveness error
+the compiler flagged was closed (only 2: `interp_value_to_u128` and
+`interp_value_to_bool`), and `as_slice` / `len` / `is_empty` /
+`split_at` / `to_vec` / both index sites were wired to use it for
+non-`u8` element types. `cargo check --workspace` clean. Full workspace
+run: **2 fixtures failed**, both with exit 101 (panic):
+
+    behavior/for_loop_over_slice.g     expected 3, got 101
+    behavior/for_loop_over_vec_ref.g   expected 6, got 101
+
+These are `Vec<i32>` loops — exactly the cases `Slice` was meant to
+serve. The panic is in `Iterator::next` lowering: the interpreter's
+`next` implementation reads the receiver as a `String` (one char per
+element) and indexes *chars*. With the receiver now a `Slice`, that
+read panics.
+
+So the true scope is: adding `Slice` requires **simultaneously**
+updating the slice iterator machinery — `Iterator::next` on `[T]`,
+`&[T]`, and the `for`-loop desugaring that consumes it — not just the
+five accessor methods. That is a coordinated change across the model
+and the iterator protocol, not a local refactor.
+
+Reverted in full (`git checkout` on the two modified files). Tree is at
+`47450241` with 18 unpushed commits; nothing half-finished.
+
+**Correct next attempt, when taken:** the variant + the 5 accessors +
+`Iterator::next`-on-slice, in one commit, with the `for_loop_over_*`
+fixtures as the acceptance test. If the iterator update proves as
+entangled as `iterator::max` was for P1-C8 (§3.5.4), this becomes the
+same shape as that item and should be planned alongside it.
+
 #### 3.5.11 — P2-A2: mock drift closed; production fallback hardened (partial)
 
 Investigated 2026-10-27. The audit described P2-A2 as two related
