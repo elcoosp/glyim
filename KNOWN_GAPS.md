@@ -2606,67 +2606,81 @@ red CI job.
     host-specific
 
 
-#### 3.5.24 — OPEN: `if let Some(_) = None` reaches LLVM with `TyKind::Error`
+#### 3.5.24 — OPEN: unconstrained `Option::None` ICEs; turbofish on variant path drops the type arg
+Narrowed from §3.5.23 (2026-10-28). Investigation of the original
+fixture revealed **two distinct bugs** and one **genuinely-invalid
+test**; the fixture has been rewritten to the valid form and is no
+longer `// ignore`-annotated.
 
-Narrowed from §3.5.23 (2026-10-28). This is the one genuine LLVM backend
-bug left after the CI-config bug and the stale header were fixed.
+**The invalid input (not a bug).**
 
-**Reproducer.**
+    let b: i32 = if let Option::Some(_) = Option::None { 1 } else { 7 };
 
-    fn main() -> i32 {
-        let b: i32 = if let Option::Some(_) = Option::None { 1 } else { 7 };
-        b
-    }
+`Option::None` here has an unconstrained `Option<_>`. Real Rust rejects
+this with `error[E0282]: type annotations needed for Option<_>`. The
+original fixture was testing invalid code — no LLVM lowering fix can
+make it "work" in a way that matches Rust. Correctly rejected at typeck
+is the right answer.
 
-Compiled with `glyim-cli --with-stdlib --emit=exec`:
+**Bug A — unconstrained `Option::None` ICEs instead of erroring.** glyim
+does not produce E0282. It silently infers `Adt1010<<error>>` (visible
+in MIR as `$3: Adt1010<<error>>`, `Substitution(len=0)`), carries that
+through to LLVM, and fails there with:
 
     [X0000] Codegen error: Attempted to lower TyKind::Error to LLVM.
     Type checking failed to resolve this type.
 
-**Narrowing done.** The two halves of `if_let_some_none.g` isolate
-cleanly:
+That is an **ICE from user input**, not a diagnostic. The mechanism is
+`zonk`'s "unbound `Infer(Ty)` → `Ty::ERROR`" fallback (`zonk.rs`, the
+Script 632 note: "an *unbound* `Infer(Ty(_))` reaching zonk means no
+pass will ever bind it... Fall back to `Ty::ERROR`"). That fallback is
+correct for *stdlib templates* that never get monomorphized; it is
+wrong for a user-written expression that the compiler can see is
+underconstrained. Fix: before the zonk fallback, detect an unbound
+`Infer(Ty)` in a **reachable** body (same "reachable" predicate typeck
+already uses for the annotation-needed diagnostic — see
+`typeck_crate`'s `unresolved_ty_var_spans`) and emit a `[T0282]-style`
+"type annotations needed" rather than `Ty::ERROR`. Likely one new arm
+in the existing annotation-needed pipeline rather than a new pass.
 
-  * `if let Option::Some(x) = Option::Some(42) { x } else { 0 }` —
-    returns 42 correctly, on both backends.
-  * `if let Option::Some(_) = Option::None { 1 } else { 7 }` — LLVM
-    fails with the error above; the MIR interpreter handles it
-    correctly.
+**Bug B — turbofish on a variant path drops the type argument.** Even
+explicitly annotating the variant does not help:
 
-So the trigger is the **`None` scrutinee combined with a
-wildcard-in-`Some` pattern** — specifically the arm that the compiler
-knows is unreachable (matching `Some(_)` against a `None` value), which
-still has to type-check and lower because the discriminator is not
-known at compile time in general.
+    let b: i32 = if let Option::Some(_) = Option::<i32>::None { 1 } else { 7 };
 
-**Where to look.** Most likely one of:
+still ICEs at LLVM codegen. But:
 
-  1. **`check_pat.rs`'s `Pat::Wild` arm inside a `Some(..)` sub-pattern
-     on a known-`None` scrutinee** — if it produces a placeholder
-     `Ty::ERROR` for the wildcard field that is never refined (because
-     the arm is statically dead but the type is still needed to lower
-     the dead branch's aggregate), lowering sees `TyKind::Error` at
-     codegen.
-  2. **Lowering of the wildcard arm's dead block** — LLVM still emits
-     code for both arms of an `if let`. If the dead arm's bindings were
-     never resolved (typeck short-circuited because the match could
-     never succeed), lowering sees error types.
-  3. **`unify`'s handling of an uninhabited sub-pattern** — if pattern
-     typeck returns early for the provably-impossible arm.
+    let none_val: Option<i32> = Option::None;
+    let b: i32 = if let Option::Some(_) = none_val { 1 } else { 7 };
 
-**Fix path.** Add a diagnostic in typeck rather than a codegen error:
-if a pattern arm is provably dead but carries error-typed locals, either
-(a) resolve the types anyway (type-check the dead arm as if it could
-run), or (b) replace the dead arm's locals with the correct
-`Option::Some` payload type so lowering emits a valid (unreachable)
-block. Both make LLVM happy without changing runtime behavior.
+works correctly (exit 7). So the bug is specifically in how
+`Option::<i32>::None` — turbofish on an enum-variant *path expression* —
+resolves. The explicit `i32` type argument does not reach the variant
+construction: the emitted `Aggregate(Adt(1010), VariantIdx(0),
+Substitution(len=0))` in MIR has an empty substitution instead of one
+carrying `i32`. Compare with the working `Some(42)` case, which emits
+`Substitution(index=21, len=1)`.
 
-**Interim.** `tests/run-pass/behavior/if_let_some_none.g` is `// ignore`-
-annotated with a pointer to this entry, so `test-ubuntu` is green under
-`--features glyim-test/real-llvm` and the bug is tracked rather than
-showing as a permanently red CI job. The fixture's first `if let`
-(which works) is exercised by `if_let_some_none.g`'s counterpart
-scenarios and by `option_nested_unwrap.g`; only the second `if let` is
-not covered until this is fixed.
+Where to look: `check_path`'s variant-path arm (`check_expr.rs`,
+`ExprKind::Path` → variant resolution) likely discards the
+`PathSegment`'s generic arguments when the resolved target is a variant
+rather than a type. The turbofish is parsed (or should be — worth
+checking with a `--emit=mir` on a simpler case) but not threaded into
+the `thir::ExprKind::VariantRef` / `VariantCtor` substitution.
+
+**Fixture state.** `tests/run-pass/behavior/if_let_some_none.g` has been
+rewritten to use the **valid** `let`-annotated form (which exercises
+the same `if let` desugaring and the same `Option::None` construction),
+exits 49, and is un-`// ignore`d. Verified against real-llvm: compiles
+and runs to 49. The `// needs-llvm` annotation is kept because the
+fixture's purpose is to guard the LLVM lowering path specifically.
+
+**What is now covered.** The original fixture's intent — that `if let
+PAT = EXPR` compiles and the wildcard arm doesn't ICE — is preserved by
+the rewritten version, which uses the `let`-annotated form. Bugs A and
+B remain open and are not currently exercised by any fixture (which is
+why they survived). Adding compile-fail fixtures for them is part of
+the fix, not part of this entry's cleanup.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 

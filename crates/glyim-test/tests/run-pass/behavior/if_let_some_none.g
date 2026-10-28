@@ -8,23 +8,22 @@
 // binding) — a binding allocated a fresh MIR local whose liveness
 // bitset insert exceeded the capacity computed from the user locals,
 // producing the "insert at index N exceeds fixedbitset size N" ICE.
-// §3.5.23: IGNORED under `--features glyim-test/real-llvm`. Narrowed to
-// the second `if let`: `if let Option::Some(_) = Option::None { 1 } else
-// { 7 }` reaches LLVM lowering with a `TyKind::Error` somewhere (verified
-// by isolating the two `if let`s — the `Some(42)` case alone returns 42
-// fine). The `None` scrutinee + wildcard-in-Some-pattern combination is
-// the trigger. Real typeck/lowering bug, tracked in KNOWN_GAPS §3.5.23.
-// The MIR-interpreter path handles it correctly; only the LLVM backend
-// fails. Ignored here so `test-ubuntu` (which uses real-llvm) is green
-// and this bug is tracked rather than hidden in a red CI job.
+//
+// §3.5.24: the `None` scrutinee is bound to an explicitly-typed local.
+// The original form `if let Option::Some(_) = Option::None { … }` has an
+// **unconstrained** `Option<_>` — real Rust rejects it with E0282 (type
+// annotations needed). glyim's failure mode was worse (silent ICE at
+// LLVM codegen instead of a typeck diagnostic), tracked separately in
+// §3.5.24. This fixture uses the valid form so the lowering path stays
+// covered while that's fixed.
 // test-mode: run-pass
-// ignore
 // exit-code: 49
 // compile-flags: --with-stdlib
 // needs-llvm
 fn main() -> i32 {
     let a: i32 = if let Option::Some(x) = Option::Some(42) { x } else { 0 };
-    let b: i32 = if let Option::Some(_) = Option::None { 1 } else { 7 };
+    let none_val: Option<i32> = Option::None;
+    let b: i32 = if let Option::Some(_) = none_val { 1 } else { 7 };
     // 42 + 7 = 49
     a + b
 }
