@@ -2376,8 +2376,79 @@ is precisely what TEST-1 (add `// check-stderr:` matchers; 232/239
 run-pass fixtures currently assert only exit code) was intended to
 catch — TEST-1 is not implemented.
 
-**Where the bug can be.** Three possibilities, in rough order of
-likelihood:
+**ROOT CAUSE — the `to_string` sentinel (same class as P1-C1's `into`).**
+
+Probes narrowed it definitively:
+
+| Probe | Result | Conclusion |
+|---|---|---|
+| `println!("plain no args")` | `plain no args` | `println!` itself works |
+| `println!("lit {}", 42)` (literal arg) | `lit ` | not operand-passing |
+| `42.to_string().len() == 2` | **false** (len is 0) | `to_string` on `i32` broken |
+| `println!("len is {}", n)` | `len is ` | consistent with the above |
+
+`typeck`'s `to_string` arm (`check_expr.rs`, the `to_owned`/`to_string`
+branch of `try_builtin_method`) consults the builtin registry only for
+receivers that canonically map to the String ADT:
+
+    TyKind::String                        -> AdtId(1061)
+    TyKind::Slice(u8)                     -> AdtId(1061)
+    TyKind::Adt(1050 | 1061 | ...)        -> that AdtId
+
+For **any other receiver** — including every integer primitive — it
+falls through to:
+
+    let fn_id = FnDefId::from_raw(u32::MAX - 2);
+    return Some((out_ty, fn_id));
+
+That sentinel is lowered (`lower_rvalue.rs`'s sentinel arm) to a
+`MirConstKind::Error` constant, which codegen turns into a zero value.
+For a `String` return type, "zero value" is the **empty string**.
+
+So `42.to_string()` returns `""`. The format expander emits
+`<arg>.to_string().as_str()` for every `{}`, gets `""`, and pushes it.
+The literal parts of the format string are unaffected — which is
+exactly the observed output.
+
+**This is the same sentinel class as P1-C1's `into` bug** (fixed earlier
+in this session, §3.5.6): a `u32::MAX - k` id that typeck hands out
+when it cannot resolve a real target, silently lowered to a zero value.
+P1-C1 was fixed by adding a `is_copy`-guarded direct operand use. This
+one has no such shortcut — a general `Display::to_string` for
+primitives needs real integer→string conversion.
+
+**Why a hard diagnostic is not the quick fix.** The `T084-REVISED` test
+comment says "the stdlib relies on `format!` compiling for its own
+error paths", and that is **accurate**: nine `format!(...{ }...)` sites
+in `crates/glyim-lang-std/lib/` pass a mix of `&str` (fine — hits the
+`(1050|1061)` arms) and integers (`process.g`'s `self.pid`,
+`io.g`'s `errno`). Turning the sentinel into a hard error would fail
+stdlib compilation at those integer sites. The fix has to come with
+either (a) a working primitive `to_string`, or (b) stdlib rewrites that
+avoid integer formatting.
+
+**Fix path for the next session, in order.**
+
+  1. **Register `to_string` for integer primitives** in
+     `TyCtxMut::register_builtin_methods` (mirroring the
+     `is_power_of_two` batch pattern): `(i32_ty, "to_string", vec![],
+     string_ty)`, `(u64_ty, ...)`, etc. — one entry per primitive.
+  2. **Implement the conversion in both backends.** LLVM: the digits
+     of an integer are computable with a small loop or an intrinsic
+     (`llvm.utoa` does not exist; `sprintf` via the runtime, or a
+     hand-rolled digit loop writing into a stack buffer then
+     `glyim_string_from_bytes`). Interp: `format!("{}", n)` directly in
+     `try_call_builtin`.
+  3. **Add `check-stdout` fixtures** for each integer width asserting
+     `println!("{}", 42i32)` prints `42`, and the same for negative
+     values, zero, and MIN/MAX boundaries.
+  4. **Extend the `T084-REVISED` test** to assert non-empty output once
+     the expander's `.to_string()` call has a real target.
+
+Steps 1 and 2 are the bulk (~1-2 sessions). The current §3.5.22 entry
+is the map.
+
+**Original hypotheses, superseded.**
 
   1. **`println!` macro expansion.** `glyim-meta`'s
      `t084_format_with_substitution_yields_empty_string` test
