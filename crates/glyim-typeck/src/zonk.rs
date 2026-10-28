@@ -1190,104 +1190,269 @@ fn walk_ty_resolved(infer: &InferenceTable, ctx: &TyCtx, ty: Ty, f: &mut impl Fn
     }
 }
 
-
 // ---------------------------------------------------------------------------
-// §3.5.18: unsuffixed integer literals whose value does not fit the type
-// that inference settled on.
+// §3.5.18: integer literals whose value does not fit the type inference chose.
 // ---------------------------------------------------------------------------
 
-/// Reject unsuffixed integer literals whose value does not fit the type
-/// inference assigned them.
+/// Reject integer literals whose value does not fit the type inference
+/// assigned them.
 ///
-/// `let a = 4294967296;` parses as `Int(4294967296, None)` (hint = None).
-/// No context constrains the type, so inference defaults it to `i32` — but
-/// `4294967296` does not fit i32. Rust reports `literal out of range`;
-/// glyim silently wraps to 0 at codegen (the THIR literal keeps the full
-/// i128; only MIR codegen's i32 store truncates it).
+/// `let a = 4294967296;` parses as `Int(4294967296, None)`. With no context
+/// to constrain it, inference defaults the type to `i32` — but the value
+/// exceeds `i32::MAX`. Rust reports `literal out of range`; glyim previously
+/// truncated to 0 at codegen (the THIR literal carries the full `i128`; only
+/// the i32 store narrowed it). This function turns that silent wrap into a
+/// hard `[T0001]` error.
 ///
-/// **When.** After `zonk_bodies`, every `Expr.ty` is concrete, and the
-/// literal's raw i128 is untouched. So we compare the raw value against
-/// the resolved type's bounds.
+/// **When.** Called from `typeck_crate` immediately after `zonk_bodies`:
+/// every `Expr.ty` is concrete and each literal's raw `i128` is intact.
 ///
-/// **Scope (deliberately narrow).** Only the *direct* initializer of a
-/// `let`, or the *direct* expression of an `Stmt::Expr`. A literal nested
-/// inside a call, binary op, if-condition, etc. still wraps silently.
-/// Broadening the walk requires mirroring `zonk_expr`'s full match, which
-/// is larger than this fix. Documented in `KNOWN_GAPS.md` §3.5.18.
+/// **Coverage.** Recurses through the same `ExprKind` structure `zonk_expr`
+/// does, so a literal anywhere in the expression tree — call argument,
+/// binary operand, `if` condition, `return` value, match arm, nested block,
+/// struct field, etc. — is checked.
 ///
-/// **Suffixed literals are not checked here** — `4294967296i32` is a
-/// different error (explicit suffix that does not fit). Also §3.5.18
-/// scope.
+/// **Negation.** `-2147483648` (i32::MIN) parses as `Unary { Neg,
+/// Literal(2147483648) }`. The operand literal on its own exceeds i32::MAX,
+/// but the negated value is exactly i32::MIN and valid. Handled as a single
+/// case at the `Unary` node: negate the raw literal and compare against the
+/// outer expression's range, then *do not* descend (which would flag the
+/// operand). `-2147483649` for i32 is then correctly rejected.
+///
+/// **Still wraps:** nothing. This is the full §3.5.18 close.
 pub fn check_literal_ranges(
     ctx: &TyCtx,
     bodies: &[(glyim_core::def_id::LocalDefId, thir::Body)],
 ) -> Vec<glyim_diag::GlyimDiagnostic> {
-    use glyim_core::primitives::{IntTy, UintTy};
+    use glyim_core::primitives::{IntTy, UnOp, UintTy};
     use glyim_type::TyKind;
+
+    /// `(min, max, name)` for an integer type, all in `i128` range
+    /// (`u64::MAX` fits). `None` for non-integer types.
+    fn int_bounds(ty: &TyKind) -> Option<(i128, i128, &'static str)> {
+        match ty {
+            TyKind::Int(int_ty) => {
+                let (width, name): (u32, &'static str) = match *int_ty {
+                    IntTy::I8 => (8, "i8"),
+                    IntTy::I16 => (16, "i16"),
+                    IntTy::I32 => (32, "i32"),
+                    IntTy::I64 => (64, "i64"),
+                    IntTy::Isize => (64, "isize"),
+                };
+                let max = (1i128 << (width - 1)) - 1;
+                let min = -(1i128 << (width - 1));
+                Some((min, max, name))
+            }
+            TyKind::Uint(uint_ty) => {
+                let (width, name): (u32, &'static str) = match *uint_ty {
+                    UintTy::U8 => (8, "u8"),
+                    UintTy::U16 => (16, "u16"),
+                    UintTy::U32 => (32, "u32"),
+                    UintTy::U64 => (64, "u64"),
+                    UintTy::Usize => (64, "usize"),
+                };
+                let max = (1i128 << width) - 1;
+                Some((0, max, name))
+            }
+            _ => None,
+        }
+    }
+
+    /// Extract the raw value of an integer literal, or `None` if this is
+    /// not an integer literal / its value does not fit i128.
+    fn literal_value(lit: &thir::Literal) -> Option<i128> {
+        match lit {
+            thir::Literal::Int(v, _) => Some(*v),
+            thir::Literal::Uint(v, _) => {
+                if *v > i128::MAX as u128 { None } else { Some(*v as i128) }
+            }
+            _ => None,
+        }
+    }
 
     fn check_expr(
         ctx: &TyCtx,
         expr: &thir::Expr,
         diags: &mut Vec<glyim_diag::GlyimDiagnostic>,
     ) {
-        let value: i128 = match &expr.kind {
-            thir::ExprKind::Literal(thir::Literal::Int(v, None)) => *v,
-            thir::ExprKind::Literal(thir::Literal::Uint(v, None)) => {
-                if *v > i128::MAX as u128 {
-                    return; // already caught by HIR's i128 overflow check
-                }
-                *v as i128
+        // Negation special case: `-<literal>` where the negated value fits.
+        if let thir::ExprKind::Unary { op: UnOp::Neg, operand } = &expr.kind
+            && let thir::ExprKind::Literal(lit) = &operand.kind
+            && let Some(raw) = literal_value(lit)
+            && let Some((min, _max, name)) = int_bounds(ctx.ty_kind(expr.ty))
+        {
+            // HIR always parses the operand of `-` as non-negative, so
+            // `raw >= 0` and `-raw` cannot overflow i128 here.
+            let negated = -raw;
+            if negated < min {
+                diags.push(glyim_diag::GlyimDiagnostic::type_error(
+                    expr.span,
+                    format!(
+                        "integer literal `-{raw}` does not fit `{name}` \
+                         (minimum {min}); the negated value is below the \
+                         type's minimum"
+                    ),
+                ));
             }
-            _ => return,
-        };
+            // Either way, don't descend: the operand is a literal whose own
+            // value may exceed the type's max (i32::MIN's magnitude is
+            // MAX+1), and flagging it would be wrong when the negation
+            // makes the whole expression valid.
+            return;
+        }
 
-        match ctx.ty_kind(expr.ty) {
-            TyKind::Int(int_ty) => {
-                // TODO(isize): honour target pointer width. 64 matches every
-                // current glyim target; wiring `TargetInfo` through would be
-                // part of the broader §3.5.18 work.
-                let width: u32 = match *int_ty {
-                    IntTy::I8 => 8,
-                    IntTy::I16 => 16,
-                    IntTy::I32 => 32,
-                    IntTy::I64 => 64,
-                    IntTy::Isize => 64,
-                };
-                let max = (1i128 << (width - 1)) - 1;
-                let min = -(1i128 << (width - 1));
-                if value < min || value > max {
-                    diags.push(glyim_diag::GlyimDiagnostic::type_error(
-                        expr.span,
-                        format!(
-                            "integer literal `{value}` does not fit `{ty}` \
-                             (range {min}..={max}); add an explicit suffix \
-                             (e.g. `{value}u64`) or annotate the binding",
-                            ty = int_ty.name(),
-                        ),
-                    ));
+        // Plain literal — compare raw value against the resolved type.
+        if let thir::ExprKind::Literal(lit) = &expr.kind
+            && let Some(v) = literal_value(lit)
+            && let Some((min, max, name)) = int_bounds(ctx.ty_kind(expr.ty))
+            && (v < min || v > max)
+        {
+            diags.push(glyim_diag::GlyimDiagnostic::type_error(
+                expr.span,
+                format!(
+                    "integer literal `{v}` does not fit `{name}` \
+                     (range {min}..={max}); add an explicit suffix \
+                     (e.g. `{v}u64`) or annotate the binding"
+                ),
+            ));
+            // Leaf: nothing to descend into.
+            return;
+        }
+
+        // Recurse. Mirrors `zonk_expr`'s match arm-for-arm.
+        match &expr.kind {
+            thir::ExprKind::Literal(_)
+            | thir::ExprKind::VarRef(_)
+            | thir::ExprKind::FnRef(_)
+            | thir::ExprKind::ConstRef(_)
+            | thir::ExprKind::StaticRef(_)
+            | thir::ExprKind::VariantRef(_, _)
+            | thir::ExprKind::VariantCtor { .. }
+            | thir::ExprKind::TraitMethodRef { .. }
+            | thir::ExprKind::Continue
+            | thir::ExprKind::Err => {}
+
+            thir::ExprKind::Binary { lhs, rhs, .. } => {
+                check_expr(ctx, lhs, diags);
+                check_expr(ctx, rhs, diags);
+            }
+            thir::ExprKind::Unary { operand, .. } => check_expr(ctx, operand, diags),
+            thir::ExprKind::Call { func, args } => {
+                check_expr(ctx, func, diags);
+                for a in args {
+                    check_expr(ctx, a, diags);
                 }
             }
-            TyKind::Uint(uint_ty) => {
-                let width: u32 = match *uint_ty {
-                    UintTy::U8 => 8,
-                    UintTy::U16 => 16,
-                    UintTy::U32 => 32,
-                    UintTy::U64 => 64,
-                    UintTy::Usize => 64,
-                };
-                let max = (1i128 << width) - 1;
-                if value < 0 || value > max {
-                    diags.push(glyim_diag::GlyimDiagnostic::type_error(
-                        expr.span,
-                        format!(
-                            "integer literal `{value}` does not fit `{ty}` \
-                             (range 0..={max}); add an explicit suffix or \
-                             annotate the binding",
-                            ty = uint_ty.name(),
-                        ),
-                    ));
+            thir::ExprKind::DynamicCall { receiver, args, .. } => {
+                check_expr(ctx, receiver, diags);
+                for a in args {
+                    check_expr(ctx, a, diags);
                 }
             }
+            thir::ExprKind::If {
+                cond,
+                then_branch,
+                else_branch,
+            } => {
+                check_expr(ctx, cond, diags);
+                check_expr(ctx, then_branch, diags);
+                if let Some(e) = else_branch {
+                    check_expr(ctx, e, diags);
+                }
+            }
+            thir::ExprKind::Match { scrutinee, arms } => {
+                check_expr(ctx, scrutinee, diags);
+                for arm in arms {
+                    if let Some(g) = &arm.guard {
+                        check_expr(ctx, g, diags);
+                    }
+                    check_expr(ctx, &arm.body, diags);
+                }
+            }
+            thir::ExprKind::Block { stmts, tail } => {
+                for s in stmts {
+                    check_stmt(ctx, s, diags);
+                }
+                if let Some(t) = tail {
+                    check_expr(ctx, t, diags);
+                }
+            }
+            thir::ExprKind::Ref { operand, .. } => check_expr(ctx, operand, diags),
+            thir::ExprKind::Field { receiver, .. } => check_expr(ctx, receiver, diags),
+            thir::ExprKind::Index { base, index } => {
+                check_expr(ctx, base, diags);
+                check_expr(ctx, index, diags);
+            }
+            thir::ExprKind::Cast { expr: operand } => {
+                // §3.5.18 Cast exemption: a literal that is the *direct*
+                // operand of an `as` cast is the user's explicit "treat
+                // this value as type X" statement. `0xFFFFFFFF as u32`
+                // is a legitimate idiom — the cast's target drives the
+                // meaning, and the literal's own default type (i32) is
+                // not what's being relied on. Skip the range check here;
+                // descend only into non-literal operands (which may
+                // themselves contain literals in call args etc.).
+                if !matches!(operand.kind, thir::ExprKind::Literal(_)) {
+                    check_expr(ctx, operand, diags);
+                }
+            }
+            thir::ExprKind::While { cond, body } => {
+                check_expr(ctx, cond, diags);
+                check_expr(ctx, body, diags);
+            }
+            thir::ExprKind::Loop { body } => check_expr(ctx, body, diags),
+            thir::ExprKind::For { iterable, body, .. } => {
+                check_expr(ctx, iterable, diags);
+                check_expr(ctx, body, diags);
+            }
+            thir::ExprKind::Array(elems) | thir::ExprKind::Tuple(elems) => {
+                for e in elems {
+                    check_expr(ctx, e, diags);
+                }
+            }
+            thir::ExprKind::Struct { fields, spread, .. } => {
+                for (_name, e) in fields {
+                    check_expr(ctx, e, diags);
+                }
+                if let Some(s) = spread {
+                    check_expr(ctx, s, diags);
+                }
+            }
+            thir::ExprKind::Break { value } | thir::ExprKind::Return { value } => {
+                if let Some(v) = value {
+                    check_expr(ctx, v, diags);
+                }
+            }
+            thir::ExprKind::Closure { body, .. } => {
+                for s in &body.stmts {
+                    check_stmt(ctx, s, diags);
+                }
+            }
+            thir::ExprKind::Range { start, end, .. } => {
+                if let Some(s) = start {
+                    check_expr(ctx, s, diags);
+                }
+                if let Some(e) = end {
+                    check_expr(ctx, e, diags);
+                }
+            }
+            thir::ExprKind::Try { expr } => check_expr(ctx, expr, diags),
+        }
+    }
+
+    fn check_stmt(
+        ctx: &TyCtx,
+        stmt: &thir::Stmt,
+        diags: &mut Vec<glyim_diag::GlyimDiagnostic>,
+    ) {
+        match stmt {
+            thir::Stmt::Let { init: Some(expr), .. } => check_expr(ctx, expr, diags),
+            thir::Stmt::Expr { expr } => check_expr(ctx, expr, diags),
+            thir::Stmt::Assign { lhs, rhs, .. } => {
+                check_expr(ctx, lhs, diags);
+                check_expr(ctx, rhs, diags);
+            }
+            thir::Stmt::Return { value: Some(v), .. } => check_expr(ctx, v, diags),
             _ => {}
         }
     }
@@ -1295,13 +1460,7 @@ pub fn check_literal_ranges(
     let mut diags = Vec::new();
     for (_owner, body) in bodies {
         for stmt in &body.stmts {
-            match stmt {
-                thir::Stmt::Let {
-                    init: Some(expr), ..
-                } => check_expr(ctx, expr, &mut diags),
-                thir::Stmt::Expr { expr } => check_expr(ctx, expr, &mut diags),
-                _ => {}
-            }
+            check_stmt(ctx, stmt, &mut diags);
         }
     }
     diags
