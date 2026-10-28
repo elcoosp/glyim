@@ -115,7 +115,8 @@ impl<'a> FnCtxt<'a> {
             );
             if bare_safe {
                 if let Some((adt_id, variant_idx)) = self.ctx.variant_by_name(name) {
-                    return self.variant_expr(adt_id, variant_idx, span);
+                    // Bare-name variant: no enum segment to carry a turbofish.
+                    return self.variant_expr(adt_id, variant_idx, span, None);
                 }
             }
         }
@@ -306,7 +307,15 @@ impl<'a> FnCtxt<'a> {
                             })
                             .map(|i| glyim_core::def_id::VariantIdx::from_raw(i as u32))
                         {
-                            return self.variant_expr(*adt_id, variant_idx, span);
+                            // §3.5.24 Bug B: forward the enum segment's
+                            // turbofish so `Option::<i32>::None` carries
+                            // `i32` into the substitution.
+                            return self.variant_expr(
+                                *adt_id,
+                                variant_idx,
+                                span,
+                                path.segments[0].generic_args.as_deref(),
+                            );
                         }
                     }
                 }
@@ -854,7 +863,14 @@ impl<'a> FnCtxt<'a> {
                     })
                     .map(|i| glyim_core::def_id::VariantIdx::from_raw(i as u32));
                 if let Some(variant_idx) = variant_idx {
-                    return self.variant_expr(adt_id, variant_idx, span);
+                    // §3.5.24 Bug B: same turbofish forwarding as the
+                    // fallback branch above.
+                    return self.variant_expr(
+                        adt_id,
+                        variant_idx,
+                        span,
+                        path.segments[0].generic_args.as_deref(),
+                    );
                 }
             }
         }
@@ -1049,20 +1065,55 @@ impl<'a> FnCtxt<'a> {
     /// or a `VariantRef` of the enum type for unit variants (`None`). The enum
     /// is instantiated with one fresh inference variable per generic parameter
     /// so downstream unification can pin the concrete type.
+    /// §3.5.24 Bug B: `explicit_args` carries the turbofish type
+    /// arguments from the enum path segment (`Option::<i32>::None` →
+    /// `Some([i32])`). When provided and the corresponding argument
+    /// resolves, it seeds that generic parameter's substitution slot
+    /// instead of a fresh inference var. `None` preserves the previous
+    /// behaviour (fresh infer vars, later unified from context).
+    ///
+    /// Before this, the caller-side turbofish was resolved and then
+    /// thrown away here: `variant_expr` unconditionally allocated fresh
+    /// vars, so `Option::<i32>::None` came out as `Adt(1010, <?X>)` and
+    /// LLVM lowering saw `Adt(1010, <error>)`.
     fn variant_expr(
         &mut self,
         adt_id: AdtId,
         variant_idx: glyim_core::def_id::VariantIdx,
         span: Span,
+        explicit_args: Option<&[glyim_hir::TypeRef]>,
     ) -> (thir::Expr, Ty) {
         if super::check_expr::dbg_flags::vexpr() {
-            eprintln!("[VEXPR] adt_id={:?} variant_idx={:?}", adt_id, variant_idx);
+            eprintln!(
+                "[VEXPR] adt_id={:?} variant_idx={:?} explicit_args={}",
+                adt_id,
+                variant_idx,
+                explicit_args.map(|a| a.len()).unwrap_or(0)
+            );
         }
         let arity = self.ctx.adt_generic_arity(adt_id);
         let substs: Vec<GenericArg> = (0..arity)
-            .map(|_| {
-                let var = self.infer.new_ty_var(self.ctx);
-                GenericArg::Ty(self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var))))
+            .map(|i| {
+                let resolved = explicit_args
+                    .and_then(|args| args.get(i as usize))
+                    .map(|ty_ref| {
+                        crate::tyconv::resolve_type_ref(
+                            self.ctx,
+                            self.infer,
+                            self.def_map,
+                            self.diagnostics,
+                            ty_ref,
+                            &self.param_map,
+                            span,
+                        )
+                    });
+                match resolved {
+                    Some(t) if t != Ty::ERROR => GenericArg::Ty(t),
+                    _ => {
+                        let var = self.infer.new_ty_var(self.ctx);
+                        GenericArg::Ty(self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var))))
+                    }
+                }
             })
             .collect();
         let substs = self.ctx.intern_substitution(substs);
