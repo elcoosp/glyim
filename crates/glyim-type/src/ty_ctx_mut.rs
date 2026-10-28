@@ -2791,6 +2791,7 @@ impl TyCtxMut {
             // u32
             (u32_ty, "checked_add", vec![u32_ty], option_u32_ty),
             (u32_ty, "checked_sub", vec![u32_ty], option_u32_ty),
+            (u32_ty, "checked_mul", vec![u32_ty], option_u32_ty),
             (u32_ty, "saturating_sub", vec![u32_ty], u32_ty),
             (u32_ty, "saturating_add", vec![u32_ty], u32_ty),
             (u32_ty, "saturating_mul", vec![u32_ty], u32_ty),

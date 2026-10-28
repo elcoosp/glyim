@@ -4714,6 +4714,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 | "saturating_add"
                 | "saturating_sub"
                 | "saturating_mul"
+                | "checked_add"
+                | "checked_sub"
+                | "checked_mul"
                 | "count_ones"
                 | "count_zeros"
                 | "leading_zeros"
@@ -5526,6 +5529,128 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
                             "is_power_of_two branch: {e:?}"
+                        ))]
+                    })?;
+            }
+            return Ok(true);
+        }
+        // BC-P1-C2-BATCH2C: `checked_add` / `checked_sub` / `checked_mul`
+        // on unsigned integers. Each returns `Option<T>`: `None` on
+        // overflow, `Some(wrapped_value)` otherwise.
+        //
+        // Uses the `.with.overflow` family (`{iN, i1}` result) — the flag
+        // is the overflow indicator. The construction mirrors `Vec::pop`
+        // (line ~6788): build the two `Option<T>` variants via
+        // `build_layout_aggregate`, then `select` on the flag. `select` on
+        // aggregate values works because both variants share the same
+        // `Option<T>` LLVM type.
+        if matches!(method.as_str(), "checked_add" | "checked_sub" | "checked_mul") {
+            let Some(recv_op) = args.first() else {
+                return Ok(false);
+            };
+            let Some(rhs_op) = args.get(1) else {
+                return Ok(false);
+            };
+            let recv_v = self.lower_operand(recv_op)?;
+            let rhs_v = self.lower_operand(rhs_op)?;
+            if !recv_v.is_int_value() || !rhs_v.is_int_value() {
+                return Ok(false);
+            }
+            let lhs_iv = recv_v.into_int_value();
+            let rhs_iv = rhs_v.into_int_value();
+            let int_ty = lhs_iv.get_type();
+            let width = int_ty.get_bit_width();
+            let bool_ty = self.context.bool_type();
+
+            let result_struct_ty =
+                self.context.struct_type(&[int_ty.into(), bool_ty.into()], false);
+            let fn_ty = result_struct_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
+            let intrinsic = match method.as_str() {
+                "checked_add" => format!("llvm.uadd.with.overflow.i{width}"),
+                "checked_sub" => format!("llvm.usub.with.overflow.i{width}"),
+                "checked_mul" => format!("llvm.umul.with.overflow.i{width}"),
+                _ => unreachable!(),
+            };
+            let fv = self
+                .module
+                .get_function(&intrinsic)
+                .unwrap_or_else(|| self.module.add_function(&intrinsic, fn_ty, None));
+            let call = self
+                .builder
+                .build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "checked_call")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "{} call: {e:?}",
+                        method
+                    ))]
+                })?;
+            let struct_val = call
+                .try_as_basic_value()
+                .basic()
+                .ok_or_else(|| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "{} void",
+                        method
+                    ))]
+                })?
+                .into_struct_value();
+            let wrapped = self
+                .builder
+                .build_extract_value(struct_val, 0, "checked_wrapped")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "{} extract wrapped: {e:?}",
+                        method
+                    ))]
+                })?
+                .into_int_value();
+            let overflow = self
+                .builder
+                .build_extract_value(struct_val, 1, "checked_overflow")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "{} extract overflow: {e:?}",
+                        method
+                    ))]
+                })?
+                .into_int_value();
+
+            // Build `None` (variant 0, no payload) and `Some(wrapped)` (variant 1).
+            let dest_ty = self.place_ty(destination);
+            let none_val =
+                self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(0)), &[])?;
+            let some_val = self.build_layout_aggregate(
+                dest_ty,
+                Some(VariantIdx::from_raw(1)),
+                &[wrapped.into()],
+            )?;
+
+            // select(overflow, none, some) — both arms are `Option<T>`.
+            let result = self
+                .builder
+                .build_select(overflow, none_val, some_val, "checked_result")
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "{} select: {e:?}",
+                        method
+                    ))]
+                })?;
+
+            let dp = self.place_ptr(destination)?;
+            self.builder.build_store(dp, result).map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "{} store: {e:?}",
+                    method
+                ))]
+            })?;
+            if let Some(target_bb) = target {
+                let tb = *self.bb_map.get(target_bb).expect("checked target");
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "{} branch: {e:?}",
+                            method
                         ))]
                     })?;
             }

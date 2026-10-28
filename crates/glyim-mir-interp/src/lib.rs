@@ -625,6 +625,74 @@ impl<'tcx> Interpreter<'tcx> {
                 };
                 Ok(Some(InterpValue::Uint(lo)))
             }
+            // P1-C2 batch 2c: checked arithmetic on unsigned integers.
+            // Returns `Option<T>`: `None` on overflow, `Some(result)` when
+            // the operation fits. The Option shape here matches what
+            // `vec_pop` produces: `Aggregate([Int(0), Unit])` for None,
+            // `Aggregate([Int(1), Uint(result)])` for Some.
+            //
+            // Overflow detection uses the width-specific bounds rather
+            // than `u128::checked_*` — `a_n + b_n` at u128 level never
+            // overflows for inputs constrained to a smaller width, but
+            // the *narrow* width's overflow is what this method reports.
+            // Each branch checks the exact condition that would push the
+            // result out of `[0, max]` before computing, so the inner
+            // arithmetic is guaranteed not to overflow u128.
+            (_, "checked_add") | (_, "checked_sub") | (_, "checked_mul") => {
+                let a = self.builtin_deref(&receiver)?;
+                let b = args.get(1).cloned().unwrap_or(InterpValue::Unit);
+                let a_n: u128 = match &a {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                let b_n: u128 = match &b {
+                    InterpValue::Uint(n) => *n,
+                    InterpValue::Int(i) => (*i).max(0) as u128,
+                    _ => return Ok(None),
+                };
+                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
+                    InterpError::Panic(format!(
+                        "interp: {}: cannot determine receiver bit width",
+                        method
+                    ))
+                })?;
+                let max: u128 = if width >= 128 {
+                    u128::MAX
+                } else {
+                    (1u128 << width) - 1
+                };
+                let result: Option<u128> = match method.as_str() {
+                    "checked_add" => {
+                        if a_n > max - b_n {
+                            None
+                        } else {
+                            Some(a_n + b_n)
+                        }
+                    }
+                    "checked_sub" => {
+                        if b_n > a_n {
+                            None
+                        } else {
+                            Some(a_n - b_n)
+                        }
+                    }
+                    "checked_mul" => {
+                        if b_n != 0 && a_n > max / b_n {
+                            None
+                        } else {
+                            Some(a_n * b_n)
+                        }
+                    }
+                    _ => unreachable!(),
+                };
+                Ok(Some(match result {
+                    None => InterpValue::Aggregate(vec![InterpValue::Int(0), InterpValue::Unit]),
+                    Some(v) => {
+                        InterpValue::Aggregate(vec![InterpValue::Int(1), InterpValue::Uint(v)])
+                    }
+                }))
+            }
             // P1-C2 batch 2b: saturating arithmetic on unsigned integers.
             // `saturating_add` / `saturating_sub` / `saturating_mul`.
             // `u128::saturating_*` clamps at u128's bounds, so the
