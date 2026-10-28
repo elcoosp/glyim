@@ -2268,6 +2268,69 @@ undefined AND nothing missing) before believing a symbol-level fix.
 
 
 
+#### 3.5.21 — TEST-7: interp exit fidelity — premise corrected, real bug fixed
+
+CLOSED (`fc7df58f`). The plan described TEST-7 as "interp masks exit
+codes to `& 0xff` (`interpreter_runner.rs:135-136`); propagate the real
+error class". Probing that premise showed it was **wrong**, and the
+actual fidelity gap was elsewhere.
+
+**The mask is correct.** `fn main() -> i32 { 300 }` run natively exits
+**44** — `300 & 0xff`, which is what the OS does to an exit status at
+the wait-status boundary. The interpreter's `(v as i64 & 0xff) as i32`
+produces 44 too. Removing the mask (as the plan suggested) would have
+made the interp *diverge* from native, not converge. Verified by
+running the compiled binary and checking `$?`.
+
+**The real bug: panic output was discarded.** `interpret_bodies`
+populated `stdout`/`stderr` from the interpreter's FFI buffers only
+inside the `Ok(())` arm:
+
+    match result {
+        Ok(()) => {
+            stdout = interpreter.get_stdout();   // only here
+            stderr = interpreter.get_stderr();   // only here
+            ...
+        }
+        Err(e) => {
+            stderr.push_str("interpreter error: ...");  // stdout empty
+            ...
+        }
+    }
+
+So a program that printed and then panicked — `println("before");
+assert!(false)` — reported `stdout: []` under the interpreter, while
+the same program run natively printed `before` before exiting 101.
+That is a genuine fidelity gap, and it matters for any `run-fail`
+fixture that wants to assert on output produced before the panic.
+
+**Fix.** Hoist the two buffer reads above the `match`, so both arms see
+whatever the program wrote. The `Err` arm additionally appends its
+`interpreter error: ...` line to stderr, which now sits after any
+program-emitted stderr rather than replacing it.
+
+**Fixture.** `tests/run-fail/print_then_panic_keeps_stdout.g` —
+`println("before"); assert!(false, "boom")`, `// exit-code: 101`,
+`// check-stdout: before`. Prior to the fix the `check-stdout` assertion
+fails under the interpreter (empty stdout); after, it passes. Note
+that **no existing `run-fail` fixture asserted on stdout** — the corpus
+had zero `check-stdout` + panic combinations — so this gap was fully
+latent until the fix exercised it.
+
+**Verified:**
+  * native `println + assert!` exits 101 with `stdout: [before]`
+  * interp (after fix) matches: same stdout, same exit
+  * `fn main() -> i32 { 300 }` exits 44 on both paths (mask is correct)
+  * `run_fail_corpus` green with the new fixture
+  * full workspace: 4622/4622
+
+**Lesson for future TEST- items.** TEST-7 is the second item this
+session (after P2-A4 / §3.5.20) where the plan's one-line description
+pointed at the wrong line. The pattern: verify the *claimed* defect
+with a direct probe before designing a fix around it. Here that probe
+(`fn main() -> i32 { 300 }` → `$?`) took ten seconds and prevented a
+"fix" that would have broken correctness.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
