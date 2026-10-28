@@ -2094,6 +2094,58 @@ Executable output must remain byte-stable (currently: defined
 `--emit=obj` artifact is still not link-safe. This is a documented
 open bug, not a regression.
 
+**Attempt 3 (2026-10-27) — pipeline placement, and why the probe lied.**
+
+The §3.5.20 plan was implemented: `prepare_compilation` gained an
+`emit_object: bool` parameter (6 callers threaded; only
+`compile_file_with_artifacts` passes `true`), and the `cgus.is_empty()`
+branch gained a synthetic-root re-collect gated on it. Two things
+worked and two did not:
+
+  * **Worked: the gate.** `stdlib_full_probe::assembled_stdlib_compiles`
+    and all 9 `root_discovery` tests passed unchanged. Threading
+    `emit_object` is the right way to scope this — the analysis-only
+    paths keep the old behavior.
+  * **Did not work: the root enumeration.** Synthetic roots were built
+    by iterating `hir.items` and using `LocalDefId::from_raw(item.id.to_raw())`.
+    `item.id` is an HIR item index, **not** a `LocalDefId` — the first
+    item maps to `LocalDefId(0)`, which is the crate root and has no
+    MIR body. Mono collect then produced a single error-body entry.
+
+**Why the probe "passed" and why it was wrong.** The acceptance test
+was `nm -u <obj> | grep glyim_fn` being empty. It was empty — because
+the object contained exactly one dummy symbol (`___glyim_fn_0`) and
+nothing else. Before the change the object had `___glyim_fn_2`
+(defined, the caller's pre-substitution body) plus
+`___glyim_fn_1_21_1` (undefined, the monomorphized callee). After, it
+had one symbol with no references. "Zero undefined" was satisfied by
+deleting the object's contents.
+
+**Corrected probe (use this next time).** Not just "no undefined":
+
+    nm <obj> | grep glyim_fn       # must show BOTH the caller AND its
+                                   # monomorphized callee as defined (T)
+    nm -u <obj> | grep glyim_fn    # must be empty
+
+Both conditions. The second alone is satisfiable by emitting nothing.
+
+**Correct root source.** `mir_bodies_map` — its keys are `DefId`s the
+lowering pass actually produced bodies for, so every entry is a valid
+`FnDefId` candidate. Iterating that map to build synthetic roots
+sidesteps the HIR-index-≠-LocalDefId problem entirely, and it is
+exactly the set of bodies we want in the object.
+
+Reverted in full (`git reset --hard`). Tree at `ba463fda`, 20 unpushed
+commits. The `emit_object` signature change was part of the reverted
+commit, so it is not in the tree either.
+
+**Revised plan for next attempt:** the same `emit_object` gate, but
+enumerate `mir_bodies_map` keys instead of `hir.items`, and use the
+two-condition probe. That is a genuinely small change on top of
+`ba463fda`.
+
+
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
