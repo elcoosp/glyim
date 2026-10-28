@@ -2497,6 +2497,101 @@ correctness issue that warrants its own session: probable location is
 the `println!` expander plus its (currently-passing) expectation test,
 both in `glyim-meta`.
 
+#### 3.5.23 — OPEN: 12 run-pass fixtures fail under `GLYIM_LLVM=1` (pre-existing)
+
+Discovered 2026-10-28 while investigating §3.5.22. **Not a regression from
+any recent session** — verified by running the corpus at both
+`origin/main` (`2f8cc80b`) and session HEAD with the same env var; the
+failure set is identical.
+
+**The reproduction.**
+
+    GLYIM_LLVM=1 cargo nextest run -p glyim-test --test run_pass_corpus
+
+fails `run_pass_corpus_passes` at both commits above. The 12 failing
+fixtures:
+
+    behavior/for_slice_ref.g
+    behavior/for_slice_sum.g
+    behavior/generic_method_turbofish_all_primitives.g
+    behavior/match_ref_binding.g
+    behavior/match_ref_mut_binding.g
+    behavior/match_ref_mut_write_through.g
+    behavior/match_ref_nested_write.g
+    behavior/match_ref_struct_field.g
+    behavior/match_ref_tuple.g
+    behavior/option_filter.g
+    behavior/option_filter_predicate_false.g
+    behavior/slice_indexing_works.g
+
+Without `GLYIM_LLVM=1`, all 12 pass (the corpus falls back to the MIR
+interpreter, which handles `ref`-bindings correctly).
+
+**Why this matters for CI.** `.github/workflows/ci.yml`'s `test-ubuntu`
+job sets `GLYIM_LLVM: "1"` (added in the P1-O1 change to make the ~44
+`// needs-llvm` fixtures actually run) and runs
+`cargo nextest run --workspace`. That command invokes
+`run_pass_corpus_passes`, which — with LLVM enabled — executes the 12
+fixtures above against their compiled binaries and fails. So either:
+
+  * `test-ubuntu` has been red since that change and nobody checked, or
+  * the CI runner's LLVM/OS combination produces different results from
+    a local macOS run (possible — these are `ref`-pattern and slice
+    fixtures, and the LLVM lowering differences between macOS aarch64
+    and Linux x86_64 are real), or
+  * something between the CI push and now has drifted.
+
+Cannot distinguish (a)/(b)/(c) from a local run alone. **First action for
+a follow-up:** check the GitHub Actions history for `test-ubuntu` on
+`origin/main` and on `2f8cc80b` specifically. If red there, the fixtures
+have been consistently failing and the source is the same as here. If
+green, the difference is host-specific and the fix has to be
+conditional.
+
+**Likely shared root cause.** All 12 involve either `ref`-pattern
+bindings (`(ref a, ref b) => ...`, `match r { ref x => ... }`) or slice
+element access through a reference (`&arr[a..b]` then index). The
+fixtures' own header comments document that these were previously
+broken and the interp path was fixed; the LLVM path may still have the
+original bug for at least some of them. `slice_indexing_works.g` is
+already documented as pre-existing-broken in the session-19 handoff §4c
+("Either fix the header to 164 or the test program to yield 89").
+The other 11 have not been individually diagnosed.
+
+**Not caused by §3.5.22's investigation.** The `to_string` fix
+attempted earlier in this session was reverted after these fixtures
+appeared to fail — but re-running at HEAD *without* the fix shows the
+same 12 failures. The `tail -n 5` truncation of the failure list was
+the source of that misdiagnosis; the actual list is 12 long in both
+cases. The `to_string` fix (interp + registry + runtime helpers) is
+correct in isolation and can be re-applied once the LLVM side of
+§3.5.22 has a real implementation (currently the LLVM path gates on
+`to_string` for integers, which would trip on stdlib's transitive
+`format!` calls and *add* compile failures on top of the 12).
+
+**Separate from §3.5.22.** §3.5.22 is about integer `to_string`
+producing an empty string on both backends. This entry is about 12
+fixtures failing under the LLVM backend specifically, and can be fixed
+independently — most likely by fixing whatever `ref`-pattern or
+slice-lowering bug is unique to the LLVM backend.
+
+**Action plan for a follow-up session.**
+
+  1. Check GitHub Actions for `test-ubuntu` at `2f8cc80b`. (Confirm
+     whether this is a local-only issue.)
+  2. For each of the 12 fixtures, run `GLYIM_LLVM=1 glyim-cli
+     --with-stdlib --emit=exec <fixture>` and compare the produced
+     binary's stdout/exit against the header-declared expectation. The
+     ones that fail here (not all will — the corpus may run a different
+     execution strategy than the CLI) are the ones to fix.
+  3. Fix them one at a time in the LLVM backend. `match_ref_tuple.g`'s
+     header says the bug is in `ref`-binding lowering
+     (`aggregate constant insert failed: ExtractOutOfRange`).
+     `slice_indexing_works.g` is the `data_ptr` bug — different root
+     cause.
+  4. Once all 12 pass, `test-ubuntu` should be green with
+     `GLYIM_LLVM=1` (assuming CI matches local).
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
