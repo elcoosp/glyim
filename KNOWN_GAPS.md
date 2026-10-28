@@ -2630,18 +2630,58 @@ through to LLVM, and fails there with:
     [X0000] Codegen error: Attempted to lower TyKind::Error to LLVM.
     Type checking failed to resolve this type.
 
-That is an **ICE from user input**, not a diagnostic. The mechanism is
-`zonk`'s "unbound `Infer(Ty)` → `Ty::ERROR`" fallback (`zonk.rs`, the
-Script 632 note: "an *unbound* `Infer(Ty(_))` reaching zonk means no
-pass will ever bind it... Fall back to `Ty::ERROR`"). That fallback is
-correct for *stdlib templates* that never get monomorphized; it is
-wrong for a user-written expression that the compiler can see is
-underconstrained. Fix: before the zonk fallback, detect an unbound
-`Infer(Ty)` in a **reachable** body (same "reachable" predicate typeck
-already uses for the annotation-needed diagnostic — see
-`typeck_crate`'s `unresolved_ty_var_spans`) and emit a `[T0282]-style`
-"type annotations needed" rather than `Ty::ERROR`. Likely one new arm
-in the existing annotation-needed pipeline rather than a new pass.
+That is an **ICE from user input**, not a diagnostic.
+
+**Mechanism (confirmed 2026-10-28).** `zonk.rs:339`:
+
+    TyKind::Infer(glyim_type::InferVar::Ty(_)) => return Ty::ERROR,
+
+An unbound `Infer(Ty)` reaching zonk means no pass will ever bind it;
+that arm replaces it with `Ty::ERROR` so downstream phases don't ICE on
+a raw variable. Correct for stdlib templates; wrong as the *only*
+response to a user-written underconstrained expression.
+
+**Why the existing E0282 machinery doesn't catch it.** There *is* a
+"type annotations needed" pipeline: `collect_unresolved_ty_var_spans`
+(`zonk.rs:964`) is called before zonk from `typeck_crate`, collecting
+spans into `TypeckResult.unresolved_ty_var_spans`. But two limits:
+
+  1. **It only walks variant-constructor calls.** The entry point is
+     `walk_body_for_variant_ctor_calls` — a deliberately narrow walker
+     covering the `Some(expr)` case where the type parameter can't be
+     inferred from the argument. A **unit variant path** like
+     `Option::None` (no call, no argument) is not visited, so its span
+     is never collected.
+  2. **Collection ≠ emission.** The field is returned on
+     `TypeckResult` but typeck does not push a diagnostic. The
+     pipeline (`glyim-pipeline`) decides per-owner which bodies are
+     reachable from `main` and emits the E0282 diagnostic only for
+     those — a deliberate gate to avoid flagging unmonomorphized
+     stdlib templates.
+
+So Bug A's fix needs **both**: extend the walker beyond variant-ctor
+calls (to cover unbound-`Infer` in any expression's `ty` or any
+pattern's `ty`), and confirm the pipeline gate already emits for
+reachable bodies containing such spans. The second part may already
+work — `if_let_some_none`'s body is reachable from `main` — but that is
+unverified.
+
+**Scope estimate.** The existing walker is ~150 lines for
+variant-ctor-only (it has to match every `ExprKind` to find ctors). A
+general walker covering every `ty` slot is comparable in size and
+touches the same functions `zonk::walk_body` already implements —
+except that walker is `&mut` (it rewrites types) while this needs
+`&` (it inspects the pre-zonk body). The cleanest structure is a
+read-only mirror of `zonk_body`, ~80-100 lines. Then either reuse
+`unresolved_ty_var_spans` (rename to reflect the broader coverage) or
+add a second field for "general unconstrained" vs "variant ctor
+unconstrained" — the pipeline emits them differently today, so the
+second is safer.
+
+**Not fixed this session** because it is a ~100-line read-only walker
+plus pipeline verification, not the one-line zonk change an earlier
+draft of this entry implied. The mechanism is now pinned to one file
+and one function; the next session can implement directly.
 
 **Bug B — turbofish on a unit-variant path is lost before typeck.** Even
 explicitly annotating the variant does not help:
