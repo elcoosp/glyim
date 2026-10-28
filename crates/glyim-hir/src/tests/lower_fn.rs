@@ -67,3 +67,51 @@ fn test_bare_extern_fn_defaults_to_c_abi() {
         _ => panic!("expected ItemKind::Fn"),
     }
 }
+
+
+#[test]
+fn unsafe_fn_sets_is_unsafe() {
+    // §3.5.25: `is_unsafe` was hardcoded `false` — the parser emits
+    // `KwUnsafe` as a *sibling* of the `FnDef` node, so the child-token
+    // scan in `lower_fn` never saw it. This asserts the field is real.
+    use crate::ItemKind;
+    use glyim_core::interner::Interner;
+    use glyim_frontend::parse_to_syntax;
+    use glyim_span::FileId;
+
+    let src = "unsafe fn f() {}";
+    let file_id = FileId::from_raw(0);
+    let parse_result = parse_to_syntax(src, file_id);
+    let mut interner = Interner::new();
+    let hir = crate::lower::lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
+
+    let item = &hir.items[crate::ItemId::from_raw(0)];
+    match &item.kind {
+        ItemKind::Fn(f) => assert!(
+            f.is_unsafe,
+            "unsafe fn must set is_unsafe = true; parser emits KwUnsafe as a \
+             sibling of FnDef, and the fix walks prev_sibling_or_token"
+        ),
+        other => panic!("expected Fn item, got {:?}", other),
+    }
+}
+
+#[test]
+fn plain_fn_is_not_unsafe() {
+    use crate::ItemKind;
+    use glyim_core::interner::Interner;
+    use glyim_frontend::parse_to_syntax;
+    use glyim_span::FileId;
+
+    let src = "fn f() {}";
+    let file_id = FileId::from_raw(0);
+    let parse_result = parse_to_syntax(src, file_id);
+    let mut interner = Interner::new();
+    let hir = crate::lower::lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
+
+    let item = &hir.items[crate::ItemId::from_raw(0)];
+    match &item.kind {
+        ItemKind::Fn(f) => assert!(!f.is_unsafe, "plain fn must not set is_unsafe"),
+        other => panic!("expected Fn item, got {:?}", other),
+    }
+}

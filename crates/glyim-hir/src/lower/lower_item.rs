@@ -259,6 +259,37 @@ pub(crate) fn lower_fn_def(
     // the leading modifier keyword token inside the FnDef node, before `fn`).
     let mut is_const = false;
     let mut is_async = false;
+    // §3.5.25: `unsafe fn` is different — `parse_item` calls `self.bump()`
+    // on `KwUnsafe` *before* `self.start_node(SyntaxKind::FnDef)`, so the
+    // keyword is a **sibling** of the FnDef node, not a child. Iterating
+    // `node.children_with_tokens()` never sees it. Before this fix,
+    // `is_unsafe` was hardcoded `false` on every FnItem — a field that lied.
+    // No downstream consumer reads it today (grep: only construction sites
+    // and tests), so the bug was latent; populating it correctly makes the
+    // field trustworthy for a future `unsafe` audit.
+    //
+    // Walk `prev_sibling_or_token`, skipping trivia, and stop at the first
+    // non-trivia token. Precedent for this walk: `lower_pat.rs:41`, which
+    // uses `prev_sibling_or_token` for pattern modifiers.
+    let mut is_unsafe = false;
+    {
+        let mut prev = node.prev_sibling_or_token();
+        while let Some(el) = prev {
+            match el {
+                glyim_syntax::SyntaxElement::Token(t) => {
+                    if t.kind() == SyntaxKind::KwUnsafe {
+                        is_unsafe = true;
+                        break;
+                    }
+                    if !t.kind().is_trivia() {
+                        break;
+                    }
+                    prev = t.prev_sibling_or_token();
+                }
+                glyim_syntax::SyntaxElement::Node(_) => break,
+            }
+        }
+    }
     let mut abi: Option<Name> = None;
     for el in node.children_with_tokens() {
         match el {
@@ -301,7 +332,7 @@ pub(crate) fn lower_fn_def(
             params,
             return_ty,
             body: body_id,
-            is_unsafe: false,
+            is_unsafe,
             is_async,
             is_const,
             generic_params,
