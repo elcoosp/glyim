@@ -2691,17 +2691,71 @@ MIR shows empty substs for `Option::<i32>::None`.
      (line ~186) but the path it receives has been rebuilt or cloned
      somewhere between the parser and this call, losing them.
 
-**First diagnostic step for a follow-up:** dump HIR for
-`let o = Option::<i32>::None;`. If the HIR `Path` shows
-`segments[0].generic_args = Some([i32])`, the loss is in typeck; if it
-shows `None`, the loss is in parser/lowering. That single dump narrows
-the three hypotheses to one, and takes about ten minutes.
+**HIR dump done (2026-10-28).** A temporary test in
+`glyim-hir/src/tests/lower_expr.rs` lowered `fn f() { Option::<i32>::None; }`
+and printed the resulting `Expr::Path`:
 
-**Why not fixed now.** Three probes (plain-let, match, if-let) all
-reproduce; one attempted fix compiled clean and changed nothing; the
-HIR-side machinery *looks* correct but evidently is not being reached.
-That is exactly the shape of a bug that needs the HIR dump first, not
-more guessing at which of three plausible sites is wrong.
+    --- Expr::Path at index 0 ---
+      segments: 2
+      seg[0] name="Option" has_generic_args=true argc=1
+        arg[0] = Path(Path { segments: [PathSegment { name: Name(3),
+                      generic_args: None }], kind: Plain })
+      seg[1] name="None" has_generic_args=false argc=0
+
+(`Name(3)` = `i32`.)
+
+So the turbofish **survives HIR lowering intact**, attached to the
+correct segment (`Option`, not `None`). This eliminates hypotheses
+(1) and (2) from the list above — the parser produces the right node
+shape, and `lower_expr.rs`'s `UsePath`-sibling-`PathType` machinery
+attaches the args to the right segment. **The loss is in typeck.**
+
+**Where in typeck.** `check_path` (`unify.rs:56`) has three routes for
+a 2-segment `Enum::Variant` path:
+
+  a. `bare_safe` via `variant_by_name` — single-segment only, not
+     applicable here.
+  b. `def_map.variant_map.get(&local)` — the branch that *does* read
+     `explicit_args` correctly (line ~186) and builds the substitution
+     from them (lines ~200-215). **`Option` is a builtin ADT
+     (AdtId 1010), registered synthetically, so `None` is not in
+     `variant_map`.** This branch never fires for `Option::None`.
+  c. The `path.segments.len() == 2` fallback (line ~281) — this IS the
+     branch that handles `Option::None`. It calls
+     `resolve_name_to_adt_ty` on a rebuilt single-segment `enum_path`
+     and then extracts `adt_id` from the result. That function resolves
+     the *name* `Option` to `Adt(1010, <fresh-or-empty>)` — it does not
+     consult the `generic_args` on the input path segment. The
+     substitution on the resulting `VariantRef` therefore comes from
+     whatever `resolve_name_to_adt_ty` produces, not from the
+     turbofish. MIR shows `Substitution(index=0, len=0)` because the
+     result is built with an empty substitution somewhere in that
+     helper or in the subsequent `VariantRef` construction.
+
+The earlier no-op fix (`unify.rs` ~285, `generic_args: None` →
+`generic_args: path.segments[0].generic_args.clone()`) preserved the
+args on the *input* to `resolve_name_to_adt_ty`, but that function does
+not read them, so the change had no effect. **Correct fix:** after
+`resolve_name_to_adt_ty` yields `Adt(adt_id, _)`, rebuild the
+substitution from `path.segments[0].generic_args` — mirroring what
+branch (b) does at lines 200-215 — and use that when constructing the
+`VariantRef`'s type. Alternatively, teach `resolve_name_to_adt_ty` to
+accept and honour generic args (better if other callers need the same,
+but touches more code).
+
+**Second attempt also no-op, reverted (2026-10-28).** A fix that
+changed `enum_path`'s `generic_args` at `unify.rs:285` compiled, corpus
+stayed green, and the ICE persisted — confirming
+`resolve_name_to_adt_ty` ignores the field. Reverted (commit
+`9808b471` was amended out; there is no such commit in the tree).
+
+**Why not fixed now.** The fix requires constructing `Option<T>`'s
+substitution in the fallback branch — several lines of careful work
+threading `TypeRef` resolution through, similar to the ~30 lines branch
+(b) already contains. Doing it correctly needs the branch's full text in
+view and a round of verification that it doesn't perturb the other
+~20 fixtures that exercise `Enum::Variant` paths. That is a focused
+task, not the tail end of a 37-commit session.
 
 **Fixture state.** `tests/run-pass/behavior/if_let_some_none.g` has been
 rewritten to use the **valid** `let`-annotated form (which exercises
