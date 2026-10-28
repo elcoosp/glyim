@@ -2008,7 +2008,7 @@ string method set (Vec/Slice/str/Box/UnsafeCell/Option/Result methods
 not yet implemented — each with its own shape, tracked separately in
 the plan).
 
-#### 3.5.20 — OPEN: P2-A4 empty-CGU fallback — real bug, fix belongs in pipeline not discovery
+#### 3.5.20 — P2-A4 empty-CGU fallback for library crates (CLOSED)
 
 Attempted 2026-10-27. Reverted. The bug is real and reproduced;
 the fix landed in the wrong layer.
@@ -2139,10 +2139,54 @@ Reverted in full (`git reset --hard`). Tree at `ba463fda`, 20 unpushed
 commits. The `emit_object` signature change was part of the reverted
 commit, so it is not in the tree either.
 
-**Revised plan for next attempt:** the same `emit_object` gate, but
-enumerate `mir_bodies_map` keys instead of `hir.items`, and use the
-two-condition probe. That is a genuinely small change on top of
-`ba463fda`.
+**Attempt 4 — CLOSED.** Exactly the revised plan: same `emit_object`
+gate, roots from `mir_bodies_map` keys.
+
+`prepare_compilation` gained `emit_object: bool`; six callers threaded
+(`compile_file_with_artifacts` passes `true`, every analysis path —
+`compile_file_to_mir`, `--emit=mir`, `--emit=llvm-ir` — passes `false`).
+The `cgus.is_empty()` branch, when `emit_object` is set, runs a fresh
+`MonoCtx::collect` seeded from `mir_bodies_map.keys()` (each a real
+`DefId` with a lowered body, unlike the HIR item indices that attempt 3
+misused), then uses `MonoItemData.symbol` for the emitted names. The
+`body_is_raw_generic` filter still drops uninstantiated generic
+templates, so only concrete instantiations survive — the object is
+self-contained, not the full stdlib surface.
+
+**Three-condition acceptance probe** (all pass):
+
+| Condition | Before | After |
+|---|---|---|
+| ≥ 2 defined `T __glyim_fn_*` symbols | 1 (`__glyim_fn_2`) | 2 (`__glyim_fn_2`, `__glyim_fn_1_21_1`) |
+| zero undefined `__glyim_fn_*` | 1 (`__glyim_fn_1_21_1`) | 0 |
+| ≥ 1 monomorphized symbol (`_N_i_j`) | 0 | 1 |
+
+Condition 3 is the one attempt 3's probe lacked — "zero undefined" is
+satisfiable by an empty object, which is exactly what attempt 3
+produced (`___glyim_fn_0`, a single dummy from `LocalDefId(0)`).
+
+**No regression:** `stdlib_full_probe::assembled_stdlib_compiles` passes
+(analysis path unaffected by the gate), all 9 `root_discovery` tests
+pass (`discovery.rs` untouched), executable `--emit=obj` and
+`--emit=exec` outputs unchanged (`__glyim_fn_1_21_1` + `__glyim_fn_2`
+defined, zero undefined, runs to 7), full workspace green.
+
+One workspace run showed `glyim-test snapshot::tests::
+verbose_mir_includes_resolved_types_and_debug_names` as `exec failed`.
+That test constructs a `Body::dummy` in memory and formats it — it never
+enters `prepare_compilation` or `MonoCtx`, so it has no dependency on
+this change. Re-run in isolation: passes. The workspace failure was
+nextest failing to spawn the process on a 434-second run dominated by
+`run_pass_corpus`, not an assertion. Re-ran the full workspace after the
+isolated pass; green.
+
+**Three attempts, three different wrong layers** — discovery (too broad,
+broke stdlib), pipeline with HIR indices (wrong root source, produced a
+dummy-only object), pipeline with `mir_bodies_map` (correct). The
+lesson recorded for future sessions: probe *both* directions (nothing
+undefined AND nothing missing) before believing a symbol-level fix.
+
+
 
 
 
