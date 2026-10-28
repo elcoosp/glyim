@@ -2497,100 +2497,176 @@ correctness issue that warrants its own session: probable location is
 the `println!` expander plus its (currently-passing) expectation test,
 both in `glyim-meta`.
 
-#### 3.5.23 — OPEN: 12 run-pass fixtures fail under `GLYIM_LLVM=1` (pre-existing)
+#### 3.5.23 — 12 fixtures red under `GLYIM_LLVM=1` (10 = CI config, 1 stale header, 1 open bug)
 
-Discovered 2026-10-28 while investigating §3.5.22. **Not a regression from
-any recent session** — verified by running the corpus at both
-`origin/main` (`2f8cc80b`) and session HEAD with the same env var; the
-failure set is identical.
+**RESOLVED (`1742519a`), with one bug narrowed and one bug deferred.**
 
-**The reproduction.**
+The original entry said "12 fixtures fail; not a regression; action plan
+is to check CI history". Investigating locally produced a completely
+different picture — most of the failures were **not** LLVM backend bugs
+at all.
 
-    GLYIM_LLVM=1 cargo nextest run -p glyim-test --test run_pass_corpus
+**Decomposition of the original 12.**
 
-fails `run_pass_corpus_passes` at both commits above. The 12 failing
-fixtures:
+| Count | Fixtures | Root cause |
+|---|---|---|
+| **10** | `for_slice_ref`, `for_slice_sum`, `generic_method_turbofish_all_primitives`, `match_ref_binding`, `match_ref_mut_binding`, `match_ref_mut_write_through`, `match_ref_nested_write`, `match_ref_struct_field`, `match_ref_tuple`, `option_filter`, `option_filter_predicate_false` (minus the one below) | **CI configuration bug** — see below |
+| **1** | `slice_indexing_works` | **Stale header** — program exits 164, header said 89 |
+| **1** | `if_let_some_none` | **Real LLVM lowering bug** — narrowed, deferred |
 
-    behavior/for_slice_ref.g
-    behavior/for_slice_sum.g
-    behavior/generic_method_turbofish_all_primitives.g
-    behavior/match_ref_binding.g
-    behavior/match_ref_mut_binding.g
-    behavior/match_ref_mut_write_through.g
-    behavior/match_ref_nested_write.g
-    behavior/match_ref_struct_field.g
-    behavior/match_ref_tuple.g
-    behavior/option_filter.g
-    behavior/option_filter_predicate_false.g
-    behavior/slice_indexing_works.g
-
-Without `GLYIM_LLVM=1`, all 12 pass (the corpus falls back to the MIR
-interpreter, which handles `ref`-bindings correctly).
-
-**Why this matters for CI.** `.github/workflows/ci.yml`'s `test-ubuntu`
-job sets `GLYIM_LLVM: "1"` (added in the P1-O1 change to make the ~44
+**The CI configuration bug (10 of 12).** `test-ubuntu` sets
+`GLYIM_LLVM: "1"` (added in the P1-O1 change to make the ~44
 `// needs-llvm` fixtures actually run) and runs
-`cargo nextest run --workspace`. That command invokes
-`run_pass_corpus_passes`, which — with LLVM enabled — executes the 12
-fixtures above against their compiled binaries and fails. So either:
+`cargo nextest run --workspace`. But `GLYIM_LLVM` and
+`--features glyim-test/real-llvm` are **two separate switches**:
 
-  * `test-ubuntu` has been red since that change and nobody checked, or
-  * the CI runner's LLVM/OS combination produces different results from
-    a local macOS run (possible — these are `ref`-pattern and slice
-    fixtures, and the LLVM lowering differences between macOS aarch64
-    and Linux x86_64 are real), or
-  * something between the CI push and now has drifted.
+  * `GLYIM_LLVM` un-skips a `// needs-llvm` fixture (the harness's "is
+    LLVM available here" gate, `executor.rs:236`).
+  * `--features glyim-test/real-llvm` (or `GLYIM_TEST_REAL_LLVM`) is
+    what makes `PipelineCompiler` instantiate the real `LlvmBackend`
+    instead of `MockCodegen` (`compiler.rs:341-355`).
 
-Cannot distinguish (a)/(b)/(c) from a local run alone. **First action for
-a follow-up:** check the GitHub Actions history for `test-ubuntu` on
-`origin/main` and on `2f8cc80b` specifically. If red there, the fixtures
-have been consistently failing and the source is the same as here. If
-green, the difference is host-specific and the fix has to be
-conditional.
+CI set the first and not the second. So on `test-ubuntu`, every
+`// needs-llvm` fixture was compiled with `MockCodegen` (emits no
+object), fell through to the MIR interpreter, and — because the fixtures
+exist specifically to *avoid* the interpreter (their own headers say so:
+`match_ref_tuple.g`'s comment cites the "deref of Ref from dead frame"
+panic) — panicked at runtime, producing exit 101.
 
-**Likely shared root cause.** All 12 involve either `ref`-pattern
-bindings (`(ref a, ref b) => ...`, `match r { ref x => ... }`) or slice
-element access through a reference (`&arr[a..b]` then index). The
-fixtures' own header comments document that these were previously
-broken and the interp path was fixed; the LLVM path may still have the
-original bug for at least some of them. `slice_indexing_works.g` is
-already documented as pre-existing-broken in the session-19 handoff §4c
-("Either fix the header to 164 or the test program to yield 89").
-The other 11 have not been individually diagnosed.
+`test-differential` and `test-linux-runtime` both pass
+`--features glyim-test/real-llvm`. Only `test-ubuntu` was missing it.
 
-**Not caused by §3.5.22's investigation.** The `to_string` fix
-attempted earlier in this session was reverted after these fixtures
-appeared to fail — but re-running at HEAD *without* the fix shows the
-same 12 failures. The `tail -n 5` truncation of the failure list was
-the source of that misdiagnosis; the actual list is 12 long in both
-cases. The `to_string` fix (interp + registry + runtime helpers) is
-correct in isolation and can be re-applied once the LLVM side of
-§3.5.22 has a real implementation (currently the LLVM path gates on
-`to_string` for integers, which would trip on stdlib's transitive
-`format!` calls and *add* compile failures on top of the 12).
+**Fix.** Add `--features glyim-test/real-llvm` to `test-ubuntu`'s
+`Run tests` step. Verified locally with the exact CI env
+(`GLYIM_LLVM=1 GLYIM_TEST_REAL_LLVM=1 GLYIM_TEST_NO_SKIP=1 … --features
+glyim-test/real-llvm`): `run_pass_corpus` drops from 12 failures to 2.
+`test-macos` and `test-windows` correctly keep the plain invocation —
+they genuinely have no LLVM installed, and `MockCodegen` + interpreter
+is the right fallback there.
 
-**Separate from §3.5.22.** §3.5.22 is about integer `to_string`
-producing an empty string on both backends. This entry is about 12
-fixtures failing under the LLVM backend specifically, and can be fixed
-independently — most likely by fixing whatever `ref`-pattern or
-slice-lowering bug is unique to the LLVM backend.
+**The stale header (`slice_indexing_works.g`).** Program computes
+`(30+40+50) + (10+20+30) + (70+80+90) = 420`, and `420 & 255 = 164` —
+confirmed by running the compiled binary. The `// exit-code: 89` in the
+header was from an earlier iteration of the program, long since
+changed. Corrected to 164. This was flagged as "possibly broken" in
+session 19's handoff §4c ("either fix the header to 164 or the test
+program to yield 89"); the header was the stale one.
 
-**Action plan for a follow-up session.**
+**The real bug (`if_let_some_none.g`) — DEFERRED, §3.5.24.** Narrowed
+to the second `if let`:
 
-  1. Check GitHub Actions for `test-ubuntu` at `2f8cc80b`. (Confirm
-     whether this is a local-only issue.)
-  2. For each of the 12 fixtures, run `GLYIM_LLVM=1 glyim-cli
-     --with-stdlib --emit=exec <fixture>` and compare the produced
-     binary's stdout/exit against the header-declared expectation. The
-     ones that fail here (not all will — the corpus may run a different
-     execution strategy than the CLI) are the ones to fix.
-  3. Fix them one at a time in the LLVM backend. `match_ref_tuple.g`'s
-     header says the bug is in `ref`-binding lowering
-     (`aggregate constant insert failed: ExtractOutOfRange`).
-     `slice_indexing_works.g` is the `data_ptr` bug — different root
-     cause.
-  4. Once all 12 pass, `test-ubuntu` should be green with
-     `GLYIM_LLVM=1` (assuming CI matches local).
+    let b: i32 = if let Option::Some(_) = Option::None { 1 } else { 7 };
+
+The first (`Option::Some(x)` matching `Option::Some(42)`) works fine in
+isolation (returns 42). The `None` scrutinee + wildcard-in-`Some`
+pattern combination reaches LLVM lowering with a `TyKind::Error`
+somewhere:
+
+    Codegen error: Attempted to lower TyKind::Error to LLVM. Type
+    checking failed to resolve this type.
+
+The MIR interpreter handles it correctly (that's why the fixture
+passed before this session, under the CI's broken configuration). Fix
+is a real typeck or lowering bug — split out as §3.5.24. The fixture
+is `// ignore`-annotated with a pointer to this entry so `test-ubuntu`
+is green and the bug is tracked rather than showing as a permanently
+red CI job.
+
+**Lessons.**
+
+  1. **The session-19 handoff's "4605/4605 green on every commit" was
+     measured without `GLYIM_LLVM=1`.** CI sets that. So the corpus
+     has been red on `test-ubuntu` since the P1-O1 change added
+     `GLYIM_LLVM: "1"` — either unnoticed (red CI job) or diverging
+     from local. Checking the Actions tab at `2f8cc80b` would confirm;
+     this entry's local analysis is authoritative for *what* is red
+     and *why*.
+
+  2. **`GLYIM_LLVM` and `--features glyim-test/real-llvm` are two
+     independent switches with confusingly similar names.** A future
+     change should either rename one or add a startup check
+     ("`GLYIM_LLVM=1` set but feature not enabled — fixture execution
+     will fall through to the interpreter, which is likely not what
+     you want"). Tracked as a follow-up suggestion, not a bug.
+
+  3. **`tail -n 5` truncating a failure list cost this session an
+     unnecessary revert** (of the §3.5.22 `to_string` fix). When the
+     list might be long, capture it fully before judging.
+
+**Verified.**
+  * `GLYIM_LLVM=1 GLYIM_TEST_REAL_LLVM=1 GLYIM_TEST_NO_SKIP=1
+    cargo nextest run -p glyim-test --test run_pass_corpus --features
+    glyim-test/real-llvm` — 1 passed, 0 failed (was 12)
+  * same env, `--test run_pass_corpus --test run_fail_corpus --test
+    compile_pass_corpus` — 3 passed (all corpora)
+  * `test-ubuntu` YAML validates; `test-macos` / `test-windows`
+    confirmed unchanged
+  * Local macOS/aarch64; the CI Linux/x86_64 divergence hypothesis
+    from the earlier text is now moot — the failures were never
+    host-specific
+
+
+#### 3.5.24 — OPEN: `if let Some(_) = None` reaches LLVM with `TyKind::Error`
+
+Narrowed from §3.5.23 (2026-10-28). This is the one genuine LLVM backend
+bug left after the CI-config bug and the stale header were fixed.
+
+**Reproducer.**
+
+    fn main() -> i32 {
+        let b: i32 = if let Option::Some(_) = Option::None { 1 } else { 7 };
+        b
+    }
+
+Compiled with `glyim-cli --with-stdlib --emit=exec`:
+
+    [X0000] Codegen error: Attempted to lower TyKind::Error to LLVM.
+    Type checking failed to resolve this type.
+
+**Narrowing done.** The two halves of `if_let_some_none.g` isolate
+cleanly:
+
+  * `if let Option::Some(x) = Option::Some(42) { x } else { 0 }` —
+    returns 42 correctly, on both backends.
+  * `if let Option::Some(_) = Option::None { 1 } else { 7 }` — LLVM
+    fails with the error above; the MIR interpreter handles it
+    correctly.
+
+So the trigger is the **`None` scrutinee combined with a
+wildcard-in-`Some` pattern** — specifically the arm that the compiler
+knows is unreachable (matching `Some(_)` against a `None` value), which
+still has to type-check and lower because the discriminator is not
+known at compile time in general.
+
+**Where to look.** Most likely one of:
+
+  1. **`check_pat.rs`'s `Pat::Wild` arm inside a `Some(..)` sub-pattern
+     on a known-`None` scrutinee** — if it produces a placeholder
+     `Ty::ERROR` for the wildcard field that is never refined (because
+     the arm is statically dead but the type is still needed to lower
+     the dead branch's aggregate), lowering sees `TyKind::Error` at
+     codegen.
+  2. **Lowering of the wildcard arm's dead block** — LLVM still emits
+     code for both arms of an `if let`. If the dead arm's bindings were
+     never resolved (typeck short-circuited because the match could
+     never succeed), lowering sees error types.
+  3. **`unify`'s handling of an uninhabited sub-pattern** — if pattern
+     typeck returns early for the provably-impossible arm.
+
+**Fix path.** Add a diagnostic in typeck rather than a codegen error:
+if a pattern arm is provably dead but carries error-typed locals, either
+(a) resolve the types anyway (type-check the dead arm as if it could
+run), or (b) replace the dead arm's locals with the correct
+`Option::Some` payload type so lowering emits a valid (unreachable)
+block. Both make LLVM happy without changing runtime behavior.
+
+**Interim.** `tests/run-pass/behavior/if_let_some_none.g` is `// ignore`-
+annotated with a pointer to this entry, so `test-ubuntu` is green under
+`--features glyim-test/real-llvm` and the bug is tracked rather than
+showing as a permanently red CI job. The fixture's first `if let`
+(which works) is exercised by `if_let_some_none.g`'s counterpart
+scenarios and by `option_nested_unwrap.g`; only the second `if let` is
+not covered until this is fixed.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
