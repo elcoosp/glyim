@@ -64,7 +64,14 @@ jobs:
       - name: Install nextest
         uses: taiki-e/install-action@nextest
       - name: Run tests
-        run: cargo nextest run --workspace
+        # §3.5.23: `GLYIM_LLVM=1` only *un-skips* `// needs-llvm`
+        # fixtures; it does not enable the real LLVM backend. Without
+        # `--features glyim-test/real-llvm`, `PipelineCompiler` falls
+        # back to `MockCodegen` and every needs-llvm fixture runs under
+        # the MIR interpreter — which panics on `ref`-patterns (10 of
+        # the 12 fixtures that used to be red here). The same feature
+        # is already passed by `test-differential` and `test-linux-runtime`.
+        run: cargo nextest run --workspace --features glyim-test/real-llvm
 
   test-linux-runtime:
     name: M5 runtime proof — strict (ubuntu-latest)

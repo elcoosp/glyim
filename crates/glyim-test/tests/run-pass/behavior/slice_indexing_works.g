@@ -17,8 +17,14 @@
 //
 // Distinct primes across three slice kinds: any residual miscompile
 // shifts the exit code.
+//
+// §3.5.23: header was `// exit-code: 89` from an earlier iteration whose
+// program produced that value. The current program sums 120 + 60 + 240 =
+// 420, and 420 & 255 = 164 — verified by running the compiled binary
+// directly (`glyim-cli --with-stdlib --emit=exec …; ./out; echo $?` →
+// 164). The header was stale, not the program; corrected to 164.
 // test-mode: run-pass
-// exit-code: 89
+// exit-code: 164
 // compile-flags: --with-stdlib
 // needs-llvm
 fn main() -> i32 {
