@@ -2606,7 +2606,7 @@ red CI job.
     host-specific
 
 
-#### 3.5.24 — OPEN: unconstrained `Option::None` ICEs; turbofish on variant path drops the type arg
+#### 3.5.24 — unconstrained `Option::None` ICEs (OPEN); turbofish on variant path (CLOSED)
 Narrowed from §3.5.23 (2026-10-28). Investigation of the original
 fixture revealed **two distinct bugs** and one **genuinely-invalid
 test**; the fixture has been rewritten to the valid form and is no
@@ -2749,13 +2749,33 @@ stayed green, and the ICE persisted — confirming
 `resolve_name_to_adt_ty` ignores the field. Reverted (commit
 `9808b471` was amended out; there is no such commit in the tree).
 
-**Why not fixed now.** The fix requires constructing `Option<T>`'s
-substitution in the fallback branch — several lines of careful work
-threading `TypeRef` resolution through, similar to the ~30 lines branch
-(b) already contains. Doing it correctly needs the branch's full text in
-view and a round of verification that it doesn't perturb the other
-~20 fixtures that exercise `Enum::Variant` paths. That is a focused
-task, not the tail end of a 37-commit session.
+**CLOSED (`0dc376ec`).** The third attempt found the actual cause:
+`variant_expr` (the helper both `Enum::Variant` callers route
+through) unconditionally allocated fresh inference vars for the
+enum's generic parameters, discarding whatever typeck had already
+resolved from the turbofish. The callers' args were fine; the helper
+dropped them.
+
+Fix: `variant_expr` gained an `explicit_args: Option<&[TypeRef]>`
+parameter. When present and the corresponding arg resolves to a
+non-error type, that slot uses the resolved type instead of a fresh
+infer var. Both `Enum::Variant` callers pass
+`path.segments[0].generic_args.as_deref()`; the bare-name caller
+(`None`/`Some`) passes `None`. Three regression probes verified:
+`Option::<i32>::None` in an `if let` now runs to 7 (was ICE);
+`Option::None` with a `let` annotation still runs to 7 (inference
+path unchanged); `Option::<i32>::Some(42)` still runs to 42
+(data-carrying variant unchanged).
+
+Regression fixture:
+`tests/run-pass/behavior/turbofish_unit_variant.g` — the
+`match Option::<i32>::None { … }` shape, which is the narrowest
+reproducer. `if_let_some_none.g` continues to cover the annotated
+`let` form.
+
+Full corpus green under the CI configuration (`GLYIM_LLVM=1
+GLYIM_TEST_REAL_LLVM=1 GLYIM_TEST_NO_SKIP=1 --features
+glyim-test/real-llvm`).
 
 **Fixture state.** `tests/run-pass/behavior/if_let_some_none.g` has been
 rewritten to use the **valid** `let`-annotated form (which exercises
