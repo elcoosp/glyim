@@ -1911,6 +1911,71 @@ i32 and truncates. Every fixture in the tree that needs a wide literal
 uses an explicit suffix (`4294967296u64`), which types correctly, so the
 corpus is unaffected either way.
 
+#### 3.5.19 — P1-C2 batch 2c: checked arithmetic (add/sub/mul)
+
+CLOSED (`179f7e03`). `checked_add` / `checked_sub` / `checked_mul` on
+`u64` / `u32` / `usize` were registered but had no lowering — every call
+hit the P1-C2 gate. `u32::checked_mul` was additionally **missing from
+the registry entirely**, so it failed at typeck with `[T0001] no method`.
+
+**What was added.**
+
+  * `ty_ctx_mut.rs` — the one missing registry entry
+    (`u32::checked_mul`). The other eight (3 ops x 3 types) were already
+    present.
+  * `codegen-llvm/src/lower.rs::try_lower_builtin_intrinsic` — a new arm
+    using the `.with.overflow` intrinsic family
+    (`llvm.u{add,sub,mul}.with.overflow.iN`), which returns
+    `{iN, i1}`: the wrapped result and an overflow flag. Both `Option<T>`
+    variants are built via `build_layout_aggregate` — `None`
+    (`VariantIdx(0)`, no payload) and `Some(wrapped)` (`VariantIdx(1)`,
+    one payload) — and `build_select(overflow, none, some)` picks
+    between them. Both variants are the same `Option<T>` LLVM struct
+    type, so the select is well-typed.
+  * `mir-interp/src/lib.rs::try_call_builtin` — an arm for the three
+    methods. Overflow is detected *before* the arithmetic (each branch
+    checks the precondition against the width's `max`), so the inner
+    `u128` computation cannot itself overflow. Returns the interp's
+    Option shape — `Aggregate([Int(0), Unit])` for `None`,
+    `Aggregate([Int(1), Uint(result)])` for `Some` — matching what
+    `vec_pop` produces.
+
+**The flagged risk did not materialize.** The batch-2c plan noted that
+`select` on two aggregate values is legal IR but a shape I had not seen
+this backend emit, and that the fallback would be branch-based
+construction. The `select` worked — LLVM accepts struct-typed selects,
+and the fixture runs correctly through the LLVM backend. No branch-based
+rewrite was needed.
+
+**Fixture.** `tests/run-pass/behavior/checked_arith.g` exercises all
+nine (op, type) pairs at both boundary and in-range values:
+
+  * `u32::MAX.checked_add(1)` -> `None`; `5 + 3` -> `Some(8)`
+  * `0.checked_sub(1)` -> `None`; `10 - 4` -> `Some(6)`
+  * `65536 * 65536` -> `None` (overflows u32); `6 * 7` -> `Some(42)`
+  * the same three patterns for `u64` and `usize`
+
+Assertions use `is_some()` / `is_none()` rather than `match Some(..)`,
+which avoids depending on `Some`/`None` being in scope — a mistake made
+in an earlier probe during this session (an `unresolved struct Some`
+error misread as a compiler gap).
+
+All literals carry explicit suffixes (per §3.5.18) so the fixture
+exercises `checked_*` and not the literal-range check.
+
+**Verified:**
+  * interp backend (`--emit=exec`): exit 0
+  * LLVM backend (`GLYIM_LLVM=1 --emit=exec`): exit 0
+  * full workspace: 4614/4614
+
+**P1-C2 family status after this batch.** `is_power_of_two` (§3.5.7),
+the bit-manipulation intrinsics (§3.5.7 / §3.5.8), `wrapping_*`
+(§3.5.12), `saturating_*` (batch 2b), and now `checked_*` are all
+lowered in both backends. Remaining P1-C2 surface is the collection /
+string method set (Vec/Slice/str/Box/UnsafeCell/Option/Result methods
+not yet implemented — each with its own shape, tracked separately in
+the plan).
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
