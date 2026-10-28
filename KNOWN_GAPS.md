@@ -2606,7 +2606,7 @@ red CI job.
     host-specific
 
 
-#### 3.5.24 — unconstrained `Option::None` ICEs (OPEN); turbofish on variant path (CLOSED)
+#### 3.5.24 — unconstrained `Option::None` ICEs + turbofish on variant path (CLOSED)
 Narrowed from §3.5.23 (2026-10-28). Investigation of the original
 fixture revealed **two distinct bugs** and one **genuinely-invalid
 test**; the fixture has been rewritten to the valid form and is no
@@ -2678,10 +2678,34 @@ add a second field for "general unconstrained" vs "variant ctor
 unconstrained" — the pipeline emits them differently today, so the
 second is safer.
 
-**Not fixed this session** because it is a ~100-line read-only walker
-plus pipeline verification, not the one-line zonk change an earlier
-draft of this entry implied. The mechanism is now pinned to one file
-and one function; the next session can implement directly.
+**CLOSED (`c753888f`).** The scope estimate was too pessimistic. The
+existing `walk_expr_for_variant_ctor_calls` already handles every
+`ExprKind` and recurses correctly; `has_unbound_ty_var` already
+recurses into ADT substitutions; the pipeline already emits from
+`unresolved_ty_var_spans` (per-owner, gated on reachability). The
+missing piece was one `VariantRef` arm — mirroring the `VariantCtor`
+call check — that flags a unit-variant value whose `expr.ty` carries an
+unbound `Infer(Ty)`. Eighteen lines including the comment.
+
+Verified:
+  * `let b = Option::None;` → `[T0001] type annotations needed`
+    (was `[X0000] Codegen error: Attempted to lower TyKind::Error`)
+  * `let b: Option<i32> = Option::None;` still compiles and runs
+  * full corpus green under `--features glyim-test/real-llvm`
+
+Regression fixture:
+`tests/compile-fail/unconstrained_none.g` (`//~ ERROR type annotations
+needed`).
+
+**Why the earlier estimate was wrong.** It assumed the walker needed a
+read-only mirror of `zonk_body` (~80-100 lines). In fact the walker
+already exists and is read-only; it just had a deliberately narrow
+detection condition ("only `VariantCtor` calls") with a comment
+explaining *why* (`FnRef`-typed calls can carry unbound `Infer` in
+their `Err` position legitimately, e.g. `Result<f64, <f64 as
+FromStr>::Err>`). `VariantRef` is not in that excluded category — a
+unit-variant value has no argument that could legitimately leave the
+enum's parameter unresolved — so it belongs alongside `VariantCtor`.
 
 **Bug B — turbofish on a unit-variant path is lost before typeck.** Even
 explicitly annotating the variant does not help:
