@@ -1769,7 +1769,7 @@ for i32`) because the default type of `4294967296` is `i32` and the value
 doesn't fit. glyim silently wraps. That is *not* what this fix addresses —
 it's a typeck issue, tracked as its own open item.
 
-#### 3.5.18 — OPEN: out-of-range unsuffixed integer literals wrap silently
+#### 3.5.18 — out-of-range unsuffixed integer literals wrap silently (PARTIALLY CLOSED)
 
 Discovered 2026-10-27 while building the saturating-arithmetic fixture
 (§3.5.17). Not fixed in that session — it is a distinct typeck issue and
@@ -1799,37 +1799,72 @@ overflow `i128`/`u128` — `[X####] literal too large` with a test at
 inference defaults an unbound `Infer(Int)` to `Ty::I32`
 (`resolve_ty_shallow`, per the Scripts 442/452 note in `zonk.rs`).
 
-**Why it was not fixed now.** The value *is* preserved correctly through
-HIR (`Literal::Int(i128, None)`) and THIR (the MIR trace shows
-`MirConst { kind: Int(4294967296), ty: <u64> }`). The wrap is specifically
-at the default-and-narrow step. A correct fix needs a check that runs
-after inference has resolved the literal's type — i.e. in `zonk` — where
-both the raw `i128` value and the concrete `TyKind::Int(_)`/`Uint(_)` are
-in scope, then a range comparison against `IntTy`/`UintTy` bounds, then a
-new diagnostic. That is a typeck change of its own, not a one-liner, and
-deserves the full explore-patch-verify cycle rather than being bolted
-onto a session already 11 commits deep.
+**Diagnosis (verified).** The value *is* preserved correctly through HIR
+(`Literal::Int(i128, None)`), THIR (`thir::Literal::Int(i128, _)`), and
+MIR — the MIR for `let x = 4294967296;` literally reads
+`MirConst { kind: Int(4294967296), ty: <i32> }`. The wrap happens at
+codegen: storing an `i32`-typed constant whose `i128` payload exceeds i32
+truncates. So this is not a lost-value bug — it is a *missing validation*
+bug. The value is right; the type inference chose is wrong for it, and
+nothing objected.
 
-**Shape of the fix (for a future session).**
+**FIXED — narrow scope (`545fb28d`).** New
+`glyim_typeck::zonk::check_literal_ranges`, called from `typeck_crate`
+immediately after `zonk_bodies` (the point at which every `Expr.ty` is
+concrete and the literal's raw `i128` is still intact). For each `Stmt::Let`
+initializer and each `Stmt::Expr` whose THIR node is a `Literal::Int(v, None)`
+or `Literal::Uint(v, None)`, it compares `v` against the resolved
+`IntTy`/`UintTy` bounds and emits a `type_error` naming the literal, the
+value, the type, and the range.
 
-  1. `zonk_body` walks every `thir::ExprKind::Literal(thir::Literal::Int(v))`;
-     when `expr.ty` resolves to a concrete `Int(_)`/`Uint(_)`, compare `v`
-     against that type's range.
-  2. On overflow, emit a `GlyimDiagnostic` naming the literal, its value,
-     the inferred type, and the range — mirroring Rust's
-     `literal out of range for \`i32\``.
-  3. Keep the existing `i128`-overflow check in HIR (it fires first for
-     truly absurd literals and is already tested).
-  4. Fixture: a `compile-fail` case for `let a = 4294967296;` and one
-     confirming `let a = 4294967296u64;` still compiles and yields the
-     right value.
+`let x = 4294967296;` now fails with:
 
-**Interim.** Every fixture in the tree that needs a wide literal uses an
-explicit suffix (`4294967296u64`), which types correctly and compiles to
-the right value. The wrap only affects *unsuffixed* literals. The
-`saturating_arith.g` fixture has a comment explaining why every literal
-carries a suffix, so the constraint is documented at the point a future
-author would trip over it.
+    [T0001] integer literal `4294967296` does not fit `i32`
+    (range -2147483648..=2147483647); add an explicit suffix
+    (e.g. `4294967296u64`) or annotate the binding
+
+Regression fixture: `crates/glyim-test/tests/compile-fail/out_of_range_literal.g`.
+
+**Verified not to regress:** `let x = 42;` (in range), `let x = 4294967296u64;`
+(suffixed, correct type), `let x: i32 = -2147483648;` (i32::MIN, valid —
+the range check accepts it because the unary minus yields the in-range
+value 2147483648 via `Neg`). Full workspace: 4614/4614.
+
+**Still open — the broader walk.** The check deliberately covers only the
+*direct* initializer of a `let` / `Stmt::Expr`. A literal nested inside a
+call argument, binary op, `if` condition, `return`, `match` arm, etc. still
+wraps silently. Broadening it requires mirroring `zonk_expr`'s full match
+across ~20 `ExprKind` variants. That is mechanical but wide; it belongs in
+its own change, and the current narrow fix catches the documented
+reproduction without touching every THIR path.
+
+`isize` / `usize` are also hardcoded to 64 bits in the check rather than
+consulting `TargetInfo`. Every current glyim target is 64-bit, so this is
+correct today; a 32-bit target would need the width threaded through.
+
+**Implementation shape (as landed).**
+
+  1. `zonk::check_literal_ranges(ctx, bodies)` — new function, called
+     from `typeck_crate` right after `zonk_bodies`.
+  2. Walks `body.stmts`, checking `Stmt::Let { init: Some(expr) }` and
+     `Stmt::Expr { expr }` for a `Literal::Int(v, None)` /
+     `Literal::Uint(v, None)` whose resolved type is a concrete integer.
+  3. Compares against `IntTy`/`UintTy` bounds; emits
+     `GlyimDiagnostic::type_error` on overflow with the value, type, and
+     range in the message.
+  4. The existing `i128`-overflow check in HIR (`lower_literal_with_diags`)
+     still fires first for truly absurd literals, and is untouched.
+  5. Fixture: `compile-fail/out_of_range_literal.g` with
+     `//~ ERROR does not fit`. The in-range and suffixed cases are
+     covered by the ad-hoc verification in this session and by
+     `saturating_arith.g` (which uses suffixed literals throughout).
+
+**Interim (superseded for the covered shape).** The narrow fix now rejects
+the direct-`let` / `Stmt::Expr` shape. Wider nesting still wraps — an
+unsuffixed `4294967296` passed as a call argument still type-checks as
+i32 and truncates. Every fixture in the tree that needs a wide literal
+uses an explicit suffix (`4294967296u64`), which types correctly, so the
+corpus is unaffected either way.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
