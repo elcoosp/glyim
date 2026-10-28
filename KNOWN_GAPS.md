@@ -1769,7 +1769,7 @@ for i32`) because the default type of `4294967296` is `i32` and the value
 doesn't fit. glyim silently wraps. That is *not* what this fix addresses —
 it's a typeck issue, tracked as its own open item.
 
-#### 3.5.18 — out-of-range unsuffixed integer literals wrap silently (PARTIALLY CLOSED)
+#### 3.5.18 — out-of-range integer literals (CLOSED)
 
 Discovered 2026-10-27 while building the saturating-arithmetic fixture
 (§3.5.17). Not fixed in that session — it is a distinct typeck issue and
@@ -1808,7 +1808,7 @@ truncates. So this is not a lost-value bug — it is a *missing validation*
 bug. The value is right; the type inference chose is wrong for it, and
 nothing objected.
 
-**FIXED — narrow scope (`545fb28d`).** New
+**Initial narrow fix (`545fb28d`), then generalized (`987f4974`).** New
 `glyim_typeck::zonk::check_literal_ranges`, called from `typeck_crate`
 immediately after `zonk_bodies` (the point at which every `Expr.ty` is
 concrete and the literal's raw `i128` is still intact). For each `Stmt::Let`
@@ -1825,22 +1825,67 @@ value, the type, and the range.
 
 Regression fixture: `crates/glyim-test/tests/compile-fail/out_of_range_literal.g`.
 
-**Verified not to regress:** `let x = 42;` (in range), `let x = 4294967296u64;`
-(suffixed, correct type), `let x: i32 = -2147483648;` (i32::MIN, valid —
-the range check accepts it because the unary minus yields the in-range
-value 2147483648 via `Neg`). Full workspace: 4614/4614.
+**Verified — 12 hand-run cases all pass:**
 
-**Still open — the broader walk.** The check deliberately covers only the
-*direct* initializer of a `let` / `Stmt::Expr`. A literal nested inside a
-call argument, binary op, `if` condition, `return`, `match` arm, etc. still
-wraps silently. Broadening it requires mirroring `zonk_expr`'s full match
-across ~20 `ExprKind` variants. That is mechanical but wide; it belongs in
-its own change, and the current narrow fix catches the documented
-reproduction without touching every THIR path.
+| Input | Expect | Reason |
+|---|---|---|
+| `let x = 4294967296;` | error | doesn't fit inferred i32 |
+| `let x: i32 = -2147483648;` | ok | i32::MIN via `Neg` |
+| `let x: i32 = -2147483649;` | error | below i32::MIN |
+| `let x = 4294967296 + 1;` | error | nested in `Binary` |
+| `if 4294967296 > 0 { .. }` | error | nested in `If` cond |
+| `let x = 42;` | ok | in range |
+| `let x = 4294967296u64;` | ok | suffixed, target type fits |
+| `let x: u32 = 4294967296;` | error | overflows u32 |
+| `let x: u32 = 4294967295;` | ok | u32::MAX boundary |
+| `fn f() -> i32 { return 4294967296; }` | error | nested in `Return` |
+| `let x = 0xFFFFFFFF as u32;` | ok | Cast exemption |
+| `let x = 2147483648 as u32;` | ok | Cast exemption |
 
-`isize` / `usize` are also hardcoded to 64 bits in the check rather than
-consulting `TargetInfo`. Every current glyim target is 64-bit, so this is
-correct today; a 32-bit target would need the width threaded through.
+Plus: compile-fail corpus green (fixture
+`tests/compile-fail/out_of_range_literal.g` exercises three distinct
+nested shapes), run-pass corpus green, full workspace 4614/4614.
+
+The `glyim-pilot process::tests::test_run_timed_command_success`
+failure in the first full-workspace run after `987f4974` was a timing
+flake — it passes in isolation, and `glyim-pilot` has no dependency on
+`glyim-typeck`.
+
+**FULLY CLOSED (`987f4974`).** The narrow fix was extended to a
+recursive walk that mirrors `zonk_expr`'s full match — every `ExprKind`
+variant with children is descended into, so a literal anywhere in the
+expression tree (call argument, binary operand, `if` condition, match
+scrutinee or arm body, `return` value, struct field, array element,
+tuple element, index base/index, range bounds, closure body, nested
+block, while-loop body and condition, for-loop iterable and body) is
+checked, not just the direct initializer.
+
+Two exemptions prevent false positives on valid code:
+
+  * **Negation.** `-2147483648` (i32::MIN) parses as
+    `Unary { Neg, Literal(2147483648) }`. The operand literal's value
+    exceeds `i32::MAX` by exactly one — but the *negated* value is
+    exactly `i32::MIN` and perfectly valid. The `Unary`-with-`Neg`-
+    of-literal arm computes the negated value and compares *that*
+    against the range; `-2147483648` for `i32` is accepted, while
+    `-2147483649` is rejected. Descends only when the operand is not a
+    literal.
+  * **Casts.** A literal that is the *direct* operand of an `as` cast
+    is exempt — `0xFFFFFFFF as u32` and `4294967296 as u64` are
+    accepted even though the literal's own default type (`i32`) cannot
+    represent the value. This is a **deliberate divergence from Rust**
+    (which rejects both with `literal out of range for i32`). Rationale:
+    `as` already declares an explicit type intent, and the idiom is
+    common (`0xFFFFFFFF as u32` appears in two fixtures in this tree).
+    Second-guessing the operand adds friction without catching real
+    bugs. The trade-off is recorded here so a future strictness pass
+    can flip it by removing the `Cast`-exemption arm in
+    `check_literal_ranges`.
+
+`isize` / `usize` remain hardcoded to 64 bits rather than consulting
+`TargetInfo`. Every current glyim target is 64-bit, so this is correct
+today; a 32-bit target would need the width threaded through.
+Documented as a residual portability item, not a live bug.
 
 **Implementation shape (as landed).**
 
