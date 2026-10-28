@@ -1306,6 +1306,84 @@ fixtures as the acceptance test. If the iterator update proves as
 entangled as `iterator::max` was for P1-C8 (§3.5.4), this becomes the
 same shape as that item and should be planned alongside it.
 
+**Attempt 3 (2026-10-28) — diagnosis sharpened, still reverted.**
+
+The prior paragraph guessed the coupling was `Iterator::next`-on-slice.
+**That was wrong.** Reading the two failing fixtures' own header comments
+(they cite KNOWN_GAPS §7) plus their MIR shows the opposite: `for x in
+v.as_slice()` and `for x in &v` are *already* routed through an
+index-walk, precisely so they avoid the trait path. MIR for
+`for_loop_over_slice.g`:
+
+    Assign(_, Len(place[9][Deref]))                       # len
+    Assign(_, Use(Copy(place[9][Deref, Index(11)])))      # s[i]
+    Assign(_, UnaryOp(Deref, Copy(place[17])))            # *x
+
+So the loop is `*((*slice)[i])`: deref the slice, index it, deref the
+element. The old String model satisfied all three because
+`ProjectionElem::Deref` had an explicit `InterpValue::String(_) => val`
+no-op arm (added for the byte payload) and the `Index` arm returned
+`Uint(low_byte)`, which the *outer* `UnOp::Deref` then handled via...
+nothing — actually `(UnOp::Deref, Uint(_))` falls to the catch-all panic
+at `eval_unary_op`'s `_` arm. That is the contradiction the attempt
+resolved by **adding the corresponding arm**:
+
+    // ProjectionElem::Deref
+    InterpValue::Slice(_) => val,     # no-op, symmetric with String
+
+plus a `Slice` index arm returning the raw element, plus 4 accessor
+arms (`len`, `is_empty`, `split_at`, `to_vec`), plus the two utility
+matches (`interp_value_to_u128`, `interp_value_to_bool`).
+
+**What worked.** `cargo check` clean (only those 2 exhaustive matches
+needed new arms). Direct `glyim-cli --with-stdlib --emit=exec` runs on
+all three fixtures exited with the right codes (3, 6, 0) — on the
+**LLVM backend**, which is what `--emit=exec` builds. That is the
+trap.
+
+**What failed.** `run_pass_corpus` executes fixtures via **mir-interp**
+(see `crates/glyim-test/src/harness/interpreter_runner.rs`), not the
+LLVM binary. All three fixtures panicked with exit 101 under interp
+despite passing under LLVM. The attempt's verification had the same
+LLVM-vs-interp asymmetry that §3.5.17 (operand_bit_width) hit — the
+direct `--emit=exec` probe validates the LLVM backend, not the
+interpreter.
+
+**Why it could not be diagnosed in the attempt.** The harness's
+`RunFailed { exit_code: Some(101), expected_exit_code: Some(3) }`
+carries the exit code but **not** the interpreter's `InterpError::Panic`
+message. `InterpRunner::run` *does* put the panic text into
+`output.stderr`, but the run-pass harness's failure report does not
+surface it. Without the panic string ("unsupported unary op: Deref on
+Int(1000)"? "deref of Ref from dead frame"? "index out of bounds"?) the
+next arm can't be located by reasoning — every candidate is plausible
+and several require contradictory fixes.
+
+**Correct next-attempt protocol.** *Before* any code change:
+
+  1. Write a `glyim-mir-interp` unit test that builds the MIR for a
+     minimal `for x in &Vec<i32>` loop **by hand** (the pattern in
+     `crates/glyim-mir-interp/src/tests/loop.rs` and `aggregate.rs`),
+     runs it through `Interpreter::run_body`, and `panic!`s with the
+     `InterpError::Panic(msg)` message on failure. This is the only
+     reliable way to see the actual panic text — the harness won't.
+  2. *Then* apply the variant + accessor patch and iterate against
+     that unit test until the interp path is green.
+  3. Only then re-run `run_pass_corpus`.
+
+**Reverted in full** (`git checkout` on `interp_value.rs` and `lib.rs`;
+`slice_non_u8_content.g` deleted). Tree at `9dadbdc7`, 23 unpushed
+commits. The `emit_object` change from P2-A4 (`f72a45fd`) is unaffected
+— different file, already committed.
+
+**Why this is the third revert and not a fourth attempt.** The pattern
+across P2-B3 attempts: each failure mode was only visible *after*
+running the corpus, because the corpus uses a backend (`mir-interp`)
+that the direct CLI probes (`--emit=exec` → LLVM) do not. That is a
+workflow-level blind spot, not an implementation detail. Fixing it with
+a targeted unit test first is the difference between a productive
+fourth attempt and a fifth revert.
+
 #### 3.5.11 — P2-A2: mock drift closed; production fallback hardened (partial)
 
 Investigated 2026-10-27. The audit described P2-A2 as two related
