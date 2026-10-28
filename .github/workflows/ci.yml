@@ -44,6 +44,17 @@ jobs:
       # something real. If any of these need to be excluded later, use a
       # per-fixture `// only-target` annotation, not a job-wide skip.
       GLYIM_LLVM: "1"
+      # TEST-3: on *this* job both fixture needs are satisfiable —
+      # `GLYIM_LLVM` is set above (covers `// needs-llvm`), and the
+      # runner is `x86_64-unknown-linux-gnu` (covers every `// only-target`
+      # in the tree). So an `Ignored` outcome here can only mean the
+      # harness was misconfigured, and we want that to be a loud failure
+      # rather than a silently-missing test. A fixture that legitimately
+      # cannot run should be `// ignore`-annotated (structural), which this
+      # flag deliberately does NOT promote. Other matrix jobs (macOS,
+      # Windows) intentionally omit this flag: they genuinely lack LLVM,
+      # so `Ignored` there is the truthful outcome, not a gap.
+      GLYIM_TEST_NO_SKIP: "1"
     steps:
       - uses: actions/checkout@v4
       - name: Install LLVM 23
