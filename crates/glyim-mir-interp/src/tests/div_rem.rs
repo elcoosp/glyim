@@ -1,6 +1,7 @@
 //! Regression tests for de-stubbing plan §11.2: `eval_binary_op::Rem`/`Div`
 //! must use `checked_*` semantics — division/remainder by zero is a clean
-//! `InterpError::DivisionByZero` (not a Rust panic that aborts the compiler),
+//! `InterpError::DivisionByZero` / `InterpError::RemainderByZero` (not a Rust
+//! panic that aborts the compiler),
 //! and signed `MIN % -1` / `MIN / -1` is diagnosed as an overflow panic
 //! (matching the LLVM backend, whose `sdiv`/`srem` trap on these operands).
 
@@ -137,7 +138,7 @@ fn signed_rem_by_zero_is_interp_error() {
     let tcx = tcx_mut.freeze();
     let mut interp = Interpreter::new(&tcx);
     let res = interp.run_body(&body);
-    assert!(matches!(res, Err(InterpError::DivisionByZero)));
+    assert!(matches!(res, Err(InterpError::RemainderByZero)));
 }
 
 #[test]
@@ -170,7 +171,7 @@ fn unsigned_rem_by_zero_is_interp_error() {
     let tcx = tcx_mut.freeze();
     let mut interp = Interpreter::new(&tcx);
     let res = interp.run_body(&body);
-    assert!(matches!(res, Err(InterpError::DivisionByZero)));
+    assert!(matches!(res, Err(InterpError::RemainderByZero)));
 }
 
 #[test]

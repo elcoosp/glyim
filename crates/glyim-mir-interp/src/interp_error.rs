@@ -7,6 +7,7 @@ pub enum InterpError {
     StackOverflow,
     /// Integer (or float) division / remainder by zero (de-stubbing plan §11.2).
     DivisionByZero,
+    RemainderByZero,
     #[allow(missing_docs)]
     Panic(String),
     /// Cross-frame unwind reached the top of the call stack
@@ -21,11 +22,12 @@ impl std::fmt::Display for InterpError {
         match self {
             Self::TimedOut => write!(f, "interpreter timed out"),
             Self::StackOverflow => write!(f, "stack overflow"),
-            Self::DivisionByZero => write!(
+            Self::DivisionByZero => write!(f, "attempt to divide by zero"),
+            Self::RemainderByZero => write!(
                 f,
-                "attempt to calculate remainder/division with a divisor of zero"
+                "attempt to calculate the remainder with a divisor of zero"
             ),
-            Self::Panic(msg) => write!(f, "panic: {}", msg),
+            Self::Panic(msg) => write!(f, "{}", msg),
             Self::Unwind(inner) => write!(f, "unwind: {}", inner),
         }
     }

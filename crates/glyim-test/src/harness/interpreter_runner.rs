@@ -159,7 +159,13 @@ fn interpret_bodies(
             }
         }
         Err(e) => {
-            stderr.push_str(&format!("interpreter error: {}\n", e));
+            // §3.5.27 / TEST-1 unification: emit the same stderr the LLVM
+            // backend writes from `glyim_panic`, so a check-stderr fixture
+            // (e.g. run-fail/div_by_zero_stderr.g) passes on both backends.
+            // Previously this was `"interpreter error: {e}\n"`, and `e`'s
+            // Display started with `"panic: "` — two layers of wrapping
+            // that no LLVM-produced binary ever produces.
+            stderr.push_str(&format!("thread 'main' panicked: {}\n", e));
             InterpOutput {
                 exit_code: 101,
                 stdout,

@@ -1590,9 +1590,24 @@ impl<'tcx> Interpreter<'tcx> {
             // ABORT-EXTERNS: the runtime's `-> !` abort hooks must STOP
             // execution. The `_` fallthrough swallowed them as `Int(0)`, so
             // `abort`/`panic` silently continued. Surface as InterpError.
-            "glyim_panic" | "glyim_process_abort" => {
-                Err(InterpError::Panic("program aborted".into()))
+            //
+            // §3.5.27 unification: `glyim_panic(msg, len)` and
+            // `glyim_process_abort_with_msg(msg, len)` carry a message the
+            // LLVM backend writes as `thread 'main' panicked: <msg>`. Read
+            // `args[0]` via `byte_payload` (a `String`-shaped value in this
+            // interpreter's model) so both backends produce identical
+            // stderr text. `glyim_process_abort()` (zero-arg) has no
+            // message — keep the generic "program aborted" for its `.g`
+            // callers.
+            "glyim_panic" | "glyim_process_abort_with_msg" => {
+                let msg = args
+                    .first()
+                    .map(Self::byte_payload)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "program aborted".to_string());
+                Err(InterpError::Panic(msg))
             }
+            "glyim_process_abort" => Err(InterpError::Panic("program aborted".into())),
             "glyim_process_exit" => {
                 let code = args
                     .first()
@@ -1893,7 +1908,7 @@ impl<'tcx> Interpreter<'tcx> {
                     self.current_body = Some(body);
                     self.current_bb = bb_idx;
                     return Err(InterpError::Panic(
-                        "reached unreachable terminator".to_string(),
+                        "entered unreachable code".to_string(),
                     ));
                 }
                 TerminatorKind::Call {
@@ -2640,7 +2655,7 @@ MirConstKind::Error => {
                         // T107-PATCHED [INT-4]: same overflow behavior as
                         // Div above.
                         if *r == 0 {
-                            return Err(InterpError::DivisionByZero);
+                            return Err(InterpError::RemainderByZero);
                         }
                         match l.checked_rem(*r) {
                             Some(v) => v,
@@ -2688,7 +2703,7 @@ MirConstKind::Error => {
                         // Plan §11.2: unsigned remainder by zero must be a clean
                         // interpreter error, not a Rust-level panic.
                         if *r == 0 {
-                            return Err(InterpError::DivisionByZero);
+                            return Err(InterpError::RemainderByZero);
                         }
                         l.wrapping_rem(*r)
                     }

@@ -426,7 +426,10 @@ fn interpret_remainder_by_zero_panics() {
     let tcx = tcx_mut.freeze();
     let mut interp = Interpreter::new(&tcx);
     let res = interp.run_body(&body);
-    assert!(matches!(res, Err(InterpError::DivisionByZero)));
+    // §3.5.27 unification: `Rem` by zero returns `RemainderByZero` (a
+    // distinct variant from `DivisionByZero`), so its Display matches
+    // the LLVM rem-abort site's message exactly.
+    assert!(matches!(res, Err(InterpError::RemainderByZero)));
 }
 
 #[test]
