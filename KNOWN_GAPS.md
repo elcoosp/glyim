@@ -3222,6 +3222,89 @@ adds a `glyim-runtime` build script that emits a stamp file, the
 annotator can consult it and the message gets even better; today's fix
 is a strict improvement that costs nothing.
 
+#### 3.5.27 — TEST-1 delivered; `assert!` failures abort silently (OPEN)
+
+TEST-1 was framed as "add a `// check-stderr:` matcher". The matcher
+already existed and was already consumed; the actual defect was narrower
+and the real blocker is a **different** bug found while delivering it.
+
+**TEST-1 (CLOSED, `5b81184f`).** `TestConfig::check_stderr` was parsed
+and consumed, but its matcher used plain `result.stderr.contains(...)`
+while `check_stdout` used the line-anchored `stdout_matches`
+(T196-PATCHED [HARNESS-9]). So `// check-stderr: error:` matched
+`error: something went wrong` — the exact prefix false-positive the
+stdout matcher was fixed for. Now both go through `stdout_matches`.
+Five matcher unit tests pin the semantics, and two existing tests that
+had *codified* the substring behaviour were updated with companion
+tests asserting the old behaviour is now a mismatch.
+
+**Why zero of 263 fixtures used `check-stderr`.** Probing the two
+`run-fail` fixtures that should print a panic message:
+
+    assert_false.g                    exit 101, stderr: 0 bytes
+    print_then_panic_keeps_stdout.g   exit 101, stderr: 0 bytes
+
+Three probes localised it:
+
+| Probe | Result |
+|---|---|
+| `eprintln!("direct stderr")` | 14 bytes on stderr, exit 0 |
+| `assert!(false, "boom")` | exit 101, **0** stderr bytes |
+| `.ll` for `assert!(false, "boom")` | `declare void @glyim_process_abort()` — **no `glyim_panic`** |
+
+**The mechanism.** `glyim_panic`
+(`crates/glyim-runtime/src/lib.rs:182`) takes `(msg_ptr, msg_len)` and
+writes `thread 'main' panicked: <msg>\n` before `exit(101)`. It works.
+But `assert!` failures never call it: they lower to
+`glyim_process_abort()`, a separate runtime function whose entire body
+is `std::process::exit(101)` — no message.
+
+    pub extern "C" fn glyim_process_abort() -> ! {
+        std::process::exit(101)
+    }
+
+Four LLVM call sites use it (`lower.rs` ~2694 div-by-zero, ~2827
+rem-by-zero, ~3922 the unreachable/panic path, ~8565 an unsupported
+coercion): each declares `void_type().fn_type(&[], false)` and calls
+with `&[]`.
+
+**Attempted fix, reverted.** Changing `glyim_process_abort` to
+`(msg: *const u8, len: usize)` and delegating to `glyim_panic` compiles
+(`cargo check` passes) — but **LLVM IR types are not checked by
+rustc**, so all four call sites silently keep the zero-argument
+declaration. The result is an ABI mismatch at link time. Reverted
+rather than half-applied.
+
+**Correct fix (for a follow-up).** The assert site at `lower.rs:3985`
+already emits a private message global (const string, `__glyim_assert_<hash>`,
+bitcast to `i8*`) and passes `(ptr, len)` to `glyim_panic`. That
+pattern needs extracting into a helper — something like
+`emit_message_global(&mut self, msg: &str) -> (PointerValue, IntValue)`
+— so the four `glyim_process_abort` sites can each pass a message
+(`"division by zero"`, `"remainder by zero"`, `"assertion failed: <msg>"`,
+`"unsupported coercion"`) instead of duplicating ~25 lines of global
+emission four times.
+
+Sequence:
+  1. Extract `emit_message_global` from the existing assert path.
+  2. Change `glyim_process_abort` to `(msg, len)`, delegate to
+     `glyim_panic`.
+  3. Update all four call sites to use the helper and pass the new args.
+  4. Add a `run-fail` fixture with `// check-stderr: division by zero`
+     to prove the message reaches stderr end to end.
+  5. Full corpus — the div/rem-by-zero fixtures (`div_by_zero.g`, etc.)
+     must still exit 101.
+
+That is a focused codegen change, but it is ~120 lines across five
+locations and needs the helper extraction first. Not a tail-end-of-session
+patch; the revert above is the honest state.
+
+**Interim.** `assert!` and div/rem-by-zero still exit 101 silently,
+exactly as before this investigation. No regression. The `check-stderr`
+matcher works correctly for programs that print to stderr via
+`eprintln!`; it has nothing to match on abort-class failures until this
+is fixed.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
