@@ -3222,7 +3222,7 @@ adds a `glyim-runtime` build script that emits a stamp file, the
 annotator can consult it and the message gets even better; today's fix
 is a strict improvement that costs nothing.
 
-#### 3.5.27 — TEST-1 delivered; `assert!` failures abort silently (OPEN)
+#### 3.5.27 — TEST-1 delivered; `assert!` failures abort silently (CLOSED; residual message-loss tracked in §3.5.28)
 
 TEST-1 was framed as "add a `// check-stderr:` matcher". The matcher
 already existed and was already consumed; the actual defect was narrower
@@ -3304,6 +3304,137 @@ exactly as before this investigation. No regression. The `check-stderr`
 matcher works correctly for programs that print to stderr via
 `eprintln!`; it has nothing to match on abort-class failures until this
 is fixed.
+
+**Update (session 23 continuation — 2026-10-29).** §3.5.27's abort-site
+half is **closed**. What landed:
+
+  * `c95bf14b` — added `glyim_process_abort_with_msg(msg, len)` to
+    `glyim-runtime` (delegates to `glyim_panic`), kept the zero-arg
+    `glyim_process_abort()` for existing `.g` callers (`process.abort`,
+    alloc's OOM handler, `core/abort_stops.g`), extracted
+    `emit_abort_with_msg` helper in `LoweringCtx`, and routed all four
+    formerly-silent LLVM abort sites through it with distinct messages
+    (`"attempt to divide by zero"`, `"attempt to calculate the remainder
+    with a divisor of zero"`, `"entered unreachable code"`,
+    `"called \`<method>\` on a miss value"`).
+  * `7c6444e4` — unified the interpreter's abort-message text with the
+    LLVM messages (`InterpError::Panic` Display no longer prefixes
+    `"panic: "`, new `RemainderByZero` variant, `try_call_extern` reads
+    the `(ptr, len)` message from `glyim_process_abort_with_msg` and
+    `glyim_panic`, `TerminatorKind::Unreachable` maps to
+    `"entered unreachable code"`, `interpreter_runner` writes
+    `"thread 'main' panicked: {msg}\n"`).
+  * `07c827b8` / `7c6444e4` — first real `check-stderr` fixtures
+    (`run-fail/div_by_zero_stderr.g`, `run-fail/rem_by_zero_stderr.g`),
+    **un-gated** on `// needs-llvm` because both backends now produce
+    byte-identical stderr. Mutation-tested end-to-end on both backends.
+
+**What remains open (this is §3.5.28, not §3.5.27).** The *specific user
+message* on `assert!(false, "boom")` and `Option::unwrap()`-on-`None`
+never reaches the runtime. It is not the abort-site codegen — the four
+sites now correctly emit `glyim_process_abort_with_msg(ptr, i64)`. The
+message is dropped one layer earlier: **MIR lowers divergent
+`panic!`/`assert!`/`unwrap` paths to `TerminatorKind::Unreachable`,
+discarding the message.** See §3.5.28.
+
+#### 3.5.28 — OPEN: divergent `panic!`/`assert!`/`unwrap` paths lower to `TerminatorKind::Unreachable`, discarding the message
+
+**Symptom.** A program that hits `assert!(false, "boom")` (or
+`Option::None.unwrap()`, or `Result::Err(_).unwrap()`) exits 101 and
+prints only `thread 'main' panicked: entered unreachable code` — the
+generic message from the four abort sites (§3.5.27), not the specific
+text the user or the stdlib provided. Verified on both backends:
+
+| Probe | LLVM (`--emit=exec`) | Interp |
+|---|---|---|
+| `assert!(false, "boom")` | exit 101, `entered unreachable code` | exit 101, `entered unreachable code` |
+| `Option::None.unwrap()` | exit 101, `entered unreachable code` | exit 101, `entered unreachable code` |
+| `Option::None.expect("need a value")` | exit 101, `entered unreachable code` | exit 101, `entered unreachable code` |
+
+**Evidence — the specific message is emitted into IR and then dropped as
+dead code.** `.ll` for `Option::None.unwrap()`:
+
+    @__glyim_str_77cecc... = private constant [44 x i8]
+        c"called `Option::unwrap()` on a `None` value\00"
+    ...
+    store { ptr, i64 } { ptr @__glyim_str_77cecc..., i64 43 }, ptr %arg, align 8
+    ; ---- END of that BB ----
+    ; (no `load` of the stored message; no `call` that consumes it)
+
+The only runtime abort call in the whole `.ll` is
+`call void @glyim_process_abort_with_msg(ptr @__glyim_abortmsg_8f90ee..., i64 24)`,
+i.e. the *generic* `entered unreachable code` string from §3.5.27's
+`TerminatorKind::Unreachable` arm at `lower.rs:3954`. The specific-message
+store lands in a basic block whose terminator is `Unreachable`, not
+`Call glyim_panic(msg_ptr, msg_len)`.
+
+For `assert!(false, "boom")` the count of `"boom"` in the `.ll` is **0**
+— the user message does not survive HIR→MIR lowering at all. The
+`Unreachable`-emission sites are `crates/glyim-lower/src/lower_rvalue.rs:1816`,
+`:1833`, `:3052` (three explicit sites) plus
+`crates/glyim-lower/src/builder.rs:135` (the generic "divergent body
+never terminated" case).
+
+**Root cause.** MIR's divergent-terminator contract collapses to
+`TerminatorKind::Unreachable`, which carries no message. The stdlib /
+macro layer emits a `panic!(msg)` call, the call lands in a basic block,
+but because the callee is `-> !`, subsequent lowering terminates the
+block with `Unreachable` rather than threading the call's arguments to
+the runtime abort. `glyim_panic` — the function that *would* print the
+specific message — is never invoked on these paths.
+
+**Why this is one bug, not three.** `assert!`, `Option::unwrap`,
+`Result::unwrap`, and any user `panic!(msg)` all reach the same
+divergent body; the same `lower_rvalue.rs`/`builder.rs` sites handle all
+four. Fix one, fix all four.
+
+**Why it did not block §3.5.27.** §3.5.27 fixed the *abort mechanism*
+(silent zero-arg abort → message-carrying abort at four sites) and made
+the generic fallback messages consistent across backends. This entry is
+about *which* message reaches the runtime — an upstream MIR-divergence
+contract problem, not a codegen problem. The codegen is correct: given
+`Call glyim_panic(specific_msg)`, both backends would print the specific
+text. The message is being discarded before codegen sees it.
+
+**Correct fix (for a follow-up planning session).** Two paths:
+
+1. **Preferred: make `glyim_panic` the divergent terminator, not
+   `Unreachable`.** At the three `lower_rvalue.rs` sites above, when the
+   divergent callee is `glyim_panic` or `glyim_process_abort_with_msg`,
+   emit `TerminatorKind::Call { func: panic_fn, args: [msg_ptr, msg_len],
+   destination: _, target: unreachable_bb, cleanup: _ }` where
+   `unreachable_bb` contains a lone `Unreachable`. This threads the
+   message through to the runtime via the normal call path. Smaller and
+   uses the existing `glyim_panic` FFI (which already works — see the
+   `assert!` path's `glyim_panic` invocation at `lower.rs:3985`).
+
+2. **Fallback: extend `TerminatorKind::Unreachable` to carry an
+   `Option<PanicMessage>`.** Codegen (LLVM) then emits the abort call
+   with the message, and interp maps the message into
+   `InterpError::Panic`. More invasive — new MIR variant, codegen
+   update, interp update, plus a mangled `PanicMessage` type.
+
+Path 1 is the recommended one. Estimate: 3–4 files, one solid session
+once the MIR-divergence contract is confirmed against the three sites
+(it needs the same kind of line-by-line read that §3.5.27's fix needed).
+
+**Acceptance tests (add all four when the fix lands).**
+
+- `run-fail/assert_with_msg_stderr.g` —
+  `// check-stderr: thread 'main' panicked: boom`
+- `run-fail/unwrap_none_stderr.g` —
+  ``// check-stderr: thread 'main' panicked: called `Option::unwrap()` on a `None` value``
+- `run-fail/unwrap_err_stderr.g` — analogous for `Result`
+- `run-fail/expect_msg_stderr.g` —
+  `// check-stderr: thread 'main' panicked: need a value`
+
+All four must pass on both backends (drop `// needs-llvm` once the interp
+side reads the message from the terminating call).
+
+**Status.** Diagnosed; no code change attempted this session (fix scope
+is 3–4 files and needs the MIR-divergence contract pinned first).
+Documented here so a future session starts from the line numbers rather
+than re-running the probes.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
