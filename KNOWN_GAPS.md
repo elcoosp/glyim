@@ -3554,15 +3554,150 @@ without a message — same observable behaviour as before this attempt.
      so they will be green the moment §3.5.22 lands and panic_any
      is patched.
 
-**Note on a defensive-mode alternative.** If a future session finds
-§3.5.22 harder to land than expected, a smaller intermediate fix is
-possible: change `panic!($msg)` with a literal (no format-args) to
-`panic_any_str($msg)` where `panic_any_str(msg: &str) -> !` calls
-`glyim_panic(msg.as_ptr(), msg.len())` directly — no format! needed.
-That would make `panic!("boom")` and `unreachable!()` work end-to-end,
-while leaving `assert!`, `panic!`-with-args, and `unwrap` still gated
-on §3.5.22 (their messages go through format!). Smaller scope, smaller
-win, but a real one. Only worth pursuing if §3.5.22 is deferred.
+**LANDED (session 23, commit `6805055b`).** The defensive-mode alternative
+described in the paragraph below was implemented and it works. It was
+**not** actually blocked on §3.5.22, as an earlier revision of this entry
+claimed — a follow-up probe session showed:
+
+  * `format!("{}", "hello")` (literal &str)         → `hello` (works)
+  * `format!("{}", <&str fn param>)`                → works
+  * `format!("{}", 42)` (int arg)                   → empty (§3.5.22)
+  * `format!("{}", <impl Display fn param>)`        → empty (§3.5.22)
+
+Only the trait-generic and int paths were broken. So `panic_any_str(msg:
+&str)` was unaffected by §3.5.22 and unblocked immediately.
+
+**Fix that shipped (`6805055b`)** — two coordinated changes:
+
+1. `glyim-lang-core/lib/panic.g`:
+   - New `fn panic_any_str(msg: &str) -> !` calls `glyim_panic(ptr, len)`
+     directly (no `format!`).
+   - `panic!` literal-only arms route through it.
+   - `unreachable!` and `unimplemented!` route through it.
+   - `panic_any` (kept for the format-args arm) now formats and calls
+     `glyim_panic`. That arm's `format!` still returns empty for runtime
+     `impl Display` values (§3.5.22 trait-generic path) and falls back to
+     `glyim_panic`'s `b"panic"` default. Not regressed vs. the pre-fix
+     state (which printed `entered unreachable code`), still imperfect.
+
+2. `glyim-lang-std/src/lib.rs` (both `std_source_assembled` and
+   `std_source_assembled_minimal`): register `"panic_any_str"` in the
+   well-known fn list alongside `"panic_any"`. **This was the actual
+   blocker behind earlier "unresolved name panic_any_str" walls** —
+   macro expansion reads the well-known fn list, not top-level fn
+   declarations, so an unregistered `&str`-taking helper is invisible
+   to macro-expanded call sites even though it is in the same file.
+
+**Verified working after `6805055b` (both backends):**
+
+| Program | stderr |
+|---|---|
+| `panic!("boom")` | `thread 'main' panicked: boom` |
+| `unreachable!()` | `thread 'main' panicked: internal error: entered unreachable code` |
+| `Option::None.unwrap()` | `` thread 'main' panicked: called `Option::unwrap()` on a `None` value `` |
+| `Result::Err(_).unwrap()` | analogous |
+
+Acceptance fixtures added and green in `run_fail_corpus` on both backends:
+  - `run-fail/panic_with_msg_stderr.g`
+  - `run-fail/unreachable_stderr.g`
+  - `run-fail/unwrap_none_stderr.g`
+
+**What did NOT land: `assert!`.** Verified-red after `6805055b` on both
+backends:
+
+    assert!(false, "boom")  →  exit 101, stderr:
+                               thread 'main' panicked: entered unreachable code
+
+That is the generic `Unreachable` site, not the specific assertion
+message. `assert!` is a different code path from `panic!` — see §3.5.29.
+
+#### 3.5.29 — OPEN: `assert!(cond, msg)` still emits the generic Unreachable message
+
+**Symptom.** `assert!(false, "boom")` exits 101 and prints
+`thread 'main' panicked: entered unreachable code` on both backends,
+not `thread 'main' panicked: assertion failed: boom`. `assert!(false)`
+without a message (the `stringify!` arm) behaves the same way.
+
+`assert!(true, "msg")` does **not** fire — the cond is honored correctly
+on the true side.
+
+**Diagnostic probes run (post-`6805055b`, both backends):**
+
+| Probe | Result |
+|---|---|
+| `if !false { panic!("entered"); }` | **works** — prints `thread 'main' panicked: entered` |
+| `assert!(true, "msg"); println!("ok");` | `ok`, exit 0 — cond honored on the true side |
+| `assert!(false);` (stringify path) | `entered unreachable code` |
+| `format!("assertion failed: {}", "boom"); println!(...)` | `[assertion failed: boom]` — format works |
+
+**What this rules out:**
+
+  * **Bool-inversion bug** — no. `if !false` at user top level fires the
+    branch correctly.
+  * **`format!` bug** — no. `format!("assertion failed: {}", "boom")`
+    produces the correct string when bound to a local.
+  * **Macro-expansion dropping the `if`** — no. `assert!(true)` returns
+    cleanly; if the cond had been dropped, `assert!(true)` would panic.
+
+**What remains, in order of likelihood:**
+
+1. **`panic!` inside a macro-expanded `if` body isn't reaching
+   `panic_any_str`.** The `assert!` expansion is
+   `if !$cond { panic!("assertion failed: {}", stringify!($cond)); }`.
+   Both the `stringify!` variant and the `format!` variant reach
+   `panic!`, but the *result* is `entered unreachable code` — i.e. the
+   caller falls through to a bare `Unreachable` after the `if` block.
+   Plausible mechanism: the macro-expanded `if` body that contains a
+   diverging call is being lowered as if the `if` were a plain unit
+   expression, so the caller's continuation `Goto` lands somewhere the
+   `panic_any_str` call cannot be reached from. This would show up in
+   `--emit=mir` as a `TerminatorKind::Call` to `panic_any_str` sitting
+   in a dead basic block.
+
+2. **A `TerminatorKind::Assert` terminator is emitted for the `if`
+   construct's condition and its fail-block is a bare `Unreachable`.**
+   Would show up in `--emit=mir` as `Assert { msg: BoundsCheck or
+   similar }` preceding the intended `panic_any_str` call.
+
+3. **The macro expander is re-expanding `panic!` inside the `assert!`
+   body** with a stale/empty `$fmt` argument, so `panic_any_str` is
+   called with an empty literal but the caller still hits `Unreachable`
+   downstream. Would show up in `--emit=mir` as a call with an empty
+   string constant arg.
+
+**Next-session probes to distinguish (1)/(2)/(3):**
+
+  * `--emit=mir` on `assert!(false, "boom")`. Grep for:
+    - `Call { ... Fn(..., "panic_any_str" or its DefId) ... }` — is it
+      emitted at all?
+    - `Assert { .. }` — is a `TerminatorKind::Assert` present?
+    - `Unreachable` — where does it sit relative to the panic call?
+  * If the call is emitted but in a dead block → hypothesis (1). Fix is
+    in macro-expansion's handling of diverging bodies inside `if`.
+  * If an `Assert` terminator is present with a bare fail-block →
+    hypothesis (2). Fix is in the `Assert` lowering that currently
+    routes the fail-block to `Unreachable` instead of a panic call.
+  * If the call is emitted but with an empty-string arg → hypothesis (3).
+    Fix is in the macro expander's handling of `$fmt` inside nested
+    macro calls.
+
+**Likely fix, if (2) is the answer (the most probable path):**
+`assert!` would need to expand to a shape that bypasses the
+`TerminatorKind::Assert` path — e.g. route through a helper
+`fn __assert_fail(msg: &str) -> !` in `panic.g` (same registration
+pattern as `panic_any_str`) and have `assert!` expand to
+`if !$cond { __assert_fail(...) }`. This is a one-file change to
+`panic.g` plus one registry line, if (2) holds.
+
+**Acceptance test (add when fixed):**
+
+  * `run-fail/assert_false_stderr.g`:
+    `// check-stderr: thread 'main' panicked: assertion failed: boom`
+  * Companion `run-pass`: `assert!(true)` must not panic, exit 0.
+
+**Status.** Open. One `--emit=mir` recon + one bounded fix expected
+(cross-crate only if hypothesis (1) holds and requires touching
+macro-expansion in `glyim-meta`).
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
