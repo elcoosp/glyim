@@ -293,7 +293,7 @@ pub fn std_source_assembled() -> String {
                 "Reverse",
             ],
         ),
-        ("panic", &["panic_any"]),
+        ("panic", &["panic_any", "panic_any_str"]),
     ];
     // `str` and `slice` are emitted FLAT: their `impl str { .. }` /
     // `impl<T> [T] { .. }` extension blocks must bind to the primitive types,
@@ -437,7 +437,7 @@ pub fn std_source_assembled_minimal() -> String {
                 "Reverse",
             ],
         ),
-        ("panic", &["panic_any"]),
+        ("panic", &["panic_any", "panic_any_str"]),
     ];
     // `str` and `slice` emitted FLAT.
     let flat_modules: &[&str] = &["str", "slice", "parse"];

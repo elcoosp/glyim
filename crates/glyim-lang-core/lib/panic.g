@@ -4,19 +4,50 @@
 /// Panics the current thread with a message.
 macro panic! {
     () => {
-        panic_any("explicit panic")
+        panic_any_str("explicit panic")
     },
     ($msg:literal) => {
-        panic_any($msg)
+        panic_any_str($msg)
     },
     ($fmt:literal, $($arg:expr),+) => {
-        panic_any(format!($fmt, $($arg),+))
+        panic_any_str(format!($fmt, $($arg),+).as_str())
     },
 }
 
 /// Panic with any value.
 fn panic_any(msg: impl Display) -> ! {
-    // compiler intrinsic - aborts execution
+    // Kept for direct callers and for the format!-args panic arm. Note:
+    // `format!("{}", msg)` where msg is an `impl Display` generic emits
+    // empty today (§3.5.22-family trait-generic format gap). The
+    // literal-only macro arms route through `panic_any_str` instead.
+    extern "C" {
+        fn glyim_panic(msg: *const u8, len: usize) -> !;
+    }
+    let formatted = format!("{}", msg);
+    let bytes = formatted.as_bytes();
+    unsafe { glyim_panic(bytes.as_ptr(), bytes.len()) }
+}
+
+/// Diverging panic that takes a `&str` directly, bypassing `format!`.
+///
+/// Used by the literal-only macro arms (`panic!("msg")`, `unreachable!()`,
+/// `unimplemented!()`), whose arguments are already `&str` and would
+/// otherwise hit the trait-generic-format gap in `panic_any`.
+///
+/// §3.5.28 fix: previously `panic_any` had an empty body, so panic!-family
+/// call sites returned immediately, continued past the panic, and hit a
+/// bare `Unreachable` whose generic message masked the user text. Now
+/// `panic_any_str` calls `glyim_panic(ptr, len)` which writes
+/// `thread 'main' panicked: <msg>\n` and exits 101.
+///
+/// Registered in glyim-lang-std's well-known fn list so macro expansion
+/// can resolve it (same list `panic_any` is in).
+fn panic_any_str(msg: &str) -> ! {
+    extern "C" {
+        fn glyim_panic(msg: *const u8, len: usize) -> !;
+    }
+    let bytes = msg.as_bytes();
+    unsafe { glyim_panic(bytes.as_ptr(), bytes.len()) }
 }
 
 /// Asserts that a boolean expression is true at runtime.
@@ -54,13 +85,13 @@ macro assert_ne! {
 /// Indicates unimplemented code by panicking.
 macro unimplemented! {
     () => {
-        panic!("not yet implemented")
+        panic_any_str("not yet implemented")
     },
 }
 
 /// Indicates unreachable code.
 macro unreachable! {
     () => {
-        panic!("internal error: entered unreachable code")
+        panic_any_str("internal error: entered unreachable code")
     },
 }
