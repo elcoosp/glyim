@@ -99,6 +99,65 @@ unless you are contributing to the dev-loop tooling itself.
   reachable from user input returns a `GlyimDiagnostic::internal_error`
   instead. There are ~300 legacy sites; don't add more.
 
+## Development gotchas
+
+Three caching layers sit between you and the source. Each has cost a
+debugging session; none is obvious from a failing build.
+
+### `kache` replays stale artifacts — disable it when bisecting
+
+`RUSTC_WRAPPER=kache` is set in the default dev environment. `kache`
+caches compilation artifacts keyed on inputs it computes itself —
+**`cargo clean` does not invalidate it**. If you apply a patch, run a
+test, revert the patch, and run again, the second run may replay the
+*patched* artifact.
+
+This produces results that cannot be reconciled with the source on
+disk: an "isolated test passed, full test failed" split where both
+runs used the same code, a `[T0001]` diagnostic naming a line that
+cannot produce it, a compile error from a function you just deleted.
+
+**When a bisect produces contradictory results, do one build with
+`RUSTC_WRAPPER=""`:**
+
+```bash
+RUSTC_WRAPPER="" cargo build -p glyim-cli
+RUSTC_WRAPPER="" cargo nextest run -p glyim-test --test run_pass_corpus
+```
+
+For the full picture, combine with `cargo clean -p <crate>` on the
+chain — but see the next entry first.
+
+### `cargo clean -p` on the type chain removes the runtime staticlib
+
+`cargo clean -p glyim-type -p glyim-typeck` (or any clean that reaches
+`glyim-runtime`) removes `target/<profile>/libglyim_runtime.a`. That
+file is not rebuilt by `cargo build -p glyim-cli` — it is the
+`glyim-runtime` crate's staticlib output, built separately.
+
+Five `--emit=exec` tests fail with `undefined reference to
+glyim_stdout_write` after any such clean, and nothing in the failure
+says "rebuild the runtime crate". (`glyim-cli` now annotates this at
+link time — KNOWN_GAPS §3.5.26 — but the fix is:
+
+```bash
+cargo build -p glyim-runtime
+```
+
+### Long corpus runs time out under load
+
+`run_pass_corpus` runs ~260 fixtures end-to-end, each spawning a
+compile and execute. A full `cargo nextest run --workspace` takes
+5-6 minutes on an idle machine and 8-10 under load. The per-test
+timeout is 60 seconds, and `run_pass_corpus_passes` is a single test
+that fans out internally — so a `TimeoutExceeded` on a *fixture* means
+the machine is loaded, not that the fixture is broken.
+
+Check `uptime` before treating a random corpus failure as a
+regression. Load average above ~20 on an 8-core box is enough to
+produce spurious timeouts.
+
+
 ## Commit messages
 
 Conventional Commits, one logical change per commit:
