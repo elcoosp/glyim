@@ -257,8 +257,13 @@ impl OutputCheck {
             });
         }
 
+        // TEST-1: line-anchored, matching `check-stdout`'s semantics
+        // (T196-PATCHED [HARNESS-9]). Before this, stderr used plain
+        // `.contains`, so `// check-stderr: error:` matched
+        // `error: something went wrong` — the exact false-positive class
+        // the stdout matcher was fixed for.
         if let Some(expected) = &self.expected_stderr
-            && !result.stderr.contains(expected.as_str())
+            && !stdout_matches(&result.stderr, expected)
         {
             return Err(crate::error::FailureReason::StderrMismatch {
                 expected: expected.clone(),
@@ -270,9 +275,10 @@ impl OutputCheck {
     }
 }
 
-/// T196-PATCHED [HARNESS-9]: line-anchored stdout matcher. A single-line
-/// expectation matches a whole line; a multi-line expectation matches the
-/// joined sequence of lines. This prevents partial-line false positives
+/// T196-PATCHED [HARNESS-9] / TEST-1: line-anchored output matcher,
+/// shared by `check-stdout` and `check-stderr`. A single-line expectation
+/// matches a whole line; a multi-line expectation matches the joined
+/// sequence of lines. This prevents partial-line false positives
 /// (`1` matching `123`).
 fn stdout_matches(actual: &str, expected: &str) -> bool {
     let trimmed = expected.trim_end_matches('\n');

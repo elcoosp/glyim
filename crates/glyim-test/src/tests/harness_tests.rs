@@ -192,7 +192,11 @@ fn test_output_check_stdout_substring_no_longer_matches() {
 
 #[test]
 fn test_output_check_stderr_pass() {
-    let check = harness::runner::OutputCheck::new().stderr("error:");
+    // TEST-1: `check-stderr` is line-anchored. A prefix expectation
+    // (`"error:"`) no longer matches `"error: something went wrong"`;
+    // the whole line must be given.
+    let check =
+        harness::runner::OutputCheck::new().stderr("error: something went wrong");
     let result = harness::runner::RunResult {
         exit_code: Some(1),
         stdout: String::new(),
@@ -201,6 +205,24 @@ fn test_output_check_stderr_pass() {
         duration: std::time::Duration::from_secs(0),
     };
     assert!(check.check(&result).is_ok());
+}
+
+#[test]
+fn test_output_check_stderr_prefix_is_not_a_match() {
+    // Guards against a future refactor reverting the matcher to
+    // `.contains`.
+    let check = harness::runner::OutputCheck::new().stderr("error:");
+    let result = harness::runner::RunResult {
+        exit_code: Some(1),
+        stdout: String::new(),
+        stderr: "error: something went wrong".to_string(),
+        timed_out: false,
+        duration: std::time::Duration::from_secs(0),
+    };
+    assert!(
+        check.check(&result).is_err(),
+        "prefix match must not satisfy a line-anchored stderr expectation"
+    );
 }
 
 #[test]
@@ -219,9 +241,11 @@ fn test_output_check_timeout() {
 
 #[test]
 fn test_output_check_run_fail_pass() {
+    // TEST-1: full line, not the substring `"panic"`. The
+    // `exit_code(1)` side is unchanged.
     let check = harness::runner::OutputCheck::new()
         .exit_code(1)
-        .stderr("panic");
+        .stderr("thread panicked: panic at core.rs:42");
     let result = harness::runner::RunResult {
         exit_code: Some(1),
         stdout: String::new(),
@@ -230,6 +254,24 @@ fn test_output_check_run_fail_pass() {
         duration: std::time::Duration::from_millis(100),
     };
     assert!(check.check(&result).is_ok());
+}
+
+#[test]
+fn test_output_check_stderr_substring_is_not_a_match() {
+    // A bare word inside a longer line must not satisfy a line-anchored
+    // expectation.
+    let check = harness::runner::OutputCheck::new().stderr("panic");
+    let result = harness::runner::RunResult {
+        exit_code: Some(1),
+        stdout: String::new(),
+        stderr: "thread panicked: panic at core.rs:42".to_string(),
+        timed_out: false,
+        duration: std::time::Duration::from_millis(100),
+    };
+    assert!(
+        check.check(&result).is_err(),
+        "substring match must not satisfy a line-anchored stderr expectation"
+    );
 }
 
 #[test]
