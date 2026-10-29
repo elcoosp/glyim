@@ -101,6 +101,74 @@ struct LoweringCtx<'ctx, 'a> {
     is_sret: bool,
 }
 impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
+    /// Emit a call to `glyim_process_abort_with_msg`, which exits 101
+    /// after writing `thread 'main' panicked: <msg>` + newline to stderr.
+    /// Appends an `unreachable` terminator afterwards.
+    fn emit_abort_with_msg(&self, msg: &str) -> CompResult<()> {
+        let module = self.module;
+        let context = self.context;
+        let i8_ptr_ty = context.ptr_type(inkwell::AddressSpace::default());
+        let i64_ty = self.llvm_int_type(64);
+
+        let abort_fn = module
+            .get_function("glyim_process_abort_with_msg")
+            .unwrap_or_else(|| {
+                let fn_ty = context
+                    .void_type()
+                    .fn_type(&[i8_ptr_ty.into(), i64_ty.into()], false);
+                module.add_function("glyim_process_abort_with_msg", fn_ty, None)
+            });
+
+        let msg_global_name = format!(
+            "__glyim_abortmsg_{:016x}",
+            {
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                let mut h = DefaultHasher::new();
+                msg.hash(&mut h);
+                h.finish()
+            }
+        );
+        let msg_global = module.get_global(&msg_global_name).unwrap_or_else(|| {
+            let const_str = context.const_string(msg.as_bytes(), true);
+            let str_ty = context.i8_type().array_type(msg.len() as u32 + 1);
+            let g = module.add_global(
+                str_ty,
+                Some(inkwell::AddressSpace::default()),
+                &msg_global_name,
+            );
+            g.set_initializer(&const_str);
+            g.set_constant(true);
+            g.set_linkage(inkwell::module::Linkage::Private);
+            g
+        });
+
+        let msg_ptr = self
+            .builder
+            .build_bit_cast(msg_global.as_pointer_value(), i8_ptr_ty, "abortmsg_ptr")
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "abortmsg bitcast: {e:?}"
+                ))]
+            })?
+            .into_pointer_value();
+        let msg_len = i64_ty.const_int(msg.len() as u64, false);
+        let args: Vec<inkwell::values::BasicMetadataValueEnum<'_>> =
+            vec![msg_ptr.into(), msg_len.into()];
+
+        self.builder.build_call(abort_fn, &args, "").map_err(|e| {
+            vec![GlyimDiagnostic::internal_error(format!(
+                "abortmsg call: {e:?}"
+            ))]
+        })?;
+        self.builder.build_unreachable().map_err(|e| {
+            vec![GlyimDiagnostic::internal_error(format!(
+                "abortmsg un: {e:?}"
+            ))]
+        })?;
+        Ok(())
+    }
+
     fn llvm_int_type(&self, bits: u32) -> inkwell::types::IntType<'ctx> {
         let non_zero = NonZeroU32::new(bits).unwrap_or_else(|| NonZeroU32::new(64).unwrap());
         self.context.custom_width_int_type(non_zero).unwrap()
@@ -2689,25 +2757,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             ))]
                         })?;
                     self.builder.position_at_end(panic_bb);
-                    let abort_fn = self
-                        .module
-                        .get_function("glyim_process_abort")
-                        .unwrap_or_else(|| {
-                            let fn_ty = self.context.void_type().fn_type(&[], false);
-                            self.module.add_function("glyim_process_abort", fn_ty, None)
-                        });
-                    self.builder.build_call(abort_fn, &[], "").map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "div abort call: {:?}",
-                            e
-                        ))]
-                    })?;
-                    self.builder.build_unreachable().map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "div abort un: {:?}",
-                            e
-                        ))]
-                    })?;
+                    self.emit_abort_with_msg("attempt to divide by zero")?;
                     self.builder.position_at_end(cont_bb);
                     let result = if is_signed {
                         self.builder.build_int_signed_div(li, ri, "div")
@@ -2822,25 +2872,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             ))]
                         })?;
                     self.builder.position_at_end(panic_bb);
-                    let abort_fn = self
-                        .module
-                        .get_function("glyim_process_abort")
-                        .unwrap_or_else(|| {
-                            let fn_ty = self.context.void_type().fn_type(&[], false);
-                            self.module.add_function("glyim_process_abort", fn_ty, None)
-                        });
-                    self.builder.build_call(abort_fn, &[], "").map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "rem abort call: {:?}",
-                            e
-                        ))]
-                    })?;
-                    self.builder.build_unreachable().map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "rem abort un: {:?}",
-                            e
-                        ))]
-                    })?;
+                    self.emit_abort_with_msg(
+                        "attempt to calculate the remainder with a divisor of zero",
+                    )?;
                     self.builder.position_at_end(cont_bb);
                     let result = if is_signed {
                         self.builder.build_int_signed_rem(li, ri, "rem")
@@ -3913,25 +3947,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     // here is UB: LLVM is free to fall through into
                     // whatever follows, and the process dies with
                     // SIGILL/SIGTRAP (observed exit 133/132), not with a
-                    // meaningful status. Route it through
-                    // `glyim_process_abort` (exit 101, matching the
-                    // interpreter's panic contract and Rust's panic exit
-                    // code) so the two backends agree.
-                    let abort_fn = self
-                        .module
-                        .get_function("glyim_process_abort")
-                        .unwrap_or_else(|| {
-                            let fn_ty = self.context.void_type().fn_type(&[], false);
-                            self.module.add_function("glyim_process_abort", fn_ty, None)
-                        });
-                    self.builder.build_call(abort_fn, &[], "").map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "abort call: {e:?}"
-                        ))]
-                    })?;
-                    self.builder
-                        .build_unreachable()
-                        .expect("unreachable failed");
+                    // Route it through `glyim_process_abort_with_msg` (exit
+                    // 101 + stderr message, matching the interpreter's panic
+                    // contract and Rust's panic exit code) so the two
+                    // backends agree.
+                    self.emit_abort_with_msg("entered unreachable code")?;
                 }
                 Ok(())
             }
@@ -8560,21 +8580,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_unconditional_branch(target_bb)
                     .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("alt br: {e:?}"))])?;
             } else {
-                let abort_fn = self
-                    .module
-                    .get_function("glyim_process_abort")
-                    .unwrap_or_else(|| {
-                        let fn_ty = self.context.void_type().fn_type(&[], false);
-                        self.module.add_function("glyim_process_abort", fn_ty, None)
-                    });
-                self.builder.build_call(abort_fn, &[], "").map_err(|e| {
-                    vec![GlyimDiagnostic::internal_error(format!(
-                        "abort call: {e:?}"
-                    ))]
-                })?;
-                self.builder.build_unreachable().map_err(|e| {
-                    vec![GlyimDiagnostic::internal_error(format!("abort un: {e:?}"))]
-                })?;
+                let msg = format!("called `{method}` on a miss value");
+                self.emit_abort_with_msg(&msg)?;
             }
             return Ok(true);
         }

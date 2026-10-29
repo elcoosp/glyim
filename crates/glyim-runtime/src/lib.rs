@@ -1003,6 +1003,20 @@ pub extern "C" fn glyim_process_abort() -> ! {
     std::process::exit(101)
 }
 
+/// Abort the process with a panic-style message on stderr.
+///
+/// Same exit code as [`glyim_process_abort`] (101), but writes
+/// `thread 'main' panicked: <msg>` + newline to stderr first. Used by the
+/// LLVM backend for abort sites where a diagnostic is available (integer
+/// division/remainder by zero, unwrap miss, unreachable). Kept separate
+/// from the zero-arg [`glyim_process_abort`] so existing `.g` callers
+/// (`process.abort`, `alloc`'s OOM handler, `core/abort_stops.g`) keep
+/// their silent-abort contract.
+#[unsafe(no_mangle)]
+pub extern "C" fn glyim_process_abort_with_msg(msg: *const u8, len: usize) -> ! {
+    glyim_panic(msg, len)
+}
+
 /// Get the process ID of the calling process.
 #[unsafe(no_mangle)]
 pub extern "C" fn glyim_process_getpid() -> u32 {
