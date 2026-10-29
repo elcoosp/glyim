@@ -3665,39 +3665,106 @@ on the true side.
    downstream. Would show up in `--emit=mir` as a call with an empty
    string constant arg.
 
-**Next-session probes to distinguish (1)/(2)/(3):**
+**DEFINITIVE FINDING (session 23 continuation, probe B).** The bug is
+**not** in the panic-family macros. Probe B replaced the entire `assert!`
+macro body — for BOTH arms — with a direct call to `panic_any_str` and
+**no** nested `panic!`, `format!`, or `stringify!`:
 
-  * `--emit=mir` on `assert!(false, "boom")`. Grep for:
-    - `Call { ... Fn(..., "panic_any_str" or its DefId) ... }` — is it
-      emitted at all?
-    - `Assert { .. }` — is a `TerminatorKind::Assert` present?
-    - `Unreachable` — where does it sit relative to the panic call?
-  * If the call is emitted but in a dead block → hypothesis (1). Fix is
-    in macro-expansion's handling of diverging bodies inside `if`.
-  * If an `Assert` terminator is present with a bare fail-block →
-    hypothesis (2). Fix is in the `Assert` lowering that currently
-    routes the fail-block to `Unreachable` instead of a panic call.
-  * If the call is emitted but with an empty-string arg → hypothesis (3).
-    Fix is in the macro expander's handling of `$fmt` inside nested
-    macro calls.
+    macro assert! {
+        ($cond:expr) => {
+            if !$cond { panic_any_str("assertion failed"); }
+        },
+        ($cond:expr, $($arg:expr),+) => {
+            if !$cond { panic_any_str("assertion failed with message"); }
+        },
+    }
 
-**Likely fix, if (2) is the answer (the most probable path):**
-`assert!` would need to expand to a shape that bypasses the
-`TerminatorKind::Assert` path — e.g. route through a helper
-`fn __assert_fail(msg: &str) -> !` in `panic.g` (same registration
-pattern as `panic_any_str`) and have `assert!` expand to
-`if !$cond { __assert_fail(...) }`. This is a one-file change to
-`panic.g` plus one registry line, if (2) holds.
+Result: `assert!(false, "boom")` **still** produced
+`thread 'main' panicked: entered unreachable code` (the generic
+Unreachable site), and `assert!(true)` correctly skipped the panic.
+
+The difference is **not** what the branch contains — it's the shape
+`if <cond> { <diverging_call> }` **when emitted by a macro expansion**
+versus when written at user top level:
+
+| Shape | Where written | Result |
+|---|---|---|
+| `if !false { panic!("entered"); }` | user top level | **works** — Call to `panic_any_str` in bb1 |
+| `if !$cond { panic_any_str("..."); }` | macro-expanded from `assert!` | **broken** — bb1 is `Goto bb4`, bb4 is bare `Unreachable`, no Call emitted |
+
+The MIR for the broken case (session log, `--emit=mir` output) shows the
+block structure survives (`SwitchInt` → bb1 (then) / bb2 (else)), but:
+
+  * bb1 is `Goto bb4` — the then-block contains no call
+  * bb4 is bare `Unreachable`
+  * bb5 contains the type-glue for a diverging value:
+    `Assign(local_2 /*: !*/, Copy(local_3 /*: !*/))`
+    — so the *type* of the diverging expression survived, but the call
+    that would produce it was dropped.
+
+The equivalent shape at user top level produces a real
+`Call { func: FnDefId(322) /* panic_any_str */, ... }` in the then-block.
+
+**Root cause is therefore:** macro expansion produces a THIR/HIR node
+for `if cond { diverging_call() }`, but the diverging call inside the
+then-branch is dropped somewhere in the lowering pipeline **when the `if`
+came out of a macro expansion**. The same lowering path handles the
+user-written case correctly, so the difference is a property of the
+macro-produced node (likely: hygiene/span context, or a THIR flag set
+by macro expansion, or an `is_macro_generated` marker with different
+lowering behaviour for the diverging-call arm).
+
+**Where to look next session (in order):**
+
+1. **The macro expander's THIR output.** Emit the expanded macro body
+   as THIR (or HIR) for both `assert!(false, "boom")` and the
+   equivalent user-written form. Diff them. The `ExprKind::If` and
+   the child `ExprKind::Call` are where the divergence will show up —
+   either a flag set on the macro-produced node, or the call node
+   missing entirely from the expanded form.
+
+2. **`crates/glyim-lower/src/lower_rvalue.rs`, the `ExprKind::If` arm.**
+   The user-written working case and the macro-broken case reach this
+   arm with what should be identical THIR. Compare the arm's handling
+   of the then-body's terminal expression — is there any span-based or
+   context-based branch that diverges?
+
+3. **`crates/glyim-lower/src/lower_rvalue.rs`, the diverging-call arm
+   at ~590-630 (the `sig_returns_never` check).** That check looks up
+   the callee's `fn_sig` via `self.ctx.ty_ctx().fn_sig(*def_id)`. If the
+   `def_id` is not the same in the macro-expanded case — e.g. the
+   macro-expanded call points at a fresh `FnDefId` that isn't
+   monomorphized yet at this point — then `sig_returns_never` returns
+   `false`, the block is NOT terminated as `Unreachable`, and the caller
+   continues past. That would match the symptom exactly: no call
+   emitted, block falls through, but the type-glue assign `local_2 :=
+   local_3` survives because the return type is `!` from typeck.
+
+   **This is my strongest hypothesis.** If true, the fix is at that
+   check site — either resolve the callee `FnDefId` through a
+   monomorphized alias, or check `expr.ty == Ty::NEVER` as a fallback.
+   **One-file fix in `lower_rvalue.rs`, likely <20 lines.**
+
+4. **Macro expansion sets a span context that masks the call.** Grep
+   for `SyntaxContext` checks in `lower_rvalue.rs` — a check that
+   silently drops calls marked with a hygiene context.
 
 **Acceptance test (add when fixed):**
 
   * `run-fail/assert_false_stderr.g`:
     `// check-stderr: thread 'main' panicked: assertion failed: boom`
   * Companion `run-pass`: `assert!(true)` must not panic, exit 0.
+  * `run-fail/assert_false_stderr.g` with the message-less form
+    (`assert!(false)`) should also produce a specific message once the
+    `stringify!` path is fixed (which it will be once the general
+    macro-expanded-`if` bug is fixed — `stringify!` is not the root
+    cause, per probe A).
 
-**Status.** Open. One `--emit=mir` recon + one bounded fix expected
-(cross-crate only if hypothesis (1) holds and requires touching
-macro-expansion in `glyim-meta`).
+**Status.** Open. Root cause narrowed to "diverging call inside a
+macro-expanded `if` body is dropped during lowering." Candidate fix
+(hypothesis 3 above) is a one-file change in `lower_rvalue.rs`. Verify
+with an isolated `--emit=mir` diff between macro-expanded and
+user-written forms before writing the fix.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
