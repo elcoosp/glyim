@@ -3370,10 +3370,38 @@ store lands in a basic block whose terminator is `Unreachable`, not
 
 For `assert!(false, "boom")` the count of `"boom"` in the `.ll` is **0**
 — the user message does not survive HIR→MIR lowering at all. The
-`Unreachable`-emission sites are `crates/glyim-lower/src/lower_rvalue.rs:1816`,
-`:1833`, `:3052` (three explicit sites) plus
-`crates/glyim-lower/src/builder.rs:135` (the generic "divergent body
-never terminated" case).
+*Correction (same-day recon).* An earlier draft of this entry named
+`crates/glyim-lower/src/lower_rvalue.rs:1816`, `:1833`, `:3052` and
+`crates/glyim-lower/src/builder.rs:135` as the "divergent-panic Unreachable
+sites". **That is wrong.** Reading those four sites in context:
+
+  - `1816` — `break outside of loop` error-recovery.
+  - `1833` — `continue outside of loop` error-recovery.
+  - `3052` — match-arm exhaustion fallback (`otherwise_bb` with no arm).
+  - `builder.rs:135` — default terminator of a freshly allocated BB before
+    the caller sets its real terminator.
+
+None of them fire for `Option::None.unwrap()`. The message threading is
+actually intact at the MIR level: `--emit=mir` for that program shows
+
+    Call { func: Constant(Fn(FnDefId(321), …)),
+           args: [Constant(MirConst { kind: String(…\`called
+                   \`Option::unwrap()\` on a \`None\` value\`…) })],
+           destination: …, target: Some(BasicBlockIdx(7)), cleanup: None }
+
+i.e. the specific message **is** threaded as a call argument to
+`FnDefId(321)`. In the emitted `.ll` the corresponding string global is
+likewise stored into the callee's arg slot as `{ ptr, i64 } { ptr @__glyim_str_…,
+i64 43 }`. So the message survives HIR and MIR lowering; it is not
+dropped by `lower_rvalue.rs`.
+
+The actual break is one layer further down: `FnDefId(321)` — the fn the
+`panic!` token resolves to — has a stub body that compiles to `Unreachable`
+without reading its argument. The codegen then hits the §3.5.27
+`Unreachable` abort site with its generic message (`"entered unreachable
+code"`), and the specific argument sitting in the caller's arg slot is
+never consumed. That is why the `.ll` shows the string stored but never
+loaded.
 
 **Root cause.** MIR's divergent-terminator contract collapses to
 `TerminatorKind::Unreachable`, which carries no message. The stdlib /
@@ -3396,27 +3424,45 @@ contract problem, not a codegen problem. The codegen is correct: given
 `Call glyim_panic(specific_msg)`, both backends would print the specific
 text. The message is being discarded before codegen sees it.
 
-**Correct fix (for a follow-up planning session).** Two paths:
+**Correct fix (planning pass next session).** Two candidate paths, both
+starting from the *correct* site — the stub body of the fn that `panic!`
+resolves to (working identifier: `FnDefId(321)` on the probe above), **not**
+the four Unreachable sites named in the earlier draft.
 
-1. **Preferred: make `glyim_panic` the divergent terminator, not
-   `Unreachable`.** At the three `lower_rvalue.rs` sites above, when the
-   divergent callee is `glyim_panic` or `glyim_process_abort_with_msg`,
-   emit `TerminatorKind::Call { func: panic_fn, args: [msg_ptr, msg_len],
-   destination: _, target: unreachable_bb, cleanup: _ }` where
-   `unreachable_bb` contains a lone `Unreachable`. This threads the
-   message through to the runtime via the normal call path. Smaller and
-   uses the existing `glyim_panic` FFI (which already works — see the
-   `assert!` path's `glyim_panic` invocation at `lower.rs:3985`).
+1. **Give `FnDefId(321)` a real body that calls the runtime panic FFI.**
+   Wherever that stub's body is synthesised (candidates: a `.g` stub in
+   `crates/glyim-lang-std/lib/`, a `#[rustc_builtin_macro]`-equivalent
+   path in `crates/glyim-frontend`, or a hand-written stub in
+   `crates/glyim-lower`), replace the current body (which terminates in
+   `Unreachable`) with:
+     * `StorageLive(msg_local)`
+     * `msg_local = arg0` (the `(ptr, len)` pair the caller already passes)
+     * `Call { func: <extern glyim_panic>, args: [msg_ptr, msg_len],
+              destination: _, target: None, cleanup: None }` — i.e. a
+              diverging Call with no continuation.
+   Codegen and interp already handle `Call { target: None }` correctly
+   (see `glyim-codegen-llvm/src/lower.rs:6269`, `:8174`, `:8430` and
+   `glyim-mir-interp/src/lib.rs:1863`, `:2034`). Both surface the call's
+   actual arguments to the runtime. No new MIR variant needed.
 
-2. **Fallback: extend `TerminatorKind::Unreachable` to carry an
-   `Option<PanicMessage>`.** Codegen (LLVM) then emits the abort call
-   with the message, and interp maps the message into
-   `InterpError::Panic`. More invasive — new MIR variant, codegen
-   update, interp update, plus a mangled `PanicMessage` type.
+2. **Alternative: extend `TerminatorKind::Unreachable` with an
+   `Option<PanicMessage>`.** More invasive, requires touching MIR,
+   both backends, and the interp. Only worth doing if path 1 turns out to
+   need wider plumbing.
 
-Path 1 is the recommended one. Estimate: 3–4 files, one solid session
-once the MIR-divergence contract is confirmed against the three sites
-(it needs the same kind of line-by-line read that §3.5.27's fix needed).
+Path 1 is the recommendation. Real scope: identify the stub's
+synthesis site, replace its body with a `Call glyim_panic(msg, len)` +
+`Unreachable` sequence, add the four acceptance fixtures, verify both
+backends print the specific message. Estimated effort: **1 solid session
+of read-then-write, same shape as §3.5.27** — not the "3–4 files" the
+earlier draft claimed, but not a one-line swap either.
+
+**Note for the next session:** the first task is *"find where
+`FnDefId(321)`'s body is synthesised."* Everything else follows from that.
+`grep -rn "panic_any\|-> ! sentinel" crates/glyim-lower` and the existing
+`TerminatorKind::Assert` path (which *does* reach `glyim_panic` correctly
+— see `glyim-codegen-llvm/src/lower.rs:3985`) are the two most promising
+starting points.
 
 **Acceptance tests (add all four when the fix lands).**
 
