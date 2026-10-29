@@ -1000,6 +1000,18 @@ pub extern "C" fn glyim_process_exit(code: i32) -> ! {
 /// backends.
 #[unsafe(no_mangle)]
 pub extern "C" fn glyim_process_abort() -> ! {
+    // §3.5.29: match the interpreter side, which returns
+    // `InterpError::Panic("program aborted")` (rendered as
+    // "thread 'main' panicked: program aborted\n" by `interpreter_runner`).
+    // Before this, the LLVM path exited 101 with no stderr at all, so the
+    // two backends disagreed on observable output for the same `.g` program.
+    // `abort_stops.g` (run-pass, exit-code: 101) does not gate on stderr, so
+    // adding a message here does not change its outcome.
+    use std::io::Write as _;
+    let stderr = std::io::stderr();
+    let mut lock = stderr.lock();
+    let _ = lock.write_all(b"thread 'main' panicked: program aborted\n");
+    let _ = lock.flush();
     std::process::exit(101)
 }
 
