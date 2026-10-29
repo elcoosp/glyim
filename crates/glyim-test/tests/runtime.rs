@@ -93,12 +93,13 @@ fn m5_two_step_multi_await_compiles_cleanly() {
     // (it only proves the compile/desugar contract, not native execution).
     match &two_step.outcome {
         TestOutcome::Passed => { /* the real runtime proof: ran and printed 3 */ }
-        // On a non-Linux host the fixture's `only-target` gate matches against
-        // the *host* triple now, so a Linux-gated fixture is `Ignored` rather
-        // than tried-and-failed. Either `Ignored` or `CompilationFailed` is the
-        // tolerated non-real-LLVM outcome; only a wrong-output `Failed` or an
-        // unexpected `Passed` from a broken mock backend would be a red flag.
-        TestOutcome::Ignored if !real_llvm => {}
+        // On a non-Linux host the fixture's `only-target` gate matches
+        // against the *host* triple, so a Linux-gated fixture is `Ignored`
+        // rather than tried-and-failed. This is expected on macOS/Windows
+        // regardless of `GLYIM_TEST_REAL_LLVM` (which enables the LLVM
+        // *backend*, not native execution of a Linux ELF). Mirrors the
+        // `m5_one_step` arm below.
+        TestOutcome::Ignored => {}
         TestOutcome::Failed { reason } if !real_llvm => {
             assert!(
                 matches!(
