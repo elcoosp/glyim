@@ -3482,6 +3482,88 @@ is 3–4 files and needs the MIR-divergence contract pinned first).
 Documented here so a future session starts from the line numbers rather
 than re-running the probes.
 
+**Attempted fix, reverted — blocked on §3.5.22 (session 23, same day).**
+Following the corrected "find the stub's synthesis site" instruction
+above located the culprit: `crates/glyim-lang-core/lib/panic.g:18`'s
+`panic_any` had an *empty body* (a comment, no statements):
+
+    fn panic_any(msg: impl Display) -> ! {
+        // compiler intrinsic - aborts execution
+    }
+
+The `-> !` signature promised divergence; the empty body compiled to a
+single `Return` block. Every panic-family call site (`panic!`, `assert!`,
+`Option::unwrap`, `Result::unwrap`) therefore saw `Call { target: Some(_) }`,
+the callee returned instantly, and the caller continued past the panic
+into a dead `Unreachable` block whose generic message was the only
+observable stderr.
+
+The attempted fix gave `panic_any` a real diverging body:
+
+    fn panic_any(msg: impl Display) -> ! {
+        extern "C" { fn glyim_panic(msg: *const u8, len: usize) -> !; }
+        let formatted = format!("{}", msg);
+        let bytes = formatted.as_bytes();
+        unsafe { glyim_panic(bytes.as_ptr(), bytes.len()) }
+    }
+
+Compiled cleanly; probes showed:
+  * `panic!("boom")`            → exit 101, stderr `thread 'main' panicked: panic`
+  * `assert!(false, "boom")`   → exit 101, stderr `thread 'main' panicked: entered unreachable code`
+  * `Option::None.unwrap()`     → exit 101, stderr `thread 'main' panicked: panic`
+
+The `panic_any` body **did** reach `glyim_panic`, but `format!("{}", msg)`
+evaluated to an **empty string** for every runtime `msg` — a fresh
+manifestation of **§3.5.22 layer 8** ("`format!`-argument substitution
+emits empty for runtime values, both backends"). With `len == 0`,
+`glyim_panic`'s guard fell through to its default `b"panic"` fallback.
+The `assert!` case didn't even reach `panic_any`: it goes through
+`panic!("assertion failed: {}", format!($($arg),+))`, so it hit a
+separate bare `Unreachable` downstream of the empty `format!` result.
+
+Confirmed independently:
+  * `format!("{}", "hello")`       → empty
+  * `format!("{}", 42)`             → empty
+  * `println!("hello")`             → prints `hello` (literal, no format-arg)
+  * `println!("x={}", 42)`          → prints `x=` (format-arg dropped)
+
+So the panic.g fix is **correct in principle but blocked**: it needs a
+working `format!` implementation for runtime values first, which is
+§3.5.22 (nine layers, 1-7 each attempted and reverted; layers 8-9 need
+the builtin-dispatcher redesign documented in the §3.5.22 entry).
+
+Reverted rather than half-landed. The tree is back at the committed
+`panic_any` empty-body state, which is the honest `→ !` divergence
+without a message — same observable behaviour as before this attempt.
+
+**Updated task list for the next session (in order):**
+  1. Land §3.5.22 (format! of runtime values). Until that works, no
+     panic-family fix can emit a specific message.
+  2. Re-apply this panic.g patch (it is 15 lines and correct — just
+     needs the substrate).
+  3. Add the three acceptance fixtures drafted this session:
+
+     - `run-fail/panic_with_msg_stderr.g`:
+       `// check-stderr: thread 'main' panicked: boom`
+     - `run-fail/assert_false_stderr.g`:
+       `// check-stderr: thread 'main' panicked: assertion failed: boom`
+     - `run-fail/unwrap_none_stderr.g`:
+       `` // check-stderr: thread 'main' panicked: called \`Option::unwrap()\` on a \`None\` value ``
+
+     All three verified-red this session with the substrate absent,
+     so they will be green the moment §3.5.22 lands and panic_any
+     is patched.
+
+**Note on a defensive-mode alternative.** If a future session finds
+§3.5.22 harder to land than expected, a smaller intermediate fix is
+possible: change `panic!($msg)` with a literal (no format-args) to
+`panic_any_str($msg)` where `panic_any_str(msg: &str) -> !` calls
+`glyim_panic(msg.as_ptr(), msg.len())` directly — no format! needed.
+That would make `panic!("boom")` and `unreachable!()` work end-to-end,
+while leaving `assert!`, `panic!`-with-args, and `unwrap` still gated
+on §3.5.22 (their messages go through format!). Smaller scope, smaller
+win, but a real one. Only worth pursuing if §3.5.22 is deferred.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
