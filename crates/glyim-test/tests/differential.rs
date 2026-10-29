@@ -82,8 +82,18 @@ fn check_corpus_agreement(corpus: &str) {
             skipped.push(test.name.clone());
             continue;
         }
-        if test.config.needs_llvm && std::env::var("GLYIM_LLVM").is_err() {
-            skipped.push(test.name.clone());
+        // Skip `// needs-llvm` fixtures unconditionally in differential:
+        // they declare that the *interpreter cannot run them* (ref-patterns,
+        // slice iteration, filter, etc. panic in mir-interp by design). The
+        // corpus already covers them via run_pass_corpus with
+        // --features glyim-test/real-llvm; comparing against a backend
+        // that is documented as unsupported for these fixtures is
+        // architecturally meaningless.
+        if test.config.needs_llvm {
+            skipped.push(format!(
+                "{}: // needs-llvm (interp unsupported)",
+                test.name
+            ));
             continue;
         }
         if test.config.only_target.is_some() {
