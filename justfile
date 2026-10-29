@@ -35,10 +35,10 @@ test-fast:
     cargo nextest run --workspace --test-threads=2 --no-fail-fast
 
 test-corpus:
-    cargo nextest run -p glyim-test --test run_pass_corpus
-    cargo nextest run -p glyim-test --test compile_pass_corpus
-    cargo nextest run -p glyim-test --test run_fail_corpus
-    cargo nextest run -p glyim-test --test compile_fail_corpus
+    cargo nextest run -p glyim-test --test run_pass_corpus --features glyim-test/real-llvm
+    cargo nextest run -p glyim-test --test compile_pass_corpus --features glyim-test/real-llvm
+    cargo nextest run -p glyim-test --test run_fail_corpus --features glyim-test/real-llvm
+    cargo nextest run -p glyim-test --test compile_fail_corpus --features glyim-test/real-llvm
 
 differential:
     GLYIM_TEST_REAL_LLVM=1 cargo nextest run -p glyim-test --test differential \
