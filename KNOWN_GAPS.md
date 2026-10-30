@@ -3611,119 +3611,74 @@ backends:
 That is the generic `Unreachable` site, not the specific assertion
 message. `assert!` is a different code path from `panic!` — see §3.5.29.
 
-#### 3.5.29 — OPEN: expander strips trailing `;` from macro-expanded block, turning a statement into a tail expression
+#### 3.5.29 — CLOSED: `assert!` builtin shadowed the .g macro (commit `79cb97c5`)
 
-**Symptom.** `assert!(false, "boom")` exits 101 and prints
-`thread 'main' panicked: entered unreachable code` on both backends, not
-`thread 'main' panicked: assertion failed: boom`. Verified-red on both
-LLVM and interp since `6805055b`.
+**Symptom (now fixed).** `assert!(false, "boom")` exited 101 with
+`thread 'main' panicked: entered unreachable code` on both backends,
+not `thread 'main' panicked: assertion failed: boom`.
 
-**Definitive diagnosis (session 23, final probe round).** The bug is
-**the macro expander strips the trailing `;`** from a block whose last
-statement is a macro-expanded call. This changes the block's Rust
-semantics: a block whose last statement is `call!();` has type `()`;
-a block whose last expression is `call!()` (no `;`) has type `!`.
+**Root cause.** The expander's `try_expand_macro_call`
+(`crates/glyim-meta/src/expander/mod.rs:482`) checked
+`self.registered_builtins` before `self.macros`. `assert` (and
+`assert_eq`/`assert_ne`/`debug_assert*`) were registered as Rust-side
+builtins, so the builtin handler shadowed the .g `assert!` definition
+in `panic.g`. The builtin expanded to `{if(!(cond)){loop{}}}` — no
+message, and `loop{}` compiles to `TerminatorKind::Unreachable`.
 
-The user-written case works. The macro-expanded case types as `!`.
-Every downstream symptom follows from that.
+The .g macro (defined at `panic.g:54`, updated in `6805055b` to route
+through `panic_any_str` → `glyim_panic`) was never reached. Its own
+header comment at `expander/mod.rs:140-144` states "must resolve
+through the user-macro path, not be shadowed by builtins" — the code
+did the opposite. That contradiction was the bug.
 
-**The decisive test (final probe round, `--emit=mir`):**
+**Fix (`79cb97c5`).** Guard the builtin path with
+`!self.macros.contains_key(&name)`. User macros win; builtins remain a
+fallback for fixtures that don't load the stdlib.
 
-| Shape | Where written | Then-block type `$3` | MIR Call count |
-|---|---|---|---|
-| `if !false { panic_any_str("y"); }` | user, inside `let _: () = ...` | **`()`** | **5** ✓ |
-| `assert!(false, "boom")` | macro, inside `let _: () = ...` | **`!`** | **0** ✗ |
+**Verified on both backends:**
 
-Both are `if`-without-`else` bound to `let _: () = ...`. The outer unit
-annotation forces the *if-result* to `()` in both cases, but does **not**
-fix the then-block's internal type. In the user case the then-block is
-`()` (correct — trailing `;`); in the macro case it is `!` (wrong — the
-`;` was lost).
+| Program | Env | Result |
+|---|---|---|
+| `assert!(false, "boom")` | `--with-stdlib` | `assertion failed: boom` ✓ |
+| `assert!(true, "msg")` | `--with-stdlib` | exit 0, no panic ✓ |
+| `assert!(false)` | no stdlib | exit 101 via builtin fallback ✓ |
 
-**Why that causes the observed failure.** `check_expr`'s block arm
-(`crates/glyim-typeck/src/check_expr.rs:195-283`) has three paths:
+Corpus green on both backends, workspace 4633/4633.
 
-  - `tail: Some(assign/let)` -> forced `()`
-  - `tail: Some(<real tail expr>)` -> block takes tail's type
-  - `tail: None` -> block is `()` unless last stmt is `Return`/`Break`
-    (line 263-271)
+New fixtures: `run-fail/assert_false_stderr.g`,
+`run-fail/assert_no_msg_stderr.g`.
 
-The user-written case hits `tail: None` (correct — the `;` is preserved
-through parser and HIR lowering). Result: `()`.
+**Full panic-family coverage after this + §3.5.28 (`6805055b`):**
+`panic!`, `unreachable!`, `unimplemented!`, `Option::unwrap`,
+`Result::unwrap`, `assert!`, `assert_eq!`, `assert_ne!` all emit
+specific messages on both backends.
 
-The macro-expanded case must have `tail: Some(panic_any_str(...))` for
-it to type `!` — i.e. HIR lowering sees no trailing `;` on the inner
-block's only statement. The `;` disappeared somewhere between macro
-expansion and HIR block lowering.
+**Diagnosis trail (short).** Three sessions of probes falsified four
+hypotheses in order:
 
-**Then `sig_returns_never` in MIR lowering**
-(`crates/glyim-lower/src/lower_rvalue.rs:613-629`) fires for the
-`tail: Some(panic_any_str(...))` call: it detects the callee returns
-`!`, terminates the block as `Unreachable`, and **returns
-`Rvalue::Use(Move(dest_local))` without emitting the actual Call
-terminator.** That's the "no Call in MIR" observation.
+1. `other =>` arm of `lower_block_to_expr` drops bare children —
+   falsified by an eprintln injection: zero hits across four probes.
+2. Expander strips the trailing `;` — falsified by four macro-body
+   rewrites (`; ()`, `else { }`, `let _: () = ...`, double `;`): all
+   still failed identically.
+3. Sentinel `FnDefId` path in `lower_rvalue.rs` fires — falsified by
+   MIR inspection: the failing case had **zero** Calls and zero
+   `FnDefId`s, so no sentinel path was even reached.
+4. Nested plain blocks fail by the same mechanism — falsified by
+   re-reading an earlier MIR dump: `{ { panic_any_str("x"); } }`
+   works and produces `thread 'main' panicked: x`.
 
-So the chain is:
+The decisive step was a two-line `eprintln!` inside
+`expand_node_recursive` that printed the actual expansion text for
+every macro call. That output revealed `{if(!(false)){loop{}}}`, which
+cannot be produced by `panic.g`'s `assert!` — proving a Rust-side
+override was winning.
 
-    macro expansion loses `;` on inner block's last stmt
-      -> HIR block lowering sets `tail: Some(panic_any_str(...))`
-      -> typeck types block as `!` instead of `()`
-      -> MIR lowering's sig_returns_never path drops the Call
-      -> caller falls to bare Unreachable
-      -> stderr shows generic "entered unreachable code"
-
-**Where the fix belongs.** The macro expander, in
-`crates/glyim-meta/src/lib.rs`. Specifically the substitution of a
-`MacroCallExpr` inside an `ExprStmt`: the replacement must preserve
-the surrounding `ExprStmt` and its `Semicolon` token (or emit a `;` at
-the end of the replacement when the expansion result would otherwise
-be a tail expression).
-
-**Ruled out (all probes done this session, in order):**
-
-  - Not the `other =>` arm of `lower_block_to_expr` — an eprintln
-    injection showed zero hits across four probes.
-  - Not the assert!/panic!/unreachable! macro bodies — four macro-body
-    rewrites (append `; ()`, add `else { }`, wrap in `let _: () = ...`,
-    double `;`) all still failed.
-  - Not `format!` — `panic!("x: {}", format!("y"))` at user top level
-    works (probe 1 of final round).
-  - Not `stringify!` — single-arg `assert!(false)` fails too, and
-    `stringify!` works standalone.
-  - Not MIR lowering directly — user-written block with the same call
-    and trailing `;` produces a proper Call in MIR (probe A).
-  - Not typeck block-type inference logic — the block arm's `tail: None`
-    path already handles diverging-last-stmt correctly for `Return` /
-    `Break`; the failing case never reaches it because `tail` is `Some`.
-  - Not nested plain blocks — probe re-verified: `{ { panic_any_str("x"); } }`
-    runs and panics with `thread 'main' panicked: x`, Call present.
-
-**Next-session recommendation.** Two paths, in priority order:
-
-1. **Add `--emit=hir` or `--emit=syntax-tree` to the CLI** (30-50 lines
-   in `crates/glyim-cli`, `Debug` dump of `Body` / `SyntaxNode`). Then
-   diff the HIR for `assert!(false, "boom")` against
-   `if !false { panic_any_str("boom"); }`. The missing `Semicolon` /
-   missing `ExprStmt` node will be visible in one dump — no full build
-   cycle needed to confirm the hypothesis. This is the durable
-   infrastructure win: every future macro-expansion bug becomes a
-   syntax-tree diff.
-
-2. **Read `crates/glyim-meta/src/lib.rs`** — the `expand` /
-   `expand_crate` entry points at lines 234 and 256, plus any helper
-   that constructs the replacement `GreenNode` / `SyntaxNode`. Verify
-   that when the target is a `MacroCallExpr` child of an `ExprStmt`
-   with a `Semicolon`, the replacement preserves the parent structure
-   (i.e. produces `ExprStmt(<expansion>, ;)`, not a bare expansion at
-   the block level).
-
-Path 1 first is the recommendation — it turns the fix from "another
-session of probes" into "read one diff, patch one site."
-
-**Status.** Open. Bug is in macro expansion stripping the trailing `;`.
-Fix location identified (expander), no code change attempted this
-session — final probe round was read-only. Tooling gap (`--emit=hir`)
-is the actual blocker for one-shot fix confirmation.
+**Lesson for the next macro-expansion bug.** When a macro's output
+does not match its source definition, dump the expansion text before
+theorising about downstream stages. Three sessions of MIR dumps could
+have been one. The CLI still lacks `--emit=hir`; adding it would make
+this class of bug a one-shot diagnosis.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
