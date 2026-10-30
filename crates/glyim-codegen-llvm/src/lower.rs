@@ -5711,7 +5711,63 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             let false_flag: inkwell::values::BasicMetadataValueEnum<'_> =
                 bool_ty.const_zero().into();
 
+            let dest_ty_for_signed = self.place_ty(destination);
+            let signed = matches!(self.ty_ctx.ty_kind(dest_ty_for_signed), glyim_type::TyKind::Int(_));
+
             let result_iv: inkwell::values::IntValue<'_> = match method.as_str() {
+                "saturating_add" if signed => {
+                    let fn_ty = int_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
+                    let name = format!("llvm.sadd.sat.i{width}");
+                    let fv = self.module.get_function(&name).unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    self.builder.build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "sat_sadd")
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("saturating_add signed: {e:?}"))])?
+                        .try_as_basic_value().basic()
+                        .ok_or_else(|| vec![GlyimDiagnostic::internal_error("saturating_add signed void")])?
+                        .into_int_value()
+                }
+                "saturating_sub" if signed => {
+                    let fn_ty = int_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
+                    let name = format!("llvm.ssub.sat.i{width}");
+                    let fv = self.module.get_function(&name).unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    self.builder.build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "sat_ssub")
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("saturating_sub signed: {e:?}"))])?
+                        .try_as_basic_value().basic()
+                        .ok_or_else(|| vec![GlyimDiagnostic::internal_error("saturating_sub signed void")])?
+                        .into_int_value()
+                }
+                "saturating_mul" if signed => {
+                    let result_struct_ty = self.context.struct_type(&[int_ty.into(), bool_ty.into()], false);
+                    let fn_ty = result_struct_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
+                    let name = format!("llvm.smul.with.overflow.i{width}");
+                    let fv = self.module.get_function(&name).unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    let call = self.builder.build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "sat_smul")
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("saturating_mul signed: {e:?}"))])?;
+                    let struct_val = call.try_as_basic_value().basic()
+                        .ok_or_else(|| vec![GlyimDiagnostic::internal_error("saturating_mul signed void")])?
+                        .into_struct_value();
+                    let product = self.builder.build_extract_value(struct_val, 0, "sat_smul_prod")
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("prod: {e:?}"))])?.into_int_value();
+                    let overflow = self.builder.build_extract_value(struct_val, 1, "sat_smul_ovf")
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("ovf: {e:?}"))])?.into_int_value();
+                    let zero = int_ty.const_zero();
+                    let a_neg = self.builder.build_int_compare(inkwell::IntPredicate::SLT, lhs_iv, zero, "sat_smul_a_neg")
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("a_neg: {e:?}"))])?;
+                    let b_neg = self.builder.build_int_compare(inkwell::IntPredicate::SLT, rhs_iv, zero, "sat_smul_b_neg")
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("b_neg: {e:?}"))])?;
+                    let signs_differ = self.builder.build_xor(a_neg, b_neg, "sat_smul_xor")
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("xor: {e:?}"))])?;
+                    let min_raw: u64 = 1u64 << (width - 1);
+                    let int_min_val = int_ty.const_int(min_raw, true);
+                    let int_max_val = int_ty.const_int(min_raw.wrapping_sub(1), false);
+                    let min_bv: inkwell::values::BasicValueEnum<'_> = int_min_val.into();
+                    let max_bv: inkwell::values::BasicValueEnum<'_> = int_max_val.into();
+                    let saturated = self.builder.build_select(signs_differ, min_bv, max_bv, "sat_smul_clamp")
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("clamp: {e:?}"))])?.into_int_value();
+                    let sat_bv: inkwell::values::BasicValueEnum<'_> = saturated.into();
+                    let prod_bv: inkwell::values::BasicValueEnum<'_> = product.into();
+                    self.builder.build_select(overflow, sat_bv, prod_bv, "sat_smul_sel")
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("final: {e:?}"))])?.into_int_value()
+                }
                 "saturating_add" => {
                     let fn_ty = int_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
                     let name = format!("llvm.uadd.sat.i{width}");

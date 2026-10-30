@@ -2312,6 +2312,7 @@ impl TyCtxMut {
             self.mk_ty(TyKind::Adt(AdtId::from_raw(1011), s))
         };
         let i32_ty = self.mk_ty(TyKind::Int(IntTy::I32));
+        let i64_ty = self.mk_ty(TyKind::Int(IntTy::I64));
         let u32_ty = self.mk_ty(TyKind::Uint(UintTy::U32));
         let u64_ty = self.mk_ty(TyKind::Uint(UintTy::U64));
         // `Option<u64>` / `Option<usize>` for `checked_add`/`checked_sub`.
@@ -2808,6 +2809,12 @@ impl TyCtxMut {
             (usize_ty, "wrapping_add", vec![usize_ty], usize_ty),
             (usize_ty, "wrapping_sub", vec![usize_ty], usize_ty),
             (usize_ty, "wrapping_mul", vec![usize_ty], usize_ty),
+            (i32_ty, "saturating_add", vec![i32_ty], i32_ty),
+            (i32_ty, "saturating_sub", vec![i32_ty], i32_ty),
+            (i32_ty, "saturating_mul", vec![i32_ty], i32_ty),
+            (i64_ty, "saturating_add", vec![i64_ty], i64_ty),
+            (i64_ty, "saturating_sub", vec![i64_ty], i64_ty),
+            (i64_ty, "saturating_mul", vec![i64_ty], i64_ty),
         ];
         for (recv_ty, name, inputs, output) in prim_entries {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);

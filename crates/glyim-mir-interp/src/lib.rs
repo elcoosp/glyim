@@ -704,6 +704,59 @@ impl<'tcx> Interpreter<'tcx> {
             (_, "saturating_add") | (_, "saturating_sub") | (_, "saturating_mul") => {
                 let a = self.builtin_deref(&receiver)?;
                 let b = args.get(1).cloned().unwrap_or(InterpValue::Unit);
+                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
+                    InterpError::Panic(format!(
+                        "interp: {}: cannot determine receiver bit width",
+                        method
+                    ))
+                })?;
+
+                // §3.5.19 follow-up: dispatch on the receiver's *declared type*
+                // (via operand_ty), not the runtime InterpValue variant. Some
+                // unsigned receivers arrive as InterpValue::Int after
+                // trunc_to_ty; value-variant dispatch would route them to the
+                // signed branch and clamp at [INT_MIN, INT_MAX] instead of
+                // [0, UINT_MAX]. Type dispatch mirrors the LLVM backend's
+                // place_ty(destination) decision.
+                let recv_ty = self.operand_ty(
+                    arg_operands.first().ok_or_else(|| {
+                        InterpError::Panic(format!(
+                            "interp: {}: no receiver operand",
+                            method
+                        ))
+                    })?,
+                );
+                let signed = recv_ty
+                    .map(|t| matches!(self.tcx.ty_kind(t), glyim_type::TyKind::Int(_)))
+                    .unwrap_or(false);
+
+                if signed {
+                    let a_s: i128 = match &a {
+                        InterpValue::Int(i) => *i,
+                        InterpValue::Uint(n) => *n as i128,
+                        _ => return Ok(None),
+                    };
+                    let b_s: i128 = match &b {
+                        InterpValue::Int(i) => *i,
+                        InterpValue::Uint(n) => *n as i128,
+                        _ => return Ok(None),
+                    };
+                    let (min, max): (i128, i128) = if width >= 128 {
+                        (i128::MIN, i128::MAX)
+                    } else {
+                        let max = (1i128 << (width - 1)) - 1;
+                        let min = -(1i128 << (width - 1));
+                        (min, max)
+                    };
+                    let result: i128 = match method.as_str() {
+                        "saturating_add" => a_s.saturating_add(b_s).clamp(min, max),
+                        "saturating_sub" => a_s.saturating_sub(b_s).clamp(min, max),
+                        "saturating_mul" => a_s.saturating_mul(b_s).clamp(min, max),
+                        _ => unreachable!(),
+                    };
+                    return Ok(Some(InterpValue::Int(result)));
+                }
+
                 let a_n: u128 = match &a {
                     InterpValue::Uint(n) => *n,
                     InterpValue::Int(i) => (*i).max(0) as u128,
@@ -714,12 +767,6 @@ impl<'tcx> Interpreter<'tcx> {
                     InterpValue::Int(i) => (*i).max(0) as u128,
                     _ => return Ok(None),
                 };
-                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
-                    InterpError::Panic(format!(
-                        "interp: {}: cannot determine receiver bit width",
-                        method
-                    ))
-                })?;
                 let max: u128 = if width >= 128 {
                     u128::MAX
                 } else {
