@@ -478,8 +478,17 @@ impl<'a> ExpanderImpl<'a> {
 
         let call_site = self.span_from_node(node);
 
-        // Check registered builtins first
-        if let Some(handler) = self.registered_builtins.get(&name).copied() {
+        // §3.5.29 fix: user macros take precedence over builtins. The
+        // stdlib defines assert!/assert_eq!/assert_ne!/debug_assert!/
+        // panic!/unreachable!/unimplemented! in panic.g; those must
+        // resolve through the user-macro path (see the header comment at
+        // line 140-144: "must resolve through the user-macro path, not be
+        // shadowed by builtins"). Only when no user-macro def exists do
+        // we fall back to the builtin — which is still useful for
+        // fixtures that don't load the stdlib (`assert_false.g` etc.).
+        if !self.macros.contains_key(&name)
+            && let Some(handler) = self.registered_builtins.get(&name).copied()
+        {
             return self.expand_builtin(handler, name, &args_node, call_site, depth);
         }
 
