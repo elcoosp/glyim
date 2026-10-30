@@ -3760,6 +3760,70 @@ lowering behaviour for the diverging-call arm).
     macro-expanded-`if` bug is fixed — `stringify!` is not the root
     cause, per probe A).
 
+**Workarounds tried and FAILED (session 23 continuation, probes H0-H4).**
+Each variant rewrote the entire `assert!` macro body and rebuilt the CLI
+via brace-matched replacement of the whole `macro assert! { ... }` block
+(regex would not work because the body has nested braces). Probe:
+`assert!(false, "boom")` — did stderr show
+`thread 'main' panicked: assertion failed: boom`?
+
+| Variant | Then-arm body | stderr |
+|---|---|---|
+| H0 baseline | `panic!("assertion failed: {}", format!($($arg),+));` | `entered unreachable code` |
+| H1 unit-tail | `... panic!(...); ();` | `entered unreachable code` |
+| H2 else-arm | `... panic!(...); } else { }` | `entered unreachable code` |
+| H4 let-unit | `let _: () = if !$cond { panic!(...); };` | `entered unreachable code` |
+
+**All four workarounds produce identical failure output.** The bug is not
+in how the `assert!` macro body is written — it is upstream of the macro
+text entirely. This rules out a same-session fix at the macro site.
+
+**Conclusive evidence the bug is in macro-expansion → typeck block-type
+inference, not in MIR lowering.** From `--emit=mir`:
+
+  | Probe | if-body local type | Call to panic fn in then-block? |
+  |---|---|---|
+  | user `if !false { panic_any_str("x"); }` | `$2: ()` | yes |
+  | user `if !false { panic_any_str("x") }` (no `;`) | `$2: !` | yes (tail-expression case) |
+  | macro `assert!(false, "boom")` | `$2: !` | **no** |
+
+Typeck gives the user-written statement-block (`{ ...; }`) type `()`,
+which is correct Rust semantics (trailing `;` = statement = unit block).
+Typeck gives the *same-looking* macro-expanded block type `!`. The
+trailing `;` distinguishes statement-from-tail in source, but is lost
+or re-interpreted in macro-expanded THIR. Once the block type is `!`,
+MIR lowering's `sig_returns_never` handling diverges to a bare
+`Unreachable` and the call is dropped.
+
+**Therefore the next-session fix must be in one of:**
+
+1. **Macro expander** (`crates/glyim-meta/` — search for how `macro`
+   body tokens are parsed into HIR statements). The expander may be
+   setting the block's `tail` field to the final `panic!(...)` expression
+   when source has a trailing `;`, treating it as the tail expression
+   and producing `!` block type. Correct behaviour: a `;` should produce
+   `tail: None` even when the last statement is diverging.
+2. **Typeck block-type inference** (`crates/glyim-typeck/src/check_expr.rs`
+   — around the `TyKind::Error | TyKind::Never => true` site at 3357).
+   If the macro-expanded block has `tail: None` but still types as `!`,
+   typeck's block-type computation is treating a diverging statement as
+   if it were the tail. That is inconsistent with the user-written case
+   where the same shape correctly produces `()`.
+3. **Both** — the expander produces a slightly different shape, and
+   typeck doesn't normalise the difference.
+
+**How to distinguish (1) from (2) next session:** compare the THIR (or
+HIR) block node's `tail` field for the two cases:
+  * user-written `if !false { panic_any_str("x"); }`
+  * macro-expanded `assert!(false, "boom")`
+
+If both have `tail: None` → typeck bug (case 2). If macro-expanded has
+`tail: Some(...)` → expander bug (case 1). A THIR debug-dump or a
+targeted `eprintln!` in the block-lowering path (either in
+`crates/glyim-meta` or `crates/glyim-hir`) is enough — the CLI has no
+`--emit=thir` today (verified: only `--emit` with the enum values
+already used for `llvm-ir`, `mir`, `exec`, `obj`).
+
 **Status.** Open. Root cause narrowed to "diverging call inside a
 macro-expanded `if` body is dropped during lowering." Candidate fix
 (hypothesis 3 above) is a one-file change in `lower_rvalue.rs`. Verify
