@@ -3611,150 +3611,125 @@ backends:
 That is the generic `Unreachable` site, not the specific assertion
 message. `assert!` is a different code path from `panic!` — see §3.5.29.
 
-#### 3.5.29 — OPEN: nested `panic!` expansion loses the ExprStmt wrapper in tail-of-block position
+#### 3.5.29 — OPEN: macro-expanded `assert!` produces a diverging `if` with no Call and no `other =>` diagnostic
 
 **Symptom.** `assert!(false, "boom")` exits 101 and prints
 `thread 'main' panicked: entered unreachable code` on both backends, not
 `thread 'main' panicked: assertion failed: boom`. Verified-red on both
 LLVM and interp since `6805055b`.
 
-**The pivotal comparison (this session's decisive evidence).**
+**Decisive evidence (this session, four runs).**
 
-| Program | Written as | MIR | Result |
-|---|---|---|---|
-| `if !false { panic_any_str("x"); }` | user, with `;` | `$2: ()`, Call present | ✓ works |
-| `if !false { panic_any_str("x") }` | user, no `;` (tail) | `$2: !`, Call present | ✓ works |
-| `if !false { panic!("boom"); }` | user, `panic!` with `;` | `$2: ()`, Call present | ✓ works |
-| `assert!(false, "boom")` | macro | `$2: !`, **Call absent** | ✗ broken |
-| `if !false { assert!(false, "boom") }` | outer-if user, inner macro | `$2: !`, **Call absent** | ✗ broken |
+| Program | Written as | `$2` (if-body ty) | Call count | Result |
+|---|---|---|---|---|
+| `if !false { panic_any_str("x"); }` | user, `;` | `()` | 5 | ✓ works |
+| `if !false { panic_any_str("x") }` | user, no `;` | `!` | 5 | ✓ works |
+| `if !false { panic!("boom"); }` | user, `panic!` | `()` | 5 | ✓ works |
+| `assert!(false, "boom")` | macro | `!` | **0** | ✗ broken |
 
-So: **user-written `panic!(...)` works** (both with and without trailing
-`;`), but **macro-expanded `panic!(...)` from `assert!` fails**. The
-difference is *two-level macro expansion* — `assert!` expands to an `if`
-whose body is `panic!(...)`, and that inner `panic!` must then expand a
-second time to `panic_any_str(...)`. The failure manifests only in that
-second expansion.
+So **user-written `panic!` works** (both trailing `;` and tail forms),
+but **macro-expanded `panic!` from `assert!` fails** — the Call is
+entirely absent from the MIR. Two-level macro expansion is the trigger
+(`assert!` → `if { panic!() }` → `panic_any_str(...)`).
 
-**Hypothesis (strongest, matches every probe).** When the expander
-substitutes the result of a `MacroCallExpr` that is a **child of an
-`ExprStmt`**, it does not preserve the `ExprStmt` wrapper. In the
-user-written case the syntax tree is:
+**Falsified hypothesis (session 23 continuation, eprintln injection).**
+Injected a temporary `eprintln!("[DEBUG-LOWER] ...")` at
+`crates/glyim-hir/src/lower/lower_expr.rs:180-188` — the `other =>`
+arm of `lower_block_to_expr` that catches unrecognised child kinds and
+`continue`s. Ran four probes (`assert!`, plain block, nested block,
+user-written `if !false { panic!() }`). **Not one fired the eprintln.**
+The `other =>` arm is never reached for any of these programs.
 
-    Block { ExprStmt( MacroCallExpr(panic!), Semicolon ) }
+Falsifies the "macro expansion produces a bare CallExpr child that
+`other =>` silently drops" hypothesis. The block's children are all
+recognised kinds; either the block is empty, or its children are
+legitimate `ExprStmt`/`LetStmt`/`Block` nodes and something inside them
+lost the call.
 
-The expander replaces `MacroCallExpr(panic!)` with `CallExpr(panic_any_str, ...)`
-in place, keeping the `ExprStmt`. Result:
+**Second falsified sub-claim (correcting this entry's earlier draft).**
+An earlier revision of this entry said `{ { panic_any_str("x"); } }`
+(nested plain block) fails. **Re-reading the same session's MIR dump
+shows `Call count: 5`** for that probe — the call *is* present. The
+`$1: !, $2: !` locals only mean the outer blocks type as `!` (correct:
+inner block diverges, so outer block diverges too). Whether the program
+also *runs* correctly was not verified in that session; no runtime
+failure was reported. **Treat nested plain blocks as NOT-broken until
+fresh evidence says otherwise.** The `!` local types in that MIR dump
+are the expected shape, not the bug.
 
-    Block { ExprStmt( CallExpr(panic_any_str), Semicolon ) }
+**What is established (not hypothesis):**
 
-That is precisely the shape the HIR block lowering expects; `lower_block_to_expr`
-(`crates/glyim-hir/src/lower/lower_expr.rs:34-204`) processes `ExprStmt`
-children, sees the trailing `;`, sets `last_has_semi = true`, pushes the
-call to `stmts`, block type is `()`.
+- The bug reproduces on `assert!(false, "boom")`, `assert!(false)` (both
+  macro arms), and `if !false { assert!(false, "boom") }` (macro nested
+  in user-written `if`).
+- The bug does *not* reproduce on user-written `if !false { panic!("..."); }`
+  (works).
+- The bug is *not* in `lower_block_to_expr`'s `other =>` arm — that arm
+  never fires on any probe.
+- The bug is *not* in the panic-family macro bodies themselves — macro-
+  body rewrites (`; ()`, `else { }`, `let _: () = ...`, double `;`) all
+  still fail. See prior attempt logs.
+- The failing MIR shows the if-body typed `!` but with **zero Call
+  terminators in the entire body** — the panic call is not merely
+  misrouted; it is absent.
 
-In the macro-expanded case the tree is:
+**Remaining hypotheses (ordered by likelihood, none verified).**
 
-    Block {
-        ExprStmt(
-            MacroCallExpr(panic!, ...),
-            Semicolon
-        )
-    }
+1. **Typeck special-cases macro-expanded diverging branches.** If
+   typeck has a fast-path like `if this branch's expansion is known-
+   diverging, type it `!` without lowering the call`, then
+   `assert!(false, ...)` would produce exactly the observed shape:
+   `$2: !` with no Call. Search `crates/glyim-typeck` for anything that
+   recognises `panic!`/`assert!`/`unreachable!` macro names and returns
+   `Ty::NEVER` directly. **This is the single most likely culprit.**
+   Grep: `grep -rn "assert\|panic\|unreachable" crates/glyim-typeck/src/`
+   filtered to places that touch `TyKind::Never` or `Ty::NEVER`.
 
-inside the inner block of the `assert!`-produced `if`. If the expander
-recursively expands this inner `MacroCallExpr` but drops the surrounding
-`ExprStmt`, the resulting tree becomes:
+2. **Expander produces an empty block.** If `assert!`'s inner
+   `panic!(...)` expands to nothing (empty `Green` node or empty
+   `Block`), then the resulting `if` body is an empty block typed `()`,
+   not `!`. But MIR shows `!`. So this hypothesis needs the empty block
+   to *also* be typed `!`, which would be a typeck inconsistency
+   (parallel to #1). Plausible if the typeck fast-path is on the
+   `assert!` call site, not the inner `panic!`.
 
-    Block { CallExpr(panic_any_str, ...) }  // no ExprStmt wrapper
+3. **Expander produces a valid `panic_any_str(...)` call but HIR
+   lowering silently drops the whole `ExprStmt` containing it.** This
+   would show as `Call count: 0` with the block's `$2` still typed `!`
+   (from typeck seeing the pre-HIR syntax tree). HIR-level probe needed:
+   dump HIR before lowering to MIR. **CLI lacks `--emit=hir`.**
 
-That hits the `other =>` arm of `lower_block_to_expr` (line 180-188),
-which pushes an `internal_error` diagnostic and `continue`s — **the Call
-is silently dropped from the block's stmts/tail, and the block ends up
-empty**. Typeck then falls through (block has `tail: None, stmts: []`)
-to the `Ty::UNIT` case — which does not match the observed `$2: !`.
+**Next-session plan (priority order).**
 
-The mismatch on the *typed* block (`$2: !`, not `$2: ()`) is the second
-half of the puzzle. Either:
+1. **`grep -rn "assert\|panic\|unreachable" crates/glyim-typeck/src/`**
+   and read every hit that touches `TyKind::Never` or short-circuits
+   type inference. If typeck has a macro-name fast-path returning
+   `Ty::NEVER` without needing the HIR call to exist, that is the bug —
+   one-file fix in typeck (either remove the fast-path, or make it
+   ensure the call node exists).
 
-  (a) The expander preserves the block shape from the *outer* `if` when
-      it processes the inner `panic!`, so the block does retain the
-      structure — but the `CallExpr` is not there. `$2: !` would then
-      come from the `if`-body-type check (an `if` whose then-branch has
-      type `!` returns `!`), which is correct — but the branch was
-      processed as an `unreachable!`-shaped empty tail, not the call.
+2. If (1) finds nothing: **add `--emit=hir` to the CLI** (30-50 lines
+   in `crates/glyim-cli`, `Debug` dump of `Body`). Dump HIR for
+   `assert!(false, "boom")` and for user-written
+   `if !false { panic!("boom"); }`. Diff the two `Block` structures.
+   If the HIR for `assert!` has an empty then-block (or a `Block` with
+   no `Call` child), the expander is the culprit. If it has the Call
+   but MIR drops it, HIR lowering is.
 
-  (b) The expander drops both the CallExpr *and* re-shapes the block,
-      and the `$2: !` comes from the fact that the whole `assert!`
-      expansion produces a value of type `!` via `ty_known_diverges`
-      (i.e. typeck special-cases macro-expanded bodies of diverging
-      macros, not reachable via user-written code).
+3. Either way, `--emit=hir` is a durable win for the next macro-expansion
+   bug after this one. It costs a bounded CLI patch and eliminates every
+   future "did the expander or the lowering drop this?" ambiguity.
 
-**Both hypotheses predict the same fix candidate**, so the next session
-should not need to choose between them to make progress.
+**This session's contribution to this entry:** falsified the `other =>`
+hypothesis with a direct eprintln probe (four runs, zero hits), and
+corrected the earlier draft's nested-block claim. The two hypotheses
+above (`typeck fast-path`, `expander empty block`) are now the two
+live candidates, each with a specific probe to test it.
 
-**Next-session fix candidates (priority order).**
-
-1. **`crates/glyim-meta/src/lib.rs`, the `expand` / `expand_crate`
-   recursion.** Specifically: when the expansion target is a
-   `MacroCallExpr` node that is a *child of* an `ExprStmt`, verify the
-   `ExprStmt` and its `Semicolon` are preserved in the replacement
-   syntax tree. This is likely a `SyntaxNode::replace_with` or
-   `GreenNode`-level bug — the expander probably replaces the inner node
-   with fresh `Green` but loses the parent's identity. **One-file fix
-   once the exact replacement call site is identified.**
-
-2. **`crates/glyim-hir/src/lower/lower_expr.rs:180-188`.** The
-   `other => { diags.push(internal_error(...)); continue; }` arm currently
-   silently drops children that are *bare expression nodes* (CallExpr,
-   IfExpr, etc.) directly inside a block. If the expander's output
-   legitimately produces bare expression children (which is arguably
-   valid syntax-tree state after expansion), the fix is to accept them
-   as tail expressions:
-
-       _ if is_expr_node(&child) || child.kind() == SyntaxKind::Block => {
-           // treat as tail expression: same shape as a user-written
-           // tail expression from the parser
-           if let Some(prev) = pending.take() { stmts.push(prev); }
-           pending = lower_expr(&child, ...);
-           last_has_semi = false;
-       }
-
-   That would handle the macro-expanded case uniformly. But it depends
-   on whether the expander is *supposed* to produce bare-children —
-   which is what the expander-vs-lowering bisection (candidate 1) would
-   answer. If (1) is fixed, (2) may not be needed.
-
-3. **`crates/glyim-meta/src/lib.rs` — force a `;` in expansion output.**
-   Alternative fix: when expanding a `MacroCallExpr` whose expansion
-   output is a multi-token expression sequence ending in a diverging
-   call, wrap the output in a statement-shaped block:
-
-       { <expanded tokens>; }
-
-   That would preserve the block-lowering invariant regardless of what
-   the parser produces. Less precise than (1) or (2), but flips a
-   one-line switch.
-
-**Tooling gap is the actual blocker.** CLI has no `--emit=hir` or
-`--emit=syntax-tree`. Every probe this session required a full CLI
-build plus a MIR-dump read. **Recommended first action next session:
-add `--emit=hir` (30-50 lines in `crates/glyim-cli`) plus a
-`Display`/`Debug` dump of the syntax tree at block-level.** With that,
-the fix becomes a syntax-tree diff between user-written `if !false {
-panic!("boom"); }` and macro-expanded `assert!(false, "boom")` — one
-command, not a build-plus-MIR cycle.
-
-**Workarounds tried (all failed).** `assert!` macro-body rewrites —
-append `; ()`, add `else { }`, wrap in `let _: () = ...`, double `;` —
-all still produce `entered unreachable code`. The bug is not reachable
-from macro-body text; it is in the expander's substitution machinery or
-the HIR block lowering's handling of expander-produced tree shapes.
-
-**Status.** Open. Bug localized to "second-level `panic!` expansion
-loses the ExprStmt wrapper inside a block." Fix candidates: expander
-(wrapper preservation), HIR block lowering (accept bare-child expr as
-tail), or expander (force `;` in output). **Highest-leverage next step
-is the tooling — `--emit=hir` makes the fix a diff away.**
+**Status.** Open. Bug is upstream of `lower_block_to_expr`. Next-session
+first action: `grep -rn "assert\|panic\|unreachable"
+crates/glyim-typeck/src/` — read every hit that touches `TyKind::Never`.
+If that finds nothing, add `--emit=hir` and diff the HIR.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
