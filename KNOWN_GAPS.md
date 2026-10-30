@@ -2078,6 +2078,49 @@ exercises `checked_*` and not the literal-range check.
   * LLVM backend (`GLYIM_LLVM=1 --emit=exec`): exit 0
   * full workspace: 4614/4614
 
+**Update (session 23 continuation — saturating-signed attempt, reverted).**
+A follow-up attempted to add `saturating_add/sub/mul` for `i32`/`i64`
+(signed), which were unimplemented:
+
+    [T0001] no method `saturating_mul` for type i32
+
+The registration (`ty_ctx_mut.rs`) and the LLVM backend (`lower.rs` —
+`llvm.sadd.sat` / `llvm.ssub.sat` / `llvm.smul.with.overflow` + sign-based
+MIN/MAX select) both worked end-to-end. The **interp-side change
+regressed the unsigned path** and was reverted.
+
+**Root cause of the interp regression.** The interp split the saturating
+arm on `matches!(&a, InterpValue::Int(_))` — dispatch on the runtime
+value's variant. But some u32/u64/usize receivers arrive as
+`InterpValue::Int` in the interp (e.g. constants with `.max(0) as u128`
+being the previous fallback, or values threaded through checked_*
+which may return Int). Those receivers got routed to the signed branch,
+which clamps at `[INT_MIN, INT_MAX]` instead of `[0, UINT_MAX]`. Result:
+`u32::MAX.saturating_add(1)` would clamp at `2^31 - 1` instead of
+`2^32 - 1`.
+
+The interp run_pass_corpus caught it:
+- LLVM backend: green (dispatches on `place_ty(destination)` — correct)
+- interp backend: red (dispatches on InterpValue variant — wrong)
+
+**Correct fix shape (not attempted this session).** The interp dispatch
+must key on the **receiver's declared type**, not the runtime value
+variant. `arg_operands.first()` carries the receiver `Operand`; the
+interp already has `operand_ty` / equivalent used elsewhere. Use:
+
+    let recv_ty = self.operand_ty(arg_operands.first())/**/;
+    let signed = matches!(self.ty_ctx.ty_kind(recv_ty), TyKind::Int(_));
+
+That mirrors the LLVM `place_ty(destination)` decision exactly and
+avoids the value-variant fragility. Once that lands, the interp split
+is: signed branch (clamp `[INT_MIN, INT_MAX]`) vs unsigned branch
+(clamp `[0, UINT_MAX]`), same shape as the LLVM fix, dispatched by
+type.
+
+The registration and LLVM work from this attempt are correct and can
+be re-applied; only the interp `matches!(&a, InterpValue::Int(_))` guard
+needs to become a type-based check.
+
 **P1-C2 family status after this batch.** `is_power_of_two` (§3.5.7),
 the bit-manipulation intrinsics (§3.5.7 / §3.5.8), `wrapping_*`
 (§3.5.12), `saturating_*` (batch 2b), and now `checked_*` are all
