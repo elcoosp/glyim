@@ -3824,6 +3824,77 @@ targeted `eprintln!` in the block-lowering path (either in
 `--emit=thir` today (verified: only `--emit` with the enum values
 already used for `llvm-ir`, `mir`, `exec`, `obj`).
 
+**Code-level finding (session 23 continuation — block-type inference read).**
+Read the block-type inference in `crates/glyim-typeck/src/check_expr.rs`
+lines 195-283. It has three construction sites:
+
+  1. `tail: Some(unit)` when the tail is assign/let -> forces `()` (correct).
+  2. `tail: Some(tail_expr)` when there is a real tail expression -> block
+     takes the tail's type (correct Rust semantics).
+  3. `tail: None` when there is no tail -> line 263-271 checks only
+     `Expr::Return` / `Expr::Break` as "diverging last statement"; other
+     constructs fall into the `Ty::UNIT` branch, correct.
+
+So the typeck block arm itself is not wrong. The macro-expanded `assert!`
+must therefore produce a block with `tail: Some(panic!())` — the `panic!()`
+treated as a tail expression — because the intermediate `$2: !` local in
+the macro-expanded MIR matches the `tail: Some(<Never>)` case (line 249,
+`ty: tail_ty`, where `tail_ty = !`).
+
+**The same `panic!(...);` with a trailing `;` at user top level produces
+`tail: None` and block-type `()`** (probe A). So the trailing semicolon is
+lost somewhere between macro expansion and HIR block lowering — turning
+what should be `stmts: [panic!], tail: None` into `tail: Some(panic!)`.
+
+Not fixable in the assert! macro text (probes H0-H4: adding `; ()`,
+`else { }`, `let _: () = ...`, or double `;` all still produced the wrong
+MIR). The expander (or its downstream re-parse) drops the statement/tail
+distinction regardless of macro-body shape.
+
+**Where to look next session (priority order):**
+
+1. **`crates/glyim-meta/src/lib.rs`** — `expand` / `expand_crate` entry
+   points at lines 234 and 256, plus any helper that re-parses the expanded
+   token stream. Check whether the reconstructed syntax tree preserves the
+   trailing `;` inside a block whose last statement is an expanded macro
+   call. Rowan-based reconstruction typically works by emitting explicit
+   child kinds — a missing `SEMICOLON` token is a plausible cause.
+
+2. **`crates/glyim-hir/src/lib.rs` Block arm** — even if the syntax tree
+   is correct, verify HIR lowering does not drop the trailing `;` from
+   blocks with a macro-origin span.
+
+3. **`SyntaxContext` / macro hygiene** — if the expanded tokens have a
+   distinct syntax context, HIR block lowering may use different
+   span-based rules for statement-vs-tail detection under that context.
+
+**Tooling gap.** CLI has no `--emit=hir` or `--emit=thir` today. Adding
+one is itself a small task (~50-100 lines in `crates/glyim-cli`, plus a
+`Display`/`Debug` impl). That would make the next session's first probe
+a one-liner: dump the syntax tree for expanded `assert!(false, "boom")`
+and for user-written `if !false { panic_any_str("boom"); }`, diff them.
+
+**This is the wall.** Probes A, B, D, E, F, G, H0-H4 plus the typeck
+block-arm read give a complete picture of where the bug is *not*:
+
+  - Not the panic-family macros (probes H0-H4).
+  - Not `format!` (probe D; format works when bound to a local).
+  - Not `stringify!` (probe A of the previous session).
+  - Not bool inversion (probe A: `if !false { panic!() }` fires correctly).
+  - Not the typeck block arm's *logic* (it handles `tail: None` correctly;
+    the block must be `tail: Some(...)` for it to type as `!`).
+  - Not the MIR lowering itself (it correctly emits Call for user-written
+    `if !false { panic!() }`).
+
+What remains to localise: **whether the macro expander's output has the
+correct statement/tail structure.** The narrowest possible fix is
+probably in `crates/glyim-meta/src/lib.rs` — preserve the trailing `;`
+across expansion. If wrong, next stop is HIR block lowering. Both are
+small surface areas; the reason this session cannot patch is that the
+location sits between two subsystems (macro expansion and HIR lowering)
+and neither has a THIR dump to bisect with — every test needs a full CLI
+build + MIR read.
+
 **Status.** Open. Root cause narrowed to "diverging call inside a
 macro-expanded `if` body is dropped during lowering." Candidate fix
 (hypothesis 3 above) is a one-file change in `lower_rvalue.rs`. Verify
