@@ -4115,6 +4115,122 @@ divergence-unification is a separate planning-worthy task. Not a
 priority for the arithmetic family — match-on-Option works fine for
 non-diverging arm bodies.
 
+**Session-23 update: three fix attempts, all reverted; three layers found.**
+
+Each attempt got one layer further than the last, and each was reverted
+on probes. The bug is genuinely multi-layer; the third needs a fresh
+session with `--emit=mir` recon, not a tail-of-session patch.
+
+**Attempt 1 — unconditional `!`-short-circuit in `unify()`.**
+Hypothesis: `crates/glyim-typeck/src/unify.rs:28` has no `TyKind::Never`
+handling, so `unify(Never, i32)` fails. Fix: `if either side is Never,
+return true`.
+
+Result: passed the mixed-arms probes (one divergent arm + one value
+arm) but failed **all-divergent** matches — `match 5 { Some(_) => return
+0, None => return 1 }` still gave `() vs i32`. Why: unify(Never, ?T)
+short-circuited without binding `?T = !`, so the match result type
+stayed unbound and defaulted to `()` downstream. Reverted.
+
+**Attempt 2 — narrow `!`-short-circuit (fall through for `! vs ?T`).**
+Hypothesis: keep the concrete-side short-circuit but let `Never vs
+Infer(Ty)` fall through to `infer.unify` so `?T = !` binds.
+
+Result: identical failure to attempt 1. Reason (found by reading the
+source, which attempt 1 and 2 did NOT do first): `infer.unify` at
+`crates/glyim-solve/src/infer.rs:255` **already** handles Never:
+
+    (TyKind::Never, _) | (_, TyKind::Never) => Ok(Vec::new()),
+
+So `infer.unify(Never, ?T)` was already a no-op — it never binds `?T`.
+Both attempts were patching the wrong layer.
+
+**Attempt 3 — fix check_expr's match-arm final-type default.**
+Hypothesis (after reading the source): the bug is not in `unify()` but
+at `crates/glyim-typeck/src/check_expr.rs:1064-1068`, where an unbound
+`Infer(InferVar::Ty(_))` match-result is defaulted to `Ty::UNIT`. For
+all-divergent matches that forces `()`, producing the `() vs i32`
+diagnostic against the fn-return type.
+
+Fix: track `all_arms_never` while iterating arms; at the final-type
+resolution, an unbound `Infer(Ty)` with every arm divergent becomes
+`Ty::NEVER` instead of `Ty::UNIT`.
+
+Result: **past layer 1 and 2** — the original `() vs i32` diagnostic is
+gone, and all-divergent matches type as `!` correctly. But the program
+now fails at a new layer:
+
+  a. `Place::ty(): Field projection on non-tuple/ADT type` (an error
+     log from `glyim_mir`)
+  b. `[X0000] internal compiler error: TyKind::Param(ParamTy {
+     index: 0, name: Name(362) }) reached LLVM codegen`
+     (from `glyim-lower`'s post_mono_checks)
+
+Two different symptoms of the same underlying problem: the `Never`-typed
+match *value* flows into MIR in a shape that breaks field projection
+and ends up with a stale `Param(0)` attached. Reverted.
+
+**What the recon established (contradicting an earlier guess).**
+`Never` **is** already handled at codegen:
+  - `crates/glyim-codegen-llvm/src/types.rs:22` — Never/Unit → empty
+    struct.
+  - `crates/glyim-codegen-llvm/src/lower.rs:3888, 9730, 10148` —
+    Never/Unit branches for terminator return, debug info, and the
+    main-wrapper return.
+
+So layer 3 is not "Never has no codegen representation" — it is that
+the match's *value place* is broken (bad field projection, stale
+`Param(0)` attached somewhere). Candidate sites in the MIR/lowering
+layer, not codegen's type mapping.
+
+**Revised fix candidates for layer 3 (fresh session, pick after recon).**
+
+  1. **`--emit=mir` recon first.** Run `fn main() -> i32 { match 5
+     { Option::Some(_) => return 0, Option::None => return 1 } }` with
+     the layer-2 fix applied, and inspect the MIR body. What local
+     carries the match value? What type does that local have? Where
+     does a field projection on it appear? Which node does the
+     post_mono `Param(0)` error point at? Answer these before patching.
+
+  2. **Candidate (a) — layer-2 fix + MIR-side local handling.**
+     If the match value's local is being materialised (e.g. as a
+     block-tail assign target) but never initialised (because every arm
+     diverges), the MIR emitter should skip the store entirely for an
+     all-divergent match. The `sig_returns_never` handling at
+     `crates/glyim-lower/src/lower_rvalue.rs:613-629` already skips
+     Call stores when the callee returns `!`; the analogous rule for
+     match-with-all-divergent-arms is to terminate without producing a
+     value. That may be the smallest fix.
+
+  3. **Candidate (c) — revert layer 2 and instead fix fn-return
+     unification.** Rather than making all-divergent matches type as
+     `Never`, keep them at `()` and make the fn-return unification
+     accept `()` when the fn body ends in a known-divergent expression.
+     This sidesteps codegen entirely — the original `() vs i32`
+     diagnostic originates at the fn-return unification site, not at
+     the match arm's type. Potentially the smallest change of all
+     three, and avoids the layer-3 problem by never producing a
+     `Never`-typed value in the first place.
+
+**Lessons recorded for the next attempt.**
+
+  - **Do not patch `unify()` because the diagnostic mentions types.**
+    Attempts 1 and 2 both attacked `unify()` on that reasoning. Reading
+    `crates/glyim-solve/src/infer.rs:255` first would have shown that
+    `Never` was already a no-op there, saving both attempts.
+  - **The failure is at a specific default, not a general unification
+    rule.** The generic type-theoretic fix (Never unifies with anything)
+    was already in place; the actual bug was one line defaulting an
+    unbound Infer to `()`.
+  - **When two symptoms appear together (`field projection on
+    non-tuple/ADT` + `Param(0) reached LLVM codegen`), they are the
+    same broken place, not two bugs.** Both trace to the match value's
+    place having a bad type. Look at where the place was allocated, not
+    at either symptom in isolation.
+  - **Prefer candidate (c) if the recon doesn't immediately show a
+    clean MIR fix.** Sidestepping `Never`-at-codegen is safer than
+    patching MIR's place allocation.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
