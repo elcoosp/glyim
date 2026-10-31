@@ -3386,7 +3386,7 @@ message is dropped one layer earlier: **MIR lowers divergent
 `panic!`/`assert!`/`unwrap` paths to `TerminatorKind::Unreachable`,
 discarding the message.** See §3.5.28.
 
-#### 3.5.28 — OPEN: divergent `panic!`/`assert!`/`unwrap` paths lower to `TerminatorKind::Unreachable`, discarding the message
+#### 3.5.28 — LANDED (6805055b): divergent `panic!`/`assert!`/`unwrap` paths now emit specific messages
 
 **Symptom.** A program that hits `assert!(false, "boom")` (or
 `Option::None.unwrap()`, or `Result::Err(_).unwrap()`) exits 101 and
