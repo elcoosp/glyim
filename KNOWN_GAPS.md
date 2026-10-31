@@ -4231,6 +4231,177 @@ layer, not codegen's type mapping.
     clean MIR fix.** Sidestepping `Never`-at-codegen is safer than
     patching MIR's place allocation.
 
+**Session-23 CORRECTION to the layer analysis above.** A more careful
+gate (user-run) after the layer-2 fix found that layers 1+2 are only a
+*partial* fix, and the "layer 3" story above was a diagnostic error.
+
+**What layer-2 (check_expr all_arms_never) actually fixes:**
+
+  ✓ Well-typed all-divergent match, literal scrutinee:
+      `match Option::Some(5) { Some(_) => return 0, None => return 1 }`
+  ✓ Well-typed all-divergent match, local scrutinee:
+      `let r = Option::Some(5); match r { Some(_) => return 0, None => return 1 }`
+  ✓ Mixed arms, divergent arm FIRST (one direction):
+      `match r { Some(_) => return 30, None => value }`
+
+**What layer-2 does NOT fix:**
+
+  ✗ Mixed arms, divergent arm SECOND (the other direction):
+      `match r { Some(v) => v, None => return 99 }`
+    Still fails with `[T0001] mismatched types: () vs i32` at the
+    match-expression span.
+
+The directional asymmetry is the new data point. It suggests the
+`?T = i32` binding depends on *when* the value arm is processed
+relative to the divergent arm. When the value arm comes first, its
+`unify(i32, ?T)` binds `?T = i32`, then the divergent arm's
+`unify(Never, i32)` passes via infer's Never short-circuit. When the
+divergent arm comes first, `unify(Never, ?T)` short-circuits *without*
+binding (correct — Never coercion shouldn't bind a var), then the
+value arm binds `?T = i32` afterward. Both orders should end with
+`?T = i32`... yet one fails. Something order-sensitive in the
+resolution or the final_ty computation is at play.
+
+**The "layer 3" MIR/codegen crash was a red herring.** It only fires
+when the source is ill-typed (`match 5 { Some(_) => ... }` — `5: i32`
+doesn't match `Option<_>`). On HEAD *without any fix*, the same
+ill-typed source also crashes at codegen. Layer-2 does not introduce
+the crash. The crash is a **separate missing-check bug** — the
+scrutinee-pattern compatibility check (§3.5.34) — not a §3.5.33
+sub-problem.
+
+**Corrected status.**
+
+  - Layers 1+2 (check_expr all_arms_never): partially correct,
+    partially effective. Covers 3 of 4 relevant shapes; the
+    mixed-arms-divergent-second shape remains. **Not committed.**
+  - The MIR/codegen crash belongs in §3.5.34, not here.
+  - §3.5.33 stays OPEN.
+
+**What the next session must do FIRST.**
+
+  1. **Print the exact failing source.** The user's gate found the
+     asymmetry but the source of the failing probe wasn't captured
+     in this session's log. Before any patch, dump the failing
+     program's source text verbatim, along with `--emit=mir` output
+     for both the working direction and the failing direction.
+  2. **Diff the two MIR dumps.** The working direction and failing
+     direction differ only in arm order. The MIR should show *where*
+     the difference manifests: does the working case have a
+     `LocalIdx(N): i32` for the match value while the failing case
+     has `LocalIdx(N): ()`? Or `!`? That tells you whether the bug
+     is at typeck's final_ty resolution (which my layer-2 didn't
+     reach for the failing order) or somewhere in MIR lowering.
+  3. **Only then attempt the fix.** Four fix attempts so far all
+     reverted. The pattern is: without printed source + MIR diff,
+     guesses are wrong 4-for-4.
+
+**What this session learned that is worth keeping.**
+
+  - §3.5.33 is real for well-typed all-divergent source (verified on
+    HEAD without any fix).
+  - The bug has a directional component in mixed arms that no fix
+    attempt addressed.
+  - The MIR/codegen crash is a *separate* bug (§3.5.34) unrelated to
+    divergence — it fires on ill-typed source with OR without any
+    divergence fix.
+  - The layer-1/2 analysis in the section above is correct as far as
+    it goes; it's just incomplete (mixed-arms divergence-second was
+    not covered).
+  - Attempts cost: 4 reverts. All four tried to patch based on
+    hand-guessed source shapes rather than printed, exact reproducers.
+
+**Do not attempt a fifth fix without printing the failing program
+first.**
+
+#### 3.5.34 — OPEN: scrutinee-pattern compatibility is not checked (ill-typed match reaches codegen)
+
+**Symptom.** A match whose patterns are incompatible with the scrutinee
+type compiles past typeck and crashes at MIR/codegen:
+
+    fn main() -> i32 {
+        match 5 {                        // 5: i32
+            Option::Some(_) => 0,        // pattern expects Option<_>
+            Option::None => 1,
+        }
+    }
+
+Running this on HEAD (no divergence-related fix applied) produces:
+
+    ERROR glyim_mir: Place::ty(): Field projection on non-tuple/ADT type
+    ERROR glyim_mir: Place::ty(): Field projection on non-tuple/ADT type
+    [X0000] internal compiler error: TyKind::Param(ParamTy {
+        index: 0, name: Name(362) }) reached LLVM codegen
+
+The pattern `Option::Some(_)` is applied to an `i32` scrutinee. MIR
+lowering emits `Downcast(VariantIdx(1))` + `Field(FieldIdx(0))` on an
+`i32`-typed place, `Place::ty()` correctly refuses to project a field
+out of an `i32`, and the whole pipeline falls apart downstream with a
+generic `Param(0)` reaching codegen.
+
+**What's missing.** `check_pattern` in `crates/glyim-typeck/src/check_pat.rs`
+should compare each pattern's expected type against the scrutinee's
+resolved type and emit a diagnostic when they are incompatible — e.g.
+`[T0001] expected Option<_>, found i32` at the pattern's span. Today
+it appears to typecheck patterns in isolation (or against a
+fresh-inferred type rather than the scrutinee's concrete type) and
+never surfaces the incompatibility.
+
+**Why this is a separate bug from §3.5.33.**
+
+  * §3.5.33 fires on **well-typed** all-divergent matches: the pattern
+    and scrutinee are compatible, the arms diverge, and *that* triggers
+    the divergence-unification bug.
+  * §3.5.34 fires on **ill-typed** matches: the pattern and scrutinee
+    are incompatible. Divergence doesn't matter — the crashing case
+    in this session had non-divergent value arms (`=> 0`, `=> 1`) and
+    still crashed.
+
+  * A pattern-compatibility check would reject §3.5.34's input at
+    typeck with a clean diagnostic. It would not fix §3.5.33
+    (well-typed divergence) — those would still fail. Two independent
+    bugs, two independent fixes.
+
+**Where to look.**
+
+  * `crates/glyim-typeck/src/check_pat.rs` — the entry point
+    `check_pattern(pat, scrut_ty, span)`. Verify it actually unifies
+    each pattern's implied type against `scrut_ty` and reports a
+    mismatch. The call site at `check_expr.rs:1005` passes
+    `scrut_ty` — so the parameter is available; the question is
+    whether the body uses it.
+  * `crates/glyim-lower/src/lower_rvalue.rs` — the `Match` lowering
+    emits `Downcast` projections on the scrutinee place. That's
+    correct when the scrutinee is an ADT. It fires here because typeck
+    let the ill-typed source through — not because lowering is wrong.
+    **Do not patch lowering for this**; the fix belongs at pattern
+    checking.
+
+**Acceptance test.**
+
+    fn main() -> i32 {
+        match 5 {
+            Option::Some(_) => 0,
+            Option::None => 1,
+        }
+    }
+
+must produce a type error at typeck — something like
+`[T0001] mismatched types: expected Option<_>, found i32` — and must
+NOT reach MIR or codegen. Companion: the same match on `Option::Some(5)`
+must compile and run correctly (the well-typed control).
+
+**Not to be confused with §3.5.33.** This is a diagnostic-quality gap,
+not a codegen bug. The wrong source silently produces a confusing
+internal-compiler-error; the fix makes it produce a clean user-facing
+error. The crash on ill-typed source is arguably acceptable if it had
+a clean diagnostic — but it does not.
+
+**Status.** Open. Discovered in session 23 while investigating §3.5.33.
+Not attempted — reading `check_pat.rs` and adding a `unify(pattern_ty,
+scrut_ty)` at the right point is a bounded next-session task once the
+current pattern-checking logic is read.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
