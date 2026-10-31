@@ -3816,25 +3816,69 @@ A typed local works:
 
 Not specific to any one method family — three independently implemented
 arms (`wrapping_*` batch 2a, `checked_*` batch 2c, `saturating_*`
-batch 2b + signed follow-up) all fail on literal receivers. The gap is
-in method resolution or type inference for a `LitExpr` used as a receiver,
-not in the arithmetic dispatch.
+batch 2b + signed follow-up) all fail on literal receivers.
 
-**Where to look.** `crates/glyim-typeck/src/check_expr.rs`, the
-`Expr::MethodCall` arm (around line 1688). The receiver's type comes
-from `check_expr(receiver_id)`; if the receiver is a bare `LitExpr`,
-the type is likely `Infer(Int(_))` (unresolved) rather than a concrete
-`i32`/`u32`. `primitive_method_fns` is keyed on concrete `Ty`, so
-`Infer(Int(_))` misses. Two candidate fixes:
+**Concrete diagnosis (session 23 continuation recon).**
 
-  - Default unresolved int literals to `i32` before method lookup
-    (Rust's fallback: unsuffixed int literals default to `i32`).
-  - Or make `primitive_method_fns` lookup resolve through `Infer(Int(_))`
-    to the default `i32` Ty.
+The primitive-method lookup fires at
+`crates/glyim-typeck/src/check_expr.rs:3641`:
 
-Whichever lands, one test should cover: `100.saturating_mul(2)`,
+    if matches!(self.ctx.ty_kind(step_ty), TyKind::Int(_) | TyKind::Uint(_)) {
+        if let Some((fn_id, sig)) = self.ctx.lookup_primitive_method(step_ty, method_name) {
+            ...
+        }
+        return None;
+    }
+
+`step_ty` is the receiver's resolved type computed by the auto-deref loop
+earlier in `resolve_method_call`. For a bare numeric literal
+(`100.saturating_mul(2)`), `step_ty` is `TyKind::Infer(InferTy::Int(_))`,
+**not** `TyKind::Int(_)`. The `matches!` check fails, the primitive
+lookup is skipped entirely, and control falls through to the ADT-keyed
+lookup (`lookup_id?` returns `None` for non-ADTs), returning `None` —
+which surfaces as `[T0001] no method`.
+
+**Fix shape (needs one more recon round before patching).** A 2-4 line
+change at the same site: resolve `step_ty` through the shallow inference
+resolver, and if still `Infer(Int(_))`, default to `i32` (matching Rust's
+fallback for unsuffixed int literals). Something like:
+
+    let resolved = self.infer.resolve_ty_shallow(&self.ctx, step_ty);
+    let step_ty = if matches!(self.ctx.ty_kind(resolved), TyKind::Infer(InferTy::Int(_))) {
+        self.ctx.mk_ty(TyKind::Int(IntTy::I32))
+    } else {
+        resolved
+    };
+    // then the existing matches! at 3641 works
+
+`InferCtx::resolve_ty_shallow(&self, ctx: &dyn TypeLookup, ty: Ty) -> Ty`
+already exists at `crates/glyim-solve/src/infer.rs:1256`, with tests
+covering bound-to-`i32` and unbound cases
+(`crates/glyim-solve/src/tests/unification.rs:817, :1638`).
+
+**What needs verifying first (do NOT patch blindly):**
+
+  * Is the inference context accessible from `CheckCtx` as `self.infer`,
+    `self.ctx.infer`, or some other field? `check_expr.rs:1694` calls
+    `self.check_expr(*receiver)` which returns a `Ty` — so some inference
+    state exists, but the field name needs a direct read of the `CheckCtx`
+    struct definition.
+  * Does `CheckCtx` implement the `TypeLookup` trait that
+    `resolve_ty_shallow` expects? `self.ctx` is likely already a `&TyCtx`,
+    which should satisfy `TypeLookup` if `TyCtx` implements it.
+  * Is there already a `resolve_and_default` helper somewhere that
+    combines the two steps? A `grep -n "fn resolve\\|fn shallow\\|fn
+    default_int" crates/glyim-typeck/src/` would answer this in one line.
+
+Those three unknowns are why this entry stops at diagnosis rather than a
+patch: three earlier attempts in this session (saturating interp split,
+saturating re-attempt, wrapping expectation values) each reverted on
+"one more quick patch without full recon." That pattern does not repeat.
+
+**Acceptance test when the fix lands.** `100.saturating_mul(2)`,
 `100.checked_mul(2)`, `100.wrapping_mul(2)` all compile and return the
-expected values. None of them do today.
+expected values. Non-literal untyped case too: `(if true { 100 } else
+{ 200 }).saturating_mul(2)` should default to `i32` and resolve.
 
 **(b) i32/i64 wrapping_* was never registered — CLOSED.** Batch 2a
 (§3.5.12) added `wrapping_add`/`wrapping_sub`/`wrapping_mul` to
