@@ -5581,11 +5581,28 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             let int_ty = lhs_iv.get_type();
             let width = int_ty.get_bit_width();
             let bool_ty = self.context.bool_type();
-
+            let dest_ty = self.place_ty(destination);
+            let recv_ty_for_checked = match self.ty_ctx.ty_kind(dest_ty) {
+                glyim_type::TyKind::Adt(_, s) => {
+                    let args = self.ty_ctx.substitution_args(*s);
+                    match args.first() {
+                        Some(glyim_type::GenericArg::Ty(t)) => *t,
+                        _ => dest_ty,
+                    }
+                }
+                _ => dest_ty,
+            };
+            let signed = matches!(
+                self.ty_ctx.ty_kind(recv_ty_for_checked),
+                glyim_type::TyKind::Int(_)
+            );
             let result_struct_ty =
                 self.context.struct_type(&[int_ty.into(), bool_ty.into()], false);
             let fn_ty = result_struct_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
             let intrinsic = match method.as_str() {
+                "checked_add" if signed => format!("llvm.sadd.with.overflow.i{width}"),
+                "checked_sub" if signed => format!("llvm.ssub.with.overflow.i{width}"),
+                "checked_mul" if signed => format!("llvm.smul.with.overflow.i{width}"),
                 "checked_add" => format!("llvm.uadd.with.overflow.i{width}"),
                 "checked_sub" => format!("llvm.usub.with.overflow.i{width}"),
                 "checked_mul" => format!("llvm.umul.with.overflow.i{width}"),
@@ -5636,7 +5653,6 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 .into_int_value();
 
             // Build `None` (variant 0, no payload) and `Some(wrapped)` (variant 1).
-            let dest_ty = self.place_ty(destination);
             let none_val =
                 self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(0)), &[])?;
             let some_val = self.build_layout_aggregate(

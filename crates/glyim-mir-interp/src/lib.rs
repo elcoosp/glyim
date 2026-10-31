@@ -641,6 +641,45 @@ impl<'tcx> Interpreter<'tcx> {
             (_, "checked_add") | (_, "checked_sub") | (_, "checked_mul") => {
                 let a = self.builtin_deref(&receiver)?;
                 let b = args.get(1).cloned().unwrap_or(InterpValue::Unit);
+                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
+                    InterpError::Panic(format!(
+                        "interp: {}: cannot determine receiver bit width",
+                        method
+                    ))
+                })?;
+                let recv_ty = self.operand_ty(arg_operands.first().ok_or_else(|| {
+                    InterpError::Panic(format!("interp: {}: no receiver operand", method))
+                })?);
+                let signed = recv_ty
+                    .map(|t| matches!(self.tcx.ty_kind(t), glyim_type::TyKind::Int(_)))
+                    .unwrap_or(false);
+                if signed {
+                    let a_s: i128 = match &a {
+                        InterpValue::Int(i) => *i,
+                        InterpValue::Uint(n) => *n as i128,
+                        _ => return Ok(None),
+                    };
+                    let b_s: i128 = match &b {
+                        InterpValue::Int(i) => *i,
+                        InterpValue::Uint(n) => *n as i128,
+                        _ => return Ok(None),
+                    };
+                    let (min, max): (i128, i128) = if width >= 128 {
+                        (i128::MIN, i128::MAX)
+                    } else {
+                        ((1i128 << (width - 1)).wrapping_neg(), (1i128 << (width - 1)) - 1)
+                    };
+                    let result: Option<i128> = match method.as_str() {
+                        "checked_add" => a_s.checked_add(b_s).filter(|v| *v >= min && *v <= max),
+                        "checked_sub" => a_s.checked_sub(b_s).filter(|v| *v >= min && *v <= max),
+                        "checked_mul" => a_s.checked_mul(b_s).filter(|v| *v >= min && *v <= max),
+                        _ => unreachable!(),
+                    };
+                    return Ok(Some(match result {
+                        None => InterpValue::Aggregate(vec![InterpValue::Int(0), InterpValue::Unit]),
+                        Some(v) => InterpValue::Aggregate(vec![InterpValue::Int(1), InterpValue::Int(v)]),
+                    }));
+                }
                 let a_n: u128 = match &a {
                     InterpValue::Uint(n) => *n,
                     InterpValue::Int(i) => (*i).max(0) as u128,
@@ -651,46 +690,16 @@ impl<'tcx> Interpreter<'tcx> {
                     InterpValue::Int(i) => (*i).max(0) as u128,
                     _ => return Ok(None),
                 };
-                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
-                    InterpError::Panic(format!(
-                        "interp: {}: cannot determine receiver bit width",
-                        method
-                    ))
-                })?;
-                let max: u128 = if width >= 128 {
-                    u128::MAX
-                } else {
-                    (1u128 << width) - 1
-                };
+                let max: u128 = if width >= 128 { u128::MAX } else { (1u128 << width) - 1 };
                 let result: Option<u128> = match method.as_str() {
-                    "checked_add" => {
-                        if a_n > max - b_n {
-                            None
-                        } else {
-                            Some(a_n + b_n)
-                        }
-                    }
-                    "checked_sub" => {
-                        if b_n > a_n {
-                            None
-                        } else {
-                            Some(a_n - b_n)
-                        }
-                    }
-                    "checked_mul" => {
-                        if b_n != 0 && a_n > max / b_n {
-                            None
-                        } else {
-                            Some(a_n * b_n)
-                        }
-                    }
+                    "checked_add" => if a_n > max - b_n { None } else { Some(a_n + b_n) },
+                    "checked_sub" => if b_n > a_n { None } else { Some(a_n - b_n) },
+                    "checked_mul" => if b_n != 0 && a_n > max / b_n { None } else { Some(a_n * b_n) },
                     _ => unreachable!(),
                 };
                 Ok(Some(match result {
                     None => InterpValue::Aggregate(vec![InterpValue::Int(0), InterpValue::Unit]),
-                    Some(v) => {
-                        InterpValue::Aggregate(vec![InterpValue::Int(1), InterpValue::Uint(v)])
-                    }
+                    Some(v) => InterpValue::Aggregate(vec![InterpValue::Int(1), InterpValue::Uint(v)]),
                 }))
             }
             // P1-C2 batch 2b: saturating arithmetic on unsigned integers.

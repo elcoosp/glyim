@@ -2324,6 +2324,14 @@ impl TyCtxMut {
             let s = self.intern_substitution(vec![GenericArg::Ty(usize_ty)]);
             self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
         };
+        let option_i32_ty = {
+            let s = self.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+        };
+        let option_i64_ty = {
+            let s = self.intern_substitution(vec![GenericArg::Ty(i64_ty)]);
+            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+        };
         // `Option<&T>` for `Option::as_ref`.
         let option_ref_t_ty = {
             let ref_t = self.mk_ty(TyKind::Ref(Region::Erased, t_var, Mutability::Not));
@@ -2821,6 +2829,12 @@ impl TyCtxMut {
             (i64_ty, "wrapping_add", vec![i64_ty], i64_ty),
             (i64_ty, "wrapping_sub", vec![i64_ty], i64_ty),
             (i64_ty, "wrapping_mul", vec![i64_ty], i64_ty),
+            (i32_ty, "checked_add", vec![i32_ty], option_i32_ty),
+            (i32_ty, "checked_sub", vec![i32_ty], option_i32_ty),
+            (i32_ty, "checked_mul", vec![i32_ty], option_i32_ty),
+            (i64_ty, "checked_add", vec![i64_ty], option_i64_ty),
+            (i64_ty, "checked_sub", vec![i64_ty], option_i64_ty),
+            (i64_ty, "checked_mul", vec![i64_ty], option_i64_ty),
         ];
         for (recv_ty, name, inputs, output) in prim_entries {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
