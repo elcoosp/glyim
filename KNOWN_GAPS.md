@@ -4060,6 +4060,56 @@ match-shape error, not a checked_* error.
 
 #### 3.5.33 — OPEN: match arms with a bare `return` body mis-type as `()`
 
+**STATUS SUMMARY (read this before the body below -- it supersedes
+several diagnostic claims in the section).**
+
+Verified on HEAD (no fix applied):
+
+| Program | Behaviour on HEAD |
+|---|---|
+| well-typed all-divergent match | FAILS, `[T0001] () vs i32` |
+| mixed arms, divergent-FIRST (`Some(_) => return 30, None => 99`) | works, exit 30 |
+| mixed arms, divergent-SECOND (`Some(v) => v, None => return 99`) | works, exit 30 |
+| non-diverging match | works |
+
+So the bug is SPECIFICALLY the all-divergent case. Both mixed-arm
+directions already work on HEAD.
+
+**Four fix attempts, all reverted:**
+
+1. Unconditional Never-short-circuit in `unify()` -- failed all-divergent.
+2. Narrow Never-short-circuit in `unify()` -- no effect; `infer.unify`
+   already no-ops Never at `glyim-solve/src/infer.rs:255`.
+3. Layer-2 (track `all_arms_never` at check_expr's final-type default):
+   fixed all-divergent, but REGRESSED mixed-arms divergent-SECOND from
+   working to `() vs i32`. Reverted.
+4. (Deferred; the MIR/codegen crash traced to ill-typed source, not to
+   this bug -- see 3.5.34.)
+
+The layer-2 regression is the key new finding: the fix for the
+all-divergent case broke a case that already worked. That asymmetry
+suggests `all_arms_never` tracking or the final-type resolution
+interacts with mixed-arm handling in a way that's not yet understood.
+
+**Do NOT attempt a fifth fix without:**
+
+1. Printing the exact failing source for the layer-2 regression, with
+   layer-2 applied: full CLI output, exit code, binary existence, and
+   `--emit=mir`.
+2. Diffing MIR between that source (with layer-2) and HEAD -- local
+   type list and arm-body block assignments. Layer-2 must change
+   something in the mixed-arms divergent-second path; the MIR shows
+   what.
+3. Only then designing the fix.
+
+Four reverts is the ceiling for blind attempts.
+
+---
+
+The historical diagnosis below (three-layer analysis, hypotheses) is
+retained for context but is partially superseded by this summary.
+
+
 Surfaced while writing the §3.5.32 fixture. A program of this shape:
 
     fn main() -> i32 {
