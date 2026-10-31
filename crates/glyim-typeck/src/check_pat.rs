@@ -100,6 +100,46 @@ impl<'a> FnCtxt<'a> {
         }
     }
 
+    /// §3.5.34: verify an ADT-keyed pattern is compatible with the
+    /// scrutinee's type. Without this, `match 5 { Option::Some(_) => ... }`
+    /// typechecked cleanly and crashed at codegen (MIR projected
+    /// Downcast+Field out of an i32; `Place::ty()` refused; Param(0) ICE).
+    ///
+    /// Returns `true` if compatible or deferred (unresolvable-now),
+    /// `false` (with a diagnostic pushed) otherwise.
+    fn check_adt_against_scrut(&mut self, adt_id: AdtId, expected_ty: Ty, span: Span) -> bool {
+        let base_ty = match self.ctx.ty_kind(expected_ty) {
+            TyKind::Ref(_, inner, _) => *inner,
+            _ => expected_ty,
+        };
+        let base_kind = self.ctx.ty_kind(base_ty).clone();
+        match &base_kind {
+            TyKind::Error => return true,
+            TyKind::Infer(glyim_type::InferVar::Ty(_)) => return true,
+            TyKind::Param(_) => return true,
+            _ => {}
+        }
+        if let TyKind::Adt(scrut_adt, _) = &base_kind
+            && *scrut_adt == adt_id
+        {
+            return true;
+        }
+        let pat_name = self
+            .ctx
+            .adt_name_for_id(adt_id)
+            .map(|n| self.ctx.name_str(n).to_string())
+            .unwrap_or_else(|| format!("{:?}", adt_id));
+        let found = format!("{:?}", base_kind);
+        self.diagnostics.push(GlyimDiagnostic::type_error(
+            span,
+            format!(
+                "mismatched types: pattern is a variant of `{}`, but scrutinee is `{}`",
+                pat_name, found
+            ),
+        ));
+        false
+    }
+
     /// Type-check a pattern, producing the THIR pattern and binding names.
     pub fn check_pattern(&mut self, pat_id: PatId, expected_ty: Ty, span: Span) -> thir::Pattern {
         // PATTERN-SCRUTINEE-RESOLVE: resolve the expected type through the
@@ -198,6 +238,9 @@ impl<'a> FnCtxt<'a> {
                             // Script 139: canonicalize the enum's AdtId.
                             let adt_id =
                                 crate::canonical_enum_adt_id(self.ctx, self.def_map, *enum_local);
+                            if !self.check_adt_against_scrut(adt_id, expected_ty, span) {
+                                return thir::Pattern::err(span);
+                            }
                             thir::Pattern {
                                 kind: thir::PatternKind::Struct {
                                     adt_id,
@@ -244,6 +287,9 @@ impl<'a> FnCtxt<'a> {
                         if let Some((adt_id, vidx)) =
                             crate::tyconv::resolve_enum_variant_path(self.ctx, self.def_map, path)
                         {
+                            if !self.check_adt_against_scrut(adt_id, expected_ty, span) {
+                                return thir::Pattern::err(span);
+                            }
                             return thir::Pattern {
                                 kind: thir::PatternKind::Struct {
                                     adt_id,
@@ -266,6 +312,9 @@ impl<'a> FnCtxt<'a> {
                             if bare_safe
                                 && let Some((adt_id, vidx)) = self.ctx.variant_by_name(name)
                             {
+                                if !self.check_adt_against_scrut(adt_id, expected_ty, span) {
+                                    return thir::Pattern::err(span);
+                                }
                                 return thir::Pattern {
                                     kind: thir::PatternKind::Struct {
                                         adt_id,
@@ -538,6 +587,9 @@ impl<'a> FnCtxt<'a> {
                             span,
                         });
                     }
+                }
+                if !self.check_adt_against_scrut(adt_id, expected_ty, span) {
+                    return thir::Pattern::err(span);
                 }
                 thir::Pattern {
                     kind: thir::PatternKind::Struct {
