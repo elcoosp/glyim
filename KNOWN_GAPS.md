@@ -3875,6 +3875,18 @@ patch: three earlier attempts in this session (saturating interp split,
 saturating re-attempt, wrapping expectation values) each reverted on
 "one more quick patch without full recon." That pattern does not repeat.
 
+**CLOSED (fix landed).** Two-line patch at check_expr.rs:3641: resolve
+`step_ty` via `self.infer.resolve_ty_shallow(self.ctx, step_ty)` before
+the primitive lookup. `resolve_ty_shallow` defaults unbound int vars to
+`i32` (Rust's unsuffixed-int fallback) and no-ops on already-concrete
+types, so the same code path handles both literal and typed receivers.
+Verified by a pre-check probe (confirmed the failure was still
+`[T0001] no method` on `100.saturating_mul(2)`) and a 6-probe suite
+covering literal and typed receivers for the saturating and wrapping
+families, plus a non-literal untyped expression. `checked_*` on
+`i32`/`i64` is *not* fixed here — that family was never registered for
+signed types (see §3.5.32).
+
 **Acceptance test when the fix lands.** `100.saturating_mul(2)`,
 `100.checked_mul(2)`, `100.wrapping_mul(2)` all compile and return the
 expected values. Non-literal untyped case too: `(if true { 100 } else
@@ -3908,6 +3920,51 @@ subsequent probes compute expectations via Python `wrap_i32` / `wrap_i64`
 rather than arithmetic in the author's head. Same lesson as
 §3.5.19's testing-configuration error: probe failures are not evidence
 until the probe's own correctness is verified.
+
+#### 3.5.32 — OPEN: signed `checked_*` on i32/i64 was never registered
+
+Surfaced while closing §3.5.31(a). Same pattern as §3.5.31(b) (wrapping_*)
+and §3.5.19 follow-up (saturating_*): the earlier batch (2c, §3.5.19,
+commit `179f7e03`) registered `checked_add`/`checked_sub`/`checked_mul`
+for u32/u64/usize only. Signed variants are absent:
+
+    let a: i32 = 100;
+    let _ = a.checked_mul(2);   // [T0001] no method `checked_mul`
+
+Same shape as wrapping:
+
+  * `ty_ctx_mut.rs` — six registration entries (`i32` / `i64` ×
+    add/sub/mul) into `primitive_method_fns`, each returning
+    `Option<i32>` / `Option<i64>`.
+  * `mir-interp/src/lib.rs` — the checked_* arm at ~line 641 returns
+    `Aggregate([Int(0), Unit])` for None and `Aggregate([Int(1), Uint])`
+    for Some; the interp's Option representation is variant tag + payload.
+    Whether the payload needs `Int` (not `Uint`) for a signed result
+    depends on how the downstream reader distinguishes the two. Likely
+    needs a small split on receiver signedness (same pattern as the
+    wrapping fix in `e6c787ac`).
+  * `codegen-llvm/src/lower.rs` — the checked_* arm (~region around
+    `usub.with.overflow` / `uadd.with.overflow` intrinsics) is
+    width-based and naturally two's-complement for signed. Verify by
+    probe. If it emits `uadd.with.overflow` on signed values, the result
+    for `i32::MAX + 1` would correctly be `Some(i32::MIN)` (wrapped) with
+    overflow flag true → None. Actually check: Rust's `checked_add` on
+    i32::MAX + 1 returns None, and `uadd.with.overflow` gives {MAX+1
+    wrapped, overflow=true} — so the LLVM arm already returns None for
+    the correct input. But `i32::MAX.checked_add(-1)` should return
+    `Some(i32::MAX - 1)` and unsigned overflow detection on i32::MAX +
+    (0xFFFFFFFF as i32 = -1) would see unsigned overflow. Probe required.
+
+**Fix shape is identical to `e6c787ac`** (signed wrapping), so it's a
+bounded three-file patch with one interp-dispatch split. Likely one
+session. Covers the last registration family that still has an
+unsigned-only restriction for signed types.
+
+**Deferred from §3.5.31(a) fix.** That commit's literal-receiver fix is
+correct and family-agnostic — 6 probes prove it works for saturating
+and wrapping families on both literal and typed receivers. The
+checked_* gap is orthogonal: `let a: i32 = 100; a.checked_mul(2)` also
+fails, and no receiver-resolution change can fix a missing registration.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
