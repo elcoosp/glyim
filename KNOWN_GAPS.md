@@ -3797,12 +3797,12 @@ truthful)" from the session-23 handoff implies the field's truthfulness
 was the only blocker — it wasn't. The field being truthful is a
 precondition, not the fix.
 
-#### 3.5.31 — (a) OPEN: literal-receiver method resolution; (b) CLOSED: signed wrapping_*
+#### 3.5.31 — (a) CLOSED: literal-receiver method resolution; (b) CLOSED: signed wrapping_*
 
 Two independent gaps surfaced by the §3.5.19 saturating-signed follow-up
 probe suite. Neither was caused by that fix.
 
-**(a) Literal-receiver method resolution — OPEN.** A method call whose
+**(a) Literal-receiver method resolution — CLOSED.** A method call whose
 receiver is a bare numeric literal does not resolve any primitive method:
 
     let _ = 100.saturating_mul(2);  // [T0001] no method `saturating_mul`
