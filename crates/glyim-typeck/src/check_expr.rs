@@ -3638,8 +3638,15 @@ impl<'a> FnCtxt<'a> {
         // Primitive receiver (u32/u64/usize/…): consult the primitive method
         // table before the ADT-keyed one. Primitives are not ADTs so they
         // cannot be reached through `lookup_builtin_method`.
-        if matches!(self.ctx.ty_kind(step_ty), TyKind::Int(_) | TyKind::Uint(_)) {
-            if let Some((fn_id, sig)) = self.ctx.lookup_primitive_method(step_ty, method_name) {
+        // §3.5.31(a): resolve the receiver type before the primitive
+        // lookup. For a bare numeric literal (`100.saturating_mul(2)`),
+        // step_ty is Infer(Int(_)); resolve_ty_shallow defaults unbound
+        // int vars to i32 (Rust's unsuffixed-int fallback) and no-ops on
+        // already-concrete types. Without this resolve, the matches!
+        // below fails for Infer(Int(_)) and the primitive lookup never runs.
+        let resolved_step = self.infer.resolve_ty_shallow(self.ctx, step_ty);
+        if matches!(self.ctx.ty_kind(resolved_step), TyKind::Int(_) | TyKind::Uint(_)) {
+            if let Some((fn_id, sig)) = self.ctx.lookup_primitive_method(resolved_step, method_name) {
                 let output = sig.output;
                 return Some((output, fn_id));
             }
