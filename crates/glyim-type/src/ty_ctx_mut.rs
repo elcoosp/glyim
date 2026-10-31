@@ -2815,6 +2815,12 @@ impl TyCtxMut {
             (i64_ty, "saturating_add", vec![i64_ty], i64_ty),
             (i64_ty, "saturating_sub", vec![i64_ty], i64_ty),
             (i64_ty, "saturating_mul", vec![i64_ty], i64_ty),
+            (i32_ty, "wrapping_add", vec![i32_ty], i32_ty),
+            (i32_ty, "wrapping_sub", vec![i32_ty], i32_ty),
+            (i32_ty, "wrapping_mul", vec![i32_ty], i32_ty),
+            (i64_ty, "wrapping_add", vec![i64_ty], i64_ty),
+            (i64_ty, "wrapping_sub", vec![i64_ty], i64_ty),
+            (i64_ty, "wrapping_mul", vec![i64_ty], i64_ty),
         ];
         for (recv_ty, name, inputs, output) in prim_entries {
             let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);

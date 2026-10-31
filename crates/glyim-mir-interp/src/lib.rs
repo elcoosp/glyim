@@ -780,17 +780,58 @@ impl<'tcx> Interpreter<'tcx> {
                 };
                 Ok(Some(InterpValue::Uint(result)))
             }
-            // P1-C2 batch 2a: wrapping arithmetic on unsigned integers.
-            // Rust semantics: the operation is performed at infinite
-            // precision and the result is truncated to the receiver's
-            // width. The receiver's type determines the width (via
-            // `operand_bit_width`), so the same arm handles u32/u64/usize
-            // uniformly. Signed variants would need to sign-extend the
-            // result through the same mask (an int receiver goes through
-            // the `InterpValue::Int` path of the extraction match).
+            // P1-C2 batch 2a: wrapping arithmetic. Rust semantics: perform
+            // at infinite precision, truncate to receiver width. Signed
+            // variants (§3.5.31(b)) additionally sign-extend the low
+            // `width` bits so InterpValue::Int round-trips. Dispatch by
+            // the receiver's declared type, not the InterpValue variant
+            // (some unsigned receivers arrive as Int after trunc_to_ty —
+            // see §3.5.19 follow-up).
             (_, "wrapping_add") | (_, "wrapping_sub") | (_, "wrapping_mul") => {
                 let a = self.builtin_deref(&receiver)?;
                 let b = args.get(1).cloned().unwrap_or(InterpValue::Unit);
+                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
+                    InterpError::Panic(format!(
+                        "interp: {}: cannot determine receiver bit width",
+                        method
+                    ))
+                })?;
+                let recv_ty = self.operand_ty(arg_operands.first().ok_or_else(|| {
+                    InterpError::Panic(format!("interp: {}: no receiver operand", method))
+                })?);
+                let signed = recv_ty
+                    .map(|t| matches!(self.tcx.ty_kind(t), glyim_type::TyKind::Int(_)))
+                    .unwrap_or(false);
+                let mask: u128 = if width >= 128 { u128::MAX } else { (1u128 << width) - 1 };
+
+                if signed {
+                    let a_s: i128 = match &a {
+                        InterpValue::Int(i) => *i,
+                        InterpValue::Uint(n) => *n as i128,
+                        _ => return Ok(None),
+                    };
+                    let b_s: i128 = match &b {
+                        InterpValue::Int(i) => *i,
+                        InterpValue::Uint(n) => *n as i128,
+                        _ => return Ok(None),
+                    };
+                    let raw: i128 = match method.as_str() {
+                        "wrapping_add" => a_s.wrapping_add(b_s),
+                        "wrapping_sub" => a_s.wrapping_sub(b_s),
+                        "wrapping_mul" => a_s.wrapping_mul(b_s),
+                        _ => unreachable!(),
+                    };
+                    let masked = (raw as u128) & mask;
+                    let result: i128 = if width >= 128 {
+                        masked as i128
+                    } else if masked & (1u128 << (width - 1)) != 0 {
+                        (masked as i128) - (1i128 << width)
+                    } else {
+                        masked as i128
+                    };
+                    return Ok(Some(InterpValue::Int(result)));
+                }
+
                 let a_n: u128 = match &a {
                     InterpValue::Uint(n) => *n,
                     InterpValue::Int(i) => (*i).max(0) as u128,
@@ -800,17 +841,6 @@ impl<'tcx> Interpreter<'tcx> {
                     InterpValue::Uint(n) => *n,
                     InterpValue::Int(i) => (*i).max(0) as u128,
                     _ => return Ok(None),
-                };
-                let width = self.operand_bit_width(arg_operands.first()).ok_or_else(|| {
-                    InterpError::Panic(format!(
-                        "interp: {}: cannot determine receiver bit width",
-                        method
-                    ))
-                })?;
-                let mask: u128 = if width >= 128 {
-                    u128::MAX
-                } else {
-                    (1u128 << width) - 1
                 };
                 let result: u128 = match method.as_str() {
                     "wrapping_add" => a_n.wrapping_add(b_n) & mask,
