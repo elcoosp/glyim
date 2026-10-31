@@ -3921,7 +3921,7 @@ rather than arithmetic in the author's head. Same lesson as
 §3.5.19's testing-configuration error: probe failures are not evidence
 until the probe's own correctness is verified.
 
-#### 3.5.32 — OPEN: signed `checked_*` on i32/i64 was never registered
+#### 3.5.32 — CLOSED: signed `checked_*` landed + LLVM signed-overflow miscompile fixed
 
 Surfaced while closing §3.5.31(a). Same pattern as §3.5.31(b) (wrapping_*)
 and §3.5.19 follow-up (saturating_*): the earlier batch (2c, §3.5.19,
@@ -4042,6 +4042,78 @@ correct and family-agnostic — 6 probes prove it works for saturating
 and wrapping families on both literal and typed receivers. The
 checked_* gap is orthogonal: `let a: i32 = 100; a.checked_mul(2)` also
 fails, and no receiver-resolution change can fix a missing registration.
+
+**CLOSED (fix landed).** Three-file patch (ty_ctx_mut registrations +
+LLVM signed arms + interp type-dispatch split). Verified by a 13-probe
+suite including the critical `i32::MAX.checked_add(-1) → Some(2147483646)`
+case that `uadd.with.overflow` would return as `None`. Fixture
+`run-pass/behavior/checked_signed.g` (16 cases, is_some/is_none/unwrap
+shape). Both corpora green on correct configs, full workspace green.
+
+Session note: two prior commit attempts were blocked by tests whose
+match-on-Option fixture shape `Some(v) => return N` failed with
+`mismatched types: () vs i32` at typeck. That's a separate pre-existing
+bug (see §3.5.33) — the fixture was rewritten using the is_some/is_none/
+unwrap pattern (same as checked_arith.g) and passes cleanly. The
+attempt-then-revert loop cost ~3 cycles; the failing probe was a
+match-shape error, not a checked_* error.
+
+#### 3.5.33 — OPEN: match arms with a bare `return` body mis-type as `()`
+
+Surfaced while writing the §3.5.32 fixture. A program of this shape:
+
+    fn main() -> i32 {
+        let r = 10.checked_mul(3);
+        match r {
+            Option::Some(v) => return 0,
+            Option::None => return 1,
+        }
+    }
+
+fails to compile with:
+
+    [T0001] mismatched types: () vs i32
+
+The mismatch is between the match arm bodies (each a `return`, which is
+`!`/diverging) and something (probably the match's result type) that is
+`()`. The `! vs i32` mismatch shows up as `() vs i32` in the diagnostic
+because `!` displays as `!` but the wrapper type comparison treats the
+diverging arm's type as `()` at the point of unification.
+
+A related but distinct shape — a `match` arm whose body is
+`if cond { return X; }` without an else — compiles but panics at runtime
+with `thread 'main' panicked: entered unreachable code` when the `if`
+branch is taken. That is the same symptom class as the original §3.5.29
+bug (divergent expression inside a macro-expanded `if`), but reaching
+it via a hand-written `match` + `if` shape.
+
+**Hypothesis.** Both shapes are the same underlying issue: an arm body
+whose type is `!` (diverging) is not being unified as a
+bottom-type-compatible-with-anything in the match-result type
+computation. §3.5.29 fixed the `assert!` case via the user-macro-
+prefers-over-builtin fix, but the underlying divergence-in-nested-
+context issue remained. Fixing that properly (make `!` unify with any
+target type in match-arm unification — standard Rust bottom-type
+semantics) would also have closed §3.5.29 at a deeper level.
+
+**Acceptance test:**
+
+    fn main() -> i32 {
+        let r = 10.checked_mul(3);
+        match r {
+            Option::Some(v) => return 0,
+            Option::None => return 1,
+        }
+    }
+
+must compile and exit 0. Companion: a match arm whose body is
+`if cond { return X; }` without else must not panic at runtime.
+
+**Status.** Open. Not investigated further — §3.5.32 was closed by
+side-stepping this via the is_some/is_none shape. Fixing the underlying
+divergence-unification is a separate planning-worthy task. Not a
+priority for the arithmetic family — match-on-Option works fine for
+non-diverging arm bodies.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
