@@ -4382,7 +4382,7 @@ sub-problem.
 **Do not attempt a fifth fix without printing the failing program
 first.**
 
-#### 3.5.34 — OPEN: scrutinee-pattern compatibility is not checked (ill-typed match reaches codegen)
+#### 3.5.34 — CLOSED: scrutinee-pattern compatibility now checked
 
 **Symptom.** A match whose patterns are incompatible with the scrutinee
 type compiles past typeck and crashes at MIR/codegen:
@@ -4469,6 +4469,20 @@ a clean diagnostic — but it does not.
 Not attempted — reading `check_pat.rs` and adding a `unify(pattern_ty,
 scrut_ty)` at the right point is a bounded next-session task once the
 current pattern-checking logic is read.
+
+**CLOSED (fix landed).** New helper `check_adt_against_scrut` on
+`FnCtxt`, called from all four ADT-keyed pattern construction sites in
+`check_pat.rs`. Peels `&` layers; defers on `Error`, `Infer(Ty)`,
+`Param`; fails on `Infer(Int/Float)` (can never unify with an ADT);
+succeeds on matching `Adt`; fails otherwise. Diagnostic:
+`mismatched types: pattern is a variant of `<Name>`, but scrutinee is
+`<Debug-TyKind>``.
+
+Before: `match 5 { Option::Some(_) => 0, ... }` typechecked and crashed
+at MIR/codegen. After: clean `[T0001]` at typeck.
+
+7 probes + both corpora + full workspace green. §3.5.33 fixtures
+still pass — the new check defers on matching ADTs.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
