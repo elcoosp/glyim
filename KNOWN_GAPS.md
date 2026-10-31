@@ -3797,6 +3797,74 @@ truthful)" from the session-23 handoff implies the field's truthfulness
 was the only blocker — it wasn't. The field being truthful is a
 precondition, not the fix.
 
+#### 3.5.31 — (a) OPEN: literal-receiver method resolution; (b) CLOSED: signed wrapping_*
+
+Two independent gaps surfaced by the §3.5.19 saturating-signed follow-up
+probe suite. Neither was caused by that fix.
+
+**(a) Literal-receiver method resolution — OPEN.** A method call whose
+receiver is a bare numeric literal does not resolve any primitive method:
+
+    let _ = 100.saturating_mul(2);  // [T0001] no method `saturating_mul`
+    let _ = 100.checked_mul(2);     // [T0001] no method `checked_mul`
+    let _ = 100.wrapping_mul(2);    // [T0001] no method `wrapping_mul`
+
+A typed local works:
+
+    let f: i32 = 100;
+    let _ = f.saturating_mul(2);    // OK
+
+Not specific to any one method family — three independently implemented
+arms (`wrapping_*` batch 2a, `checked_*` batch 2c, `saturating_*`
+batch 2b + signed follow-up) all fail on literal receivers. The gap is
+in method resolution or type inference for a `LitExpr` used as a receiver,
+not in the arithmetic dispatch.
+
+**Where to look.** `crates/glyim-typeck/src/check_expr.rs`, the
+`Expr::MethodCall` arm (around line 1688). The receiver's type comes
+from `check_expr(receiver_id)`; if the receiver is a bare `LitExpr`,
+the type is likely `Infer(Int(_))` (unresolved) rather than a concrete
+`i32`/`u32`. `primitive_method_fns` is keyed on concrete `Ty`, so
+`Infer(Int(_))` misses. Two candidate fixes:
+
+  - Default unresolved int literals to `i32` before method lookup
+    (Rust's fallback: unsuffixed int literals default to `i32`).
+  - Or make `primitive_method_fns` lookup resolve through `Infer(Int(_))`
+    to the default `i32` Ty.
+
+Whichever lands, one test should cover: `100.saturating_mul(2)`,
+`100.checked_mul(2)`, `100.wrapping_mul(2)` all compile and return the
+expected values. None of them do today.
+
+**(b) i32/i64 wrapping_* was never registered — CLOSED.** Batch 2a
+(§3.5.12) added `wrapping_add`/`wrapping_sub`/`wrapping_mul` to
+`primitive_method_fns` for u32/u64/usize only. Signed variants were
+absent. Closed in commit `e6c787ac`:
+
+  * `ty_ctx_mut.rs` — six registration entries (`i32` / `i64` ×
+    add/sub/mul) in `primitive_method_fns`.
+  * `mir-interp/src/lib.rs` — split the `wrapping_*` arm on the
+    receiver's *declared type* (via `operand_ty` matching `TyKind::Int`),
+    with a sign-extend step (mask to width, then sign-extend the low
+    `width` bits back to `i128`). Mirrors the saturating fix (`f07b9807`).
+  * LLVM untouched — the unsigned wrapping arm already emits
+    `add`/`sub`/`mul` on the full-width `int_ty`, which is naturally
+    two's-complement for signed too.
+
+Covered by `run-pass/behavior/wrapping_signed.g` and a 16-probe suite
+covering signed i32 add/sub/mul wrap, `MAX*2 -> -2`, `MIN*MIN -> 0`,
+`MAX*MIN`, `-1*MIN`, signed i64 wrap, unsigned regression
+(u32/u64/usize wrap, u32 underflow), and saturating regression.
+
+**Session-23 note on the (b) attempt.** A first attempt had a probe
+with a hand-computed expectation (`-2000000000 * -2000000000`) that
+was wrong — the actual wrapped result is `-1651507200`, not
+`294967296`. The fix was correct; the test expectation was not. All
+subsequent probes compute expectations via Python `wrap_i32` / `wrap_i64`
+rather than arithmetic in the author's head. Same lesson as
+§3.5.19's testing-configuration error: probe failures are not evidence
+until the probe's own correctness is verified.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
