@@ -3955,10 +3955,87 @@ Same shape as wrapping:
     `Some(i32::MAX - 1)` and unsigned overflow detection on i32::MAX +
     (0xFFFFFFFF as i32 = -1) would see unsigned overflow. Probe required.
 
-**Fix shape is identical to `e6c787ac`** (signed wrapping), so it's a
-bounded three-file patch with one interp-dispatch split. Likely one
-session. Covers the last registration family that still has an
-unsigned-only restriction for signed types.
+**Correction: LLVM has a real bug here, not just missing registration.**
+The recon that preceded this fix attempt found that the LLVM checked_*
+arm emits **unsigned** intrinsics for every receiver:
+
+    "checked_add" => format!("llvm.uadd.with.overflow.i{width}"),
+    "checked_sub" => format!("llvm.usub.with.overflow.i{width}"),
+    "checked_mul" => format!("llvm.umul.with.overflow.i{width}"),
+
+For signed receivers that is **wrong**. `i32::MAX.checked_add(-1)` should
+be `Some(i32::MAX - 1)` = `Some(2147483646)`, but unsigned overflow
+detection on the two's-complement bit pattern (`0x7FFFFFFF + 0xFFFFFFFF`)
+sees an unsigned carry and returns `None`. Same class of error for
+`checked_sub` with a negative subtrahend and `checked_mul` with any
+negative operand pair that would not overflow signed.
+
+The bug is latent today because `i32/i64.checked_*` fails at typeck
+(no registration), so the arm never fires on a signed receiver. Adding
+registration **makes the arm live** — so a fix cannot be just
+"registration + interp split"; the LLVM arm needs three signed variants
+using `sadd` / `ssub` / `smul` `.with.overflow` intrinsics. Mirror the
+saturating-signed fix (`f07b9807`) — that one added `sadd.sat`/`ssub.sat`/
+`smul.with.overflow` gated on a `signed` flag from the receiver's Ty.
+
+**Revised fix shape (3 files, ~1 session, more than originally estimated):**
+
+1. `ty_ctx_mut.rs` — two new `Option<Ty>` declarations
+   (`option_i32_ty`, `option_i64_ty`) plus six registration entries
+   (`i32` / `i64` × add/sub/mul) into `primitive_method_fns`, each
+   returning the matching `Option<i32>` / `Option<i64>`.
+
+2. `codegen-llvm/src/lower.rs` — compute `signed` from the receiver's
+   Ty (place_ty of the first operand, or extract the inner Ty from
+   `Option<T>` at the destination), then split the three match arms:
+     - signed: `llvm.sadd.with.overflow.i{width}` /
+       `llvm.ssub.with.overflow.i{width}` /
+       `llvm.smul.with.overflow.i{width}` — then use the existing
+       `{wrapped, overflow}` → `Some` / `None` select the arm already
+       builds, no shape change to the Option construction.
+     - unsigned: existing `uadd` / `usub` / `umul` unchanged.
+   The signed/unsigned intrinsics have identical signatures (return
+   `{iN, i1}`) and identical select logic, so the split is just the
+   intrinsic name — three `format!` sites.
+
+3. `mir-interp/src/lib.rs` — split on `operand_ty(arg_operands.first())`
+   matching `TyKind::Int(_)` (same idiom as `e6c787ac`). Signed branch:
+     - i128 arithmetic with min/max clamps for the three operations.
+     - `Some(v)` payload is `InterpValue::Int(v as i128)`, not `Uint`.
+       Unsigned branch keeps `Uint(v)`.
+     - `None` uses `Aggregate([Int(0), Unit])` for both (variant tag).
+
+**Probe suite required before commit** (10+ cases — this is more than
+just wrapping's 8 because of the signed overflow edge cases):
+
+  - `i32::MAX.checked_add(1)` → None
+  - `i32::MAX.checked_add(-1)` → **Some(MAX-1)** ← the case LLVM currently
+    would get wrong
+  - `i32::MIN.checked_sub(1)` → None
+  - `i32::MIN.checked_sub(-1)` → **Some(MIN+1)** ← same trap for sub
+  - `i32::MAX.checked_mul(2)` → None
+  - `(-1i32).checked_mul(i32::MIN)` → None (i32::MIN * -1 overflows)
+  - `10i32.checked_mul(3)` → Some(30) (in-range sanity)
+  - `i64::MAX.checked_add(1)` → None, `i64::MAX.checked_add(-1)` → Some
+  - unsigned regression for all three u32 ops
+  - literal receiver: `100.checked_mul(2)` now works (§3.5.31(a) fix
+    carries through to this family)
+
+**Do NOT commit the registration + interp changes without the LLVM
+signed arms in the same commit.** A registration-only or
+registration+interp-only patch would land a working feature on the
+interp backend and a **silent miscompile** on the LLVM backend for
+signed checked_* — worse than the current state (compile error
+everywhere) because the wrong value would ship.
+
+**Session-23 close.** This finding is documented but not fixed: the
+attempt stopped at recon once the LLVM scope was clear. Doing the LLVM
+signed-arm patch mid-session would repeat the pattern that produced
+three reverts earlier. Fresh session: read the existing LLVM checked_*
+arm fully (there's ~30 lines below the intrinsic selection that build
+the `{wrapped, overflow}` → `Option<T>` select; the split for signed
+reuses all of it with only the intrinsic name changing), then apply all
+three files together.
 
 **Deferred from §3.5.31(a) fix.** That commit's literal-receiver fix is
 correct and family-agnostic — 6 probes prove it works for saturating
