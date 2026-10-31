@@ -1000,6 +1000,8 @@ impl<'a> FnCtxt<'a> {
                 let result_ty = self.fresh_infer_ty();
 
                 let mut thir_arms = Vec::with_capacity(arms.len());
+                let mut any_arm_seen = false;
+                let mut all_arms_never = true;
                 for arm in arms {
                     self.env.enter_scope();
                     let pat_thir = self.check_pattern(arm.pat, scrut_ty, span);
@@ -1041,6 +1043,10 @@ impl<'a> FnCtxt<'a> {
                         self.check_expr(arm.body)
                     };
                     self.env.leave_scope();
+                    any_arm_seen = true;
+                    if !matches!(self.ctx.ty_kind(body_ty), glyim_type::TyKind::Never) {
+                        all_arms_never = false;
+                    }
                     if body_ty != Ty::ERROR {
                         self.unify(body_ty, result_ty, span);
                     }
@@ -1065,7 +1071,11 @@ impl<'a> FnCtxt<'a> {
                     self.ctx.ty_kind(resolved_result),
                     TyKind::Infer(InferVar::Ty(_))
                 ) {
-                    Ty::UNIT
+                    if any_arm_seen && all_arms_never {
+                        Ty::NEVER
+                    } else {
+                        Ty::UNIT
+                    }
                 } else {
                     resolved_result
                 };
