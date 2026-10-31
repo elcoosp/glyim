@@ -4058,7 +4058,25 @@ unwrap pattern (same as checked_arith.g) and passes cleanly. The
 attempt-then-revert loop cost ~3 cycles; the failing probe was a
 match-shape error, not a checked_* error.
 
-#### 3.5.33 — OPEN: match arms with a bare `return` body mis-type as `()`
+#### 3.5.33 — CLOSED: all-divergent match arms now type as `!` not `()`
+
+**CLOSED (fix landed).** check_expr tracks `all_arms_never`; an
+unbound `Infer(Ty)` match result with every arm divergent becomes
+`Ty::NEVER` instead of `Ty::UNIT`. Fires only for `Infer(Ty)` — mixed
+arms produce concrete `Int(I32)` or `Infer(Int)` and are unaffected.
+
+The "layer-2 breaks mixed-arms divergent-second" claim in earlier
+section iterations was a stale-build artifact (mid-probe `cargo clean`
+removed `libglyim_runtime.a`). Corrected.
+
+Two prior attempts patched `unify()` blind; the third worked after
+reading `glyim-solve/src/infer.rs:255` and finding `Never` was already
+a no-op — the bug was a one-line default, not a rule.
+
+Covered by `match_diverging_arm.g` and `match_mixed_arms_reverse.g`,
+plus 6 gate probes. (A divergent-FIRST companion fixture was deferred:
+`Option::None` alone has no inferable type; a typed-local scrutinee
+is needed, tracked as a follow-up.)
 
 **STATUS SUMMARY (read this before the body below -- it supersedes
 several diagnostic claims in the section).**
