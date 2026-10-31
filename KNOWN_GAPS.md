@@ -2089,37 +2089,43 @@ The registration (`ty_ctx_mut.rs`) and the LLVM backend (`lower.rs` —
 MIN/MAX select) both worked end-to-end. The **interp-side change
 regressed the unsigned path** and was reverted.
 
-**Root cause of the interp regression.** The interp split the saturating
-arm on `matches!(&a, InterpValue::Int(_))` — dispatch on the runtime
-value's variant. But some u32/u64/usize receivers arrive as
-`InterpValue::Int` in the interp (e.g. constants with `.max(0) as u128`
-being the previous fallback, or values threaded through checked_*
-which may return Int). Those receivers got routed to the signed branch,
-which clamps at `[INT_MIN, INT_MAX]` instead of `[0, UINT_MAX]`. Result:
-`u32::MAX.saturating_add(1)` would clamp at `2^31 - 1` instead of
-`2^32 - 1`.
+**Correction (same-session follow-up).** The paragraph above originally
+claimed the interp regression was caused by value-variant dispatch
+(`matches!(&a, InterpValue::Int(_))` routing unsigned receivers into the
+signed branch) and that "the interp run_pass_corpus caught it." **Both
+claims are wrong.** The follow-up investigation found:
 
-The interp run_pass_corpus caught it:
-- LLVM backend: green (dispatches on `place_ty(destination)` — correct)
-- interp backend: red (dispatches on InterpValue variant — wrong)
+  - The interp corpus was run with `GLYIM_LLVM=1` exported but WITHOUT
+    `--features glyim-test/real-llvm`. In that config the 12
+    `// needs-llvm` fixtures run through the interp path where they
+    cannot work — the exact same misconfiguration that produced a
+    similar-looking failure in §3.5.28's original episode. Both
+    baselines are green under correct config (interp: no GLYIM_LLVM;
+    LLVM: GLYIM_LLVM=1 + feature).
+  - The claim that "some u32 receivers arrive as InterpValue::Int" was
+    speculation, not observed. There was no probe showing it.
 
-**Correct fix shape (not attempted this session).** The interp dispatch
-must key on the **receiver's declared type**, not the runtime value
-variant. `arg_operands.first()` carries the receiver `Operand`; the
-interp already has `operand_ty` / equivalent used elsewhere. Use:
+**What was actually landed (§3.5.19 follow-up, commit f07b9807).** The
+re-attempt succeeded with 13/13 probes:
+  - 8 signed (i32/i64 add/sub/mul, both overflow directions, in-range)
+  - 3 unsigned regression (u32 add/mul overflow, sub underflow)
+  - u64/usize add overflow
 
-    let recv_ty = self.operand_ty(arg_operands.first())/**/;
-    let signed = matches!(self.ty_ctx.ty_kind(recv_ty), TyKind::Int(_));
+The committed implementation uses **type dispatch** via
+`operand_ty(arg_operands.first())` matching `TyKind::Int(_)`. This is
+defensively more correct than value-variant dispatch (it mirrors LLVM's
+`place_ty(destination)` decision exactly, and cannot be affected by how
+a runtime value happens to be represented), even though the value-variant
+version might also have worked — that was never actually tested under a
+correct corpus configuration.
 
-That mirrors the LLVM `place_ty(destination)` decision exactly and
-avoids the value-variant fragility. Once that lands, the interp split
-is: signed branch (clamp `[INT_MIN, INT_MAX]`) vs unsigned branch
-(clamp `[0, UINT_MAX]`), same shape as the LLVM fix, dispatched by
-type.
-
-The registration and LLVM work from this attempt are correct and can
-be re-applied; only the interp `matches!(&a, InterpValue::Int(_))` guard
-needs to become a type-based check.
+**Lesson.** Testing configuration errors produce failures that look
+identical to real regressions. Before treating a corpus failure as
+"the corpus caught it," verify the corpus was run in the correct
+configuration for the backend being tested. The interp-only config
+must NOT export `GLYIM_LLVM`. `just test-corpus` was fixed for this in
+commit `a6c41ed3`; ad-hoc `cargo nextest` invocations have the same
+failure mode and need the same care.
 
 **P1-C2 family status after this batch.** `is_power_of_two` (§3.5.7),
 the bit-manipulation intrinsics (§3.5.7 / §3.5.8), `wrapping_*`
