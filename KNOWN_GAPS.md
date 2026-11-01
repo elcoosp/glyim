@@ -2524,9 +2524,13 @@ the digits can be appended via a match:
 
 **The revised path for a future session.**
 
-  Step 1 (done): `push_str` works; `push(char)` doesn't; `char`
-    casts don't. The `.g` digit-loop path is viable using
-    `push_str` and a digit→&str match.
+  Step 1 (done): `push_str` works. `s.push(char)` fails because
+    `String` has no inherent `push` — the call resolves to
+    `Vec<u8>::push(u8)` via the `String -> Vec<u8>` deref. §3.5.36(a)
+    was misdiagnosed: adding `push(char)` would shadow `Vec::push`
+    and break existing u8 callers. The `.g` digit-loop path is
+    viable using `push_str` + digit→&str match; it does not need
+    `String::push(char)` at all.
 
   Step 2 (i32-only, ~60 lines across 2 files):
     - `.g` `fn i32_to_string(n: i32) -> String` doing:
@@ -4891,7 +4895,7 @@ arm + runtime digit-formatting helper), not a diagnostic change.
 
 **Status.** Withdrawn. No separate fix exists. See §3.5.22.
 
-#### 3.5.36 — PARTIAL: int->char casts fixed; `String::push(u8)` still to change
+#### 3.5.36 — (b) CLOSED: int->char casts fixed. (a) MISDIAGNOSED: `String` has no `push` method
 
 Discovered while probing §3.5.22's `.g` digit-loop path.
 
@@ -4921,11 +4925,56 @@ int cast (char is i32 at the LLVM level per
 (`int_to_char_casts_are_valid`) plus end-to-end probes of all four
 directions. `97u8 as char` now works; `'a' as u8` continues to work.
 
-**(a) `String::push` takes `u8` not `char` — still open.** Fixing
-it needs a one-line signature change in `crates/glyim-lang-alloc/lib/
-string.g` plus a body that converts `char` to `u8`. Both cast
-directions (`char as u8` pre-existing, `u8 as char` now legal) are
-available; the body can use whichever is more natural.
+**(a) `String::push` — MISDIAGNOSED, no fix needed as written.**
+
+The original claim ("`String::push` takes `u8` not `char`") was
+based on a probe that showed `s.push('a')` failing with
+`mismatched types: char vs u8`. Recon shows the mechanism is
+different:
+
+  * `String` has **no inherent `push` method at all**. Its inherent
+    methods are exactly: `new`, `push_str`, `as_str`, `len`,
+    `is_empty`, `default` (`crates/glyim-lang-alloc/lib/string.g:13-39`).
+  * `String` derefs to `Vec<u8>` (via `inner`), so `s.push(...)` on
+    a `String` resolves — through the standard deref chain — to
+    `Vec<u8>::push(u8)`. That's what produces the `char vs u8`
+    diagnostic. Confirmed via `--emit=mir`: the `push` call in
+    `s.push(65u8)` resolves to a `FnDefId` for `Vec::push`, not a
+    `String::push`.
+
+Adding an **inherent** `String::push(char)` would shadow the
+deref'd `Vec::push(u8)` for String receivers (Rust's inherent-
+before-deref lookup). That would break the two existing u8 callers:
+
+  - `net.g:547` — `host.push(bytes[j] as u8)` (host is a `String`)
+  - `io.g:450` — `self.buf.push(0)` (buf is a `Vec<u8>`, but the
+    same deref path is why String receivers currently accept u8)
+
+So the "one-line signature change" the previous revision proposed
+would have been a **breaking change** for real callers.
+
+**Two options, neither urgent:**
+
+  (i) Add a **distinct-named** method `String::push_char(c: char)`.
+      No conflict, no breakage. Callers wanting Rust-idiomatic
+      `push(char)` would write `push_char`. Small addition, ~5
+      lines including the char->u8 cast (both directions now
+      work; see (b)). If glyim wants to match Rust's String API,
+      this is the safe way.
+
+  (ii) Leave as-is; document that `push_str` is the path for
+      appending to a String. `push_str(&str)` works and is what
+      §3.5.22's i32_to_string implementation will use, with a
+      match-to-&str for single digits.
+
+**Neither is needed for §3.5.22.** The i32_to_string path uses
+`push_str` + match; it does not need `String::push(char)`.
+
+**Status.** Not a bug — an API divergence from Rust. `s.push('a')`
+fails because glyim's `String` inherits `Vec<u8>::push(u8)`, not
+Rust's `String::push(char)`. Fixing the divergence would require
+either `push_char` (new method) or breaking the deref pattern.
+Neither is in scope for §3.5.22.
 
 **(b) `u8 as char` / `char as u8` casts are unsupported.**
 
