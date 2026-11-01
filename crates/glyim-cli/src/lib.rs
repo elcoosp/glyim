@@ -280,6 +280,7 @@ enum EmitKind {
     Exec,
     Mir,
     LlvmIr,
+    Syntax,
     Asm,
     /// Emit a position-independent shared library (cdylib). Phase 9.2: this is
     /// the host artifact a procedural-macro crate compiles to so it can be
@@ -294,10 +295,11 @@ impl EmitKind {
             "exec" => Ok(EmitKind::Exec),
             "mir" => Ok(EmitKind::Mir),
             "llvm-ir" => Ok(EmitKind::LlvmIr),
+            "syntax" => Ok(EmitKind::Syntax),
             "asm" => Ok(EmitKind::Asm),
             "cdylib" => Ok(EmitKind::Cdylib),
             _ => Err(format!(
-                "invalid value for --emit: '{}' (expected one of: obj, exec, mir, llvm-ir, asm, cdylib)",
+                "invalid value for --emit: '{}' (expected one of: obj, exec, mir, llvm-ir, asm, cdylib, syntax)",
                 s
             )),
         }
@@ -366,10 +368,14 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             });
             (obj, Some(final_out))
         }
-        EmitKind::Mir | EmitKind::LlvmIr => {
+        EmitKind::Mir | EmitKind::LlvmIr | EmitKind::Syntax => {
             let out = args.output.clone().unwrap_or_else(|| {
                 let mut p = input.clone();
-                let ext = if emit == EmitKind::Mir { "mir" } else { "ll" };
+                let ext = match emit {
+                    EmitKind::Mir => "mir",
+                    EmitKind::Syntax => "syntax",
+                    _ => "ll",
+                };
                 p.set_extension(ext);
                 p
             });
@@ -468,6 +474,8 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     let proc_registry_ref = proc_registry.as_ref();
     if emit == EmitKind::Mir {
         return glyim_pipeline::emit_mir(&mut db, input, &object_path, proc_registry_ref);
+    } else if emit == EmitKind::Syntax {
+        return glyim_pipeline::emit_syntax(&mut db, input, &object_path, proc_registry_ref);
     } else if emit == EmitKind::LlvmIr {
         return glyim_pipeline::emit_llvm_ir(&mut db, input, &object_path, proc_registry_ref);
     } else if emit == EmitKind::Asm {

@@ -1123,6 +1123,30 @@ pub fn emit_mir(
 
     Ok(())
 }
+/// Emit the parser's output syntax tree (`--emit=syntax`).
+pub fn emit_syntax(
+    db: &mut Database,
+    input: &Path,
+    output: &Path,
+    proc_registry: Option<&glyim_proc_macro::Registry>,
+) -> Result<(), Vec<GlyimDiagnostic>> {
+    let _ = (db, proc_registry);
+    let source = std::fs::read_to_string(input).map_err(|e| {
+        vec![GlyimDiagnostic::internal_error(format!(
+            "emit=syntax: read: {e}"
+        ))]
+    })?;
+    let file_id = glyim_span::FileId::from_raw(0);
+    let parsed = glyim_frontend::parse_to_syntax(&source, file_id);
+    let dump = format!("{:#?}", parsed.root);
+    std::fs::write(output, dump).map_err(|e| {
+        vec![GlyimDiagnostic::internal_error(format!(
+            "emit=syntax: write: {e}"
+        ))]
+    })?;
+    Ok(())
+}
+
 
 /// emit_llvm_ir.
 pub fn emit_llvm_ir(
