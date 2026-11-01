@@ -2775,7 +2775,20 @@ at all.
 |---|---|---|
 | **10** | `for_slice_ref`, `for_slice_sum`, `generic_method_turbofish_all_primitives`, `match_ref_binding`, `match_ref_mut_binding`, `match_ref_mut_write_through`, `match_ref_nested_write`, `match_ref_struct_field`, `match_ref_tuple`, `option_filter`, `option_filter_predicate_false` (minus the one below) | **CI configuration bug** — see below |
 | **1** | `slice_indexing_works` | **Stale header** — program exits 164, header said 89 |
-| **1** | `if_let_some_none` | **Real LLVM lowering bug** — narrowed, deferred |
+| **1** | `if_let_some_none` | ~~**Real LLVM lowering bug** — narrowed, deferred~~ **CLOSED IMPLICITLY** — see below |
+
+**`if_let_some_none` — CLOSED IMPLICITLY (session 23 end).** The fixture
+now exits 49, matching its header (`// exit-code: 49`), on both backends.
+The fix came from §3.5.24 A (commit `c753888f`) — unconstrained
+`Option::None` now emits a clean `[T0001] type annotations needed`
+diagnostic instead of an ICE. The fixture itself was rewritten during
+that fix to use a typed local (`let none_val: Option<i32> = Option::None;`)
+so the `if let` lowering path stays covered without hitting the
+unconstrained-None case.
+
+Verified on HEAD: the fixture is in the run-pass corpus and green on
+both backends. §3.5.23's "1 real bug, narrowed, deferred" is now "1
+real bug, fixed via §3.5.24's typing diagnostic + fixture rewrite".
 
 **The CI configuration bug (10 of 12).** `test-ubuntu` sets
 `GLYIM_LLVM: "1"` (added in the P1-O1 change to make the ~44
