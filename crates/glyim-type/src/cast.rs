@@ -74,6 +74,13 @@ pub fn is_valid_cast(ctx: &dyn TypeLookup, from: Ty, to: Ty) -> bool {
         (Ref(_, _, _), RawPtr(_, _)) => true,
         (Bool, Int(_) | Uint(_)) => true,
         (Char, Int(_) | Uint(_)) => true,
+        // §3.5.36(b): int → char. Rust accepts any integer as a `char`
+        // cast (out-of-range values become U+FFFD). Missing before this
+        // fix, `97u8 as char` failed with "invalid cast", blocking the
+        // idiomatic `String::push(char)` path. Codegen handles it as an
+        // ordinary int cast — char is i32 at the LLVM level (see
+        // codegen-llvm/src/types.rs:31).
+        (Int(_) | Uint(_), Char) => true,
         (Adt(from_id, _), Int(_) | Uint(_)) => {
             // Two legal shapes:
             //   1. A fieldless (C-like) enum → any integer (plan §13.2).
@@ -129,6 +136,19 @@ mod tests {
         let i32 = tcx_mut.mk_ty(TyKind::Int(IntTy::I32));
         let u8 = tcx_mut.mk_ty(TyKind::Uint(UintTy::U8));
         assert!(is_valid_cast(&tcx_mut, i32, u8));
+    }
+
+    #[test]
+    fn int_to_char_casts_are_valid() {
+        // §3.5.36(b): `97u8 as char` / `97i32 as char` must be valid.
+        let mut tcx_mut = TyCtxMut::new(Interner::new());
+        let u8 = tcx_mut.mk_ty(TyKind::Uint(UintTy::U8));
+        let u32_ty = tcx_mut.mk_ty(TyKind::Uint(UintTy::U32));
+        let i32 = tcx_mut.mk_ty(TyKind::Int(IntTy::I32));
+        let char_ty = tcx_mut.mk_ty(TyKind::Char);
+        assert!(is_valid_cast(&tcx_mut, u8, char_ty));
+        assert!(is_valid_cast(&tcx_mut, u32_ty, char_ty));
+        assert!(is_valid_cast(&tcx_mut, i32, char_ty));
     }
 
     #[test]
