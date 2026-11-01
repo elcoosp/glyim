@@ -4881,6 +4881,61 @@ regardless.
 took one command instead of a temporary-eprintln build cycle. The same
 will be true for any future parser-level investigation.
 
+**Session 23 final recon: three additional infrastructure gaps.**
+
+Verified before attempting any of pieces (2)-(5):
+
+  1. **`CrateHir` has no `fn_item` / `item_for` accessor.** Its public
+     methods are `from_single`, `as_name`, `alloc_expr`,
+     `alloc_missing`, `verify_invariants`. The `FnItem.is_unsafe`
+     field exists and is truthfully populated (§3.5.25), but there
+     is no `CrateHir::fn_item(def_id) -> Option<&FnItem>` accessor
+     for typeck to reach it. **New method needed.**
+
+  2. **`TyCtx` has no `is_unsafe` accessor.** Typeck has
+     `self.ctx: &mut TyCtxMut` and `self.hir: &CrateHir`, so it
+     *could* reach the HIR — but no method on either wires
+     `FnDefId → is_unsafe` today. **New method needed** (either on
+     `TyCtx` or by direct `CrateHir` walk from `FnCtxt`).
+
+  3. **`GlyimDiagnostic` has no `warning()` constructor.** Public
+     constructors are `type_error`, `internal_error`, and one more
+     (verified: line 356 is `internal_error`). `DiagSeverity::Warning`
+     exists as an enum variant but there is no constructor that
+     produces a warning-severity diagnostic. **New constructor
+     needed** — `pub fn warning(span, msg) -> Self` or similar.
+
+**Revised estimate for piece (2) alone (LintLevel/LintId enum).**
+That piece is now clearly **four sub-pieces**, not one:
+
+  2a. `GlyimDiagnostic::warning(span, msg) -> Self` — trivial (5
+      lines, mirrors `internal_error`).
+  2b. `CrateHir::fn_item(def_id) -> Option<&FnItem>` — small (~10
+      lines + access to the item index; CrateHir may or may not
+      already index FnItems by def id — verify before writing).
+  2c. `FnCtxt::is_unsafe_fn_call(callee_id) -> bool` — small (~15
+      lines wrapping 2b; also needs `unsafe_context_depth` field
+      and inc/dec at block boundaries).
+  2d. `LintId` / `LintLevel` enum + a `HashSet<LintId>` on `FnCtxt`
+      — the actual "framework" the original entry cited. This is
+      what makes (2) a session of work.
+
+Pieces (3) attribute resolution, (4) CLI flags, (5) emission still
+sit on top.
+
+**Why this was not attempted.** The recon revealed three separate
+constructors/methods that need adding before a single lint can fire.
+That is genuinely the 3-5 sessions the entry estimated. Attempting
+any single sub-piece in isolation would land inert code, exactly the
+pattern §3.5.30's own earlier note warns against.
+
+**The entry's final state after session 23.** Piece 1a confirmed
+(`--emit=syntax`), piece 1b landed (`afdd7022`), pieces 2a-2d, 3, 4, 5
+still open with concrete line-level fix shapes. §3.5.30 is not
+"planning-worthy" — it is *planned*. The remaining work is mechanical
+implementation across four files plus tests, one session per
+sub-piece.
+
 **Status.** Piece (1) is 1a + 1b + 1c as described above. Pieces (2)-(4)
 (LintLevel/LintId, attribute resolution, CLI flags) unchanged. §3.5.30
 stays OPEN with corrected scope.
