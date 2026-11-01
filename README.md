@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/logo.png" alt="Glyim Logo" width="200"/>
+  <img src="docs/logo.png" alt="Glyim Logo" width="300"/>
   <p>
     <strong>A modular, from‑scratch compiler for a Rust‑like systems programming language, written in Rust.</strong><br/>
     Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference &amp; trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with more than 20 crates, designed for clarity, testability, and incremental development.
