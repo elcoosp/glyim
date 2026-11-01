@@ -2639,9 +2639,11 @@ landed in `bba09256`:
      only typed-but-not-literal receivers matched. That was the final
      domino — typed worked, `42.to_string()` didn't, until the peel.
 
-**Still open: multi-arg `format!`.** `format!("a={} b={}", 42, 100)`
-prints empty. Distinct bug in the fmt macro's repeated-substitution
-path. Tracked as §3.5.37.
+**Multi-arg `format!` is fixed too (5d92bdd7).** `format!("a={} b={}",
+42, 100)` prints `a=42 b=100` after §3.5.37's `try_interp` rewrite
+(loop over all `{}` substitutions instead of rejecting multi-`{}`
+format strings). §3.5.22 is fully closed: single-arg + multi-arg both
+work on both backends.
 
 **Minimal reproduction.**
 
