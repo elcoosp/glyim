@@ -4891,7 +4891,7 @@ arm + runtime digit-formatting helper), not a diagnostic change.
 
 **Status.** Withdrawn. No separate fix exists. See §3.5.22.
 
-#### 3.5.36 — OPEN: `String::push` takes `u8` not `char`; `u8 as char` / `char as u8` casts are unsupported
+#### 3.5.36 — PARTIAL: int->char casts fixed; `String::push(u8)` still to change
 
 Discovered while probing §3.5.22's `.g` digit-loop path.
 
@@ -4912,6 +4912,20 @@ compile.
 `impl String` block defining `push`. Changing the parameter type
 from `u8` to `char` would require the body to convert `char` to
 `u8`, which is gap (b).
+
+**(b) `u8 as char` / `char as u8` casts — CLOSED.** Fixed by adding
+`(Int(_) | Uint(_), Char) => true` to `is_valid_cast` in
+`crates/glyim-type/src/cast.rs`. Codegen handles it as an ordinary
+int cast (char is i32 at the LLVM level per
+`codegen-llvm/src/types.rs:31`). Verified by unit test
+(`int_to_char_casts_are_valid`) plus end-to-end probes of all four
+directions. `97u8 as char` now works; `'a' as u8` continues to work.
+
+**(a) `String::push` takes `u8` not `char` — still open.** Fixing
+it needs a one-line signature change in `crates/glyim-lang-alloc/lib/
+string.g` plus a body that converts `char` to `u8`. Both cast
+directions (`char as u8` pre-existing, `u8 as char` now legal) are
+available; the body can use whichever is more natural.
 
 **(b) `u8 as char` / `char as u8` casts are unsupported.**
 
