@@ -364,6 +364,20 @@ impl GlyimDiagnostic {
             MultiSpan::from_span(Span::DUMMY),
         )
     }
+    /// Create a warning-severity diagnostic. Used by `-W`-style lints
+    /// (§3.5.30). Severity `Warning` — the compiler continues past it.
+    pub fn warning(span: Span, message: impl Into<String>) -> Self {
+        Self::new(
+            ErrorCode {
+                category: ErrorCategory::Internal,
+                number: 0,
+            },
+            DiagSeverity::Warning,
+            message,
+            MultiSpan::from_span(span),
+        )
+    }
+
     /// macro_error.
     pub fn macro_error(span: Span, message: impl Into<String>) -> Self {
         Self::new(

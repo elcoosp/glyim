@@ -114,3 +114,12 @@ fn test_error_trait() {
     let diag = GlyimDiagnostic::lex_error(span, "test");
     let _err: &dyn std::error::Error = &diag; // must compile
 }
+
+#[test]
+fn warning_severity_test() {
+    use glyim_span::Span;
+    let d = GlyimDiagnostic::warning(Span::DUMMY, "test warning message");
+    assert!(matches!(d.severity, DiagSeverity::Warning));
+    assert!(!d.is_error());
+    assert_eq!(d.message, "test warning message");
+}
