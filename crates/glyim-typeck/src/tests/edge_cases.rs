@@ -20,6 +20,7 @@ fn multiple_functions() {
         let mut exprs: IndexVec<ExprId, Expr> = IndexVec::new();
         exprs.push(Expr::Literal(glyim_hir::Literal::Unit));
         Body {
+            unsafe_blocks: std::collections::HashSet::new(),
             owner: LocalDefId::from_raw(0),
             exprs: exprs.clone(),
             pats: IndexVec::new(),
@@ -120,6 +121,7 @@ fn multiple_params() {
     exprs.push(Expr::Literal(glyim_hir::Literal::Unit));
 
     let body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats,
@@ -200,6 +202,7 @@ fn binary_multiply() {
     exprs.push(Expr::Literal(glyim_hir::Literal::Unit));
 
     let body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
@@ -265,6 +268,7 @@ fn binary_comparison() {
     exprs.push(Expr::Literal(glyim_hir::Literal::Unit));
 
     let body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
@@ -331,6 +335,7 @@ fn if_expression() {
     exprs.push(Expr::Literal(glyim_hir::Literal::Unit));
 
     let body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
@@ -396,6 +401,7 @@ fn block_expression() {
     exprs.push(Expr::Literal(glyim_hir::Literal::Unit));
 
     let body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
@@ -457,6 +463,7 @@ fn unresolved_variable() {
     exprs.push(Expr::Literal(glyim_hir::Literal::Unit));
 
     let body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),

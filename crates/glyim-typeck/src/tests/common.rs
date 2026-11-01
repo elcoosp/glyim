@@ -103,6 +103,7 @@ pub fn make_single_body_hir(
     };
     expr_vec.push(block_expr);
     let body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: expr_vec,
         pats: IndexVec::new(),

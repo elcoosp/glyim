@@ -499,6 +499,15 @@ pub struct Body {
     pub span: Span,
     /// Struct.
     pub expr_spans: IndexVec<ExprId, Span>, // Added field
+    /// §3.5.30 piece (1b): `ExprId`s of `Expr::Block` nodes whose source
+    /// was `unsafe { ... }`. Populated by `lower_block_to_expr` via a
+    /// preceding-sibling scan for `KwUnsafe` (parser emits it as a bare
+    /// sibling token of an ordinary Block node — confirmed via
+    /// --emit=syntax in de5028d2).
+    ///
+    /// Currently inert. Exists so the future -W unsafe lint (§3.5.30
+    /// pieces 2-4) has a source of truth.
+    pub unsafe_blocks: std::collections::HashSet<ExprId>,
 }
 
 #[derive(Clone, Debug)]

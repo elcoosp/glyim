@@ -31,6 +31,7 @@ fn dummy_span() -> glyim_span::Span {
 
 fn test_body() -> Body {
     Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: glyim_core::def_id::LocalDefId::from_raw(0),
         exprs: glyim_core::arena::IndexVec::new(),
         pats: glyim_core::arena::IndexVec::new(),

@@ -235,6 +235,7 @@ pub(crate) fn lower_fn_def(
     {
         tracing::debug!("Found Block node in FnDef, lowering to expr");
         let mut body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
             owner,
             exprs: IndexVec::new(),
             pats: temp_pats,
@@ -702,6 +703,7 @@ pub(crate) fn lower_impl_def(
             .find(|c| c.kind() == SyntaxKind::Block)
         {
             let mut body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
                 owner,
                 exprs: IndexVec::new(),
                 pats: temp_pats,
@@ -870,6 +872,7 @@ pub(crate) fn lower_trait_def(
             .find(|c| c.kind() == SyntaxKind::Block)
         {
             let mut body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
                 owner,
                 exprs: IndexVec::new(),
                 pats: temp_pats,
@@ -1001,6 +1004,7 @@ pub(crate) fn lower_const_def(
     let mut root_expr: Option<crate::ExprId> = None;
     let body_id: Option<BodyId> = if let Some(init) = init_node {
         let mut body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
             owner,
             exprs: IndexVec::new(),
             pats: IndexVec::new(),
@@ -1096,6 +1100,7 @@ pub(crate) fn lower_static_def(
     }
     let (body_id, root_expr_id): (Option<BodyId>, Option<crate::ExprId>) = if let Some(init) = init_node {
         let mut body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
             owner,
             exprs: IndexVec::new(),
             pats: IndexVec::new(),

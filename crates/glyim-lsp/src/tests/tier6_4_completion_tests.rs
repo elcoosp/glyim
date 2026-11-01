@@ -174,6 +174,7 @@ fn main() {
     expr_spans.push(span_for(dot_pos, dot_pos + 1)); // receiver `x`
     expr_spans.push(span_for(dot_pos, dot_pos + 2)); // method-call span covers the `.`
     let body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: main_owner,
         exprs,
         pats: IndexVec::new(),
@@ -370,6 +371,7 @@ fn main() {
     expr_spans.push(span_for(dot_pos, dot_pos + 1));
     expr_spans.push(span_for(dot_pos, dot_pos + 2));
     let body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: main_owner,
         exprs,
         pats: IndexVec::new(),

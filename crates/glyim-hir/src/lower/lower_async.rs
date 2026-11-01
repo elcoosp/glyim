@@ -519,6 +519,7 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
     let mut poll_body = {
         let original_body = &hir.bodies[original_body_id];
         let mut b = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
             owner: original_body.owner,
             exprs: original_body.exprs.clone(),
             pats: IndexVec::new(),
@@ -598,6 +599,7 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
 
     // ---- 4. Wrapper fn body: `FooFuture { f0: a0, .. }` ----
     let mut wrapper_body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: original_body_owner,
         exprs: IndexVec::new(),
         pats: IndexVec::new(),
@@ -1313,6 +1315,7 @@ fn desugar_multi_async_fn(
 
     // 3. Build the poll body. Each `S_k` arm re-drives `fut_k`.
     let mut poll_body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: original_body_owner,
         exprs: IndexVec::new(),
         pats: IndexVec::new(),
@@ -1890,6 +1893,7 @@ fn desugar_multi_async_fn(
     let interner = &hir.interner;
     // 5. Wrapper fn: `fn foo(args) -> fooFuture { fooFuture { state: fooState::Start(args) } }`.
     let mut wrapper_body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: original_body_owner,
         exprs: IndexVec::new(),
         pats: IndexVec::new(),
@@ -2644,6 +2648,7 @@ fn desugar_loop_async_fn(
     let fut_local_name = interner.intern("fut");
 
     let mut poll_body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: original_body_owner,
         exprs: IndexVec::new(),
         pats: IndexVec::new(),
@@ -3088,6 +3093,7 @@ fn desugar_loop_async_fn(
 
     // Wrapper fn: fn foo(args) -> fooFuture { fooFuture { state: fooState::Start(args) } }
     let mut wrapper_body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: original_body_owner,
         exprs: IndexVec::new(),
         pats: IndexVec::new(),

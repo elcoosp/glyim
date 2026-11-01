@@ -30,6 +30,7 @@ fn make_return_42_body(owner: LocalDefId) -> Body {
     };
     let _ret_id = exprs.push(ret_expr);
     Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner,
         exprs: exprs.clone(),
         pats: IndexVec::new(),
@@ -49,6 +50,7 @@ fn make_return_99_body(owner: LocalDefId) -> Body {
     };
     let _ret_id = exprs.push(ret_expr);
     Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner,
         exprs: exprs.clone(),
         pats: IndexVec::new(),
@@ -71,6 +73,7 @@ fn make_body_with_call(owner: LocalDefId, callee_name: Name) -> Body {
         value: Some(call_id),
     });
     Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner,
         exprs: exprs.clone(),
         pats: IndexVec::new(),
@@ -367,6 +370,7 @@ fn v03_t04_default_method_with_generic_params() {
     let mut exprs = IndexVec::new();
     exprs.push(Expr::Literal(Literal::Unit));
     let default_body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: owner_trait,
         exprs: exprs.clone(),
         pats: IndexVec::new(),
@@ -640,6 +644,7 @@ fn v03_t06_ambiguous_method_in_multiple_impls() {
     });
 
     let main_body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats,

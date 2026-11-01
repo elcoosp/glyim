@@ -199,8 +199,29 @@ pub(crate) fn lower_block_to_expr(
     };
 
     let expr = Expr::Block { stmts, tail };
+    let expr_id = body.alloc_expr(expr, node_span(node));
 
-    body.alloc_expr(expr, node_span(node))
+    // §3.5.30 piece (1b): `unsafe { ... }` — parser emits KwUnsafe as a
+    // sibling token of an ordinary Block node (confirmed via
+    // --emit=syntax).
+    {
+        let mut prev = node.prev_sibling_or_token();
+        while let Some(el) = prev {
+            match el {
+                glyim_syntax::SyntaxElement::Token(t) => {
+                    if t.kind() == SyntaxKind::KwUnsafe {
+                        body.unsafe_blocks.insert(expr_id);
+                        break;
+                    }
+                    if !t.kind().is_trivia() { break; }
+                    prev = t.prev_sibling_or_token();
+                }
+                glyim_syntax::SyntaxElement::Node(_) => break,
+            }
+        }
+    }
+
+    expr_id
 }
 
 /// Convert a pattern into an expression (for LHS of assignment). Kept for the

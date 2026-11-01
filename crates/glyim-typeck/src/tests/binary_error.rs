@@ -25,6 +25,7 @@ fn binary_i32_add_bool_error() {
     exprs.push(Expr::Literal(glyim_hir::Literal::Unit));
 
     let body = Body {
+            unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
