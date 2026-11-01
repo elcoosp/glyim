@@ -2386,6 +2386,67 @@ Discovered 2026-10-28 (session 22). Originally surfaced by moving a
 dead fixture into the corpus, then narrowed by direct probes. The bug
 is **much larger** than the fixture that found it.
 
+**Status update (session 23 continuation, after §3.5.31(a)).**
+`42.to_string()`, `1.5.to_string()`, `true.to_string()` all now
+**compile and run** — but produce an **empty String**. Two things
+changed relative to the original nine-layer analysis:
+
+  1. §3.5.31(a)'s `resolve_ty_shallow` at
+     `check_expr.rs:3641` made primitive-method resolution find the
+     `to_string` **name**. Before that fix, these calls failed at
+     typeck with `[T0001] no method`. Now they compile and reach
+     codegen.
+  2. The failure mode for `to_string` on a **non-String primitive**
+     is a sentinel path (`FnDefId(u32::MAX - 2)` at
+     `check_expr.rs:3583`) — not the `str::to_string` /
+     `String::to_string` builtins (which have real intrinsic
+     bodies, per the `TO_STRING-BUILTIN-FIRST` block at
+     `check_expr.rs:3544-3584`).
+
+So §3.5.22 did **not** get smaller; the failure just moved downstream.
+The substrate gap is unchanged:
+
+  * `primitive_method_fns` has `str::to_string` and
+    `String::to_string` — **no `i32`/`i64`/`u32`/`f64`/`bool` entries**.
+  * No runtime integer-formatting helper (`glyim_i32_to_string`,
+    `glyim_u64_to_string`, etc.) exists in `glyim-runtime`.
+  * No stdlib `.g` `impl Display for i32` or `fn to_string` for
+    primitives.
+  * `format!("{}", 42)` therefore resolves the `to_string` call on
+    the argument but the sentinel returns zero, so the format
+    buffer receives an empty string.
+
+**Diagnostic asymmetry discovered.** The two backends treat the
+sentinel very differently:
+
+| Backend | `42.to_string()` behaviour |
+|---|---|
+| Interpreter | **panics loudly** at `mir-interp/src/lib.rs:287-290` (`SENTINEL-HARD-FAIL`) with a message that begins `reached a compiler-synthetic sentinel call (FnDefId …); … File a compiler bug.` |
+| LLVM backend | **silently zero-consts** the sentinel call — `MirConstKind::Error` lowered as a zero value, so `to_string` yields an empty `String`. No stderr. |
+
+Both are wrong for a user program, but the interpreter at least
+identifies the site. Making the LLVM backend loud too (emit a call
+to a trap or to `glyim_panic("compiler-synthetic sentinel reached")`
+instead of zero-consting) is a **separate, bounded** fix — see
+§3.5.35. It would turn §3.5.22's silent-empty into a clear panic,
+making the bug testable and diagnosable without the full
+builtin-dispatcher redesign.
+
+**Nine-layer status after this recon.**
+
+  * Layers 1-7: unchanged from the original entry below.
+  * **Layer 8** (primitive `to_string` needs `builtin_fn_index` or
+    `primitive_method_fns` entries) — **still open, still blocked**
+    on the builtin-dispatcher redesign the original entry cites.
+  * **Layer 9** (`Ok(false)` silent drop in
+    `try_lower_builtin_intrinsic`) — still open.
+  * **NEW finding** — the sentinel path is the actual fallthrough
+    for `to_string` on primitives once name resolution succeeds.
+    So even after layers 8-9 land, `to_string` on a primitive will
+    still hit the sentinel unless an implementation is registered.
+    The registry entry needs a real codegen arm *and* interp arm
+    *and* runtime helper, not just a name.
+
 **Minimal reproduction.**
 
     fn main() -> i32 {
@@ -4625,6 +4686,81 @@ will be true for any future parser-level investigation.
 **Status.** Piece (1) is 1a + 1b + 1c as described above. Pieces (2)-(4)
 (LintLevel/LintId, attribute resolution, CLI flags) unchanged. §3.5.30
 stays OPEN with corrected scope.
+
+#### 3.5.35 — OPEN: LLVM silently zero-consts sentinel calls; interp panics loudly
+
+**Diagnostic asymmetry.** Typeck emits four synthetic sentinel
+`FnDefId`s in the top range (`u32::MAX - 4 … u32::MAX - 1`) for
+builtin-method fallbacks (`into`, `to_string`, `clone`, `drop`). When
+one of these reaches a live code path, the two backends disagree:
+
+| Backend | Behaviour | Site |
+|---|---|---|
+| Interpreter | **panics loudly** — `SENTINEL-HARD-FAIL` prints `reached a compiler-synthetic sentinel call (FnDefId N); this branch was assumed dead. File a compiler bug.` | `mir-interp/src/lib.rs:287-290` |
+| LLVM backend | **silently zero-consts** — the sentinel lowers to a zero value, so e.g. `to_string()` returns an empty `String` | lowering replaces the sentinel with `MirConstKind::Error` |
+
+For user programs, the LLVM behaviour is a **silent miscompile**: the
+program runs to completion with wrong output and no diagnostic. The
+interpreter's behaviour is a **loud compiler-bug report** — not the
+right output for the user, but at least the failure is visible.
+
+**Concrete case (§3.5.22).** `42.to_string()` resolves through typeck
+via §3.5.31(a)'s primitive-method fix, then falls to the sentinel at
+`check_expr.rs:3583` (no `i32::to_string` is registered). LLVM
+silently returns empty; the interpreter panics with
+`reached a compiler-synthetic sentinel call (FnDefId 4294967294);
+… File a compiler bug.` The interpreter's message is correct and
+actionable; LLVM's is absent.
+
+**Fix shape.** Make the LLVM lowering path reject sentinel calls
+loudly, matching the interpreter. Two candidate sites:
+
+  a. **At lowering** (`crates/glyim-lower/src/lower_rvalue.rs`,
+     the sentinel-detection region around line 546-633). When a
+     sentinel `FnDefId` reaches a live Call, emit a real
+     `TerminatorKind::Call { func: glyim_panic, args: [msg, len],
+     target: unreachable_bb }` where `msg = "compiler bug: synthetic
+     sentinel reached (FnDefId N)"`. This requires threading a
+     `glyim_panic` reference through lowering — which §3.5.27
+     already does for the abort sites.
+  b. **At codegen** (`crates/glyim-codegen-llvm/src/lower.rs`).
+     Detect `MirConstKind::Error` used as a Call target and emit the
+     same `glyim_process_abort_with_msg("compiler-synthetic sentinel
+     reached")` that §3.5.27 added. Simpler because the plumbing
+     already exists.
+
+Option (b) is likely smaller: three-line change at the
+`build_call` site when the callee value is `MirConstKind::Error`,
+reusing `emit_abort_with_msg` from `afdd7022`'s sibling commit
+`c95bf14b`.
+
+**Why this is not §3.5.22.** §3.5.22 is about *making `to_string`
+work*. This entry is about *making the failure mode readable while
+`to_string` does not work*. The two are independent: with this fix
+alone, `42.to_string()` would panic with a clear message instead of
+returning empty; §3.5.22's registry/runtime work would still be
+needed to make it return `"42"`.
+
+**Acceptance test.**
+
+    fn main() -> i32 {
+        let s = 42.to_string();
+        println!("[{}]", s);
+        0
+    }
+
+On the LLVM backend (default `--emit=exec`), must exit non-zero with
+stderr containing `sentinel` and `compiler bug` (or similar),
+matching the interpreter's message. Currently exits 0 with empty
+stdout. Companion: `str::to_string` and `String::to_string` (which
+have real builtin bodies) must keep working — those should not hit
+the sentinel at all, and the fix must not panic on them.
+
+**Status.** Open. Not attempted — the fix overlaps §3.5.27's
+abort-message plumbing but is a distinct site (Error-const call
+targets, not the four abort arms). Bounded at one file, but needs
+careful reading of where lowering replaces sentinels with
+`MirConstKind::Error` before it can safely be patched.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
