@@ -2380,7 +2380,7 @@ with a direct probe before designing a fix around it. Here that probe
 (`fn main() -> i32 { 300 }` → `$?`) took ten seconds and prevented a
 "fix" that would have broken correctness.
 
-#### 3.5.22 — OPEN: `println!`/`format!` format-argument substitution emits empty for runtime values (both backends)
+#### 3.5.22 — SINGLE-ARG CLOSED (bba09256); multi-arg tracked in §3.5.37
 
 Discovered 2026-10-28 (session 22). Originally surfaced by moving a
 dead fixture into the corpus, then narrowed by direct probes. The bug
@@ -2598,6 +2598,48 @@ to a sentinel and still produces nothing useful.
     still hit the sentinel unless an implementation is registered.
     The registry entry needs a real codegen arm *and* interp arm
     *and* runtime helper, not just a name.
+
+**Status (session 23 end): single-arg FIXED.** `42.to_string()`,
+`format!("value {}", 42)`, `i32::MIN.to_string()`, and all u32/u64
+extremes now produce correct strings on both backends. Three pieces
+landed in `bba09256`:
+
+  1. `crates/glyim-lang-std/lib/int_str.g` — four `*_to_string` free
+     functions with manual digit extraction (`% 10`, `/ 10`,
+     match-to-`&str`, `push_str`).
+  2. `crates/glyim-lang-std/src/lib.rs` — `std_source` entry +
+     `int_str` in both `pubs` lists.
+  3. `crates/glyim-typeck/src/check_expr.rs` — typeck branch routes
+     concrete Int(I32/I64)/Uint(U32/U64) receivers to the matching
+     int_str function. **Peels one `Ref` layer first** because literal
+     receivers arrive as `&Infer(Int)` (auto-ref); without the peel,
+     only typed-but-not-literal receivers matched. That was the final
+     domino — typed worked, `42.to_string()` didn't, until the peel.
+
+**Still open: multi-arg `format!`.** `format!("a={} b={}", 42, 100)`
+prints empty. Distinct bug in the fmt macro's repeated-substitution
+path. Tracked as §3.5.37.
+
+**Status (session 23 end): single-arg FIXED.** `42.to_string()`,
+`format!("value {}", 42)`, `i32::MIN.to_string()`, and all u32/u64
+extremes now produce correct strings on both backends. Three pieces
+landed in `bba09256`:
+
+  1. `crates/glyim-lang-std/lib/int_str.g` — four `*_to_string` free
+     functions with manual digit extraction (`% 10`, `/ 10`,
+     match-to-`&str`, `push_str`).
+  2. `crates/glyim-lang-std/src/lib.rs` — `std_source` entry +
+     `int_str` in both `pubs` lists.
+  3. `crates/glyim-typeck/src/check_expr.rs` — typeck branch routes
+     concrete Int(I32/I64)/Uint(U32/U64) receivers to the matching
+     int_str function. **Peels one `Ref` layer first** because literal
+     receivers arrive as `&Infer(Int)` (auto-ref); without the peel,
+     only typed-but-not-literal receivers matched. That was the final
+     domino — typed worked, `42.to_string()` didn't, until the peel.
+
+**Still open: multi-arg `format!`.** `format!("a={} b={}", 42, 100)`
+prints empty. Distinct bug in the fmt macro's repeated-substitution
+path. Tracked as §3.5.37.
 
 **Minimal reproduction.**
 
@@ -5017,6 +5059,74 @@ Neither is required for §3.5.22 to progress, since `push_str` and the
 `match`-to-`&str` pattern bypass both. But idiomatic Rust code
 (`s.push('a')`) currently fails, so these are real user-facing gaps
 on their own.
+
+#### 3.5.37 — OPEN: multi-arg `format!` produces empty output
+
+**Symptom.** After §3.5.22's single-arg fix (commit `bba09256`):
+
+    fn main() -> i32 {
+        let a = 42;
+        let b = 100;
+        println!("a={} b={}", a, b);
+        0
+    }
+
+prints an empty line, exit 0. Single-arg `format!("value {}", a)`
+prints `value 42` correctly.
+
+**Mechanism hypothesis.** The `format!` macro expands each `{}` to a
+`__glyim_fmt.push_str(<arg>.to_string().as_str())`, wrapped in a block
+whose tail is the final `__glyim_fmt` identifier. For the multi-arg
+case, either:
+
+  a. The `push_str` statements are being dropped — typeck routes them
+     through a `check_stmt` path that discards side-effecting calls
+     for `Assign`/`Let` shapes, leaving `__glyim_fmt` empty.
+
+  b. The block's tail `__glyim_fmt` is discarded — same class of bug
+     as §3.5.33 (all-divergent match arms). The block ends up with a
+     `let`-shaped tail (or gets mis-classified) and the value is
+     dropped.
+
+**Where to look.**
+
+  * `crates/glyim-meta/src/expander/mod.rs` — `BuiltinMacro::Format`
+    handler. Verify each substitution produces a distinct
+    `<arg>.to_string().push_str(...)` call.
+  * `crates/glyim-typeck/src/check_expr.rs` — block handler's tail
+    resolution. §3.5.33's `all_arms_never` fix is nearby; same
+    block-shape reasoning may apply.
+  * The emitted MIR — inspect `--emit=mir` for
+    `format!("a={} b={}", 42, 100)`. Count `push_str` Call
+    terminators; check the final `Assign(_dest, __glyim_fmt)`.
+
+**Probe plan.**
+
+  Step 1 (30 min): `--emit=mir` on
+    `let s = format!("a={} b={}", 42, 100);`.
+    - How many `push_str` Call terminators appear? (Expect 2.)
+    - Does the final tail `Assign(_dest, Move(__glyim_fmt))` survive?
+    - If push_str calls missing → (a). If present but tail discarded
+      → (b).
+
+  Step 2: `--emit=syntax` on the same program to see the pre-
+    expansion tree; verify all substitutions are present in the macro
+    body.
+
+  Step 3: diagnose at the site the MIR + syntax points to.
+
+**Acceptance test.**
+
+    fn main() -> i32 {
+        let s = format!("a={} b={}", 42, 100);
+        println!("[{}]", s.as_str());
+        0
+    }
+
+must print `[a=42 b=100]`. Companion: `format!("{}", 42)` (single
+arg) must continue to work.
+
+**Status.** Open. Not attempted. First probe is cheap.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
