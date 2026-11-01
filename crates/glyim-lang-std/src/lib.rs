@@ -70,6 +70,7 @@ pub fn std_source(name: &str) -> Option<&'static str> {
         "boxed" => Some(include_str!("../../glyim-lang-alloc/lib/boxed.g")),
         "rc" => Some(include_str!("../../glyim-lang-alloc/lib/rc.g")),
         "string" => Some(include_str!("../../glyim-lang-alloc/lib/string.g")),
+        "int_str" => Some(include_str!("../lib/int_str.g")),
         "raw_vec" => Some(include_str!("../../glyim-lang-alloc/lib/raw_vec.g")),
         "alloc" => Some(include_str!("../../glyim-lang-alloc/lib/alloc.g")),
 
@@ -294,6 +295,15 @@ pub fn std_source_assembled() -> String {
             ],
         ),
         ("panic", &["panic_any", "panic_any_str"]),
+        (
+            "int_str",
+            &[
+                "i32_to_string",
+                "u32_to_string",
+                "i64_to_string",
+                "u64_to_string",
+            ],
+        ),
     ];
     // `str` and `slice` are emitted FLAT: their `impl str { .. }` /
     // `impl<T> [T] { .. }` extension blocks must bind to the primitive types,
@@ -438,6 +448,15 @@ pub fn std_source_assembled_minimal() -> String {
             ],
         ),
         ("panic", &["panic_any", "panic_any_str"]),
+        (
+            "int_str",
+            &[
+                "i32_to_string",
+                "u32_to_string",
+                "i64_to_string",
+                "u64_to_string",
+            ],
+        ),
     ];
     // `str` and `slice` emitted FLAT.
     let flat_modules: &[&str] = &["str", "slice", "parse"];

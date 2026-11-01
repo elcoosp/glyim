@@ -3580,6 +3580,50 @@ impl<'a> FnCtxt<'a> {
                         {
                             return Some((out_ty, fn_id));
                         }
+                        // §3.5.22: integer to_string via stdlib helpers.
+                        let peeled_step = match self.ctx.ty_kind(step_ty) {
+                            TyKind::Ref(_, inner, _) => *inner,
+                            _ => step_ty,
+                        };
+                        let resolved_step =
+                            self.infer.resolve_ty_shallow(self.ctx, peeled_step);
+                        let int_fn_name: Option<&str> = match self.ctx.ty_kind(resolved_step) {
+                            TyKind::Int(glyim_core::primitives::IntTy::I32) => {
+                                Some("i32_to_string")
+                            }
+                            TyKind::Int(glyim_core::primitives::IntTy::I64) => {
+                                Some("i64_to_string")
+                            }
+                            TyKind::Uint(glyim_core::primitives::UintTy::U32) => {
+                                Some("u32_to_string")
+                            }
+                            TyKind::Uint(glyim_core::primitives::UintTy::U64) => {
+                                Some("u64_to_string")
+                            }
+                            _ => None,
+                        };
+                        if let Some(fname) = int_fn_name {
+                            let name = self.ctx.resolver().intern(fname);
+                            let core_path = glyim_core::Path {
+                                segments: vec![glyim_core::PathSegment {
+                                    name,
+                                    generic_args: None,
+                                }],
+                                kind: glyim_core::PathKind::Plain,
+                            };
+                            let resolver = glyim_def_map::Resolver::new(
+                                &self.def_map.modules,
+                                self.def_map.root,
+                                self.current_module,
+                            );
+                            let resolved = resolver.resolve_path(&core_path);
+                            if let Some((local, _vis)) =
+                                resolved.values.or(resolved.types)
+                            {
+                                let fn_id = FnDefId::from_raw(local.to_raw());
+                                return Some((out_ty, fn_id));
+                            }
+                        }
                         let fn_id = FnDefId::from_raw(u32::MAX - 2);
                         return Some((out_ty, fn_id));
                     }
