@@ -4529,6 +4529,26 @@ gets `is_unsafe: false` except the real one), plus every destructure
 site. No HIR design avoids it: a side-table keyed on `ExprId` would
 also need 36 population sites.
 
+**Piece (1b) landed (commit `afdd7022`).** `Body::unsafe_blocks:
+HashSet<ExprId>` added and populated by `lower_block_to_expr` via
+preceding-sibling scan for `KwUnsafe` (confirmed shape via
+`--emit=syntax`). 13 lib construction sites + 40 test sites patched
+via span-based compiler guidance (`cargo check --workspace
+--all-targets --message-format=json`, dedupe by byte offset, insert
+at exact `{` position). Field is currently **inert** — no consumer.
+Full workspace green (4633/4633) on both backends.
+
+Prior attempts at piece (1b) and their failure modes (for the next
+reader):
+  1. Naive regex `\bBody\s*\{` matched all three `Body` types (HIR,
+     MIR, THIR) — 249 sites patched, most wrong. Revert.
+  2. `cargo check --workspace` (without `--all-targets`) missed test-
+     only sites (e.g. `glyim-lsp/src/tests/tier6_4_completion_tests.rs`).
+  3. Line-scan of E0063 spans oscillated (11 → 4 → 27 → 12) because
+     line-scan picked the wrong `Body {` when multiple literals sat
+     near the reported line. Byte-offset insertion from JSON spans
+     converged in 4 iterations (11 → 38 → 4 → 0).
+
 **Revised scope for piece (1) alone.** Two sub-pieces, each ~one
 session:
 
