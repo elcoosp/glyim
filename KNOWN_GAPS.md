@@ -4497,6 +4497,68 @@ at MIR/codegen. After: clean `[T0001]` at typeck.
 7 probes + both corpora + full workspace green. §3.5.33 fixtures
 still pass — the new check defers on matching ADTs.
 
+**Recon update (session 23 end): piece (1) is two sub-pieces, and
+36 sites — not one.**
+
+Two separate findings from the recon, both material:
+
+**(i) The parser is lossy for `unsafe { }` — no distinct node.**
+`crates/glyim-frontend/src/parser/expr.rs:856` handles
+`SyntaxKind::KwUnsafe` in expression position by `bump()`ing the
+keyword and calling `parse_block()` on the following `LBrace`. The
+result is an ordinary `SyntaxKind::Block` node, indistinguishable from
+a plain `{ }`. There is no `SyntaxKind::UnsafeBlock` in
+`crates/glyim-syntax/src/lib.rs`, and `lower_expr` has no arm for
+`KwUnsafe`.
+
+So before `Expr::Block` can carry `is_unsafe`, the **parser** must emit
+a wrapper node (or set a token-level flag) so HIR lowering can tell the
+two apart. That's a parser change in `expr.rs` plus a new `SyntaxKind`
+variant plus `ast_node!` wiring — itself a bounded but non-trivial
+sub-piece.
+
+**(ii) `Expr::Block` has 36 construction sites, not one.**
+`Expr::Block { stmts, tail }` appears in 36 places:
+  - 1 in `crates/glyim-hir/src/lower/lower_expr.rs:201` (the real one).
+  - **35 in `crates/glyim-hir/src/lower/lower_async.rs`** — the async
+    desugar synthesizes poll-state blocks, each constructing
+    `Expr::Block` literally.
+
+Adding `is_unsafe: bool` requires editing all 36 struct literals (each
+gets `is_unsafe: false` except the real one), plus every destructure
+site. No HIR design avoids it: a side-table keyed on `ExprId` would
+also need 36 population sites.
+
+**Revised scope for piece (1) alone.** Two sub-pieces, each ~one
+session:
+
+  1a. Parser: emit `SyntaxKind::UnsafeBlock` (or a `Block` with an
+      `is_unsafe` marker) when lowering `unsafe { }`. ~30-50 lines in
+      `expr.rs` + `SyntaxKind` + `ast_node!`. Verify with a syntax
+      dump probe (no `--emit=syntax` today, so a temporary `eprintln`
+      or a small test).
+
+  1b. HIR: add `is_unsafe: bool` to `Expr::Block`. Edit 36 struct
+      literals + destructure sites mechanically. Verify with a
+      lowering unit test that `unsafe { }` produces `is_unsafe = true`
+      and `{ }` produces `false`.
+
+  1c. HIR lowering: at `lower_expr.rs:201`, extract `is_unsafe` from
+      the new parser node; at the 35 async sites, always pass `false`.
+      (~20 lines, once 1a and 1b exist.)
+
+Then the lint framework (§3.5.30 pieces 2-4) can consume `is_unsafe`.
+Piece (1) alone is ~2 sessions of mechanical work + a parser change.
+
+**Corrects the prior recommendation.** The "land (1) alone — it's
+independently useful" suggestion was based on two wrong assumptions:
+that `Expr::Block` had one construction site, and that `unsafe { }` was
+already visible as a distinct syntax node. Neither holds.
+
+**Status.** Piece (1) is 1a + 1b + 1c as described above. Pieces (2)-(4)
+(LintLevel/LintId, attribute resolution, CLI flags) unchanged. §3.5.30
+stays OPEN with corrected scope.
+
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
 Investigated 2026-10-26 during session 19. The audit's P2-B1
