@@ -2493,7 +2493,65 @@ end-to-end across six primitives × two backends × typed/literal
 receivers) is genuinely a session. §3.5.22's "not one session" tag
 stands.
 
-**The three-step path a future session should take.**
+**Step-1 probe result (session 23 end): `push_str` works, `push(char)`
+does not.**
+
+Ran four probes to validate the path:
+
+| Probe | Result |
+|---|---|
+| `String::push('a')` | **compile fail**: `mismatched types: char vs u8` |
+| `String::push_str("hello")` | **works** — prints `[hello world]` |
+| `String::new().as_str()` | **works** — prints `[]` |
+| `n as u8 as char` | **compile fail**: `invalid cast` |
+
+Two findings:
+
+  1. `String::push` takes `u8`, not `char` — its signature is
+     `push(u8)` in this stdlib, unlike Rust's `push(char)`. See
+     §3.5.36.
+  2. `u8 as char` / `char as u8` casts are unsupported. See §3.5.36.
+
+Neither is fatal to the .g digit-loop approach — `push_str` works, so
+the digits can be appended via a match:
+
+    fn digit_to_str(d: u32) -> &str {
+        match d {
+            0 => "0", 1 => "1", 2 => "2", 3 => "3", 4 => "4",
+            5 => "5", 6 => "6", 7 => "7", 8 => "8", _ => "9",
+        }
+    }
+
+**The revised path for a future session.**
+
+  Step 1 (done): `push_str` works; `push(char)` doesn't; `char`
+    casts don't. The `.g` digit-loop path is viable using
+    `push_str` and a digit→&str match.
+
+  Step 2 (i32-only, ~60 lines across 2 files):
+    - `.g` `fn i32_to_string(n: i32) -> String` doing:
+      - handle `n == 0` (early return "0")
+      - handle `n == i32::MIN` (special case — negation overflows)
+      - handle negative (prepend "-", work on absolute value)
+      - build digits by `n % 10` → match → `push_str` in reverse
+    - register `i32_to_string` in `glyim-lang-std/src/lib.rs`
+      well-known list (both sites, ~296 and ~440)
+    - typeck branch at `check_expr.rs:3544-3585`: if `step_ty` is
+      `TyKind::Int(IntTy::I32)`, look up `i32_to_string` and return
+      its FnDefId instead of the sentinel
+    - verify `42.to_string() == "42"` on both backends
+
+  Step 3 (replicate for i64/u32/u64/f64/bool, OR build the Display
+    trait properly).
+
+**Why the path was not attempted this session.** The three-step plan
+was rewritten mid-session based on the probe. Step 2 is genuinely a
+session of work (i32 digit loop with edge cases, registry, typeck
+branch, both-backends verification). Attempting it at the tail of a
+~20-commit session would repeat the pattern that produced four
+reverts on §3.5.33.
+
+**Original three-step sketch (superseded by the above).**
 
   Step 1 (30 min): probe `String::push(char)`:
 
@@ -4832,6 +4890,70 @@ recommendation stands: **the real fix for `to_string` on primitives is
 arm + runtime digit-formatting helper), not a diagnostic change.
 
 **Status.** Withdrawn. No separate fix exists. See §3.5.22.
+
+#### 3.5.36 — OPEN: `String::push` takes `u8` not `char`; `u8 as char` / `char as u8` casts are unsupported
+
+Discovered while probing §3.5.22's `.g` digit-loop path.
+
+**Two narrow gaps.**
+
+**(a) `String::push` signature is `push(u8)`, not `push(char)`.**
+In Rust, `String::push` takes `char`. Here:
+
+    let mut s = String::new();
+    s.push('a');          // [T0001] mismatched types: char vs u8
+    s.push(97u8);         // presumably works but is not char
+
+The mismatch diagnostic confirms `push`'s parameter is `u8`. A
+program that writes `s.push('a')` in idiomatic Rust style fails to
+compile.
+
+**Where to look.** `crates/glyim-lang-alloc/lib/string.g` — the
+`impl String` block defining `push`. Changing the parameter type
+from `u8` to `char` would require the body to convert `char` to
+`u8`, which is gap (b).
+
+**(b) `u8 as char` / `char as u8` casts are unsupported.**
+
+    let n: u8 = 97;
+    let c = n as char;    // [T0001] invalid cast
+
+    let c: char = 'a';
+    let n = c as u8;      // same (character kind of cast)
+
+Neither direction of the char↔u8 cast works. That's the usual way to
+implement `push(char)` when the underlying storage is bytes.
+
+**Where to look.** `crates/glyim-typeck/src/check_expr.rs`, the
+`Expr::Cast` arm. `TyKind::Char` in the source or destination should
+be a valid cast target when the other side is `Uint(UintTy::U8)`.
+Neither direction is currently accepted.
+
+**Interim workaround (which §3.5.22's path uses).**
+`String::push_str(&str)` works. If the caller needs to push a
+single character, a `match` to a one-char `&str` bypasses both
+gaps:
+
+    fn digit_to_str(d: u32) -> &str {
+        match d {
+            0 => "0", 1 => "1", ..., 9 => "9",
+        }
+    }
+
+That's what §3.5.22's i32_to_string implementation can use, avoiding
+both char casts and `String::push`.
+
+**Status.** Open. Two independent fixes:
+
+  * Extend typeck's `Cast` arm to accept `Uint(U8) ↔ Char` in both
+    directions. Bounded, ~10-15 lines including tests.
+  * Change `String::push`'s parameter from `u8` to `char` (which
+    depends on the cast fix to implement). Also bounded.
+
+Neither is required for §3.5.22 to progress, since `push_str` and the
+`match`-to-`&str` pattern bypass both. But idiomatic Rust code
+(`s.push('a')`) currently fails, so these are real user-facing gaps
+on their own.
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
