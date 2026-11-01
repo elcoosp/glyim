@@ -1152,23 +1152,16 @@ impl<'a> ExpanderImpl<'a> {
                     out.push(tt_tok(SyntaxKind::Semicolon, ";"));
                 }
                 fn try_interp(inner: &[TokenTree]) -> Option<Vec<TokenTree>> {
+                    // §3.5.37: loop over every `{}` substitution.
                     let (fmt, rest) = take_fmt(inner)?;
-                    let open = fmt.find("{}")?;
-                    let (before, after) = (&fmt[..open], &fmt[open + 2..]);
-                    if before.contains('{')
-                        || before.contains('}')
-                        || after.contains('{')
-                        || after.contains('}')
-                    {
+                    if !fmt.contains("{}") {
                         return None;
                     }
-                    let rest = match rest.split_first() {
-                        Some((TokenTree::Token(SyntaxKind::Comma, _), r)) => r,
-                        _ => return None,
-                    };
                     if rest.is_empty() {
                         return None;
                     }
+                    let mut fmt_remaining: String = fmt;
+                    let mut rest_vec: Vec<TokenTree> = rest.to_vec();
                     let mut out: Vec<TokenTree> = Vec::new();
                     out.push(tt_tok(SyntaxKind::LBrace, "{"));
                     out.push(tt_tok(SyntaxKind::KwLet, "let"));
@@ -1180,31 +1173,95 @@ impl<'a> ExpanderImpl<'a> {
                     out.push(tt_tok(SyntaxKind::Ident, "new"));
                     out.push(tt_paren(Vec::new()));
                     out.push(tt_tok(SyntaxKind::Semicolon, ";"));
-                    if !before.is_empty() {
+                    loop {
+                        let open = match fmt_remaining.find("{}") {
+                            Some(o) => o,
+                            None => break,
+                        };
+                        let before = fmt_remaining[..open].to_string();
+                        let after = fmt_remaining[open + 2..].to_string();
+                        if before.contains('{') || before.contains('}') {
+                            return None;
+                        }
+                        if !before.is_empty() {
+                            emit_push_str(
+                                &mut out,
+                                vec![tt_tok(
+                                    SyntaxKind::StringLit,
+                                    &format!("\"{}\"", before),
+                                )],
+                            );
+                        }
+                        if matches!(
+                            rest_vec.first(),
+                            Some(TokenTree::Token(SyntaxKind::Comma, _))
+                        ) {
+                            rest_vec.remove(0);
+                        }
+                        let mut depth = 0i32;
+                        let mut split_idx = rest_vec.len();
+                        for (i, tt) in rest_vec.iter().enumerate() {
+                            match tt {
+                                TokenTree::Token(
+                                    SyntaxKind::LParen
+                                    | SyntaxKind::LBracket
+                                    | SyntaxKind::LBrace,
+                                    _,
+                                ) => depth += 1,
+                                TokenTree::Token(
+                                    SyntaxKind::RParen
+                                    | SyntaxKind::RBracket
+                                    | SyntaxKind::RBrace,
+                                    _,
+                                ) => depth -= 1,
+                                TokenTree::Token(SyntaxKind::Comma, _) if depth == 0 => {
+                                    split_idx = i;
+                                    break;
+                                }
+                                _ => {}
+                            }
+                        }
+                        let arg: Vec<TokenTree> = rest_vec.drain(..split_idx).collect();
+                        if arg.is_empty() {
+                            return None;
+                        }
+                        let mut arg_toks: Vec<TokenTree> = arg;
+                        arg_toks.push(tt_tok(SyntaxKind::Dot, "."));
+                        arg_toks.push(tt_tok(SyntaxKind::Ident, "to_string"));
+                        arg_toks.push(tt_paren(Vec::new()));
+                        arg_toks.push(tt_tok(SyntaxKind::Dot, "."));
+                        arg_toks.push(tt_tok(SyntaxKind::Ident, "as_str"));
+                        arg_toks.push(tt_paren(Vec::new()));
+                        emit_push_str(&mut out, arg_toks);
+                        fmt_remaining = after;
+                    }
+                    if !fmt_remaining.is_empty() {
+                        if fmt_remaining.contains('{') || fmt_remaining.contains('}') {
+                            return None;
+                        }
                         emit_push_str(
                             &mut out,
-                            vec![tt_tok(SyntaxKind::StringLit, &format!("\"{}\"", before))],
+                            vec![tt_tok(
+                                SyntaxKind::StringLit,
+                                &format!("\"{}\"", fmt_remaining),
+                            )],
                         );
                     }
-                    let mut arg_toks: Vec<TokenTree> = Vec::new();
-                    arg_toks.extend(rest.iter().cloned());
-                    arg_toks.push(tt_tok(SyntaxKind::Dot, "."));
-                    arg_toks.push(tt_tok(SyntaxKind::Ident, "to_string"));
-                    arg_toks.push(tt_paren(Vec::new()));
-                    arg_toks.push(tt_tok(SyntaxKind::Dot, "."));
-                    arg_toks.push(tt_tok(SyntaxKind::Ident, "as_str"));
-                    arg_toks.push(tt_paren(Vec::new()));
-                    emit_push_str(&mut out, arg_toks);
-                    if !after.is_empty() {
-                        emit_push_str(
-                            &mut out,
-                            vec![tt_tok(SyntaxKind::StringLit, &format!("\"{}\"", after))],
-                        );
+                    if matches!(
+                        rest_vec.first(),
+                        Some(TokenTree::Token(SyntaxKind::Comma, _))
+                    ) {
+                        rest_vec.remove(0);
+                    }
+                    if !rest_vec.is_empty() {
+                        return None;
                     }
                     out.push(tt_tok(SyntaxKind::Ident, "__glyim_fmt"));
                     out.push(tt_tok(SyntaxKind::RBrace, "}"));
                     Some(out)
                 }
+
+
 
                 let args_tt = flatten_token_tree(args_node);
                 let mut inner: &[TokenTree] = &args_tt;
