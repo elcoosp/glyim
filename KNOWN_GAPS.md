@@ -2380,7 +2380,7 @@ with a direct probe before designing a fix around it. Here that probe
 (`fn main() -> i32 { 300 }` → `$?`) took ten seconds and prevented a
 "fix" that would have broken correctness.
 
-#### 3.5.22 — SINGLE-ARG CLOSED (bba09256); multi-arg tracked in §3.5.37
+#### 3.5.22 — CLOSED: single-arg (bba09256) + multi-arg (5d92bdd7) both landed
 
 Discovered 2026-10-28 (session 22). Originally surfaced by moving a
 dead fixture into the corpus, then narrowed by direct probes. The bug
@@ -2616,9 +2616,11 @@ landed in `bba09256`:
      only typed-but-not-literal receivers matched. That was the final
      domino — typed worked, `42.to_string()` didn't, until the peel.
 
-**Still open: multi-arg `format!`.** `format!("a={} b={}", 42, 100)`
-prints empty. Distinct bug in the fmt macro's repeated-substitution
-path. Tracked as §3.5.37.
+**Multi-arg `format!` is fixed too (5d92bdd7).** `format!("a={} b={}",
+42, 100)` prints `a=42 b=100` after §3.5.37's `try_interp` rewrite
+(loop over all `{}` substitutions instead of rejecting multi-`{}`
+format strings). §3.5.22 is fully closed: single-arg + multi-arg both
+work on both backends.
 
 **Status (session 23 end): single-arg FIXED.** `42.to_string()`,
 `format!("value {}", 42)`, `i32::MIN.to_string()`, and all u32/u64
@@ -5060,7 +5062,7 @@ Neither is required for §3.5.22 to progress, since `push_str` and the
 (`s.push('a')`) currently fails, so these are real user-facing gaps
 on their own.
 
-#### 3.5.37 — OPEN: multi-arg `format!` produces empty output
+#### 3.5.37 — CLOSED: multi-arg `format!` substitution fixed (5d92bdd7)
 
 **Symptom.** After §3.5.22's single-arg fix (commit `bba09256`):
 
@@ -5126,7 +5128,31 @@ case, either:
 must print `[a=42 b=100]`. Companion: `format!("{}", 42)` (single
 arg) must continue to work.
 
-**Status.** Open. Not attempted. First probe is cheap.
+**CLOSED (5d92bdd7).** The bug was neither (a) dropped push_str
+statements nor (b) discarded block tail. It was `try_interp`'s
+single-shot design: `let open = fmt.find("{}")?;` then
+`if after.contains('{') || after.contains('}') { return None; }`.
+With `after = " b={}"`, the `{}` in `after` triggered the bail-out,
+control fell through to the literal-only `collect` fallback, and the
+resulting `__glyim_fmt` block had no substitutions.
+
+Fix in `crates/glyim-meta/src/expander/mod.rs`: rewritten `try_interp`
+loops over every `{}`, emitting `push_str("before")` then
+`push_str(<arg>.to_string().as_str())` per substitution, with a
+top-level-comma-aware argument splitter. Rejects the expansion only
+when `{}` count ≠ arg count.
+
+Verified:
+  - `format!("a={}", 42)` → `a=42` (single-arg regression)
+  - `format!("a={} b={}", 42, 100)` → `a=42 b=100`
+  - `format!("{} + {} = {}", 1, 2, 3)` → `1 + 2 = 3`
+  - `format!("{}!", 42)` → `42!` (trailing literal)
+  - `println!("p={} q={}", 5, 7)` → `p=5 q=7`
+  - corpus + workspace green (4634/4634)
+
+New fixture: `run-pass/behavior/format_multiarg.g`.
+
+
 
 #### 3.6 — P2-B1 investigated: fallback is a defensive escape hatch, not a live miscompile
 
