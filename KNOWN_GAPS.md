@@ -4555,6 +4555,53 @@ independently useful" suggestion was based on two wrong assumptions:
 that `Expr::Block` had one construction site, and that `unsafe { }` was
 already visible as a distinct syntax node. Neither holds.
 
+**Confirmed with `--emit=syntax` (commit `5021eb1a`).** The new
+`--emit=syntax` tool settles the piece-1a question directly. For
+`let x = unsafe { 42 };` the parser emits:
+
+    LetStmt
+      KwLet "let"
+      PatIdent
+        Ident "x"
+      Whitespace " "
+      Eq "="
+      Whitespace " "
+      KwUnsafe "unsafe"        <-- bare token, no wrapper node
+      Whitespace " "
+      Block                    <-- ordinary Block, indistinguishable
+        LBrace "{"                  from a plain `{ ... }`
+        LitExpr "42"
+        RBrace "}"
+      Semicolon ";"
+
+So `KwUnsafe` is a **sibling token of an ordinary `Block` node** inside
+the `LetStmt` — exactly the "parser is lossy" case documented above.
+There is no `UnsafeBlock` wrapper, no `is_unsafe` marker on `Block`, and
+`Block` itself carries no distinguishing information.
+
+**Implication for piece 1a (confirmed).** Two viable shapes, both
+bounded to the parser + HIR:
+
+  a) **New wrapper node.** Parser emits `SyntaxKind::UnsafeBlock`
+     wrapping a `Block` child when it sees `KwUnsafe`. HIR lowering
+     dispatches `UnsafeBlock` → `lower_block_to_expr(... is_unsafe=true)`.
+     Cleanest semantically; adds one `SyntaxKind` variant + `ast_node!`
+     + one `parse_block` call site change + one `lower_expr` arm.
+
+  b) **Preceding-sibling token scan.** No new `SyntaxKind`;
+     `lower_block_to_expr` inspects `node.prev_sibling_or_token()` for
+     `KwUnsafe` (same pattern `lower_item.rs:276` uses for `fn`). Smaller
+     parser-side change (nothing) but relies on the token still being a
+     sibling — and the `--emit=syntax` dump above confirms it is.
+
+Option (b) is smaller: one HIR-side helper, no `SyntaxKind` churn. The
+36-site `Expr::Block` field addition (piece 1b) is still required
+regardless.
+
+**Recon loop closed.** With `--emit=syntax` available, this question
+took one command instead of a temporary-eprintln build cycle. The same
+will be true for any future parser-level investigation.
+
 **Status.** Piece (1) is 1a + 1b + 1c as described above. Pieces (2)-(4)
 (LintLevel/LintId, attribute resolution, CLI flags) unchanged. §3.5.30
 stays OPEN with corrected scope.
