@@ -4881,6 +4881,85 @@ regardless.
 took one command instead of a temporary-eprintln build cycle. The same
 will be true for any future parser-level investigation.
 
+**Piece 2a landed (commit `b34ddeca`).** `GlyimDiagnostic::warning(
+span, msg) -> Self` added to `crates/glyim-diag/src/lib.rs`,
+mirroring the existing `internal_error` family but with
+`DiagSeverity::Warning`. `is_error()` correctly returns `false` for it.
+Unit test `warning_severity_test` passes. This is one of the four
+pieces §3.5.30 requires.
+
+**Recon after 2a revealed two additional structural unknowns** (not in
+the original "three gaps" list):
+
+  * **Where FnItem lives.** `CrateHir.items: IndexVec<ItemId, Item>`
+    is keyed by `ItemId`, and `ItemId::to_raw()` shares the raw
+    u32 space with `LocalDefId` — but the mapping is only set at
+    `pre_register_fn_sigs_in_module` (line 1288-1291) via
+    `def_map.modules[module_id].scope.values.get(&item.name)` with a
+    fallback to `LocalDefId::from_raw(item.id.to_raw())`. That
+    fallback is not a general contract; using it elsewhere is fragile.
+
+  * **`register_fn_sig` has SIX call sites**, not one. Only one
+    (line 1287, `pre_register_fn_sigs_in_module`) has `f.is_unsafe`
+    in scope alongside the `fn_id`. The other five (1030, 1331,
+    1433, 1533, 1836, 2003 — one is 2003) cover: default-trait
+    methods, impl methods, trait method sigs, and pre-monomorphised
+    bodies. Each would need its own population line, and only some
+    have the `FnItem` in scope at that point.
+
+  * **`unsafe_context_depth` cannot be threaded through `Expr::Block`**
+    without a signature change. The Block arm
+    (`check_expr.rs:195`) matches `Expr::Block { stmts, tail }` — it
+    does not receive its own `ExprId`, so it cannot check whether
+    that `ExprId` is in `self.body.unsafe_blocks` (the set
+    `afdd7022` populated). The entry point `check_expr(&mut self,
+    expr_id: ExprId)` does receive the id — but by the time control
+    reaches the Block arm, the id has been destructured away.
+
+  * **`Expr::Call` arm has no `Span` in scope.** A `GlyimDiagnostic::
+    warning` needs a span. `check_expr` receives an outer `Span` (used
+    for most diagnostics) but the Call arm doesn't take its own span;
+    it would warn at the function-level span, not the call site. That
+    is acceptable for a first pass but worth noting.
+
+**Revised estimate for pieces 2b-2d (previously combined as "one
+piece of work"):** now clearly four separate sub-pieces, each with
+its own unknowns:
+
+  2b. `TyCtxMut::is_unsafe_fn_map: HashMap<FnDefId, bool>` — add
+      field + `Self` initialiser at `TyCtxMut::new` (line 172-183) +
+      populate at `pre_register_fn_sigs_in_module` (line 1287-1292).
+      Catches free functions only; the five other registration sites
+      need separate population for methods-in-impls and trait
+      methods. **Not fully covered by a single line.**
+
+  2c. `FnCtxt::unsafe_context_depth: u32` + **signature change** to
+      `check_expr` or to the `Block` arm's call pattern so the
+      ExprId is available when the Block arm runs. Then increment
+      when `self.body.unsafe_blocks.contains(&expr_id)`, decrement
+      on exit, and consult `depth > 0` at the Call arm.
+
+  2d. `LintId` / `LintLevel` enum + `HashSet` on `FnCtxt` — the
+      `-A unsafe` / `-W unsafe` toggling layer. Purely additive once
+      2b+2c exist. Trivial by itself.
+
+**Realistic estimate for all of pieces 2a-2d plus CLI flag: 3-4
+sessions.** Each sub-piece lands a testable improvement:
+  - 2b: `unsafe fn f();` callers get a warning regardless of context
+    (some false positives inside `unsafe { }` until 2c lands).
+  - 2c: false positives cleared.
+  - 2d: user can `#[allow(...)]` or `-A unsafe`.
+  - CLI: `-W unsafe` / `-A unsafe` flags.
+
+**What's landed this session:** piece 1a (`--emit=syntax`), piece 1b
+(`Body::unsafe_blocks`), piece 2a (`GlyimDiagnostic::warning`). Each
+independently useful; each testable; each committed.
+
+**What remains:** 2b, 2c, 2d, CLI flag, plus attribute resolution
+(piece 3 from the original four-piece list). The estimate of "3-5
+sessions" in the original entry is confirmed accurate by today's
+recon.
+
 **Session 23 final recon: three additional infrastructure gaps.**
 
 Verified before attempting any of pieces (2)-(5):
