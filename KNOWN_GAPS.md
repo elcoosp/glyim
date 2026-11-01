@@ -2442,6 +2442,86 @@ the same code, and distinguishing them at lower time is the hard
 part. That ambiguity is why this has never been attempted as a
 diagnostic fix — it's §3.5.22's substrate work or nothing.
 
+**Recon on possible bounded paths (session 23 end).** Explored whether
+a bounded end-to-end fix exists for `to_string` on a single primitive,
+avoiding the full builtin-dispatcher redesign. Findings:
+
+| Path | Feasible? | Why |
+|---|---|---|
+| `.g` impl on a primitive (`impl i32 { fn to_string(..) }`) | No | No such impls exist in stdlib; parser apparently only accepts `impl<T> Adt<T>` |
+| `.g` `impl Display for i32` | No | No `Display` trait exists in stdlib |
+| Runtime helper + registry + typeck branch + codegen/interp arm + `.g` wrapper | Only viable path, still multi-session | see below |
+
+**What the runtime substrate offers.** `crates/glyim-runtime/src/lib.rs`
+has:
+  * `glyim_alloc(size, align) -> *mut u8` (line 112)
+  * `glyim_string_from_bytes(src, len, out)` (line 2125)
+  * `glyim_string_push_str(...)` (line 2155)
+  * `glyim_str_is_utf8`, `glyim_str_eq`
+
+These are the primitives a digit formatter would consume — but nothing
+currently constructs a `to_string` call for a primitive.
+
+**The clean minimal fix needs five coordinated pieces per primitive.**
+
+  1. `.g` free function (e.g. `fn i32_to_string(n: i32) -> String`)
+     doing manual digit extraction (`n % 10`, `n / 10`, `'0' + digit`,
+     negative-sign handling) and constructing a `String` via
+     `String::new()` + `String::push(...)`.
+  2. Register `i32_to_string` in the well-known-fn list
+     (`glyim-lang-std/src/lib.rs` ~line 296 and 440 — same list
+     `panic_any_str` went into).
+  3. Typeck's `to_string` fallback at `check_expr.rs:3544-3585` needs
+     a branch: if `step_ty` is `TyKind::Int(IntTy::I32)`, look up
+     `i32_to_string`'s FnDefId and return it instead of the sentinel.
+  4. `i32_to_string`'s `.g` body must avoid `format!` on ints. Manual
+     digit loop is the alternative — but only if `String::push(char)`
+     and `String::new()` work. `String::new` is tested (checked_arith
+     uses it). `String::push(char)` is **untested**.
+  5. Replicate for i64/u32/u64/f64/bool, or build the Display trait
+     properly.
+
+The "one primitive" scope is genuinely five pieces, because pieces
+1-3 are per-primitive but piece 4 is shared infrastructure that can
+collapse the whole approach if broken.
+
+**Why this was not attempted this session.** At least one of the five
+pieces (`String::push(char)`) has never been probed. If broken, a `.g`
+digit loop can't work and the approach collapses. Probing it is cheap;
+but the full pipeline (write fn, register, patch typeck, verify
+end-to-end across six primitives × two backends × typed/literal
+receivers) is genuinely a session. §3.5.22's "not one session" tag
+stands.
+
+**The three-step path a future session should take.**
+
+  Step 1 (30 min): probe `String::push(char)`:
+
+      fn main() -> i32 {
+          let mut s = String::new();
+          s.push('a');
+          s.push('b');
+          println!("[{}]", s.as_str());
+          0
+      }
+
+    If this prints `[ab]`, the `.g` digit-loop approach is viable.
+    If it prints `[]`, `String::push` is also broken and the substrate
+    is deeper than `format!` alone.
+
+  Step 2 (if step 1 works): implement the i32-only path (pieces 1-3
+    for i32 only). ~50 lines across 2 files. Verify
+    `42.to_string() == "42"` on both backends.
+
+  Step 3 (if step 2 works): replicate to i64/u32/u64/f64/bool, or —
+    better — build the `Display` trait properly so all types share
+    one impl. That's the builtin-dispatcher redesign the entry cites.
+
+**Why §3.5.31(a) did not shrink this entry.** §3.5.31(a) moved the
+failure mode from "compile error" (T0001) to "silent empty" — the
+substrate gap is unchanged. `to_string` on primitives still resolves
+to a sentinel and still produces nothing useful.
+
 **Nine-layer status after this recon.**
 
   * Layers 1-7: unchanged from the original entry below.
