@@ -4001,26 +4001,38 @@ theorising about downstream stages. Three sessions of MIR dumps could
 have been one. The CLI still lacks `--emit=hir`; adding it would make
 this class of bug a one-shot diagnosis.
 
-#### 3.5.30 — PARTIAL: MVP + items 1, 2, 4 + lint framework (1, 3) landed; attribute resolution remains
+#### 3.5.30 — PARTIAL: MVP + framework + 2 lints landed; attribute resolution remains
 
-**Status.** The user-visible feature and the lint framework are landed.
-- An `unsafe fn` called outside any enclosing `unsafe { }` block emits a
-  compiler diagnostic. Covers free fns, `mod::f` module paths, and
-  `Type::assoc` inherent associated fns, plus trait methods and impl
-  methods.
-- `-A <lint>` / `-W <lint>` / `-D <lint>` CLI flags control the severity
-  per lint. `unsafe` is accepted as an alias for `unsafe_fn_call`.
-- The lint config is part of the compile cache key, so flag changes
-  invalidate cached objects (without this, `-A unsafe` on an already-cached
-  source silently served a stale object — the exact class of bug that
-  motivated including lints in the key).
-- Warning and error presence (outside/inside `unsafe { }`, and
-  `-A`/`-W`/`-D` modes) are locked into CI via **eight** compile-pass
-  fixtures.
+**Status.** The user-visible feature, the lint framework, and **two lints**
+are landed.
 
-Workspace gate: **4639/4639 passed, 2 skipped** (the +4 are new
-`glyim-core::lint` unit tests). `run_pass_corpus` green.
-`compile_pass_corpus` green (13 fixtures total).
+- **`unsafe_fn_call`**: `unsafe fn` called outside any enclosing
+  `unsafe { }` block emits a compiler diagnostic. Covers free fns,
+  `mod::f` module paths, and `Type::assoc` inherent associated fns, plus
+  trait methods and impl methods.
+- **`unused_generic_params`**: a monomorphized function that does not use
+  its generic parameter(s) emits a compiler diagnostic. Emitted
+  post-monomorphization by
+  `glyim_lower::post_mono_checks::check_unused_generic_params` (the check
+  itself predates the framework; the framework now controls its severity).
+
+Both lints accept `-A <lint>` / `-W <lint>` / `-D <lint>` (`unsafe` and
+`unused_generics` are accepted aliases). Lint config is part of the compile
+cache key — flag changes invalidate cached objects, which is critical for
+correctness (session 26 caught a stale-cache bug where `-A unsafe` silently
+served the previously-built object).
+
+Diagnostic presence across all modes is locked into CI:
+- **10 compile-pass fixtures** covering: warning present (default),
+  warning suppressed (`-A`), warning present explicitly (`-W`),
+  warning absent inside `unsafe { }`. Covering both `unsafe_fn_call` and
+  `unused_generic_params`.
+- **2 compile-fail fixtures** covering: `-D unsafe` and `-D unused_generics`
+  promote the diagnostic to `DiagSeverity::Error`.
+
+Workspace gate: **4639/4639 passed, 2 skipped** (+6 new `glyim-core::lint`
+unit tests). `run_pass_corpus`, `compile_pass_corpus`, `compile_fail_corpus`
+all green.
 
 **Landed commits (chronological):**
 
@@ -4035,46 +4047,44 @@ Workspace gate: **4639/4639 passed, 2 skipped** (the +4 are new
 | `ImplMethod.is_unsafe` / `TraitMethod.is_unsafe` | `b8c10e4d` | Item 1: impl/trait visibility |
 | `call_target_fn_id` 2-segment paths | `d49fef1e` | Item 2: multi-segment resolution |
 | `expect-warning`/`forbid-warning` + 5 fixtures | `0eb13455` | Item 4: CI warning assertion |
-| `LintId`/`LintLevel` framework + `-A/-W/-D` CLI flags + cache-key inclusion + 3 new fixtures | `df540c8e` | Framework items 1+3 |
+| `LintId`/`LintLevel` framework + `-A/-W/-D` CLI + cache-key inclusion | `df540c8e` | Framework items 1+3 |
+| 2 lint fixtures | `95ce20b7` | Lock `-A`/`-W` in CI |
+| `-D unsafe` compile-fail fixture | `713a3a2d` | Lock `-D` in CI |
+| `LintId::UnusedGenericParams` (2nd lint) wired into framework | `5b9b62d5` | Framework extensibility validated |
 
 **Remaining limitations:**
 
-1. **No attribute resolution.** `#[allow(unsafe_fn_call)]` and friends
-   have no effect — HIR attributes are not walked. CLI flags and
-   `compile-flags:` work; source-level attributes are deferred.
-2. **3+ segment paths** (`mod::Type::assoc`) still unresolved. Only
-   1- and 2-segment paths go through `call_target_fn_id`.
-3. **One lint only.** `LintId` currently has just `UnsafeFnCall`.
-   Adding more lints (e.g. `unused_variables`, `unreachable_code`) is
-   the natural next step; the framework is in place for it.
+1. **No attribute resolution.** `#[allow(unsafe_fn_call)]` /
+   `#[allow(unused_generic_params)]` and friends have no effect. HIR
+   attributes are not walked. Multi-session work; the largest remaining
+   piece.
+2. **3+ segment paths** (`mod::Type::assoc`) still unresolved. Only 1- and
+   2-segment paths go through `call_target_fn_id`.
+3. **Two lints only.** `LintId` currently has `UnsafeFnCall` and
+   `UnusedGenericParams`. Adding more is mechanical: extend the enum,
+   update `as_str`/`from_str`, wire the emission site with `lint_level`,
+   add a byte to the cache-key id mapping in `crates/glyim-cli/src/lib.rs`,
+   and add fixtures.
 
-**What remains for a `-W unsafe` that fully matches rustc's model:**
-
-1. **Attribute resolution** — parse `#[allow(..)]` / `#[warn(..)]` /
-   `#[deny(..)]` on fns, impls, and modules; resolve lint names to
-   `LintId`; walk the HIR scope chain to find the innermost override.
-   Multi-session; needs a `hir::lower::lower_attrs` module plus scope
-   tracking in typeck.
-
-**Framework shape (for adding future lints):**
+**Framework shape (validated, ready for more lints):**
 
 1. Add a variant to `LintId` in `crates/glyim-core/src/lint.rs`.
 2. Update `LintId::as_str` and `LintId::from_str`.
-3. Wire the emission site: `self.ctx.lint_level(LintId::NewLint)` returns
-   `Allow` (skip) / `Warn` (diagnostic as `warning`) / `Deny` (diagnostic
-   as `type_error`).
-4. `-A/-W/-D <new_lint_name>` on the CLI works for free via `apply_named`.
-5. Add a compile-pass fixture with `expect-warning:` or `forbid-warning:`
-   to lock the behaviour into CI.
+3. At the emission site:
+   `match self.ctx.lint_level(LintId::NewLint) { Allow => {}, Warn =>
+    push(warning), Deny => push(type_error) }`.
+4. Add an id byte to the cache-key mapping in
+   `crates/glyim-cli/src/lib.rs` inside the `extra_key_bytes` block.
+   **Without this step, flags silently no-op on cached builds** — the exact
+   bug session 26 caught with `-A unsafe`.
+5. Add compile-pass (and/or compile-fail) fixtures with
+   `expect-warning:` / `forbid-warning:` / `//~ ERROR` to lock behaviour
+   into CI.
 
 **Cache-key note.** `crates/glyim-cli/src/lib.rs`'s cache-key
-construction mixes `db.lints()` as a sorted `(id_byte, level_byte)`
-list. Adding a new lint requires adding a byte for it in the mapping.
-Without that, `-A newlint` on an already-cached source would silently
-serve the previously-built object. **This is the class of bug this
-session caught mid-flight** — the probe initially showed `-A unsafe`
-returning a stale cached object; the fix is the small block in the CLI's
-cache-key construction that mixes in `db.lints()`.
+construction mixes `db.lints()` as a sorted `(id_byte, level_byte)` list.
+Adding a new lint requires adding a byte for it in the mapping. Miss this
+and lint flags silently serve stale cached objects.
 
 **Not to be confused with §3.5.25.** That entry closed the parse-side
 `is_unsafe` lie. The MVP in §3.5.30 consumes that truthful field.
