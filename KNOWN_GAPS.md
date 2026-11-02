@@ -4054,10 +4054,18 @@ all green.
 
 **Remaining limitations (all bounded follow-ups):**
 
-1. **3+ segment paths** (`mod::Type::assoc`) still unresolved. Only 1- and
-   2-segment paths go through `call_target_fn_id`. Requires changing
-   `inherent_methods_by_name`'s key from `(Name, Name)` to
-   `(Vec<Name>, Name)`. Medium; low immediate value.
+1. **3+ segment paths** (`crate::S::assoc`, `mod::S::assoc`)
+   remain unresolved — but for a **different reason than expected**.
+   The last-two-segment fallback in `call_target_fn_id` IS in place
+   and would handle them, but these paths fail **earlier**, at the
+   primary path-resolution step in `Expr::Call`/`Expr::Path` handling:
+   `check_path` emits `[T0001] unresolved value path` for any 3+ seg
+   path whose intermediate segments name modules, and the `Call` arm
+   never reaches the lint emission. Extending `call_target_fn_id` alone
+   is insufficient — the primary resolution step needs the same
+   module-descent + type-assoc logic. Medium-sized; documented here so
+   a future session doesn't re-attempt the one-liner.
+   **Meanwhile** `S::assoc` (2-segment) works end-to-end.
 2. **Two lints only.** `LintId` currently has `UnsafeFnCall` and
    `UnusedGenericParams`. Adding more is mechanical: extend the enum,
    update `as_str`/`from_str` and `ALL`, wire the emission site with

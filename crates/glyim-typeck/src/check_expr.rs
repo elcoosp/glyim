@@ -1082,9 +1082,17 @@ impl<'a> FnCtxt<'a> {
                 if self.unsafe_depth == 0 {
                     if let Some(fn_id) = self.call_target_fn_id(*func) {
                         if self.ctx.is_unsafe_fn(fn_id) {
+                            // Display the *last* path segment: for
+                            // `S::get_value`, the diagnostic should say
+                            // `get_value` (the called function), not `S`
+                            // (the type). The resolution above may have
+                            // gone through the last-two-segment fallback,
+                            // so the last segment is always the callee
+                            // name regardless of path length.
                             let display = match &self.body.exprs[*func] {
                                 Expr::Path(p) if !p.segments.is_empty() => {
-                                    self.ctx.name_str(p.segments[0].name).to_string()
+                                    let last = p.segments.last().unwrap();
+                                    self.ctx.name_str(last.name).to_string()
                                 }
                                 _ => format!("fn#{}", fn_id.to_raw()),
                             };
