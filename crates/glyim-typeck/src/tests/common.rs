@@ -67,6 +67,7 @@ pub fn check_function_body(
         param_map: HashMap::new(),
         pending_closure_expectation: None,
         in_callee_position: false,
+        unsafe_depth: 0,
     };
 
     let (thir_body, _expr_types) = fn_ctxt.check(params);

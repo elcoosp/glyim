@@ -2377,6 +2377,7 @@ fn check_body(
         param_map: body_param_map,
         pending_closure_expectation: None,
         in_callee_position: false,
+        unsafe_depth: 0,
     };
 
     let (thir_body, body_expr_types) = fn_ctxt.check(params);

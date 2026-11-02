@@ -192,96 +192,7 @@ impl<'a> FnCtxt<'a> {
 
             Expr::Path(path) => self.check_path(path, span),
 
-            Expr::Block { stmts, tail } => {
-                // BLOCK-SCOPE-FIX: a block is a lexical scope. Without
-                // this, `let x = 5; { let x = 10; } x` resolved the
-                // trailing `x` to the inner binding (10, not 5) — a
-                // silent wrong-value bug. `LocalEnv::enter_scope` /
-                // `leave_scope` (see `env::tests::env_scoping_and_shadowing`)
-                // correctly unwind shadowed names; the block arm simply
-                // never invoked them.
-                self.env.enter_scope();
-                let mut thir_stmts = Vec::new();
-                for &stmt_id in stmts {
-                    // Statements are *not* expressions: routing them through
-                    // `check_expr` hits the `Expr::Let`/`Expr::Assign` arms
-                    // that return `thir::Expr::err`, corrupting any statement
-                    // nested inside a block (e.g. an `if` body). Use the shared
-                    // statement checker that produces proper `thir::Stmt`s.
-                    thir_stmts.push(self.check_stmt_to_thir(stmt_id, false));
-                }
-                if let Some(tail_id) = tail {
-                    // TAIL-ASSIGN-STMT: a block tail that is statement-shaped
-                    // (`let x = ..` or `p = ..`) is a *statement*, not a value
-                    // expression. `check_expr`'s `Expr::Assign` arm type-checks
-                    // both sides and then discards the assignment (it returns
-                    // `Literal(Unit)`, since THIR has no assignment-expression
-                    // node). That silently dropped `unsafe { *p = 7 }` and any
-                    // `{ x = y }` block tail. Route it through the statement
-                    // checker so the store survives; the block's value is `()`.
-                    if matches!(
-                        &self.body.exprs[*tail_id],
-                        Expr::Assign { .. } | Expr::Let { .. }
-                    ) {
-                        thir_stmts.push(self.check_stmt_to_thir(*tail_id, false));
-                        let unit = thir::Expr {
-                            kind: thir::ExprKind::Literal(thir::Literal::Unit),
-                            ty: Ty::UNIT,
-                            span,
-                        };
-                        let block_expr = thir::Expr {
-                            kind: thir::ExprKind::Block {
-                                stmts: thir_stmts,
-                                tail: Some(Box::new(unit)),
-                            },
-                            ty: Ty::UNIT,
-                            span,
-                        };
-                        self.env.leave_scope();
-                        return (block_expr, Ty::UNIT);
-                    }
-                    let (tail_expr, tail_ty) = self.check_expr(*tail_id);
-                    let block_expr = thir::Expr {
-                        kind: thir::ExprKind::Block {
-                            stmts: thir_stmts,
-                            tail: Some(Box::new(tail_expr)),
-                        },
-                        ty: tail_ty,
-                        span,
-                    };
-                    self.env.leave_scope();
-                    (block_expr, tail_ty)
-                } else {
-                    // A block with no tail whose *last statement* is a
-                    // divergent expression (`return` / `break`) has type `!`
-                    // (never), not `()`. Without this, an
-                    // `if cond { x } else { return y; }` unifies the `x`
-                    // arm's type against `()` and reports
-                    // "expected integer type, found ()" — exactly the shape
-                    // of `let digit: u32 = if .. { .. } else { return ..; };`
-                    // in net.g's `parse_u16_hex` / `parse_u16_dec`.
-                    let diverges = stmts
-                        .last()
-                        .map(|&sid| {
-                            matches!(
-                                &self.body.exprs[sid],
-                                Expr::Return { .. } | Expr::Break { .. }
-                            )
-                        })
-                        .unwrap_or(false);
-                    let ty = if diverges { Ty::NEVER } else { Ty::UNIT };
-                    let unit_expr = thir::Expr {
-                        kind: thir::ExprKind::Block {
-                            stmts: thir_stmts,
-                            tail: None,
-                        },
-                        ty,
-                        span,
-                    };
-                    self.env.leave_scope();
-                    (unit_expr, ty)
-                }
-            }
+            Expr::Block { stmts, tail } => self.check_block_expr(expr_id, stmts, tail, span),
 
             Expr::Unary { op, expr: operand } => {
                 let (inner_expr, inner_ty) = self.check_expr(*operand);
@@ -3287,6 +3198,128 @@ impl<'a> FnCtxt<'a> {
         self.expr_cache.insert(expr_id, result.clone());
         result
     }
+    /// Wrapper that tracks `unsafe { }` depth around a block body (§3.5.30).
+    /// Increments `self.unsafe_depth` when the block is listed in
+    /// `Body::unsafe_blocks`, calls `check_block_inner`, then decrements.
+    /// Because the body lives in a separate fn, its early `return`s exit
+    /// *it*, not this wrapper, so the decrement always runs.
+    fn check_block_expr(
+        &mut self,
+        expr_id: ExprId,
+        stmts: &[ExprId],
+        tail: &Option<ExprId>,
+        span: Span,
+    ) -> (thir::Expr, Ty) {
+        let is_unsafe = self.body.unsafe_blocks.contains(&expr_id);
+        if is_unsafe {
+            self.unsafe_depth += 1;
+        }
+        let result = self.check_block_inner(stmts, tail, span);
+        if is_unsafe {
+            self.unsafe_depth -= 1;
+        }
+        result
+    }
+
+    /// Verbatim body of the original `Expr::Block` arm (§3.5.30 piece 2c).
+    /// Contains early `return`s; all callers must go through
+    /// `check_block_expr` so `unsafe_depth` bookkeeping stays symmetric.
+    fn check_block_inner(
+        &mut self,
+        stmts: &[ExprId],
+        tail: &Option<ExprId>,
+        span: Span,
+    ) -> (thir::Expr, Ty) {
+                // BLOCK-SCOPE-FIX: a block is a lexical scope. Without
+                // this, `let x = 5; { let x = 10; } x` resolved the
+                // trailing `x` to the inner binding (10, not 5) — a
+                // silent wrong-value bug. `LocalEnv::enter_scope` /
+                // `leave_scope` (see `env::tests::env_scoping_and_shadowing`)
+                // correctly unwind shadowed names; the block arm simply
+                // never invoked them.
+                self.env.enter_scope();
+                let mut thir_stmts = Vec::new();
+                for &stmt_id in stmts {
+                    // Statements are *not* expressions: routing them through
+                    // `check_expr` hits the `Expr::Let`/`Expr::Assign` arms
+                    // that return `thir::Expr::err`, corrupting any statement
+                    // nested inside a block (e.g. an `if` body). Use the shared
+                    // statement checker that produces proper `thir::Stmt`s.
+                    thir_stmts.push(self.check_stmt_to_thir(stmt_id, false));
+                }
+                if let Some(tail_id) = tail {
+                    // TAIL-ASSIGN-STMT: a block tail that is statement-shaped
+                    // (`let x = ..` or `p = ..`) is a *statement*, not a value
+                    // expression. `check_expr`'s `Expr::Assign` arm type-checks
+                    // both sides and then discards the assignment (it returns
+                    // `Literal(Unit)`, since THIR has no assignment-expression
+                    // node). That silently dropped `unsafe { *p = 7 }` and any
+                    // `{ x = y }` block tail. Route it through the statement
+                    // checker so the store survives; the block's value is `()`.
+                    if matches!(
+                        &self.body.exprs[*tail_id],
+                        Expr::Assign { .. } | Expr::Let { .. }
+                    ) {
+                        thir_stmts.push(self.check_stmt_to_thir(*tail_id, false));
+                        let unit = thir::Expr {
+                            kind: thir::ExprKind::Literal(thir::Literal::Unit),
+                            ty: Ty::UNIT,
+                            span,
+                        };
+                        let block_expr = thir::Expr {
+                            kind: thir::ExprKind::Block {
+                                stmts: thir_stmts,
+                                tail: Some(Box::new(unit)),
+                            },
+                            ty: Ty::UNIT,
+                            span,
+                        };
+                        self.env.leave_scope();
+                        return (block_expr, Ty::UNIT);
+                    }
+                    let (tail_expr, tail_ty) = self.check_expr(*tail_id);
+                    let block_expr = thir::Expr {
+                        kind: thir::ExprKind::Block {
+                            stmts: thir_stmts,
+                            tail: Some(Box::new(tail_expr)),
+                        },
+                        ty: tail_ty,
+                        span,
+                    };
+                    self.env.leave_scope();
+                    (block_expr, tail_ty)
+                } else {
+                    // A block with no tail whose *last statement* is a
+                    // divergent expression (`return` / `break`) has type `!`
+                    // (never), not `()`. Without this, an
+                    // `if cond { x } else { return y; }` unifies the `x`
+                    // arm's type against `()` and reports
+                    // "expected integer type, found ()" — exactly the shape
+                    // of `let digit: u32 = if .. { .. } else { return ..; };`
+                    // in net.g's `parse_u16_hex` / `parse_u16_dec`.
+                    let diverges = stmts
+                        .last()
+                        .map(|&sid| {
+                            matches!(
+                                &self.body.exprs[sid],
+                                Expr::Return { .. } | Expr::Break { .. }
+                            )
+                        })
+                        .unwrap_or(false);
+                    let ty = if diverges { Ty::NEVER } else { Ty::UNIT };
+                    let unit_expr = thir::Expr {
+                        kind: thir::ExprKind::Block {
+                            stmts: thir_stmts,
+                            tail: None,
+                        },
+                        ty,
+                        span,
+                    };
+                    self.env.leave_scope();
+                    (unit_expr, ty)
+                }
+    }
+
 
     // Helper: substitute generic args in a type (simplified)
     fn substitute_type(&mut self, ty: Ty, substs: glyim_type::Substitution, _span: Span) -> Ty {

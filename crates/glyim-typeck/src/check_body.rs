@@ -60,4 +60,9 @@ pub struct FnCtxt<'a> {
     /// rewrite. This flag lets `check_path` emit a diagnostic for the value
     /// case only, so the error node never reaches codegen silently.
     pub in_callee_position: bool,
+    /// Depth of `unsafe { }` blocks currently open during body checking
+    /// (§3.5.30). Incremented in `check_block_expr` when entering a block
+    /// listed in `Body::unsafe_blocks`, decremented on exit. `0` at the
+    /// top level of a safe fn body; `>=1` inside any enclosing `unsafe { }`.
+    pub unsafe_depth: u32,
 }
