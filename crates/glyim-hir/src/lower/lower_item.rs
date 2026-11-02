@@ -25,6 +25,75 @@ pub(crate) fn detect_kw_unsafe_sibling(node: &SyntaxNode) -> bool {
     }
     false
 }
+
+/// §3.5.30 attribute resolution, layer 2: collect `Attribute` sibling
+/// nodes immediately preceding `node`. Walks backwards through trivia
+/// until the first non-`Attribute`, non-trivia element.
+pub(crate) fn collect_attributes(
+    node: &SyntaxNode,
+    interner: &mut Interner,
+) -> Vec<crate::Attribute> {
+    let mut attrs_rev: Vec<crate::Attribute> = Vec::new();
+    let mut prev = node.prev_sibling_or_token();
+    while let Some(el) = prev {
+        match el {
+            glyim_syntax::SyntaxElement::Node(n) => {
+                if n.kind() != SyntaxKind::Attribute { break; }
+                attrs_rev.push(lower_attribute_node(&n, interner));
+                prev = n.prev_sibling_or_token();
+            }
+            glyim_syntax::SyntaxElement::Token(t) => {
+                if !t.kind().is_trivia() { break; }
+                prev = t.prev_sibling_or_token();
+            }
+        }
+    }
+    attrs_rev.reverse();
+    attrs_rev
+}
+
+/// Lower one `Attribute` syntax node into a structured HIR [`Attribute`].
+fn lower_attribute_node(
+    node: &SyntaxNode,
+    interner: &mut Interner,
+) -> crate::Attribute {
+    let mut is_inner = false;
+    let mut path: Vec<crate::Name> = Vec::new();
+    let mut args: Option<String> = None;
+    let mut saw_hash = false;
+    for el in node.children_with_tokens() {
+        match el {
+            glyim_syntax::SyntaxElement::Token(t) => match t.kind() {
+                SyntaxKind::Hash => saw_hash = true,
+                SyntaxKind::Bang if saw_hash => is_inner = true,
+                _ => {}
+            },
+            glyim_syntax::SyntaxElement::Node(n) => match n.kind() {
+                SyntaxKind::UsePath => {
+                    for el2 in n.children_with_tokens() {
+                        if let glyim_syntax::SyntaxElement::Token(t2) = el2 {
+                            if t2.kind() == SyntaxKind::Ident {
+                                path.push(interner.intern(t2.text()));
+                            }
+                        }
+                    }
+                }
+                SyntaxKind::AttrList => {
+                    let text = n.text().to_string();
+                    let trimmed = text
+                        .strip_prefix('(')
+                        .and_then(|s| s.strip_suffix(')'))
+                        .unwrap_or(&text)
+                        .trim()
+                        .to_string();
+                    args = Some(trimmed);
+                }
+                _ => {}
+            },
+        }
+    }
+    crate::Attribute { path, args, is_inner }
+}
 use std::collections::HashMap;
 
 use crate::{
@@ -359,6 +428,7 @@ pub(crate) fn lower_fn_def(
             generic_params,
             where_clauses: collect_where_clauses(node, interner),
             abi,
+            attrs: collect_attributes(node, interner),
         }),
         visibility: Visibility::Inherited,
         span: node_span(node),

@@ -123,6 +123,17 @@ pub enum ItemKind {
     Extern(ExternBlockItem),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// §3.5.30 attribute resolution: a parsed `#[...]` attribute on an item.
+pub struct Attribute {
+    /// Attribute name path (e.g. `test`, `allow`, `cfg`).
+    pub path: Vec<Name>,
+    /// Raw argument text inside `(...)`, if any (e.g. `warnings`).
+    pub args: Option<String>,
+    /// Whether the attribute was `#![...]` (inner).
+    pub is_inner: bool,
+}
+
 #[derive(Clone, Debug)]
 /// FnItem.
 pub struct FnItem {
@@ -145,6 +156,9 @@ pub struct FnItem {
     /// Calling convention for FFI (`extern "C" fn`), if declared. `None`
     /// means the default Glyim ABI (unstub-5 Phase 4).
     pub abi: Option<Name>,
+    /// §3.5.30 attribute resolution: parsed `#[...]` attributes on this
+    /// function, in source order. Empty for compiler-synthesized fns.
+    pub attrs: Vec<Attribute>,
 }
 
 #[derive(Clone, Debug)]

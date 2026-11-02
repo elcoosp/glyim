@@ -20,6 +20,7 @@ fn create_dummy_hir(interner: &Interner) -> CrateHir {
             generic_params: vec![],
             where_clauses: vec![],
             abi: None,
+            attrs: Vec::new(),
         }),
         visibility: Visibility::Public,
         span: Span::new(

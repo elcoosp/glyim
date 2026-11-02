@@ -57,6 +57,7 @@ fn inference_param_type() {
             generic_params: vec![],
             where_clauses: Vec::new(),
             abi: None,
+            attrs: Vec::new(),
         }),
         visibility: Visibility::Public,
         span: Span::DUMMY,

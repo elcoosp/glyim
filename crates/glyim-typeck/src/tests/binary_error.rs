@@ -50,6 +50,7 @@ fn binary_i32_add_bool_error() {
             generic_params: vec![],
             where_clauses: Vec::new(),
             abi: None,
+            attrs: Vec::new(),
         }),
         visibility: Visibility::Public,
         span: Span::DUMMY,

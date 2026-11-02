@@ -110,6 +110,7 @@ fn build_async_hir(n_awaits: usize) -> CrateHir {
         generic_params: Vec::new(),
         where_clauses: Vec::new(),
         abi: None,
+        attrs: Vec::new(),
     };
     let item = Item {
         id: ItemId::from_raw(0),
@@ -313,6 +314,7 @@ fn build_async_hir_with_loop_await() -> CrateHir {
         generic_params: Vec::new(),
         where_clauses: Vec::new(),
         abi: None,
+        attrs: Vec::new(),
     };
     let item = Item {
         id: ItemId::from_raw(0),
@@ -482,6 +484,7 @@ fn build_async_hir_while_loop_await() -> CrateHir {
         generic_params: Vec::new(),
         where_clauses: Vec::new(),
         abi: None,
+        attrs: Vec::new(),
     };
     let item = Item {
         id: ItemId::from_raw(0),

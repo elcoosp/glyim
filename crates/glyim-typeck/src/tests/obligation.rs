@@ -110,6 +110,7 @@ fn obligation_fulfilled() {
             generic_params: vec![],
             where_clauses: Vec::new(),
             abi: None,
+            attrs: Vec::new(),
         }),
         visibility: Visibility::Public,
         span: Span::DUMMY,

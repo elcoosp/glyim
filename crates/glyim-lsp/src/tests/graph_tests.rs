@@ -24,6 +24,7 @@ fn build_from_hir_records_definitions_and_references() {
         generic_params: vec![],
         where_clauses: vec![],
         abi: None,
+        attrs: Vec::new(),
     };
     let item = Item {
         id: ItemId::from_raw(0),

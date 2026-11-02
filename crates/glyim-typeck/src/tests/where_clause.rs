@@ -104,6 +104,7 @@ fn build_simple_hir(
             generic_params,
             where_clauses,
             abi: None,
+            attrs: Vec::new(),
         }),
         visibility: Visibility::Public,
         span: dummy_span(),
