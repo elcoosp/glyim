@@ -1073,6 +1073,31 @@ impl<'a> FnCtxt<'a> {
             }
 
             Expr::Call { func, args } => {
+                // §3.5.30 MVP: warn when a call to a declared-unsafe free
+                // function appears outside any enclosing `unsafe { }` block.
+                // Scope: single-segment free-fn paths only (see
+                // `call_target_fn_id`); impl methods are a documented
+                // limitation. Warning, not error — MVP matches the
+                // "lint, not deny" phase of the feature.
+                if self.unsafe_depth == 0 {
+                    if let Some(fn_id) = self.call_target_fn_id(*func) {
+                        if self.ctx.is_unsafe_fn(fn_id) {
+                            let display = match &self.body.exprs[*func] {
+                                Expr::Path(p) if !p.segments.is_empty() => {
+                                    self.ctx.name_str(p.segments[0].name).to_string()
+                                }
+                                _ => format!("fn#{}", fn_id.to_raw()),
+                            };
+                            self.diagnostics.push(GlyimDiagnostic::warning(
+                                span,
+                                format!(
+                                    "call to unsafe function `{}` outside of an `unsafe` block",
+                                    display,
+                                ),
+                            ));
+                        }
+                    }
+                }
                 // Detect a path-qualified trait method call
                 // `Trait::method(receiver, ..)` *before* resolving the callee,
                 // so we can statically dispatch to the concrete impl function
@@ -3198,6 +3223,38 @@ impl<'a> FnCtxt<'a> {
         self.expr_cache.insert(expr_id, result.clone());
         result
     }
+    /// Resolve the callee of a `Call` to a `FnDefId` if it is a
+    /// single-segment path naming a free function (§3.5.30 MVP scope).
+    /// Returns `None` for method calls, multi-segment paths, and
+    /// anything not resolving to a `values`-namespace `LocalDefId`.
+    /// The HIR `Path` is converted to a single-segment `glyim_core::Path`
+    /// (matching the `check_path` idiom), then resolved against the
+    /// function's own module via `Resolver::new`.
+    fn call_target_fn_id(&self, func_expr: ExprId) -> Option<FnDefId> {
+        let hir_path = match &self.body.exprs[func_expr] {
+            Expr::Path(p) => p,
+            _ => return None,
+        };
+        if hir_path.segments.len() != 1 {
+            return None;
+        }
+        let core_path = glyim_core::path::Path {
+            segments: vec![glyim_core::path::PathSegment {
+                name: hir_path.segments[0].name,
+                generic_args: None,
+            }],
+            kind: glyim_core::path::PathKind::Plain,
+        };
+        let resolver = glyim_def_map::Resolver::new(
+            &self.def_map.modules,
+            self.def_map.root,
+            self.current_module,
+        );
+        let per_ns = resolver.resolve_path(&core_path);
+        let (local_id, _) = per_ns.values.or(per_ns.types)?;
+        Some(FnDefId::from_raw(local_id.to_raw()))
+    }
+
     /// Wrapper that tracks `unsafe { }` depth around a block body (§3.5.30).
     /// Increments `self.unsafe_depth` when the block is listed in
     /// `Body::unsafe_blocks`, calls `check_block_inner`, then decrements.
