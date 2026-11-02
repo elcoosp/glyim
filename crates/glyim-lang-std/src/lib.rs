@@ -332,6 +332,21 @@ pub fn std_source_assembled() -> String {
             out.push_str(&format!("pub use {name}::{item};\n"));
         }
     }
+    // §3.5.36-adjacent: enum variants into the root value namespace so
+    // bare `Some(x)` / `None` / `Ok(x)` / `Err(x)` resolve. `pub use
+    // option::Option;` re-exports only the type; variants live in the
+    // synthetic `option::Option` module, so the re-export path is the
+    // three-segment `option::Option::Some`.
+    for (module, enum_name, variants) in [
+        ("option", "Option", ["Some", "None"]),
+        ("result", "Result", ["Ok", "Err"]),
+    ] {
+        for v in variants {
+            out.push_str(&format!(
+                "pub use {module}::{enum_name}::{v};\n",
+            ));
+        }
+    }
     out.push('\n');
     out
 }
@@ -481,6 +496,21 @@ pub fn std_source_assembled_minimal() -> String {
     for (name, items) in pubs {
         for item in *items {
             out.push_str(&format!("pub use {name}::{item};\n"));
+        }
+    }
+    // §3.5.36-adjacent: enum variants into the root value namespace so
+    // bare `Some(x)` / `None` / `Ok(x)` / `Err(x)` resolve. `pub use
+    // option::Option;` re-exports only the type; variants live in the
+    // synthetic `option::Option` module, so the re-export path is the
+    // three-segment `option::Option::Some`.
+    for (module, enum_name, variants) in [
+        ("option", "Option", ["Some", "None"]),
+        ("result", "Result", ["Ok", "Err"]),
+    ] {
+        for v in variants {
+            out.push_str(&format!(
+                "pub use {module}::{enum_name}::{v};\n",
+            ));
         }
     }
     out.push('\n');
