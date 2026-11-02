@@ -3235,14 +3235,20 @@ impl<'a> FnCtxt<'a> {
             Expr::Path(p) => p,
             _ => return None,
         };
-        if hir_path.segments.len() != 1 {
+        let seg_count = hir_path.segments.len();
+        if seg_count == 0 || seg_count > 2 {
             return None;
         }
-        let core_path = glyim_core::path::Path {
-            segments: vec![glyim_core::path::PathSegment {
-                name: hir_path.segments[0].name,
+        let core_segments: Vec<glyim_core::path::PathSegment> = hir_path
+            .segments
+            .iter()
+            .map(|s| glyim_core::path::PathSegment {
+                name: s.name,
                 generic_args: None,
-            }],
+            })
+            .collect();
+        let core_path = glyim_core::path::Path {
+            segments: core_segments,
             kind: glyim_core::path::PathKind::Plain,
         };
         let resolver = glyim_def_map::Resolver::new(
@@ -3251,8 +3257,27 @@ impl<'a> FnCtxt<'a> {
             self.current_module,
         );
         let per_ns = resolver.resolve_path(&core_path);
-        let (local_id, _) = per_ns.values.or(per_ns.types)?;
-        Some(FnDefId::from_raw(local_id.to_raw()))
+        if let Some((local_id, _)) = per_ns.values.or(per_ns.types) {
+            return Some(FnDefId::from_raw(local_id.to_raw()));
+        }
+        // §3.5.30 item 2: `Type::assoc` associated function — the def-map
+        // does not expose inherent methods as path entries, so fall back
+        // to the (type_name, method_name) registry populated by
+        // `pre_allocate_impl_method_ids`. Only 2-segment paths make sense
+        // here; 3+ segments (`mod::Type::assoc`) remain unresolved (see
+        // KNOWN_GAPS §3.5.30 limitation 2).
+        if seg_count == 2 {
+            let type_name = hir_path.segments[0].name;
+            let method_name = hir_path.segments[1].name;
+            if let Some(fn_id) = self
+                .ctx
+                .inherent_methods_by_name
+                .get(&(type_name, method_name))
+            {
+                return Some(*fn_id);
+            }
+        }
+        None
     }
 
     /// Wrapper that tracks `unsafe { }` depth around a block body (§3.5.30).
