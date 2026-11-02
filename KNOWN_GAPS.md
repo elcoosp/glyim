@@ -4001,77 +4001,83 @@ theorising about downstream stages. Three sessions of MIR dumps could
 have been one. The CLI still lacks `--emit=hir`; adding it would make
 this class of bug a one-shot diagnosis.
 
-#### 3.5.30 — PARTIAL: `-W unsafe` MVP + items 1, 2, 4 landed; framework remains
+#### 3.5.30 — PARTIAL: MVP + items 1, 2, 4 + lint framework (1, 3) landed; attribute resolution remains
 
-**Status.** MVP is landed and functional. An `unsafe fn` called outside
-any enclosing `unsafe { }` block emits a compiler warning during typeck.
-The warning-only behaviour is unconditional (no CLI gate). Covers free
-fns, `mod::f` module paths, and `Type::assoc` inherent associated fns,
-plus trait methods and impl methods via the `inherent_methods_by_name`
-registry. Workspace gate: **4635/4635 passed, 2 skipped**;
-`run_pass_corpus` green; `compile_pass_corpus` green; manual probe
-confirms warnings fire exactly where expected across four scenarios.
-**Warning presence is locked into CI** via five compile-pass fixtures
-that assert `expect-warning:` / `forbid-warning:` directly on compiler
-diagnostics.
+**Status.** The user-visible feature and the lint framework are landed.
+- An `unsafe fn` called outside any enclosing `unsafe { }` block emits a
+  compiler diagnostic. Covers free fns, `mod::f` module paths, and
+  `Type::assoc` inherent associated fns, plus trait methods and impl
+  methods.
+- `-A <lint>` / `-W <lint>` / `-D <lint>` CLI flags control the severity
+  per lint. `unsafe` is accepted as an alias for `unsafe_fn_call`.
+- The lint config is part of the compile cache key, so flag changes
+  invalidate cached objects (without this, `-A unsafe` on an already-cached
+  source silently served a stale object — the exact class of bug that
+  motivated including lints in the key).
+- Warning and error presence (outside/inside `unsafe { }`, and
+  `-A`/`-W`/`-D` modes) are locked into CI via **eight** compile-pass
+  fixtures.
+
+Workspace gate: **4639/4639 passed, 2 skipped** (the +4 are new
+`glyim-core::lint` unit tests). `run_pass_corpus` green.
+`compile_pass_corpus` green (13 fixtures total).
 
 **Landed commits (chronological):**
 
 | Piece | Commit | Scope |
 |---|---|---|
-| `GlyimDiagnostic::warning(span, msg)` | `b34ddeca` (prior) | Diagnostic infrastructure — inert until §3.5.30 |
-| `Body::unsafe_blocks: HashSet<ExprId>` populated in `lower_block_to_expr` | `afdd7022` (prior) | HIR side: which `Expr::Block`s came from `unsafe { }` |
-| `is_unsafe_fn: HashMap<FnDefId, bool>` on `TyCtxMut`, populated via `register_fn_unsafe` | `046a45ab` | type-side: per-fn `unsafe` flag |
-| `FnCtxt::unsafe_depth: u32`, inc/dec in `check_block_expr` (helper-extracted) | `8fb50331` | typeck side: unsafe-context tracking during body walk |
-| Warning emission at top of `Expr::Call`, plus `call_target_fn_id` helper | `7a296209` | The user-visible feature |
-| `register_fn_unsafe` moved above the sig-guard | `252359df` | Fix: warning was inert because sig-guard skipped the registration call |
-| `ImplMethod.is_unsafe` + `TraitMethod.is_unsafe` HIR fields, populated from `KwUnsafe` sibling token | `b8c10e4d` | Item 1: impl/trait methods now visible to `is_unsafe_fn` |
-| `call_target_fn_id` extended to 2-segment paths (module paths and `Type::assoc`) via `inherent_methods_by_name` fallback | `d49fef1e` | Item 2: multi-segment call resolution |
-| `expect-warning:` / `forbid-warning:` directives in `glyim-test` harness; `GlyimDiagnostic::is_warning()`; `CompileOutput` merges `artifacts.warnings`; five compile-pass fixtures | `0eb13455` | Item 4: warning presence locked into CI |
+| `GlyimDiagnostic::warning` | `b34ddeca` | Diagnostic infrastructure |
+| `Body::unsafe_blocks` (HIR) | `afdd7022` | Which `Expr::Block`s came from `unsafe { }` |
+| `is_unsafe_fn` on `TyCtxMut` | `046a45ab` | Per-fn `unsafe` flag |
+| `FnCtxt::unsafe_depth` + helper extraction | `8fb50331` | Unsafe-context tracking |
+| Warning emission + `call_target_fn_id` | `7a296209` | The user-visible feature |
+| `register_fn_unsafe` above sig-guard | `252359df` | Fix: warning was inert |
+| `ImplMethod.is_unsafe` / `TraitMethod.is_unsafe` | `b8c10e4d` | Item 1: impl/trait visibility |
+| `call_target_fn_id` 2-segment paths | `d49fef1e` | Item 2: multi-segment resolution |
+| `expect-warning`/`forbid-warning` + 5 fixtures | `0eb13455` | Item 4: CI warning assertion |
+| `LintId`/`LintLevel` framework + `-A/-W/-D` CLI flags + cache-key inclusion + 3 new fixtures | `df540c8e` | Framework items 1+3 |
 
-**Remaining limitations (all bounded follow-ups):**
+**Remaining limitations:**
 
-1. **No CLI gate.** The warning is unconditional — there is no
-   `-W unsafe` / `-A unsafe` / `--warn-unsafe` flag. Threading one
-   through `CliArgs` and `prepare_compilation` (5 params → 6) is a
-   genuine signature change.
+1. **No attribute resolution.** `#[allow(unsafe_fn_call)]` and friends
+   have no effect — HIR attributes are not walked. CLI flags and
+   `compile-flags:` work; source-level attributes are deferred.
+2. **3+ segment paths** (`mod::Type::assoc`) still unresolved. Only
+   1- and 2-segment paths go through `call_target_fn_id`.
+3. **One lint only.** `LintId` currently has just `UnsafeFnCall`.
+   Adding more lints (e.g. `unused_variables`, `unreachable_code`) is
+   the natural next step; the framework is in place for it.
 
-2. **No attribute resolution.** `#[allow(unsafe_fn_call)]` and friends
-   have no effect — HIR attributes are not walked, and there is no
-   `LintId`/`LintLevel` infrastructure.
+**What remains for a `-W unsafe` that fully matches rustc's model:**
 
-3. **3+ segment paths** (`mod::Type::assoc`) still unresolved. Only
-   1- and 2-segment paths go through `call_target_fn_id`'s fallback.
+1. **Attribute resolution** — parse `#[allow(..)]` / `#[warn(..)]` /
+   `#[deny(..)]` on fns, impls, and modules; resolve lint names to
+   `LintId`; walk the HIR scope chain to find the innermost override.
+   Multi-session; needs a `hir::lower::lower_attrs` module plus scope
+   tracking in typeck.
 
-**What a full `-W unsafe` implementation still requires:**
+**Framework shape (for adding future lints):**
 
-1. **`LintId`/`LintLevel` infrastructure** — introduce a
-   `HashMap<LintId, LintLevel>` in `TyCtxMut` (or a new `LintCtx`), with
-   `LintId::UnsafeFnCall` as the first variant. Medium.
+1. Add a variant to `LintId` in `crates/glyim-core/src/lint.rs`.
+2. Update `LintId::as_str` and `LintId::from_str`.
+3. Wire the emission site: `self.ctx.lint_level(LintId::NewLint)` returns
+   `Allow` (skip) / `Warn` (diagnostic as `warning`) / `Deny` (diagnostic
+   as `type_error`).
+4. `-A/-W/-D <new_lint_name>` on the CLI works for free via `apply_named`.
+5. Add a compile-pass fixture with `expect-warning:` or `forbid-warning:`
+   to lock the behaviour into CI.
 
-2. **Attribute resolution** — `#[allow(..)]` / `#[warn(..)]` /
-   `#[deny(..)]` on fns and modules. Parse attribute, resolve lint name
-   to `LintId`, walk up the HIR scope chain. Medium — new
-   `hir::lower::lower_attrs` module plus scope tracking in typeck.
-
-3. **CLI flags** — `-W unsafe` / `-A unsafe` in `glyim-cli/src/lib.rs`.
-   Small — but only useful once (1)-(2) exist.
-
-**Test harness (added by item 4).** Compile-pass fixtures can now declare
-`// expect-warning: <substring>` (must match at least one warning
-diagnostic) and `// forbid-warning: <substring>` (must match zero). The
-harness extends `CompileOutput.diagnostics` with `artifacts.warnings`
-from the pipeline so that typeck-emitted warnings reach the strategy's
-evaluation. Five fixtures exercise all four call shapes:
-- `unsafe_fn_call_free_outside.g` / `_inside.g`
-- `unsafe_fn_call_mod_path_outside.g`
-- `unsafe_fn_call_impl_assoc_outside.g` / `_inside.g`
+**Cache-key note.** `crates/glyim-cli/src/lib.rs`'s cache-key
+construction mixes `db.lints()` as a sorted `(id_byte, level_byte)`
+list. Adding a new lint requires adding a byte for it in the mapping.
+Without that, `-A newlint` on an already-cached source would silently
+serve the previously-built object. **This is the class of bug this
+session caught mid-flight** — the probe initially showed `-A unsafe`
+returning a stale cached object; the fix is the small block in the CLI's
+cache-key construction that mixes in `db.lints()`.
 
 **Not to be confused with §3.5.25.** That entry closed the parse-side
-`is_unsafe` lie (`FnItem::is_unsafe` now correctly reflects the source
-`unsafe fn` keyword, commit `76a150bb`). The MVP in §3.5.30 consumes
-that truthful field; it does not replace the need for the framework
-described above when a *full* `-W unsafe` lint is desired.
+`is_unsafe` lie. The MVP in §3.5.30 consumes that truthful field.
 
 #### 3.5.31 — (a) CLOSED: literal-receiver method resolution; (b) CLOSED: signed wrapping_*
 
