@@ -32,6 +32,13 @@ pub enum LintId {
 }
 
 impl LintId {
+    /// Every lint known to the compiler, in registration order. Used by
+    /// `-W help` to enumerate available lint names.
+    pub const ALL: &'static [LintId] =
+        &[LintId::UnsafeFnCall, LintId::UnusedGenericParams];
+}
+
+impl LintId {
     /// Canonical name used in CLI flags and diagnostic text.
     pub fn as_str(self) -> &'static str {
         match self {

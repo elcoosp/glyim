@@ -113,6 +113,29 @@ pub fn inject_assembled_stdlib(
 }
 
 pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
+    // §3.5.30 framework: `-W help` must be answered before clap enforces
+    // the required `<INPUT>` arg — otherwise `glyim -W help` errors out
+    // instead of listing lints. Scan argv directly, then return.
+    {
+        let argv: Vec<String> = std::env::args().collect();
+        for i in 0..argv.len() {
+            let a = argv[i].as_str();
+            let help_requested = match a {
+                "-W" | "--warn" => argv.get(i + 1).map(|s| s == "help").unwrap_or(false),
+                _ => a == "-W=help" || a == "--warn=help",
+            };
+            if help_requested {
+                eprintln!("Available lints:");
+                for id in glyim_core::lint::LintId::ALL {
+                    eprintln!("  {}", id.as_str());
+                }
+                eprintln!();
+                eprintln!("Aliases: `unsafe` = `unsafe_fn_call`, `unused_generics` = `unused_generic_params`.");
+                return Ok(());
+            }
+        }
+    }
+
     // Capture args (incl. `error-format`) before entering the panic catcher,
     // so we can print any returned diagnostics in the requested format.
     let cli_args = CliArgs::parse();
