@@ -599,6 +599,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
                 .map(|(id, lvl)| {
                     let id_b = match id {
                         glyim_core::lint::LintId::UnsafeFnCall => 0u8,
+                        glyim_core::lint::LintId::UnusedGenericParams => 1u8,
                     };
                     let lvl_b = match lvl {
                         glyim_core::lint::LintLevel::Allow => 0u8,

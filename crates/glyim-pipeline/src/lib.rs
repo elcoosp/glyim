@@ -744,11 +744,32 @@ impl Pipeline {
                 mono_ctx.items(),
                 ty_ctx_ref,
             ));
-            post_diags.extend(check_unused_generic_params(
+            // §3.5.30 framework: gate the unused-generic-params post-mono check
+            // on the lint level. The check always runs (cheap); we filter
+            // its output here based on `LintId::UnusedGenericParams`.
+            let unused_generic_diags = check_unused_generic_params(
                 mono_ctx.items(),
                 Some(&mir_bodies_map),
                 ty_ctx_ref,
-            ));
+            );
+            match db
+                .lints()
+                .get(&glyim_core::lint::LintId::UnusedGenericParams)
+                .copied()
+                .unwrap_or(glyim_core::lint::LintLevel::Warn)
+            {
+                glyim_core::lint::LintLevel::Allow => {}
+                glyim_core::lint::LintLevel::Warn => {
+                    post_diags.extend(unused_generic_diags);
+                }
+                glyim_core::lint::LintLevel::Deny => {
+                    for d in unused_generic_diags {
+                        let primary = d.span.primary;
+                        let msg = d.message.clone();
+                        post_diags.push(glyim_diag::GlyimDiagnostic::type_error(primary, msg));
+                    }
+                }
+            }
             post_diags.extend(check_large_mono_set(mono_ctx.items(), 1000));
             sink_cell.borrow_mut().extend(post_diags);
             mono_ctx.items().to_vec()

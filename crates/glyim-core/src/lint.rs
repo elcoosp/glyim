@@ -25,6 +25,10 @@ pub enum LintId {
     /// Call to a declared `unsafe fn` outside any enclosing `unsafe { }` block.
     /// MVP for §3.5.30.
     UnsafeFnCall,
+    /// Monomorphized function that does not use one or more of its
+    /// generic parameters. Emitted post-monomorphization by
+    /// `glyim_lower::post_mono_checks::check_unused_generic_params`.
+    UnusedGenericParams,
 }
 
 impl LintId {
@@ -32,6 +36,7 @@ impl LintId {
     pub fn as_str(self) -> &'static str {
         match self {
             LintId::UnsafeFnCall => "unsafe_fn_call",
+            LintId::UnusedGenericParams => "unused_generic_params",
         }
     }
 
@@ -41,6 +46,9 @@ impl LintId {
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "unsafe_fn_call" | "unsafe" => Some(LintId::UnsafeFnCall),
+            "unused_generic_params" | "unused_generics" => {
+                Some(LintId::UnusedGenericParams)
+            }
             _ => None,
         }
     }
@@ -100,5 +108,19 @@ mod tests {
         assert_eq!(m.get(&LintId::UnsafeFnCall), Some(&LintLevel::Allow));
         apply_named(&mut m, &["unsafe".into()], LintLevel::Deny);
         assert_eq!(m.get(&LintId::UnsafeFnCall), Some(&LintLevel::Deny));
+    }
+
+    #[test]
+    fn unused_generic_params_round_trip() {
+        let id = LintId::UnusedGenericParams;
+        assert_eq!(LintId::from_str(id.as_str()), Some(id));
+    }
+
+    #[test]
+    fn unused_generics_alias() {
+        assert_eq!(
+            LintId::from_str("unused_generics"),
+            Some(LintId::UnusedGenericParams),
+        );
     }
 }
