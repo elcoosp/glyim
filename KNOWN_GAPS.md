@@ -4068,7 +4068,10 @@ all green.
 
 **Framework shape (validated, ready for more lints):**
 
-1. Add a variant to `LintId` in `crates/glyim-core/src/lint.rs`.
+1. Add a variant to `LintId` in `crates/glyim-core/src/lint.rs` and
+   to `LintId::ALL`; bump `EXPECTED_VARIANT_COUNT` in the
+   `all_covers_every_variant` unit test. The test fails loudly if
+   you forget — that is the drift guard for the `-W help` listing.
 2. Update `LintId::as_str` and `LintId::from_str`.
 3. At the emission site:
    `match self.ctx.lint_level(LintId::NewLint) { Allow => {}, Warn =>
@@ -4080,6 +4083,12 @@ all green.
 5. Add compile-pass (and/or compile-fail) fixtures with
    `expect-warning:` / `forbid-warning:` / `//~ ERROR` to lock behaviour
    into CI.
+
+**Discoverability.** `glyim -W help` lists every lint (`LintId::ALL`)
+plus aliases, and exits before `<INPUT>` is required. Handled by a
+pre-clap argv scan in `glyim-cli::run` (session 26 addition,
+commit `29655eda`) because clap enforces the positional `INPUT` arg
+before our in-flow `-W help` check could run.
 
 **Cache-key note.** `crates/glyim-cli/src/lib.rs`'s cache-key
 construction mixes `db.lints()` as a sorted `(id_byte, level_byte)` list.

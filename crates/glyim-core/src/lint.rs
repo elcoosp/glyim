@@ -130,4 +130,30 @@ mod tests {
             Some(LintId::UnusedGenericParams),
         );
     }
+
+    /// Drift detection: every `LintId` variant must round-trip via
+    /// `as_str` / `from_str`, AND `LintId::ALL` must contain it. Adding a
+    /// new lint variant without updating `ALL` would make it invisible to
+    /// `-W help` — this test fails loudly instead.
+    #[test]
+    fn all_covers_every_variant() {
+        // Known count. Bump when adding a variant — that is the whole
+        // point: forgetting to bump means forgetting to add to ALL.
+        const EXPECTED_VARIANT_COUNT: usize = 2;
+        assert_eq!(
+            LintId::ALL.len(),
+            EXPECTED_VARIANT_COUNT,
+            "LintId::ALL length ({}) does not match the expected variant count ({}); update ALL and this constant when adding a lint",
+            LintId::ALL.len(),
+            EXPECTED_VARIANT_COUNT,
+        );
+        for id in LintId::ALL {
+            assert_eq!(
+                LintId::from_str(id.as_str()),
+                Some(*id),
+                "LintId::{:?} does not round-trip via as_str()/from_str()",
+                id,
+            );
+        }
+    }
 }
