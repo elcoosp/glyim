@@ -5453,16 +5453,36 @@ previously conflated:
    probe that said "no method iter" used `vec![...]`, not `[...]`. So
    **no array-receiver fallback is needed** — that diagnosis was wrong.
 
-2. **`vec![...]` doesn't resolve `.iter()` — but the macro expansion is
-   correct.** `BuiltinMacro::Vec` (`crates/glyim-meta/src/expander/mod.rs:1314`)
-   splices `vec![a, b, c]` into the token stream `[a, b, c]`. The
-   subsequent let-binding *should* infer `[i32; N]` and then `.iter()`
-   should resolve as in case (1). Yet it doesn't. Hypothesis: the macro
-   expansion is transparent to the parser but not to type inference —
-   the array literal produced by macro expansion retains a fresh-inference-var
-   type until a method call forces resolution, and method lookup happens
-   *before* the array-vs-Vec distinction is forced. Needs a probe with
-   `--emit=syntax` on both forms side by side.
+2. **`vec![...]` vs `[...]` — the difference is `let`-binding vs inline,
+   not `Vec` vs array.** Session 30's precise repro matrix:
+
+   | Form | Result |
+   |---|---|
+   | `let v = [1,2,3]; v.len()` | works |
+   | `let v = [1,2,3]; v.iter()` | works |
+   | `let v = vec![1,2,3]; v.len()` | fails: no method len |
+   | `let v = vec![1,2,3]; v.iter()` | fails: no method iter |
+   | `let v = vec![1,2,3]; v[0]` | fails: indexing requires array... |
+   | `vec![1,2,3].iter().len()` (inline) | works |
+   | `let v: [i32;3] = vec![1,2,3];` | fails: mismatched types [i32; _] |
+
+   `BuiltinMacro::Vec` (`crates/glyim-meta/src/expander/mod.rs:1314`)
+   splices `vec![a, b, c]` into the token stream `[a, b, c]` — the
+   expansion is correct. The bug is specific to **let-bound macro
+   expansions**: when the expansion lands as the RHS of a `let`, the
+   binding's inferred type stays an unconstrained inference variable
+   instead of unifying with the expanded array type. Evidence: `v[0]`
+   on `vec![1,2,3]` reports the receiver is not an array, and the
+   array length itself stays `_`. Inline use of the same expansion
+   works, so the type IS discoverable when inference is forced
+   immediately — but a `let` defers, and by the time `.iter()` looks
+   up the receiver, its type is still an unresolved var.
+
+   Investigate `crates/glyim-meta/src/expander/mod.rs`'s
+   `parse_expansion` (line 227) and the let-statement lowering in
+   `crates/glyim-hir/src/lower/` (search `LetStmt`). The expansion may
+   be spliced into a *copy* while the outer `let` statement's pattern
+   inference reads the original unresolved macro-call node.
 
 3. **`.sum()` on an iterator is blocked by §3.9 (projection), not by
    §3.7.** `Iterator::sum` lives in stdlib (`crates/glyim-lang-core/lib/iter.g`),
