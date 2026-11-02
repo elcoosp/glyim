@@ -4052,19 +4052,35 @@ all green.
 | `-D unsafe` compile-fail fixture | `713a3a2d` | Lock `-D` in CI |
 | `LintId::UnusedGenericParams` (2nd lint) wired into framework | `5b9b62d5` | Framework extensibility validated |
 
-**Remaining limitations:**
+**Remaining limitations (all bounded follow-ups):**
 
-1. **No attribute resolution.** `#[allow(unsafe_fn_call)]` /
-   `#[allow(unused_generic_params)]` and friends have no effect. HIR
-   attributes are not walked. Multi-session work; the largest remaining
-   piece.
-2. **3+ segment paths** (`mod::Type::assoc`) still unresolved. Only 1- and
-   2-segment paths go through `call_target_fn_id`.
-3. **Two lints only.** `LintId` currently has `UnsafeFnCall` and
+1. **3+ segment paths** (`mod::Type::assoc`) still unresolved. Only 1- and
+   2-segment paths go through `call_target_fn_id`. Requires changing
+   `inherent_methods_by_name`'s key from `(Name, Name)` to
+   `(Vec<Name>, Name)`. Medium; low immediate value.
+2. **Two lints only.** `LintId` currently has `UnsafeFnCall` and
    `UnusedGenericParams`. Adding more is mechanical: extend the enum,
-   update `as_str`/`from_str`, wire the emission site with `lint_level`,
-   add a byte to the cache-key id mapping in `crates/glyim-cli/src/lib.rs`,
-   and add fixtures.
+   update `as_str`/`from_str` and `ALL`, wire the emission site with
+   `effective_lint_level`, add a byte to the cache-key id mapping in
+   `crates/glyim-cli/src/lib.rs`, and add fixtures.
+3. **Attribute resolution scope: call-site only.** Attributes are
+   honoured at the *scope where the diagnostic fires* (the body being
+   checked), not at the callee declaration. `#[allow(unsafe_fn_call)]`
+   on the enclosing fn suppresses the warning for a call inside that
+   fn, regardless of whether the callee is a free fn, module path, or
+   inherent method. Attributes on the callee method itself are parsed
+   into `ImplMethod.attrs` / `TraitMethod.attrs` (so future work can
+   consult them) but are not currently read by the emission site — this
+   matches rustc: the lint fires at the call site, and only the call
+   site's attributes matter.
+4. **Attribute scope is per-fn only.** Module-level, impl-level, and
+   trait-level attributes (`#[allow(...)] mod m { ... }`) are parsed
+   but not applied. Extending to module scope requires threading the
+   enclosing module's attributes down into every fn body it contains.
+   Medium.
+5. **`#[cfg(...)]` evaluation.** Attributes are parsed but not
+   evaluated; cfg-gating remains separate work (a cfg evaluator plus
+   the item-elimination pass, orthogonal to lints).
 
 **Framework shape (validated, ready for more lints):**
 
