@@ -302,6 +302,14 @@ impl Place {
                         let _ = &sub_args; // keep the earlier binding live
                         TypeLookup::subst_ty_in(ctx, field_ty, *substs)
                     }
+                    // §3.8: `Unit`/`Never` have no fields. A `Field` projection
+                    // here is benign — the polymorphize pass calls `Place::ty`
+                    // on every place to recover parameter references, and any
+                    // place whose base is `()` or `!` will land here. Return
+                    // `error_ty()` silently; do NOT log (the log fires on every
+                    // `Vec::new() + push` build via the call at
+                    // `polymorphize::mark_used_params_in_place`).
+                    TyKind::Unit | TyKind::Never => ctx.error_ty(),
                     _ => {
                         tracing::error!("Place::ty(): Field projection on non-tuple/ADT type");
                         ctx.error_ty()
