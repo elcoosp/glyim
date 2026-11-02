@@ -4001,16 +4001,19 @@ theorising about downstream stages. Three sessions of MIR dumps could
 have been one. The CLI still lacks `--emit=hir`; adding it would make
 this class of bug a one-shot diagnosis.
 
-#### 3.5.30 — PARTIAL: `-W unsafe` MVP landed; CLI flag and framework remain
+#### 3.5.30 — PARTIAL: `-W unsafe` MVP + items 1&2 landed; framework remains
 
-**Status.** MVP is landed and functional (commits `046a45ab`, `8fb50331`,
-`7a296209`, `252359df`). An `unsafe fn` called outside any enclosing
-`unsafe { }` block now emits a compiler warning during typeck. The
-warning-only behaviour is unconditional (no CLI gate). Workspace gate:
-**4635/4635 passed, 2 skipped**; `run_pass_corpus` green; manual probe
-confirms exactly one warning outside `unsafe { }`, zero inside.
+**Status.** MVP is landed and functional. An `unsafe fn` called outside
+any enclosing `unsafe { }` block emits a compiler warning during typeck.
+The warning-only behaviour is unconditional (no CLI gate). Covers free
+fns, `mod::f` module paths, and `Type::assoc` inherent associated fns,
+plus trait methods and impl methods via the `inherent_methods_by_name`
+registry. Workspace gate: **4635/4635 passed, 2 skipped**;
+`run_pass_corpus` green; manual probe confirms warnings fire exactly
+where expected across four scenarios (mod path and Type::assoc, inside
+and outside `unsafe { }`).
 
-**What landed:**
+**Landed commits (chronological):**
 
 | Piece | Commit | Scope |
 |---|---|---|
@@ -4020,62 +4023,50 @@ confirms exactly one warning outside `unsafe { }`, zero inside.
 | `FnCtxt::unsafe_depth: u32`, inc/dec in `check_block_expr` (helper-extracted) | `8fb50331` | typeck side: unsafe-context tracking during body walk |
 | Warning emission at top of `Expr::Call`, plus `call_target_fn_id` helper | `7a296209` | The user-visible feature |
 | `register_fn_unsafe` moved above the sig-guard | `252359df` | Fix: warning was inert because sig-guard skipped the registration call |
-| Two run-pass fixtures | `7a296209` | `unsafe_fn_call_{outside,inside}.g`, exit-code only |
+| `ImplMethod.is_unsafe` + `TraitMethod.is_unsafe` HIR fields, populated from `KwUnsafe` sibling token | `b8c10e4d` | Item 1: impl/trait methods now visible to `is_unsafe_fn` |
+| `call_target_fn_id` extended to 2-segment paths (module paths and `Type::assoc`) via `inherent_methods_by_name` fallback | `d49fef1e` | Item 2: multi-segment call resolution |
+| Four run-pass fixtures (free fn, mod path, Type::assoc, inside/outside variants) | `7a296209`, `d49fef1e` | Exit-code only (see limitation 3) |
 
-**Known limitations (all documented, all bounded follow-ups):**
+**Remaining limitations (all bounded follow-ups):**
 
-1. **Impl-method and trait-method `unsafe fn`s are invisible.** Only the
-   free-fn `register_fn_sig` call site (inside
-   `pre_register_fn_sigs_in_module`) is instrumented with
-   `register_fn_unsafe`. The other five `register_fn_sig` call sites do
-   not have `FnItem.is_unsafe` in scope; populating them requires walking
-   `hir.items` for `ItemKind::Impl` members. MVP limitation only —
-   `is_unsafe_fn` returns `false` for unregistered ids (safe-by-default).
-
-2. **Only single-segment paths are resolved.** `call_target_fn_id`
-   returns `None` for `path.segments.len() != 1`, so `crate::f()`,
-   `mod::f()`, and `Type::assoc()` calls to `unsafe fn` do not warn.
-   Multi-segment resolution was scoped out because it needs impl-method
-   support (limitation 1) to be useful.
-
-3. **No CLI gate.** The warning is unconditional — there is no
+1. **No CLI gate.** The warning is unconditional — there is no
    `-W unsafe` / `-A unsafe` / `--warn-unsafe` flag. Threading one
    through `CliArgs` and `prepare_compilation` (5 params → 6) is a
-   genuine signature change and was explicitly deferred.
+   genuine signature change.
 
-4. **No attribute resolution.** `#[allow(unsafe_fn_call)]` and friends
+2. **No attribute resolution.** `#[allow(unsafe_fn_call)]` and friends
    have no effect — HIR attributes are not walked, and there is no
-   `LintId`/`LintLevel` infrastructure. Multi-session work.
+   `LintId`/`LintLevel` infrastructure.
 
-5. **Fixtures assert exit-code only.** Run-pass `check-stderr` captures
+3. **Fixtures assert exit-code only.** Run-pass `check-stderr` captures
    *program* stderr, not *compiler* diagnostics, so the fixtures verify
    the "compiles and runs correctly" dimension but not warning presence.
-   A harness addition (warning-count assertion, ~20 lines) would be
-   needed to lock the warning into CI. Verified manually in session 24
-   via the probe: 1 warning outside `unsafe { }`, 0 inside.
+   A harness addition (warning-count assertion, ~20 lines) would lock
+   warning presence into CI. Verified manually in sessions 24-25 via the
+   probe: warnings fire for free fns, module paths, and `Type::assoc`
+   outside `unsafe { }`; zero inside.
 
-**What a full `-W unsafe` implementation still requires (post-MVP):**
+4. **3+ segment paths** (`mod::Type::assoc`) still unresolved. Only
+   1- and 2-segment paths go through `call_target_fn_id`'s fallback.
 
-1. **Populate `is_unsafe_fn` for impl/trait methods** — walk `hir.items`
-   in `pre_register_fn_sigs_in_module` or a new prepass, calling
-   `register_fn_unsafe` for each `ImplItemKind::Fn(m)` where
-   `m.is_unsafe`. Touches `glyim-typeck/src/lib.rs` only. Small.
+**What a full `-W unsafe` implementation still requires:**
 
-2. **Multi-segment path resolution** — extend `call_target_fn_id` to
-   handle `mod::f`, `Type::assoc`, etc. Requires (1) to be useful.
-   Bounded.
-
-3. **`LintId`/`LintLevel` infrastructure** — introduce a
+1. **`LintId`/`LintLevel` infrastructure** — introduce a
    `HashMap<LintId, LintLevel>` in `TyCtxMut` (or a new `LintCtx`), with
    `LintId::UnsafeFnCall` as the first variant. Medium.
 
-4. **Attribute resolution** — `#[allow(..)]` / `#[warn(..)]` /
+2. **Attribute resolution** — `#[allow(..)]` / `#[warn(..)]` /
    `#[deny(..)]` on fns and modules. Parse attribute, resolve lint name
    to `LintId`, walk up the HIR scope chain. Medium — new
    `hir::lower::lower_attrs` module plus scope tracking in typeck.
 
-5. **CLI flags** — `-W unsafe` / `-A unsafe` in `glyim-cli/src/lib.rs`.
-   Small — but only useful once (3)-(4) exist.
+3. **CLI flags** — `-W unsafe` / `-A unsafe` in `glyim-cli/src/lib.rs`.
+   Small — but only useful once (1)-(2) exist.
+
+4. **Harness warning-count assertion.** ~20 lines in `glyim-test` to
+   assert the warning fires for the four existing fixtures. Small, but
+   needs a way to capture compiler diagnostics (currently only program
+   stderr is captured for run-pass).
 
 **Not to be confused with §3.5.25.** That entry closed the parse-side
 `is_unsafe` lie (`FnItem::is_unsafe` now correctly reflects the source
