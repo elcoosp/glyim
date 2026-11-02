@@ -4001,73 +4001,87 @@ theorising about downstream stages. Three sessions of MIR dumps could
 have been one. The CLI still lacks `--emit=hir`; adding it would make
 this class of bug a one-shot diagnosis.
 
-#### 3.5.30 — OPEN: `-W unsafe` lint needs framework scaffolding before it can land
+#### 3.5.30 — PARTIAL: `-W unsafe` MVP landed; CLI flag and framework remain
 
-**Status.** P2-B7's parse-side half is CLOSED (§3.5.25, commit `76a150bb`):
-`FnItem::is_unsafe` is now truthful (walks `prev_sibling_or_token` to
-find `KwUnsafe` as a sibling of `FnDef`). The **lint half** — emitting
-a warning when an `unsafe fn` is called outside an `unsafe { }` block,
-togglable via `-W unsafe` / `-A unsafe` — cannot land as a bounded
-patch. It requires four pieces of infrastructure that do not exist
-today.
+**Status.** MVP is landed and functional (commits `046a45ab`, `8fb50331`,
+`7a296209`, `252359df`). An `unsafe fn` called outside any enclosing
+`unsafe { }` block now emits a compiler warning during typeck. The
+warning-only behaviour is unconditional (no CLI gate). Workspace gate:
+**4635/4635 passed, 2 skipped**; `run_pass_corpus` green; manual probe
+confirms exactly one warning outside `unsafe { }`, zero inside.
 
-**Recon (session 23 continuation):**
+**What landed:**
 
-| Component | Status |
-|---|---|
-| `DiagSeverity::Warning` variant | exists (`glyim-diag/src/lib.rs:110`) |
-| `LintId` / `LintLevel` enum | **absent** — only severity, no lint identifiers |
-| `#[allow(..)]` / `#[warn(..)]` / `#[deny(..)]` attribute resolution | **absent** — no attribute-to-lint mapping |
-| CLI `-W <lint>` / `-A <lint>` flags | **absent** |
-| `unsafe { }` block tracking in HIR | **absent** — no `Expr::Block { is_unsafe }` |
-| call-site safety check in typeck | **absent** — nothing at `Expr::Call` arms (`check_expr.rs:1154, 1332, 1369, ...`) inspects `is_unsafe` |
+| Piece | Commit | Scope |
+|---|---|---|
+| `GlyimDiagnostic::warning(span, msg)` | `b34ddeca` (prior) | Diagnostic infrastructure — inert until §3.5.30 |
+| `Body::unsafe_blocks: HashSet<ExprId>` populated in `lower_block_to_expr` | `afdd7022` (prior) | HIR side: which `Expr::Block`s came from `unsafe { }` |
+| `is_unsafe_fn: HashMap<FnDefId, bool>` on `TyCtxMut`, populated via `register_fn_unsafe` | `046a45ab` | type-side: per-fn `unsafe` flag |
+| `FnCtxt::unsafe_depth: u32`, inc/dec in `check_block_expr` (helper-extracted) | `8fb50331` | typeck side: unsafe-context tracking during body walk |
+| Warning emission at top of `Expr::Call`, plus `call_target_fn_id` helper | `7a296209` | The user-visible feature |
+| `register_fn_unsafe` moved above the sig-guard | `252359df` | Fix: warning was inert because sig-guard skipped the registration call |
+| Two run-pass fixtures | `7a296209` | `unsafe_fn_call_{outside,inside}.g`, exit-code only |
 
-**What a real `-W unsafe` implementation requires, in order:**
+**Known limitations (all documented, all bounded follow-ups):**
 
-1. **`unsafe` block tracking.** Add `is_unsafe: bool` to `Expr::Block`
-   in `glyim-hir/src/lib.rs`, populate it in `lower_block_to_expr`
-   (`lower_expr.rs:34`) from `KwUnsafe` in `children_with_tokens`, and
-   thread a `in_unsafe_context: bool` flag into `CheckCtx` in typeck.
-   Small individually, but touches both crates.
+1. **Impl-method and trait-method `unsafe fn`s are invisible.** Only the
+   free-fn `register_fn_sig` call site (inside
+   `pre_register_fn_sigs_in_module`) is instrumented with
+   `register_fn_unsafe`. The other five `register_fn_sig` call sites do
+   not have `FnItem.is_unsafe` in scope; populating them requires walking
+   `hir.items` for `ItemKind::Impl` members. MVP limitation only —
+   `is_unsafe_fn` returns `false` for unregistered ids (safe-by-default).
 
-2. **`LintLevel` infrastructure.** Introduce a
-   `HashMap<LintId, LintLevel>` in `TyCtxMut` (or a new `LintCtx`),
-   with `LintId::UnsafeFnCall` as the first variant. Medium — needs a
-   place to live and a way to be passed to typeck.
+2. **Only single-segment paths are resolved.** `call_target_fn_id`
+   returns `None` for `path.segments.len() != 1`, so `crate::f()`,
+   `mod::f()`, and `Type::assoc()` calls to `unsafe fn` do not warn.
+   Multi-segment resolution was scoped out because it needs impl-method
+   support (limitation 1) to be useful.
 
-3. **Attribute resolution.** `#[allow(unsafe_code)]`,
-   `#[warn(unsafe_fn_call)]`, `#[deny(unsafe_fn_call)]` — parse the
-   attribute, resolve the lint name to a `LintId`, walk up the HIR
-   scope chain. Medium — a new `hir::lower::lower_attrs` module plus
-   scope-tracking in typeck.
+3. **No CLI gate.** The warning is unconditional — there is no
+   `-W unsafe` / `-A unsafe` / `--warn-unsafe` flag. Threading one
+   through `CliArgs` and `prepare_compilation` (5 params → 6) is a
+   genuine signature change and was explicitly deferred.
 
-4. **CLI flags.** `-W unsafe_fn_call` and `-A unsafe_fn_call` in
-   `glyim-cli/src/lib.rs`. Small — but only useful once (1)-(3) exist.
+4. **No attribute resolution.** `#[allow(unsafe_fn_call)]` and friends
+   have no effect — HIR attributes are not walked, and there is no
+   `LintId`/`LintLevel` infrastructure. Multi-session work.
 
-5. **The lint emission itself** at each `Expr::Call` arm:
-   `if callee_is_unsafe_fn && !ctx.in_unsafe_context { emit(warn) }`.
-   Trivial once (1)-(4) exist.
+5. **Fixtures assert exit-code only.** Run-pass `check-stderr` captures
+   *program* stderr, not *compiler* diagnostics, so the fixtures verify
+   the "compiles and runs correctly" dimension but not warning presence.
+   A harness addition (warning-count assertion, ~20 lines) would be
+   needed to lock the warning into CI. Verified manually in session 24
+   via the probe: 1 warning outside `unsafe { }`, 0 inside.
 
-**Estimate.** 3-5 sessions of coordinated work across `glyim-hir`,
-`glyim-typeck`, `glyim-cli`. Not a "small item".
+**What a full `-W unsafe` implementation still requires (post-MVP):**
 
-**Recommendation.** Defer P2-B7's lint half until at least one other
-lint genuinely wants the framework (e.g. `unused_variables` or
-`unreachable_code`, both of which are already diagnosed as hard errors
-in a few narrow cases and would benefit from warn-level escalation).
-Building the framework for a single lint is more cost than value.
-Alternatively, land (1) — `unsafe { }` block tracking — on its own, as
-it's independently useful for other things (e.g. a future `unused_unsafe`
-lint, or verifying that `unsafe { }` blocks actually permit unsafe ops
-once the current "unsafe is parsed then discarded" behaviour at the
-block level is fixed).
+1. **Populate `is_unsafe_fn` for impl/trait methods** — walk `hir.items`
+   in `pre_register_fn_sigs_in_module` or a new prepass, calling
+   `register_fn_unsafe` for each `ImplItemKind::Fn(m)` where
+   `m.is_unsafe`. Touches `glyim-typeck/src/lib.rs` only. Small.
+
+2. **Multi-segment path resolution** — extend `call_target_fn_id` to
+   handle `mod::f`, `Type::assoc`, etc. Requires (1) to be useful.
+   Bounded.
+
+3. **`LintId`/`LintLevel` infrastructure** — introduce a
+   `HashMap<LintId, LintLevel>` in `TyCtxMut` (or a new `LintCtx`), with
+   `LintId::UnsafeFnCall` as the first variant. Medium.
+
+4. **Attribute resolution** — `#[allow(..)]` / `#[warn(..)]` /
+   `#[deny(..)]` on fns and modules. Parse attribute, resolve lint name
+   to `LintId`, walk up the HIR scope chain. Medium — new
+   `hir::lower::lower_attrs` module plus scope tracking in typeck.
+
+5. **CLI flags** — `-W unsafe` / `-A unsafe` in `glyim-cli/src/lib.rs`.
+   Small — but only useful once (3)-(4) exist.
 
 **Not to be confused with §3.5.25.** That entry closed the parse-side
-`is_unsafe` lie. It did **not** close P2-B7's lint. The plan's
-parenthetical "P2-B7's lint half (`-W unsafe` now that `is_unsafe` is
-truthful)" from the session-23 handoff implies the field's truthfulness
-was the only blocker — it wasn't. The field being truthful is a
-precondition, not the fix.
+`is_unsafe` lie (`FnItem::is_unsafe` now correctly reflects the source
+`unsafe fn` keyword, commit `76a150bb`). The MVP in §3.5.30 consumes
+that truthful field; it does not replace the need for the framework
+described above when a *full* `-W unsafe` lint is desired.
 
 #### 3.5.31 — (a) CLOSED: literal-receiver method resolution; (b) CLOSED: signed wrapping_*
 
