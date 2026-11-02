@@ -577,6 +577,7 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
         params: vec![self_mut_param],
         generic_params: Vec::new(),
         return_ty: Some(poll_return_ty),
+        is_unsafe: false,
     };
     let impl_item = Item {
         id: ItemId::from_raw(hir.items.len() as u32 + 1),
@@ -1075,6 +1076,7 @@ fn build_future_impl(
                 params: vec![self_mut_param],
                 generic_params: Vec::new(),
                 return_ty: Some(poll_return_ty),
+                is_unsafe: false,
             }],
             generic_params: Vec::new(),
             where_clauses: Vec::new(),

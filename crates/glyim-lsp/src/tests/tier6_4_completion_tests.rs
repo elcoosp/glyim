@@ -205,6 +205,7 @@ fn main() {
                     params: vec![],
                     generic_params: vec![],
                     return_ty: None,
+                    is_unsafe: false,
                 },
                 ImplMethod {
                     name: other_name,
@@ -212,6 +213,7 @@ fn main() {
                     params: vec![],
                     generic_params: vec![],
                     return_ty: None,
+                    is_unsafe: false,
                 },
             ],
             generic_params: vec![],
@@ -398,6 +400,7 @@ fn main() {
                 params: vec![],
                 generic_params: vec![],
                 return_ty: None,
+                is_unsafe: false,
             }],
             generic_params: vec![],
             where_clauses: vec![],

@@ -1448,6 +1448,19 @@ fn pre_allocate_impl_method_ids(
                             abi: Abi::Glyim,
                         },
                     );
+                    // §3.5.30 impl-method follow-up: record is_unsafe here
+                    // in the pre-pass so calls from a body checked before
+                    // the method's owning impl is fully walked still warn.
+                    ctx.register_fn_unsafe(fn_id, method.is_unsafe);
+                    let pre_self_ty_name: Option<Name> = match &impl_item.self_ty {
+                        glyim_hir::TypeRef::Path(p) if p.segments.len() == 1 => {
+                            Some(p.segments[0].name)
+                        }
+                        _ => None,
+                    };
+                    if let Some(tn) = pre_self_ty_name {
+                        ctx.inherent_methods_by_name.insert((tn, method.name), fn_id);
+                    }
                 }
             }
             ItemKind::Mod(m) => {
@@ -1851,6 +1864,11 @@ fn check_fn_items_in_module(
                             abi: Abi::Glyim,
                         },
                     );
+                    // §3.5.30 impl-method follow-up: propagate unsafe flag.
+                    ctx.register_fn_unsafe(
+                        FnDefId::from_raw(local_def_id.to_raw()),
+                        method.is_unsafe,
+                    );
                     // Script 690 (re-applied): register the inherent-method
                     // mapping. Use the HIR `self_ty` path's *name* directly
                     // — the resolved Ty is unreliable (Error/ErrorKind may
@@ -2017,6 +2035,12 @@ fn check_fn_items_in_module(
                                 unsafety: Safety::Safe,
                                 abi: Abi::Glyim,
                             },
+                        );
+                        // §3.5.30 impl-method follow-up: propagate unsafe
+                        // flag for trait default methods reached via impls.
+                        ctx.register_fn_unsafe(
+                            FnDefId::from_raw(local_def_id.to_raw()),
+                            tm.is_unsafe,
                         );
                         if let (Some(self_ty), Some(trait_def_id)) =
                             (self_ty_opt, trait_def_id_opt)

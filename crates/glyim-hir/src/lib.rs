@@ -195,6 +195,10 @@ pub struct TraitMethod {
     pub return_ty: Option<TypeRef>,
     /// Struct.
     pub default_body: Option<BodyId>,
+    /// §3.5.30: whether this trait method was declared `unsafe fn`.
+    /// Populated by `lower_item::lower_trait_def` from the sibling
+    /// `KwUnsafe` token on the method's `FnDef` node.
+    pub is_unsafe: bool,
     /// T178-PATCHED [TCK-28]: declared generic parameters on the method.
     /// Carried through so typeck can populate `MethodDef::generic_params`
     /// and the object-safety check can correctly reject
@@ -215,6 +219,11 @@ pub struct ImplMethod {
     pub generic_params: Vec<GenericParam>,
     /// Struct.
     pub return_ty: Option<TypeRef>,
+    /// §3.5.30: whether this method was declared `unsafe fn`. Populated by
+    /// `lower_item::lower_impl_block` from the sibling `KwUnsafe` token on
+    /// the method's `FnDef` node; synthetic methods (async desugarings) are
+    /// always `false`.
+    pub is_unsafe: bool,
 }
 
 #[derive(Clone, Debug)]

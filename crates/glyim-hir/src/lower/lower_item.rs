@@ -5,6 +5,26 @@ use glyim_core::primitives::*;
 use glyim_diag::GlyimDiagnostic;
 use glyim_span::Span;
 use glyim_syntax::{SyntaxKind, SyntaxNode};
+
+/// §3.5.30: detect whether a `fn` node was declared `unsafe`. The parser
+/// emits `KwUnsafe` as a *sibling* of the `FnDef` node (parse_item bumps
+/// the keyword before start_node), so we walk `prev_sibling_or_token`,
+/// skipping trivia, and stop at the first non-trivia token. Same technique
+/// as the free-fn `is_unsafe` detection in the `ItemKind::Fn` lowering.
+pub(crate) fn detect_kw_unsafe_sibling(node: &SyntaxNode) -> bool {
+    let mut prev = node.prev_sibling_or_token();
+    while let Some(el) = prev {
+        match el {
+            glyim_syntax::SyntaxElement::Token(t) => {
+                if t.kind() == SyntaxKind::KwUnsafe { return true; }
+                if !t.kind().is_trivia() { return false; }
+                prev = t.prev_sibling_or_token();
+            }
+            glyim_syntax::SyntaxElement::Node(_) => return false,
+        }
+    }
+    false
+}
 use std::collections::HashMap;
 
 use crate::{
@@ -720,12 +740,14 @@ pub(crate) fn lower_impl_def(
             None
         };
 
+        let method_is_unsafe = detect_kw_unsafe_sibling(&method_node);
         methods.push(ImplMethod {
             name: mname,
             body: body_id,
             params,
             generic_params: collect_generic_params(&method_node, interner),
             return_ty,
+            is_unsafe: method_is_unsafe,
         });
     }
 
@@ -889,6 +911,7 @@ pub(crate) fn lower_trait_def(
             None
         };
 
+        let trait_method_is_unsafe = detect_kw_unsafe_sibling(&method_node);
         methods.push(TraitMethod {
             name: mname,
             params,
@@ -898,6 +921,7 @@ pub(crate) fn lower_trait_def(
             // generic parameters so typeck can populate MethodDef and
             // the object-safety check sees them.
             generic_params: collect_generic_params(&method_node, interner),
+            is_unsafe: trait_method_is_unsafe,
         });
     }
 
