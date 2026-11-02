@@ -4001,7 +4001,7 @@ theorising about downstream stages. Three sessions of MIR dumps could
 have been one. The CLI still lacks `--emit=hir`; adding it would make
 this class of bug a one-shot diagnosis.
 
-#### 3.5.30 — PARTIAL: `-W unsafe` MVP + items 1&2 landed; framework remains
+#### 3.5.30 — PARTIAL: `-W unsafe` MVP + items 1, 2, 4 landed; framework remains
 
 **Status.** MVP is landed and functional. An `unsafe fn` called outside
 any enclosing `unsafe { }` block emits a compiler warning during typeck.
@@ -4009,9 +4009,11 @@ The warning-only behaviour is unconditional (no CLI gate). Covers free
 fns, `mod::f` module paths, and `Type::assoc` inherent associated fns,
 plus trait methods and impl methods via the `inherent_methods_by_name`
 registry. Workspace gate: **4635/4635 passed, 2 skipped**;
-`run_pass_corpus` green; manual probe confirms warnings fire exactly
-where expected across four scenarios (mod path and Type::assoc, inside
-and outside `unsafe { }`).
+`run_pass_corpus` green; `compile_pass_corpus` green; manual probe
+confirms warnings fire exactly where expected across four scenarios.
+**Warning presence is locked into CI** via five compile-pass fixtures
+that assert `expect-warning:` / `forbid-warning:` directly on compiler
+diagnostics.
 
 **Landed commits (chronological):**
 
@@ -4025,7 +4027,7 @@ and outside `unsafe { }`).
 | `register_fn_unsafe` moved above the sig-guard | `252359df` | Fix: warning was inert because sig-guard skipped the registration call |
 | `ImplMethod.is_unsafe` + `TraitMethod.is_unsafe` HIR fields, populated from `KwUnsafe` sibling token | `b8c10e4d` | Item 1: impl/trait methods now visible to `is_unsafe_fn` |
 | `call_target_fn_id` extended to 2-segment paths (module paths and `Type::assoc`) via `inherent_methods_by_name` fallback | `d49fef1e` | Item 2: multi-segment call resolution |
-| Four run-pass fixtures (free fn, mod path, Type::assoc, inside/outside variants) | `7a296209`, `d49fef1e` | Exit-code only (see limitation 3) |
+| `expect-warning:` / `forbid-warning:` directives in `glyim-test` harness; `GlyimDiagnostic::is_warning()`; `CompileOutput` merges `artifacts.warnings`; five compile-pass fixtures | `0eb13455` | Item 4: warning presence locked into CI |
 
 **Remaining limitations (all bounded follow-ups):**
 
@@ -4038,15 +4040,7 @@ and outside `unsafe { }`).
    have no effect — HIR attributes are not walked, and there is no
    `LintId`/`LintLevel` infrastructure.
 
-3. **Fixtures assert exit-code only.** Run-pass `check-stderr` captures
-   *program* stderr, not *compiler* diagnostics, so the fixtures verify
-   the "compiles and runs correctly" dimension but not warning presence.
-   A harness addition (warning-count assertion, ~20 lines) would lock
-   warning presence into CI. Verified manually in sessions 24-25 via the
-   probe: warnings fire for free fns, module paths, and `Type::assoc`
-   outside `unsafe { }`; zero inside.
-
-4. **3+ segment paths** (`mod::Type::assoc`) still unresolved. Only
+3. **3+ segment paths** (`mod::Type::assoc`) still unresolved. Only
    1- and 2-segment paths go through `call_target_fn_id`'s fallback.
 
 **What a full `-W unsafe` implementation still requires:**
@@ -4063,10 +4057,15 @@ and outside `unsafe { }`).
 3. **CLI flags** — `-W unsafe` / `-A unsafe` in `glyim-cli/src/lib.rs`.
    Small — but only useful once (1)-(2) exist.
 
-4. **Harness warning-count assertion.** ~20 lines in `glyim-test` to
-   assert the warning fires for the four existing fixtures. Small, but
-   needs a way to capture compiler diagnostics (currently only program
-   stderr is captured for run-pass).
+**Test harness (added by item 4).** Compile-pass fixtures can now declare
+`// expect-warning: <substring>` (must match at least one warning
+diagnostic) and `// forbid-warning: <substring>` (must match zero). The
+harness extends `CompileOutput.diagnostics` with `artifacts.warnings`
+from the pipeline so that typeck-emitted warnings reach the strategy's
+evaluation. Five fixtures exercise all four call shapes:
+- `unsafe_fn_call_free_outside.g` / `_inside.g`
+- `unsafe_fn_call_mod_path_outside.g`
+- `unsafe_fn_call_impl_assoc_outside.g` / `_inside.g`
 
 **Not to be confused with §3.5.25.** That entry closed the parse-side
 `is_unsafe` lie (`FnItem::is_unsafe` now correctly reflects the source
