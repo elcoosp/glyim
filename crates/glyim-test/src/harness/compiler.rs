@@ -415,8 +415,16 @@ impl TestCompiler for PipelineCompiler {
                         None
                     }
                 };
+                // §3.5.30 item 4: merge pipeline warnings (e.g. the
+                // unsafe-fn-call warning emitted by typeck) into the
+                // CompileOutput.diagnostics list so compile-pass fixtures
+                // can assert on them. `artifacts.warnings` is the pipeline's
+                // aggregate of all non-error diagnostics from successful
+                // phases; before this merge they were silently dropped.
+                let mut all_diagnostics = expansion_diags;
+                all_diagnostics.extend(artifacts.warnings.iter().cloned());
                 CompileOutput {
-                    diagnostics: expansion_diags,
+                    diagnostics: all_diagnostics,
                     syntax_tree: None,
                     def_map: Some(artifacts.def_map),
                     typeck_result: Some(artifacts.typeck_result),

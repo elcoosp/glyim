@@ -14,20 +14,55 @@ impl CompilePassStrategy {
     pub fn evaluate(
         &self,
         diagnostics: &[GlyimDiagnostic],
-        _source: &str,
+        source: &str,
     ) -> super::executor::TestOutcome {
         let errors: Vec<String> = diagnostics
             .iter()
             .filter(|d| d.is_error())
             .map(|e| e.message.clone())
             .collect();
-        if errors.is_empty() {
-            super::executor::TestOutcome::Passed
-        } else {
-            super::executor::TestOutcome::Failed {
+        if !errors.is_empty() {
+            return super::executor::TestOutcome::Failed {
                 reason: FailureReason::CompilePassUnexpectedErrors { errors },
+            };
+        }
+        // §3.5.30 item 4: warning-presence directives. Parse the source
+        // again (cheap — small files) to recover `expect-warning:` and
+        // `forbid-warning:` declarations.
+        let parsed = match crate::harness::config::parse_test_config(source) {
+            Ok(p) => p,
+            Err(_) => return super::executor::TestOutcome::Passed,
+        };
+        let warnings: Vec<&GlyimDiagnostic> =
+            diagnostics.iter().filter(|d| d.is_warning()).collect();
+        for pat in &parsed.config.expect_warnings {
+            let found = warnings.iter().any(|d| d.message.contains(pat));
+            if !found {
+                return super::executor::TestOutcome::Failed {
+                    reason: FailureReason::CompilePassUnexpectedErrors {
+                        errors: vec![format!(
+                            "expected warning matching {:?}, got none (warnings: {:?})",
+                            pat,
+                            warnings.iter().map(|d| d.message.clone()).collect::<Vec<_>>(),
+                        )],
+                    },
+                };
             }
         }
+        for pat in &parsed.config.forbid_warnings {
+            if warnings.iter().any(|d| d.message.contains(pat)) {
+                return super::executor::TestOutcome::Failed {
+                    reason: FailureReason::CompilePassUnexpectedErrors {
+                        errors: vec![format!(
+                            "forbidden warning matching {:?} fired (warnings: {:?})",
+                            pat,
+                            warnings.iter().map(|d| d.message.clone()).collect::<Vec<_>>(),
+                        )],
+                    },
+                };
+            }
+        }
+        super::executor::TestOutcome::Passed
     }
 }
 

@@ -405,6 +405,13 @@ impl GlyimDiagnostic {
     pub fn is_error(&self) -> bool {
         matches!(self.severity, DiagSeverity::Error)
     }
+
+    /// Returns `true` when this diagnostic's severity is `Warning`
+    /// (§3.5.30 item 4). Mirrors `is_error`; used by the compile-pass
+    /// harness to assert `expect-warning:` / `forbid-warning:` directives.
+    pub fn is_warning(&self) -> bool {
+        matches!(self.severity, DiagSeverity::Warning)
+    }
 }
 
 /// CompResult.

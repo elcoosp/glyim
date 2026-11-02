@@ -33,6 +33,13 @@ pub struct TestConfig {
     pub check_stderr: Option<String>,
     /// Struct.
     pub expected_exit_code: Option<i32>,
+    /// §3.5.30 item 4: warning-presence assertions for `compile-pass`
+    /// fixtures. Each pattern must match at least one warning diagnostic
+    /// (`expect-warning:`) or must match zero warnings
+    /// (`forbid-warning:`). Locks compiler-warning behaviour into CI
+    /// (run-pass `check-stderr` only sees *program* stderr).
+    pub expect_warnings: Vec<String>,
+    pub forbid_warnings: Vec<String>,
 }
 
 impl Default for TestConfig {
@@ -52,6 +59,8 @@ impl Default for TestConfig {
             check_stdout: None,
             check_stderr: None,
             expected_exit_code: None,
+            expect_warnings: Vec::new(),
+            forbid_warnings: Vec::new(),
         }
     }
 }
@@ -176,6 +185,10 @@ pub fn parse_test_config(source: &str) -> Result<ParsedConfig, String> {
             config.check_stderr = Some(value.trim().to_string());
         } else if let Some(value) = content.strip_prefix("exit-code:") {
             config.expected_exit_code = Some(value.trim().parse().unwrap_or(1));
+        } else if let Some(value) = content.strip_prefix("expect-warning:") {
+            config.expect_warnings.push(value.trim().to_string());
+        } else if let Some(value) = content.strip_prefix("forbid-warning:") {
+            config.forbid_warnings.push(value.trim().to_string());
         }
     }
 
