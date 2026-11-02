@@ -5428,3 +5428,174 @@ that bar.
 
 **Status.** Reviewed, no change needed. Documented to prevent a
 future session from repeating the reverted attempt.
+
+#### 3.7 — OPEN: `[T; N].iter()` / `.sum()` fail because `vec![...]` lowers to an array literal
+
+**Symptom.**
+
+    fn main() -> i32 {
+        let v = vec![1, 2, 3, 4, 5];
+        let sum: i32 = v.iter().sum();
+        sum
+    }
+
+    // [T0001] no method `iter` found for type
+    // [T0001] no method `sum` found for type
+
+**Root cause (diagnosed session 30).** `vec![a, b, c]` is not a `Vec`
+constructor in Glyim — the expander lowers it to an **array literal**
+`[a, b, c]` (see `crates/glyim-meta/src/expander/mod.rs:1314`,
+`BuiltinMacro::Vec`). That is a deliberate design choice (documented at
+`crates/glyim-meta/src/lib.rs:128`) matching the compiler's array-first
+model, but it means `v.iter()` on `vec![...]` is trying to find `iter` on
+an `[i32; 5]` receiver, which has no such method — the slice `iter`
+(`slice_id` in the builtin table) isn't reachable from an array without
+an array→slice unsize coercion at the method-lookup layer.
+
+**Contrast.** `Vec::new() + push + as_slice` (i.e. a real `Vec<T>`)
+resolves `push`, `len`, `as_slice` correctly — those go through the ADT
+lookup path (AdtId 1020). `vec![...]` never produces a `Vec<T>` in the
+first place.
+
+**Bounded paths forward, in increasing cost:**
+
+1. **Add array-receiver fallback in method lookup** — when a method isn't
+   found on `Adt(...)`/primitive but the receiver is an array `[T; N]`,
+   unsize to `[T]` and retry. This is the "array-to-slice for method
+   receivers" gap. Would touch `try_builtin_method` /
+   `lookup_builtin_method`. Probably 30-50 lines plus fixtures.
+
+2. **Change `vec![...]` to lower to `Vec::from([...])`** — closer to
+   Rust semantics but changes the whole user-facing surface of the macro.
+   Requires `Vec::from` to accept an array. Large.
+
+3. **Leave as-is and document** that `vec![...]` is an array literal, not
+   a Vec. Fine for `for x in vec![...]` (works — array iteration is
+   supported), surprising for `.iter()` / `.sum()` / `.push()` chains.
+
+**Recommendation.** Option (1) — the array-to-slice method-receiver
+fallback. It's the bounded fix and it's independently useful for
+`[1, 2, 3].iter()` regardless of `vec!` semantics.
+
+**Note for future probes.** When testing `Vec` idioms, use
+`let v: Vec<i32> = Vec::new(); v.push(...)` — not `vec![...]`. The
+distinction is invisible in Rust but fundamental in Glyim.
+
+---
+
+#### 3.8 — OPEN: spurious `Place::ty(): Field projection on non-tuple/ADT type` error log
+
+**Symptom.** A perfectly valid program (any `Vec::new()` + `push` +
+`len` sequence) emits this on stderr at compile time, but **compiles and
+runs correctly** (exit code matches expectation):
+
+    ERROR glyim_mir: Place::ty(): Field projection on non-tuple/ADT type
+
+Repro:
+
+    fn main() -> i32 {
+        let mut v = Vec::new();
+        v.push(1);
+        v.push(2);
+        v.push(3);
+        v.len() as i32  // exits 3, correct
+    }
+
+**Location.** The message comes from `crates/glyim-mir/src/lib.rs` (grep
+`Field projection on non-tuple`). It's a `tracing::error!` (or equivalent
+log call), not a `GlyimDiagnostic`. Because it doesn't enter the
+diagnostics list, the pipeline succeeds — but the log is user-visible in
+`--error-format=human` mode via stderr.
+
+**Impact.** Cosmetic but corrosive: it makes every successful `Vec` build
+look like a compiler bug to a user who scrolls back through stderr. Worse,
+it masks real MIR errors — a genuine "field projection on a non-ADT" bug
+would produce the same message and be lost in the noise.
+
+**Root cause (hypothesis).** Somewhere in the `Place::ty()` caller chain,
+a projection is being attempted on a `Vec<T>` "value" as if it were a
+struct, probably as part of the vec→slice deref resolution or the `len`
+builtin lowering. The MIR-level `Place::ty` looks up the field in
+`place.ty()` — if `place.ty()` is a raw `{ptr, len, cap}` (Vec's LLVM
+representation) instead of the ADT type, the field lookup fails.
+
+**Bounded next step.** Add `RUST_BACKTRACE=1` to a probe, get the call
+stack, identify the caller that's constructing the bad `Place`, and
+either fix the `Place` construction or downgrade the log to `tracing::warn!`
+with a "compiler bug, please report" message that names the culprit.
+
+**Not urgent** (nothing is miscompiled today), but worth closing: the
+current state makes real MIR errors indistinguishable from this noise.
+
+---
+
+#### 3.9 — OPEN (ICE): assoc-type projection from `<T as Iterator>::Item` reaches LLVM
+
+**Symptom.** A manual `it.next()` call — regardless of context — either
+fails typechecking with an unsubstituted projection or crashes codegen:
+
+    // Type-check failure (the "good" outcome — this one doesn't ICE)
+    let mut it = vec![1, 2, 3].into_iter();
+    let first = it.next();
+    match first { Some(x) => x, None => 0 }
+    // [T0001] mismatched types: <?ty33716 as Trait37>::Item vs i32
+    // [T0001] expected integer type, found <?ty33716 as Trait37>::Item
+
+    // Codegen ICE (the "bad" outcome)
+    let mut it = vec![1, 2, 3].into_iter();
+    while let Some(_x) = it.next() { /* ... */ }
+    // [X0000] internal compiler error: TyKind::Projection reached LLVM
+    //        codegen – type normalization incomplete
+
+**Root cause (diagnosed session 30).** `<VecIntoIter<T> as Iterator>::Item`
+is a `TyKind::Projection` that **is never normalized** in the zonk step
+before MIR lowering. It reaches codegen, where
+`crates/glyim-codegen-llvm/src/types.rs:279` rejects it with an ICE.
+
+The only place the compiler currently produces a concrete `Option<T>`
+from a `.next()` call is the **`for`-loop lowering fast-path**
+(`crates/glyim-lower/src/lower_rvalue.rs:1317-1331` via
+`iterator_next_fn`), which computes the element type out-of-band and
+substitutes. A manual `.next()` call has no such fast-path, so the
+projection survives.
+
+**Why this is multi-session and NOT bounded.**
+
+- There is **no `deeply_normalize` / `resolve_projection`** on `TyCtxMut`
+  (grep confirms). A real assoc-type-normalization pass doesn't exist.
+- The normalizer would need to consult `impl_assoc_types` (populated by
+  `register_impl_assoc_types`) to resolve `<T as Trait>::Assoc` against
+  a concrete `T`. That's per-impl, per-assoc-type, per-substitution
+  work.
+- It's a **language feature** — affects `<T as AnyTrait>::Assoc` for
+  every user trait with associated types, not just `Iterator`.
+- Alternative (narrow) fix: special-case `Iterator::next`'s return type
+  at typeck time (like the for-loop fast-path). Small but hacky, and
+  leaves the general projection-normalization gap open.
+
+**Value.** High — assoc-type projection is table stakes for a usable
+Rust-like language. `Option::map`, `Result::map_err`, `Iterator::sum`
+(the real form, not the `.iter().sum()` from §3.7), `Future::Output`,
+etc. all go through it.
+
+**Recommendation.** Scope as a dedicated session (or two), not a §3.5.x
+fix. Sketch:
+
+1. `TyCtxMut::deeply_normalize(ty: Ty) -> Ty` — recursively walks the
+   type, replacing `TyKind::Projection(self_ty, assoc_name)` with the
+   resolved associated type from `impl_assoc_types` (using the self-ty
+   to pick the right impl).
+2. Call it in `zonk` for every expression's recorded type. Also call it
+   on function return types before registering sigs.
+3. Verify with a probe suite: `.next()` outside a loop, `Option::map`,
+   a user trait with `type Assoc;`, etc.
+
+That's ~200-400 lines across `glyim-type` / `glyim-typeck` with
+regression tests. Multi-session, but bounded.
+
+**Workaround until then.** Use `for x in it { ... }` (goes through the
+fast-path), or `loop { match ... }` with a `.next()` wrapped in an
+explicit `Option<T>` type annotation (which unifies eagerly and skips
+the projection). The `while let Some(_x) = it.next()` form specifically
+hits the ICE and must be avoided.
+
