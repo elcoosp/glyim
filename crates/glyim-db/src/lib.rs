@@ -19,6 +19,8 @@ pub struct Database {
     /// Cache of previously computed mono item symbols.
     mono_cache: RwLock<Option<Vec<String>>>,
     config: CrateConfig,
+    /// §3.5.30: per-lint levels.
+    lints: glyim_core::lint::LintMap,
 }
 
 #[derive(Clone, Debug)]
@@ -47,6 +49,7 @@ impl Database {
             krate: CrateId::from_raw(0),
             mono_cache: RwLock::new(None),
             config,
+            lints: glyim_core::lint::LintMap::new(),
         }
     }
 
@@ -102,6 +105,16 @@ impl Database {
     /// config.
     pub fn config(&self) -> &CrateConfig {
         &self.config
+    }
+
+    /// Per-lint levels (§3.5.30).
+    pub fn lints(&self) -> &glyim_core::lint::LintMap {
+        &self.lints
+    }
+
+    /// Replace the per-lint map (§3.5.30).
+    pub fn set_lints(&mut self, lints: glyim_core::lint::LintMap) {
+        self.lints = lints;
     }
 }
 

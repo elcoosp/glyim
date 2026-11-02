@@ -69,6 +69,15 @@ pub struct CliArgs {
     /// project template will grow a native equivalent in v0.2.
     #[arg(long = "with-stdlib", default_value_t = false)]
     pub with_stdlib: bool,
+    /// §3.5.30: suppress the named lint(s). Repeatable.
+    #[arg(short = 'A', long = "allow", value_name = "LINT")]
+    pub allow: Vec<String>,
+    /// §3.5.30: set the named lint(s) to warning level (default).
+    #[arg(short = 'W', long = "warn", value_name = "LINT")]
+    pub warn: Vec<String>,
+    /// §3.5.30: promote the named lint(s) to error level.
+    #[arg(short = 'D', long = "deny", value_name = "LINT")]
+    pub deny: Vec<String>,
 }
 
 /// Prepend the assembled minimal standard library to `input`'s VFS content.
@@ -429,6 +438,14 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     };
 
     let mut db = Database::new(config);
+    // §3.5.30 framework: translate `-A/-W/-D <lint>`.
+    {
+        let mut lint_map = glyim_core::lint::LintMap::new();
+        glyim_core::lint::apply_named(&mut lint_map, &args.allow, glyim_core::lint::LintLevel::Allow);
+        glyim_core::lint::apply_named(&mut lint_map, &args.warn, glyim_core::lint::LintLevel::Warn);
+        glyim_core::lint::apply_named(&mut lint_map, &args.deny, glyim_core::lint::LintLevel::Deny);
+        db.set_lints(lint_map);
+    }
     // Tier 1.1: --with-stdlib prepends the assembled stdlib + prelude
     if args.with_stdlib
         && let Err(diags) = inject_assembled_stdlib(&mut db, input)
@@ -569,6 +586,35 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             glyim_codegen_llvm::passes::LtoKind::Thin => 1,
             glyim_codegen_llvm::passes::LtoKind::Fat => 2,
         });
+        // §3.5.30 framework: mix the lint config into the cache key.
+        // Without this, `-A unsafe`/`-D unsafe` on an already-cached
+        // source silently serves the previously-built object and the
+        // flag has no effect. Lints are a SORTED list of `(id, level)`
+        // pairs so flag ordering (`-A x -D y` vs `-D y -A x`) does not
+        // affect the key.
+        {
+            let mut lint_entries: Vec<(u8, u8)> = db
+                .lints()
+                .iter()
+                .map(|(id, lvl)| {
+                    let id_b = match id {
+                        glyim_core::lint::LintId::UnsafeFnCall => 0u8,
+                    };
+                    let lvl_b = match lvl {
+                        glyim_core::lint::LintLevel::Allow => 0u8,
+                        glyim_core::lint::LintLevel::Warn => 1u8,
+                        glyim_core::lint::LintLevel::Deny => 2u8,
+                    };
+                    (id_b, lvl_b)
+                })
+                .collect();
+            lint_entries.sort_unstable();
+            extra_key_bytes.extend_from_slice(b"\x1flints\x1f");
+            for (id_b, lvl_b) in &lint_entries {
+                extra_key_bytes.push(*id_b);
+                extra_key_bytes.push(*lvl_b);
+            }
+        }
         let key = glyim_pipeline::Pipeline::compute_cache_key(
             &mut db,
             input,
@@ -956,6 +1002,9 @@ fn compile_proc_macro_dep(
         proc_macro_deps: None,
         error_format: "human".to_string(),
         with_stdlib: false,
+        allow: Vec::new(),
+        warn: Vec::new(),
+        deny: Vec::new(),
     };
     run_with_args(args).map_err(|diags| {
         let msg = diags

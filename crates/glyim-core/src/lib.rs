@@ -7,6 +7,7 @@ pub mod arena;
 pub mod def_id;
 /// interner.
 pub mod interner;
+pub mod lint;
 /// path.
 pub mod path;
 /// primitives.
@@ -16,6 +17,7 @@ pub use abi::*;
 pub use arena::*;
 pub use def_id::*;
 pub use interner::*;
+pub use lint::*;
 pub use path::*;
 pub use primitives::*;
 

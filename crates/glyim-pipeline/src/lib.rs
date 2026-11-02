@@ -467,6 +467,8 @@ impl Pipeline {
         // solver's own `TraitContext`.
         let resolver = db.interner().clone();
         let mut ty_ctx_mut = glyim_type::TyCtxMut::new(resolver);
+        // §3.5.30 framework: forward per-lint levels from the Database.
+        ty_ctx_mut.set_lints(db.lints().clone());
         let mut trait_ctx = glyim_solve::TraitContext::new();
         register_builtin_traits(&mut trait_ctx, db.interner());
         // Register every ADT's name -> id up front so the impl-header

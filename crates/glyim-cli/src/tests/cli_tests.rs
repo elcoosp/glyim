@@ -23,6 +23,9 @@ fn test_compile_valid_file() {
         proc_macro_deps: None,
         error_format: "human".to_string(),
         with_stdlib: false,
+        allow: Vec::new(),
+        warn: Vec::new(),
+        deny: Vec::new(),
     };
     let result = run_with_args(args);
     assert!(
@@ -52,6 +55,9 @@ fn test_compile_invalid_file() {
         proc_macro_deps: None,
         error_format: "human".to_string(),
         with_stdlib: false,
+        allow: Vec::new(),
+        warn: Vec::new(),
+        deny: Vec::new(),
     };
     let result = run_with_args(args);
     assert!(result.is_err(), "Expected compilation to fail");
@@ -123,6 +129,9 @@ fn test_emit_asm_produces_assembly_file() {
         proc_macro_deps: None,
         error_format: "human".to_string(),
         with_stdlib: false,
+        allow: Vec::new(),
+        warn: Vec::new(),
+        deny: Vec::new(),
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "asm emit should succeed, got: {:?}", result);
@@ -169,6 +178,9 @@ fn test_lto_fat_compiles_to_object() {
         proc_macro_deps: None,
         error_format: "human".to_string(),
         with_stdlib: false,
+        allow: Vec::new(),
+        warn: Vec::new(),
+        deny: Vec::new(),
     };
     let result = run_with_args(args);
     assert!(
@@ -214,6 +226,9 @@ fn test_lto_thin_is_no_longer_a_tracked_gap() {
         proc_macro_deps: None,
         error_format: "human".to_string(),
         with_stdlib: false,
+        allow: Vec::new(),
+        warn: Vec::new(),
+        deny: Vec::new(),
     };
     let result = run_with_args(args);
     // Two acceptable outcomes: success when llvm-lto2 is present, or a
@@ -266,6 +281,9 @@ fn test_emit_cdylib_produces_shared_library() {
         proc_macro_deps: None,
         error_format: "human".to_string(),
         with_stdlib: false,
+        allow: Vec::new(),
+        warn: Vec::new(),
+        deny: Vec::new(),
     };
     let result = run_with_args(args);
     assert!(
@@ -297,6 +315,9 @@ fn test_lto_invalid_value_rejected() {
         proc_macro_deps: None,
         error_format: "human".to_string(),
         with_stdlib: false,
+        allow: Vec::new(),
+        warn: Vec::new(),
+        deny: Vec::new(),
     };
     let result = run_with_args(args);
     assert!(result.is_err(), "invalid --lto value must be rejected");
@@ -335,6 +356,9 @@ fn exec_emit_links_and_runs() {
         proc_macro_deps: None,
         error_format: "human".to_string(),
         with_stdlib: false,
+        allow: Vec::new(),
+        warn: Vec::new(),
+        deny: Vec::new(),
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "glyim-cli --emit=exec failed: {:?}", result);

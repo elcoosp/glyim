@@ -72,6 +72,9 @@ pub struct TyCtxMut {
     /// documented in `KNOWN_GAPS.md`). Lookups on unregistered `FnDefId`s
     /// return `false` ("safe by default").
     is_unsafe_fn: HashMap<FnDefId, bool>,
+    /// §3.5.30 framework: per-lint levels (from `Database::lints()`).
+    /// Missing entries default to `Warn` in `lint_level`.
+    lints: glyim_core::lint::LintMap,
     const_tys: HashMap<ConstDefId, Ty>,
     static_tys: HashMap<StaticDefId, Ty>,
     static_is_mut: HashMap<StaticDefId, bool>,
@@ -194,6 +197,7 @@ impl TyCtxMut {
             variant_types: HashMap::new(),
             fn_sigs: HashMap::new(),
             is_unsafe_fn: HashMap::new(),
+            lints: glyim_core::lint::LintMap::new(),
             const_tys: HashMap::new(),
             static_tys: HashMap::new(),
             static_is_mut: HashMap::new(),
@@ -324,6 +328,7 @@ impl TyCtxMut {
     pub fn from_ty_ctx(ctx: &super::ty_ctx::TyCtx) -> Self {
         Self {
             is_unsafe_fn: HashMap::new(),
+            lints: glyim_core::lint::LintMap::new(),
             arena: ctx.arena,
             regions: ctx.regions.clone(),
             resolver: ctx.resolver.clone(),
@@ -1050,6 +1055,16 @@ impl TyCtxMut {
     /// for the MVP population scope (free fns only).
     pub fn is_unsafe_fn(&self, def_id: FnDefId) -> bool {
         self.is_unsafe_fn.get(&def_id).copied().unwrap_or(false)
+    }
+
+    /// Replace the per-lint map (§3.5.30).
+    pub fn set_lints(&mut self, lints: glyim_core::lint::LintMap) {
+        self.lints = lints;
+    }
+
+    /// Look up the level for a lint. Missing entries default to `Warn`.
+    pub fn lint_level(&self, id: glyim_core::lint::LintId) -> glyim_core::lint::LintLevel {
+        self.lints.get(&id).copied().unwrap_or(glyim_core::lint::LintLevel::Warn)
     }
 
     /// Register the value type of a constant definition so `check_path` can

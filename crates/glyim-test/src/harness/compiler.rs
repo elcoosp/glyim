@@ -184,6 +184,9 @@ impl TestCompiler for PipelineCompiler {
         // shorthand is also accepted.
         let mut opt_level: u8 = 0;
         let mut target_triple: Option<String> = None;
+        let mut lint_allow: Vec<String> = Vec::new();
+        let mut lint_warn: Vec<String> = Vec::new();
+        let mut lint_deny: Vec<String> = Vec::new();
         let mut i = 0usize;
         while i < flags.len() {
             let f = &flags[i];
@@ -204,6 +207,12 @@ impl TestCompiler for PipelineCompiler {
             } else if f == "--target" && i + 1 < flags.len() {
                 target_triple = Some(flags[i + 1].clone());
                 i += 1;
+            } else if f == "-A" || f == "--allow" {
+                if i + 1 < flags.len() { lint_allow.push(flags[i + 1].clone()); i += 1; }
+            } else if f == "-W" || f == "--warn" {
+                if i + 1 < flags.len() { lint_warn.push(flags[i + 1].clone()); i += 1; }
+            } else if f == "-D" || f == "--deny" {
+                if i + 1 < flags.len() { lint_deny.push(flags[i + 1].clone()); i += 1; }
             }
             i += 1;
         }
@@ -253,6 +262,14 @@ impl TestCompiler for PipelineCompiler {
         };
 
         let mut db = Database::new(config);
+        // §3.5.30 framework: forward `-A/-W/-D <lint>`.
+        {
+            let mut lint_map = glyim_core::lint::LintMap::new();
+            glyim_core::lint::apply_named(&mut lint_map, &lint_allow, glyim_core::lint::LintLevel::Allow);
+            glyim_core::lint::apply_named(&mut lint_map, &lint_warn, glyim_core::lint::LintLevel::Warn);
+            glyim_core::lint::apply_named(&mut lint_map, &lint_deny, glyim_core::lint::LintLevel::Deny);
+            db.set_lints(lint_map);
+        }
 
         // Compile in memory, keyed by the fixture's *real* path. External
         // modules (`mod foo;`) then resolve relative to that path's directory

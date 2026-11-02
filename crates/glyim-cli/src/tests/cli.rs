@@ -20,6 +20,9 @@ mod tests {
             proc_macro_deps: None,
             error_format: "human".to_string(),
             with_stdlib: false,
+            allow: Vec::new(),
+            warn: Vec::new(),
+            deny: Vec::new(),
         };
         let result = run_with_args(args);
         assert!(result.is_err());
@@ -56,6 +59,9 @@ mod tests {
             proc_macro_deps: None,
             error_format: "human".to_string(),
             with_stdlib: false,
+            allow: Vec::new(),
+            warn: Vec::new(),
+            deny: Vec::new(),
         };
         let result = run_with_args(args);
         assert!(result.is_ok(), "emit_mir failed: {:?}", result.err());
@@ -86,6 +92,9 @@ mod tests {
             proc_macro_deps: None,
             error_format: "human".to_string(),
             with_stdlib: false,
+            allow: Vec::new(),
+            warn: Vec::new(),
+            deny: Vec::new(),
         };
         let result = run_with_args(args);
         assert!(result.is_ok(), "emit_llvm_ir failed: {:?}", result.err());

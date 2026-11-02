@@ -1088,13 +1088,21 @@ impl<'a> FnCtxt<'a> {
                                 }
                                 _ => format!("fn#{}", fn_id.to_raw()),
                             };
-                            self.diagnostics.push(GlyimDiagnostic::warning(
-                                span,
-                                format!(
-                                    "call to unsafe function `{}` outside of an `unsafe` block",
-                                    display,
-                                ),
-                            ));
+                            // §3.5.30 framework: honor the user-chosen lint
+                            // level from `-A/-W/-D unsafe_fn_call`.
+                            let msg = format!(
+                                "call to unsafe function `{}` outside of an `unsafe` block",
+                                display,
+                            );
+                            match self.ctx.lint_level(glyim_core::lint::LintId::UnsafeFnCall) {
+                                glyim_core::lint::LintLevel::Allow => {}
+                                glyim_core::lint::LintLevel::Warn => {
+                                    self.diagnostics.push(GlyimDiagnostic::warning(span, msg));
+                                }
+                                glyim_core::lint::LintLevel::Deny => {
+                                    self.diagnostics.push(GlyimDiagnostic::type_error(span, msg));
+                                }
+                            }
                         }
                     }
                 }
