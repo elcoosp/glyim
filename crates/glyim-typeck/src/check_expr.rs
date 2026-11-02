@@ -3312,8 +3312,14 @@ impl<'a> FnCtxt<'a> {
             let Some(args) = &attr.args else { continue };
             for raw in args.split(',') {
                 let arg = raw.trim();
+                // §3.5.30 blanket group: `warnings` (and `all`) name
+                // the group of every warning-emitting lint, so their
+                // level applies regardless of which lint `id` is. This
+                // mirrors rustc's `#[allow(warnings)]` short form.
                 if arg == target
                     || glyim_core::lint::LintId::from_str(arg) == Some(id)
+                    || arg == "warnings"
+                    || arg == "all"
                 {
                     override_level = Some(level);
                 }

@@ -213,6 +213,9 @@ pub struct TraitMethod {
     /// Populated by `lower_item::lower_trait_def` from the sibling
     /// `KwUnsafe` token on the method's `FnDef` node.
     pub is_unsafe: bool,
+    /// §3.5.30 attribute resolution: parsed `#[...]` attributes on this
+    /// trait method, in source order. Empty when none were written.
+    pub attrs: Vec<Attribute>,
     /// T178-PATCHED [TCK-28]: declared generic parameters on the method.
     /// Carried through so typeck can populate `MethodDef::generic_params`
     /// and the object-safety check can correctly reject
@@ -238,6 +241,10 @@ pub struct ImplMethod {
     /// the method's `FnDef` node; synthetic methods (async desugarings) are
     /// always `false`.
     pub is_unsafe: bool,
+    /// §3.5.30 attribute resolution: parsed `#[...]` attributes on this
+    /// method, in source order. Populated from the sibling `Attribute`
+    /// nodes on the method's `FnDef`; empty for synthesized methods.
+    pub attrs: Vec<Attribute>,
 }
 
 #[derive(Clone, Debug)]

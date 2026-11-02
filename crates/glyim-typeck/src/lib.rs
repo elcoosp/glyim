@@ -1947,7 +1947,7 @@ fn check_fn_items_in_module(
                             module_id,
                             &combined_generics,
                             self_ty_opt,
-                            Vec::new(),
+                            method.attrs.clone(),
                         );
                     } else {
                         diagnostics.push(GlyimDiagnostic::type_error(
@@ -2079,7 +2079,7 @@ fn check_fn_items_in_module(
                             module_id,
                             &combined_generics,
                             self_ty_opt,
-                            Vec::new(),
+                            tm.attrs.clone(),
                         );
                         // Rollback on error: if this default body can't be
                         // checked for this impl (unresolvable projections,

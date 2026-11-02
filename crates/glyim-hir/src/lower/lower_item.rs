@@ -818,6 +818,7 @@ pub(crate) fn lower_impl_def(
             generic_params: collect_generic_params(&method_node, interner),
             return_ty,
             is_unsafe: method_is_unsafe,
+            attrs: collect_attributes(&method_node, interner),
         });
     }
 
@@ -992,6 +993,7 @@ pub(crate) fn lower_trait_def(
             // the object-safety check sees them.
             generic_params: collect_generic_params(&method_node, interner),
             is_unsafe: trait_method_is_unsafe,
+            attrs: collect_attributes(&method_node, interner),
         });
     }
 

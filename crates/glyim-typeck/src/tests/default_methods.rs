@@ -124,6 +124,7 @@ fn make_simple_hir_with_trait_and_impl(override_default: bool) -> (TyCtxMut, Cra
         default_body: None,
         generic_params: vec![],
         is_unsafe: false,
+        attrs: Vec::new(),
     };
 
     let trait_item = TraitItem {
@@ -147,6 +148,7 @@ fn make_simple_hir_with_trait_and_impl(override_default: bool) -> (TyCtxMut, Cra
         generic_params: vec![],
         return_ty: None,
         is_unsafe: false,
+        attrs: Vec::new(),
     };
 
     let impl_item = ImplItem {
@@ -260,6 +262,7 @@ fn v03_t03_default_method_calling_another_default_method() {
             default_body: None,
             generic_params: vec![],
             is_unsafe: false,
+            attrs: Vec::new(),
         },
         TraitMethod {
             name: foo_name,
@@ -268,6 +271,7 @@ fn v03_t03_default_method_calling_another_default_method() {
             default_body: None,
             generic_params: vec![],
             is_unsafe: false,
+            attrs: Vec::new(),
         },
     ];
 
@@ -286,6 +290,7 @@ fn v03_t03_default_method_calling_another_default_method() {
             generic_params: vec![],
             return_ty: None,
             is_unsafe: false,
+            attrs: Vec::new(),
         },
         ImplMethod {
             name: foo_name,
@@ -294,6 +299,7 @@ fn v03_t03_default_method_calling_another_default_method() {
             generic_params: vec![],
             return_ty: None,
             is_unsafe: false,
+            attrs: Vec::new(),
         },
     ];
 
@@ -402,6 +408,7 @@ fn v03_t04_default_method_with_generic_params() {
         default_body: None,
         generic_params: vec![],
         is_unsafe: false,
+        attrs: Vec::new(),
     };
 
     let trait_item = TraitItem {
@@ -418,6 +425,7 @@ fn v03_t04_default_method_with_generic_params() {
         generic_params: vec![],
         return_ty: None,
         is_unsafe: false,
+        attrs: Vec::new(),
     };
 
     let impl_item = ImplItem {
@@ -521,6 +529,7 @@ fn v03_t05_default_method_calls_missing_method_error() {
         default_body: None,
         generic_params: vec![],
         is_unsafe: false,
+        attrs: Vec::new(),
     };
 
     let trait_item = TraitItem {
@@ -537,6 +546,7 @@ fn v03_t05_default_method_calls_missing_method_error() {
         generic_params: vec![],
         return_ty: None,
         is_unsafe: false,
+        attrs: Vec::new(),
     };
 
     let impl_item = ImplItem {
@@ -622,6 +632,7 @@ fn v03_t06_ambiguous_method_in_multiple_impls() {
                 generic_params: vec![],
                 return_ty: None,
                 is_unsafe: false,
+                attrs: Vec::new(),
             }],
             generic_params: vec![],
             where_clauses: vec![],
