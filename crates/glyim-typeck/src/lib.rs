@@ -1599,6 +1599,7 @@ fn check_fn_items_in_module(
                         module_id,
                         &f.generic_params,
                         None,
+                        f.attrs.clone(),
                     );
                 }
             }
@@ -1946,6 +1947,7 @@ fn check_fn_items_in_module(
                             module_id,
                             &combined_generics,
                             self_ty_opt,
+                            Vec::new(),
                         );
                     } else {
                         diagnostics.push(GlyimDiagnostic::type_error(
@@ -2077,6 +2079,7 @@ fn check_fn_items_in_module(
                             module_id,
                             &combined_generics,
                             self_ty_opt,
+                            Vec::new(),
                         );
                         // Rollback on error: if this default body can't be
                         // checked for this impl (unresolvable projections,
@@ -2368,6 +2371,7 @@ fn check_body(
     // to "unresolved value path" — 3 stdlib Default impls
     // (Vec/String/RawVec) hit exactly this.
     self_ty: Option<Ty>,
+    body_attrs: Vec<glyim_hir::Attribute>,
 ) {
     let body = &hir.bodies[body_id];
     let env = env::LocalEnv::new();
@@ -2405,6 +2409,7 @@ fn check_body(
         pending_closure_expectation: None,
         in_callee_position: false,
         unsafe_depth: 0,
+        body_attrs,
     };
 
     let (thir_body, body_expr_types) = fn_ctxt.check(params);

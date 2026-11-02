@@ -1094,7 +1094,7 @@ impl<'a> FnCtxt<'a> {
                                 "call to unsafe function `{}` outside of an `unsafe` block",
                                 display,
                             );
-                            match self.ctx.lint_level(glyim_core::lint::LintId::UnsafeFnCall) {
+                            match self.effective_lint_level(glyim_core::lint::LintId::UnsafeFnCall) {
                                 glyim_core::lint::LintLevel::Allow => {}
                                 glyim_core::lint::LintLevel::Warn => {
                                     self.diagnostics.push(GlyimDiagnostic::warning(span, msg));
@@ -3293,6 +3293,35 @@ impl<'a> FnCtxt<'a> {
     /// `Body::unsafe_blocks`, calls `check_block_inner`, then decrements.
     /// Because the body lives in a separate fn, its early `return`s exit
     /// *it*, not this wrapper, so the decrement always runs.
+    pub(crate) fn effective_lint_level(
+        &self,
+        id: glyim_core::lint::LintId,
+    ) -> glyim_core::lint::LintLevel {
+        let target = id.as_str();
+        let mut override_level: Option<glyim_core::lint::LintLevel> = None;
+        for attr in &self.body_attrs {
+            if attr.is_inner { continue; }
+            if attr.path.len() != 1 { continue; }
+            let name = self.ctx.name_str(attr.path[0]).to_string();
+            let level = match name.as_str() {
+                "allow" => glyim_core::lint::LintLevel::Allow,
+                "warn" => glyim_core::lint::LintLevel::Warn,
+                "deny" => glyim_core::lint::LintLevel::Deny,
+                _ => continue,
+            };
+            let Some(args) = &attr.args else { continue };
+            for raw in args.split(',') {
+                let arg = raw.trim();
+                if arg == target
+                    || glyim_core::lint::LintId::from_str(arg) == Some(id)
+                {
+                    override_level = Some(level);
+                }
+            }
+        }
+        override_level.unwrap_or_else(|| self.ctx.lint_level(id))
+    }
+
     fn check_block_expr(
         &mut self,
         expr_id: ExprId,

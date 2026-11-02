@@ -65,4 +65,5 @@ pub struct FnCtxt<'a> {
     /// listed in `Body::unsafe_blocks`, decremented on exit. `0` at the
     /// top level of a safe fn body; `>=1` inside any enclosing `unsafe { }`.
     pub unsafe_depth: u32,
+    pub body_attrs: Vec<glyim_hir::Attribute>,
 }

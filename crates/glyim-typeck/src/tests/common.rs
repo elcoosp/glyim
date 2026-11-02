@@ -68,6 +68,7 @@ pub fn check_function_body(
         pending_closure_expectation: None,
         in_callee_position: false,
         unsafe_depth: 0,
+        body_attrs: Vec::new(),
     };
 
     let (thir_body, _expr_types) = fn_ctxt.check(params);
