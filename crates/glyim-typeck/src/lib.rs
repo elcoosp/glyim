@@ -1338,6 +1338,11 @@ fn pre_register_fn_sigs_in_module(
                         abi: abi_from_name(f.abi, ctx),
                     },
                 );
+                // §3.5.30 piece 2b: track `unsafe fn` declaration on the
+                // FnDefId. MVP: only this free-fn registration site is
+                // covered; impl and trait methods are documented as a
+                // known limitation in KNOWN_GAPS.md.
+                ctx.register_fn_unsafe(fn_id, f.is_unsafe);
             }
             ItemKind::Mod(m) => {
                 let child_mod = def_map.modules[module_id]

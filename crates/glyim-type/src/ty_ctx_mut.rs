@@ -66,6 +66,12 @@ pub struct TyCtxMut {
 
     variant_types: HashMap<AdtId, Vec<Ty>>,
     fn_sigs: HashMap<FnDefId, FnSig>,
+    /// Tracks whether a free function is declared `unsafe fn` (§3.5.30).
+    /// Populated only by the `pre_register_fn_sigs_in_module` path today —
+    /// impl methods and trait methods are not yet registered (MVP limitation,
+    /// documented in `KNOWN_GAPS.md`). Lookups on unregistered `FnDefId`s
+    /// return `false` ("safe by default").
+    is_unsafe_fn: HashMap<FnDefId, bool>,
     const_tys: HashMap<ConstDefId, Ty>,
     static_tys: HashMap<StaticDefId, Ty>,
     static_is_mut: HashMap<StaticDefId, bool>,
@@ -187,6 +193,7 @@ impl TyCtxMut {
             type_aliases: HashMap::new(),
             variant_types: HashMap::new(),
             fn_sigs: HashMap::new(),
+            is_unsafe_fn: HashMap::new(),
             const_tys: HashMap::new(),
             static_tys: HashMap::new(),
             static_is_mut: HashMap::new(),
@@ -316,6 +323,7 @@ impl TyCtxMut {
     /// out-of-bounds errors.
     pub fn from_ty_ctx(ctx: &super::ty_ctx::TyCtx) -> Self {
         Self {
+            is_unsafe_fn: HashMap::new(),
             arena: ctx.arena,
             regions: ctx.regions.clone(),
             resolver: ctx.resolver.clone(),
@@ -1029,6 +1037,19 @@ impl TyCtxMut {
 
     pub fn register_fn_sig(&mut self, def_id: FnDefId, sig: FnSig) {
         self.fn_sigs.insert(def_id, sig);
+    }
+
+    /// Register whether a free function is declared `unsafe fn` (§3.5.30).
+    /// Unregistered ids default to `false` in `is_unsafe_fn`.
+    pub fn register_fn_unsafe(&mut self, def_id: FnDefId, is_unsafe: bool) {
+        self.is_unsafe_fn.insert(def_id, is_unsafe);
+    }
+
+    /// Query whether a function is declared `unsafe fn`. Returns `false`
+    /// for unregistered ids (safe-by-default). See `register_fn_unsafe`
+    /// for the MVP population scope (free fns only).
+    pub fn is_unsafe_fn(&self, def_id: FnDefId) -> bool {
+        self.is_unsafe_fn.get(&def_id).copied().unwrap_or(false)
     }
 
     /// Register the value type of a constant definition so `check_path` can
