@@ -5186,14 +5186,42 @@ before-deref lookup). That would break the two existing u8 callers:
 So the "one-line signature change" the previous revision proposed
 would have been a **breaking change** for real callers.
 
-**Two options, neither urgent:**
+**Two options. Option (i) attempted, NOT trivially landable (session 29).**
 
   (i) Add a **distinct-named** method `String::push_char(c: char)`.
-      No conflict, no breakage. Callers wanting Rust-idiomatic
-      `push(char)` would write `push_char`. Small addition, ~5
-      lines including the char->u8 cast (both directions now
-      work; see (b)). If glyim wants to match Rust's String API,
-      this is the safe way.
+      ATTEMPTED and DEFERRED. The `.g`-source addition is trivial
+      (5 lines in `crates/glyim-lang-alloc/lib/string.g`), but
+      **three separate hardcoded tables** must agree for a new
+      `String` method to work end-to-end:
+
+      1. **Type checker's builtin table** — `crates/glyim-type/src/ty_ctx_mut.rs`
+         around line 2530. `String` method resolution goes through the
+         hardcoded `builtin_methods` list, not through HIR walk of
+         `string.g`'s `impl String`. Two entries needed: one on
+         `str_id` (1061, because `String` currently routes there via
+         `TyKind::String`) and one on `string_id` (1050, for the ADT
+         path).
+
+      2. **Codegen's builtin intrinsic allow-list** — `crates/glyim-codegen-llvm/src/lower.rs`
+         around line 4698. Adding `push_char` to the type table without
+         adding it to this `matches!(method.as_str(), ...)` list yields
+         `[X0000] builtin method push_char is resolved by the type
+         checker but not implemented by the LLVM backend`.
+
+      3. **Codegen's actual implementation** — same file, `try_lower_builtin_intrinsic`
+         around line 5291. A new arm needed: for `push_char(c)`, either
+         emit a call to the `glyim_string_push_str` runtime helper with
+         a 1-char buffer, or make `char` → `u8` → `Vec::push` all happen
+         at the LLVM IR level. Real work, not a one-liner.
+
+      Cost estimate: ~50-100 lines across two crates, plus fixtures.
+      Value: users can write `s.push_char('a')` instead of
+      `s.push(b'a' as u8)` or building a one-char `&str` for `push_str`.
+
+      **Not attempted in session 29** because it's more work than the
+      §3.5.36 entry originally claimed and less urgent than §3.5.30's
+      in-flight framework. Deferred; the `.g`-source change alone is
+      insufficient.
 
   (ii) Leave as-is; document that `push_str` is the path for
       appending to a String. `push_str(&str)` works and is what
