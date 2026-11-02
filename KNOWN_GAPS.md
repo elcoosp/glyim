@@ -5429,57 +5429,65 @@ that bar.
 **Status.** Reviewed, no change needed. Documented to prevent a
 future session from repeating the reverted attempt.
 
-#### 3.7 — OPEN: `[T; N].iter()` / `.sum()` fail because `vec![...]` lowers to an array literal
+#### 3.7 — OPEN (scope corrected): `vec![...].iter()` fails; `[...].iter()` works
 
-**Symptom.**
+**Symptom.** Two forms that look equivalent in Rust behave differently:
 
-    fn main() -> i32 {
-        let v = vec![1, 2, 3, 4, 5];
-        let sum: i32 = v.iter().sum();
-        sum
-    }
+    // WORKS
+    fn f() -> i32 { let v = [1, 2, 3, 4, 5]; v.iter().len() as i32 }
 
-    // [T0001] no method `iter` found for type
-    // [T0001] no method `sum` found for type
+    // FAILS: [T0001] no method `iter` found for type
+    fn f() -> i32 { let v = vec![1, 2, 3, 4, 5]; v.iter().len() as i32 }
 
-**Root cause (diagnosed session 30).** `vec![a, b, c]` is not a `Vec`
-constructor in Glyim — the expander lowers it to an **array literal**
-`[a, b, c]` (see `crates/glyim-meta/src/expander/mod.rs:1314`,
-`BuiltinMacro::Vec`). That is a deliberate design choice (documented at
-`crates/glyim-meta/src/lib.rs:128`) matching the compiler's array-first
-model, but it means `v.iter()` on `vec![...]` is trying to find `iter` on
-an `[i32; 5]` receiver, which has no such method — the slice `iter`
-(`slice_id` in the builtin table) isn't reachable from an array without
-an array→slice unsize coercion at the method-lookup layer.
+And `.sum()` fails on both:
 
-**Contrast.** `Vec::new() + push + as_slice` (i.e. a real `Vec<T>`)
-resolves `push`, `len`, `as_slice` correctly — those go through the ADT
-lookup path (AdtId 1020). `vec![...]` never produces a `Vec<T>` in the
-first place.
+    // FAILS: [T0001] no method `sum` found
+    let v = [1, 2, 3]; let s: i32 = v.iter().sum();
 
-**Bounded paths forward, in increasing cost:**
+**Root cause (revised diagnosis, session 30).** Three distinct sub-issues,
+previously conflated:
 
-1. **Add array-receiver fallback in method lookup** — when a method isn't
-   found on `Adt(...)`/primitive but the receiver is an array `[T; N]`,
-   unsize to `[T]` and retry. This is the "array-to-slice for method
-   receivers" gap. Would touch `try_builtin_method` /
-   `lookup_builtin_method`. Probably 30-50 lines plus fixtures.
+1. **`[...].iter()` works.** Array-receiver method lookup IS wired up
+   correctly (`crates/glyim-typeck/src/check_expr.rs:4483` matches
+   `TyKind::Array` as a builtin-receiver shape). The earlier session-29
+   probe that said "no method iter" used `vec![...]`, not `[...]`. So
+   **no array-receiver fallback is needed** — that diagnosis was wrong.
 
-2. **Change `vec![...]` to lower to `Vec::from([...])`** — closer to
-   Rust semantics but changes the whole user-facing surface of the macro.
-   Requires `Vec::from` to accept an array. Large.
+2. **`vec![...]` doesn't resolve `.iter()` — but the macro expansion is
+   correct.** `BuiltinMacro::Vec` (`crates/glyim-meta/src/expander/mod.rs:1314`)
+   splices `vec![a, b, c]` into the token stream `[a, b, c]`. The
+   subsequent let-binding *should* infer `[i32; N]` and then `.iter()`
+   should resolve as in case (1). Yet it doesn't. Hypothesis: the macro
+   expansion is transparent to the parser but not to type inference —
+   the array literal produced by macro expansion retains a fresh-inference-var
+   type until a method call forces resolution, and method lookup happens
+   *before* the array-vs-Vec distinction is forced. Needs a probe with
+   `--emit=syntax` on both forms side by side.
 
-3. **Leave as-is and document** that `vec![...]` is an array literal, not
-   a Vec. Fine for `for x in vec![...]` (works — array iteration is
-   supported), surprising for `.iter()` / `.sum()` / `.push()` chains.
+3. **`.sum()` on an iterator is blocked by §3.9 (projection), not by
+   §3.7.** `Iterator::sum` lives in stdlib (`crates/glyim-lang-core/lib/iter.g`),
+   declared with `Self::Item` in its signature. Calling it requires
+   assoc-type projection normalization — the same root cause as §3.9's
+   `while let Some(_x) = it.next()` ICE. Fixing §3.9 fixes `.sum()` and
+   every other `Iterator` method at once.
 
-**Recommendation.** Option (1) — the array-to-slice method-receiver
-fallback. It's the bounded fix and it's independently useful for
-`[1, 2, 3].iter()` regardless of `vec!` semantics.
+**Bounded paths forward, revised:**
 
-**Note for future probes.** When testing `Vec` idioms, use
-`let v: Vec<i32> = Vec::new(); v.push(...)` — not `vec![...]`. The
-distinction is invisible in Rust but fundamental in Glyim.
+- **For sub-issue (2):** investigate with `--emit=syntax` to confirm the
+  type-inference delay hypothesis. If confirmed, the fix is likely a
+  small adjustment in method-lookup dispatch to force array-vs-Vec
+  resolution before `try_builtin_method`. Bounded (~20-40 lines + fixture).
+
+- **For sub-issue (3):** **skip** — it is §3.9, not a separate fix.
+
+**Recommendation.** Do NOT attempt §3.7 fix (1) — the array fallback
+already works. Investigate (2) if desired; it is the only bounded piece.
+Sub-issue (3) is real but lives in §3.9.
+
+**Update for future probes.** When testing "does method M work on a
+vector", use `let v: [i32; N] = [...];` for the array path, or
+`let v: Vec<i32> = Vec::new(); v.push(...)` for the Vec path.
+`vec![...]` hits sub-issue (2) specifically, which is a separate bug.
 
 ---
 
@@ -5595,7 +5603,13 @@ regression tests. Multi-session, but bounded.
 
 **Workaround until then.** Use `for x in it { ... }` (goes through the
 fast-path), or `loop { match ... }` with a `.next()` wrapped in an
-explicit `Option<T>` type annotation (which unifies eagerly and skips
+explicit `Option<T>` type annotation
+
+**Also blocks:** every `Iterator` method whose signature mentions
+`Self::Item` — `.sum()`, `.map()`, `.filter()`, `.collect()`, `.fold()`,
+`.enumerate()`, etc. §3.7 sub-issue (3) is a symptom of this, not a
+separate gap. Fixing §3.9 unblocks a large swath of the iterator idiom
+suite at once. (which unifies eagerly and skips
 the projection). The `while let Some(_x) = it.next()` form specifically
 hits the ICE and must be avoided.
 
