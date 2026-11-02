@@ -5491,7 +5491,7 @@ vector", use `let v: [i32; N] = [...];` for the array path, or
 
 ---
 
-#### 3.8 — OPEN: spurious `Place::ty(): Field projection on non-tuple/ADT type` error log
+#### 3.8 — CLOSED: spurious `Place::ty(): Field projection on non-tuple/ADT type` log
 
 **Symptom.** A perfectly valid program (any `Vec::new()` + `push` +
 `len` sequence) emits this on stderr at compile time, but **compiles and
@@ -5532,8 +5532,14 @@ stack, identify the caller that's constructing the bad `Place`, and
 either fix the `Place` construction or downgrade the log to `tracing::warn!`
 with a "compiler bug, please report" message that names the culprit.
 
-**Not urgent** (nothing is miscompiled today), but worth closing: the
-current state makes real MIR errors indistinguishable from this noise.
+**CLOSED (session 30, commit pending).** Root cause: `polymorphize::mark_used_params_in_place`
+calls `Place::ty()` on *every* place (to recover parameter references).
+When a place's base type is `Unit`/`Never`, the `Field` projection arm
+hit the `_ =>` fallback and logged. Fixed by adding silent
+`TyKind::Unit | TyKind::Never => ctx.error_ty()` arms before the error
+arm in `crates/glyim-mir/src/lib.rs` — those types have no fields, so
+projecting through them is benign and not a compiler bug. The error log
+remains for genuinely unexpected cases (non-ADT, non-tuple, non-Unit).
 
 ---
 
