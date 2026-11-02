@@ -223,6 +223,14 @@ pub enum SyntaxKind {
     /// Variant.
     Module,
     /// Variant.
+    /// A `#[...]` attribute attached to an item.
+    /// Children: `#`, `[`, `Ident`, optional `AttrList` (`(...)`), `]`.
+    /// Emitted as a sibling *before* the item it decorates
+    /// (matching the rowan convention; also mirrors how `KwUnsafe`
+    /// sits as a sibling before `FnDef`).
+    Attribute,
+    /// Parenthesised attribute arguments: `(a, b = c, ...)`.
+    AttrList,
     FnDef,
     /// Variant.
     StructDef,

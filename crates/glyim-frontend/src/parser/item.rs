@@ -4,6 +4,12 @@ use rowan::Language; // Required for kind_to_raw
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_item(&mut self) {
+        // §3.5.30 attribute resolution, layer 1: parse `#[...]` attributes
+        // as `Attribute` sibling nodes before the item they decorate.
+        while self.at_attribute() {
+            self.parse_attribute();
+        }
+
         let _vis = self.parse_visibility();
 
         if self.current_kind() == SyntaxKind::KwUnsafe {
@@ -256,6 +262,67 @@ impl<'a> Parser<'a> {
                 }
             }
         }
+    }
+
+    /// §3.5.30 attribute resolution: true when the cursor is at the start
+    /// of an attribute (`#` followed by `[`). `#!` inner attributes are
+    /// accepted and parsed to the same shape (inner-ness is ignored at
+    /// this layer — the parser is not yet rewriting them to a different
+    /// kind).
+    fn at_attribute(&mut self) -> bool {
+        self.current_kind() == SyntaxKind::Hash
+            && self.next_non_ws_kind() == SyntaxKind::LBracket
+    }
+
+    /// Parse one `#[path(args)]` attribute as an `Attribute` node.
+    /// Recognised shapes:
+    ///   - `#[ident]`
+    ///   - `#[ident(a, b, c)]`
+    ///   - `#[ident(a = "x", b = 1)]`
+    /// Argument tokens are consumed verbatim into `AttrList`; nested
+    /// attributes (`#[cfg_attr(...)]` inside) are not re-parsed at this
+    /// layer.
+    fn parse_attribute(&mut self) {
+        self.start_node(SyntaxKind::Attribute);
+        self.bump_expected(SyntaxKind::Hash);
+        if self.current_kind() == SyntaxKind::Bang {
+            self.bump();
+        }
+        self.bump_expected(SyntaxKind::LBracket);
+        if self.current_kind() == SyntaxKind::Ident {
+            self.parse_path();
+        }
+        if self.current_kind() == SyntaxKind::LParen {
+            self.start_node(SyntaxKind::AttrList);
+            self.bump_expected(SyntaxKind::LParen);
+            let mut depth: usize = 1;
+            while depth > 0 {
+                match self.current_kind() {
+                    SyntaxKind::LParen | SyntaxKind::LBrace | SyntaxKind::LBracket => {
+                        depth += 1;
+                        self.bump();
+                    }
+                    SyntaxKind::RParen | SyntaxKind::RBrace | SyntaxKind::RBracket => {
+                        depth -= 1;
+                        if depth == 0 {
+                            self.bump_expected(SyntaxKind::RParen);
+                        } else {
+                            self.bump();
+                        }
+                    }
+                    _ => {
+                        if self.current().is_none() {
+                            self.error("unterminated attribute arguments");
+                            break;
+                        }
+                        self.bump();
+                    }
+                }
+            }
+            self.finish_node();
+        }
+        self.bump_expected(SyntaxKind::RBracket);
+        self.finish_node();
     }
 
     pub(crate) fn parse_visibility(&mut self) -> bool {
