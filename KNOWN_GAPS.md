@@ -5469,12 +5469,34 @@ previously conflated:
    re-wrapping. Verified across 10 idiomatic probes (all `len`/`iter`/
    `index`/`for` forms now behave correctly).
 
-   **Design note (out of scope of this fix).** `vec![...]` produces an
-   array `[i32; N]`, not a `Vec<i32>`. That is a deliberate choice in
-   glyim, but it means `let mut v = vec![1,2]; v.push(3)` fails (`push`
-   is a Vec method, not an array one). Users wanting a `Vec` must write
-   `let mut v: Vec<i32> = Vec::new(); v.push(...)`. See §3.7's "still
-   open" sub-section for the resulting method-resolution gap.
+   **Design decision (NOT a bug).** `vec![...]` produces an array
+   `[T; N]`, not a `Vec<T>`. This is deliberate — documented at
+   `crates/glyim-meta/src/lib.rs:128` ("`vec![a, b, c]` — expands to the
+   array literal `[a, b, c]`"). It's a Rust deviation.
+
+   Consequences and idiomatic workarounds:
+
+   | You want | Write |
+   |---|---|
+   | array, fixed size | `vec![1,2,3]` → `[i32; 3]` |
+   | growable `Vec` from items | `[1,2,3].to_vec()` |
+   | empty `Vec` | `Vec::new()` (annotate element if needed) |
+   | grow after construction | `let mut v = [1,2].to_vec(); v.push(3);` |
+
+   Verified end-to-end (session 30):
+   - `[1,2].to_vec().push(3).len()` → 3
+   - `[10,20,30,40,50].to_vec().as_slice().len()` → 5
+   - `Vec::new()` → empty Vec, `.len()` → 0
+   - `for x in vec![1,2,3]` → correct iteration (was broken pre-fix)
+
+   If glyim ever wants Rust-compatible `vec![]` semantics, the expansion
+   would become `{ let mut __v = Vec::new(); __v.push(a); ...; __v }`
+   (verified to work in expression, method-receiver, and empty positions
+   — see session 30 probes). But that changes the *type* of every
+   existing `vec![...]` call from `[T; N]` to `Vec<T>`, which is a
+   breaking change for any code that relies on array semantics
+   (fixed-size, `Copy`, array-indexing with static bounds, etc.).
+   Deferred unless a specific user need surfaces.
 
    Original repro matrix for reference:
 
