@@ -1313,18 +1313,51 @@ impl<'a> ExpanderImpl<'a> {
             }
             BuiltinMacro::Vec => {
                 // `vec![a, b, c]` → `[a, b, c]`.
-                let args_tt = flatten_token_tree(args_node);
-                let mut out: Vec<TokenTree> = Vec::new();
-                out.push(TokenTree::Token(SyntaxKind::LBracket, SmolStr::from("[")));
-                for tt in &args_tt {
-                    if let TokenTree::Token(kind, text) = tt {
-                        if *kind == SyntaxKind::Comma {
-                            continue;
+                //
+                // The args are one `Group(LBracket, [elem, Comma, elem, ...], RBracket)`
+                // because `flatten_token_tree` preserves the delimiter structure.
+                // The PRE-FIX code matched only `TokenTree::Token`, so the Group
+                // never matched, every inner element was skipped, and the
+                // expansion collapsed to `[]`. That was a silent miscompile:
+                // `vec![1,2,3].len()` returned 0, and `let v = vec![1,2,3];
+                // v.iter()` failed because `[]` had an unresolved element type.
+                //
+                // Recursive flatten: unwrap the outer `[...]` group, splice in
+                // its inner tokens (which already carry the commas), and wrap
+                // with `[`/`]`. Empty `vec![]` still produces `[]`.
+                fn splice_tokens(tt: &TokenTree, out: &mut Vec<TokenTree>) {
+                    match tt {
+                        TokenTree::Token(kind, text) => {
+                            out.push(TokenTree::Token(*kind, text.clone()));
                         }
-                        out.push(TokenTree::Token(*kind, text.clone()));
+                        TokenTree::Group(_, inner, _) => {
+                            for it in inner {
+                                splice_tokens(it, out);
+                            }
+                        }
+                        TokenTree::DollarCrate => {
+                            out.push(TokenTree::DollarCrate);
+                        }
                     }
                 }
-                out.push(TokenTree::Token(SyntaxKind::RBracket, SmolStr::from("]")));
+                // IMPORTANT: `flatten_token_tree(args_node)` returns the args
+                // **including** the outer `[` ... `]` delimiters (the parser
+                // wraps the whole token tree in a `TokenTree` node whose first
+                // and last direct children are the brackets). The pre-fix code
+                // pushed its own `[`/`]` on top, so the expansion was
+                // `[[1,2,3]]` — an array-of-one-array. That silently
+                // miscompiled `vec![1,2,3].len()` to 1 and gave
+                // `let v = vec![1,2,3]; for x in v` an element type of
+                // `[?; _]` instead of `i32`.
+                //
+                // Correct behaviour: splice the flattened args verbatim into
+                // `out` (recursively unwrapping any inner Groups), preserving
+                // the original brackets and the commas between elements.
+                let args_tt = flatten_token_tree(args_node);
+                let mut out: Vec<TokenTree> = Vec::new();
+                for tt in &args_tt {
+                    splice_tokens(tt, &mut out);
+                }
                 out
             }
             BuiltinMacro::Matches => {
