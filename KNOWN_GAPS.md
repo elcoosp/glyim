@@ -5609,6 +5609,56 @@ remains for genuinely unexpected cases (non-ADT, non-tuple, non-Unit).
 
 #### 3.9 — OPEN (ICE): assoc-type projection from `<T as Iterator>::Item` reaches LLVM
 
+**Session-31 scope correction (2026-11-03).** The generic title overstates
+what's broken. Precise probe matrix:
+
+| Form | Result |
+|---|---|
+| `[1,2,3].to_vec().into_iter().next()` | ✅ returns the correct `Some(42)` — works |
+| `[1,2,3].into_iter().next()` | ❌ `mismatched types: <?ty as Trait>::Item vs i32` |
+| `let s: &[i32] = ...; s.into_iter().next()` | ❌ same |
+| `for x in [1,2,3]` (for-loop fast-path) | ✅ works via `iterator_next_fn` |
+
+So the failure is NOT about `Iterator::next` in general — it's specifically:
+
+1. **Direct-impl `Iterator::next` works** when the receiver is a concrete
+   ADT (`VecIntoIter<T>`, `Iter<'a, T>`, etc.) — the impl's concrete
+   return type `Option<T>` / `Option<&'a T>` is used.
+
+2. **`IntoIterator::into_iter()` on an *array*** has no `IntoIterator`
+   impl in stdlib — that's a missing-impl gap, not a projection bug.
+   The `&[T].into_iter()` case *does* have an impl but produces a fresh
+   inference var that never resolves.
+
+3. **`&[T].into_iter().next()`** fails because the `Iterator::next`
+   return type comes out as `<Self as Iterator>::Item`, a projection
+   against a *fresh inference var* rather than the concrete `Iter<'a, T>`
+   receiver. The impl's concrete `-> Option<&'a T>` (from
+   `iter.g:335-336`) is *not* being used at the call site.
+
+**Root cause hypothesis (needs confirmation next session).** Trait-method
+call return types use the *trait's* declared signature
+(`fn next(&mut self) -> Option<Self::Item>`), not the impl's concrete
+override (`fn next(&mut self) -> Option<&'a T>`). Substitution of `Self`
+→ receiver + `Self::Item` → impl's assoc type happens for *arguments*
+but not for the *return type* at the call site. Either:
+
+- (a) make `resolve_trait_method_fn` substitute the trait sig's return
+  type against the impl's `register_impl_assoc_types` entries, or
+- (b) make `zonk_ty` normalize projections whose `self` is an inference
+  var that has since bound to a concrete ADT.
+
+(a) is likely the correct fix. (b) is a broader normalization pass (the
+"deeply_normalize" sketch below), and is the multi-session option.
+
+**What still needs `deeply_normalize`** (the original §3.9 sketch): the
+case where a projection genuinely survives zonk as
+`<Param as Trait>::Assoc` inside a *generic* body that gets monomorphized
+later. That's a separate concern from the `&[T].into_iter()` shape and
+still needs the deep normalizer.
+
+
+
 **Symptom.** A manual `it.next()` call — regardless of context — either
 fails typechecking with an unsubstituted projection or crashes codegen:
 
