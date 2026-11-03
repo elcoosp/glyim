@@ -5657,6 +5657,50 @@ case where a projection genuinely survives zonk as
 later. That's a separate concern from the `&[T].into_iter()` shape and
 still needs the deep normalizer.
 
+**Session-32 investigation (2026-11-03).** Instrumented
+`resolve_method_call` and the `zonk_ty` Projection arm. Findings:
+
+1. **`zonk_ty` handles the *concrete* case correctly.** The
+   `TyKind::Projection(proj)` arm resolves the projection's self type
+   through `ctx.resolve_associated_type_by_self_ty_name`. When `self`
+   is a concrete `Adt(...)`, this returns the impl's assoc type. Verified:
+   `[1,2,3].to_vec().into_iter().next()` runs and returns `Some(42)`.
+
+2. **The failures come from a *trait-signature* return type, not a
+   stale projection.** `resolve_method_call` returns
+   `candidates[0].1` — the trait-method candidate's `ret_ty`. When the
+   candidate's `ret_ty` came from the *trait's* declared signature
+   (`fn next(&mut self) -> Option<Self::Item>`), it carries
+   `<Self as Iterator>::Item` as a *substitution-ready projection*.
+   The impl's concrete `fn next(...) -> Option<&'a T>` (from
+   `iter.g:335-336`) is registered separately in `fn_sigs` but
+   `resolve_method_call` doesn't consult it at the trait-method
+   candidate step.
+
+3. **The `for`-loop path already fixes this correctly.** See
+   `check_expr.rs:~560` (`subst_ty(raw_opt, &m)` after resolving
+   `VecIntoIter<T>`'s `T`). That is the reference implementation for
+   the general `x.next()` path.
+
+**Fix sketch.** At the trait-method candidate's `ret_ty` computation in
+`resolve_method_call` (~line 4586-4660, the `MethodDispatch::Static`
+construction), after `resolve_trait_method_fn` returns
+`(fn_def_id, substs)`:
+- Fetch `self.ctx.fn_sig(fn_def_id)?.output` (the impl's registered
+  concrete return type — already correct).
+- Substitute the impl's `generic_params` from the caller's `substs`.
+- Use THAT as `ret_ty` instead of the trait sig's projection.
+
+The `substs` are already constructed in `resolve_trait_method_fn` at
+the return site (see its tail — `resolved_params` / `intern_substitution`).
+The fix is to actually *use* them when computing `ret_ty`.
+
+**Not attempted in session 32** — the fix requires threading
+`(fn_def_id, substs)` through `resolve_method_call`'s candidate tuple,
+which touches ~4 call sites and the `MethodDispatch::Static` arm.
+Bounded, but not small enough to land cleanly alongside the recons.
+Documented here so the next session has the exact recipe.
+
 
 
 **Symptom.** A manual `it.next()` call — regardless of context — either
