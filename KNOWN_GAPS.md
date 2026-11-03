@@ -5701,6 +5701,71 @@ which touches ~4 call sites and the `MethodDispatch::Static` arm.
 Bounded, but not small enough to land cleanly alongside the recons.
 Documented here so the next session has the exact recipe.
 
+**Session-32 SEVERE FINDING — this is a memory-safety bug, not a projection ICE.**
+
+Probe matrix (all with `--with-stdlib --emit=exec`, LLVM backend):
+
+| Pattern | Result |
+|---|---|
+| `s.iter().len()` on `&[i32]` | ✅ 3 |
+| `v.iter().len()` on `Vec<i32>` | ✅ 3 |
+| `s[0]`, `&s[0]`, `*&s[0]` | ✅ correct |
+| `s.split_first().unwrap().0` deref | ✅ correct |
+| `Option<&i32>` from any non-iterator source | ✅ correct |
+| **`s.iter().next()` + deref the `&i32`** | 🔴 **BUS ERROR (SIGBUS, exit 138)** |
+| **`v.iter().next()` + deref the `&i32`** | 🔴 **BUS ERROR (SIGBUS, exit 138)** |
+| **`v.iter().enumerate().next()`** | 🔴 same |
+| A free fn with `Iter::next`'s *exact body* (`&mut &[i32]` param) | ✅ correct |
+
+**What this means.** `iter()` returns a struct whose slice header is
+valid (`.len()` works). But calling `.next()` on that struct — an
+`impl<'a, T> Iterator for Iter<'a, T>` with `fn next(&mut self) ->
+Option<&'a T>` — produces a **dangling reference**. Dereferencing it
+segfaults.
+
+The identical body called directly as `fn my_next(&mut &[i32]) ->
+Option<&i32>` works. So the bug is in the **ABI/field-access codegen
+for the `&mut self` receiver**, not in the typeck or the
+assoc-type projection.
+
+**Severity.** This is a **memory-safety violation** — a Rust-like
+compiler emitting a SIGBUS on a safe program. Far more serious than
+the projection ICE the entry was originally filed as. It also explains
+why `.sum()`, `.map()`, `.filter()`, `.collect()`, etc. all fail: they
+all chain through `Iter::next`.
+
+**Impact.** Every `for x in &slice` and `for x in slice` in the stdlib
+uses the `for`-loop fast-path (`iterator_next_fn`), which bypasses
+`Iter::next` entirely. So the stdlib *currently* works — but any
+user-written `.iter().next()` chain on a slice or `Vec` will SIGBUS.
+This includes `.iter().sum()` (which is the idiomatic Rust form).
+
+**What needs to be investigated next.**
+
+1. Compare the MIR for `impl Iterator for Iter<'a, T> { fn next(&mut
+   self) -> Option<&'a T> { ... } }` against the hand-written
+   `fn my_next(self_slice: &mut &[i32]) -> Option<&i32>` body. If they
+   differ in how `self.slice` (a **struct field** projected through a
+   `&mut` reference) is read, the bug is in that projection.
+
+2. Check whether the `&mut self` receiver lowering correctly passes
+   the `Iter` pointer (not a copy of the slice header). If it copies
+   the header *and* returns a reference into the copy's backing memory,
+   the reference dangles.
+
+3. Check whether the return type `Option<&'a T>` is being lowered as
+   `Option<ptr>` or `Option<{ptr, len}>` for the field-type mismatch.
+   A fat-pointer vs thin-pointer mismatch here would produce exactly
+   this behavior.
+
+**The original fix sketch above (`resolve_method_call` should use the
+impl's `fn_sig`)** is likely still needed — but it does NOT explain
+SIGBUS. It only explains the earlier "mismatched types" errors on
+*non-iterator* trait methods. Both bugs exist and both must be fixed.
+
+**Status.** Investigate before attempting §3.9 for real. The memory-safety
+bug should be the priority.
+
 
 
 **Symptom.** A manual `it.next()` call — regardless of context — either
