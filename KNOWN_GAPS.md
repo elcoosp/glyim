@@ -5763,8 +5763,89 @@ impl's `fn_sig`)** is likely still needed — but it does NOT explain
 SIGBUS. It only explains the earlier "mismatched types" errors on
 *non-iterator* trait methods. Both bugs exist and both must be fixed.
 
-**Status.** Investigate before attempting §3.9 for real. The memory-safety
-bug should be the priority.
+**Session-32 ROOT CAUSE (confirmed via --emit=llvm-ir).**
+
+The compiler emits **three inconsistent LLVM signatures for the same
+symbol** `__glyim_fn_428_10_1` (the monomorphized `Iter::next`):
+
+  line 48 — DECLARATION:
+    declare void @__glyim_fn_428_10_1(ptr, ptr)
+
+  line 56 — DEFINITION:
+    define fastcc void @__glyim_fn_428_10_1(ptr sret %0, ptr %1)
+
+  line 35 — CALL SITE (from main):
+    call void @__glyim_fn_428_10_1(ptr sret %sret, { ptr, i64 } %load5)
+
+**The mismatch.** The definition's second parameter `%1` is a **thin
+`ptr`** — correct for `&mut Iter<'a, T>` (a reference is one pointer).
+The call site passes **`{ ptr, i64 }`** — a **fat slice** — by value.
+
+On arm64 a `{ptr, i64}` struct arg is split across x1 (data ptr) and x2
+(length). The callee reads `%1` = x1 = the array's *data pointer*, then
+dereferences it **as if it were the `Iter` struct** (a `&mut {ptr,
+i64}`). Reading `(*data_ptr).slice` interprets the first 16 bytes of
+the `[10,20,30]` array data as a slice header. Then `split_first`
+walks past the buffer → **SIGBUS**.
+
+**Typeck root cause.** `MethodDispatch::Static`'s "Script 560: AUTOREF"
+wrapping (in `check_expr.rs` ~line 1728) is supposed to detect
+`formal_first: &mut Self` and wrap the receiver as `&mut it` (thin
+pointer, emitted as `alloca it; pass alloca_ptr`). It does **not** fire
+for this call — the value `Iter` is passed directly. The IR shows
+`load { ptr, i64 }` + by-value call, not `alloca` + address-of.
+
+Two candidate reasons, both worth checking next session:
+
+1. **`fn_sig(fn_def_id).inputs[0]` isn't `&mut Iter` for the
+   monomorphized instance.** If `register_fn_sig` stored
+   `inputs[0] = Iter` (by value) instead of `&mut Iter`, the autoref
+   guard `formal_first.is_some_and(|t| t is Ref)` sees `Iter` and
+   skips the wrap.
+
+2. **The impl method's `self` param is being resolved as `Iter` (by
+   value) during `pre_allocate_impl_method_ids`** — because the
+   generic `Iter<'a, T>` struct reference is being desugared without
+   the `&mut` outer layer.
+
+**Verification of surrounding cases (session 32 probes).**
+
+- User-defined `fn bump(&mut self)` on a plain struct — **works**
+  (returns correct value, no SIGBUS).
+- User-defined `fn get(&self) -> &i32` — **works** (returns the
+  correct dereferenced value).
+- `Iter::len()` — works (returns 3; reads the fat-slice header field
+  directly without calling `next`).
+- Direct call to a free fn `my_next(&mut &[i32]) -> Option<&i32>` —
+  works. Body semantics are fine; only the dispatch ABI breaks.
+- `Iterator::next` on `VecIntoIter` (from `.to_vec().into_iter()`)
+  — works. That ADT is not generic over a lifetime, and its receiver
+  ABI matches.
+
+So the bug is **specific to trait-impl methods on generic-lifetime
+ADTs**, not user-`&mut self` in general. Narrower than initially feared,
+but still a memory-safety violation.
+
+**Recommendation for the fix.**
+
+1. First probe: does a generic ADT with a `&mut self` method hit the
+   same bug? e.g. `struct W<'a> { r: &'a [i32] }` +
+   `impl<'a> W<'a> { fn get(&mut self) -> i32 { self.r[0] } }`.
+   If yes, the bug is "`&mut self` on a generic-lifetime ADT loses
+   autoref" and the fix is in `register_fn_sig`'s `self` param
+   handling (make sure `&mut Self` stays a reference through mono
+   substitution).
+2. If not, the bug is specific to trait-impl methods. Check
+   `pre_allocate_impl_method_ids` and the trait-call path.
+
+**DO NOT attempt a fix** without confirming which branch applies. The
+IR mismatch (`{ptr, i64}` vs `ptr`) narrows it to exactly one of them;
+a blanket change to `register_fn_sig` would risk breaking `Iter::len`
+and `VecIntoIter::next` — both work today.
+
+**Status.** Root-caused to the LLVM level. Memory-safety severity.
+Highest-priority bug in the tree. Needs a dedicated session to
+implement the fix, not a drive-by.
 
 
 
