@@ -5453,8 +5453,30 @@ previously conflated:
    probe that said "no method iter" used `vec![...]`, not `[...]`. So
    **no array-receiver fallback is needed** — that diagnosis was wrong.
 
-2. **`vec![...]` vs `[...]` — the difference is `let`-binding vs inline,
-   not `Vec` vs array.** Session 30's precise repro matrix:
+2. **CLOSED (session 30): `vec![...]` was expanding to `[[...]]` (array-of-one-array).**
+   Root cause: `crates/glyim-meta/src/expander/mod.rs`'s `BuiltinMacro::Vec`
+   arm called `flatten_token_tree(args_node)` — which returns the args
+   **including** the outer `[`/`]` delimiters (the parser wraps the whole
+   token tree in a `TokenTree` node whose first and last direct children
+   are the brackets). The arm then pushed *another* `[`/`]` around the
+   result, producing `[[1,2,3]]` instead of `[1,2,3]`. That was a silent
+   miscompile: `vec![1,2,3].len()` returned 1, `for x in vec![1,2,3]`
+   bound `x: [?; _]` (unresolved array), and every downstream method call
+   on `v` failed because the element type was a nested array.
+
+   Fix: splice the flattened args verbatim (recursively unwrapping any
+   inner Groups via a local `splice_tokens` helper) and drop the
+   re-wrapping. Verified across 10 idiomatic probes (all `len`/`iter`/
+   `index`/`for` forms now behave correctly).
+
+   **Design note (out of scope of this fix).** `vec![...]` produces an
+   array `[i32; N]`, not a `Vec<i32>`. That is a deliberate choice in
+   glyim, but it means `let mut v = vec![1,2]; v.push(3)` fails (`push`
+   is a Vec method, not an array one). Users wanting a `Vec` must write
+   `let mut v: Vec<i32> = Vec::new(); v.push(...)`. See §3.7's "still
+   open" sub-section for the resulting method-resolution gap.
+
+   Original repro matrix for reference:
 
    | Form | Result |
    |---|---|
