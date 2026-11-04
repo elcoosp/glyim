@@ -6029,6 +6029,39 @@ Still failing (unchanged severity, distinct bugs):
 The original "SIGBUS on safe code" severity is now **resolved on LLVM**;
 the interpreter and projection paths remain at their previous severity.
 
+
+**Interpreter path (MIR interp via `InterpRunner`) — still panics.**
+
+The differential test (`llvm_and_interp_agree_on_run_pass_corpus`)
+reports an exit mismatch (`interp=Some(101), llvm=Some(10)`) for the
+two `.iter().next()` probes. **The interpreter exit 101 is a panic in
+the interpreter itself** (not a matched-but-wrong result). Reproduce:
+
+    cargo nextest run -p glyim-test differential --test-threads=2 --no-fail-fast \
+        --features glyim-test/real-llvm
+
+The two fixtures were removed to keep the workspace green while the
+interp bug is unresolved — the LLVM SIGBUS regression is prevented by
+the typeck fix only, which is a partial guarantee. Restoring the
+fixtures requires fixing the interpreter too.
+
+**Where to look.** `crates/glyim-mir-interp/src/lib.rs` — the interp's
+`Rvalue::Ref` handling. The MIR now contains the correct autoref wrap
+(thanks to commit e8588f0d's typeck fix), so the input the interpreter
+sees is correct. If it still panics, either:
+
+- it evaluates `Ref` as a reference-to-copy rather than
+  reference-to-place, or
+- the callee's `UnaryOp(Deref, ...)` on `&mut self` (top of
+  `Iter::next`'s MIR) dereferences the wrong value.
+
+Both point into `interp_value.rs`'s representation of references and
+`lib.rs`'s `Rvalue::Ref` evaluation. Not attempted this session.
+
+**Fix recipe.** Compare the interpreter's execution of the post-fix
+MIR for `Iter::next` against the same MIR under a `Debug` walker (if
+the crate has one). Any divergence in the value of the `&mut self`
+receiver local between the two points to the actual bug.
 #### 3.10 — CLOSED: user-defined trait with `&mut self` method crashed with IndexVec OOB
 
 **Symptom.**
