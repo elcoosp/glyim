@@ -5843,6 +5843,82 @@ IR mismatch (`{ptr, i64}` vs `ptr`) narrows it to exactly one of them;
 a blanket change to `register_fn_sig` would risk breaking `Iter::len`
 and `VecIntoIter::next` — both work today.
 
+**Session-33 correction: the typeck autoref path is CORRECT.** Instrumented
+the `MethodDispatch::Static` arm in `check_expr.rs` (~line 1748). For
+`it.next()` on `let mut it = s.iter();`, it fires with:
+
+    method=next fn_id=FnDefId(349)
+    recv=Adt2
+    formal=&mut Adt2
+    formal_kind=Ref(Erased, Ty(68), Mut)
+    formal_ref_mut=Some(Mut)
+    recv_is_ref=false
+
+So `formal_ref_mutability = Some(Mut)` and `!recv_is_ref` — both
+conditions of the autoref wrap met. The `thir::ExprKind::Ref` node IS
+emitted by typeck.
+
+**So the bug is DOWNSTREAM of typeck.** Either:
+
+1. **`thir::ExprKind::Ref` lowering is broken for ADT types that
+   contain a fat-slice field.** The Ref should emit
+   `alloca it; <op>; pass alloca_ptr`. If it emits
+   `load {ptr, i64}; pass by value`, that's the bug. Check
+   `crates/glyim-lower/src/lower_rvalue.rs` (or wherever
+   `thir::ExprKind::Ref` is lowered) — specifically whether the
+   `Ref` on a value type produces an alloca (address-of) or a load.
+
+2. **The MIR local's type for `it` disagrees with the typeck type.**
+   Typeck says `it: Iter` (ADT). If lowering or codegen allocates the
+   local as `{ptr, i64}` (the fat-slice inner field, not the ADT
+   wrapper), then `alloca` + address-of would still produce a fat-
+   slice-pointer that the callee reads as a thin-ptr-to-ADT → SIGBUS.
+
+Next probe: dump MIR for the crashing case (`--emit=mir`) and inspect
+the local declaration for `it` — does it say `Iter` (ADT) or `{ptr,
+i64}`? And inspect the `Ref` rvalue: does it produce `Rvalue::Ref`
+or a `Use`/`Copy` of the value?
+
+That's the exact next step. Do not guess.
+
+**Session-33 correction: the typeck autoref path is CORRECT.** Instrumented
+the `MethodDispatch::Static` arm in `check_expr.rs` (~line 1748). For
+`it.next()` on `let mut it = s.iter();`, it fires with:
+
+    method=next fn_id=FnDefId(349)
+    recv=Adt2
+    formal=&mut Adt2
+    formal_kind=Ref(Erased, Ty(68), Mut)
+    formal_ref_mut=Some(Mut)
+    recv_is_ref=false
+
+So `formal_ref_mutability = Some(Mut)` and `!recv_is_ref` — both
+conditions of the autoref wrap met. The `thir::ExprKind::Ref` node IS
+emitted by typeck.
+
+**So the bug is DOWNSTREAM of typeck.** Either:
+
+1. **`thir::ExprKind::Ref` lowering is broken for ADT types that
+   contain a fat-slice field.** The Ref should emit
+   `alloca it; <op>; pass alloca_ptr`. If it emits
+   `load {ptr, i64}; pass by value`, that's the bug. Check
+   `crates/glyim-lower/src/lower_rvalue.rs` (or wherever
+   `thir::ExprKind::Ref` is lowered) — specifically whether the
+   `Ref` on a value type produces an alloca (address-of) or a load.
+
+2. **The MIR local's type for `it` disagrees with the typeck type.**
+   Typeck says `it: Iter` (ADT). If lowering or codegen allocates the
+   local as `{ptr, i64}` (the fat-slice inner field, not the ADT
+   wrapper), then `alloca` + address-of would still produce a fat-
+   slice-pointer that the callee reads as a thin-ptr-to-ADT → SIGBUS.
+
+Next probe: dump MIR for the crashing case (`--emit=mir`) and inspect
+the local declaration for `it` — does it say `Iter` (ADT) or `{ptr,
+i64}`? And inspect the `Ref` rvalue: does it produce `Rvalue::Ref`
+or a `Use`/`Copy` of the value?
+
+That's the exact next step. Do not guess.
+
 **Status.** Root-caused to the LLVM level. Memory-safety severity.
 Highest-priority bug in the tree. Needs a dedicated session to
 implement the fix, not a drive-by.
