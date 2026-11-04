@@ -6000,6 +6000,35 @@ the projection). The `while let Some(_x) = it.next()` form specifically
 hits the ICE and must be avoided.
 
 
+**Session-33 fix landed (commit e8588f0d): LLVM SIGBUS resolved.**
+
+Root cause was a **wrong predicate** in `MethodDispatch::Static`'s autoref
+wrapping: the pass-through condition was `!recv_is_ref`, which skipped
+the wrap for `recv: &[i32]` (recv IS a ref). But the impl's formal `self`
+is `&mut &[T]` — a **ref-to-ref**, not a `&[i32]`. The old rule conflated
+"recv is a ref" with "recv structurally matches the formal". Fix:
+
+    pass_through = (formal == recv_ty)
+        || (&mut X -> &X coercion on same pointee)
+
+Now autoref wraps `it` in `&mut` when the impl is `Iterator for &[T]`,
+and the LLVM ABI matches the definition's `(ptr sret, ptr)` signature.
+
+Verified (LLVM path only):
+- `s.iter().next()` -> 10 (was SIGBUS exit 138)
+- `v.iter().next()` -> 10 (was SIGBUS exit 138)
+
+Still failing (unchanged severity, distinct bugs):
+- `s.into_iter().next()` -> `[T0001]` (projection, section below)
+- `while let Some(_) = it.next() {}` on VecIntoIter -> ICE (projection)
+- **MIR interpreter** — the differential test (`llvm_and_interp_agree`)
+  shows LLVM returns 10, interpreter returns 101 (panic). The interpreter
+  has its own autoref/lowering bug. Fixing it requires a matching change
+  in the interpreter's impl-method dispatch path.
+
+The original "SIGBUS on safe code" severity is now **resolved on LLVM**;
+the interpreter and projection paths remain at their previous severity.
+
 #### 3.10 — CLOSED: user-defined trait with `&mut self` method crashed with IndexVec OOB
 
 **Symptom.**
