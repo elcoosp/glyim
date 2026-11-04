@@ -1756,15 +1756,51 @@ impl<'a> FnCtxt<'a> {
                                             _ => None,
                                         })
                                 });
-                            let recv_is_ref =
-                                matches!(self.ctx.ty_kind(recv_expr.ty), TyKind::Ref(_, _, _),);
                             let formal_ref_mutability: Option<glyim_core::primitives::Mutability> =
                                 formal_first.and_then(|t| match self.ctx.ty_kind(t) {
                                     TyKind::Ref(_, _, m) => Some(*m),
                                     _ => None,
                                 });
+                            // §3.9 fix (session 33): pass-through only when recv
+                            // *structurally matches* the formal `self` type
+                            // (pointee + mutability), OR the coercion
+                            // `&mut X` -> `&X` applies. The old rule
+                            // (`!recv_is_ref`) was wrong: `it.next()` where
+                            // `it: &[T]` and the impl is
+                            // `Iterator for &[T]` has `formal: &mut &[T]`
+                            // (a ref-to-ref). `recv = &[i32]` IS a ref, so
+                            // the old rule skipped the wrap — but the caller
+                            // then passed a fat `{ptr, i64}` where the callee
+                            // expected a thin `ptr`, producing a SIGBUS on
+                            // arm64. Fix: wrap unless the pointee already
+                            // matches.
+                            let pass_through = formal_first
+                                .map(|f| {
+                                    if f == recv_expr.ty {
+                                        return true;
+                                    }
+                                    match (
+                                        self.ctx.ty_kind(f),
+                                        self.ctx.ty_kind(recv_expr.ty),
+                                    ) {
+                                        (
+                                            TyKind::Ref(
+                                                _,
+                                                formal_inner,
+                                                glyim_core::primitives::Mutability::Not,
+                                            ),
+                                            TyKind::Ref(
+                                                _,
+                                                recv_inner,
+                                                glyim_core::primitives::Mutability::Mut,
+                                            ),
+                                        ) => formal_inner == recv_inner,
+                                        _ => false,
+                                    }
+                                })
+                                .unwrap_or(false);
                             match formal_ref_mutability {
-                                Some(mutab) if !recv_is_ref => {
+                                Some(mutab) if !pass_through => {
                                     let ref_ty = self.ctx.mk_ref(
                                         glyim_type::Region::Erased,
                                         recv_expr.ty,
