@@ -5924,7 +5924,7 @@ the projection). The `while let Some(_x) = it.next()` form specifically
 hits the ICE and must be avoided.
 
 
-#### 3.10 — OPEN (ICE): user-defined trait with `&mut self` method crashes with IndexVec OOB
+#### 3.10 — CLOSED: user-defined trait with `&mut self` method crashed with IndexVec OOB
 
 **Symptom.**
 
@@ -6073,65 +6073,3 @@ remains (independent fat-vs-thin ABI bug, unrelated to the inference
 table).
 
 
-#### 3.10 — OPEN (ICE): user-defined trait with `&mut self` method crashes with IndexVec OOB
-
-**Symptom.**
-
-    trait Read {
-        fn get(&mut self) -> i32;
-    }
-    struct W { r: i32 }
-    impl Read for W {
-        fn get(&mut self) -> i32 { self.r }
-    }
-    fn main() -> i32 {
-        let mut w = W { r: 42 };
-        w.get()
-    }
-
-Compiles with `glyim panicked (ICE)`. Backtrace summary:
-
-    panic message: IndexVec::get: index out of bounds
-    ...
-    glyim_cli::run
-    ... (catch_unwind, no deeper compiler frames shown)
-
-The 40-frame truncation hides the actual site. Needs a fresh probe with
-`RUST_BACKTRACE=full` next session.
-
-**Discovery context (session 32).** Found while isolating §3.9's
-`iter().next()` SIGBUS. Probing whether the SIGBUS was trait-specific,
-a minimal user-defined trait with `&mut self` on a plain struct (no
-generics, no lifetimes) also ICEs. So there are two distinct bugs:
-
-- §3.9: `Iter<'a, T>`'s trait-impl `&mut self` produces a **fat-vs-thin
-  ABI mismatch** (memory-safety, SIGBUS at runtime).
-- §3.10: **user-defined trait with `&mut self`** panics at compile time
-  (ICE, memory-safety of the compiler itself).
-
-The second is *possibly* a `body_owner_map[body_id]` lookup that fails
-for trait-impl methods whose `self` param shape doesn't match — but
-without the full backtrace, that's speculation.
-
-**Interaction with §3.9.** The two bugs may share a root cause (the
-trait-impl `&mut self` code path), but they manifest differently:
-§3.9 is a codegen ABI bug on an *ADT* receiver (the `self` param ends
-up fat), while §3.10 is a *typeck* crash on a *plain-struct* receiver.
-Fixing §3.9 might incidentally fix §3.10, or they might be independent.
-
-**Severity.** High — user-defined traits are a core language feature.
-`&mut self` methods on them are idiomatic. Most real trait usage hits
-this.
-
-**Next steps.** Get the full backtrace:
-
-    RUST_BACKTRACE=full cargo run -p glyim-cli -- <repro>.g 2>&1 | head -100
-
-The 40-frame truncation above is from `glyim_cli::run`'s error handler
-(crates/glyim-cli/src/lib.rs:182), not the panic itself. Either raise
-the printed-frame limit in a debug build, or re-run under gdb / with
-`std::panic::set_backtrace_style(BacktraceStyle::Full)`.
-
-**Not attempted in session 32** — the ICE-safety of the compiler is a
-broader concern than §3.9's specific ABI bug; neither is a
-one-line fix. Both should be scheduled as their own sessions.
