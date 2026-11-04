@@ -86,11 +86,45 @@ impl InferenceTable {
     }
 
     /// rollback_to.
+    ///
+    /// **§3.10 fix (session 33).** The pre-fix implementation did
+    /// `self.ty_vars = snapshot.ty_vars` — *replacing* the vector with
+    /// the (shorter) snapshot. Any `Ty` handle stored outside the
+    /// inference table that embeds `Infer(TyVar(N))` for `N` beyond the
+    /// snapshot length then becomes **dangling**: `ty_vars.get(N)`
+    /// returns `None`, and in the worst case `zonk_fn_sigs` /
+    /// `resolve_ty_shallow_depth` treats that as `IndexVec::get: index
+    /// out of bounds` (panics — the `get` is supposed to be total).
+    ///
+    /// Concretely: `resolve_method_call` snapshots, probes a candidate
+    /// impl (allocating new inference vars), rolls back, then a
+    /// *different* candidate stores the probe's `Infer(TyVar(N))` in the
+    /// candidate's return type. `zonk_fn_sigs` later tries to resolve
+    /// that stale `N` against the shrunken table → ICE.
+    ///
+    /// Correct semantics: rollback restores *values* (any unification
+    /// performed after the snapshot is undone) but must not shrink the
+    /// vector — slots allocated after the snapshot remain addressable
+    /// (just unbound), so every `Infer(TyVar(N))` handle in the wild
+    /// still resolves to "unbound var", not "index out of bounds".
+    ///
+    /// Implemented by: truncating snapshot's *values* into the current
+    /// vec (keeping the current longer length), and resetting the
+    /// post-snapshot slots to their pristine unbound state.
     pub fn rollback_to(&mut self, snapshot: InferenceSnapshot) {
-        self.ty_vars = snapshot.ty_vars;
-        self.int_vars = snapshot.int_vars;
-        self.float_vars = snapshot.float_vars;
-        self.region_vars = snapshot.region_vars;
+        // Restore values from the snapshot into the existing slots.
+        for (dst, src) in self.ty_vars.iter_mut().zip(snapshot.ty_vars.iter()) {
+            *dst = src.clone();
+        }
+        for (dst, src) in self.int_vars.iter_mut().zip(snapshot.int_vars.iter()) {
+            *dst = src.clone();
+        }
+        for (dst, src) in self.float_vars.iter_mut().zip(snapshot.float_vars.iter()) {
+            *dst = src.clone();
+        }
+        for (dst, src) in self.region_vars.iter_mut().zip(snapshot.region_vars.iter()) {
+            *dst = src.clone();
+        }
         self.universe = snapshot.universe;
     }
 
