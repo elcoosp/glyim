@@ -146,8 +146,16 @@ pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
     // a raw `thread 'main' panicked at …` line on top of our ICE report; the
     // ICE report itself is the correct user-facing output, and it should
     // contain the panic message.
-    let panic_message: std::sync::Arc<std::sync::Mutex<Option<String>>> =
-        std::sync::Arc::new(std::sync::Mutex::new(None));
+    // Capture BOTH the panic message AND the backtrace inside the hook.
+    // `Backtrace::force_capture()` at the post-unwind point (the previous
+    // design) captured the *unwound* stack — the frames from
+    // `catch_unwind` down to the ICE reporter, NOT the panic site. That
+    // made every ICE report's backtrace useless (session 33 discovered
+    // this while diagnosing §3.9/§3.10). Inside `set_hook`, the stack is
+    // still at the panic site.
+    let panic_message: std::sync::Arc<
+        std::sync::Mutex<Option<(String, std::backtrace::Backtrace)>>,
+    > = std::sync::Arc::new(std::sync::Mutex::new(None));
     {
         let sink = panic_message.clone();
         std::panic::set_hook(Box::new(move |info| {
@@ -158,8 +166,9 @@ pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
             } else {
                 "<non-string panic payload>".to_string()
             };
+            let bt = std::backtrace::Backtrace::force_capture();
             if let Ok(mut slot) = sink.lock() {
-                *slot = Some(msg);
+                *slot = Some((msg, bt));
             }
         }));
     }
@@ -179,12 +188,16 @@ pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
             inner
         }
         Err(_payload) => {
-            let backtrace = std::backtrace::Backtrace::force_capture();
-            let panic_msg = panic_message
+            let (panic_msg, backtrace) = panic_message
                 .lock()
                 .ok()
-                .and_then(|slot| slot.clone())
-                .unwrap_or_else(|| "<unknown>".to_string());
+                .and_then(|mut slot| slot.take())
+                .unwrap_or_else(|| {
+                    (
+                        "<unknown>".to_string(),
+                        std::backtrace::Backtrace::force_capture(),
+                    )
+                });
             let report = format!(
                 "glyim internal compiler error (ICE): the compiler panicked.\n\
                  version: {}\n\
