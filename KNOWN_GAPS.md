@@ -6030,6 +6030,49 @@ remains (independent fat-vs-thin ABI bug, unrelated to the inference
 table).
 
 
+**CLOSED (session 33).** Root cause found via the CLI's backtrace-capture
+fix (session 33 also fixed: the CLI now captures the backtrace inside
+the panic hook, at the panic site, instead of post-unwind).
+
+The real panic site was:
+
+    glyim_typeck::zonk::zonk_fn_sigs (zonk.rs:804)
+      -> zonk_ty
+        -> InferenceTable::resolve_ty_shallow (infer.rs:1257)
+          -> resolve_ty_shallow_depth
+            -> self.ty_vars.get(*var)   <- IndexVec OOB
+
+`InferenceTable::rollback_to` was doing `self.ty_vars = snapshot.ty_vars`
+- replacing the vector with the *shorter* snapshot. But any `Ty` handle
+stored outside the inference table embedding `Infer(TyVar(N))` for
+`N` beyond the snapshot length became dangling: `ty_vars.get(N)` was
+`None` and `resolve_ty_shallow_depth` panicked.
+
+Concretely: `resolve_method_call` snapshots, probes a candidate impl
+(allocating fresh inference vars), rolls back, then a *different*
+candidate stores the probe's `Infer(TyVar(N))` in its return type.
+`zonk_fn_sigs` later tries to resolve that stale `N` against the
+shrunken table -> ICE.
+
+**Fix.** Rewrote `rollback_to` to restore *values* from the snapshot
+into the existing slots (via `iter_mut().zip(...)`), keeping the vector
+length. Unbound slots beyond the snapshot stay `value: None` (the
+correct "unbound inference var" state, not a dangling index).
+`crates/glyim-solve/src/infer.rs` (commit d3836570).
+
+**Verified.** User trait `&mut self` on plain struct and on
+generic-lifetime ADT both compile and run correctly. Full workspace
+gate: 4642/4642. 2 run-pass fixtures: `trait_mut_self.g`,
+`trait_mut_self_generic.g`.
+
+**Side effects.** The `iter_manual_match` probe (`[10,20,30].to_vec()
+.into_iter().next()`) and `iter_two` probe also started passing
+correctly after this fix - the VecIntoIter path had the same latent
+dangling-var bug on a smaller scale. §3.9's `s.iter().next()` SIGBUS
+remains (independent fat-vs-thin ABI bug, unrelated to the inference
+table).
+
+
 #### 3.10 — OPEN (ICE): user-defined trait with `&mut self` method crashes with IndexVec OOB
 
 **Symptom.**
