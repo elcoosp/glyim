@@ -3895,17 +3895,29 @@ MirConstKind::Error => {
     fn slice_length_from_value(&self, val: &InterpValue) -> InterpResult<usize> {
         match val {
             InterpValue::Aggregate(fields) => {
-                if fields.len() >= 2 {
+                let looks_like_fat_ptr = fields.len() >= 2
+                    && matches!(
+                        &fields[0],
+                        InterpValue::Ref { .. }
+                            | InterpValue::String(_)
+                            | InterpValue::StaticPtr { .. }
+                    )
+                    && matches!(&fields[1], InterpValue::Int(_) | InterpValue::Uint(_));
+                let result = if looks_like_fat_ptr {
                     match &fields[1] {
                         InterpValue::Int(i) => Ok(*i as usize),
                         InterpValue::Uint(u) => Ok(*u as usize),
-                        _ => Err(InterpError::Panic("slice length must be an integer".into())),
+                        _ => unreachable!(),
                     }
                 } else {
-                    Err(InterpError::Panic(
-                        "slice value must be an aggregate of at least 2 elements".into(),
-                    ))
-                }
+                    Ok(fields.len())
+                };
+                eprintln!("[DBG-LEN] Aggregate(len={}) looks_like_fat_ptr={} -> {}",
+                    fields.len(), looks_like_fat_ptr, match &result {
+                        Ok(n) => format!("{}", n),
+                        Err(_) => "ERR".to_string(),
+                    });
+                result
             }
             InterpValue::Ref { frame, local, .. } => {
                 let target_val = self
