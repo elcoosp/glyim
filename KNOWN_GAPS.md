@@ -6269,6 +6269,104 @@ session.
 MIR for `Iter::next` against the same MIR under a `Debug` walker (if
 the crate has one). Any divergence in the value of the `&mut self`
 receiver local between the two points to the actual bug.
+
+**Session-33 ROOT CAUSE (interp half): `slice_length_from_value` treats
+an ARRAY aggregate as a fat-pointer `(ptr, len)`.**
+
+`crates/glyim-mir-interp/src/lib.rs:3895`:
+
+    fn slice_length_from_value(&self, val: &InterpValue) -> InterpResult<usize> {
+        match val {
+            InterpValue::Aggregate(fields) => {
+                if fields.len() >= 2 {
+                    match &fields[1] {
+                        InterpValue::Int(i) => Ok(*i as usize),
+                        InterpValue::Uint(u) => Ok(*u as usize),
+                        ...
+
+`fields[1]` is the **second element** of an array aggregate, not the
+length of a fat pointer. For `[10, 20, 30]` it returns `20` instead of
+`3`.
+
+**MIR trace.** In `impl Iterator for &[T]`'s `next` body:
+
+    bb0:
+      local_2 = UnaryOp(Deref, copy(local_1))   // local_1 = &mut &[T]
+      local_3 = local_2                          // local_3 = &[T]
+      local_4 = is_empty(local_3)                // -> false
+    bb3:
+      local_12 = Len(deref(local_3))             // <-- the bug
+      ...
+
+`Len(deref(local_3))` calls `slice_length_from_value` on the value read
+from `local_3`. That value is `Ref{caller, 2, []}` — a reference into
+the caller's locals where `caller.locals[2] = Aggregate([Int(10), Int(20),
+Int(30)])`. `slice_length_from_value` follows the Ref, reaches the
+Aggregate, takes `fields[1]` = 20. So `local_12 = 20` instead of `3`.
+
+That cascades: the bounds check `1 <= 20` passes, the `slice[1..]`
+computation writes a bogus `(data_ptr, 19)` back into the caller's
+iterator, and the subsequent tuple field reads drive the caller into
+`BoundsCheck` on the second `.next()` — the observed `Panic("program
+aborted")` at exit 101.
+
+**Verified independently.** `let arr = [10,20,30]; let s: &[i32] = &arr;
+s.len()` returns **3** under LLVM (correct) — so the LLVM path is not
+affected; the interp-specific divergence is `slice_length_from_value`.
+
+**Why the current code has this shape.** `InterpValue::Aggregate` is
+overloaded: it represents both *arrays* (`[a, b, c]` → `Aggregate([a,
+b, c])`) and *fat-pointer tuples* (`(ptr, len)` → `Aggregate([Ptr,
+Len])`). `slice_length_from_value` assumes the latter unconditionally.
+Every `slice.len()` probe that passed before (session 32's `iter_len:
+PASS (3)`) exercised the *fat-pointer* representation because the value
+flowed through `Ref{...}` / `Len(Ref)` rather than `Len(array)`. The new
+`&[T].iter().next()` case for the *first* time reads `Len(array
+aggregate)` directly, exposing the ambiguity.
+
+**The fix shape.** `slice_length_from_value` must distinguish the two
+representations by the source type:
+
+    fn slice_length_from_value(&self, val: &InterpValue, source_ty: Ty)
+        -> InterpResult<usize>
+    {
+        match (self.tcx.ty_kind(source_ty), val) {
+            (Array(_, const_len), _) => const_len to usize,
+            (Slice(_), Aggregate(fields)) => Ok(fields.len()),
+            (Ref(_, _, _), Ref { frame, local, .. }) => {
+                let target_ty = decls_for_ref_frame(frame)[local].ty;
+                let target_val = ...read...;
+                self.slice_length_from_value(target_val, target_ty)
+            }
+            (_, Aggregate(fields)) if fields.len() >= 2 => /* fat ptr */ ...,
+            ...
+        }
+    }
+
+Or more surgical: keep the current shape, but at the two `Aggregate`
+cases distinguish by `fields[0]`:
+- If `fields[0]` looks like a pointer (Ref / Ptr / String / Uint large)
+  treat as `(ptr, len)` and return `fields[1]`.
+- If `fields[0]` looks like a scalar element (`Int(small)`, `Bool`, ...)
+  treat as array and return `fields.len()`.
+
+The **type-based** approach is robust; the **shape-based** approach is
+fragile but simpler. Prefer type-based — pass `source_ty` through from
+`Rvalue::Len`'s four call sites (lines 2471, 2487, 2497, 2507).
+
+**Not attempted this session.** Small, but needs:
+- signature change + 4 call-site updates,
+- verification that array_len / slice_len / Vec::len fixtures stay
+  green,
+- the `&[T].iter().next()` and `Vec::iter().next()` differential
+  fixtures restored (they were removed to keep the gate green; restore
+  AFTER the fix).
+
+The LLVM half of §3.9 is already shipped (commit e8588f0d); this is
+the interp half.
+
+
+
 #### 3.10 — CLOSED: user-defined trait with `&mut self` method crashed with IndexVec OOB
 
 **Symptom.**
