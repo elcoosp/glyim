@@ -6094,6 +6094,69 @@ interp's execution of that (correct) MIR.
 non-trivial frame/Ref semantics; a targeted debug session is more
 productive than blind static analysis.
 
+**Session-33 final diagnosis: it is the *program* that panics, not the
+interpreter.**
+
+Instrumented `interpret_bodies` in
+`crates/glyim-test/src/harness/interpreter_runner.rs` to write the
+`InterpError` to `/tmp/interp-err.txt` on the failure path. The
+captured error was:
+
+    InterpError Debug: Panic("program aborted")
+
+`Panic("program aborted")` is the generic message from the
+`glyim_panic` FFI hook, i.e. the *user's `main`* invoked `panic!` (via
+a Rust-side macro expansion) — not an interpreter-internal assert.
+
+**Which panic fires.** `crates/glyim-lang-core/lib/iter.g`'s
+`impl<'a, T> Iterator for Iter<'a, T>` body is:
+
+    fn next(&mut self) -> Option<&'a T> {
+        if self.slice.is_empty() {
+            Option::None
+        } else {
+            let (first, rest) = self.slice.split_first().unwrap();   // <-- panic
+            self.slice = rest;
+            Option::Some(first)
+        }
+    }
+
+Given the exact same body called as a *free function*
+(`fn my_next(self_slice: &mut &[i32]) -> Option<&i32>`) works fine
+(session 32 probe), but executing the impl's MIR body under interp
+panics here, the immediate hypothesis is: **`split_first()` returns
+`Option::None` for a non-empty slice under the interp** — i.e. a
+wrong-result bug in interp's `split_first` or in how
+`self.slice` (a `&mut &[T]` field) is read from a `&mut self`
+receiver.
+
+But note: the earlier `s.split_first().unwrap().0` probe PASSED (session
+32 r3, returned 10). So `split_first` on a direct `&[i32]` works. The
+divergence is specifically the `&mut self` receiver chain
+(`&mut Iter -> Deref -> Field(0): &[T] -> split_first()`).
+
+**The interp's `read_place` must walk**
+`Ref{projection: [Deref, Field(0)]}` **in `builtin_deref`** (which
+does handle Deref/Field projections). But `eval_unary_op`'s Deref
+handler (line 2990) **ignores the projection** — it only reads
+`locals.get(*local).cloned()`. If the compiler emits
+`UnaryOp(Deref, Ref{local, projection: [Field(0)]})` for the implicit
+`Deref` of `&mut self` (to get `self.slice`), `eval_unary_op` would
+return the whole `Iter` (not the `&[T]`), and `split_first` would then
+see the wrong type and panic.
+
+**This is the concrete next probe.** Dump the MIR for
+`crates/glyim-lang-core/lib/iter.g`'s `Iter::next` and check whether any
+`UnaryOp(Deref, Ref{projection: ...})` fires. If yes: **fix
+`eval_unary_op`'s Deref to apply the projection** (mirror
+`builtin_deref`'s Deref+Field loop). That is a 10-line fix and closes
+the interp half of §3.9.
+
+**Not attempted this session** — but the diagnostic chain is complete:
+- LLVM path: fixed (commit e8588f0d).
+- Interp path: program-level panic in `Iter::next`'s `unwrap()`,
+  narrowed to `eval_unary_op`'s Deref not applying its Ref's projection.
+
 **Fix recipe.** Compare the interpreter's execution of the post-fix
 MIR for `Iter::next` against the same MIR under a `Debug` walker (if
 the crate has one). Any divergence in the value of the `&mut self`
