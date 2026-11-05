@@ -159,6 +159,18 @@ fn check_corpus_agreement(corpus: &str) {
             disagreements.push(format!("{}: no ty_ctx produced", test.name));
             continue;
         };
+        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+            eprintln!("[TRACE-FIXTURE] {}", test.name);
+        }
+        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+            eprintln!("[TRACE-FIXTURE] {}", test.name);
+        }
+        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+            eprintln!("[TRACE-FIXTURE] {}", test.name);
+        }
+        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+            eprintln!("[TRACE-FIXTURE] {}", test.name);
+        }
         let interp = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             InterpRunner::new(out.mir_bodies.clone(), ty_ctx, out.entry_main).run(TIMEOUT)
         })) {

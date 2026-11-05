@@ -1691,9 +1691,19 @@ impl<'tcx> Interpreter<'tcx> {
                     .map(Self::byte_payload)
                     .filter(|s| !s.is_empty())
                     .unwrap_or_else(|| "program aborted".to_string());
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    eprintln!("[TRACE-PANIC] owner={:?} frame_depth={} bb={:?} msg={:?}",
+                        self.current_body_owner, self.frame_depth, self.current_bb, msg);
+                }
                 Err(InterpError::Panic(msg))
             }
-            "glyim_process_abort" => Err(InterpError::Panic("program aborted".into())),
+            "glyim_process_abort" => {
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    eprintln!("[TRACE-ABORT] owner={:?} frame_depth={} bb={:?}",
+                        self.current_body_owner, self.frame_depth, self.current_bb);
+                }
+                Err(InterpError::Panic("program aborted".into()))
+            }
             "glyim_process_exit" => {
                 let code = args
                     .first()
@@ -1815,6 +1825,18 @@ impl<'tcx> Interpreter<'tcx> {
 
     /// run_body.
     pub fn run_body(&mut self, body: &Body) -> InterpResult<()> {
+        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+            eprintln!("[TRACE-RUN-BODY] owner={:?}", body.owner);
+        }
+        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+            eprintln!("[TRACE-RUN-BODY] owner={:?}", body.owner);
+        }
+        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+            eprintln!("[TRACE-RUN-BODY] owner={:?}", body.owner);
+        }
+        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+            eprintln!("[TRACE-RUN-BODY] owner={:?}", body.owner);
+        }
         self.current_body_owner = Some(body.owner);
         self.current_arg_count = body.arg_count;
         self.current_body = Some(body.clone());
@@ -1837,6 +1859,22 @@ impl<'tcx> Interpreter<'tcx> {
             if self.step_count > self.step_limit {
                 self.current_body = Some(body);
                 self.current_bb = bb_idx;
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    eprintln!("[TRACE-BB] owner={:?} bb={:?} depth={}",
+                        self.current_body_owner, bb_idx, self.frame_depth);
+                }
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    eprintln!("[TRACE-BB] owner={:?} bb={:?} depth={}",
+                        self.current_body_owner, bb_idx, self.frame_depth);
+                }
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    eprintln!("[TRACE-BB] owner={:?} bb={:?} depth={}",
+                        self.current_body_owner, bb_idx, self.frame_depth);
+                }
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    eprintln!("[TRACE-BB] owner={:?} bb={:?} depth={}",
+                        self.current_body_owner, bb_idx, self.frame_depth);
+                }
                 return Err(InterpError::TimedOut);
             }
 
@@ -1940,6 +1978,78 @@ impl<'tcx> Interpreter<'tcx> {
                     bb_idx = next_bb;
                 }
                 TerminatorKind::Return => {
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    let ret = self.locals
+                        .first()
+                        .and_then(|opt| opt.as_ref())
+                        .map(|v| match v {
+                            InterpValue::Ref { frame, local, projection } =>
+                                format!("Ref(f={}, l={}, plen={})", frame, local, projection.len()),
+                            InterpValue::Aggregate(a) => {
+                                let inner: Vec<_> = a.iter().take(4).map(|v| match v {
+                                    InterpValue::Ref { frame, local, .. } =>
+                                        format!("Ref({},{})", frame, local),
+                                    InterpValue::Int(n) => format!("Int({})", n),
+                                    other => format!("{:?}", other),
+                                }).collect();
+                                format!("Aggregate(len={}, head={:?})", a.len(), inner)
+                            }
+                            InterpValue::Int(v) => format!("Int({})", v),
+                            InterpValue::String(s) => format!("String(len={})", s.len()),
+                            InterpValue::Unit => "Unit".to_string(),
+                            other => format!("{:?}", other),
+                        })
+                        .unwrap_or_else(|| "Uninit".to_string());
+                    eprintln!("[TRACE-RETURN] frame={} value={}", self.frame_depth, ret);
+                }
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    let ret = self.locals
+                        .first()
+                        .and_then(|opt| opt.as_ref())
+                        .map(|v| match v {
+                            InterpValue::Ref { frame, local, projection } =>
+                                format!("Ref(f={}, l={}, plen={})", frame, local, projection.len()),
+                            InterpValue::Aggregate(a) => {
+                                let inner: Vec<_> = a.iter().take(4).map(|v| match v {
+                                    InterpValue::Ref { frame, local, .. } =>
+                                        format!("Ref({},{})", frame, local),
+                                    InterpValue::Int(n) => format!("Int({})", n),
+                                    other => format!("{:?}", other),
+                                }).collect();
+                                format!("Aggregate(len={}, head={:?})", a.len(), inner)
+                            }
+                            InterpValue::Int(v) => format!("Int({})", v),
+                            InterpValue::String(s) => format!("String(len={})", s.len()),
+                            InterpValue::Unit => "Unit".to_string(),
+                            other => format!("{:?}", other),
+                        })
+                        .unwrap_or_else(|| "Uninit".to_string());
+                    eprintln!("[TRACE-RETURN] frame={} value={}", self.frame_depth, ret);
+                }
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    let ret = self.locals
+                        .first()
+                        .and_then(|opt| opt.as_ref())
+                        .map(|v| match v {
+                            InterpValue::Ref { frame, local, projection } =>
+                                format!("Ref(f={}, l={}, plen={})", frame, local, projection.len()),
+                            InterpValue::Aggregate(a) => {
+                                let inner: Vec<_> = a.iter().take(4).map(|v| match v {
+                                    InterpValue::Ref { frame, local, .. } =>
+                                        format!("Ref({},{})", frame, local),
+                                    InterpValue::Int(n) => format!("Int({})", n),
+                                    other => format!("{:?}", other),
+                                }).collect();
+                                format!("Aggregate(len={}, head={:?})", a.len(), inner)
+                            }
+                            InterpValue::Int(v) => format!("Int({})", v),
+                            InterpValue::String(s) => format!("String(len={})", s.len()),
+                            InterpValue::Unit => "Unit".to_string(),
+                            other => format!("{:?}", other),
+                        })
+                        .unwrap_or_else(|| "Uninit".to_string());
+                    eprintln!("[TRACE-RETURN] frame={} value={}", self.frame_depth, ret);
+                }
                     // A normal return cancels any in-flight unwind payload:
                     // the call that just completed succeeded, so the pending
                     // panic (if any) is no longer being propagated.
@@ -2347,6 +2457,18 @@ impl<'tcx> Interpreter<'tcx> {
     }
 
     fn execute_statement(&mut self, stmt: &Statement) -> InterpResult<()> {
+        if std::env::var("GLYIM_INTERP_TRACE_STMT").is_ok() {
+            let __s = format!("{:?}", stmt); let __s = if __s.len() > 200 { __s.chars().take(200).collect::<String>() } else { __s }; eprintln!("[TRACE-STMT] depth={} stmt={}", self.frame_depth, __s);
+        }
+        if std::env::var("GLYIM_INTERP_TRACE_STMT").is_ok() {
+            let __s = format!("{:?}", stmt); let __s = if __s.len() > 200 { __s.chars().take(200).collect::<String>() } else { __s }; eprintln!("[TRACE-STMT] depth={} stmt={}", self.frame_depth, __s);
+        }
+        if std::env::var("GLYIM_INTERP_TRACE_STMT").is_ok() {
+            let __s = format!("{:?}", stmt); let __s = if __s.len() > 200 { __s.chars().take(200).collect::<String>() } else { __s }; eprintln!("[TRACE-STMT] depth={} stmt={}", self.frame_depth, __s);
+        }
+        if std::env::var("GLYIM_INTERP_TRACE_STMT").is_ok() {
+            let __s = format!("{:?}", stmt); let __s = if __s.len() > 200 { __s.chars().take(200).collect::<String>() } else { __s }; eprintln!("[TRACE-STMT] depth={} stmt={}", self.frame_depth, __s);
+        }
         match &stmt.kind {
             StatementKind::Assign(place, rvalue) => {
                 // MIR-13/14: the destination local's declared type drives
@@ -2393,14 +2515,118 @@ impl<'tcx> Interpreter<'tcx> {
                 self.eval_unary_op(*op, &v)
             }
             Rvalue::Ref(place, _borrow_kind) => {
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    let base_kind = self
+                        .locals_for_ref_frame(self.frame_depth)
+                        .and_then(|fl| fl.get(place.local.index()))
+                        .and_then(|opt| opt.as_ref())
+                        .map(|v| match v {
+                            InterpValue::Ref { frame, local, projection } =>
+                                format!("Ref(f={},l={},plen={})", frame, local, projection.len()),
+                            InterpValue::String(s) => format!("String(len={})", s.len()),
+                            InterpValue::Aggregate(a) =>
+                                format!("Aggregate(len={})", a.len()),
+                            InterpValue::Int(v) => format!("Int({})", v),
+                            InterpValue::Uint(v) => format!("Uint({})", v),
+                            InterpValue::Bool(_) => "Bool".to_string(),
+                            InterpValue::Unit => "Unit".to_string(),
+                            InterpValue::Float(_) => "Float".to_string(),
+                            InterpValue::Fn(_) => "Fn".to_string(),
+                            InterpValue::ConstRef(_) => "ConstRef".to_string(),
+                            InterpValue::StaticPtr { .. } => "StaticPtr".to_string(),
+                        })
+                        .unwrap_or_else(|| "Uninit".to_string());
+                    eprintln!(
+                        "[TRACE-REF-CREATE] cur_frame={} local={} proj={:?} base_kind={}",
+                        self.frame_depth,
+                        place.local.index(),
+                        place.projection,
+                        base_kind
+                    );
+                }
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    let base_kind = self
+                        .locals_for_ref_frame(self.frame_depth)
+                        .and_then(|fl| fl.get(place.local.index()))
+                        .and_then(|opt| opt.as_ref())
+                        .map(|v| match v {
+                            InterpValue::Ref { frame, local, projection } =>
+                                format!("Ref(f={},l={},plen={})", frame, local, projection.len()),
+                            InterpValue::String(s) => format!("String(len={})", s.len()),
+                            InterpValue::Aggregate(a) =>
+                                format!("Aggregate(len={})", a.len()),
+                            InterpValue::Int(v) => format!("Int({})", v),
+                            InterpValue::Uint(v) => format!("Uint({})", v),
+                            InterpValue::Bool(_) => "Bool".to_string(),
+                            InterpValue::Unit => "Unit".to_string(),
+                            InterpValue::Float(_) => "Float".to_string(),
+                            InterpValue::Fn(_) => "Fn".to_string(),
+                            InterpValue::ConstRef(_) => "ConstRef".to_string(),
+                            InterpValue::StaticPtr { .. } => "StaticPtr".to_string(),
+                        })
+                        .unwrap_or_else(|| "Uninit".to_string());
+                    eprintln!(
+                        "[TRACE-REF-CREATE] cur_frame={} local={} proj={:?} base_kind={}",
+                        self.frame_depth,
+                        place.local.index(),
+                        place.projection,
+                        base_kind
+                    );
+                }
                 // Preserve the place's projection: `&mut _5.field0` must
                 // refer to the *field*, not to the whole `_5`. Dropping
                 // it here made `w.v.len()` deref to the whole `W` and
                 // read the wrong length (KNOWN_GAPS §8).
+                //
+                // §3.9 fix (interp half): when the place's projection
+                // starts with `Deref` and the base local is itself a
+                // `Ref`, walk through it and prepend the ref's own
+                // projection. Without this, `&(*self).0[i]` inside a
+                // method produces a ref tagged with the *callee's*
+                // frame; once the callee returns, the ref points at a
+                // dead frame → "deref of Ref from dead frame". This is
+                // exactly what makes `s.iter().next()` panic when the
+                // returned `&T` is dereferenced in the caller.
+                let mut frame = self.frame_depth;
+                let mut local = place.local.index();
+                let mut projection: Vec<glyim_mir::ProjectionElem> =
+                    place.projection.iter().cloned().collect();
+                loop {
+                    match projection.first() {
+                        Some(glyim_mir::ProjectionElem::Deref) => {
+                            let base = self
+                                .locals_for_ref_frame(frame)
+                                .and_then(|fl| fl.get(local))
+                                .and_then(|opt| opt.as_ref());
+                            match base {
+                                Some(InterpValue::Ref {
+                                    frame: f,
+                                    local: l,
+                                    projection: p,
+                                }) => {
+                                    if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                                        eprintln!(
+                                            "[TRACE-REF-FLATTEN] ({}, {}) {:?} -> ({}, {}) {:?}",
+                                            frame, local, projection, f, l, p
+                                        );
+                                    }
+                                    frame = *f;
+                                    local = *l;
+                                    let mut np: Vec<glyim_mir::ProjectionElem> =
+                                        p.iter().cloned().collect();
+                                    np.extend_from_slice(&projection[1..]);
+                                    projection = np;
+                                }
+                                _ => break,
+                            }
+                        }
+                        _ => break,
+                    }
+                }
                 Ok(InterpValue::Ref {
-                    frame: self.frame_depth,
-                    local: place.local.index(),
-                    projection: place.projection.clone(),
+                    frame,
+                    local,
+                    projection: projection.into_boxed_slice(),
                 })
             }
             Rvalue::Aggregate(kind, operands) => {
@@ -2451,6 +2677,22 @@ impl<'tcx> Interpreter<'tcx> {
                 }
             }
             Rvalue::Len(place) => {
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    eprintln!("[TRACE-LEN] owner={:?} place={:?}",
+                        self.current_body_owner, place);
+                }
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    eprintln!("[TRACE-LEN] owner={:?} place={:?}",
+                        self.current_body_owner, place);
+                }
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    eprintln!("[TRACE-LEN] owner={:?} place={:?}",
+                        self.current_body_owner, place);
+                }
+                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                    eprintln!("[TRACE-LEN] owner={:?} place={:?}",
+                        self.current_body_owner, place);
+                }
                 let ty = self.local_decls[place.local.index()].ty;
                 let ty_kind = self.tcx.ty_kind(ty);
                 match ty_kind {
@@ -3009,6 +3251,10 @@ MirConstKind::Error => {
     }
 
     fn read_place(&self, place: &Place) -> InterpResult<InterpValue> {
+        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+            eprintln!("[TRACE-READ-PLACE] owner={:?} depth={} place={:?}",
+                self.current_body_owner, self.frame_depth, place);
+        }
         let idx = place.local.index();
         let mut val = self
             .locals
@@ -3893,6 +4139,18 @@ MirConstKind::Error => {
     }
 
     fn slice_length_from_value(&self, val: &InterpValue) -> InterpResult<usize> {
+        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+            eprintln!("[TRACE-SLICE-LEN-IN] val={:?}", val);
+        }
+        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+            eprintln!("[TRACE-SLICE-LEN-IN] val={:?}", val);
+        }
+        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+            eprintln!("[TRACE-SLICE-LEN-IN] val={:?}", val);
+        }
+        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+            eprintln!("[TRACE-SLICE-LEN-IN] val={:?}", val);
+        }
         match val {
             InterpValue::Aggregate(fields) => {
                 let looks_like_fat_ptr = fields.len() >= 2
