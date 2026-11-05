@@ -6229,6 +6229,42 @@ the empty representation returns 0.
 Either way: bounded, isolated to the interp crate, and diagnosed down
 to the exact operation. LLVM path works; interp needs one focused
 session.
+
+**Session-33 final wrap: interp bug needs its own session.**
+
+Reading the MIR for `Iter::next` in the failing case shows the interp
+is following the correct structural flow:
+- `Deref(local 1: &mut &[T])` → `&[T]` (cur)
+- `Call is_empty(cur)` → bool
+- If not empty: `Len(cur)`, `Copy(cur, [Deref, Field(0)])` to compute
+  first + rest, `Some(first)`
+
+Neither `Len` nor `Field(0)` on a slice is broken in isolation — session
+32 probes confirmed `s[0]` and `s.len()` both work directly. And
+`a1: s.iter().len()` works.
+
+The panic path is: `LtEq(1, Len(cur))` returns false → `Assert(BoundsCheck)`
+fires. That means `Len(cur)` returns 0 for a non-empty slice, and only
+in the autoref'd `&mut &[T]` context (direct `s.len()` works because
+`local_decls[place.local].ty` matches the direct-Slice arm; here it's
+`Ref(Slice)` and might be going through the wrong branch of `Len`'s
+type match).
+
+**Concrete fix recipe for next session.** In
+`crates/glyim-mir-interp/src/lib.rs`, instrument the `Rvalue::Len` arm's
+`ty_kind` match to log which branch fires for `Iter::next`'s
+`Len(Place{local: 3, [Deref]})`. If it lands on the `Slice(_)` branch
+instead of `Ref(Slice(_))` (or vice versa) and returns 0, that's the
+bug — the `read_place` result's `slice_length_from_value` is being
+computed from the wrong representation.
+
+Alternatively, check `is_empty`'s interp impl — if it returns true when
+it should return false, the whole "not empty" branch runs and `Len` on
+the empty representation returns 0.
+
+Either way: bounded, isolated to the interp crate, and diagnosed down
+to the exact operation. LLVM path works; interp needs one focused
+session.
 **Fix recipe.** Compare the interpreter's execution of the post-fix
 MIR for `Iter::next` against the same MIR under a `Debug` walker (if
 the crate has one). Any divergence in the value of the `&mut self`
