@@ -6354,16 +6354,60 @@ The **type-based** approach is robust; the **shape-based** approach is
 fragile but simpler. Prefer type-based — pass `source_ty` through from
 `Rvalue::Len`'s four call sites (lines 2471, 2487, 2497, 2507).
 
-**Not attempted this session.** Small, but needs:
-- signature change + 4 call-site updates,
-- verification that array_len / slice_len / Vec::len fixtures stay
-  green,
-- the `&[T].iter().next()` and `Vec::iter().next()` differential
-  fixtures restored (they were removed to keep the gate green; restore
-  AFTER the fix).
+**ATTEMPTED (session 33) — the shape-discriminator fix is INSUFFICIENT.**
 
-The LLVM half of §3.9 is already shipped (commit e8588f0d); this is
-the interp half.
+Patched `slice_length_from_value` to distinguish raw array aggregates
+from fat-pointer tuples by shape:
+
+    let looks_like_fat_ptr = fields.len() >= 2
+        && matches!(&fields[0], InterpValue::Ref { .. }
+                                | InterpValue::String(_)
+                                | InterpValue::StaticPtr { .. })
+        && matches!(&fields[1], InterpValue::Int(_) | InterpValue::Uint(_));
+    if looks_like_fat_ptr { Ok(fields[1] as usize) } else { Ok(fields.len()) }
+
+Verified with the two §3.9 fixtures restored
+(`slice_iter_next.g`, `vec_iter_next.g`): **still fails the
+differential** — interp=101, llvm=10. The reverted patch is not the
+fix.
+
+**So `slice_length_from_value` was A bug (returning `fields[1]` for an
+array is genuinely wrong), but NOT the trigger for the observed
+`Panic("program aborted")`.**
+
+**Revised hypothesis.** The panic must be inside `Iter::next`'s body at
+a step *after* `Len` — maybe `split_first()` itself returning
+`Option::None` for a non-empty slice, or `Option::Some` construction
+with the wrong payload. Session 32's `fn my_next(&mut &[i32])` free-fn
+probe returned `Some(10)` correctly, so the *body* semantics work
+when called directly. The divergence appears specifically when the
+body runs through impl-method dispatch under the interp.
+
+**Next step MUST be a live interp debug.** Add temporary `eprintln!`
+inside `glyim-mir-interp`'s `run_body` at each `StatementKind::Assign`
+and `TerminatorKind::Call` of `Iter::next`'s MIR — or set a breakpoint
+via `lldb` on `Interpreter::run_body`. Capture:
+- local_3's value (should be `Ref{caller, N, []}`, the `&[T]` receiver)
+- the result of `Len(deref(local_3))` (should be 3)
+- the result of `split_first()` (should be `Some(...)`)
+- the exit path
+
+The `Panic("program aborted")` message is the generic `glyim_panic`
+FFI hook — so we know a `panic!` ran. To find **which** one, either
+instrument the panic macro itself in the stdlib, or compare the
+program's captured stderr (`interpreter_runner.rs` populates it from
+`interpreter.get_stderr()` on both Ok and Err) against the same stderr
+under LLVM.
+
+**Lesson for future sessions.** This investigation went through five
+distinct hypotheses (fat-vs-thin ABI downstream of typeck, eval_unary_op
+projection, split_first returning None, Len returning 0, array-vs-
+fat-pointer ambiguity). Only the first one — which was the LLVM bug —
+turned out correct. Do not trust a hypothesis about the interp without
+a live probe; the MIR reading gave a plausible-but-wrong story.
+
+**The LLVM half of §3.9 is already shipped (commit e8588f0d).** The
+interp half needs the live-debug work above.
 
 
 
