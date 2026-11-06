@@ -24,7 +24,7 @@ pub(crate) fn is_pattern(kind: SyntaxKind) -> bool {
 
 use crate::{
     Body, Expr, ExprId, Literal, MatchArm, Pat, PatId, Path as HirPath, PathSegment, Span,
-};
+    GsxAttrHIR, GsxAttrValue, GsxChildHIR, GsxExpr, GsxTag,};
 
 use super::{
     first_ident_text_with_depth, is_expr_node, is_pat_node, is_type_node, lower_item::lower_param,
@@ -388,6 +388,9 @@ pub(crate) fn lower_expr(
             lower_closure_expr(node, interner, body, diags, struct_field_map)
         }
         SyntaxKind::StructExpr => lower_struct_expr(node, interner, body, diags, struct_field_map),
+        SyntaxKind::GsxElement | SyntaxKind::GsxSelfClosing | SyntaxKind::GsxFragment => {
+            lower_gsx_expr(node, interner, body, diags, struct_field_map)
+        }
         SyntaxKind::AwaitExpr => {
             // `.await`: lower the single operand child into `Expr::Await`.
             // The async desugaring pass (`lower_async`) later rewrites the
@@ -2357,4 +2360,279 @@ fn lower_range_expr(
     };
     let eid = body.alloc_expr(expr, node_span(node));
     Some(eid)
+}
+
+/// GSX view syntax lowering (GSX-in-Glyim §4.1, finding F7): the element
+/// structure is preserved as `Expr::Gsx` — attributes carrying literal
+/// values intern their text, dynamic values lower into body hole
+/// expressions, children keep text/block/node shape. Nothing here desugars
+/// to calls; the `glyim-gsx` stage consumes this node later.
+fn lower_gsx_expr(
+    node: &SyntaxNode,
+    interner: &mut Interner,
+    body: &mut Body,
+    diags: &mut Vec<GlyimDiagnostic>,
+    struct_field_map: &HashMap<Name, Vec<Name>>,
+) -> Option<ExprId> {
+    let open = node
+        .children()
+        .find(|n| n.kind() == SyntaxKind::GsxOpenTag)
+        .or_else(|| {
+            node.children()
+                .find(|n| n.kind() == SyntaxKind::GsxOpenTag)
+        });
+    // Fragments have no open tag.
+    if node.kind() == SyntaxKind::GsxFragment {
+        let mut children = Vec::new();
+        collect_gsx_children(node, interner, body, diags, struct_field_map, &mut children);
+        let gsx = GsxExpr {
+            tag: GsxTag::Component(Vec::new()), // fragments: empty path
+            attrs: Vec::new(),
+            children,
+            self_closing: false,
+        };
+        let eid = body.alloc_expr(Expr::Gsx(Box::new(gsx)), node_span(node));
+        return Some(eid);
+    }
+    let Some(open) = open else {
+        diags.push(GlyimDiagnostic::parse_error(
+            node_span(node),
+            "internal: GSX element without an open tag",
+        ));
+        return None;
+    };
+
+    // Tag classification (§3.2).
+    let tag = classify_gsx_tag(&open, interner);
+
+    // Attributes.
+    let mut attrs = Vec::new();
+    for a in open.children() {
+        match a.kind() {
+            SyntaxKind::GsxAttr => {
+                if let Some(attr) = lower_gsx_attr(&a, interner, body, diags, struct_field_map, false) {
+                    attrs.push(attr);
+                }
+            }
+            SyntaxKind::GsxDirectiveAttr => {
+                if let Some(attr) = lower_gsx_attr(&a, interner, body, diags, struct_field_map, true) {
+                    attrs.push(attr);
+                }
+            }
+            SyntaxKind::GsxSpread => {
+                diags.push(GlyimDiagnostic::parse_error(
+                    node_span(&a),
+                    "spread attributes in GSX are not supported yet (gsx-stage)",
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    // Children (elements only; self-closing has none).
+    let mut children = Vec::new();
+    if node.kind() == SyntaxKind::GsxElement {
+        collect_gsx_children(node, interner, body, diags, struct_field_map, &mut children);
+    }
+
+    let gsx = GsxExpr {
+        tag,
+        attrs,
+        children,
+        self_closing: node.kind() == SyntaxKind::GsxSelfClosing,
+    };
+    let eid = body.alloc_expr(Expr::Gsx(Box::new(gsx)), node_span(node));
+    Some(eid)
+}
+
+/// §3.2 tag classification: intrinsic / dialect / component path.
+fn classify_gsx_tag(open: &SyntaxNode, interner: &mut Interner) -> GsxTag {
+    // Tag-name tokens: the Ident/Colon/ColonColon run before the first attr.
+    let mut segs: Vec<Name> = Vec::new();
+    let mut seps: Vec<&str> = Vec::new();
+    for t in open.children_with_tokens() {
+        let Some(tok) = t.into_token() else { continue };
+        match tok.kind() {
+            SyntaxKind::Lt => {}
+            SyntaxKind::Ident if segs.len() == seps.len() => {
+                segs.push(interner.intern(tok.text()));
+            }
+            SyntaxKind::Ident => break, // attribute territory begins
+            SyntaxKind::Colon => {
+                // Could be a dialect namespace (`web:canvas`) — decide by
+                // what follows: another Ident (single-colon dialect form)
+                // or `=`/attr (not part of the tag).
+                seps.push(":");
+            }
+            SyntaxKind::ColonColon => seps.push("::"),
+            _ => break,
+        }
+    }
+    if segs.is_empty() {
+        return GsxTag::Component(Vec::new());
+    }
+    if segs.len() == 2 && seps.first() == Some(&":") {
+        return GsxTag::Dialect(segs[0], segs[1]);
+    }
+    if segs.len() == 1 && seps.is_empty() {
+        let head = segs[0];
+        // Uppercase head = component (§3.2).
+        let name = interner.resolve(head);
+        if name.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
+            return GsxTag::Component(segs);
+        }
+        return GsxTag::Intrinsic(head);
+    }
+    GsxTag::Component(segs)
+}
+
+/// One attribute: lit / bare / hole; directives keep ns:name.
+fn lower_gsx_attr(
+    node: &SyntaxNode,
+    interner: &mut Interner,
+    body: &mut Body,
+    diags: &mut Vec<GlyimDiagnostic>,
+    struct_field_map: &HashMap<Name, Vec<Name>>,
+    directive: bool,
+) -> Option<GsxAttrHIR> {
+    // Name tokens: leading Ident (`-`-joined idents merged, aria-label).
+    let mut ns: Option<Name> = None;
+    let mut sub: Option<Name> = None;
+    let mut saw_colon = false;
+    let mut hyphen_parts: Vec<String> = Vec::new();
+    let mut tokens = node
+        .children_with_tokens()
+        .filter_map(|c| c.into_token())
+        .filter(|t| !t.kind().is_trivia());
+    let mut value_kind = None;
+    while let Some(t) = tokens.next() {
+        match t.kind() {
+            SyntaxKind::Ident | SyntaxKind::KwType | SyntaxKind::KwSelf
+                if !saw_colon && hyphen_parts.is_empty() =>
+            {
+                hyphen_parts.push(t.text().to_string());
+            }
+            SyntaxKind::Minus if !hyphen_parts.is_empty() => {
+                // hyphenated name continues; the next Ident appends.
+            }
+            SyntaxKind::Ident | SyntaxKind::KwType if hyphen_parts.len() == 1 && !saw_colon => {
+                // aria-label shape: Minus then Ident.
+                hyphen_parts.push(t.text().to_string());
+            }
+            SyntaxKind::Colon if ns.is_none() && directive => {
+                saw_colon = true;
+                ns = Some(interner.intern(&hyphen_parts.join("")));
+                hyphen_parts.clear();
+            }
+            SyntaxKind::Ident if saw_colon && sub.is_none() => {
+                sub = Some(interner.intern(t.text()));
+            }
+            SyntaxKind::Eq => {}
+            SyntaxKind::StringLit => {
+                let raw = t.text().to_string();
+                let inner = raw
+                    .strip_prefix('"')
+                    .and_then(|x| x.strip_suffix('"'))
+                    .unwrap_or(&raw);
+                value_kind = Some(GsxAttrValue::Lit(interner.intern(&process_attr_string(inner))));
+            }
+            SyntaxKind::LBrace => {
+                if let Some(expr_node) = node
+                    .children()
+                    .find(|c| is_expr_node(c))
+                {
+                    let eid = lower_expr(&expr_node, interner, body, diags, struct_field_map)
+                        .unwrap_or_else(|| body.alloc_missing(node_span(&expr_node)));
+                    value_kind = Some(GsxAttrValue::Expr(eid));
+                }
+                break;
+            }
+            SyntaxKind::DotDot => {}
+            _ => break,
+        }
+    }
+    let value = value_kind.unwrap_or(GsxAttrValue::Bare);
+    if directive {
+        let ns = ns.or_else(|| sub.is_none().then_some(interner.intern(&hyphen_parts.join(""))))?;
+        let sub = sub?;
+        Some(GsxAttrHIR::Directive { ns, name: sub, value })
+    } else {
+        Some(GsxAttrHIR::Plain {
+            name: interner.intern(&hyphen_parts.join("-")),
+            value,
+        })
+    }
+}
+
+/// Attribute string bodies do not carry interpolation (§3.2: values are
+/// literals or brace exprs) — pass escapes through.
+fn process_attr_string(inner: &str) -> String {
+    inner.to_string()
+}
+
+/// Children: text literals, block children (holes), nested elements.
+fn collect_gsx_children(
+    node: &SyntaxNode,
+    interner: &mut Interner,
+    body: &mut Body,
+    diags: &mut Vec<GlyimDiagnostic>,
+    struct_field_map: &HashMap<Name, Vec<Name>>,
+    out: &mut Vec<GsxChildHIR>,
+) {
+    for c in node.children() {
+        match c.kind() {
+            SyntaxKind::GsxTextLit => {
+                let raw = c.text().to_string();
+                let inner = raw
+                    .strip_prefix('"')
+                    .and_then(|x| x.strip_suffix('"'))
+                    .unwrap_or(&raw);
+                out.push(GsxChildHIR::Text(interner.intern(&unescape_gsx_text(inner))));
+            }
+            SyntaxKind::GsxBlockChild => {
+                if let Some(expr_node) = c.children().find(|n| is_expr_node(n)) {
+                    let eid = lower_expr(&expr_node, interner, body, diags, struct_field_map)
+                        .unwrap_or_else(|| body.alloc_missing(node_span(&expr_node)));
+                    out.push(GsxChildHIR::Expr(eid));
+                }
+            }
+            SyntaxKind::GsxElement | SyntaxKind::GsxSelfClosing | SyntaxKind::GsxFragment => {
+                if let Some(eid) = lower_gsx_expr(&c, interner, body, diags, struct_field_map) {
+                    // Peel the Expr::Gsx back out to nest structurally.
+                    if let Expr::Gsx(g) = &body.exprs[eid] {
+                        out.push(GsxChildHIR::Node(g.clone()));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Text interpolation holes stay verbatim (§3.2); escapes resolve like
+/// ordinary string literals.
+fn unescape_gsx_text(inner: &str) -> String {
+    let mut out = String::with_capacity(inner.len());
+    let mut chars = inner.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('t') => out.push('\t'),
+            Some('r') => out.push('\r'),
+            Some('\\') => out.push('\\'),
+            Some('"') => out.push('"'),
+            Some('\'') => out.push('\''),
+            Some('0') => out.push('\0'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
 }
