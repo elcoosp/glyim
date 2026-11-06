@@ -410,6 +410,32 @@ pub enum SyntaxKind {
     MetaVar,
     /// Variant.
     MetaVarCrate,
+    // GSX view syntax (docs/design/GSX-in-Glyim.md §3.4)
+    /// GSX paired element `<tag …> children </tag>`.
+    GsxElement,
+    /// GSX open tag `<tag attrs…>` (child of [`SyntaxKind::GsxElement`]).
+    GsxOpenTag,
+    /// GSX close tag `</tag>` (child of [`SyntaxKind::GsxElement`]).
+    GsxCloseTag,
+    /// GSX self-closing element `<tag attrs… />`.
+    GsxSelfClosing,
+    /// GSX fragment `<> … </>`.
+    GsxFragment,
+    /// GSX attribute `name="lit"`, `name={expr}`, bare `disabled`, `{shorthand}`.
+    GsxAttr,
+    /// GSX directive attribute `ns:name={…}` (`on:click`, `class:warn`,
+    /// `bind:value`, `style:width`).
+    GsxDirectiveAttr,
+    /// GSX spread attribute `{..props}`.
+    GsxSpread,
+    /// GSX text child — always a string literal (§3.2); interpolation holes
+    /// `{name}` stay inside the literal and are split by the GSX pipeline.
+    GsxTextLit,
+    /// GSX dynamic child `{expr}`.
+    GsxBlockChild,
+    /// GSX keyed-iteration clause `by <key-expr>` (child of a `ForExpr` that
+    /// appears in GSX child position).
+    GsxForBy,
 }
 impl SyntaxKind {
     /// Returns true for whitespace and comment tokens.
@@ -592,6 +618,17 @@ impl SyntaxKind {
                 | SyntaxKind::Bound
                 | SyntaxKind::MetaVar
                 | SyntaxKind::MetaVarCrate
+                | SyntaxKind::GsxElement
+                | SyntaxKind::GsxOpenTag
+                | SyntaxKind::GsxCloseTag
+                | SyntaxKind::GsxSelfClosing
+                | SyntaxKind::GsxFragment
+                | SyntaxKind::GsxAttr
+                | SyntaxKind::GsxDirectiveAttr
+                | SyntaxKind::GsxSpread
+                | SyntaxKind::GsxTextLit
+                | SyntaxKind::GsxBlockChild
+                | SyntaxKind::GsxForBy
         )
     }
 
@@ -742,6 +779,17 @@ ast_node!(StructField, SyntaxKind::StructField);
 ast_node!(EnumVariant, SyntaxKind::EnumVariant);
 ast_node!(FieldList, SyntaxKind::FieldList);
 ast_node!(VariantList, SyntaxKind::VariantList);
+ast_node!(GsxElement, SyntaxKind::GsxElement);
+ast_node!(GsxOpenTag, SyntaxKind::GsxOpenTag);
+ast_node!(GsxCloseTag, SyntaxKind::GsxCloseTag);
+ast_node!(GsxSelfClosing, SyntaxKind::GsxSelfClosing);
+ast_node!(GsxFragment, SyntaxKind::GsxFragment);
+ast_node!(GsxAttr, SyntaxKind::GsxAttr);
+ast_node!(GsxDirectiveAttr, SyntaxKind::GsxDirectiveAttr);
+ast_node!(GsxSpread, SyntaxKind::GsxSpread);
+ast_node!(GsxTextLit, SyntaxKind::GsxTextLit);
+ast_node!(GsxBlockChild, SyntaxKind::GsxBlockChild);
+ast_node!(GsxForBy, SyntaxKind::GsxForBy);
 pub use rowan::GreenToken;
 
 #[cfg(test)]
