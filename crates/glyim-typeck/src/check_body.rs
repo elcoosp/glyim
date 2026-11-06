@@ -41,14 +41,6 @@ pub struct FnCtxt<'a> {
     /// typeck allocated for its MIR body, so trait-method static dispatch can
     /// resolve to the body key stored during monomorphization.
     pub body_owner_map: &'a HashMap<glyim_hir::BodyId, LocalDefId>,
-    /// KNOWN_GAPS §3.9 (this session): per-impl specializations of trait
-    /// default bodies. Trait default bodies are checked once per impl (with
-    /// `Self` bound to that impl's self type), each check allocating its own
-    /// `LocalDefId`; this map keys them by `(impl item, method name)` so
-    /// method dispatch selects the specialization matching the receiver's
-    /// impl instead of whichever impl was type-checked last.
-    pub impl_default_body_map:
-        &'a HashMap<(glyim_hir::ItemId, Name), LocalDefId>,
     /// Generic parameters in scope for the body being checked (the enclosing
     /// fn's own params, plus any impl-level params for methods). Used by
     /// `check_expr` when resolving a `TypeRef` written *inside* the body
