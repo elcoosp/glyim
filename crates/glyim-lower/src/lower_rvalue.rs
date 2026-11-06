@@ -2429,20 +2429,9 @@ impl<'a> MirBuilder<'a> {
                 // Auto-deref a `&[T]`/`&mut [T]`/`&Vec<T>` receiver before
                 // applying the `Index` projection (mirrors Rust indexing,
                 // which peels the reference first).
-                //
-                // KNOWN_GAPS §3.9 (this session): the decision used the
-                // base *local's declared* type, which is right only when the
-                // base is the local itself (`s[i]` on `s: &[i32]`). For
-                // `b.data[i]` — a slice field read through a struct — the
-                // base place is `Place{local: struct, [Field(0)]}` and the
-                // local's type is the STRUCT, so no `Deref` was emitted and
-                // the projection became `[Field, Index]` on a fat `&[i32]`
-                // slot: codegen ICEd with "Index projection on
-                // non-array/slice type". Decide on the type *at the place*
-                // (the declared type walked through its projections) instead.
-                let base_ty_at_place = base_place.ty(self.ctx.ty_ctx(), &self.locals);
+                let base_decl_ty = self.locals[base_place.local].ty;
                 let base_place =
-                    if matches!(self.ctx.ty_ctx().ty_kind(base_ty_at_place), TyKind::Ref(..)) {
+                    if matches!(self.ctx.ty_ctx().ty_kind(base_decl_ty), TyKind::Ref(..)) {
                         self.place_with_projection(base_place, ProjectionElem::Deref)
                     } else {
                         base_place
