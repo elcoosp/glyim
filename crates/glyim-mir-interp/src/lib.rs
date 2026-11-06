@@ -1217,31 +1217,10 @@ impl<'tcx> Interpreter<'tcx> {
                         if matches!(self.tcx.ty_kind(inner), glyim_type::TyKind::Slice(_))
                 );
                 let s = self.builtin_deref(&receiver)?;
-                let len = match &receiver {
-                    // KNOWN_GAPS §3.9 (this session): the discriminator must
-                    // look at the PRE-deref receiver. A thin `Ref` that
-                    // leaked into a `&[T]`-typed context uncoerced (the
-                    // interpreter keeps `&[T]` locals thin; only the
-                    // call/aggregate boundaries wrap) dereferences to the
-                    // raw array — the length is the element count. Reading
-                    // field 1 of that array returned the second element
-                    // (`[1,2,3]` → 2). A fat receiver, by contrast, always
-                    // arrives as an `Aggregate` (`{ptr-as-int, len}` from
-                    // the dynamic-slice lowering, `{data_ref, len}` from
-                    // the unsize coercion) and carries the length in
-                    // field 1 — an aggregate receiver can never be a raw
-                    // array in a fat-typed slot.
-                    InterpValue::Ref { .. } => {
-                        match &s {
-                            InterpValue::Aggregate(fields) => fields.len(),
-                            InterpValue::String(bytes) => bytes.len(),
-                            other => Self::byte_payload(other).len(),
-                        }
-                    }
+                let len = match &s {
                     InterpValue::Aggregate(fields) => {
                         if is_fat_ptr && fields.len() >= 2 {
-                            // Fat pointer `{ptr, len}` (either encoding):
-                            // read field 1.
+                            // Fat pointer `{ptr, len}`: read field 1.
                             match &fields[1] {
                                 InterpValue::Int(n) => (*n).max(0) as usize,
                                 InterpValue::Uint(n) => *n as usize,
@@ -1253,7 +1232,6 @@ impl<'tcx> Interpreter<'tcx> {
                     }
                     other => Self::byte_payload(other).len(),
                 };
-                let _ = &s;
                 Ok(Some(InterpValue::Uint(len as u128)))
             }
             (1060, "is_empty") => {
@@ -1467,90 +1445,6 @@ impl<'tcx> Interpreter<'tcx> {
             }
         }
         Ok(val)
-    }
-
-    /// KNOWN_GAPS §3.9 (this session): array→slice unsizing at the
-    /// interpreter's value boundaries — the same coercion the LLVM backend
-    /// materializes at its call-ABI and aggregate-construction sites.
-    ///
-    /// `value_ty` is the value's own MIR type; `dest_ty` the destination
-    /// (callee formal, ADT/tuple field, `let`-binding annotation). When the
-    /// destination is a fat `&[T]` and the value is a thin reference to a
-    /// fixed-size array (`&[T; N]`), wrap it into the interpreter's fat
-    /// value shape `Aggregate([Ref{into the array}, len])`; everything
-    /// downstream (`len`, `is_empty`, indexing, `iter`) already handles
-    /// that shape. Without this, the callee's `x.len()` trusted the
-    /// *declared* fat type and read the array's second element as the
-    /// length (`[1,2,3]` → 2, `[4,5,6]` → 5).
-    ///
-    /// No-op for every other shape (including fat→fat).
-    fn coerce_unsized_slice_ref_value(
-        &self,
-        val: InterpValue,
-        value_ty: Ty,
-        dest_ty: Ty,
-    ) -> InterpResult<InterpValue> {
-        // Destination must be a fat reference (`&[T]`).
-        let dest_pointee = match self.tcx.ty_kind(dest_ty) {
-            glyim_type::TyKind::Ref(_, inner, _) => *inner,
-            other => {
-                if dbg_coerce() {
-                    eprintln!("[ICOERCE] dest not ref: {:?}", other.clone());
-                }
-                return Ok(val);
-            }
-        };
-        let dest_elem = match self.tcx.ty_kind(dest_pointee) {
-            glyim_type::TyKind::Slice(e) => *e,
-            other => {
-                if dbg_coerce() {
-                    eprintln!("[ICOERCE] dest pointee not slice: {:?}", other.clone());
-                }
-                return Ok(val);
-            }
-        };
-        // Value must be a reference to a fixed-size array with a
-        // concrete length.
-        let value_pointee = match self.tcx.ty_kind(value_ty) {
-            glyim_type::TyKind::Ref(_, inner, _) => *inner,
-            other => {
-                if dbg_coerce() {
-                    eprintln!("[ICOERCE] value not ref: {:?}", other.clone());
-                }
-                return Ok(val);
-            }
-        };
-        let (value_elem, count) = match self.tcx.ty_kind(value_pointee) {
-            glyim_type::TyKind::Array(e, c) => (*e, c),
-            other => {
-                if dbg_coerce() {
-                    eprintln!("[ICOERCE] value pointee not array: {:?}", other.clone());
-                }
-                return Ok(val);
-            }
-        };
-        // Element agreement; a still-generic slice element (`Slice(Param)`)
-        // is a wildcard — typeck already unified it before monomorphization.
-        let elem_ok = value_elem == dest_elem
-            || matches!(self.tcx.ty_kind(dest_elem), glyim_type::TyKind::Param(_));
-        if !elem_ok {
-            return Ok(val);
-        }
-        let n = match &count.kind {
-            glyim_type::ConstKind::Uint(n) => *n as u128,
-            glyim_type::ConstKind::Int(n) => (*n).max(0) as u128,
-            other => {
-                if dbg_coerce() {
-                    eprintln!("[ICOERCE] unresolved array len: {:?}", other);
-                }
-                return Ok(val);
-            }
-        };
-        // Only wrap a *thin* reference value.
-        if !matches!(val, InterpValue::Ref { .. }) {
-            return Ok(val);
-        }
-        Ok(InterpValue::Aggregate(vec![val, InterpValue::Uint(n)]))
     }
 
     fn builtin_deref(&self, v: &InterpValue) -> InterpResult<InterpValue> {
@@ -2408,7 +2302,6 @@ impl<'tcx> Interpreter<'tcx> {
                     // (`arg_count = captures.len() + params.len()`).
                     let (callee_id, captured) = self.resolve_callee(&func, &args)?;
 
-                    let capture_count = captured.len();
                     let mut arg_values = captured;
                     for arg_op in &args {
                         arg_values.push(self.eval_operand(arg_op)?);
@@ -2472,28 +2365,6 @@ impl<'tcx> Interpreter<'tcx> {
                                 callee_locals.len()
                             )));
                         }
-                        // KNOWN_GAPS §3.9 (this session): array→slice
-                        // unsizing at the call boundary. The argument value
-                        // keeps its own type (`&[i32; 3]` for `take(&arr)`)
-                        // while the callee formal is the fat `&[i32]`; bound
-                        // raw, the callee's `x.len()` trusted the declared
-                        // fat type and read the array's second element as
-                        // the length (`[1,2,3]` → 2). Mirrors the LLVM
-                        // backend's call-ABI coercion. Closure captures
-                        // (`i < captured.len()`) have no declared formal to
-                        // consult and are bound as-is.
-                        let val = if i < capture_count {
-                            val
-                        } else {
-                            let arg_op = &args[i - capture_count];
-                            let coerced = match (self.operand_ty(arg_op), callee_body.locals.get(glyim_mir::LocalIdx::from_raw((i + 1) as u32)).map(|d| d.ty)) {
-                                (Some(arg_ty), Some(formal_ty)) => {
-                                    self.coerce_unsized_slice_ref_value(val, arg_ty, formal_ty)?
-                                }
-                                _ => val,
-                            };
-                            coerced
-                        };
                         callee_locals[i + 1] = Some(val);
                     }
 
@@ -2860,98 +2731,11 @@ impl<'tcx> Interpreter<'tcx> {
                     local,
                     projection: projection.into_boxed_slice(),
                 })
-                // KNOWN_GAPS §3.9 (this session): NOTE — no assignment-level
-                // unsize coercion here, deliberately. The LLVM backend
-                // materializes fat `{ptr, len}` values at its ABI/aggregate
-                // boundaries, but the interpreter's value model keeps a
-                // `&[T]`-typed local as a *thin* `Ref` and its builtin paths
-                // (`iter`, `split_first`, `iter_mut`, …) are built around
-                // that shape; wrapping at every `let` broke them
-                // (slice_iter_next regressed to exit 0). The coercion is
-                // applied at the two boundaries where the callee/consumer
-                // cannot recover the shape on its own: call-argument binding
-                // (formal ty) and aggregate field construction (declared
-                // field ty). The `len` builtin additionally shape-checks its
-                // receiver, so a thin ref that reaches a fat-typed context
-                // uncoerced still lengths correctly.
             }
             Rvalue::Aggregate(kind, operands) => {
-                if dbg_coerce() {
-                    let dk = self.tcx.ty_kind(dest_ty).clone();
-                    eprintln!("[ICOERCE-AGG] dest_kind={:?} ops={}", dk, operands.len());
-                }
-                let mut values: Vec<InterpValue> = Vec::with_capacity(operands.len());
-                let mut value_tys: Vec<Ty> = Vec::with_capacity(operands.len());
+                let mut values = Vec::with_capacity(operands.len());
                 for op in operands {
                     values.push(self.eval_operand(op)?);
-                    value_tys.push(self.operand_ty(op).unwrap_or(Ty::ERROR));
-                }
-                // KNOWN_GAPS §3.9 (this session): array→slice unsizing per
-                // aggregate field, keyed on the DECLARED field types from
-                // the destination ADT/tuple type (structs keep a flat
-                // `fields` list; enums keep per-variant field lists). Mirrors
-                // the LLVM backend's `coerce_aggregate_field_unsizing`.
-                {
-                    let field_tys: Vec<Ty> = match self.tcx.ty_kind(dest_ty) {
-                        glyim_type::TyKind::Adt(adt_id, substs) => {
-                            if let Some(def) = self.tcx.adt_def(*adt_id) {
-                                let subst_map: std::collections::HashMap<u32, glyim_type::GenericArg> =
-                                    self.tcx
-                                        .substitution_args(*substs)
-                                        .iter()
-                                        .enumerate()
-                                        .map(|(i, a)| (i as u32, a.clone()))
-                                        .collect();
-                                if def.variants.is_empty() {
-                                    // Struct: flat field list. Substitute the
-                                    // ADT's own params so a generic field
-                                    // `&[T]` reads as `&[i32]`.
-                                    let mut ctx = glyim_type::TyCtxMut::from_ty_ctx(self.tcx);
-                                    def.fields
-                                        .iter()
-                                        .map(|f| ctx.subst_ty(f.ty, &subst_map))
-                                        .collect()
-                                } else {
-                                    match def.variants.get(variant_index_of(kind)) {
-                                        Some(v) => v.fields.iter().map(|f| f.ty).collect(),
-                                        None => Vec::new(),
-                                    }
-                                }
-                            } else {
-                                Vec::new()
-                            }
-                        }
-                        glyim_type::TyKind::Tuple(substs) => self
-                            .tcx
-                            .substitution_args(*substs)
-                            .iter()
-                            .filter_map(|a| match a {
-                                glyim_type::GenericArg::Ty(t) => Some(*t),
-                                _ => None,
-                            })
-                            .collect(),
-                        _ => Vec::new(),
-                    };
-                    if dbg_coerce() {
-                        eprintln!(
-                            "[ICOERCE-AGG] field_tys={} values={} kinds={:?}",
-                            field_tys.len(),
-                            values.len(),
-                            field_tys
-                                .iter()
-                                .map(|t| self.tcx.ty_kind(*t).clone())
-                                .collect::<Vec<_>>()
-                        );
-                    }
-                    if field_tys.len() == values.len() {
-                        for i in 0..values.len() {
-                            values[i] = self.coerce_unsized_slice_ref_value(
-                                values[i].clone(),
-                                value_tys[i],
-                                field_tys[i],
-                            )?;
-                        }
-                    }
                 }
                 // Enum ADTs are tagged with their variant index as `fields[0]`
                 // so `SwitchInt` and `Rvalue::Discriminant` can read it, and
@@ -3664,33 +3448,6 @@ MirConstKind::Error => {
                         )?;
                         val = v;
                     }
-                    // KNOWN_GAPS §3.9 (this session): a fat slice reference
-                    // stored by the unsize coercion at the call/aggregate
-                    // boundaries is `Aggregate([data_ref, len])`. Deref
-                    // yields the pointee: unwrap the aggregate to its data
-                    // half and REPLAY this `Deref` on it, so the plain
-                    // `Ref`/`String`/`StaticPtr` arms below do the real work
-                    // (with the inner ref's own projection spliced, exactly
-                    // like a direct deref). Without this arm, `b.data[i]` on
-                    // a slice *field* panicked with "deref projection on
-                    // non-reference value".
-                    InterpValue::Aggregate(ref fields)
-                        if fields.len() == 2
-                            && matches!(
-                                &fields[0],
-                                InterpValue::Ref { .. }
-                                    | InterpValue::String(_)
-                                    | InterpValue::StaticPtr { .. }
-                            )
-                            && matches!(
-                                &fields[1],
-                                InterpValue::Uint(_) | InterpValue::Int(_)
-                            ) =>
-                    {
-                        val = fields[0].clone();
-                        // Replay the Deref without advancing the queue.
-                        continue;
-                    }
                     // `Deref` on a `Vec<T>` (AdtId 1020) is a trait deref:
                     // `impl<T> Deref for Vec<T> { type Target = [T]; }`.
                     // `self.v[i]` inside an `impl<T> Iterator for
@@ -4069,181 +3826,21 @@ MirConstKind::Error => {
             .and_then(|decls| decls.get(idx))
             .map(|d| d.ty)
             .unwrap_or(Ty::ERROR);
-        // Bounds-check and short-circuit the plain-store case inside a scope
-        // so the mutable `frame_locals` borrow ends before the projection
-        // walks below (which need `&self` for type lookups and recursive
-        // `write_place_frame` calls).
-        {
-            let frame_locals = self
-                .write_target_locals_mut(frame)
-                .ok_or_else(|| InterpError::Panic(format!("write to dead frame {frame}")))?;
-            if idx >= frame_locals.len() {
-                return Err(InterpError::Panic(format!(
-                    "local index out of bounds: {}",
-                    idx
-                )));
-            }
-            if place.projection.is_empty() {
-                frame_locals[idx] = Some(val);
-                return Ok(());
-            }
-        }
-
-        let proj_count = place.projection.len();
-
-        // KNOWN_GAPS §3.9 (this session): a `Deref` that is *preceded* by
-        // aggregate-internal projections (`b.data[i] = v` lowers to
-        // `[Field(0), Deref, Index(i)]` on the struct local) cannot go
-        // through the functional `write_through_projections_with_locals`
-        // walk below — its `Deref` arm is a hard error, because writing
-        // "through" a reference inside the returned copy of the struct would
-        // mutate the struct's field, not the array the ref points at.
-        // Resolve the aggregate prefix (Fields/Downcasts only) against the
-        // live frame, unwrap the ref-like value found there (plain `Ref`,
-        // fat `Aggregate([data_ref, len])`, or `StaticPtr`), and delegate
-        // the write to the *referenced* storage imperatively.
-        {
-            let deref_pos = place.projection.iter().position(|p| {
-                matches!(p, ProjectionElem::Deref)
-            });
-            if let Some(k) = deref_pos {
-                if k > 0
-                    && place.projection[..k].iter().all(|p| {
-                        matches!(p, ProjectionElem::Field(_) | ProjectionElem::Downcast(_))
-                    })
-                {
-                    // Walk the aggregate prefix functionally (reads only).
-                    let mut cur = {
-                        let frame_locals = self
-                            .write_target_locals_mut(frame)
-                            .ok_or_else(|| {
-                                InterpError::Panic(format!("write to dead frame {frame}"))
-                            })?;
-                        frame_locals
-                            .get(idx)
-                            .and_then(|opt| opt.as_ref())
-                            .cloned()
-                            .ok_or_else(|| {
-                                InterpError::Panic(format!(
-                                    "write to uninitialized local {idx}"
-                                ))
-                            })?
-                    };
-                    let _cur_ty = base_ty;
-                    for p in &place.projection[..k] {
-                        match p {
-                            ProjectionElem::Field(fi) => {
-                                let fi = fi.index();
-                                match &cur {
-                                    InterpValue::Aggregate(fields) => {
-                                        cur = fields.get(fi).cloned().ok_or_else(|| {
-                                            InterpError::Panic(format!(
-                                                "field index {fi} out of bounds (len {})",
-                                                fields.len()
-                                            ))
-                                        })?;
-                                    }
-                                    _ => {
-                                        return Err(InterpError::Panic(
-                                            "field projection on non-aggregate".into(),
-                                        ));
-                                    }
-                                }
-                            }
-                            ProjectionElem::Downcast(_) => {
-                                // Strip the discriminant tag ([tag, ...payload]).
-                                if let InterpValue::Aggregate(fields) = &cur {
-                                    if !fields.is_empty() {
-                                        cur = InterpValue::Aggregate(fields[1..].to_vec());
-                                    }
-                                }
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                    // Unwrap the ref-like value.
-                    let data = match &cur {
-                        InterpValue::Aggregate(fields)
-                            if fields.len() == 2
-                                && matches!(
-                                    &fields[0],
-                                    InterpValue::Ref { .. }
-                                        | InterpValue::String(_)
-                                        | InterpValue::StaticPtr { .. }
-                                )
-                                && matches!(
-                                    &fields[1],
-                                    InterpValue::Uint(_) | InterpValue::Int(_)
-                                ) =>
-                        {
-                            fields[0].clone()
-                        }
-                        other => other.clone(),
-                    };
-                    match data {
-                        InterpValue::Ref { frame, local, projection } => {
-                            let mut target_proj: Vec<ProjectionElem> =
-                                projection.to_vec();
-                            target_proj.extend_from_slice(&place.projection[k + 1..]);
-                            let target_place = Place {
-                                local: LocalIdx::from_raw(local as u32),
-                                projection: target_proj.into_boxed_slice(),
-                            };
-                            return self.write_place_frame(frame, &target_place, val);
-                        }
-                        InterpValue::StaticPtr { def_id } => {
-                            let mut cur_global = self
-                                .globals
-                                .borrow()
-                                .get(&def_id)
-                                .cloned()
-                                .ok_or_else(|| InterpError::Panic(format!(
-                                    "write to uninitialized static {:?}",
-                                    def_id
-                                )))?;
-                            let frame_snapshot: Vec<Option<InterpValue>> = {
-                                let frame_locals = self
-                                    .write_target_locals_mut(frame)
-                                    .ok_or_else(|| {
-                                        InterpError::Panic(format!(
-                                            "write to dead frame {frame}"
-                                        ))
-                                    })?;
-                                frame_locals.iter().cloned().collect()
-                            };
-                            write_projection_into_value(
-                                &mut cur_global,
-                                &place.projection[k + 1..],
-                                val,
-                                &frame_snapshot,
-                            )?;
-                            self.globals.borrow_mut().insert(def_id, cur_global);
-                            return Ok(());
-                        }
-                        InterpValue::String(_) => {
-                            // Byte payloads are immutable in this model.
-                            return Err(InterpError::Panic(
-                                "write through a byte-payload slice view is not \
-                                 supported by the interpreter"
-                                    .into(),
-                            ));
-                        }
-                        other => {
-                            return Err(InterpError::Panic(format!(
-                                "deref projection on non-reference value {other:?}"
-                            )));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Re-borrow the frame's locals: every branch of the aggregate-prefix
-        // block above returns, so reaching this point means it fell through
-        // (no deref in the projection, or the deref is the first step).
         let frame_locals = self
             .write_target_locals_mut(frame)
             .ok_or_else(|| InterpError::Panic(format!("write to dead frame {frame}")))?;
+        if idx >= frame_locals.len() {
+            return Err(InterpError::Panic(format!(
+                "local index out of bounds: {}",
+                idx
+            )));
+        }
+        if place.projection.is_empty() {
+            frame_locals[idx] = Some(val);
+            return Ok(());
+        }
+
+        let proj_count = place.projection.len();
 
         if let Some(ProjectionElem::Deref) = place.projection.first() {
             if proj_count > 1 {
@@ -4604,30 +4201,14 @@ MirConstKind::Error => {
     }
 
     /// Type of an operand, derived from its constant or (for `Copy`/`Move`)
-    /// the local declaration walked through the place's projections.
-    /// Used to recover the *concrete* receiver type of a devirtualized
-    /// `VirtualMethod` call so it can be resolved against the trait-method
-    /// dispatch table, and by the slice-len builtin's fat-pointer
-    /// classification.
-    ///
-    /// KNOWN_GAPS §3.9 (this session): the previous implementation returned
-    /// the whole local's declared type, ignoring projections — a receiver
-    /// operand `Copy(Place{s, [Field(0)]})` (reading the `buf: &[i32]`
-    /// field of struct `s`) reported the STRUCT as the operand type, so the
-    /// slice `len` builtin's `is_fat_ptr` check missed and read the fat
-    /// aggregate's field count (2) as the length. `Place::ty` walks the
-    /// projections (with the `Index`/`Subslice` ref-peel added this
-    /// session), so `s.buf` reports `&[i32]` as it should.
+    /// the local declaration. Used to recover the *concrete* receiver type of a
+    /// devirtualized `VirtualMethod` call so it can be resolved against the
+    /// trait-method dispatch table.
     fn operand_ty(&self, operand: &Operand) -> Option<Ty> {
         match operand {
             Operand::Constant(c) => Some(c.ty),
             Operand::Copy(place) | Operand::Move(place) => {
-                if place.projection.is_empty() {
-                    return self.local_decls.get(place.local.index()).map(|d| d.ty);
-                }
-                let decls =
-                    glyim_core::arena::IndexVec::from_raw(self.local_decls.clone());
-                Some(place.ty(self.tcx, &decls))
+                self.local_decls.get(place.local.index()).map(|d| d.ty)
             }
         }
     }
@@ -4844,20 +4425,6 @@ MirConstKind::Error => {
 
 /// InterpResult.
 pub type InterpResult<T> = Result<T, InterpError>;
-
-/// Env-gated coercion tracing (temporary diagnostics aid; off by default).
-fn dbg_coerce() -> bool {
-    std::env::var("GLYIM_COERCE_DEBUG").is_ok()
-}
-
-/// Extract the variant index from an `AggregateKind::Adt` (0 for the
-/// struct/closure/tuple kinds, which have no variant field tables).
-fn variant_index_of(kind: &AggregateKind) -> usize {
-    match kind {
-        AggregateKind::Adt(_, variant, _) => variant.index(),
-        _ => 0,
-    }
-}
 
 #[cfg(test)]
 mod tests;
