@@ -5655,6 +5655,65 @@ and stdout for every comparable fixture. The duplicated session-33
 wrap blocks in this entry were collapsed to one copy.
 
 
+**Session-35 RESOLUTION — array→slice unsizing coercion (was: "b7 shows
+the call-arg unsize coercion missing; b6 shows struct-field [i32]
+resolving as an array").** CLOSED. The `[T]` (no length) TypeRef parses
+and resolves as `TyKind::Slice` everywhere; what was missing was the
+*unsizing coercion* `&[T; N] → &[T]` at every site where a thin
+array-ref value flows into a fat-slice-ref destination. The type
+checker tolerated the shape mismatch (Script 359 unification), so the
+bug was silent at every backend boundary:
+
+1. **LLVM call ABI** — `take(&arr)` passed the thin pointer into the
+   callee's fat `{ ptr, i64 }` formal; `x.len()` read the register
+   holding the next argument (probe returned 72 instead of 3). Fixed
+   in `lower_call`: materialize `{ ptr, len }` from the operand's
+   array-ref type + concrete length (`coerce_unsized_slice_ref`).
+2. **LLVM aggregate fields** — `S { buf: &arr }` stored the thin
+   pointer into the 16-byte fat field slot; `s.buf.len()` read the
+   adjacent `n: usize` bytes (0 / 64 / 16). Fixed per field in
+   `lower_rvalue`'s Aggregate arm against the *declared* field types
+   (flat `AdtDef.fields` for structs, `variants[..].fields` for enum
+   variants, substitution args for tuples) —
+   `coerce_aggregate_field_unsizing`.
+3. **MIR `Place::ty` / `ty_mut`** — `Index`/`ConstantIndex`/`Subslice`
+   over a `Ref`-typed place ("index the pointee") logged
+   "Index on non-array/slice type" and returned `Error`. They now peel
+   one reference before classifying.
+4. **MIR builder Index auto-deref** — the decision used the base
+   *local's* declared type, so `b.data[i]` (slice field through a
+   struct) emitted `[Field, Index]` with no `Deref` and codegen ICEd.
+   It now decides on the type *at the place* (`Place::ty` walk).
+5. **Interpreter `operand_ty`** — ignored projections entirely:
+   `Copy(Place{s, [Field(0)]})` reported the STRUCT as the operand
+   type, so the slice `len` builtin's `is_fat_ptr` classification
+   missed and read the fat aggregate's field count (2) as the length.
+   It now walks the place via `Place::ty`.
+6. **Interpreter value boundaries** — call-argument binding coerces
+   thin `Ref` → `Aggregate([data_ref, len])` against the callee formal;
+   aggregate field construction coerces against the declared field
+   types; the `len` builtin discriminates on the *pre-deref* receiver
+   (a thin `Ref` dereferences to the raw array — element count; an
+   `Aggregate` receiver is fat — field 1); `read_place`'s `Deref` arm
+   unwraps fat `[data_ref, len]` aggregates; `write_place_frame`
+   resolves a `[Field…, Deref, rest…]` prefix against live storage and
+   delegates the write to the referenced frame (so `b.data[i] = v`
+   mutates the original array).
+
+Deliberately NOT coerced: assignment-level `let s: &[i32] = &arr;`
+keeps the thin `Ref` in the interpreter's value model — its builtin
+`iter`/`split_first`/`iter_mut` paths are built around that shape, and
+wrapping at every `let` regressed `slice_iter_next`. The `len`
+builtin's receiver discriminator covers the leaked-thin case instead.
+
+Regression fixtures (all green under LLVM *and* interp, plus the
+real-LLVM differential): `call_arg_slice_unsize`,
+`struct_field_slice_len`, `slice_field_index`, `mut_slice_field_index`,
+`generic_struct_slice_field`, `enum_variant_slice_field`,
+`tuple_field_slice_unsize` (behavior/), plus the pre-existing
+`slice_inherent_first_last` / `slice_into_iter_next` / `slice_iter_next`.
+
+
 **Session-31 scope correction (2026-11-03).** The generic title overstates
 what's broken. Precise probe matrix:
 
