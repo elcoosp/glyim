@@ -1721,24 +1721,57 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 // `{ ptr, i64 }`. Build it with the array's length. Without
                 // this, the length half was left uninitialized and every
                 // `&slice.len()` read stack garbage.
-                if matches!(self.ty_ctx.ty_kind(pointee_ty), TyKind::Array(_, _)) {
-                    let coerced =
-                        self.coerce_unsized_slice_ref(ptr.as_basic_value_enum(), pointee_ty, expected_ty)?;
-                    return Ok(coerced);
+                if let TyKind::Array(_, count) = self.ty_ctx.ty_kind(pointee_ty) {
+                    let dest_is_fat_slice = matches!(
+                        self.ty_ctx.ty_kind(expected_ty),
+                        TyKind::Ref(_, inner, _)
+                            if matches!(self.ty_ctx.ty_kind(*inner), TyKind::Slice(_))
+                    );
+                    if dest_is_fat_slice {
+                        let n = match &count.kind {
+                            ConstKind::Uint(n) => *n as u64,
+                            ConstKind::Int(n) => (*n).max(0) as u64,
+                            _ => 0,
+                        };
+                        if let inkwell::types::BasicTypeEnum::StructType(st) =
+                            self.llvm_type_for_ty(expected_ty)?
+                        {
+                            let i64_ty = self.llvm_int_type(64);
+                            let agg = st.get_undef();
+                            let agg = self
+                                .builder
+                                .build_insert_value(agg, ptr, 0, "fat_slice_ptr")
+                                .map_err(|e| {
+                                    vec![GlyimDiagnostic::internal_error(format!(
+                                        "fat slice ptr insert: {e:?}"
+                                    ))]
+                                })?
+                                .into_struct_value();
+                            let agg = self
+                                .builder
+                                .build_insert_value(
+                                    agg,
+                                    i64_ty.const_int(n, false),
+                                    1,
+                                    "fat_slice_len",
+                                )
+                                .map_err(|e| {
+                                    vec![GlyimDiagnostic::internal_error(format!(
+                                        "fat slice len insert: {e:?}"
+                                    ))]
+                                })?
+                                .into_struct_value();
+                            return Ok(agg.as_basic_value_enum());
+                        }
+                    }
                 }
                 Ok(ptr.as_basic_value_enum())
             }
             Rvalue::Aggregate(kind, operands) => {
-                // Lower each operand paired with its own MIR type so the
-                // ADT/tuple arms can apply array→slice unsizing per field.
-                let mut lowered: Vec<(BasicValueEnum<'ctx>, Ty)> = Vec::new();
+                let mut vals = Vec::new();
                 for op in operands {
-                    let val = self.lower_operand(op)?;
-                    let ty = self.operand_ty(op);
-                    lowered.push((val, ty));
+                    vals.push(self.lower_operand(op)?);
                 }
-                let mut vals: Vec<BasicValueEnum<'ctx>> =
-                    lowered.iter().map(|(v, _)| *v).collect();
                 match kind {
                     AggregateKind::Array(elem_ty) => {
                         let llvm_elem_ty = self.llvm_type_for_ty(*elem_ty)?;
@@ -1760,60 +1793,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         }
                         Ok(agg.as_basic_value_enum())
                     }
-                    AggregateKind::Tuple => {
-                        // KNOWN_GAPS §3.9 (this session): same unsize
-                        // coercion as the Adt arm — a tuple field declared
-                        // `&[T]` (e.g. `let t: (&[i32], usize) = (&arr, 0);`)
-                        // must materialize the fat value, not store the thin
-                        // array pointer into the 16-byte slot.
-                        let coerced = {
-                            let field_tys: Vec<Ty> = match self.ty_ctx.ty_kind(expected_ty) {
-                                TyKind::Tuple(substs) => {
-                                    self.ty_ctx
-                                        .substitution_args(*substs)
-                                        .iter()
-                                        .filter_map(|a| match a {
-                                            GenericArg::Ty(t) => Some(*t),
-                                            _ => None,
-                                        })
-                                        .collect()
-                                }
-                                _ => Vec::new(),
-                            };
-                            if field_tys.len() == lowered.len() {
-                                let mut out = Vec::with_capacity(lowered.len());
-                                for ((val, op_ty), field_ty) in lowered.iter().zip(field_tys.iter())
-                                {
-                                    let op_pointee = match self.ty_ctx.ty_kind(*op_ty) {
-                                        TyKind::Ref(_, inner, _) => *inner,
-                                        _ => Ty::ERROR,
-                                    };
-                                    out.push(self.coerce_unsized_slice_ref(
-                                        *val,
-                                        op_pointee,
-                                        *field_ty,
-                                    )?);
-                                }
-                                out
-                            } else {
-                                vals
-                            }
-                        };
-                        self.build_layout_aggregate(expected_ty, None, &coerced)
-                    }
-                    AggregateKind::Adt(adt_id, variant, substs) => {
-                        // KNOWN_GAPS §3.9 (this session): a field declared
-                        // `&[T]` receiving a `&[T; N]` operand must get the
-                        // fat `{ ptr, len }` value — the same unsize coercion
-                        // call arguments already rely on. Without it the thin
-                        // pointer is stored into the 16-byte field slot and
-                        // every `s.field.len()` reads adjacent bytes.
-                        vals = self.coerce_aggregate_field_unsizing(
-                            *adt_id,
-                            *substs,
-                            *variant,
-                            &lowered,
-                        )?;
+                    AggregateKind::Tuple => self.build_layout_aggregate(expected_ty, None, &vals),
+                    AggregateKind::Adt(_adt_id, variant, _substs) => {
                         self.build_layout_aggregate(expected_ty, Some(*variant), &vals)
                     }
                     AggregateKind::Closure(_closure_id, _substs) => {
@@ -1933,161 +1914,6 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 Ok(agg.as_basic_value_enum())
             }
         }
-    }
-
-    /// Peel one reference off `ty`, returning the pointee (`Ty::ERROR` for
-    /// a non-reference). Helper for the unsize-coercion call sites, which
-    /// decide on the *pointee* shape (fixed array) vs the target's (slice).
-    fn ref_pointee_ty(&self, ty: Ty) -> Ty {
-        match self.ty_ctx.ty_kind(ty) {
-            TyKind::Ref(_, inner, _) => *inner,
-            _ => Ty::ERROR,
-        }
-    }
-
-    /// Array→slice unsizing coercion (`&[T; N]` → `&[T]`): build the fat
-    /// `{ data_ptr, len }` reference value from a thin array pointer.
-    ///
-    /// KNOWN_GAPS §3.9 (this session): the type checker accepts `&[T; N]`
-    /// where `&[T]` is expected (Script 359 unification), but until now only
-    /// the direct `Rvalue::Ref` site materialized the fat value. A thin
-    /// pointer routed through an intermediate local — a call argument, a
-    /// struct/tuple-literal field — reached the fat destination
-    /// unconverted: the 16-byte ABI slot's length half carried garbage (or
-    /// the thin pointer clobbered adjacent struct bytes), so
-    /// `fn take(x: &[i32]) -> i32 { x.len() }` on `take(&arr)` returned an
-    /// unpredictable number and `S { buf: &arr }` read adjacent field bytes
-    /// as the slice length.
-    ///
-    /// `val` is the value the operand lowered to (a thin pointer when the
-    /// operand is an array reference); `operand_pointee_ty` is the type that
-    /// pointer addresses (the fixed-size array); `target_ty` is the
-    /// destination / ABI / declared-field type. Returns `val` unchanged
-    /// whenever no unsize coercion applies.
-    fn coerce_unsized_slice_ref(
-        &self,
-        val: BasicValueEnum<'ctx>,
-        operand_pointee_ty: Ty,
-        target_ty: Ty,
-    ) -> CompResult<BasicValueEnum<'ctx>> {
-        // Destination must be a fat reference (`&[T]`).
-        let TyKind::Ref(_, slice_ty, _) = self.ty_ctx.ty_kind(target_ty) else {
-            return Ok(val);
-        };
-        let TyKind::Slice(target_elem) = self.ty_ctx.ty_kind(*slice_ty) else {
-            return Ok(val);
-        };
-        // Operand pointee must be a fixed-size array with a concrete length.
-        let TyKind::Array(op_elem, count) = self.ty_ctx.ty_kind(operand_pointee_ty) else {
-            return Ok(val);
-        };
-        // Element types must agree. A still-generic target element
-        // (`Slice(Param)`) is a wildcard: the type checker already unified
-        // it with the operand's element before monomorphization.
-        let elem_ok = op_elem == target_elem
-            || matches!(self.ty_ctx.ty_kind(*target_elem), TyKind::Param(_));
-        if !elem_ok {
-            return Ok(val);
-        }
-        let n = match &count.kind {
-            ConstKind::Uint(n) => *n as u64,
-            ConstKind::Int(n) => (*n).max(0) as u64,
-            // An unresolved length cannot be materialized here; leave the
-            // value alone (the type checker should have resolved the array
-            // literal's length before codegen).
-            _ => return Ok(val),
-        };
-        let ptr = match val {
-            BasicValueEnum::PointerValue(p) => p,
-            _ => return Ok(val),
-        };
-        if let inkwell::types::BasicTypeEnum::StructType(st) = self.llvm_type_for_ty(target_ty)? {
-            let i64_ty = self.llvm_int_type(64);
-            let agg = st.get_undef();
-            let agg = self
-                .builder
-                .build_insert_value(agg, ptr, 0, "fat_slice_ptr")
-                .map_err(|e| {
-                    vec![GlyimDiagnostic::internal_error(format!(
-                        "fat slice ptr insert: {e:?}"
-                    ))]
-                })?
-                .into_struct_value();
-            let agg = self
-                .builder
-                .build_insert_value(agg, i64_ty.const_int(n, false), 1, "fat_slice_len")
-                .map_err(|e| {
-                    vec![GlyimDiagnostic::internal_error(format!(
-                        "fat slice len insert: {e:?}"
-                    ))]
-                })?
-                .into_struct_value();
-            return Ok(agg.as_basic_value_enum());
-        }
-        Ok(val)
-    }
-
-    /// Unsize-coerce aggregate field values against their declared field
-    /// types (`&[T; N]` operand into a `&[T]` field).
-    ///
-    /// `adt_id` / `substs` / `variant_idx` describe the aggregate being
-    /// built (for a plain struct, `variant_idx` is 0 and the operand list
-    /// is the struct's fields; for an enum variant it is that variant's
-    /// fields). `lowered` holds the already-lowered operand values paired
-    /// with each operand's own MIR type. Fields whose declared type is not
-    /// a fat slice ref pass through unchanged.
-    fn coerce_aggregate_field_unsizing(
-        &self,
-        adt_id: glyim_core::def_id::AdtId,
-        substs: glyim_type::Substitution,
-        variant_idx: VariantIdx,
-        lowered: &[(BasicValueEnum<'ctx>, Ty)],
-    ) -> CompResult<Vec<BasicValueEnum<'ctx>>> {
-        let Some(adt_def) = self.ty_ctx.adt_def(adt_id) else {
-            return Ok(lowered.iter().map(|(v, _)| *v).collect());
-        };
-        // Field types live in two places: enums carry one `VariantDef` per
-        // variant in `variants`; plain structs keep a flat `fields` list and
-        // an *empty* `variants` vec (this is what `FullLayoutComputer`'s Adt
-        // arm mirrors — `variants.len() > 1` for enums, `simple.layout_of`
-        // over the flat `fields` otherwise). Pick the same source the layout
-        // computer uses so writer and reader agree.
-        let field_tys: Vec<Ty> = if adt_def.variants.is_empty() {
-            adt_def.fields.iter().map(|f| f.ty).collect()
-        } else {
-            match adt_def.variants.get(variant_idx.to_raw() as usize) {
-                Some(variant) => variant.fields.iter().map(|f| f.ty).collect(),
-                None => return Ok(lowered.iter().map(|(v, _)| *v).collect()),
-            }
-        };
-        if field_tys.len() != lowered.len() {
-            return Ok(lowered.iter().map(|(v, _)| *v).collect());
-        }
-        // Substitute the ADT's own generic params into the declared field
-        // types so a generic field `buf: &'a [T]` reads as `&[i32]` for the
-        // concrete instantiation.
-        let subst_map: HashMap<u32, GenericArg> = self
-            .ty_ctx
-            .substitution_args(substs)
-            .iter()
-            .enumerate()
-            .map(|(i, a)| (i as u32, a.clone()))
-            .collect();
-        let mut ctx = TyCtxMut::from_ty_ctx(self.ty_ctx);
-        let mut vals = Vec::with_capacity(lowered.len());
-        for ((val, op_ty), field_ty) in lowered.iter().zip(field_tys.iter()) {
-            let field_ty = ctx.subst_ty(*field_ty, &subst_map);
-            // Peel the operand's own reference: the coercion decides on the
-            // *pointee* shape (fixed array) vs the target's (slice).
-            let op_pointee = match self.ty_ctx.ty_kind(*op_ty) {
-                TyKind::Ref(_, inner, _) => *inner,
-                _ => Ty::ERROR,
-            };
-            let coerced =
-                self.coerce_unsized_slice_ref(*val, op_pointee, field_ty)?;
-            vals.push(coerced);
-        }
-        Ok(vals)
     }
 
     /// Construct an ADT (struct/enum variant) or closure aggregate value
@@ -9474,23 +9300,6 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 }
             } else {
                 self.lower_operand(&args[arg_idx])?
-            };
-            // KNOWN_GAPS §3.9 (this session): array→slice unsizing at the
-            // call ABI boundary. The MIR argument operand keeps its own
-            // type (`&[i32; 3]` for `take(&arr)`), while the ABI slot is
-            // the callee's formal (`&[i32]`, a fat `{ ptr, i64 }`). Passing
-            // the thin pointer unconverted misaligned every following
-            // argument and made `x.len()` inside the callee read register
-            // garbage. Coerce whenever the operand is an array reference
-            // and the ABI slot is a fat slice reference.
-            let arg_val = if closure_captures.is_none() {
-                self.coerce_unsized_slice_ref(
-                    arg_val,
-                    self.ref_pointee_ty(self.operand_ty(&args[arg_idx])),
-                    arg_abi.ty,
-                )?
-            } else {
-                arg_val
             };
             match arg_abi.mode {
                 PassMode::Direct => llvm_args.push(arg_val),
