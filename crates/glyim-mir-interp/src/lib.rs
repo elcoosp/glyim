@@ -93,6 +93,56 @@ pub struct Interpreter<'tcx> {
     /// `read_place` / `write_place`. Mirrors the LLVM backend's
     /// `__glyim_static_<id>` globals.
     globals: std::cell::RefCell<std::collections::HashMap<glyim_core::def_id::StaticDefId, InterpValue>>,
+    /// Frames that were popped while their return value still held a
+    /// `Ref { frame: <this depth> }`. §3.9 (KNOWN_GAPS): the stdlib's
+    /// `impl Iterator for &[T]` binds the slice to a callee-local (`let cur:
+    /// &[T] = *self;`) and returns `&cur[0]` — under LLVM the pointee is the
+    /// caller's array and everything works; under the interpreter the
+    /// fat-pointer value model loses the origin address, so the returned
+    /// `Ref` points at the *callee's* frame. When that frame popped, every
+    /// later deref panicked with "deref of Ref from dead frame".
+    ///
+    /// Instead of failing, the popping frame is archived (bounded queue) and
+    /// `locals_for_ref_frame` consults the archive as a last resort. Reads
+    /// through such a ref observe the values as of the return — which is
+    /// exactly what LLVM's stack layout produces for this pattern. Writes
+    /// through a dead-frame ref still fail (`write_target_locals_mut` does
+    /// not consult the archive): no live alias exists to observe them.
+    dead_frames: std::collections::VecDeque<ArchivedFrame>,
+}
+
+/// A popped interpreter frame retained so `Ref`s that escaped into the
+/// caller stay readable (see `Interpreter::dead_frames`).
+struct ArchivedFrame {
+    /// Absolute depth the frame occupied when it was popped.
+    depth: usize,
+    /// Generation stamped when the frame was pushed (informational; the
+    /// archive is keyed by depth, newest-first, mirroring slot reuse).
+    #[allow(dead_code)]
+    generation: u64,
+    locals: Vec<Option<InterpValue>>,
+    /// The frame's local declarations (types), so `decls_for_ref_frame` can
+    /// resolve projection types for refs into archived frames.
+    decls: Vec<LocalDecl>,
+}
+
+/// Upper bound on archived dead frames. The iterator pattern archives one
+/// frame per `next()` call, so the cap bounds memory for long-running loops;
+/// beyond it the oldest entry is evicted (a ref that old could not be
+/// distinguished from slot reuse anyway).
+const DEAD_FRAME_ARCHIVE_CAP: usize = 256;
+
+/// Whether `value`'s tree contains a `Ref` into absolute frame `depth`.
+/// Used at return time to decide whether the popping frame must be archived
+/// (see `Interpreter::dead_frames`).
+fn value_references_frame(value: &InterpValue, depth: usize) -> bool {
+    match value {
+        InterpValue::Ref { frame, .. } => *frame == depth,
+        InterpValue::Aggregate(fields) => {
+            fields.iter().any(|f| value_references_frame(f, depth))
+        }
+        _ => false,
+    }
 }
 
 struct CallFrame {
@@ -138,6 +188,7 @@ impl<'tcx> Interpreter<'tcx> {
             next_frame_gen: 0,
             pending_unwind: None,
             globals: std::cell::RefCell::new(std::collections::HashMap::new()),
+            dead_frames: std::collections::VecDeque::new(),
         }
     }
 
@@ -1271,6 +1322,131 @@ impl<'tcx> Interpreter<'tcx> {
         }
     }
 
+    /// Fetch the pointee of a `Ref` and replay the ref's own projection
+    /// (§3.9). `projection` steps are evaluated against the ref's origin
+    /// frame: a `Deref` recurses into a nested ref, a `Field(i)` selects an
+    /// aggregate field, an `Index(l)` reads the index operand from the origin
+    /// frame's locals (which may be an archived dead frame) and selects the
+    /// element. `read_place` performs the equivalent splice for place reads;
+    /// this helper covers value-level derefs (`UnOp::Deref`).
+    fn deref_ref_value(
+        &self,
+        frame: usize,
+        local: usize,
+        projection: &[ProjectionElem],
+    ) -> InterpResult<InterpValue> {
+        let mut val = self
+            .locals_for_ref_frame(frame)
+            .and_then(|locals| locals.get(local).and_then(|o| o.as_ref()).cloned())
+            .ok_or_else(|| {
+                InterpError::Panic(format!(
+                    "deref of Ref from dead frame {frame} or uninitialized local {local}"
+                ))
+            })?;
+        for proj in projection {
+            match proj {
+                ProjectionElem::Deref => {
+                    val = match &val {
+                        InterpValue::Ref {
+                            frame: f,
+                            local: l,
+                            projection: p,
+                        } => self.deref_ref_value(*f, *l, p)?,
+                        // Byte payload (`String`) — already the
+                        // "dereferenced" view (`read_place` treats `Deref`
+                        // on it as a no-op). Same here.
+                        InterpValue::String(_) => val.clone(),
+                        InterpValue::StaticPtr { def_id } => self
+                            .globals
+                            .borrow()
+                            .get(def_id)
+                            .cloned()
+                            .ok_or_else(|| {
+                                InterpError::Panic(format!(
+                                    "deref of uninitialized static {def_id:?}"
+                                ))
+                            })?,
+                        other => {
+                            return Err(InterpError::Panic(format!(
+                                "deref_ref_value: Deref on non-reference value {other:?}"
+                            )));
+                        }
+                    };
+                }
+                ProjectionElem::Field(fi) => {
+                    let fi = fi.index();
+                    val = match val {
+                        InterpValue::Aggregate(fields) => fields.into_iter().nth(fi).ok_or_else(
+                            || {
+                                InterpError::Panic(format!(
+                                    "deref_ref_value: field {fi} out of bounds"
+                                ))
+                            },
+                        )?,
+                        other => {
+                            return Err(InterpError::Panic(format!(
+                                "deref_ref_value: Field projection on non-aggregate {other:?}"
+                            )));
+                        }
+                    };
+                }
+                ProjectionElem::Index(index_local) => {
+                    let index_val = self
+                        .locals_for_ref_frame(frame)
+                        .and_then(|locals| locals.get(index_local.index()).cloned())
+                        .flatten()
+                        .ok_or_else(|| {
+                            InterpError::Panic(format!(
+                                "deref_ref_value: index local {} not initialized (frame {frame})",
+                                index_local.index()
+                            ))
+                        })?;
+                    let idx = match index_val {
+                        InterpValue::Int(i) => i as usize,
+                        InterpValue::Uint(u) => u as usize,
+                        other => {
+                            return Err(InterpError::Panic(format!(
+                                "deref_ref_value: index must be an integer, got {other:?}"
+                            )));
+                        }
+                    };
+                    val = match val {
+                        InterpValue::String(s) => {
+                            let bytes = s.as_bytes();
+                            InterpValue::Uint(
+                                *bytes.get(idx).ok_or_else(|| {
+                                    InterpError::Panic(format!(
+                                        "index out of bounds: {idx} >= {}",
+                                        bytes.len()
+                                    ))
+                                })? as u128
+                            )
+                        }
+                        InterpValue::Aggregate(elems) => {
+                            let len = elems.len();
+                            elems.into_iter().nth(idx).ok_or_else(|| {
+                                InterpError::Panic(format!(
+                                    "index {idx} out of bounds (len {len})"
+                                ))
+                            })?
+                        }
+                        other => {
+                            return Err(InterpError::Panic(format!(
+                                "deref_ref_value: Index projection on non-aggregate {other:?}"
+                            )));
+                        }
+                    };
+                }
+                other => {
+                    return Err(InterpError::Panic(format!(
+                        "deref_ref_value: projection {other:?} in Ref not yet supported"
+                    )));
+                }
+            }
+        }
+        Ok(val)
+    }
+
     fn builtin_deref(&self, v: &InterpValue) -> InterpResult<InterpValue> {
         match v {
             InterpValue::Ref { frame, local, projection } => {
@@ -1769,6 +1945,11 @@ impl<'tcx> Interpreter<'tcx> {
                 == self.frame_generations.get(frame).copied().unwrap_or(0)
         {
             Some(&self.call_stack[frame].locals)
+        } else if let Some(archived) = self.dead_frames.iter().rev().find(|f| f.depth == frame) {
+            // §3.9: the frame was popped while its return value still held a
+            // ref into it. The archived locals stay readable (read-only) so
+            // the ref dereferences to the values as of the return.
+            Some(&archived.locals)
         } else {
             None
         }
@@ -1789,6 +1970,8 @@ impl<'tcx> Interpreter<'tcx> {
                 == self.frame_generations.get(frame).copied().unwrap_or(0)
         {
             Some(self.call_stack[frame].body.locals.as_slice())
+        } else if let Some(archived) = self.dead_frames.iter().rev().find(|f| f.depth == frame) {
+            Some(archived.decls.as_slice())
         } else {
             None
         }
@@ -1828,15 +2011,6 @@ impl<'tcx> Interpreter<'tcx> {
         if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
             eprintln!("[TRACE-RUN-BODY] owner={:?}", body.owner);
         }
-        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-            eprintln!("[TRACE-RUN-BODY] owner={:?}", body.owner);
-        }
-        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-            eprintln!("[TRACE-RUN-BODY] owner={:?}", body.owner);
-        }
-        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-            eprintln!("[TRACE-RUN-BODY] owner={:?}", body.owner);
-        }
         self.current_body_owner = Some(body.owner);
         self.current_arg_count = body.arg_count;
         self.current_body = Some(body.clone());
@@ -1844,6 +2018,7 @@ impl<'tcx> Interpreter<'tcx> {
         self.locals = vec![None; body.locals.len()];
         self.local_decls = body.locals.iter().cloned().collect();
         self.call_stack.clear();
+        self.dead_frames.clear();
         self.frame_depth = 0;
         self.step_count = 0;
         self.recursion_depth = 1;
@@ -1859,18 +2034,6 @@ impl<'tcx> Interpreter<'tcx> {
             if self.step_count > self.step_limit {
                 self.current_body = Some(body);
                 self.current_bb = bb_idx;
-                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-                    eprintln!("[TRACE-BB] owner={:?} bb={:?} depth={}",
-                        self.current_body_owner, bb_idx, self.frame_depth);
-                }
-                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-                    eprintln!("[TRACE-BB] owner={:?} bb={:?} depth={}",
-                        self.current_body_owner, bb_idx, self.frame_depth);
-                }
-                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-                    eprintln!("[TRACE-BB] owner={:?} bb={:?} depth={}",
-                        self.current_body_owner, bb_idx, self.frame_depth);
-                }
                 if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
                     eprintln!("[TRACE-BB] owner={:?} bb={:?} depth={}",
                         self.current_body_owner, bb_idx, self.frame_depth);
@@ -2002,54 +2165,6 @@ impl<'tcx> Interpreter<'tcx> {
                         .unwrap_or_else(|| "Uninit".to_string());
                     eprintln!("[TRACE-RETURN] frame={} value={}", self.frame_depth, ret);
                 }
-                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-                    let ret = self.locals
-                        .first()
-                        .and_then(|opt| opt.as_ref())
-                        .map(|v| match v {
-                            InterpValue::Ref { frame, local, projection } =>
-                                format!("Ref(f={}, l={}, plen={})", frame, local, projection.len()),
-                            InterpValue::Aggregate(a) => {
-                                let inner: Vec<_> = a.iter().take(4).map(|v| match v {
-                                    InterpValue::Ref { frame, local, .. } =>
-                                        format!("Ref({},{})", frame, local),
-                                    InterpValue::Int(n) => format!("Int({})", n),
-                                    other => format!("{:?}", other),
-                                }).collect();
-                                format!("Aggregate(len={}, head={:?})", a.len(), inner)
-                            }
-                            InterpValue::Int(v) => format!("Int({})", v),
-                            InterpValue::String(s) => format!("String(len={})", s.len()),
-                            InterpValue::Unit => "Unit".to_string(),
-                            other => format!("{:?}", other),
-                        })
-                        .unwrap_or_else(|| "Uninit".to_string());
-                    eprintln!("[TRACE-RETURN] frame={} value={}", self.frame_depth, ret);
-                }
-                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-                    let ret = self.locals
-                        .first()
-                        .and_then(|opt| opt.as_ref())
-                        .map(|v| match v {
-                            InterpValue::Ref { frame, local, projection } =>
-                                format!("Ref(f={}, l={}, plen={})", frame, local, projection.len()),
-                            InterpValue::Aggregate(a) => {
-                                let inner: Vec<_> = a.iter().take(4).map(|v| match v {
-                                    InterpValue::Ref { frame, local, .. } =>
-                                        format!("Ref({},{})", frame, local),
-                                    InterpValue::Int(n) => format!("Int({})", n),
-                                    other => format!("{:?}", other),
-                                }).collect();
-                                format!("Aggregate(len={}, head={:?})", a.len(), inner)
-                            }
-                            InterpValue::Int(v) => format!("Int({})", v),
-                            InterpValue::String(s) => format!("String(len={})", s.len()),
-                            InterpValue::Unit => "Unit".to_string(),
-                            other => format!("{:?}", other),
-                        })
-                        .unwrap_or_else(|| "Uninit".to_string());
-                    eprintln!("[TRACE-RETURN] frame={} value={}", self.frame_depth, ret);
-                }
                     // A normal return cancels any in-flight unwind payload:
                     // the call that just completed succeeded, so the pending
                     // panic (if any) is no longer being propagated.
@@ -2080,6 +2195,32 @@ impl<'tcx> Interpreter<'tcx> {
                             .first()
                             .and_then(|opt| opt.clone())
                             .unwrap_or(InterpValue::Unit);
+                        // §3.9: if the value escaping this frame still holds a
+                        // `Ref` into it, archive the frame so the ref stays
+                        // readable (see `dead_frames`). Without this, the
+                        // stdlib slice iterator's returned `&T` — which the
+                        // fat-pointer value model anchors to the callee's
+                        // frame — panicked with "deref of Ref from dead
+                        // frame" the moment the caller dereferenced it.
+                        let callee_depth = self.frame_depth;
+                        if value_references_frame(&ret_val, callee_depth) {
+                            let generation = self
+                                .frame_generations
+                                .get(callee_depth)
+                                .copied()
+                                .unwrap_or(0);
+                            let locals = std::mem::take(&mut self.locals);
+                            let decls = std::mem::take(&mut self.local_decls);
+                            self.dead_frames.push_back(ArchivedFrame {
+                                depth: callee_depth,
+                                generation,
+                                locals,
+                                decls,
+                            });
+                            while self.dead_frames.len() > DEAD_FRAME_ARCHIVE_CAP {
+                                self.dead_frames.pop_front();
+                            }
+                        }
                         bb_idx = frame.target_bb;
                         self.locals = frame.locals;
                         self.local_decls = caller_body.locals.iter().cloned().collect();
@@ -2460,15 +2601,6 @@ impl<'tcx> Interpreter<'tcx> {
         if std::env::var("GLYIM_INTERP_TRACE_STMT").is_ok() {
             let __s = format!("{:?}", stmt); let __s = if __s.len() > 200 { __s.chars().take(200).collect::<String>() } else { __s }; eprintln!("[TRACE-STMT] depth={} stmt={}", self.frame_depth, __s);
         }
-        if std::env::var("GLYIM_INTERP_TRACE_STMT").is_ok() {
-            let __s = format!("{:?}", stmt); let __s = if __s.len() > 200 { __s.chars().take(200).collect::<String>() } else { __s }; eprintln!("[TRACE-STMT] depth={} stmt={}", self.frame_depth, __s);
-        }
-        if std::env::var("GLYIM_INTERP_TRACE_STMT").is_ok() {
-            let __s = format!("{:?}", stmt); let __s = if __s.len() > 200 { __s.chars().take(200).collect::<String>() } else { __s }; eprintln!("[TRACE-STMT] depth={} stmt={}", self.frame_depth, __s);
-        }
-        if std::env::var("GLYIM_INTERP_TRACE_STMT").is_ok() {
-            let __s = format!("{:?}", stmt); let __s = if __s.len() > 200 { __s.chars().take(200).collect::<String>() } else { __s }; eprintln!("[TRACE-STMT] depth={} stmt={}", self.frame_depth, __s);
-        }
         match &stmt.kind {
             StatementKind::Assign(place, rvalue) => {
                 // MIR-13/14: the destination local's declared type drives
@@ -2515,35 +2647,6 @@ impl<'tcx> Interpreter<'tcx> {
                 self.eval_unary_op(*op, &v)
             }
             Rvalue::Ref(place, _borrow_kind) => {
-                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-                    let base_kind = self
-                        .locals_for_ref_frame(self.frame_depth)
-                        .and_then(|fl| fl.get(place.local.index()))
-                        .and_then(|opt| opt.as_ref())
-                        .map(|v| match v {
-                            InterpValue::Ref { frame, local, projection } =>
-                                format!("Ref(f={},l={},plen={})", frame, local, projection.len()),
-                            InterpValue::String(s) => format!("String(len={})", s.len()),
-                            InterpValue::Aggregate(a) =>
-                                format!("Aggregate(len={})", a.len()),
-                            InterpValue::Int(v) => format!("Int({})", v),
-                            InterpValue::Uint(v) => format!("Uint({})", v),
-                            InterpValue::Bool(_) => "Bool".to_string(),
-                            InterpValue::Unit => "Unit".to_string(),
-                            InterpValue::Float(_) => "Float".to_string(),
-                            InterpValue::Fn(_) => "Fn".to_string(),
-                            InterpValue::ConstRef(_) => "ConstRef".to_string(),
-                            InterpValue::StaticPtr { .. } => "StaticPtr".to_string(),
-                        })
-                        .unwrap_or_else(|| "Uninit".to_string());
-                    eprintln!(
-                        "[TRACE-REF-CREATE] cur_frame={} local={} proj={:?} base_kind={}",
-                        self.frame_depth,
-                        place.local.index(),
-                        place.projection,
-                        base_kind
-                    );
-                }
                 if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
                     let base_kind = self
                         .locals_for_ref_frame(self.frame_depth)
@@ -2677,18 +2780,6 @@ impl<'tcx> Interpreter<'tcx> {
                 }
             }
             Rvalue::Len(place) => {
-                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-                    eprintln!("[TRACE-LEN] owner={:?} place={:?}",
-                        self.current_body_owner, place);
-                }
-                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-                    eprintln!("[TRACE-LEN] owner={:?} place={:?}",
-                        self.current_body_owner, place);
-                }
-                if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-                    eprintln!("[TRACE-LEN] owner={:?} place={:?}",
-                        self.current_body_owner, place);
-                }
                 if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
                     eprintln!("[TRACE-LEN] owner={:?} place={:?}",
                         self.current_body_owner, place);
@@ -3229,19 +3320,13 @@ MirConstKind::Error => {
                     ))
                 })
             }
-            (UnOp::Deref, InterpValue::Ref { frame, local, .. }) => {
-                let frame_locals = self.locals_for_ref_frame(*frame).ok_or_else(|| {
-                    InterpError::Panic(format!("deref of Ref from dead frame {frame}"))
-                })?;
-                frame_locals
-                    .get(*local)
-                    .and_then(|opt| opt.as_ref())
-                    .cloned()
-                    .ok_or_else(|| {
-                        InterpError::Panic(format!(
-                            "deref of uninitialized local {local} (frame {frame})"
-                        ))
-                    })
+            (UnOp::Deref, InterpValue::Ref { frame, local, projection }) => {
+                // §3.9: replay the ref's own projection after fetching the
+                // pointee. A ref created by `&cur[0]` carries
+                // `[Deref, Index(0)]`; ignoring it made `*x` yield the whole
+                // slice aggregate instead of element 0 (LLVM disagreed, so
+                // the differential flagged every such fixture).
+                self.deref_ref_value(*frame, *local, projection)
             }
             _ => Err(InterpError::Panic(format!(
                 "unsupported unary op: {:?} on {:?}",
@@ -3276,8 +3361,34 @@ MirConstKind::Error => {
             .map(|d| d.ty)
             .unwrap_or(Ty::ERROR);
 
-        for proj in place.projection.iter() {
-            match proj {
+        // Walk the projection list. When a `Deref` resolves an
+        // `InterpValue::Ref` that carries its *own* projection (see
+        // `Rvalue::Ref`, which preserves the projected place), that
+        // projection is spliced in front of the remaining steps: the ref was
+        // created as `&base[proj...]`, so reading through it must replay
+        // `proj...` before the reader's own trailing projections.
+        // (§3.9: the stdlib iterator's returned `&cur[0]` is exactly such a
+        // ref — `[Deref, Index(0)]` — and ignoring its projection made `*x`
+        // yield the whole slice instead of element 0.)
+        //
+        // Each queued step carries the frame its `Index(local)` operand
+        // belongs to: a spliced step's index local lives in the frame that
+        // *created* the ref — possibly an archived dead frame (§3.9) — not
+        // in the frame doing the reading.
+        let mut queue: Vec<(ProjectionElem, usize)> = place
+            .projection
+            .iter()
+            .map(|p| (p.clone(), self.frame_depth))
+            .collect();
+        let mut qi = 0usize;
+        while qi < queue.len() {
+            if queue.len() > 128 {
+                return Err(InterpError::Panic(
+                    "place projection chain too deep (cyclic ref splicing?)".into(),
+                ));
+            }
+            let (proj, proj_frame) = queue[qi].clone();
+            match &proj {
                 ProjectionElem::Deref => match val {
                     // T140-PATCHED-DEREF-STRING: `InterpValue::String` is the
                     // interpreter's stand-in for `&str`/`&[u8]` byte payloads
@@ -3285,7 +3396,7 @@ MirConstKind::Error => {
                     // (`buf[0]` on `buf: &[u8]`) is a no-op — the value is
                     // already the "dereferenced" byte view.
                     InterpValue::String(_) => { /* val unchanged */ }
-                    InterpValue::Ref { frame, local, .. } => {
+                    InterpValue::Ref { frame, local, projection } => {
                         let target = local;
                         let frame_locals = self.locals_for_ref_frame(frame).ok_or_else(|| {
                             InterpError::Panic(format!("deref of Ref from dead frame {frame}"))
@@ -3309,6 +3420,18 @@ MirConstKind::Error => {
                             .and_then(|decls| decls.get(target))
                             .map(|decl| decl.ty);
                         current_ty = decl_ty.unwrap_or(Ty::ERROR);
+                        // §3.9: replay the ref's own projection before the
+                        // reader's remaining steps (see the queue comment).
+                        if !projection.is_empty() {
+                            let mut spliced: Vec<(ProjectionElem, usize)> = projection
+                                .iter()
+                                .map(|p| (p.clone(), frame))
+                                .collect();
+                            spliced.extend(queue[qi + 1..].iter().cloned());
+                            queue.truncate(qi);
+                            queue.extend(spliced);
+                            continue;
+                        }
                     }
                     InterpValue::StaticPtr { def_id } => {
                         // `static mut` / `&STATIC` read: fetch the value
@@ -3455,19 +3578,30 @@ MirConstKind::Error => {
                     }
                 }
                 ProjectionElem::Index(index_local) => {
-                    let index_val = self
-                        .locals
-                        .get(index_local.index())
-                        .and_then(|opt| opt.as_ref())
-                        .ok_or_else(|| {
-                            InterpError::Panic(format!(
-                                "index local {} not initialized",
-                                index_local.index()
-                            ))
-                        })?;
+                    // The index operand lives in `proj_frame` — the frame the
+                    // projection step came from. For steps spliced out of a
+                    // ref's own projection that is the ref's *origin* frame
+                    // (possibly an archived dead frame, §3.9), not the frame
+                    // executing the read.
+                    let index_val = if proj_frame == self.frame_depth {
+                        self.locals
+                            .get(index_local.index())
+                            .and_then(|opt| opt.as_ref())
+                            .cloned()
+                    } else {
+                        self.locals_for_ref_frame(proj_frame)
+                            .and_then(|locals| locals.get(index_local.index()).cloned())
+                            .flatten()
+                    }
+                    .ok_or_else(|| {
+                        InterpError::Panic(format!(
+                            "index local {} not initialized (frame {proj_frame})",
+                            index_local.index()
+                        ))
+                    })?;
                     let idx_u = match index_val {
-                        InterpValue::Int(i) => *i as usize,
-                        InterpValue::Uint(u) => *u as usize,
+                        InterpValue::Int(i) => i as usize,
+                        InterpValue::Uint(u) => u as usize,
                         _ => {
                             return Err(InterpError::Panic("index must be an integer".into()));
                         }
@@ -3661,6 +3795,7 @@ MirConstKind::Error => {
                     val = InterpValue::Aggregate(vec![data_ptr, InterpValue::Int(new_len as i128)]);
                 }
             }
+            qi += 1;
         }
         Ok(val)
     }
@@ -4142,17 +4277,16 @@ MirConstKind::Error => {
         if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
             eprintln!("[TRACE-SLICE-LEN-IN] val={:?}", val);
         }
-        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-            eprintln!("[TRACE-SLICE-LEN-IN] val={:?}", val);
-        }
-        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-            eprintln!("[TRACE-SLICE-LEN-IN] val={:?}", val);
-        }
-        if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-            eprintln!("[TRACE-SLICE-LEN-IN] val={:?}", val);
-        }
         match val {
             InterpValue::Aggregate(fields) => {
+                // §3.9: a slice fat pointer is `(ptr, len)` — `fields[0]`
+                // ptr-shaped (Ref/String/StaticPtr) and `fields[1]` an
+                // integer length. A bare array aggregate (`[10, 20, 30]`)
+                // has element values in every slot, so `fields[0]` is an
+                // Int/Uint and the length is simply the field count. The
+                // pre-fix code skipped the shape check and read `fields[1]`
+                // of every 2+-field aggregate, reporting 20 as the length of
+                // `[10, 20, 30]`.
                 let looks_like_fat_ptr = fields.len() >= 2
                     && matches!(
                         &fields[0],
@@ -4161,7 +4295,7 @@ MirConstKind::Error => {
                             | InterpValue::StaticPtr { .. }
                     )
                     && matches!(&fields[1], InterpValue::Int(_) | InterpValue::Uint(_));
-                let result = if looks_like_fat_ptr {
+                if looks_like_fat_ptr {
                     match &fields[1] {
                         InterpValue::Int(i) => Ok(*i as usize),
                         InterpValue::Uint(u) => Ok(*u as usize),
@@ -4169,13 +4303,7 @@ MirConstKind::Error => {
                     }
                 } else {
                     Ok(fields.len())
-                };
-                eprintln!("[DBG-LEN] Aggregate(len={}) looks_like_fat_ptr={} -> {}",
-                    fields.len(), looks_like_fat_ptr, match &result {
-                        Ok(n) => format!("{}", n),
-                        Err(_) => "ERR".to_string(),
-                    });
-                result
+                }
             }
             InterpValue::Ref { frame, local, .. } => {
                 let target_val = self
