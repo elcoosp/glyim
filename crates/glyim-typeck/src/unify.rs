@@ -25,6 +25,90 @@ impl<'a> FnCtxt<'a> {
         self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)))
     }
 
+    /// KNOWN_GAPS §3.9 (this session): probe whether `concrete` is
+    /// shape-compatible with `formal` — a **purely structural** check with no
+    /// inference side effects, where every `Param` in `formal` is a wildcard.
+    ///
+    /// Used by the method-call autoref pass-through decision: the callee's
+    /// registered signature is still generic (`&[T]` with a rigid `Param`),
+    /// and the receiver is concrete (`&[i32]`). Inference-table unification
+    /// cannot be used here because glyim's unifier treats rigid `Param`s as
+    /// non-unifiable (only fresh `Infer` vars bind), so the question is
+    /// answered structurally instead: same Ref mutability, same ADT id, same
+    /// arity, and every position either structurally compatible or a
+    /// `Param` wildcard.
+    pub fn probe_types_compatible(&self, concrete: Ty, formal: Ty, depth: u32) -> bool {
+        if depth >= 16 {
+            return false;
+        }
+        if concrete == Ty::ERROR || formal == Ty::ERROR {
+            return false;
+        }
+        if concrete == formal {
+            return true;
+        }
+        let ck = self.ctx.ty_kind(concrete);
+        let fk = self.ctx.ty_kind(formal);
+        match (ck, fk) {
+            // A generic formal position accepts anything.
+            (_, TyKind::Param(_)) => true,
+            (
+                TyKind::Ref(_, ci, cm),
+                TyKind::Ref(_, fi, fm),
+            ) => cm == fm && self.probe_types_compatible(*ci, *fi, depth + 1),
+            (TyKind::RawPtr(ci, cm), TyKind::RawPtr(fi, fm)) => {
+                cm == fm && self.probe_types_compatible(*ci, *fi, depth + 1)
+            }
+            (TyKind::Slice(ce), TyKind::Slice(fe)) => {
+                self.probe_types_compatible(*ce, *fe, depth + 1)
+            }
+            (TyKind::Array(ce, _), TyKind::Array(fe, _)) => {
+                self.probe_types_compatible(*ce, *fe, depth + 1)
+            }
+            (TyKind::Tuple(cs), TyKind::Tuple(fs)) => {
+                self.compatible_arg_lists(*cs, *fs, depth)
+            }
+            (TyKind::Adt(cid, cs), TyKind::Adt(fid, fs)) => {
+                if cid != fid {
+                    return false;
+                }
+                self.compatible_arg_lists(*cs, *fs, depth)
+            }
+            _ => false,
+        }
+    }
+
+    /// Pairwise `probe_types_compatible` over two substitution argument lists
+    /// (helper so the borrow of `substitution_args` ends before the recursive
+    /// `&mut self` calls).
+    fn compatible_arg_lists(
+        &self,
+        concrete_subst: glyim_type::Substitution,
+        formal_subst: glyim_type::Substitution,
+        depth: u32,
+    ) -> bool {
+        let c_args: Vec<GenericArg> = self.ctx.substitution_args(concrete_subst).to_vec();
+        let f_args: Vec<GenericArg> = self.ctx.substitution_args(formal_subst).to_vec();
+        if c_args.len() != f_args.len() {
+            return false;
+        }
+        for (c, f) in c_args.iter().zip(f_args.iter()) {
+            match (c, f) {
+                (GenericArg::Ty(ct), GenericArg::Ty(ft)) => {
+                    if !self.probe_types_compatible(*ct, *ft, depth + 1) {
+                        return false;
+                    }
+                }
+                _ => {
+                    if c != f {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    }
+
     pub fn unify(&mut self, a: Ty, b: Ty, span: Span) -> bool {
         if a == Ty::ERROR || b == Ty::ERROR {
             return false;
