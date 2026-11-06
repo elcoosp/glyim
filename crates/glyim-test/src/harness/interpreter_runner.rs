@@ -97,18 +97,6 @@ fn interpret_bodies(
         eprintln!("[TRACE-HARNESS-ENTRY] bodies={} entry_main={:?}",
             bodies.len(), entry_main);
     }
-    if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-        eprintln!("[TRACE-HARNESS-ENTRY] bodies={} entry_main={:?}",
-            bodies.len(), entry_main);
-    }
-    if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-        eprintln!("[TRACE-HARNESS-ENTRY] bodies={} entry_main={:?}",
-            bodies.len(), entry_main);
-    }
-    if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-        eprintln!("[TRACE-HARNESS-ENTRY] bodies={} entry_main={:?}",
-            bodies.len(), entry_main);
-    }
     // T140-PATCHED-IO: stdout/stderr are populated from the interpreter's
     // FFI write buffers below, not left empty.
     let mut stdout = String::new();
