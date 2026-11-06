@@ -1132,24 +1132,58 @@ impl TyCtxMut {
     /// correct semantics: an impl's associated type is keyed by the self type's
     /// ADT, not by a specific substitution.
     pub fn resolve_associated_type_by_self_ty(&self, self_ty: Ty, assoc_name: Name) -> Option<Ty> {
+        self.resolve_assoc_with_trait(self_ty, assoc_name).map(|(_, ty)| ty)
+    }
+
+    /// KNOWN_GAPS §3.9 (this session): variant of
+    /// `resolve_associated_type_by_self_ty` that also returns the
+    /// `TraitDefId` of the impl the entry was found under, so callers can
+    /// apply `impl_param_subst` against the *right* trait (both `Iterator`
+    /// and `IntoIterator` declare `type Item`; guessing the trait by name
+    /// can normalize against a table that has no entry for this self type
+    /// and silently return the unsubstituted template).
+    pub fn resolve_assoc_with_trait(
+        &self,
+        self_ty: Ty,
+        assoc_name: Name,
+    ) -> Option<(glyim_core::def_id::TraitDefId, Ty)> {
         let self_adt = match self.ty_kind(self_ty) {
             TyKind::Adt(adt_id, _) => Some(*adt_id),
             _ => None,
         };
+        // KNOWN_GAPS §3.9 (this session): besides the ADT/handle match, align
+        // structurally so Ref-shaped impl self types
+        // (`impl<'a, T> Iterator for &'a [T]`, registered as
+        // `Ref(_, Slice(Param), _)`) match a concrete receiver `&[i32]` —
+        // handle equality can never hold across the generic registration and
+        // the concrete instantiation.
         self.impl_assoc_types
             .iter()
             .find(|((sty, _), entries)| {
                 let sty_matches = match self_adt {
                     Some(a) => matches!(self.ty_kind(*sty), TyKind::Adt(b, _) if b == &a),
-                    None => *sty == self_ty,
+                    None => {
+                        // KNOWN_GAPS §3.9 (this session): structural
+                        // alignment only applies to CONCRETE non-param
+                        // qualifiers. A generic `Param` qualifier
+                        // (`<T as FromStr>::Err` inside a generic body) must
+                        // stay an abstract projection — aligning it against
+                        // a registered impl's self type would normalize the
+                        // projection to the impl's raw `Param` template and
+                        // produce cross-space `parameter index mismatch`
+                        // errors in every generic body.
+                        *sty == self_ty
+                            || (!matches!(self.ty_kind(self_ty), TyKind::Param(_))
+                                && self.align_param_shapes(self_ty, *sty, 0).is_some())
+                    }
                 };
                 sty_matches && entries.iter().any(|(n, _)| *n == assoc_name)
             })
-            .and_then(|((_, _), entries)| {
+            .and_then(|((_, tid), entries)| {
                 entries
                     .iter()
                     .find(|(name, _)| *name == assoc_name)
-                    .map(|(_, ty)| *ty)
+                    .map(|(_, ty)| (*tid, *ty))
             })
     }
 
@@ -1230,58 +1264,128 @@ impl TyCtxMut {
     /// `i32` (position 0 of `Ready<i32>`), and returns `{ T.index -> i32 }`. The
     /// caller applies it so the normalized type becomes `i32` rather than the
     /// dangling `T`.
-    pub(crate) fn impl_param_subst(
+    ///
+    /// KNOWN_GAPS §3.9 (this session): the impl search previously keyed only
+    /// on `(trait_def_id, arity, positional non-param args)`, so for a receiver
+    /// `Iter<i32>` it could align against `impl<T> Iterator for VecIntoIter<T>`
+    /// (a different ADT with the same arity) and produce a wrong-but-plausible
+    /// map. The impl's Self ADT must now be the *same* ADT as
+    /// `concrete_self`'s. Non-ADT shapes (`impl<'a, T> Iterator for &'a [T]`,
+    /// receivers that are `Ref(Slice(..))`) align structurally through
+    /// `align_param_shapes`.
+    pub fn impl_param_subst(
         &self,
         concrete_self: Ty,
         trait_def_id: glyim_core::def_id::TraitDefId,
         _assoc_name: Name,
     ) -> std::collections::HashMap<u32, GenericArg> {
         let mut map = std::collections::HashMap::new();
-        let concrete_args: Vec<GenericArg> = match self.ty_kind(concrete_self) {
-            TyKind::Adt(_, substs) => self.substitution_args(*substs).to_vec(),
-            TyKind::Tuple(substs) => self.substitution_args(*substs).to_vec(),
-            _ => return map,
+        // The impl must be registered for the *same* underlying shape as the
+        // concrete self: same ADT (by id), or a structurally compatible
+        // Ref/Slice/Array/Tuple shape.
+        let concrete_adt = match self.ty_kind(concrete_self) {
+            TyKind::Adt(id, _) => Some(*id),
+            _ => None,
         };
-        // Find the impl registered for this trait whose `Self` ADT matches.
         for (impl_self, tid) in self.impl_assoc_types.keys() {
             if *tid != trait_def_id {
                 continue;
             }
-            let impl_args: Option<Vec<GenericArg>> = match self.ty_kind(*impl_self) {
-                TyKind::Adt(_, substs) => Some(self.substitution_args(*substs).to_vec()),
-                TyKind::Tuple(substs) => Some(self.substitution_args(*substs).to_vec()),
-                _ => None,
-            };
-            let Some(impl_args) = impl_args else { continue };
-            // ADT identity already established by the trait key + substs match
-            // below; require the same arity then align param positions.
-            if impl_args.len() != concrete_args.len() {
-                continue;
-            }
-            let mut matched = true;
-            for (ia, ca) in impl_args.iter().zip(concrete_args.iter()) {
-                match ia {
-                    GenericArg::Ty(it) if matches!(self.ty_kind(*it), TyKind::Param(_)) => {
-                        if let TyKind::Param(p) = self.ty_kind(*it) {
-                            map.insert(p.index, ca.clone());
-                        }
-                    }
-                    _ => {
-                        // Non-param impl arg (e.g. concrete) must match the
-                        // concrete argument positionally; otherwise this impl is
-                        // not the one we want.
-                        if ia != ca {
-                            matched = false;
-                            break;
-                        }
-                    }
+            // ADT identity pre-filter: when the concrete self is an ADT, the
+            // impl's self type must be the same ADT. (A non-ADT concrete self
+            // — `&[i32]`, `&mut &[i32]` — skips this pre-filter and relies on
+            // the structural alignment below.)
+            if let (Some(cid), TyKind::Adt(iid, _)) =
+                (concrete_adt, self.ty_kind(*impl_self))
+            {
+                if cid != *iid {
+                    continue;
                 }
             }
-            if matched {
+            if let Some(m) =
+                self.align_param_shapes(concrete_self, *impl_self, 0)
+            {
+                for (idx, arg) in m {
+                    map.insert(idx, arg);
+                }
                 return map;
             }
         }
         map
+    }
+
+    /// Structurally align `concrete` against `impl_shape`, collecting
+    /// `{param_index -> concrete arg}` bindings for every `Param` position in
+    /// the impl shape. Returns `None` when the shapes are incompatible (the
+    /// caller then tries the next registered impl).
+    ///
+    /// Handles the shapes impl self types actually take:
+    /// `Adt(args)`, `Ref(_, inner, mut)`, `Slice(el)`, `Array(el, len)`,
+    /// `Tuple(args)`, and bare `Param` (an impl over the primitive itself).
+    fn align_param_shapes(
+        &self,
+        concrete: Ty,
+        impl_shape: Ty,
+        depth: u32,
+    ) -> Option<Vec<(u32, GenericArg)>> {
+        if depth >= 16 {
+            return None;
+        }
+        match (self.ty_kind(concrete), self.ty_kind(impl_shape)) {
+            (TyKind::Adt(_, ca), TyKind::Adt(_, ia)) => {
+                self.align_arg_lists(&self.substitution_args(*ca).to_vec(), &self.substitution_args(*ia).to_vec(), depth)
+            }
+            (TyKind::Tuple(ca), TyKind::Tuple(ia)) => {
+                self.align_arg_lists(&self.substitution_args(*ca).to_vec(), &self.substitution_args(*ia).to_vec(), depth)
+            }
+            (TyKind::Ref(_, ci, cm), TyKind::Ref(_, ii, im)) => {
+                if cm != im {
+                    return None;
+                }
+                self.align_param_shapes(*ci, *ii, depth + 1)
+            }
+            (TyKind::Slice(ce), TyKind::Slice(ie)) => {
+                self.align_param_shapes(*ce, *ie, depth + 1)
+            }
+            (TyKind::Array(ce, _), TyKind::Array(ie, _)) => {
+                self.align_param_shapes(*ce, *ie, depth + 1)
+            }
+            // A concrete type against a bare impl parameter: bind it.
+            (_, TyKind::Param(p)) => Some(vec![(p.index, GenericArg::Ty(concrete))]),
+            // Identical concrete shapes (e.g. `u8` vs `u8`): nothing to bind.
+            (a, b) if a == b => Some(Vec::new()),
+            _ => None,
+        }
+    }
+
+    /// Align two substitution-argument lists positionally (helpers for
+    /// `align_param_shapes`).
+    fn align_arg_lists(
+        &self,
+        concrete_args: &[GenericArg],
+        impl_args: &[GenericArg],
+        depth: u32,
+    ) -> Option<Vec<(u32, GenericArg)>> {
+        if concrete_args.len() != impl_args.len() {
+            return None;
+        }
+        let mut out = Vec::new();
+        for (ca, ia) in concrete_args.iter().zip(impl_args.iter()) {
+            match (ca, ia) {
+                (GenericArg::Ty(ct), GenericArg::Ty(it)) => {
+                    if let TyKind::Param(p) = self.ty_kind(*it) {
+                        out.push((p.index, GenericArg::Ty(*ct)));
+                    } else {
+                        match self.align_param_shapes(*ct, *it, depth + 1) {
+                            Some(mut m) => out.append(&mut m),
+                            None => return None,
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Some(out)
     }
 
     /// Query the traits a generic parameter (by name) is bound to. Populated
