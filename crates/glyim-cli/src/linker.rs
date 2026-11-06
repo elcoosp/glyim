@@ -353,6 +353,35 @@ pub fn link_with_args(
         cross_flags = linker_flags_for_target(triple, final_linker_name.as_str())?;
     }
 
+    // PIE default (plan §18.1 follow-up): the codegen backend emits non-PIC
+    // code with absolute relocations (e.g. `R_X86_64_32 against '.rodata'`),
+    // while most modern distro toolchains configure gcc/clang to build PIE
+    // executables by default — the link then dies with "recompile with
+    // -fPIE". Pass `-no-pie` explicitly for ELF targets so the produced
+    // executable matches the code model the backend actually emits.
+    // Restrictions:
+    //   * cc-style drivers only — a raw `ld` link does not pull in the PIE
+    //     startfiles that make the default relevant;
+    //   * ELF targets only — Mach-O (darwin) has no `-no-pie` semantics and
+    //     MSVC is handled by `MsvcLinker`;
+    //   * not for `-shared` (cdylib) links — `-no-pie` + `-shared` is a
+    //     contradictory request.
+    let eff_triple = target_triple
+        .filter(|t| !t.is_empty())
+        .map(|t| t.to_string())
+        .unwrap_or_else(crate::host_target_triple);
+    let is_driver_link = !cfg!(target_os = "windows")
+        && (final_linker_name == "cc"
+            || final_linker_name == "gcc"
+            || final_linker_name == "clang"
+            || final_linker_name.ends_with("/cc")
+            || final_linker_name.ends_with("/gcc")
+            || final_linker_name.ends_with("/clang"));
+    let is_shared_link = args.user_flags.iter().any(|f| f == "-shared");
+    if is_driver_link && !is_shared_link && is_elf_triple(&eff_triple) {
+        cross_flags.push("-no-pie".to_string());
+    }
+
     let linker_invoker: Box<dyn LinkerInvoker> = if cfg!(target_os = "windows") {
         Box::new(MsvcLinker {
             linker: final_linker_name,
@@ -387,14 +416,20 @@ pub fn link_with_args(
 /// the CI-tested target set. Returns an error for unmapped targets rather than
 /// silently passing host flags to a cross target.
 ///
-/// - `clang`/`gcc` drivers accept `--target=<triple>` directly.
+/// - `clang` drivers (including Apple's `cc`, which is clang) accept
+///   `-target <triple>` directly.
+/// - GNU `gcc` does **not** accept `-target` at all (it fails with
+///   "unrecognized command-line option '-target'"). A gcc driver only links
+///   the host triple without flags; a genuine cross build needs either clang
+///   or a matching `<arch>-<os>-gnu*` cross gcc.
 /// - GNU `ld` needs an explicit emulation via `-m <emulation>` (e.g.
 ///   `-m aarch64linux` for an aarch64 Linux target from an x86_64 host).
 pub(crate) fn linker_flags_for_target(triple: &str, linker: &str) -> Result<Vec<String>, String> {
     // The flags differ between a compiler *driver* (cc/clang/gcc) and a raw
     // GNU `ld`:
-    //   - drivers accept a single-dash `-target <triple>` (Apple clang rejects
-    //     the double-dash `--target` and the `-m <emulation>` GNU-ld flag);
+    //   - clang-style drivers accept a single-dash `-target <triple>` (Apple
+    //     clang rejects the double-dash `--target` and the `-m <emulation>`
+    //     GNU-ld flag);
     //   - raw GNU ld has no `--target` and instead needs `-m <emulation>`.
     let linker = linker.trim();
     let is_driver = linker == "cc"
@@ -405,15 +440,74 @@ pub(crate) fn linker_flags_for_target(triple: &str, linker: &str) -> Result<Vec<
         || linker.ends_with("/clang");
 
     if is_driver {
-        // `-target <triple>` (single dash) is what cc/clang/gcc understand.
-        // This is what lets a darwin host link a darwin executable via its
-        // clang `cc` (the previous `--target` + `-m` pair was rejected by the
-        // driver, so `--emit=exec --target=x86_64-apple-darwin` failed on macOS).
-        return Ok(vec!["-target".to_string(), triple.to_string()]);
+        // Clang understands `-target`; GNU gcc does not. Probe the driver's
+        // `--version` output — `cc` is clang on macOS/BSD and gcc on most
+        // Linux distros, so the binary name alone is not enough.
+        let kind = if driver_is_clang(linker) {
+            DriverKind::Clang
+        } else {
+            DriverKind::Gcc
+        };
+        return linker_flags_for_driver(kind, triple);
     }
 
+    // Raw GNU ld path (shared with the driver=none case below).
+    linker_flags_for_raw_ld(triple)
+}
+
+/// Which compiler-driver flavor `linker` resolved to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DriverKind {
+    /// Clang-style driver: understands `-target <triple>`.
+    Clang,
+    /// GNU gcc driver: no `-target` support; host-triple links only.
+    Gcc,
+}
+
+/// Driver-independent flag computation for compiler drivers. Pure and
+/// deterministic, so unit tests can cover clang/gcc behavior regardless of
+/// which driver the host happens to install as `cc`.
+pub(crate) fn linker_flags_for_driver(
+    kind: DriverKind,
+    triple: &str,
+) -> Result<Vec<String>, String> {
+    match kind {
+        DriverKind::Clang => Ok(vec!["-target".to_string(), triple.to_string()]),
+        DriverKind::Gcc => {
+            // Passing `-target` makes gcc exit with an error, so fall back to
+            // what gcc can actually do:
+            //   * a triple that matches the host needs no extra flags at all;
+            //   * a foreign triple needs a cross toolchain this driver cannot
+            //     provide — fail with an actionable message instead of a
+            //     baffling "unrecognized command-line option" from deep inside
+            //     the link.
+            if gcc_triple_matches_host(triple) {
+                Ok(Vec::new())
+            } else {
+                Err(format!(
+                    "GNU gcc driver cannot cross-link target '{triple}': \
+                     gcc has no `-target` option. Install clang (preferred — it \
+                     accepts `-target`) or an `{arch}-linux-gnu-gcc`-style cross \
+                     toolchain and pass it via `--linker`.",
+                    arch = triple.split('-').next().unwrap_or(triple),
+                ))
+            }
+        }
+    }
+}
+
+/// Flag computation for a raw GNU `ld` invocation (no compiler driver).
+pub(crate) fn linker_flags_for_raw_ld(triple: &str) -> Result<Vec<String>, String> {
     // Raw GNU ld: emulation table keys on the architecture component.
     let arch = triple.split('-').next().unwrap_or(triple);
+    // Mach-O targets (darwin) cannot be linked by GNU ld at all — say so
+    // instead of emitting an emulation flag that produces nonsense errors.
+    if triple.contains("darwin") || triple.contains("macos") || triple.contains("ios") {
+        return Err(format!(
+            "raw GNU ld cannot link Mach-O target '{triple}'; use a clang \
+             driver (or Apple's ld64/ld64.lld) for this target"
+        ));
+    }
     // emulation -> linker -m flag for GNU ld (matches common cross targets).
     let emulation = match arch {
         "aarch64" | "arm64" => "aarch64linux",
@@ -436,6 +530,89 @@ pub(crate) fn linker_flags_for_target(triple: &str, linker: &str) -> Result<Vec<
         }
     };
     Ok(vec!["-m".to_string(), emulation.to_string()])
+}
+
+/// Probe whether `linker` is a clang-style driver (accepts `-target`).
+///
+/// The result for the first driver probed is cached process-wide: the probe
+/// runs the driver's `--version` at most once per compiler invocation, which
+/// is negligible next to the link itself. Drivers probed later (rare — the
+/// linker choice is stable within one invocation) are probed on demand.
+fn driver_is_clang(linker: &str) -> bool {
+    use std::sync::OnceLock;
+
+    /// 1 = clang-style, 2 = not clang.
+    fn probe(linker: &str) -> u8 {
+        match Command::new(linker).arg("--version").output() {
+            Ok(out) => {
+                let text = String::from_utf8_lossy(&out.stdout).to_string()
+                    + &String::from_utf8_lossy(&out.stderr);
+                if text.to_lowercase().contains("clang") {
+                    1
+                } else {
+                    2
+                }
+            }
+            // The driver could not even be executed; treat it as not-clang so
+            // the gcc path (which at least refuses cleanly) is taken.
+            Err(_) => 2,
+        }
+    }
+
+    static FIRST: OnceLock<(String, u8)> = OnceLock::new();
+    match FIRST.get() {
+        Some((name, kind)) if name == linker => *kind == 1,
+        Some(_) => probe(linker) == 1,
+        None => {
+            let kind = probe(linker);
+            let _ = FIRST.set((linker.to_string(), kind));
+            kind == 1
+        }
+    }
+}
+
+/// Whether a GNU gcc driver can link `triple` without extra flags — i.e. the
+/// triple's architecture and object format match the compiling host.
+fn gcc_triple_matches_host(triple: &str) -> bool {
+    let mut parts = triple.split('-');
+    let arch = parts.next().unwrap_or("").trim();
+    let rest: Vec<&str> = parts.collect();
+    let os_and_env = rest.join("-");
+    let host_arch = std::env::consts::ARCH;
+    // Normalize the spellings that differ between LLVM triples and Rust's
+    // `env::consts::ARCH`.
+    let arch_matches = match arch {
+        "x86_64" | "amd64" => host_arch == "x86_64",
+        "aarch64" | "arm64" => host_arch == "aarch64",
+        "i686" | "i386" | "x86" => host_arch == "x86",
+        "arm" => host_arch == "arm",
+        "riscv64" => host_arch == "riscv64",
+        "powerpc64" => host_arch == "powerpc64",
+        "mips64" => host_arch == "mips64",
+        "s390x" => host_arch == "s390x",
+        other => other == host_arch,
+    };
+    // The OS component must match too: `x86_64-unknown-linux-gnu` gcc on a
+    // Linux host is a plain host link; a mingw/darwin triple is not.
+    let host_os = std::env::consts::OS;
+    let os_matches = match host_os {
+        "linux" => os_and_env.contains("linux"),
+        "macos" => os_and_env.contains("darwin") || os_and_env.contains("macos"),
+        "windows" => os_and_env.contains("windows") || os_and_env.contains("mingw"),
+        "freebsd" => os_and_env.contains("freebsd"),
+        "netbsd" => os_and_env.contains("netbsd"),
+        "openbsd" => os_and_env.contains("openbsd"),
+        _ => false,
+    };
+    arch_matches && os_matches
+}
+
+/// Whether `triple` names an ELF platform (Linux/BSD/Solaris-style). Only
+/// ELF toolchains default to PIE executables, so only those need `-no-pie`.
+fn is_elf_triple(triple: &str) -> bool {
+    ["linux", "freebsd", "netbsd", "openbsd", "dragonfly", "solaris", "elf"]
+        .iter()
+        .any(|marker| triple.contains(marker))
 }
 
 /// Tries to find a suitable C linker on Unix-like systems.

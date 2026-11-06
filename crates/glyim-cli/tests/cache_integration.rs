@@ -280,6 +280,26 @@ fn different_target_misses() {
     assert_eq!(count_objects(cache.path()), 2);
 }
 
+/// Best-effort host target triple, mirroring `glyim_cli`'s default. The
+/// exec-emit cache contract is exercised against the *host* triple so the
+/// link step (and the actual run of the cached binary) works on every host —
+/// the old hardcoded `aarch64-apple-darwin` could only ever link on a macOS
+/// host, which made this test fail on Linux with
+/// `cc: error: unrecognized command-line option '-target'`.
+fn host_triple() -> String {
+    let arch = std::env::consts::ARCH;
+    let os = std::env::consts::OS;
+    match (arch, os) {
+        ("x86_64", "macos") => "x86_64-apple-darwin".to_string(),
+        ("aarch64", "macos") => "aarch64-apple-darwin".to_string(),
+        ("x86_64", "linux") => "x86_64-unknown-linux-gnu".to_string(),
+        ("aarch64", "linux") => "aarch64-unknown-linux-gnu".to_string(),
+        ("x86_64", "windows") => "x86_64-pc-windows-msvc".to_string(),
+        ("aarch64", "windows") => "aarch64-pc-windows-msvc".to_string(),
+        _ => format!("{}-{}", arch, os),
+    }
+}
+
 #[test]
 fn cache_hit_for_exec_produces_a_runnable_binary() {
     let work = Scratch::new("exec");
@@ -287,6 +307,7 @@ fn cache_hit_for_exec_produces_a_runnable_binary() {
     let src = work.path().join("main.g");
     std::fs::write(&src, "fn main() -> i32 { 7 }\n").unwrap();
 
+    let target = host_triple();
     let run_exec = |out: &str| {
         run(
             cache.path(),
@@ -299,26 +320,24 @@ fn cache_hit_for_exec_produces_a_runnable_binary() {
                 "--backend",
                 "llvm",
                 "--target",
-                "aarch64-apple-darwin",
+                &target,
             ],
         )
     };
-    let (_, _, ok) = run_exec("a");
-    assert!(ok, "cold exec must succeed");
+    let (_, stderr, ok) = run_exec("a");
+    assert!(
+        ok,
+        "cold exec must succeed (host target {target}); stderr:\n{stderr}"
+    );
 
     let (_, stderr, ok) = run_exec("b");
-    assert!(ok);
+    assert!(ok, "warm exec must succeed; stderr:\n{stderr}");
     assert!(stderr.contains("cache hit"), "warm exec must hit");
 
     let b = work.path().join("b");
     assert!(b.exists(), "cached exec must still produce a binary");
-    // Actually running the binary is only meaningful on the host triple;
-    // skip when cross-compiled (target != host). The key contract this test
-    // asserts is that a cache hit still runs the *link* step and yields an
-    // executable file, not a bare object.
-    let is_host_target = cfg!(all(target_os = "macos", target_arch = "aarch64"));
-    if is_host_target {
-        let status = Command::new(&b).status().expect("run cached binary");
-        assert_eq!(status.code(), Some(7), "cached binary must return 7");
-    }
+    // The cached binary is built for the host triple, so running it is
+    // meaningful everywhere (the run step is the point of this contract).
+    let status = Command::new(&b).status().expect("run cached binary");
+    assert_eq!(status.code(), Some(7), "cached binary must return 7");
 }
