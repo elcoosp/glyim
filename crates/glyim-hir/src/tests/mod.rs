@@ -2,6 +2,7 @@ mod async_desugar;
 mod expr_lowering;
 mod field_access;
 mod generic_in_module;
+mod gsx_lower;
 mod lower_comprehensive;
 mod lower_edge;
 mod lower_enum;
