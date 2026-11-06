@@ -64,6 +64,7 @@ pub fn check_function_body(
         trait_ctx: &trait_ctx,
         capture_log: Vec::new(),
         body_owner_map: &HashMap::new(),
+        impl_default_body_map: &HashMap::new(),
         param_map: HashMap::new(),
         pending_closure_expectation: None,
         in_callee_position: false,
