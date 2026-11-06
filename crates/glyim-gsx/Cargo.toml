@@ -1,0 +1,14 @@
+[package]
+name = "glyim-gsx"
+description = "GSX view pipeline: VIR, blueprints, slot analyses, patch generation and host emitters (docs/design/GSX-in-Glyim.md)"
+license.workspace = true
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+glyim-syntax = { workspace = true }
+glyim-span = { workspace = true }
+glyim-frontend = { workspace = true }
+
+[dev-dependencies]
+glyim-frontend = { workspace = true }
