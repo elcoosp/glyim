@@ -6,7 +6,8 @@
 // enum and a `poll` body that drives each suspended future and stores the
 // in-flight future + live locals across `Poll::Pending`, so the future
 // genuinely suspends and resumes. `two_step(1, 2)` => x=dep(1)=1, y=dep(2)=2,
-// x+y => 3.
+// x+y => 3, surfaced as the process exit code (`fn main() -> i32` — the same
+// contract as `run-pass/baseline_exit_42.g`).
 //
 // GATED TO LINUX: the pipeline links a native x86_64-unknown-linux-gnu binary,
 // so this only executes on that target (macOS/Windows runners Ignore it).
@@ -17,12 +18,12 @@
 // generated `FooState::S_k` enum's `Field` reads now use the same per-variant
 // layout table the aggregate writer uses. The harness compiles with the real
 // `LlvmBackend` on the `test-linux-runtime` (ubuntu-latest) job, links a
-// runnable ELF, and asserts it prints `3`. The MIR-interpreter proof
+// runnable ELF, and asserts it exits with `3`. The MIR-interpreter proof
 // (`glyim-pipeline::async_multi_await_runtime::m5_two_step_runtime_returns_3`)
 // also remains green.
 // test-mode: run-pass
 // only-target: x86_64-unknown-linux-gnu
-// check-stdout: 3
+// exit-code: 3
 enum Poll<T> { Ready(T), Pending }
 trait Future {
     type Output;

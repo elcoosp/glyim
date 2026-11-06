@@ -14,13 +14,13 @@
 // sees a raw `Infer(Int(_))` from an unsuffixed literal). On the
 // `test-linux-runtime` (ubuntu-latest) job the harness compiles with the real
 // `LlvmBackend` (feature `real-llvm` via `GLYIM_TEST_REAL_LLVM`), links a
-// runnable ELF, and asserts it prints `42`. Cross-compiling the same fixture
+// runnable ELF, and asserts it exits with `42`. Cross-compiling the same fixture
 // to `x86_64-unknown-linux-gnu` from a non-Linux host also produces a valid,
 // linkable ELF object today; only *running* it needs a Linux host (the
 // `only-target:` gate handles that).
 // test-mode: run-pass
 // only-target: x86_64-unknown-linux-gnu
-// check-stdout: 42
+// exit-code: 42
 
 enum Poll<T> { Ready(T), Pending }
 trait Future {

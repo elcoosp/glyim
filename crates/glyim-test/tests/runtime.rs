@@ -58,7 +58,7 @@ fn m5_two_step_multi_await_compiles_cleanly() {
     // executor is Linux-gated), so it does not execute there. On the
     // `test-linux-runtime` (ubuntu-latest) job the real `LlvmBackend` path
     // (enabled via `GLYIM_TEST_REAL_LLVM`) links a runnable ELF and the runner
-    // executes it; a wrong output or a `CompilationFailed` (no executable) is a
+    // executes it; a wrong exit code or a `CompilationFailed` (no executable) is a
     // genuine regression we MUST catch, so we no longer tolerate that failure
     // mode there.
     let real_llvm = std::env::var("GLYIM_TEST_REAL_LLVM").is_ok();
@@ -92,7 +92,7 @@ fn m5_two_step_multi_await_compiles_cleanly() {
     // other hosts the mock backend cannot link, so we accept `CompilationFailed`
     // (it only proves the compile/desugar contract, not native execution).
     match &two_step.outcome {
-        TestOutcome::Passed => { /* the real runtime proof: ran and printed 3 */ }
+        TestOutcome::Passed => { /* the real runtime proof: ran and exited with 3 */ }
         // On a non-Linux host the fixture's `only-target` gate matches
         // against the *host* triple, so a Linux-gated fixture is `Ignored`
         // rather than tried-and-failed. This is expected on macOS/Windows
@@ -123,7 +123,7 @@ fn m5_two_step_multi_await_compiles_cleanly() {
 fn m5_one_step_single_await_must_not_miscompile() {
     // Single-await is the verified-supported shape. On the Linux runner (real
     // LLVM backend via `GLYIM_TEST_REAL_LLVM`) it must produce a runnable ELF
-    // and execute it, printing `42`. A `CompilationFailed` (no executable
+    // and execute it, exiting with `42`. A `CompilationFailed` (no executable
     // produced) or a wrong-output `Failed` is a genuine regression — the
     // generic `Future`/`block_on` codegen gap is closed — and is no longer
     // tolerated there. On a non-Linux host the harness `Ignored` the fixture
@@ -143,7 +143,7 @@ fn m5_one_step_single_await_must_not_miscompile() {
         .expect("m5/one_step.g fixture must be discovered");
 
     match &one_step.outcome {
-        TestOutcome::Passed => { /* the real runtime proof: ran and printed 42 */ }
+        TestOutcome::Passed => { /* the real runtime proof: ran and exited with 42 */ }
         TestOutcome::Ignored => { /* non-Linux host: executor is Linux-gated */ }
         TestOutcome::Failed { reason } if !real_llvm => {
             assert!(
