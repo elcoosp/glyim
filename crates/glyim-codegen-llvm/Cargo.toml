@@ -4,6 +4,14 @@ license.workspace = true
 edition.workspace = true
 version.workspace = true
 
+[features]
+# Link llvm-sys against the shared libLLVM instead of the default static
+# archives. Build with `--features glyim-codegen-llvm/prefer-dynamic` on
+# memory-constrained hosts: statically linking every workspace test binary
+# against libLLVM needs ~1.5 GB per `ld` invocation, which OOMs small
+# machines. The default (static) is unchanged and is what CI uses.
+prefer-dynamic = ["inkwell/llvm23-1-force-dynamic"]
+
 [dependencies]
 inkwell = { workspace = true, features = ["llvm23-1"] }
 # Raw FFI bindings for the LLVM-C funclet (exception-handling) API, which
