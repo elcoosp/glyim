@@ -751,8 +751,82 @@ pub enum Expr {
         /// expr field.
         expr: ExprId,
     },
+    /// GSX view expression (GSX-in-Glyim §4.1, finding F7): the element
+    /// structure is preserved into the middle of the compiler — NOT desugared
+    /// to a call tree. The dedicated `glyim-gsx` stage lowers it to VIR/
+    /// blueprints/patches; typeck validates it against dialect schemas.
+    Gsx(Box<GsxExpr>),
     /// Variant.
     Err,
+}
+
+/// A GSX element in the HIR (§3): tag, attributes, children.
+#[derive(Clone, Debug)]
+pub struct GsxExpr {
+    /// Tag (classification per §3.2).
+    pub tag: GsxTag,
+    /// Attributes in source order.
+    pub attrs: Vec<GsxAttrHIR>,
+    /// Children in source order.
+    pub children: Vec<GsxChildHIR>,
+    /// Written as `<tag/>`.
+    pub self_closing: bool,
+}
+
+/// Tag classification (§3.2): intrinsic / dialect-namespaced / component.
+#[derive(Clone, Debug)]
+pub enum GsxTag {
+    /// Lowercase intrinsic — resolved through the dialect schema.
+    Intrinsic(Name),
+    /// `<ns:tag>` — host-specific element (§3.2).
+    Dialect(Name, Name),
+    /// Uppercase / path — resolved through the def-map like any item.
+    Component(Vec<Name>),
+}
+
+/// One attribute in the HIR.
+#[derive(Clone, Debug)]
+pub enum GsxAttrHIR {
+    /// `name=value`.
+    Plain {
+        /// Attribute name.
+        name: Name,
+        /// Value.
+        value: GsxAttrValue,
+    },
+    /// `ns:name=value` — `on:`/`class:`/`style:`/`bind:` directives (§3.2).
+    Directive {
+        /// Directive namespace (`on`, `class`, `style`, `bind`).
+        ns: Name,
+        /// Directive sub-name (`click`, `warn`, `width`, `value`).
+        name: Name,
+        /// Value.
+        value: GsxAttrValue,
+    },
+}
+
+/// An attribute value: constant string, bare (`= true`), or a hole expr.
+#[derive(Clone, Debug)]
+pub enum GsxAttrValue {
+    /// `="lit"` — the interned literal body.
+    Lit(Name),
+    /// Bare attribute — `true` (§3.2).
+    Bare,
+    /// `={expr}` — a hole expression allocated in the body.
+    Expr(ExprId),
+}
+
+/// One child of a GSX element in the HIR.
+#[derive(Clone, Debug)]
+pub enum GsxChildHIR {
+    /// Text is always a string literal (§3.2); the interned content keeps
+    /// interpolation holes verbatim (`"Count: {s.count}"`) — the GSX stage
+    /// splits them at VIR time.
+    Text(Name),
+    /// `{expr}` dynamic child (§3.2).
+    Expr(ExprId),
+    /// A nested element.
+    Node(Box<GsxExpr>),
 }
 
 #[derive(Clone, Debug)]
