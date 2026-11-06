@@ -379,16 +379,6 @@ pub fn typeck_crate(
     // concrete impl function must translate through this map to hit the MIR
     // body key actually stored during monomorphization.
     let mut body_owner_map: HashMap<glyim_hir::BodyId, LocalDefId> = HashMap::new();
-    // KNOWN_GAPS §3.9 (this session): trait default bodies are checked
-    // once per implementing impl (with `Self` bound to that impl's self
-    // type), each check allocating its own `LocalDefId`. Only the last
-    // entry survived in `body_owner_map` (keyed by the HIR `BodyId`
-    // alone), so a trait-default method dispatched to whichever impl's
-    // concretization was checked last — correct only by accident of
-    // source order. Key the per-impl copies by (impl item, method)
-    // so method dispatch can select the exact specialization.
-    let mut impl_default_body_map: HashMap<(glyim_hir::ItemId, Name), LocalDefId> =
-        HashMap::new();
 
     let local_krate = def_map.krate;
 
@@ -1125,7 +1115,6 @@ pub fn typeck_crate(
         def_map.root,
         &mut next_local_def_id,
         &mut body_owner_map,
-        &mut impl_default_body_map,
     );
 
     check_fn_items_in_module(
@@ -1144,7 +1133,6 @@ pub fn typeck_crate(
         def_map.root,
         &mut next_local_def_id,
         &mut body_owner_map,
-        &mut impl_default_body_map,
     );
 
     // Zonk the ADT definitions' field types through the inference table
@@ -1402,7 +1390,6 @@ fn pre_allocate_impl_method_ids(
     module_id: ModuleId,
     next_local_def_id: &mut u32,
     body_owner_map: &mut HashMap<glyim_hir::BodyId, LocalDefId>,
-    _impl_default_body_map: &mut HashMap<(glyim_hir::ItemId, Name), LocalDefId>,
 ) {
     for item_id in item_ids {
         let item = match hir.items.get(*item_id) {
@@ -1492,7 +1479,6 @@ fn pre_allocate_impl_method_ids(
                         child_mod,
                         next_local_def_id,
                         body_owner_map,
-                        _impl_default_body_map,
                     );
                 }
             }
@@ -1526,7 +1512,6 @@ fn check_fn_items_in_module(
     module_id: ModuleId,
     next_local_def_id: &mut u32,
     body_owner_map: &mut HashMap<glyim_hir::BodyId, LocalDefId>,
-    impl_default_body_map: &mut HashMap<(glyim_hir::ItemId, Name), LocalDefId>,
 ) {
     for item_id in item_ids {
         let item = match hir.items.get(*item_id) {
@@ -1610,7 +1595,6 @@ fn check_fn_items_in_module(
                         def_map,
                         trait_ctx,
                         body_owner_map,
-                        impl_default_body_map,
                         all_expr_types,
                         module_id,
                         &f.generic_params,
@@ -1770,7 +1754,6 @@ fn check_fn_items_in_module(
                         child_mod,
                         next_local_def_id,
                         body_owner_map,
-                        impl_default_body_map,
                     );
                 }
             }
@@ -1960,7 +1943,6 @@ fn check_fn_items_in_module(
                             def_map,
                             trait_ctx,
                             body_owner_map,
-                            &*impl_default_body_map,
                             all_expr_types,
                             module_id,
                             &combined_generics,
@@ -2032,7 +2014,6 @@ fn check_fn_items_in_module(
                         let saved_thir_len = thir_bodies.len();
                         let saved_obligations_len = all_obligations.len();
                         body_owner_map.insert(body_id, local_def_id);
-                        impl_default_body_map.insert((*item_id, tm.name), local_def_id);
                         let sig = tyconv::resolve_fn_sig(
                             ctx,
                             infer,
@@ -2094,7 +2075,6 @@ fn check_fn_items_in_module(
                             def_map,
                             trait_ctx,
                             body_owner_map,
-                            &*impl_default_body_map,
                             all_expr_types,
                             module_id,
                             &combined_generics,
@@ -2378,7 +2358,6 @@ fn check_body(
     def_map: &glyim_def_map::CrateDefMap,
     trait_ctx: &TraitContext,
     body_owner_map: &HashMap<glyim_hir::BodyId, LocalDefId>,
-    impl_default_body_map: &HashMap<(glyim_hir::ItemId, Name), LocalDefId>,
     expr_types: &mut HashMap<LocalDefId, HashMap<ExprId, Ty>>,
     module_id: glyim_def_map::ModuleId,
     // Generic parameters in scope for this body (fn-level, plus impl-level for
@@ -2426,7 +2405,6 @@ fn check_body(
         trait_ctx,
         capture_log: Vec::new(),
         body_owner_map,
-        impl_default_body_map,
         param_map: body_param_map,
         pending_closure_expectation: None,
         in_callee_position: false,
