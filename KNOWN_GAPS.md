@@ -5609,6 +5609,52 @@ remains for genuinely unexpected cases (non-ADT, non-tuple, non-Unit).
 
 #### 3.9 — OPEN (ICE): assoc-type projection from `<T as Iterator>::Item` reaches LLVM
 
+**Session-34 RESOLUTION — the *interp runtime half* is CLOSED.**
+
+The slice-iterator runtime panic (`behavior/slice_iter_next.g`:
+interp exit 101 "deref of Ref from dead frame 1" vs LLVM exit 10) is
+fixed. The assoc-type projection ICE further down this entry
+(`&[T].into_iter()` mismatched-types / `TyKind::Projection reached LLVM
+codegen`) is a separate, still-open item.
+
+What was actually wrong (found with a live `GLYIM_INTERP_TRACE` run,
+after five sessions of static-analysis hypotheses):
+
+1. **`next`'s returned `&T` pointed at the dying callee frame.** The
+   stdlib body binds `let cur: &[T] = *self;` — the interpreter's
+   fat-pointer value model copies the slice *elements* into `next`'s
+   frame — and returns `&cur[0]`, a `Ref{frame: 1, local: cur,
+   projection: [Deref, Index(0)]}`. When `next` popped, every later
+   deref hit the dead-frame check. Fix: the return path now *archives*
+   any popped frame whose return value still references it
+   (`Interpreter::dead_frames`, bounded at 256) and
+   `locals_for_ref_frame` / `decls_for_ref_frame` consult the archive —
+   reads observe the values as of the return (what LLVM's stack layout
+   produces); writes through a dead-frame ref still fail.
+
+2. **Derefs ignored the `Ref`'s own projection.** Both `read_place`'s
+   `Deref` arm and `eval_unary_op`'s `UnOp::Deref` fetched the whole
+   pointee and dropped `projection`, so `*x` yielded the entire slice
+   aggregate instead of element 0. `read_place` now splices the ref's
+   projection in front of the reader's remaining steps (with per-step
+   frame tracking for `Index` operands, which live in the ref's origin
+   frame), and `eval_unary_op` routes through the new
+   `deref_ref_value` helper that replays `Deref`/`Field`/`Index`.
+
+3. The `slice_length_from_value` array-vs-fat-pointer shape
+   discriminator from session 34's earlier WIP was kept (it is
+   correct: a bare `[10, 20, 30]` aggregate is not `(ptr, len)`), and
+   the unconditional `[DBG-LEN]` stderr spam it shipped with was
+   removed.
+
+Verified: `run_pass_corpus` 0 failures (283 fixtures; 54 `needs-llvm`
+ignored by contract), and the differential gate
+(`llvm_and_interp_agree_on_run_pass_corpus` + `..._run_fail_corpus`)
+passes with the real LLVM backend — both backends agree on exit code
+and stdout for every comparable fixture. The duplicated session-33
+wrap blocks in this entry were collapsed to one copy.
+
+
 **Session-31 scope correction (2026-11-03).** The generic title overstates
 what's broken. Precise probe matrix:
 
@@ -6194,77 +6240,6 @@ Either way: bounded, isolated to the interp crate, and diagnosed down
 to the exact operation. LLVM path works; interp needs one focused
 session.
 
-**Session-33 final wrap: interp bug needs its own session.**
-
-Reading the MIR for `Iter::next` in the failing case shows the interp
-is following the correct structural flow:
-- `Deref(local 1: &mut &[T])` → `&[T]` (cur)
-- `Call is_empty(cur)` → bool
-- If not empty: `Len(cur)`, `Copy(cur, [Deref, Field(0)])` to compute
-  first + rest, `Some(first)`
-
-Neither `Len` nor `Field(0)` on a slice is broken in isolation — session
-32 probes confirmed `s[0]` and `s.len()` both work directly. And
-`a1: s.iter().len()` works.
-
-The panic path is: `LtEq(1, Len(cur))` returns false → `Assert(BoundsCheck)`
-fires. That means `Len(cur)` returns 0 for a non-empty slice, and only
-in the autoref'd `&mut &[T]` context (direct `s.len()` works because
-`local_decls[place.local].ty` matches the direct-Slice arm; here it's
-`Ref(Slice)` and might be going through the wrong branch of `Len`'s
-type match).
-
-**Concrete fix recipe for next session.** In
-`crates/glyim-mir-interp/src/lib.rs`, instrument the `Rvalue::Len` arm's
-`ty_kind` match to log which branch fires for `Iter::next`'s
-`Len(Place{local: 3, [Deref]})`. If it lands on the `Slice(_)` branch
-instead of `Ref(Slice(_))` (or vice versa) and returns 0, that's the
-bug — the `read_place` result's `slice_length_from_value` is being
-computed from the wrong representation.
-
-Alternatively, check `is_empty`'s interp impl — if it returns true when
-it should return false, the whole "not empty" branch runs and `Len` on
-the empty representation returns 0.
-
-Either way: bounded, isolated to the interp crate, and diagnosed down
-to the exact operation. LLVM path works; interp needs one focused
-session.
-
-**Session-33 final wrap: interp bug needs its own session.**
-
-Reading the MIR for `Iter::next` in the failing case shows the interp
-is following the correct structural flow:
-- `Deref(local 1: &mut &[T])` → `&[T]` (cur)
-- `Call is_empty(cur)` → bool
-- If not empty: `Len(cur)`, `Copy(cur, [Deref, Field(0)])` to compute
-  first + rest, `Some(first)`
-
-Neither `Len` nor `Field(0)` on a slice is broken in isolation — session
-32 probes confirmed `s[0]` and `s.len()` both work directly. And
-`a1: s.iter().len()` works.
-
-The panic path is: `LtEq(1, Len(cur))` returns false → `Assert(BoundsCheck)`
-fires. That means `Len(cur)` returns 0 for a non-empty slice, and only
-in the autoref'd `&mut &[T]` context (direct `s.len()` works because
-`local_decls[place.local].ty` matches the direct-Slice arm; here it's
-`Ref(Slice)` and might be going through the wrong branch of `Len`'s
-type match).
-
-**Concrete fix recipe for next session.** In
-`crates/glyim-mir-interp/src/lib.rs`, instrument the `Rvalue::Len` arm's
-`ty_kind` match to log which branch fires for `Iter::next`'s
-`Len(Place{local: 3, [Deref]})`. If it lands on the `Slice(_)` branch
-instead of `Ref(Slice(_))` (or vice versa) and returns 0, that's the
-bug — the `read_place` result's `slice_length_from_value` is being
-computed from the wrong representation.
-
-Alternatively, check `is_empty`'s interp impl — if it returns true when
-it should return false, the whole "not empty" branch runs and `Len` on
-the empty representation returns 0.
-
-Either way: bounded, isolated to the interp crate, and diagnosed down
-to the exact operation. LLVM path works; interp needs one focused
-session.
 **Fix recipe.** Compare the interpreter's execution of the post-fix
 MIR for `Iter::next` against the same MIR under a `Debug` walker (if
 the crate has one). Any divergence in the value of the `&mut self`
