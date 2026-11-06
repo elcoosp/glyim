@@ -1660,7 +1660,7 @@ impl<'a> FnCtxt<'a> {
                 // params are seeded from the expected `fn(..)` signature, and
                 // (b) unify each arg against after checking it.
                 let has_closure_arg = args.iter().any(|&a| matches!(&self.body.exprs[a], Expr::Closure { .. }));
-                let (ret_ty, method_formals, method_own_generics, dispatch, callee_subst_override) =
+                let (ret_ty, method_formals, method_own_generics, dispatch) =
                     self.resolve_method_call(recv_ty, *method, span, has_closure_arg);
                 let ret_ty = self.extract_return_ty(ret_ty, span);
                 // Builtin method sigs list ONLY the explicit args (the
@@ -1756,21 +1756,6 @@ impl<'a> FnCtxt<'a> {
                                             _ => None,
                                         })
                                 });
-                            if dbg_flags::cand_push() {
-                                let mn = self.ctx.name_str(*method).to_string();
-                                if matches!(mn.as_str(), "first" | "last" | "next" | "split_first")
-                                {
-                                    let fk = formal_first
-                                        .map(|f| PrintTy::new(f, &*self.ctx).to_string())
-                                        .unwrap_or_else(|| "<none>".into());
-                                    let rk =
-                                        PrintTy::new(recv_expr.ty, &*self.ctx).to_string();
-                                    eprintln!(
-                                        "[AUTOREF] method={} formal={} recv={}",
-                                        mn, fk, rk
-                                    );
-                                }
-                            }
                             let formal_ref_mutability: Option<glyim_core::primitives::Mutability> =
                                 formal_first.and_then(|t| match self.ctx.ty_kind(t) {
                                     TyKind::Ref(_, _, m) => Some(*m),
@@ -1789,36 +1774,14 @@ impl<'a> FnCtxt<'a> {
                             // expected a thin `ptr`, producing a SIGBUS on
                             // arm64. Fix: wrap unless the pointee already
                             // matches.
-                            // KNOWN_GAPS §3.9 (this session, pre-existing on
-                            // HEAD): the pass-through comparison used raw `Ty`
-                            // handle equality against the *registered* (still
-                            // generic) signature. For slice.g's
-                            // `impl<T> [T] { fn first(&self) -> Option<&T> }`
-                            // the formal is `&[Param(T)]` while the receiver is
-                            // `&[i32]` — unequal handles — so the receiver was
-                            // wrapped into `&&[i32]` (a thin pointer to a fat
-                            // struct) while the monomorphized callee expects
-                            // the fat `&[i32]` BY VALUE. On x86_64 the callee
-                            // then read the fat struct's data pointer as the
-                            // slice length: `s.first()` / `s.last()` /
-                            // `s.split_first()` returned garbage or segfaulted.
-                            // Compare through the inference table and a
-                            // snapshot-probed unification instead, so a generic
-                            // formal unifies with the concrete receiver.
                             let pass_through = formal_first
-                                .map(|f_raw| {
-                                    let f = self
-                                        .infer
-                                        .resolve_ty_shallow(self.ctx, f_raw);
-                                    let r = self
-                                        .infer
-                                        .resolve_ty_shallow(self.ctx, recv_expr.ty);
-                                    if f == r {
+                                .map(|f| {
+                                    if f == recv_expr.ty {
                                         return true;
                                     }
                                     match (
                                         self.ctx.ty_kind(f),
-                                        self.ctx.ty_kind(r),
+                                        self.ctx.ty_kind(recv_expr.ty),
                                     ) {
                                         (
                                             TyKind::Ref(
@@ -1831,23 +1794,7 @@ impl<'a> FnCtxt<'a> {
                                                 recv_inner,
                                                 glyim_core::primitives::Mutability::Mut,
                                             ),
-                                        ) => self.probe_types_compatible(
-                                            *recv_inner,
-                                            *formal_inner,
-                                            0,
-                                        ),
-                                        // Same-shape refs (`&X` / `&mut X`):
-                                        // pass through when the pointees
-                                        // are shape-compatible. This is what
-                                        // lets the fat `&[i32]` receiver match
-                                        // the generic `&[T]` formal instead of
-                                        // being re-wrapped.
-                                        (
-                                            TyKind::Ref(_, _, fm),
-                                            TyKind::Ref(_, _, rm),
-                                        ) if fm == rm => {
-                                            self.probe_types_compatible(r, f, 0)
-                                        }
+                                        ) => formal_inner == recv_inner,
                                         _ => false,
                                     }
                                 })
@@ -2040,53 +1987,24 @@ impl<'a> FnCtxt<'a> {
                         // the resulting `Param(i)` uses the *whole* map's
                         // index space. So the whole-map substitution is the
                         // correct one.
-                        // KNOWN_GAPS §3.9 (this session): a trait DEFAULT
-                        // method body's generic parameter space is the
-                        // *trait's* generics (`[Self]`), not the receiver's
-                        // ADT arguments. When the candidate carried an
-                        // explicit callee substitution, use it verbatim for
-                        // BOTH the return-type substitution map and the
-                        // callee `FnDef` substitution, instead of the Script
-                        // 655 receiver-derived substitution (which would
-                        // substitute `Self := i32` into
-                        // `fn last(self) -> Option<Self::Item>` for an
-                        // `Iter<i32>` receiver — a garbage dispatch).
-                        let override_resolved: Option<Vec<GenericArg>> =
-                            callee_subst_override.as_ref().map(|args| {
-                                args.iter()
-                                    .map(|a| match a {
-                                        GenericArg::Ty(t) => GenericArg::Ty(
-                                            self.infer.resolve_ty_shallow(self.ctx, *t),
-                                        ),
-                                        other => other.clone(),
-                                    })
-                                    .collect()
-                            });
-                        let full_map: std::collections::HashMap<u32, GenericArg> =
-                            if let Some(ov) = &override_resolved {
-                                ov.iter()
-                                    .enumerate()
-                                    .map(|(i, a)| (i as u32, a.clone()))
-                                    .collect()
-                            } else {
-                                let mut m: std::collections::HashMap<u32, GenericArg> =
-                                    impl_part
-                                        .iter()
-                                        .enumerate()
-                                        .map(|(i, a)| (i as u32, a.clone()))
-                                        .collect();
-                                for (i, a) in method_own_generics.iter().enumerate() {
-                                    let idx = (impl_part.len() + i) as u32;
-                                    let resolved = match a {
-                                        GenericArg::Ty(t) => GenericArg::Ty(
-                                            self.infer.resolve_ty_shallow(self.ctx, *t),
-                                        ),
-                                        other => other.clone(),
-                                    };
-                                    m.insert(idx, resolved);
-                                }
-                                m
-                            };
+                        let full_map: std::collections::HashMap<u32, GenericArg> = {
+                            let mut m: std::collections::HashMap<u32, GenericArg> = impl_part
+                                .iter()
+                                .enumerate()
+                                .map(|(i, a)| (i as u32, a.clone()))
+                                .collect();
+                            for (i, a) in method_own_generics.iter().enumerate() {
+                                let idx = (impl_part.len() + i) as u32;
+                                let resolved = match a {
+                                    GenericArg::Ty(t) => GenericArg::Ty(
+                                        self.infer.resolve_ty_shallow(self.ctx, *t),
+                                    ),
+                                    other => other.clone(),
+                                };
+                                m.insert(idx, resolved);
+                            }
+                            m
+                        };
                         let ret_ty = self.ctx.subst_ty(ret_ty, &full_map);
                         // Resolve any `Infer(TyVar)` that remains. The
                         // sig's `output` for a method whose return type is
@@ -2121,16 +2039,6 @@ impl<'a> FnCtxt<'a> {
                                 other => other.clone(),
                             })
                             .collect();
-                        // KNOWN_GAPS §3.9 (continued): reuse the resolved
-                        // override for the callee `FnDef` substitution.
-                        let (impl_part, method_part_resolved): (
-                            Vec<GenericArg>,
-                            Vec<GenericArg>,
-                        ) = if let Some(ov) = &override_resolved {
-                            (Vec::new(), ov.clone())
-                        } else {
-                            (impl_part, method_part_resolved)
-                        };
                         let mut all_substs = impl_part;
                         all_substs.extend(method_part_resolved);
 
@@ -3290,6 +3198,16 @@ impl<'a> FnCtxt<'a> {
             }
 
             Expr::Err => (thir::Expr::err(span), Ty::ERROR),
+
+            // GSX view expression (GSX-in-Glyim §4.1): `check_gsx` validates
+            // the element against its dialect schema (props, events, content
+            // model — §5) and checks every hole expression. The element's
+            // *value* is compiled by the dedicated `glyim-gsx` stage; when
+            // that stage has not run, this is a clean diagnostic (same
+            // contract as `await` reaching typeck without desugaring), never
+            // an ICE.
+            Expr::Gsx(g) => self.check_gsx(g, span),
+
             // Defensive: `await` must be desugared to a poll loop by the async
             // desugaring pass (`lower_async`) before type-checking. If it
             // survives, the desugar pass did not run — treat as an error rather
@@ -4157,18 +4075,7 @@ impl<'a> FnCtxt<'a> {
         method_name: Name,
         span: Span,
         need_formals: bool,
-    ) -> (
-        Ty,
-        Vec<Ty>,
-        Vec<GenericArg>,
-        Option<MethodDispatch>,
-        // KNOWN_GAPS §3.9: callee-substitution override for trait DEFAULT
-        // method bodies. `Some(args)` means "the callee's generic parameter
-        // space is the trait's generics; use these args instead of deriving
-        // them from the receiver's ADT substitution". `None` keeps the
-        // Script 655 receiver-derived behavior.
-        Option<Vec<GenericArg>>,
-    ) {
+    ) -> (Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>) {
         // §9.1 / §9.2: collect *every* impl whose Self type unifies with the
         // receiver and that defines `method_name`. If more than one matches,
         // this is an ambiguous method call — surface all candidates (rustc's
@@ -4207,7 +4114,6 @@ impl<'a> FnCtxt<'a> {
                         Vec::new(),
                         Vec::new(),
                         Some(MethodDispatch::PtrArith(PtrArithOp::IsNull, inner_ty)),
-                        None,
                     );
                 }
                 "is_not_null" => {
@@ -4216,7 +4122,6 @@ impl<'a> FnCtxt<'a> {
                         Vec::new(),
                         Vec::new(),
                         Some(MethodDispatch::PtrArith(PtrArithOp::IsNotNull, inner_ty)),
-                        None,
                     );
                 }
                 "addr" => {
@@ -4228,12 +4133,11 @@ impl<'a> FnCtxt<'a> {
                         Vec::new(),
                         Vec::new(),
                         Some(MethodDispatch::PtrArith(PtrArithOp::Addr, inner_ty)),
-                        None,
                     );
                 }
                 "add" | "sub" => {
                     // `p.add(n)` / `p.sub(n)` preserve the receiver's pointer type.
-                    return (recv_ty, Vec::new(), Vec::new(), None, None);
+                    return (recv_ty, Vec::new(), Vec::new(), None);
                 }
                 "as_ptr" => {
                     // `*mut T` -> `*const T`; `*const T` -> itself.
@@ -4244,7 +4148,7 @@ impl<'a> FnCtxt<'a> {
                         )),
                         glyim_core::primitives::Mutability::Not => recv_ty,
                     };
-                    return (new_ty, Vec::new(), Vec::new(), None, None);
+                    return (new_ty, Vec::new(), Vec::new(), None);
                 }
                 "as_mut_ptr" => {
                     // `*const T` -> `*mut T` (unsafe); `*mut T` -> itself.
@@ -4255,7 +4159,7 @@ impl<'a> FnCtxt<'a> {
                         )),
                         glyim_core::primitives::Mutability::Mut => recv_ty,
                     };
-                    return (new_ty, Vec::new(), Vec::new(), None, None);
+                    return (new_ty, Vec::new(), Vec::new(), None);
                 }
                 _ => {}
             }
@@ -4278,8 +4182,8 @@ impl<'a> FnCtxt<'a> {
         ];
 
         let recv_is_param = matches!(self.ctx.ty_kind(recv_ty), TyKind::Param(_));
-        let collect_for = |this: &mut Self, step_ty: Ty| -> Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>, Option<Vec<GenericArg>>)> {
-            let mut found: Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>, Option<Vec<GenericArg>>)> = Vec::new();
+        let collect_for = |this: &mut Self, step_ty: Ty| -> Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>)> {
+            let mut found: Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>)> = Vec::new();
             for (_id, item) in this.hir.items.iter_enumerated() {
                 if let glyim_hir::ItemKind::Impl(impl_item) = &item.kind {
                     // Instantiate the impl's generic params with *fresh
@@ -4413,21 +4317,6 @@ impl<'a> FnCtxt<'a> {
                                 let ty = this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)));
                                 method_pm.insert(gp.name, ty);
                             }
-                            // KNOWN_GAPS §3.9 (this session): make the impl's
-                            // probe-bound self type visible to type resolution
-                            // as `Self`. Without it, `Self::Item` in the
-                            // method's return type (`fn next(&mut self) ->
-                            // Option<Self::Item>` on `impl Iterator for
-                            // Iter<'a, T>`) falls through to the abstract
-                            // `<Self as Trait>::Item` projection and the call
-                            // site sees a non-derefable raw projection instead
-                            // of the impl's concrete `&'a T`. The tyconv
-                            // `Self::X` branch normalizes through the impl's
-                            // registered assoc table with a deep impl-param
-                            // substitution, so the returned type is the impl's
-                            // concrete `Item` specialized to this receiver.
-                            let self_pm_name = this.ctx.resolver().intern("Self");
-                            method_pm.insert(self_pm_name, impl_self_ty);
                             let return_ty = if let Some(return_ty_ref) = &method.return_ty {
                                 crate::tyconv::resolve_type_ref(
                                     this.ctx,
@@ -4480,17 +4369,13 @@ impl<'a> FnCtxt<'a> {
                             });
                             if dbg_flags::cand_push() {
                                 let mn = this.ctx.name_str(method_name).to_string();
-                                if matches!(
-                                    mn.as_str(),
-                                    "len" | "next" | "count" | "last" | "fold" | "into_iter"
-                                ) {
+                                if mn == "len" {
                                     let step_kind = format!("{:?}", this.ctx.ty_kind(step_ty));
                                     let self_kind = format!("{:?}", this.ctx.ty_kind(impl_self_ty));
                                     let hir_kind = format!("{:?}", impl_item.self_ty);
-                                    let ret_kind = format!("{:?}", this.ctx.ty_kind(return_ty));
                                     eprintln!(
-                                        "[CAND] method={} step_ty={} hir_self={} resolved={} ret={}",
-                                        mn, step_kind, hir_kind, self_kind, ret_kind
+                                        "[CAND] method={} step_ty={} hir_self={} resolved={}",
+                                        mn, step_kind, hir_kind, self_kind
                                     );
                                 }
                             }
@@ -4547,7 +4432,7 @@ impl<'a> FnCtxt<'a> {
                                         .unwrap_or(GenericArg::Ty(Ty::ERROR))
                                 })
                                 .collect();
-                            found.push((impl_self_ty, return_ty, formal_tys, method_own_generics, dispatch, None));
+                            found.push((impl_self_ty, return_ty, formal_tys, method_own_generics, dispatch));
                         }
                     }
                     // If this impl matched the receiver's self-type but had
@@ -4655,18 +4540,12 @@ impl<'a> FnCtxt<'a> {
         {
             for &step in steps.iter().chain(autoref_steps.iter()) {
                 if let Some((out_ty, fn_id)) = self.try_builtin_method(step, method_name) {
-                    return (
-                        out_ty,
-                        Vec::new(),
-                        Vec::new(),
-                        Some(MethodDispatch::Builtin(fn_id)),
-                        None,
-                    );
+                    return (out_ty, Vec::new(), Vec::new(), Some(MethodDispatch::Builtin(fn_id)));
                 }
             }
         }
 
-        let mut candidates: Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>, Option<Vec<GenericArg>>)> = Vec::new();
+        let mut candidates: Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>)> = Vec::new();
         for &step in steps.iter().chain(autoref_steps.iter()) {
             let found = collect_for(self, step);
             if !found.is_empty() {
@@ -4682,13 +4561,7 @@ impl<'a> FnCtxt<'a> {
             // applies to type-parameter receivers.
             for &step in steps.iter().chain(autoref_steps.iter()) {
                 if let Some((out_ty, fn_id)) = self.try_builtin_method(step, method_name) {
-                    return (
-                        out_ty,
-                        Vec::new(),
-                        Vec::new(),
-                        Some(MethodDispatch::Builtin(fn_id)),
-                        None,
-                    );
+                    return (out_ty, Vec::new(), Vec::new(), Some(MethodDispatch::Builtin(fn_id)));
                 }
             }
             // Concrete ADT receiver with `impl Trait for Self`: resolve inherited
@@ -4696,42 +4569,18 @@ impl<'a> FnCtxt<'a> {
             // — e.g. `Stdout: Write` inherits `write_all` from `trait Write`. The
             // impl-scan above only sees methods declared directly in the
             // `impl Write for Stdout` block, so defaults fall through here.
-            // KNOWN_GAPS §3.9 (this session): the fallback previously ran only
-            // for `Adt` receivers, so a trait DEFAULT method (`count`, `fold`,
-            // `collect`, …) on a slice-iterator receiver (`s.iter().count()`
-            // where the builtin `iter` hands back `&[i32]`) was unreachable —
-            // `impl<'a, T> Iterator for &'a [T]` is a Ref-shaped self type.
-            // Run it for any non-param receiver; the per-impl probe-unify
-            // below rejects non-matching impls without side effects.
-            if !matches!(self.ctx.ty_kind(recv_ty), TyKind::Param(_) | TyKind::Infer(_)) {
+            if let glyim_type::TyKind::Adt(_adt_id, _recv_subst) = self.ctx.ty_kind(recv_ty) {
                 let self_name = self.ctx.resolver().intern("Self");
+                let mut pm: HashMap<Name, Ty> = HashMap::new();
+                pm.insert(self_name, recv_ty);
                 let recv_ty_copy = recv_ty;
-                'concrete: for (concrete_item_id, item) in
-                    self.hir.items.iter_enumerated()
-                {
+                'concrete: for item in self.hir.items.iter() {
                     if let glyim_hir::ItemKind::Impl(impl_item) = &item.kind {
                         let Some(trait_path) = &impl_item.trait_ref else {
                             continue;
                         };
-                        // KNOWN_GAPS §3.9 (this session): probe with *fresh
-                        // inference vars* for the impl's generics (mirroring
-                        // `collect_for`), not rigid `Param`s. The rigid probe
-                        // could not unify a generic impl (`impl<'a, T>
-                        // Iterator for Iter<'a, T>`) against the concrete
-                        // receiver (`Iter<Erased, i32>`), so trait DEFAULT
-                        // methods (`count`, `fold`, `collect`, …) were
-                        // unreachable on any generic impl's receiver — and
-                        // the lenient-ADT-unify path that DID fire for `last`
-                        // dispatched the generic body without a `Self`
-                        // substitution (a runtime segfault).
-                        let mut param_map: HashMap<Name, Ty> = HashMap::new();
-                        for gp in impl_item.generic_params.iter() {
-                            let var = self.infer.new_ty_var(self.ctx);
-                            param_map.insert(
-                                gp.name,
-                                self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var))),
-                            );
-                        }
+                        let param_map =
+                            crate::tyconv::build_param_tys(self.ctx, &impl_item.generic_params);
                         let impl_self_ty = crate::tyconv::resolve_type_ref(
                             self.ctx,
                             self.infer,
@@ -4741,13 +4590,9 @@ impl<'a> FnCtxt<'a> {
                             &param_map,
                             span,
                         );
-                        // Probe receiver compatibility without committing
-                        // diagnostics; the surviving bindings carry the
-                        // impl's generics for the return-type resolution
-                        // below.
+                        // Probe receiver compatibility without committing diagnostics.
                         let inf_snap = self.infer.snapshot();
                         let diag_len = self.diagnostics.len();
-                        let pushed_before = candidates.len();
                         let ok = self.unify(recv_ty_copy, impl_self_ty, span);
                         if !ok {
                             self.infer.rollback_to(inf_snap);
@@ -4760,16 +4605,8 @@ impl<'a> FnCtxt<'a> {
                             trait_path,
                             span,
                         ) else {
-                            self.infer.rollback_to(inf_snap);
-                            self.diagnostics.truncate(diag_len);
                             continue;
                         };
-                        // Return-type parameter map: the impl's (now bound)
-                        // generics plus `Self` → the impl's self type, so
-                        // `Self::Item` in a default method's signature
-                        // resolves through the impl's registered assoc table.
-                        let mut pm: HashMap<Name, Ty> = param_map.clone();
-                        pm.insert(self_name, impl_self_ty);
                         // Prefer an impl-provided override of the method.
                         for m in &impl_item.methods {
                             if m.name == method_name {
@@ -4792,11 +4629,6 @@ impl<'a> FnCtxt<'a> {
                                     } else {
                                         Ty::UNIT
                                     };
-                                    // The override body's registered generic
-                                    // params are [impl generics, method
-                                    // generics]; the call site derives that
-                                    // substitution from the receiver (Script
-                                    // 655). No override needed.
                                     candidates.push((
                                         recv_ty,
                                         return_ty,
@@ -4805,7 +4637,6 @@ impl<'a> FnCtxt<'a> {
                                         Some(MethodDispatch::Static(FnDefId::from_raw(
                                             local.to_raw(),
                                         ))),
-                                        None,
                                     ));
                                     break 'concrete;
                                 }
@@ -4833,60 +4664,8 @@ impl<'a> FnCtxt<'a> {
                                 }
                                 for m in &ti.methods {
                                     if m.name == method_name {
-                                        // KNOWN_GAPS §3.9 (this session): a
-                                        // trait default method can declare its
-                                        // OWN generic parameters (`fn fold<B>
-                                        // (self, init: B, ..) -> B`). Give them
-                                        // fresh inference vars in the signature
-                                        // map and carry them out as the
-                                        // candidate's method-level generics so
-                                        // the call site substitutes them.
-                                        let mut method_own: Vec<GenericArg> = Vec::new();
-                                        for gp in m.generic_params.iter() {
-                                            let v = self.infer.new_ty_var(self.ctx);
-                                            let var_ty =
-                                                self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)));
-                                            pm.insert(gp.name, var_ty);
-                                            method_own.push(GenericArg::Ty(var_ty));
-                                        }
-                                        // Expected formal types for the call-site
-                                        // argument unification (skip the `self`
-                                        // parameter, mirroring `collect_for`).
-                                        let self_param_name =
-                                            self.ctx.resolver().intern("self");
-                                        let skip_self = if m
-                                            .params
-                                            .first()
-                                            .map(|pp| pp.name == self_param_name)
-                                            .unwrap_or(false)
-                                        {
-                                            1
-                                        } else {
-                                            0
-                                        };
-                                        let formals: Vec<Ty> = m
-                                            .params
-                                            .iter()
-                                            .skip(skip_self)
-                                            .map(|pp| match &pp.ty {
-                                                Some(tr) => crate::tyconv::resolve_type_ref(
-                                                    self.ctx,
-                                                    self.infer,
-                                                    self.def_map,
-                                                    self.diagnostics,
-                                                    tr,
-                                                    &pm,
-                                                    span,
-                                                ),
-                                                None => {
-                                                    let v = self.infer.new_ty_var(self.ctx);
-                                                    self.ctx
-                                                        .mk_ty(TyKind::Infer(InferVar::Ty(v)))
-                                                }
-                                            })
-                                            .collect();
                                         let return_ty = if let Some(rt) = &m.return_ty {
-                                            let raw = crate::tyconv::resolve_type_ref(
+                                            crate::tyconv::resolve_type_ref(
                                                 self.ctx,
                                                 self.infer,
                                                 self.def_map,
@@ -4894,44 +4673,10 @@ impl<'a> FnCtxt<'a> {
                                                 rt,
                                                 &pm,
                                                 span,
-                                            );
-                                            // KNOWN_GAPS §3.9: fold the impl's
-                                            // bound generics (`Self::Item` →
-                                            // the receiver's concrete args)
-                                            // into the default signature's
-                                            // return type.
-                                            self.infer.resolve_ty_shallow(self.ctx, raw)
+                                            )
                                         } else {
                                             Ty::UNIT
                                         };
-                                        // KNOWN_GAPS §3.9 (this session): the
-                                        // default body's generic parameter
-                                        // space is the *trait's* generics
-                                        // (`[Self, <method own generics>..]`),
-                                        // not the impl's. The call site's
-                                        // Script 655 substitution derives the
-                                        // callee args from the receiver's ADT
-                                        // arguments — for `Iter<i32>` that is
-                                        // `[i32]`, which substituted
-                                        // `Self := i32` into the default body
-                                        // and produced a garbage dispatch (the
-                                        // `s.iter().last()` segfault). Provide
-                                        // the callee substitution explicitly:
-                                        // the full, resolved receiver type
-                                        // followed by the method's own
-                                        // (fresh-var) generics.
-                                        let mut callee_substs = vec![GenericArg::Ty(
-                                            self.infer.resolve_ty_shallow(self.ctx, recv_ty),
-                                        )];
-                                        for a in method_own.iter() {
-                                            match a {
-                                                GenericArg::Ty(t) => callee_substs.push(
-                                                    GenericArg::Ty(self.infer
-                                                        .resolve_ty_shallow(self.ctx, *t)),
-                                                ),
-                                                other => callee_substs.push(other.clone()),
-                                            }
-                                        }
                                         if let Some(body_id) = m.default_body {
                                             // TRAIT-DEFAULT-FALLBACK: only
                                             // resolve a `Static` FnDefId
@@ -4950,42 +4695,25 @@ impl<'a> FnCtxt<'a> {
                                             // fall through to `Virtual` —
                                             // which surfaces a clean
                                             // diagnostic instead.
-                                            // KNOWN_GAPS §3.9 (this session):
-                                            // dispatch to the PER-IMPL
-                                            // specialization of the default
-                                            // body (keyed by the impl item we
-                                            // just matched), not the
-                                            // last-checked copy that
-                                            // `body_owner_map` (keyed by the
-                                            // HIR BodyId alone) retains.
-                                            let default_local =
-                                                self.impl_default_body_map
-                                                    .get(&(concrete_item_id, method_name))
-                                                    .copied()
-                                                    .or_else(|| {
-                                                        self.body_owner_map.get(&body_id).copied()
-                                                    });
-                                            match default_local {
+                                            match self.body_owner_map.get(&body_id).copied() {
                                                 Some(local) => {
                                                     candidates.push((
                                                         recv_ty,
                                                         return_ty,
-                                                        formals.clone(),
-                                                        method_own.clone(),
+                                                        Vec::new(),
+                                                        Vec::new(),
                                                         Some(MethodDispatch::Static(
                                                             FnDefId::from_raw(local.to_raw()),
                                                         )),
-                                                        Some(callee_substs),
                                                     ));
                                                 }
                                                 None => {
                                                     candidates.push((
                                                         recv_ty,
                                                         return_ty,
-                                                        formals.clone(),
-                                                        method_own.clone(),
+                                                        Vec::new(),
+                                                        Vec::new(),
                                                         Some(MethodDispatch::Virtual(trait_id)),
-                                                        Some(callee_substs),
                                                     ));
                                                 }
                                             }
@@ -4993,28 +4721,15 @@ impl<'a> FnCtxt<'a> {
                                             candidates.push((
                                                 recv_ty,
                                                 return_ty,
-                                                formals,
-                                                method_own,
+                                                Vec::new(),
+                                                Vec::new(),
                                                 Some(MethodDispatch::Virtual(trait_id)),
-                                                Some(callee_substs),
                                             ));
                                         }
                                         break 'concrete;
                                     }
                                 }
                             }
-                        }
-                        // KNOWN_GAPS §3.9 (this session): this impl matched
-                        // the receiver's self type but contributes no
-                        // candidate (no override, no default of this name).
-                        // Discard the probe's unify bindings — otherwise
-                        // every impl visited for an unrelated method name
-                        // leaks `fresh_var := body Param` bindings into the
-                        // caller's inference table (the
-                        // `parameter index mismatch` cascade on the stdlib).
-                        if candidates.len() == pushed_before {
-                            self.infer.rollback_to(inf_snap);
-                            self.diagnostics.truncate(diag_len);
                         }
                     }
                 }
@@ -5071,7 +4786,6 @@ impl<'a> FnCtxt<'a> {
                                             Vec::new(),
                                             Vec::new(),
                                             Some(MethodDispatch::Virtual(tid)),
-                                            None,
                                         ));
                                         break;
                                     }
@@ -5111,7 +4825,7 @@ impl<'a> FnCtxt<'a> {
                         }
                     }
                 }
-                return (Ty::ERROR, Vec::new(), Vec::new(), None, None);
+                return (Ty::ERROR, Vec::new(), Vec::new(), None);
             }
         }
 
@@ -5154,7 +4868,7 @@ impl<'a> FnCtxt<'a> {
             }
             let concrete: Vec<_> = candidates
                 .iter()
-                .filter(|(self_ty, _, _, _, _, _)| !has_infer_var(&*self.ctx, *self_ty))
+                .filter(|(self_ty, _, _, _, _)| !has_infer_var(&*self.ctx, *self_ty))
                 .cloned()
                 .collect();
             if !concrete.is_empty() {
@@ -5164,7 +4878,7 @@ impl<'a> FnCtxt<'a> {
         if candidates.len() > 1 {
             let list: Vec<String> = candidates
                 .iter()
-                .map(|(self_ty, _, _, _, _, _)| format!("  {}", PrintTy::new(*self_ty, &*self.ctx)))
+                .map(|(self_ty, _, _, _, _)| format!("  {}", PrintTy::new(*self_ty, &*self.ctx)))
                 .collect();
             self.diagnostics.push(GlyimDiagnostic::type_error(
                 span,
@@ -5177,31 +4891,10 @@ impl<'a> FnCtxt<'a> {
             ));
             // Still return the first candidate's type so downstream typing is
             // not worse than before; the diagnostic is the real signal.
-            return (candidates[0].1, candidates[0].2.clone(), candidates[0].3.clone(), None, None);
+            return (candidates[0].1, candidates[0].2.clone(), candidates[0].3.clone(), None);
         }
 
-        if dbg_flags::cand_push() {
-            let mn = self.ctx.name_str(method_name).to_string();
-            if matches!(mn.as_str(), "next" | "count" | "last" | "fold" | "into_iter") {
-                let rk = PrintTy::new(recv_ty, &*self.ctx).to_string();
-                let retk = PrintTy::new(candidates[0].1, &*self.ctx).to_string();
-                let dk = match &candidates[0].4 {
-                    Some(MethodDispatch::Static(_)) => "Static",
-                    Some(MethodDispatch::Virtual(_)) => "Virtual",
-                    Some(MethodDispatch::Builtin(_)) => "Builtin",
-                    Some(MethodDispatch::PtrArith(_, _)) => "PtrArith",
-                    None => "None",
-                };
-                eprintln!("[RESOLVE] method={} recv={} ret={} dispatch={}", mn, rk, retk, dk);
-            }
-        }
-        (
-            candidates[0].1,
-            candidates[0].2.clone(),
-            candidates[0].3.clone(),
-            candidates[0].4.clone(),
-            candidates[0].5.clone(),
-        )
+        (candidates[0].1, candidates[0].2.clone(), candidates[0].3.clone(), candidates[0].4.clone())
     }
 
     /// Resolve `IntoIterator::into_iter` for `recv_ty` with **exact** receiver
@@ -5483,5 +5176,150 @@ impl<'a> FnCtxt<'a> {
             ));
             Ty::ERROR
         }
+    }
+}
+
+impl<'a> FnCtxt<'a> {
+    /// §4.1 `check_gsx`: validate a GSX element against its dialect schema.
+    ///
+    /// - intrinsics resolve through the active dialect's Schema registry
+    ///   (§5.1: "The compiler passes only know Schemas"); v0.1 uses the
+    ///   compiler-side seed registry (`glyim_gsx::schema`) — the full design
+    ///   resolves dialect schemas from `glyim-lang-ui` through the def-map.
+    /// - `on:<event>` must exist in the element's schema (`#[event]`, §5.2).
+    /// - plain/dynamic props must be known to the schema (§5.2).
+    /// - every hole expression (attr values, block children, nested
+    ///   elements) is checked recursively.
+    ///
+    /// The element's own value is produced by the `glyim-gsx` stage; when
+    /// this function is reached the stage has not run, so the result is
+    /// `Ty::ERROR` plus a clean diagnostic (no ICE downstream).
+    fn check_gsx(&mut self, g: &GsxExpr, span: Span) -> (thir::Expr, Ty) {
+        let registry = glyim_gsx::schema::SchemaRegistry::standard();
+
+        // 1. Tag resolution (§3.2 classification).
+        match &g.tag {
+            GsxTag::Intrinsic(name) => {
+                let tag = self.hir.interner.resolve(*name);
+                if registry.resolve("web", None, tag).is_none() {
+                    self.diagnostics.push(GlyimDiagnostic::type_error(
+                        span,
+                        format!("no schema for element `{tag}` in dialect `web` (GSX-in-Glyim §5)"),
+                    ));
+                }
+            }
+            GsxTag::Dialect(ns, tag) => {
+                let ns = self.hir.interner.resolve(*ns);
+                let tag = self.hir.interner.resolve(*tag);
+                if registry.resolve("web", Some(&ns), &tag).is_none() {
+                    self.diagnostics.push(GlyimDiagnostic::type_error(
+                        span,
+                        format!("no schema for `<{ns}:{tag}>` — dialect-namespace escape hatch (§3.2)"),
+                    ));
+                }
+            }
+            GsxTag::Component(_) => {
+                // Components resolve through the def-map like any item
+                // (§3.2). Their prop checking lands with `glyim-lang-ui`
+                // (§4.2); here the call is accepted structurally.
+            }
+        }
+
+        // 2. Attributes: hole exprs checked; props/events validated.
+        for attr in &g.attrs {
+            let (kind_head, kind_name, value): (&str, Option<&str>, &GsxAttrValue) = match attr {
+                GsxAttrHIR::Plain { name, value } => (self.hir.interner.resolve(*name), None, value),
+                GsxAttrHIR::Directive { ns, name, value } => {
+                    let ns = self.hir.interner.resolve(*ns);
+                    let n = self.hir.interner.resolve(*name);
+                    (ns, Some(n), value)
+                }
+            };
+            match (kind_head, kind_name) {
+                ("on", Some(ev)) => {
+                    let ok = match &g.tag {
+                        GsxTag::Intrinsic(name) => {
+                            let tag = self.hir.interner.resolve(*name);
+                            registry
+                                .resolve("web", None, tag)
+                                .and_then(|s| s.event(ev))
+                                .is_some()
+                        }
+                        _ => true, // components/dialect tags: def-map driven later
+                    };
+                    if !ok {
+                        self.diagnostics.push(GlyimDiagnostic::type_error(
+                            span,
+                            format!("unknown event `on:{ev}` for this element (§5.2 #[event])"),
+                        ));
+                    }
+                }
+                ("bind", Some(prop)) => {
+                    let ok = match &g.tag {
+                        GsxTag::Intrinsic(name) => {
+                            let tag = self.hir.interner.resolve(*name);
+                            registry
+                                .resolve("web", None, tag)
+                                .and_then(|s| s.prop(prop))
+                                .is_some()
+                        }
+                        _ => true,
+                    };
+                    if !ok {
+                        self.diagnostics.push(GlyimDiagnostic::type_error(
+                            span,
+                            format!("unknown prop `{prop}` for `bind:` (§7.9)"),
+                        ));
+                    }
+                }
+                (prop, None) => {
+                    let ok = match &g.tag {
+                        GsxTag::Intrinsic(name) => {
+                            let tag = self.hir.interner.resolve(*name);
+                            registry
+                                .resolve("web", None, tag)
+                                .and_then(|s| s.prop(prop).or_else(|| s.prop(&prop.replace('-', "_"))))
+                                .is_some()
+                        }
+                        _ => true,
+                    };
+                    if !ok && prop != "class" {
+                        // `class` may repeat (G2 folding).
+                        self.diagnostics.push(GlyimDiagnostic::type_error(
+                            span,
+                            format!("unknown prop `{prop}` on this element (§5.2)"),
+                        ));
+                    }
+                }
+                _ => {}
+            }
+            if let GsxAttrValue::Expr(e) = value {
+                self.check_expr(*e);
+            }
+        }
+
+        // 3. Children: block children checked; nested elements validated
+        //    recursively. Text children are string literals (§3.2) — no
+        //    holes to check here (the GSX stage splits them).
+        for child in &g.children {
+            match child {
+                GsxChildHIR::Expr(e) => {
+                    self.check_expr(*e);
+                }
+                GsxChildHIR::Node(nested) => {
+                    self.check_gsx(nested, span);
+                }
+                GsxChildHIR::Text(_) => {}
+            }
+        }
+
+        // 4. The stage hand-off (see the arm comment): GSX values compile in
+        //    the `glyim-gsx` stage, which this driver does not run.
+        self.diagnostics.push(GlyimDiagnostic::type_error(
+            span,
+            "GSX view expressions are compiled by the `glyim-gsx` pipeline stage \
+             (GSX-in-Glyim §4.1); this driver does not run the stage yet",
+        ));
+        (thir::Expr::err(span), Ty::ERROR)
     }
 }
