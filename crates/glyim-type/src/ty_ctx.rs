@@ -20,9 +20,10 @@ use std::collections::{HashMap, HashSet};
 /// TyCtx.
 pub struct TyCtx {
     /// Shared, canonical type table for this compilation (see `type_arena`).
-    /// A `&'static` so handles allocated by any derived `TyCtxMut` are valid
-    /// here — the fix for the cross-context handle-validity ("aliasing") class.
-    pub(crate) arena: &'static TypeArena,
+    /// An `Arc` so handles allocated by any derived `TyCtxMut` are valid
+    /// here — the fix for the cross-context handle-validity ("aliasing") class
+    /// — while the arena is freed when the last view of the compilation drops.
+    pub(crate) arena: std::sync::Arc<TypeArena>,
     pub(crate) regions: IndexVec<RegionVid, Region>,
     pub(crate) resolver: Interner,
     pub(crate) auto_trait_registry: AutoTraitRegistry,

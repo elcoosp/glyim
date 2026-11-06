@@ -70,6 +70,22 @@ pub struct TypeArena {
 unsafe impl Send for TypeArena {}
 unsafe impl Sync for TypeArena {}
 
+impl Drop for TypeArena {
+    fn drop(&mut self) {
+        // SAFETY: each raw pointer was produced by exactly one `Box::into_raw`
+        // in `new` and is reconstructed exactly once here. The arena is only
+        // dropped when the last `Arc` view of the compilation drops, so no
+        // `&TyKind` / `&[GenericArg]` borrowed through a live view can still
+        // exist (Rust's borrow checker ties such borrows to the view that
+        // produced them, which cannot outlive the view).
+        unsafe {
+            drop(Box::from_raw(self.types));
+            drop(Box::from_raw(self.type_flags));
+            drop(Box::from_raw(self.substitution_data));
+        }
+    }
+}
+
 impl TypeArena {
     pub(crate) fn new() -> Self {
         TypeArena {

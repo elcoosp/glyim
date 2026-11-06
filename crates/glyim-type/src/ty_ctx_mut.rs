@@ -21,10 +21,14 @@ use std::collections::HashSet;
 /// TyCtxMut.
 pub struct TyCtxMut {
     /// Shared, canonical type table for this compilation (see `type_arena`).
-    /// Held as a leaked `&'static` so `Ty`/`Substitution` handles stay valid
-    /// across every `TyCtx`/`TyCtxMut` view of the compilation — the fix for
-    /// the cross-context handle-validity ("aliasing") class of bugs.
-    arena: &'static TypeArena,
+    /// Held as an `Arc` so `Ty`/`Substitution` handles stay valid across every
+    /// `TyCtx`/`TyCtxMut` view of the compilation — the fix for the
+    /// cross-context handle-validity ("aliasing") class of bugs — while the
+    /// arena itself is freed when the last view of the compilation drops.
+    /// (Historically this was a `Box::leak`ed `&'static`, which retained the
+    /// whole type table for the process lifetime — one leak per compilation,
+    /// ~40MB+ per stdlib compile, OOMing long test runs.)
+    arena: std::sync::Arc<TypeArena>,
     regions: IndexVec<RegionVid, Region>,
     resolver: Interner,
     auto_trait_registry: AutoTraitRegistry,
@@ -175,9 +179,10 @@ pub struct TyCtxMut {
 impl TyCtxMut {
     /// new.
     pub fn new(resolver: Interner) -> Self {
-        // One canonical type arena per compilation, leaked so its handles stay
-        // valid across every TyCtx/TyCtxMut derived from this one.
-        let arena: &'static TypeArena = Box::leak(Box::new(TypeArena::new()));
+        // One canonical type arena per compilation, shared by every
+        // TyCtx/TyCtxMut derived from this one and freed when the last of them
+        // drops (Arc keeps the handles valid without a process-lifetime leak).
+        let arena = std::sync::Arc::new(TypeArena::new());
         let mut ctx = Self {
             arena,
             regions: IndexVec::new(),
@@ -329,7 +334,7 @@ impl TyCtxMut {
         Self {
             is_unsafe_fn: HashMap::new(),
             lints: glyim_core::lint::LintMap::new(),
-            arena: ctx.arena,
+            arena: std::sync::Arc::clone(&ctx.arena),
             regions: ctx.regions.clone(),
             resolver: ctx.resolver.clone(),
             auto_trait_registry: ctx.auto_trait_registry.clone(),
@@ -1385,7 +1390,7 @@ impl TyCtxMut {
     /// freeze.
     pub fn freeze(&self) -> super::ty_ctx::TyCtx {
         super::ty_ctx::TyCtx {
-            arena: self.arena,
+            arena: std::sync::Arc::clone(&self.arena),
             regions: self.regions.clone(),
             resolver: self.resolver.clone(),
             auto_trait_registry: self.auto_trait_registry.clone(),
