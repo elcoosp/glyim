@@ -35,7 +35,10 @@ use std::collections::HashMap;
 /// remains the source of truth. Reconstructing through these helpers means the
 /// length mistake can only happen once (here), not in every hand-written FFI fn.
 pub(crate) unsafe fn slice_from_raw_parts<'a>(ptr: *const u8, len: usize) -> &'a [u8] {
-    debug_assert!(
+    // Unconditional (not `debug_assert!`): this is the one gate between a
+    // codegen length bug and a wrapped `from_raw_parts` (memory UB), so it
+    // must fire in release too.
+    assert!(
         len <= isize::MAX as usize,
         "glyim runtime FFI: slice length {len} exceeds isize::MAX; \
          refusing to reconstruct a potentially-overflowing slice"
@@ -46,7 +49,8 @@ pub(crate) unsafe fn slice_from_raw_parts<'a>(ptr: *const u8, len: usize) -> &'a
 }
 
 pub(crate) unsafe fn slice_from_raw_parts_mut<'a>(ptr: *mut u8, len: usize) -> &'a mut [u8] {
-    debug_assert!(
+    // Unconditional (not `debug_assert!`): see `slice_from_raw_parts`.
+    assert!(
         len <= isize::MAX as usize,
         "glyim runtime FFI: slice length {len} exceeds isize::MAX; \
          refusing to reconstruct a potentially-overflowing slice"

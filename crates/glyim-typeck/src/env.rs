@@ -68,7 +68,10 @@ impl LocalEnv {
         // rather than falling back to `base = 0` (which would clobber every
         // in-scope name).
         let Some(base) = self.scope_stack.pop() else {
-            debug_assert!(false, "leave_scope without matching enter_scope");
+            // Unconditional (not `debug_assert!`): an unbalanced leave is a
+            // typeck-internal invariant violation; failing loudly in every
+            // profile beats silently corrupting name resolution in release.
+            assert!(false, "leave_scope without matching enter_scope");
             return;
         };
 

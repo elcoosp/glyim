@@ -73,7 +73,15 @@ impl Span {
 
     /// new.
     pub fn new(file: FileId, lo: ByteIdx, hi: ByteIdx, ctx: SyntaxContext) -> Self {
-        debug_assert!(lo <= hi, "Span lo > hi");
+        // Unconditional (not `debug_assert!`): a lo>hi span is a
+        // compiler-internal invariant violation that would corrupt every
+        // downstream span computation. The cost is one compare per span —
+        // negligible next to parsing — and the loud failure beats silently
+        // propagating a backwards range.
+        assert!(
+            lo <= hi,
+            "Span lo > hi (lo = {lo:?}, hi = {hi:?}) — a backwards source range"
+        );
         Self { file, lo, hi, ctx }
     }
 
