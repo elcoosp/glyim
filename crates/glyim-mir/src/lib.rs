@@ -315,47 +315,33 @@ impl Place {
                         ctx.error_ty()
                     }
                 },
-                ProjectionElem::Index(_) => {
-                    // KNOWN_GAPS §3.9 (this session): peel one reference
-                    // before classifying — `s[i]` on a `&[T]`-typed place, or
-                    // `b.data[i]` where a `Field` projection just yielded a
-                    // fat `&[T]`, means "index the pointee" (Rust's `Index`
-                    // auto-derefs). The Deref-into-Vec arm below the `Deref`
-                    // case already sets the precedent for shape-leniency
-                    // here; without the peel this arm logged "Index on
-                    // non-array/slice type" and returned `Error`.
-                    let ty = match ctx.ty_kind(ty) {
-                        TyKind::Ref(_, inner_ty, _) => *inner_ty,
-                        _ => ty,
-                    };
-                    match ctx.ty_kind(ty) {
-                        TyKind::Array(inner_ty, _) => *inner_ty,
-                        TyKind::Slice(inner_ty) => *inner_ty,
-                        // STR-INDEX: a `str` / `String` indexes to a `u8` byte.
-                        // Codegen already lowers a str index to a `{ptr, len}`
-                        // data-pointer GEP + `i8` load, so the element type
-                        // here must be `u8`. Without this arm, `"abc"[0]`
-                        // tripped the "Index on non-array/slice type"
-                        // invariant and returned `Ty::ERROR`.
-                        TyKind::String => Ty::U8,
-                        // `Vec<T>` (AdtId 1020) indexes like `[T]`; typeck
-                        // accepts it (`get_index_info`), so the MIR element type
-                        // must be `T` too or `place.ty()` yields `ERROR` and the
-                        // load is mis-typed.
-                        TyKind::Adt(adt_id, substs) if adt_id.to_raw() == 1020 => ctx
-                            .substitution_args(*substs)
-                            .first()
-                            .and_then(|a| match a {
-                                glyim_type::GenericArg::Ty(t) => Some(*t),
-                                _ => None,
-                            })
-                            .unwrap_or(Ty::ERROR),
-                        _ => {
-                            tracing::error!("Place::ty(): Index on non-array/slice type");
-                            ctx.error_ty()
-                        }
+                ProjectionElem::Index(_) => match ctx.ty_kind(ty) {
+                    TyKind::Array(inner_ty, _) => *inner_ty,
+                    TyKind::Slice(inner_ty) => *inner_ty,
+                    // STR-INDEX: a `str` / `String` indexes to a `u8` byte.
+                    // Codegen already lowers a str index to a `{ptr, len}`
+                    // data-pointer GEP + `i8` load, so the element type
+                    // here must be `u8`. Without this arm, `"abc"[0]`
+                    // tripped the "Index on non-array/slice type"
+                    // invariant and returned `Ty::ERROR`.
+                    TyKind::String => Ty::U8,
+                    // `Vec<T>` (AdtId 1020) indexes like `[T]`; typeck
+                    // accepts it (`get_index_info`), so the MIR element type
+                    // must be `T` too or `place.ty()` yields `ERROR` and the
+                    // load is mis-typed.
+                    TyKind::Adt(adt_id, substs) if adt_id.to_raw() == 1020 => ctx
+                        .substitution_args(*substs)
+                        .first()
+                        .and_then(|a| match a {
+                            glyim_type::GenericArg::Ty(t) => Some(*t),
+                            _ => None,
+                        })
+                        .unwrap_or(Ty::ERROR),
+                    _ => {
+                        tracing::error!("Place::ty(): Index on non-array/slice type");
+                        ctx.error_ty()
                     }
-                }
+                },
                 ProjectionElem::Downcast(variant_idx) => {
                     // Downcast selects the variant; the variant's fields are
                     // accessed via `Field` projections. Record the variant so a
@@ -369,11 +355,6 @@ impl Place {
                     from_end: _,
                 } => {
                     // Constant index returns the element type of the array/slice.
-                    // Peel one reference first (see the `Index` arm above).
-                    let ty = match ctx.ty_kind(ty) {
-                        TyKind::Ref(_, inner_ty, _) => *inner_ty,
-                        _ => ty,
-                    };
                     match ctx.ty_kind(ty) {
                         TyKind::Array(inner_ty, _) | TyKind::Slice(inner_ty) => *inner_ty,
                         TyKind::String => Ty::U8,
@@ -395,13 +376,6 @@ impl Place {
                     // `[T; len]` type, so we fall back to the element type; the
                     // allocating `ty_mut` computes the precise `[T; len]` (plan
                     // §11.1).
-                    // Peel one reference first: `&s.buf[1..]` on a slice
-                    // *field* reaches this walk as Subslice over a fat `&[T]`
-                    // slot when the builder did not emit an explicit `Deref`.
-                    let ty = match ctx.ty_kind(ty) {
-                        TyKind::Ref(_, inner_ty, _) => *inner_ty,
-                        _ => ty,
-                    };
                     match ctx.ty_kind(ty) {
                         TyKind::Slice(_) => ty,
                         TyKind::Array(inner, _) => *inner,
@@ -472,29 +446,21 @@ impl Place {
                         ctx.error_ty()
                     }
                 },
-                ProjectionElem::Index(_) => {
-                    // Peel one reference before classifying (see `Place::ty`'s
-                    // `Index` arm — `b.data[i]` on a slice field).
-                    let ty = match ctx.ty_kind(ty) {
-                        TyKind::Ref(_, inner_ty, _) => *inner_ty,
-                        _ => ty,
-                    };
-                    match ctx.ty_kind(ty) {
-                        TyKind::Array(inner_ty, _) => *inner_ty,
-                        TyKind::Slice(inner_ty) => *inner_ty,
-                        TyKind::String => ctx.alloc_ty(TyKind::Uint(UintTy::U8)),
-                        TyKind::Adt(adt_id, substs) if adt_id.to_raw() == 1020 => ctx
-                            .substitution_args(*substs)
-                            .first()
-                            .and_then(|a| match a {
-                                glyim_type::GenericArg::Ty(t) => Some(*t),
-                                _ => None,
-                            })
-                            .unwrap_or_else(|| ctx.alloc_ty(TyKind::Error)),
-                        _ => {
-                            tracing::error!("Place::ty_mut(): Index on non-array/slice type");
-                            ctx.error_ty()
-                        }
+                ProjectionElem::Index(_) => match ctx.ty_kind(ty) {
+                    TyKind::Array(inner_ty, _) => *inner_ty,
+                    TyKind::Slice(inner_ty) => *inner_ty,
+                    TyKind::String => ctx.alloc_ty(TyKind::Uint(UintTy::U8)),
+                    TyKind::Adt(adt_id, substs) if adt_id.to_raw() == 1020 => ctx
+                        .substitution_args(*substs)
+                        .first()
+                        .and_then(|a| match a {
+                            glyim_type::GenericArg::Ty(t) => Some(*t),
+                            _ => None,
+                        })
+                        .unwrap_or_else(|| ctx.alloc_ty(TyKind::Error)),
+                    _ => {
+                        tracing::error!("Place::ty_mut(): Index on non-array/slice type");
+                        ctx.error_ty()
                     }
                 },
                 ProjectionElem::Downcast(_variant_idx) => ty,
@@ -502,19 +468,12 @@ impl Place {
                     offset: _,
                     min_length: _,
                     from_end: _,
-                } => {
-                    // Peel one reference first (see `Place::ty`'s arm).
-                    let ty = match ctx.ty_kind(ty) {
-                        TyKind::Ref(_, inner_ty, _) => *inner_ty,
-                        _ => ty,
-                    };
-                    match ctx.ty_kind(ty) {
-                        TyKind::Array(inner_ty, _) | TyKind::Slice(inner_ty) => *inner_ty,
-                        TyKind::String => ctx.alloc_ty(TyKind::Uint(UintTy::U8)),
-                        _ => {
-                            tracing::error!("Place::ty_mut(): ConstantIndex on non-array/slice type");
-                            ctx.error_ty()
-                        }
+                } => match ctx.ty_kind(ty) {
+                    TyKind::Array(inner_ty, _) | TyKind::Slice(inner_ty) => *inner_ty,
+                    TyKind::String => ctx.alloc_ty(TyKind::Uint(UintTy::U8)),
+                    _ => {
+                        tracing::error!("Place::ty_mut(): ConstantIndex on non-array/slice type");
+                        ctx.error_ty()
                     }
                 },
                 ProjectionElem::Subslice { from, to, from_end } => match ctx.ty_kind(ty) {
