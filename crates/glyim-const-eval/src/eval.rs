@@ -650,6 +650,12 @@ impl<'a> ConstEvaluator<'a> {
                 "`?` is not supported in const evaluation",
                 span,
             )),
+            // GSX view expressions (GSX-in-Glyim §4.1): views are compiled by
+            // the dedicated `glyim-gsx` stage, never const-evaluated.
+            Expr::Gsx(_) => Err(ConstEvalError::new(
+                "GSX view expressions are not supported in const evaluation",
+                span,
+            )),
             Expr::Return { value } => match value {
                 Some(v) => self.evaluate_at_depth(*v, depth),
                 None => Ok(ConstValue::Unit),
