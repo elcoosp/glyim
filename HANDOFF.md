@@ -1,5 +1,14 @@
 # HANDOFF — session 34 (interp half of §3.9: still open, but diagnosis advanced)
 
+> **SUPERSEDED (session 35).** Everything this handoff left open is now
+> closed: the §3.9 interp half was fixed and verified in session 34's
+> aftermath, and session 35 closed the remaining array→slice unsize
+> coercion gaps (call ABI, aggregate/tuple fields, `Place::ty`
+> ref-peel, builder auto-deref, interpreter `operand_ty` + value
+> boundaries) — see `FIXES.md` §8 and the session-35 resolution block
+> in `KNOWN_GAPS.md` §3.9. The notes below are kept verbatim as the
+> historical record of how the interp bug was narrowed.
+
 ## 0. State at handoff
 
 **HEAD:** `aad6585a` — in sync with `origin/main`
