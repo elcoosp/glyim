@@ -12,6 +12,135 @@ use glyim_type::*;
 
 use crate::coherence::ResolvedImplHeader;
 
+/// KNOWN_GAPS §3.9 (this session): normalize an associated-type *template*
+/// resolved through `resolve_associated_type_by_self_ty` against the concrete
+/// qualifier type.
+///
+/// The projection table stores the impl's declared `type X = ...` in the
+/// impl's own parameter space (e.g. `impl<'a, T> Iterator for Iter<'a, T>`
+/// registers `Item = &'a T` with a rigid `Param(1, T)`). Returning that
+/// template verbatim leaks the impl's `Param` into the caller's type — the
+/// caller's `Option<Self::Item>` became `Option<&'a Param(1)>`, which neither
+/// unifies with the use-site expectation nor derefs. This helper derives the
+/// `{impl_param -> concrete_arg}` substitution from the concrete qualifier
+/// (`Iter<i32>` ↔ `Iter<Param(1)>` → `{1 -> i32}`) via
+/// `TyCtxMut::impl_param_subst` and applies it deeply.
+/// KNOWN_GAPS §3.9 (this session): deep inference-variable resolution.
+/// `InferenceTable::resolve_ty_shallow` only folds the *head* of a type — a
+/// `&[?T]` whose `?T` was bound to `i32` still reads as `&[?T]` afterwards,
+/// because the `Ref`/`Slice` structure is not walked. `normalize_assoc_template`
+/// (and the impl-param alignment it feeds) needs the fully-folded form.
+/// Mirrors `zonk_ty`'s traversal, but on the mutable `TyCtxMut` so it can run
+/// during expression checking.
+pub(crate) fn deep_resolve_ty(
+    infer: &mut InferenceTable,
+    ctx: &mut TyCtxMut,
+    ty: Ty,
+    depth: u32,
+) -> Ty {
+    if depth >= 32 {
+        return ty;
+    }
+    let ty = infer.resolve_ty_shallow(ctx, ty);
+    let kind = ctx.ty_kind(ty).clone();
+    match kind {
+        TyKind::Ref(region, inner, m) => {
+            let inner = deep_resolve_ty(infer, ctx, inner, depth + 1);
+            ctx.mk_ty(TyKind::Ref(region, inner, m))
+        }
+        TyKind::RawPtr(inner, m) => {
+            let inner = deep_resolve_ty(infer, ctx, inner, depth + 1);
+            ctx.mk_ty(TyKind::RawPtr(inner, m))
+        }
+        TyKind::Slice(inner) => {
+            let inner = deep_resolve_ty(infer, ctx, inner, depth + 1);
+            ctx.mk_ty(TyKind::Slice(inner))
+        }
+        TyKind::Array(inner, len) => {
+            let inner = deep_resolve_ty(infer, ctx, inner, depth + 1);
+            ctx.mk_ty(TyKind::Array(inner, len))
+        }
+        TyKind::Tuple(substs) => {
+            let raw: Vec<GenericArg> = ctx.substitution_args(substs).to_vec();
+            let args: Vec<GenericArg> = raw
+                .iter()
+                .map(|a| match a {
+                    GenericArg::Ty(t) => GenericArg::Ty(deep_resolve_ty(infer, ctx, *t, depth + 1)),
+                    other => other.clone(),
+                })
+                .collect();
+            let s = ctx.intern_substitution(args);
+            ctx.mk_ty(TyKind::Tuple(s))
+        }
+        TyKind::Adt(id, substs) => {
+            let raw: Vec<GenericArg> = ctx.substitution_args(substs).to_vec();
+            let args: Vec<GenericArg> = raw
+                .iter()
+                .map(|a| match a {
+                    GenericArg::Ty(t) => GenericArg::Ty(deep_resolve_ty(infer, ctx, *t, depth + 1)),
+                    other => other.clone(),
+                })
+                .collect();
+            let s = ctx.intern_substitution(args);
+            ctx.mk_ty(TyKind::Adt(id, s))
+        }
+        TyKind::FnPtr(sig) => {
+            let sig = sig.clone();
+            let raw: Vec<GenericArg> = ctx.substitution_args(sig.inputs).to_vec();
+            let args: Vec<GenericArg> = raw
+                .iter()
+                .map(|a| match a {
+                    GenericArg::Ty(t) => GenericArg::Ty(deep_resolve_ty(infer, ctx, *t, depth + 1)),
+                    other => other.clone(),
+                })
+                .collect();
+            let inputs = ctx.intern_substitution(args);
+            let output = deep_resolve_ty(infer, ctx, sig.output, depth + 1);
+            ctx.mk_ty(TyKind::FnPtr(fn_ptr_sig_with(inputs, output, &sig)))
+        }
+        // Everything else (primitives, Param, Error, Projection, …) is
+        // either already concrete or handled elsewhere.
+        _ => ty,
+    }
+}
+
+/// Rebuild a `FnPtr` signature with new input/output substitutions, keeping
+/// the other flags. (Helper for `deep_resolve_ty`.)
+fn fn_ptr_sig_with(
+    inputs: glyim_type::Substitution,
+    output: Ty,
+    sig: &glyim_type::FnSig,
+) -> glyim_type::FnSig {
+    glyim_type::FnSig {
+        inputs,
+        output,
+        c_variadic: sig.c_variadic,
+        unsafety: sig.unsafety,
+        abi: sig.abi,
+    }
+}
+
+pub(crate) fn normalize_assoc_template(
+    ctx: &mut TyCtxMut,
+    infer: &mut InferenceTable,
+    qual_ty: Ty,
+    template: Ty,
+    trait_def_id: TraitDefId,
+    assoc_name: Name,
+) -> Ty {
+    // Deep-resolve the qualifier: the candidate probing binds the impl's
+    // fresh vars to the receiver's concrete args (e.g. `?T := i32` inside
+    // `&[?T]`), and `impl_param_subst` needs those concrete args — a shallow
+    // resolve stops at the `Ref` head and would align `?T` with itself.
+    let resolved_qual = deep_resolve_ty(infer, ctx, qual_ty, 0);
+    let map = ctx.impl_param_subst(resolved_qual, trait_def_id, assoc_name);
+    if map.is_empty() {
+        return template;
+    }
+    let substituted = ctx.subst_ty(template, &map);
+    deep_resolve_ty(infer, ctx, substituted, 0)
+}
+
 /// resolve_type_ref.
 pub fn resolve_type_ref(
     ctx: &mut TyCtxMut,
@@ -632,10 +761,21 @@ pub fn resolve_path_type(
         // to store, so the two sides of `type Item = I::Item` agree.
         if qname_str == "Self" {
             if let Some(&impl_self_ty) = param_map.get(&qname) {
-                if let Some(resolved) =
-                    ctx.resolve_associated_type_by_self_ty(impl_self_ty, aname)
+                if let Some((found_tid, resolved)) =
+                    ctx.resolve_assoc_with_trait(impl_self_ty, aname)
                 {
-                    return resolved;
+                    // KNOWN_GAPS §3.9: the table stores the impl's raw
+                    // template (`Item = &'a Param(1)`); substitute the
+                    // impl's params with the qualifier's concrete args
+                    // before returning it to the caller's type.
+                    return normalize_assoc_template(
+                        ctx,
+                        infer,
+                        impl_self_ty,
+                        resolved,
+                        found_tid,
+                        aname,
+                    );
                 }
             }
         }
@@ -742,8 +882,21 @@ pub fn resolve_path_type(
             let qual_ty =
                 resolve_path_type(ctx, infer, def_map, &mut q_diags, &qpath, param_map, span);
             if !matches!(ctx.ty_kind(qual_ty), TyKind::Error) {
-                if let Some(ty) = ctx.resolve_associated_type_by_self_ty(qual_ty, aname) {
-                    return ty;
+                if let Some((found_tid, ty)) =
+                    ctx.resolve_assoc_with_trait(qual_ty, aname)
+                {
+                    // KNOWN_GAPS §3.9: substitute the impl's params with the
+                    // concrete qualifier's args (deep subst), so a projection
+                    // like `Option<Self::Item>` on `Iter<'a, i32>` normalizes
+                    // to `Option<&i32>` instead of leaking `Param(1)`.
+                    return normalize_assoc_template(
+                        ctx,
+                        infer,
+                        qual_ty,
+                        ty,
+                        found_tid,
+                        aname,
+                    );
                 }
             }
             if matches!(ctx.ty_kind(qual_ty), TyKind::Param(_)) || qual == "Self" {
@@ -809,8 +962,17 @@ pub fn resolve_path_type(
             span,
         );
         if !matches!(ctx.ty_kind(self_ty), TyKind::Error) {
-            if let Some(ty) = ctx.resolve_associated_type_by_self_ty(self_ty, assoc_name) {
-                return ty;
+            if let Some((found_tid, ty)) = ctx.resolve_assoc_with_trait(self_ty, assoc_name) {
+                // KNOWN_GAPS §3.9: deep-substitute the impl's params with the
+                // concrete qualifier's args before returning the template.
+                return normalize_assoc_template(
+                    ctx,
+                    infer,
+                    self_ty,
+                    ty,
+                    found_tid,
+                    assoc_name,
+                );
             }
         }
         // Plan unstub-5 P5: associated-type projection for an abstract self
