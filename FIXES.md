@@ -115,12 +115,76 @@ actually have (`exit-code: 42` / `exit-code: 3`, the same convention as
   half CLOSED, root causes named), and collapsed the triplicated
   session-33 wrap blocks.
 
+## 8. Array→slice unsizing coercion was missing at every backend boundary (`glyim-codegen-llvm`, `glyim-mir`, `glyim-lower`, `glyim-mir-interp`)
+
+The type checker accepts `&[T; N]` where `&[T]` is expected (Script 359
+unification), but nothing materialized the unsize coercion. A thin
+array pointer routed through an intermediate local reached every
+fat-slice destination unconverted — a silent miscompile on LLVM and a
+wrong-value bug on the interpreter. Live-traced root causes, all fixed:
+
+- **LLVM call ABI** (`lower.rs::lower_call`): the argument operand
+  keeps its own `&[T; N]` type while the ABI slot is the callee's fat
+  `&[T]` formal; the thin pointer misaligned every following argument
+  and `fn take(x: &[i32]) -> i32 { x.len() }` on `take(&arr)` returned
+  register garbage (72). New `coerce_unsized_slice_ref` materializes
+  `{ ptr, len }` at the call boundary (mut refs included).
+- **LLVM aggregate fields** (`lower.rs` Aggregate/Tuple arms): a field
+  declared `&[T]` receiving `&[T; N]` stored the thin pointer into the
+  16-byte slot and `s.buf.len()` read adjacent struct bytes (0 / 64 /
+  16). New `coerce_aggregate_field_unsizing` keys on the *declared*
+  field types — flat `AdtDef.fields` for structs (the same source
+  `FullLayoutComputer` uses; enums keep `variants[..].fields`),
+  substitution args for tuples — with the ADT's own generic params
+  substituted so `Wrapper<i32> { buf: &arr }` works.
+- **MIR `Place::ty` / `Place::ty_mut`** (`glyim-mir`): `Index`,
+  `ConstantIndex` and `Subslice` over a `Ref`-typed place (indexing the
+  pointee of a fat slot) logged "Index/… on non-array/slice type" and
+  returned `Error`; they now peel one reference before classifying.
+- **MIR builder Index auto-deref** (`glyim-lower`): the decision used
+  the base *local's* declared type, so `b.data[i]` — a slice field read
+  through a struct — emitted `[Field, Index]` with no `Deref` and
+  codegen ICEd with "Index projection on non-array/slice type". It now
+  decides on the type *at the place* (`Place::ty` walk), matching what
+  `s[i]` on a `&[T]` local already did.
+- **Interpreter `operand_ty`** (`glyim-mir-interp`): ignored place
+  projections — a receiver operand `Copy(Place{s, [Field(0)]})`
+  reported the STRUCT as the operand type, so the slice `len`
+  builtin's `is_fat_ptr` classification missed and read the fat
+  aggregate's field count (2) as the length. It now walks the place
+  through `Place::ty`.
+- **Interpreter value boundaries** (`glyim-mir-interp`): call-argument
+  binding coerces thin `Ref` → `Aggregate([data_ref, len])` against the
+  callee formal; aggregate field construction coerces against declared
+  field types; the `len` builtin discriminates on the *pre-deref*
+  receiver (thin `Ref` → raw array → element count; `Aggregate` →
+  field 1); `read_place`'s `Deref` arm unwraps fat `[data_ref, len]`
+  aggregates (replaying the deref on the data half); `write_place_frame`
+  resolves a `[Field…, Deref, rest…]` projection prefix against live
+  storage and delegates the write to the referenced frame, so
+  `b.data[i] = v` on a `&'a mut [i32]` field mutates the original
+  array instead of panicking.
+- Deliberately not coerced: assignment-level `let s: &[i32] = &arr;`
+  keeps the thin `Ref` in the interpreter's value model — its builtin
+  `iter`/`split_first` paths are built around that shape (wrapping at
+  every `let` regressed `slice_iter_next`); the `len` builtin's
+  receiver discriminator covers the leaked-thin case.
+
+New regression fixtures (all agree across LLVM, interpreter, and the
+differential gate): `call_arg_slice_unsize`, `struct_field_slice_len`,
+`slice_field_index`, `mut_slice_field_index`,
+`generic_struct_slice_field`, `enum_variant_slice_field`,
+`tuple_field_slice_unsize`. KNOWN_GAPS §3.9 carries the full
+session-35 resolution note.
+
 ## Verification
 
 ```
 cargo test --release --workspace        # 106 test binaries, 0 failures
 GLYIM_TEST_REAL_LLVM=1 cargo test --release -p glyim-test \
     --features glyim-test/real-llvm --test differential   # 2/2, backends agree
+GLYIM_TEST_REAL_LLVM=1 GLYIM_LLVM=1 cargo test --release -p glyim-test \
+    --features glyim-test/real-llvm --test run_pass_corpus   # incl. needs-llvm slice fixtures
 glyip new / build / run                 # end-to-end smoke, green
 ```
 
