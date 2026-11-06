@@ -32,7 +32,7 @@
 //! pass delivers is a *real*, compiling `async fn`/`.await` for the supported
 //! subset, not a stub.
 
-use crate::PatId;
+use crate::{GsxAttrHIR, GsxAttrValue, GsxChildHIR, GsxExpr, PatId};
 use glyim_core::arena::IndexVec;
 use glyim_core::interner::Interner;
 use glyim_core::primitives::{Mutability, StructKind, Visibility};
@@ -1986,6 +1986,33 @@ fn copy_expr_renamed(
             }
         }
         Expr::Missing | Expr::Literal(_) | Expr::Continue | Expr::Err => src.exprs[eid].clone(),
+        // GSX view expressions (finding F7): attribute/child hole exprs are
+        // body-owned ExprIds — re-allocate them into `dst` like any other
+        // child, keeping the element structure intact.
+        Expr::Gsx(g) => {
+            let mut g2 = (**g).clone();
+            for attr in &mut g2.attrs {
+                let value = match attr {
+                    GsxAttrHIR::Plain { value, .. } | GsxAttrHIR::Directive { value, .. } => value,
+                };
+                if let GsxAttrValue::Expr(e) = value {
+                    *e = copy_expr_renamed(src, dst, *e, rename, interner);
+                }
+            }
+            for child in &mut g2.children {
+                match child {
+                    GsxChildHIR::Expr(e) => {
+                        *e = copy_expr_renamed(src, dst, *e, rename, interner);
+                    }
+                    GsxChildHIR::Node(inner) => {
+                        // Recursive structure copy: holes re-allocated in place.
+                        copy_gsx_holes(src, dst, inner, rename, interner);
+                    }
+                    GsxChildHIR::Text(_) => {}
+                }
+            }
+            Expr::Gsx(Box::new(g2))
+        }
         Expr::Block { stmts, tail } => Expr::Block {
             stmts: stmts
                 .iter()
@@ -2255,6 +2282,33 @@ fn copy_expr_subst_await(
             }
         }
         Expr::Missing | Expr::Literal(_) | Expr::Continue | Expr::Err => src.exprs[eid].clone(),
+        // GSX view expressions (finding F7): attribute/child hole exprs are
+        // body-owned ExprIds — re-allocate them into `dst` like any other
+        // child, keeping the element structure intact.
+        Expr::Gsx(g) => {
+            let mut g2 = (**g).clone();
+            for attr in &mut g2.attrs {
+                let value = match attr {
+                    GsxAttrHIR::Plain { value, .. } | GsxAttrHIR::Directive { value, .. } => value,
+                };
+                if let GsxAttrValue::Expr(e) = value {
+                    *e = copy_expr_renamed(src, dst, *e, rename, interner);
+                }
+            }
+            for child in &mut g2.children {
+                match child {
+                    GsxChildHIR::Expr(e) => {
+                        *e = copy_expr_renamed(src, dst, *e, rename, interner);
+                    }
+                    GsxChildHIR::Node(inner) => {
+                        // Recursive structure copy: holes re-allocated in place.
+                        copy_gsx_holes(src, dst, inner, rename, interner);
+                    }
+                    GsxChildHIR::Text(_) => {}
+                }
+            }
+            Expr::Gsx(Box::new(g2))
+        }
         Expr::Block { stmts, tail } => Expr::Block {
             stmts: stmts
                 .iter()
@@ -3819,5 +3873,29 @@ fn two_seg(interner: &Interner, a: &str, b: crate::Name) -> Path {
             },
         ],
         kind: PathKind::Plain,
+    }
+}
+
+
+/// Re-allocate the hole expressions of a nested GSX node into `dst` in place.
+fn copy_gsx_holes(
+    src: &Body,
+    dst: &mut Body,
+    g: &mut GsxExpr,
+    rename: &std::collections::HashMap<crate::Name, crate::Name>,
+    interner: &Interner,
+) {
+    for attr in &mut g.attrs {
+        let value = match attr {
+            GsxAttrHIR::Plain { value, .. } | GsxAttrHIR::Directive { value, .. } => value,
+        };
+        if let GsxAttrValue::Expr(e) = value {
+            *e = copy_expr_renamed(src, dst, *e, rename, interner);
+        }
+    }
+    for child in &mut g.children {
+        if let GsxChildHIR::Expr(e) = child {
+            *e = copy_expr_renamed(src, dst, *e, rename, interner);
+        }
     }
 }
