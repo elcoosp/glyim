@@ -436,12 +436,11 @@ impl Pipeline {
             return Err(sink_cell.into_inner().into_diagnostics());
         }
 
-        let (hir, hir_diags) =
-            glyim_hir::pipeline_api::lower_crate_for_pipeline_with_file_id(
-                &expanded_root,
-                db.intern_mut(),
-                file_id,
-            );
+        let (hir, hir_diags) = glyim_hir::pipeline_api::lower_crate_for_pipeline_with_file_id(
+            &expanded_root,
+            db.intern_mut(),
+            file_id,
+        );
 
         sink_cell.borrow_mut().extend(hir_diags.clone());
 
@@ -618,8 +617,10 @@ impl Pipeline {
             let lower_ctx =
                 PipelineLowerCtx::new(ty_ctx_ref, &hir, typeck_result.const_values.clone());
             let mut bodies = std::collections::HashMap::new();
-            let mut pre_opt_bodies_map: std::collections::HashMap<glyim_core::def_id::DefId, Arc<Body>> =
-                std::collections::HashMap::new();
+            let mut pre_opt_bodies_map: std::collections::HashMap<
+                glyim_core::def_id::DefId,
+                Arc<Body>,
+            > = std::collections::HashMap::new();
 
             for (_owner_def_id, thir_body) in &typeck_result.thir_bodies {
                 let mut lower_result = glyim_lower::lower_body(&lower_ctx, thir_body);
@@ -678,10 +679,7 @@ impl Pipeline {
                     }
                     let c_opt = glyim_opt::optimize(ty_ctx_ref, &c_mir_arc);
                     let c_body = c_opt.body;
-                    let c_sym = format!(
-                        "__glyim_fn_{}",
-                        c_body.owner.local_id.to_raw()
-                    );
+                    let c_sym = format!("__glyim_fn_{}", c_body.owner.local_id.to_raw());
                     closure_bodies_codegen.push((c_sym, Arc::new(c_body)));
                 }
             }
@@ -747,11 +745,8 @@ impl Pipeline {
             // §3.5.30 framework: gate the unused-generic-params post-mono check
             // on the lint level. The check always runs (cheap); we filter
             // its output here based on `LintId::UnusedGenericParams`.
-            let unused_generic_diags = check_unused_generic_params(
-                mono_ctx.items(),
-                Some(&mir_bodies_map),
-                ty_ctx_ref,
-            );
+            let unused_generic_diags =
+                check_unused_generic_params(mono_ctx.items(), Some(&mir_bodies_map), ty_ctx_ref);
             match db
                 .lints()
                 .get(&glyim_core::lint::LintId::UnusedGenericParams)
@@ -804,7 +799,10 @@ impl Pipeline {
                     continue;
                 }
                 for span in spans {
-                    ann_diags.push(GlyimDiagnostic::type_error(*span, "type annotations needed"));
+                    ann_diags.push(GlyimDiagnostic::type_error(
+                        *span,
+                        "type annotations needed",
+                    ));
                 }
             }
             if !ann_diags.is_empty() {
@@ -854,9 +852,7 @@ impl Pipeline {
                 let mut synthetic_roots: Vec<glyim_lower::mono::MonoItem> = Vec::new();
                 for def_id in mir_bodies_map.keys() {
                     synthetic_roots.push(glyim_lower::mono::MonoItem::Fn {
-                        def_id: glyim_core::def_id::FnDefId::from_raw(
-                            def_id.local_id.to_raw(),
-                        ),
+                        def_id: glyim_core::def_id::FnDefId::from_raw(def_id.local_id.to_raw()),
                         substs: empty_subst,
                     });
                 }
@@ -884,12 +880,9 @@ impl Pipeline {
             match synthesized {
                 Some(v) if !v.is_empty() => v,
                 _ => mir_bodies_map
-                    .into_iter()
-                    .map(|(_def_id, body)| {
-                        let sym = format!(
-                            "__glyim_fn_{}",
-                            body.owner.local_id.to_raw()
-                        );
+                    .into_values()
+                    .map(|body| {
+                        let sym = format!("__glyim_fn_{}", body.owner.local_id.to_raw());
                         (sym, body)
                     })
                     .collect(),
@@ -927,12 +920,8 @@ impl Pipeline {
             for (sym, body) in std::mem::take(&mut all_bodies) {
                 if body_is_raw_generic(&body, ty_ctx_ref) {
                     let reason = match ty_ctx_ref.ty_kind(body.return_ty) {
-                        glyim_type::TyKind::Param(_) => {
-                            "return type is a generic parameter"
-                        }
-                        glyim_type::TyKind::Bound(_, _) => {
-                            "return type is a bound variable"
-                        }
+                        glyim_type::TyKind::Param(_) => "return type is a generic parameter",
+                        glyim_type::TyKind::Bound(_, _) => "return type is a bound variable",
                         glyim_type::TyKind::Projection(_) => {
                             "return type is an associated-type projection"
                         }
@@ -1169,7 +1158,6 @@ pub fn emit_syntax(
     })?;
     Ok(())
 }
-
 
 /// emit_llvm_ir.
 pub fn emit_llvm_ir(
