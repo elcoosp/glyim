@@ -103,7 +103,12 @@ impl LocalEnv {
     pub fn add_binding(&mut self, name: Name, ty: Ty, mutability: Mutability) -> LocalVarId {
         let id = LocalVarId::from_raw(self.vars.len() as u32);
         if std::env::var_os("GLYIM_DBG_BIND").is_some() {
-            eprintln!("[BIND] id={} at vars.len={} scope_depth={}", id.to_raw(), self.vars.len(), self.scope_stack.len());
+            eprintln!(
+                "[BIND] id={} at vars.len={} scope_depth={}",
+                id.to_raw(),
+                self.vars.len(),
+                self.scope_stack.len()
+            );
         }
         self.vars.push(LocalVarInfo {
             id,
