@@ -1,0 +1,113 @@
+---
+title: Write GSX Views
+description: Author typed GSX view elements with directives, keyed iteration, and two-way bindings, and run them through the glyim-gsx compiler stage and headless test host.
+type: how-to
+sidebar:
+  order: 6
+---
+
+import { Aside, Badge, LinkCard } from '@astrojs/starlight/components';
+
+This guide shows how to author views with Glyim's GSX syntax: elements, text holes, event and binding directives, and keyed iteration — and how the compiler turns them into blueprints with mutation-specialized patches.
+
+<Aside type="caution">
+GSX is experimental. The parser, type checker, and the `glyim-gsx` stage are implemented and tested (the flagship Counter example runs end to end through the library API), but the `glyim-cli` driver does not run the GSX stage yet: a body containing GSX ends type checking with a clean hand-off diagnostic. Until driver wiring lands, you exercise GSX through the `glyim-gsx` library API, as the crate's own tests do.
+</Aside>
+
+## Author a view
+
+GSX view elements are first-class expressions in Glyim. A complete component from the design's flagship example:
+
+```glyim
+use ui::{View, Host, Handler};
+
+#[state]
+struct Counter {
+    count: i32,
+    step:  i32,
+    name:  String,
+}
+
+#[component]
+fn CounterView(s: &Counter) -> View {
+    <section class="counter" aria-label="Counter">
+        <h1>"Hello, {s.name}!"</h1>
+
+        <button on:click={|s, _| s.count -= s.step}>"−"</button>
+        <output class:warn={s.count < 0}>"{s.count}"</output>
+        <button on:click={|s, _| s.count += s.step}>"+"</button>
+
+        <input bind:value={s.name} placeholder="Your name" />
+
+        {if s.count > 10 {
+            <p class="big">"That's a lot."</p>
+        } else {
+            <></>
+        }}
+
+        <ul>
+            {for item in s.history.iter() by item.id {
+                <li>"{item.label}"</li>
+            }}
+        </ul>
+    </section>
+}
+```
+
+## Know the text rules
+
+Text is always a string literal — JSX-style raw text is not part of the syntax, which keeps the lexer unchanged and avoids whitespace-collapsing rules:
+
+```glyim
+<h1>"Hello, {s.name}!"</h1>
+```
+
+The GSX parser splits the literal into static pieces and typed holes at parse time, so each hole's read-set is syntactically visible and escaping is type-driven. Spaces between siblings are not significant; write `" "` explicitly when you need one.
+
+## Use attributes, spreads, and directives
+
+| Construct | Syntax | Meaning |
+|---|---|---|
+| Attribute | `name="lit"`, `name={expr}` | Static string or dynamic expression. |
+| Bare attribute | `disabled` | Equivalent to `disabled={true}`. |
+| Shorthand | `{name}` | Equivalent to `name={name}`. |
+| Spread | `{..props}` | Typed against the target's prop struct. |
+| Event handler | `on:click={handler}` | Handlers are state transformers `fn(&mut S, E)`. |
+| Class toggle | `class:active={cond}` | Statically decomposed into slots. |
+| Style toggle | `style:width={px}` | Statically decomposed into slots. |
+| Two-way binding | `bind:value={place}` | `place` is a place expression (lvalue). |
+
+Lowercase tags resolve through the active dialect schema — the compiler validates tags, props, events, and children against the schema, never by string matching. Uppercase tags such as `<Name …/>` resolve through the def-map like any item. Namespaced escapes such as `<web:canvas/>` and `<native:window/>` select host-specific dialects.
+
+## Control flow is the language
+
+There are no template directives such as `v-if` or `{#each}` — you use Glyim's native `if`, `match`, and `for` inside `{ }`, and the compiler recognizes those forms as regions:
+
+```glyim
+{if s.count > 10 {
+    <p class="big">"That's a lot."</p>
+} else {
+    <></>
+}}
+```
+
+For lists, add a `by` key expression — a GSX-scoped contextual keyword accepted only in child-position `for` — to get keyed reconciliation:
+
+```glyim
+{for item in s.history.iter() by item.id {
+    <li>"{item.label}"</li>
+}}
+```
+
+## Run it through the compiler stage
+
+The `glyim-gsx` stage is a library: it lowers checked GSX expressions through View IR (skeleton + slots + regions), read/write-set analysis with prefix interference, and mutation-specialized patch functions, then emits flat-`u32` blueprints plus an SSR string. The headless, op-recording host mounts, patches, and dispatches views so tests can assert exact update costs — the Counter test in `crates/glyim-gsx/tests/counter.rs` is the reference walkthrough.
+
+<Aside type="tip">
+If a value cannot be tracked by ownership analysis — a shared mutable cell behind `Rc<RefCell<T>>`-style aliasing — the compiler emits the `Signal<T>` diagnostic (G0201) with a fix-it, and the host falls back to signal bits for that slot.
+</Aside>
+
+## Next steps
+
+<LinkCard title="GSX reference" href="/reference/gsx/" description="The complete syntax and the glyim-gsx public API." />
+<LinkCard title="Ownership-driven reactivity, explained" href="/explanation/gsx-reactivity/" description="Why the compiler proves who can write to what instead of diffing a vdom." />
