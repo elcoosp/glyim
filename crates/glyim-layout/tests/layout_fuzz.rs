@@ -10,13 +10,13 @@ use glyim_layout::LayoutComputer;
 use glyim_layout::SimpleLayoutComputer;
 use glyim_layout::VariantsShape;
 use glyim_type::{AdtDef, AdtKind, FieldDef, Ty, TyCtxMut, TyKind, VariantDef};
-use rand::Rng;
+use rand::{Rng, RngExt};
 
 fn build_random_ty(ctx: &mut TyCtxMut, rng: &mut impl Rng, depth: u32) -> Ty {
     if depth > 3 {
         return ctx.mk_ty(TyKind::Int(IntTy::I32));
     }
-    match rng.gen_range(0..8) {
+    match rng.random_range(0..8) {
         0 => ctx.mk_ty(TyKind::Int(IntTy::I32)),
         1 => ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U32)),
         2 => ctx.mk_ty(TyKind::Float(glyim_core::primitives::FloatTy::F64)),
@@ -37,14 +37,14 @@ fn build_random_ty(ctx: &mut TyCtxMut, rng: &mut impl Rng, depth: u32) -> Ty {
             let elem_ty = build_random_ty(ctx, rng, depth + 1);
             let len = ctx.mk_ty(TyKind::Int(IntTy::I32));
             let const_val = glyim_type::Const {
-                kind: glyim_type::ConstKind::Uint(rng.gen_range(1..5)),
+                kind: glyim_type::ConstKind::Uint(rng.random_range(1..5)),
                 ty: len,
             };
             ctx.mk_ty(TyKind::Array(elem_ty, const_val))
         }
         7 => {
             // Build a tuple with random fields.
-            let count = rng.gen_range(1..4);
+            let count = rng.random_range(1..4);
             let mut args = Vec::new();
             for _ in 0..count {
                 args.push(glyim_type::GenericArg::Ty(build_random_ty(
@@ -62,13 +62,13 @@ fn build_random_ty(ctx: &mut TyCtxMut, rng: &mut impl Rng, depth: u32) -> Ty {
 
 #[test]
 fn fuzz_random_adt_layouts() {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut ctx_mut = TyCtxMut::new(Interner::new());
     let target = TargetInfo::x86_64();
 
     for _ in 0..50 {
         // Generate a random struct ADT.
-        let field_count = rng.gen_range(0..6);
+        let field_count = rng.random_range(0..6);
         let mut fields = Vec::new();
         for i in 0..field_count {
             let ty = build_random_ty(&mut ctx_mut, &mut rng, 0);
@@ -91,7 +91,7 @@ fn fuzz_random_adt_layouts() {
             }],
             generic_params: vec![],
         };
-        let adt_id = AdtId::from_raw(rng.gen_range(1000..2000));
+        let adt_id = AdtId::from_raw(rng.random_range(1000..2000));
         ctx_mut.register_adt(adt_id, adt_def.clone());
 
         // Get the ADT type and compute its layout.
@@ -147,15 +147,15 @@ fn fuzz_random_adt_layouts() {
 #[test]
 fn fuzz_random_enum_layouts() {
     // Similar to struct fuzz but for enums.
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut ctx_mut = TyCtxMut::new(Interner::new());
     let target = TargetInfo::x86_64();
 
     for _ in 0..30 {
-        let variant_count = rng.gen_range(1..4);
+        let variant_count = rng.random_range(1..4);
         let mut variants = Vec::new();
         for vi in 0..variant_count {
-            let field_count = rng.gen_range(0..3);
+            let field_count = rng.random_range(0..3);
             let mut fields = Vec::new();
             for fi in 0..field_count {
                 let ty = build_random_ty(&mut ctx_mut, &mut rng, 0);
@@ -185,7 +185,7 @@ fn fuzz_random_enum_layouts() {
             variants: variants.clone(),
             generic_params: vec![],
         };
-        let adt_id = AdtId::from_raw(rng.gen_range(3000..4000));
+        let adt_id = AdtId::from_raw(rng.random_range(3000..4000));
         ctx_mut.register_adt(adt_id, adt_def);
 
         let subst = ctx_mut.intern_substitution(vec![]);

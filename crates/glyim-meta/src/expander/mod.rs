@@ -1173,11 +1173,7 @@ impl<'a> ExpanderImpl<'a> {
                     out.push(tt_tok(SyntaxKind::Ident, "new"));
                     out.push(tt_paren(Vec::new()));
                     out.push(tt_tok(SyntaxKind::Semicolon, ";"));
-                    loop {
-                        let open = match fmt_remaining.find("{}") {
-                            Some(o) => o,
-                            None => break,
-                        };
+                    while let Some(open) = fmt_remaining.find("{}") {
                         let before = fmt_remaining[..open].to_string();
                         let after = fmt_remaining[open + 2..].to_string();
                         if before.contains('{') || before.contains('}') {

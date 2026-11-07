@@ -372,13 +372,12 @@ fn collect_writes(e: &Expr, state_param: &str, set: &mut BTreeSet<Place>) {
             }
         }
         Expr::Method(recv, name, args) => {
-            if is_mutating_method(name) {
-                if let Some(p) = arg_place(recv, state_param) {
+            if is_mutating_method(name)
+                && let Some(p) = arg_place(recv, state_param) {
                     let mut p2 = p;
                     p2.subtree = true;
                     set.insert(p2);
                 }
-            }
             for a in args {
                 collect_writes(a, state_param, set);
             }
@@ -444,12 +443,12 @@ fn is_mutating_method(name: &str) -> bool {
 }
 
 /// Format an expression for diagnostics (`s.items[i]`).
-pub fn expr_display(e: &Expr, state_param: &str) -> String {
+pub fn expr_display(e: &Expr, _state_param: &str) -> String {
     match e {
         Expr::Var(v) => v.clone(),
-        Expr::Field(b, n) => format!("{}.{}", expr_display(b, state_param), n),
-        Expr::Index(b, i) => format!("{}[{}]", expr_display(b, state_param), expr_display(i, state_param)),
-        Expr::Method(r, n, _) => format!("{}.{}(..)", expr_display(r, state_param), n),
+        Expr::Field(b, n) => format!("{}.{}", expr_display(b, _state_param), n),
+        Expr::Index(b, i) => format!("{}[{}]", expr_display(b, _state_param), expr_display(i, _state_param)),
+        Expr::Method(r, n, _) => format!("{}.{}(..)", expr_display(r, _state_param), n),
         Expr::Call(n, _) => format!("{n}(..)"),
         Expr::Lit(l) => match l {
             crate::expr::Lit::Str(s) => format!("\"{s}\""),

@@ -221,6 +221,7 @@ impl TyCtx {
     /// `impl_self_ty = VecIntoIter<Param(0, T)>`,
     /// `query_self_ty = VecIntoIter<i32>`, `assoc = Param(0, T)`; this
     /// helper substitutes `{0 -> i32}` and returns `i32`.
+    #[allow(clippy::collapsible_if)]
     fn subst_impl_params_into_assoc(&self, impl_self_ty: Ty, query_self_ty: Ty, assoc: Ty) -> Ty {
         let (impl_sub, query_sub) = match (self.ty_kind(impl_self_ty), self.ty_kind(query_self_ty))
         {

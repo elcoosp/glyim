@@ -226,6 +226,7 @@ pub struct SsrProgram {
 
 /// One SSR chunk.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum SsrChunk {
     /// `&'static str` — memcpy'd (G7).
     Static(String),
@@ -609,7 +610,7 @@ mod tests {
         let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
         let g = crate::ast::gsx_from_parse(&parsed);
         let schemas = SchemaRegistry::standard();
-        VirBuilder::new(VirOptions::default(), &schemas).build(&g.root.as_ref().unwrap())
+        VirBuilder::new(VirOptions::default(), &schemas).build(g.root.as_ref().unwrap())
     }
 
     /// §6.1: the static skeleton encodes to Create/StaticProp/Text/Enter/

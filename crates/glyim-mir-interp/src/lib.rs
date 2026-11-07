@@ -2693,35 +2693,30 @@ impl<'tcx> Interpreter<'tcx> {
                 let mut frame = self.frame_depth;
                 let mut local = place.local.index();
                 let mut projection: Vec<glyim_mir::ProjectionElem> =
-                    place.projection.iter().cloned().collect();
-                loop {
-                    match projection.first() {
-                        Some(glyim_mir::ProjectionElem::Deref) => {
-                            let base = self
-                                .locals_for_ref_frame(frame)
-                                .and_then(|fl| fl.get(local))
-                                .and_then(|opt| opt.as_ref());
-                            match base {
-                                Some(InterpValue::Ref {
-                                    frame: f,
-                                    local: l,
-                                    projection: p,
-                                }) => {
-                                    if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-                                        eprintln!(
-                                            "[TRACE-REF-FLATTEN] ({}, {}) {:?} -> ({}, {}) {:?}",
-                                            frame, local, projection, f, l, p
-                                        );
-                                    }
-                                    frame = *f;
-                                    local = *l;
-                                    let mut np: Vec<glyim_mir::ProjectionElem> =
-                                        p.iter().cloned().collect();
-                                    np.extend_from_slice(&projection[1..]);
-                                    projection = np;
-                                }
-                                _ => break,
+                    place.projection.to_vec();
+                while let Some(glyim_mir::ProjectionElem::Deref) = projection.first() {
+                    let base = self
+                        .locals_for_ref_frame(frame)
+                        .and_then(|fl| fl.get(local))
+                        .and_then(|opt| opt.as_ref());
+                    match base {
+                        Some(InterpValue::Ref {
+                            frame: f,
+                            local: l,
+                            projection: p,
+                        }) => {
+                            if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
+                                eprintln!(
+                                    "[TRACE-REF-FLATTEN] ({}, {}) {:?} -> ({}, {}) {:?}",
+                                    frame, local, projection, f, l, p
+                                );
                             }
+                            frame = *f;
+                            local = *l;
+                            let mut np: Vec<glyim_mir::ProjectionElem> =
+                                p.to_vec();
+                            np.extend_from_slice(&projection[1..]);
+                            projection = np;
                         }
                         _ => break,
                     }
@@ -3856,7 +3851,7 @@ MirConstKind::Error => {
                 // arm touches `self.globals`. Used by the `StaticPtr` arm to
                 // resolve dynamic `Index` projections.
                 let frame_snapshot: Vec<Option<InterpValue>> =
-                    frame_locals.iter().cloned().collect();
+                    frame_locals.to_vec();
                 let target = match base_val {
                     InterpValue::Ref { frame, local, .. } => (frame, local),
                     InterpValue::StaticPtr { def_id } => {

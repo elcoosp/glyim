@@ -150,11 +150,10 @@ pub fn build_msps(vir: &Vir, enc: &Encoded) -> Msp {
     // the same input (the compiler knows the host already holds that value).
     let mut bind_places: BTreeSet<String> = BTreeSet::new();
     for slot in &vir.slots {
-        if let SlotKind::Event { handler, .. } = &slot.kind {
-            if let HandlerSpec::SynthBind { place } = handler.as_ref() {
+        if let SlotKind::Event { handler, .. } = &slot.kind
+            && let HandlerSpec::SynthBind { place } = handler.as_ref() {
                 bind_places.insert(analysis::expr_display(place, &sp));
             }
-        }
     }
 
     // Distinct write-sets → patch fns (§7.5).
@@ -891,7 +890,7 @@ mod tests {
         assert!(g.diagnostics.is_empty(), "{:?}", g.diagnostics);
         let schemas = SchemaRegistry::standard();
         let vir = VirBuilder::new(VirOptions::default(), &schemas)
-            .build(&g.root.as_ref().unwrap());
+            .build(g.root.as_ref().unwrap());
         ViewRuntime::new(vir, 0)
     }
 

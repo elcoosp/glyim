@@ -7,7 +7,7 @@ pub fn render_status_table(sessions: &[SessionState]) -> String {
         return "No active sessions.".to_string();
     }
     let mut table = Table::new();
-    table.load_preset(UTF8_FULL);
+    table.load_style(UTF8_FULL);
     table.set_header(vec![
         "Stream",
         "Provider",

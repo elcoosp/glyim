@@ -181,7 +181,7 @@ impl Expr {
 
     /// Walk sub-expressions (order is structural).
     pub fn children(&self) -> Vec<&Expr> {
-        fn e(x: &Box<Expr>) -> &Expr {
+        fn e(x: &Expr) -> &Expr {
             x
         }
         match self {
@@ -261,9 +261,7 @@ pub fn expr_from_cst(node: &SyntaxNode) -> Expr {
             let mut kids = expr_children(node);
             let field = node
                 .children_with_tokens()
-                .filter_map(|e| e.into_token())
-                .filter(|t| t.kind() == SyntaxKind::Ident)
-                .next();
+                .filter_map(|e| e.into_token()).find(|t| t.kind() == SyntaxKind::Ident);
             match (kids.pop(), field) {
                 (Some(base), Some(t)) => Expr::Field(Box::new(base), t.text().to_string()),
                 (Some(base), None) => base, // tuple index `.0` — keep the base
@@ -276,9 +274,7 @@ pub fn expr_from_cst(node: &SyntaxNode) -> Expr {
             let mut kids = expr_children(node);
             let name = node
                 .children_with_tokens()
-                .filter_map(|e| e.into_token())
-                .filter(|t| t.kind() == SyntaxKind::Ident)
-                .next()
+                .filter_map(|e| e.into_token()).find(|t| t.kind() == SyntaxKind::Ident)
                 .map(|t| t.text().to_string())
                 .unwrap_or_default();
             let args = if kids.len() >= 2 {

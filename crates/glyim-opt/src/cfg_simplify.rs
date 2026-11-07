@@ -111,7 +111,7 @@ pub(crate) fn remap_terminator(block: &mut BasicBlockData, remap: &[Option<usize
             BasicBlockIdx::from_raw(0)
         }
     };
-    let map_opt = |opt: &Option<BasicBlockIdx>| -> Option<BasicBlockIdx> { opt.as_ref().map(&map) };
+    let map_opt = |opt: &Option<BasicBlockIdx>| -> Option<BasicBlockIdx> { opt.as_ref().map(map) };
     match &mut block.terminator.kind {
         TerminatorKind::Goto { target } => *target = map(target),
         TerminatorKind::SwitchInt { targets, .. } => {

@@ -3683,7 +3683,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     // could not select, aborting with
                     // `Cannot select: f64 = Constant<...>`.
                     let decl = intrinsic
-                        .get_declaration(&self.module, &[dst_basic, src_basic])
+                        .get_declaration(self.module, &[dst_basic, src_basic])
                         .ok_or_else(|| {
                             vec![GlyimDiagnostic::internal_error(format!(
                                 "could not declare `{intrinsic_name}`"
@@ -4243,7 +4243,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         }
                     };
                     let null_drop_fn = drop_fn_ptr;
-                    let args_vals: Vec<BasicValueEnum<'ctx>> = vec![drop_arg, null_drop_fn.into()];
+                    let args_vals: Vec<BasicValueEnum<'ctx>> = vec![drop_arg, null_drop_fn];
 
                     if let Some(cleanup_bb) = cleanup_bb {
                         let normal_bb = self.context.append_basic_block(self.function, "drop_cont");
@@ -4775,7 +4775,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         // are computed locally here.
         {
             let atomic_adt = _recv_adt.to_raw();
-            if matches!(atomic_adt, 1016 | 1017 | 1018)
+            if matches!(atomic_adt, 1016..=1018)
                 && matches!(
                     method.as_str(),
                     "new" | "load" | "store" | "fetch_and" | "fetch_or" | "fetch_add"

@@ -50,6 +50,7 @@ impl LintId {
     /// Parse a lint name from a CLI argument. Returns `None` for unknown names
     /// (callers log-and-ignore, matching rustc's lenient-but-warns policy;
     /// here the MVP silently ignores so unrelated tests aren't disrupted).
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "unsafe_fn_call" | "unsafe" => Some(LintId::UnsafeFnCall),

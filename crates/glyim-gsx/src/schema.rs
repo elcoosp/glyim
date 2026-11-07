@@ -247,11 +247,10 @@ impl SchemaRegistry {
         tag: &str,
     ) -> Option<&ElementSchema> {
         if let Some(ns) = namespace {
-            if let Some(d) = self.dialects.get(ns) {
-                if let Some(s) = d.element(Some(ns), tag) {
+            if let Some(d) = self.dialects.get(ns)
+                && let Some(s) = d.element(Some(ns), tag) {
                     return Some(s);
                 }
-            }
             return None;
         }
         self.dialects

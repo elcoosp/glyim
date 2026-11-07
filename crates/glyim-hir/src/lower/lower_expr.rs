@@ -2505,7 +2505,7 @@ fn lower_gsx_attr(
         .filter_map(|c| c.into_token())
         .filter(|t| !t.kind().is_trivia());
     let mut value_kind = None;
-    while let Some(t) = tokens.next() {
+    for t in tokens {
         match t.kind() {
             SyntaxKind::Ident | SyntaxKind::KwType | SyntaxKind::KwSelf
                 if !saw_colon && hyphen_parts.is_empty() =>
@@ -2539,7 +2539,7 @@ fn lower_gsx_attr(
             SyntaxKind::LBrace => {
                 if let Some(expr_node) = node
                     .children()
-                    .find(|c| is_expr_node(c))
+                    .find(is_expr_node)
                 {
                     let eid = lower_expr(&expr_node, interner, body, diags, struct_field_map)
                         .unwrap_or_else(|| body.alloc_missing(node_span(&expr_node)));
@@ -2590,7 +2590,7 @@ fn collect_gsx_children(
                 out.push(GsxChildHIR::Text(interner.intern(&unescape_gsx_text(inner))));
             }
             SyntaxKind::GsxBlockChild => {
-                if let Some(expr_node) = c.children().find(|n| is_expr_node(n)) {
+                if let Some(expr_node) = c.children().find(is_expr_node) {
                     let eid = lower_expr(&expr_node, interner, body, diags, struct_field_map)
                         .unwrap_or_else(|| body.alloc_missing(node_span(&expr_node)));
                     out.push(GsxChildHIR::Expr(eid));

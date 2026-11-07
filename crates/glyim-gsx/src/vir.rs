@@ -606,12 +606,7 @@ impl<'a> VirBuilder<'a> {
             match attr {
                 ast::GsxAttr::Plain(name, value) => {
                     let prop_schema = schema.prop(name).or_else(|| {
-                        schema
-                            .prop(&name.replace('-', "_"))
-                            .map(|p| {
-                                // hyphenated names map to schema names (aria-label → aria_label)
-                                p
-                            })
+                        schema.prop(&name.replace('-', "_"))
                     });
                     let Some(ps) = prop_schema else {
                         self.diagnostics.push(GsxDiagnostic::new(
@@ -826,8 +821,8 @@ impl<'a> VirBuilder<'a> {
         if !(self_closing || schema.serialization.void) {
             for c in children {
                 // Content-model check (§5.2).
-                if let ast::GsxChild::Node(inner) = c {
-                    if let ast::GsxNode::Element { tag: itag, .. } = inner {
+                if let ast::GsxChild::Node(inner) = c
+                    && let ast::GsxNode::Element { tag: itag, .. } = inner {
                         let shape = match itag {
                             ast::TagName::Intrinsic(t) => ChildName::Intrinsic(t.clone()),
                             ast::TagName::Dialect(_, t) => ChildName::Intrinsic(t.clone()),
@@ -843,7 +838,6 @@ impl<'a> VirBuilder<'a> {
                             self.diagnostics.push(GsxDiagnostic::new(GsxCode::ContentModel, v));
                         }
                     }
-                }
                 if let Some(node) = self.child_to_node(c) {
                     child_nodes.push(node);
                 }
@@ -876,9 +870,9 @@ impl<'a> VirBuilder<'a> {
         let head = segs.first().cloned().unwrap_or_default();
         let props: Vec<(String, ast::AttrValue)> = attrs
             .iter()
-            .filter_map(|a| match a {
-                ast::GsxAttr::Plain(n, v) => Some((n.clone(), v.clone())),
-                ast::GsxAttr::Directive(ns, sub, v) => Some((format!("{ns}:{sub}"), v.clone())),
+            .map(|a| match a {
+                ast::GsxAttr::Plain(n, v) => (n.clone(), v.clone()),
+                ast::GsxAttr::Directive(ns, sub, v) => (format!("{ns}:{sub}"), v.clone()),
             })
             .collect();
         // Record the region slot first so structural patching has an anchor.

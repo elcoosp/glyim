@@ -376,11 +376,10 @@ impl Interp {
                 let s = self.eval(scrutinee)?;
                 for (pat, guard, body) in arms {
                     if pattern_matches(pat, &s) {
-                        if let Some(g) = guard {
-                            if !self.eval(g)?.truthy() {
+                        if let Some(g) = guard
+                            && !self.eval(g)?.truthy() {
                                 continue;
                             }
-                        }
                         return self.eval(body);
                     }
                 }
@@ -464,8 +463,8 @@ impl Interp {
 
 fn lit_value(l: &Lit) -> Value {
     match l {
-        Lit::Int(i) => Value::Int(i64::try_from(*i).unwrap_or_else(|_| i64::MAX)),
-        Lit::Uint(u) => Value::Int(i64::try_from(*u).unwrap_or_else(|_| i64::MAX)),
+        Lit::Int(i) => Value::Int(i64::try_from(*i).unwrap_or(i64::MAX)),
+        Lit::Uint(u) => Value::Int(i64::try_from(*u).unwrap_or(i64::MAX)),
         Lit::Float(f) => Value::Float(*f),
         Lit::Str(s) => Value::Str(Rc::from(s.as_str())),
         Lit::Char(c) => Value::Str(Rc::from(c.to_string())),

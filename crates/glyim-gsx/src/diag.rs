@@ -32,14 +32,14 @@ impl GsxCode {
     /// The `Gxxxx` code as printed in diagnostics.
     pub fn code(self) -> u32 {
         match self {
-            GsxCode::UnknownProp => 0_0101,
-            GsxCode::UnknownEvent => 0_0102,
-            GsxCode::ContentModel => 0_0103,
-            GsxCode::A11yRequired => 0_0104,
-            GsxCode::DuplicateAttr => 0_0105,
-            GsxCode::HandlerCapture => 0_0200,
-            GsxCode::UntrackableRead => 0_0201,
-            GsxCode::StructuralWrite => 0_0202,
+            GsxCode::UnknownProp => 101,
+            GsxCode::UnknownEvent => 102,
+            GsxCode::ContentModel => 103,
+            GsxCode::A11yRequired => 104,
+            GsxCode::DuplicateAttr => 105,
+            GsxCode::HandlerCapture => 200,
+            GsxCode::UntrackableRead => 201,
+            GsxCode::StructuralWrite => 202,
         }
     }
 

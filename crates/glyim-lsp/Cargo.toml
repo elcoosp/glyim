@@ -20,14 +20,14 @@ glyim-frontend = { path = "../glyim-frontend" }
 glyim-core = { path = "../glyim-core" }
 glyim-span = { path = "../glyim-span" }
 async-lsp = { git = "https://github.com/elcoosp/async-lsp", features = ["omni-trait", "stdio", "tokio"] }
-tokio = { version = "1.53", features = ["full"] }
+tokio = { version = "1.54", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
 tracing = "0.1"
 dashmap = "6.2"
-parking_lot = "0.12"
+parking_lot = "0.13"
 url = "2.5.8"
-file_url = "0.3.2"
+file_url = "0.3.3"
 glyim-def-map = { workspace = true }
 glyim-type = { workspace = true }
 glyim-typeck = { workspace = true }

@@ -18,4 +18,4 @@ glyim-proc-macro = { workspace = true }
 
 [dev-dependencies]
 glyim-test = { workspace = true }
-tempfile = "3.8"
+tempfile = "3.27"

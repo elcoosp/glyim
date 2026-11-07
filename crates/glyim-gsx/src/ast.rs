@@ -421,7 +421,7 @@ fn shorthand_name(e: &Expr) -> String {
 fn attr_name_and_value(raw: &[(SyntaxKind, String)]) -> Option<(String, usize)> {
     let mut name = String::new();
     let mut i = 0;
-    while i < raw.len() {
+    if i < raw.len() {
         match raw[i].0 {
             SyntaxKind::Ident | SyntaxKind::KwType | SyntaxKind::KwSelf => {
                 name.push_str(&raw[i].1);
@@ -435,7 +435,6 @@ fn attr_name_and_value(raw: &[(SyntaxKind, String)]) -> Option<(String, usize)> 
                     name.push_str(&raw[i + 1].1);
                     i += 2;
                 }
-                break;
             }
             _ => return None,
         }
