@@ -15,7 +15,7 @@
 //! handlers or reactive slots; static regions are never walked.
 
 use crate::analysis::Place;
-use crate::blueprint::{BpOp, Blueprint};
+use crate::blueprint::{Blueprint, BpOp};
 use crate::interp::{Interp, Value};
 use crate::schema::EscapeCtx;
 use crate::vir::{Region, SlotKind, Vir, VirNode};
@@ -107,7 +107,13 @@ struct EncodeState {
 
 fn encode_node(node: &VirNode, vir: &Vir, bp: &mut Blueprint, st: &mut EncodeState) {
     match node {
-        VirNode::Element { tag_id, static_props, slot_ids, children, .. } => {
+        VirNode::Element {
+            tag_id,
+            static_props,
+            slot_ids,
+            children,
+            ..
+        } => {
             let node_idx = st.counter;
             st.counter += 1;
             bp.push_op(BpOp::Create(*tag_id));
@@ -289,7 +295,13 @@ impl RegionSsr {
                 scrutinee: scrutinee.clone(),
                 arms: arms.clone(),
             },
-            Region::For { pat, iter, key, body, .. } => RegionSsr::For {
+            Region::For {
+                pat,
+                iter,
+                key,
+                body,
+                ..
+            } => RegionSsr::For {
                 pat: pat.clone(),
                 iter: iter.clone(),
                 key: key.clone(),
@@ -298,7 +310,12 @@ impl RegionSsr {
             Region::Component { inlined, .. } => RegionSsr::If {
                 arms: inlined
                     .as_ref()
-                    .map(|v| vec![(crate::expr::Expr::Lit(crate::expr::Lit::Bool(true)), (**v).clone())])
+                    .map(|v| {
+                        vec![(
+                            crate::expr::Expr::Lit(crate::expr::Lit::Bool(true)),
+                            (**v).clone(),
+                        )]
+                    })
                     .unwrap_or_default(),
                 else_body: None,
             },
@@ -351,11 +368,13 @@ impl SsrProgram {
                         let chosen = arms
                             .iter()
                             .enumerate()
-                            .find(|(_, (c, _))| {
-                                interp.eval(c).map(|v| v.truthy()).unwrap_or(false)
-                            })
+                            .find(|(_, (c, _))| interp.eval(c).map(|v| v.truthy()).unwrap_or(false))
                             .map(|(i, _)| Some(i))
-                            .unwrap_or(if else_body.is_some() { Some(arms.len()) } else { None });
+                            .unwrap_or(if else_body.is_some() {
+                                Some(arms.len())
+                            } else {
+                                None
+                            });
                         if let Some(i) = chosen {
                             let sub = if i < arms.len() {
                                 &arms[i].1
@@ -371,7 +390,9 @@ impl SsrProgram {
                             out.push_str(&ssr_program(body).render_to(interp));
                         }
                     }
-                    RegionSsr::For { pat, iter, body, .. } => {
+                    RegionSsr::For {
+                        pat, iter, body, ..
+                    } => {
                         let it = interp.eval(iter).unwrap_or(Value::Null);
                         if let Value::List(l) = it {
                             for item in l.borrow().iter() {
@@ -399,7 +420,13 @@ pub fn ssr_program(vir: &Vir) -> SsrProgram {
 
 fn ssr_node(node: &VirNode, vir: &Vir, p: &mut SsrProgram) {
     match node {
-        VirNode::Element { tag, static_props, slot_ids, children, .. } => {
+        VirNode::Element {
+            tag,
+            static_props,
+            slot_ids,
+            children,
+            ..
+        } => {
             p.chunks.push(SsrChunk::Static(format!("<{}", tag)));
             for sp in static_props {
                 p.chunks.push(SsrChunk::Static(format!(
@@ -591,7 +618,8 @@ fn vir_needs_hydration(vir: &Vir) -> bool {
 /// §7.5 helper shared with `msp`: the read-set of a slot.
 pub fn slot_reads(slot: &crate::vir::Slot, state_param: &str) -> BTreeSet<Place> {
     match &slot.kind {
-        SlotKind::Prop { expr, .. } | SlotKind::ClassToggle { expr, .. }
+        SlotKind::Prop { expr, .. }
+        | SlotKind::ClassToggle { expr, .. }
         | SlotKind::Style { expr, .. } => crate::analysis::read_set(expr, state_param),
         SlotKind::Text => BTreeSet::new(),
         SlotKind::Event { .. } | SlotKind::Region { .. } => BTreeSet::new(),
@@ -601,7 +629,7 @@ pub fn slot_reads(slot: &crate::vir::Slot, state_param: &str) -> BTreeSet<Place>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{split_text_holes, TextPiece};
+    use crate::ast::{TextPiece, split_text_holes};
     use crate::schema::SchemaRegistry;
     use crate::vir::{VirBuilder, VirOptions};
 
@@ -617,9 +645,8 @@ mod tests {
     /// Leave ops with SlotMarkers exactly at dynamic holes.
     #[test]
     fn blueprint_encoding_matches_ops() {
-        let v = build(
-            "<section class=\"counter\"><h1>\"Hi {s.name}\"</h1><p>\"static\"</p></section>",
-        );
+        let v =
+            build("<section class=\"counter\"><h1>\"Hi {s.name}\"</h1><p>\"static\"</p></section>");
         let mut bp = Blueprint::default();
         encode_blueprint(&v, &mut bp);
         let ops = bp.decode();
@@ -643,7 +670,10 @@ mod tests {
         let stream = emit(&v, HostFlavor::Stream);
         assert!(stream.ssr.is_some());
         let retained = emit(&v, HostFlavor::Retained);
-        assert!(retained.ssr.is_none(), "G17: retained hosts get no render_to");
+        assert!(
+            retained.ssr.is_none(),
+            "G17: retained hosts get no render_to"
+        );
     }
 
     /// G7: fully static pages are one slice with a precomputed length.
@@ -708,7 +738,7 @@ mod tests {
         let v = build(concat!(
             "<section>",
             "{if s.count > 10 { <p>\"{s.count}\"</p> }}", // reactive island
-            "{if s.count > 0 { <p>\"static\"</p> }}", // reactive condition
+            "{if s.count > 0 { <p>\"static\"</p> }}",     // reactive condition
             "</section>",
         ));
         let a = emit(&v, HostFlavor::Stream);
