@@ -75,9 +75,7 @@ impl TestRunner {
                 std::env::var("CI").ok().as_deref(),
                 std::env::var("GLYIM_BLESS").ok().as_deref(),
             ),
-            no_skip: resolve_no_skip_flag(
-                std::env::var("GLYIM_TEST_NO_SKIP").ok().as_deref(),
-            ),
+            no_skip: resolve_no_skip_flag(std::env::var("GLYIM_TEST_NO_SKIP").ok().as_deref()),
             verbose: std::env::var("GLYIM_TEST_SHOW_OUTPUT").is_ok(),
         })
     }
@@ -101,8 +99,7 @@ impl TestRunner {
 ///   * `CI` unset, `GLYIM_BLESS` set    -> `true`  (local bless)
 ///   * `CI` set,   `GLYIM_BLESS` unset  -> `false` (compare mode)
 ///   * `CI` set,   `GLYIM_BLESS` set    -> **panic** — refuse to bless
-///                                          in CI; the caller must
-///                                          unset one or the other
+///     in CI; the caller must unset one or the other
 ///
 /// The panic (rather than a silent `false`) is deliberate: a
 /// misconfigured CI job should fail loudly with an actionable message,
@@ -227,7 +224,6 @@ pub struct TestSummary {
     pub ignored: usize,
 }
 
-
 #[cfg(test)]
 mod resolve_bless_flag_tests {
     use super::resolve_bless_flag;
@@ -264,7 +260,6 @@ mod resolve_bless_flag_tests {
         let _ = resolve_bless_flag(Some("true"), Some("1"));
     }
 }
-
 
 #[cfg(test)]
 mod resolve_no_skip_flag_tests {
