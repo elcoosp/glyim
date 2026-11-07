@@ -23,8 +23,9 @@ pub(crate) fn is_pattern(kind: SyntaxKind) -> bool {
 }
 
 use crate::{
-    Body, Expr, ExprId, Literal, MatchArm, Pat, PatId, Path as HirPath, PathSegment, Span,
-    GsxAttrHIR, GsxAttrValue, GsxChildHIR, GsxExpr, GsxTag,};
+    Body, Expr, ExprId, GsxAttrHIR, GsxAttrValue, GsxChildHIR, GsxExpr, GsxTag, Literal, MatchArm,
+    Pat, PatId, Path as HirPath, PathSegment, Span,
+};
 
 use super::{
     first_ident_text_with_depth, is_expr_node, is_pat_node, is_type_node, lower_item::lower_param,
@@ -213,7 +214,9 @@ pub(crate) fn lower_block_to_expr(
                         body.unsafe_blocks.insert(expr_id);
                         break;
                     }
-                    if !t.kind().is_trivia() { break; }
+                    if !t.kind().is_trivia() {
+                        break;
+                    }
                     prev = t.prev_sibling_or_token();
                 }
                 glyim_syntax::SyntaxElement::Node(_) => break,
@@ -1226,7 +1229,13 @@ pub(crate) fn lower_literal_with_diags(
                     "u64" => return Literal::Uint(value as u128, Some(UintTy::U64)),
                     "usize" => return Literal::Uint(value as u128, Some(UintTy::Usize)),
                     _ => {
-                        tracing::warn!("Unknown integer suffix: {}", suffix);
+                        // HIR-15 policy: a malformed literal must surface as a
+                        // user-facing diagnostic, not as a `tracing::warn`
+                        // with a silent fallback value.
+                        diags.push(GlyimDiagnostic::type_error(
+                            span,
+                            format!("unknown integer suffix `{suffix}`: `{text}`"),
+                        ));
                         return Literal::Int(value, None);
                     }
                 }
@@ -1242,7 +1251,12 @@ pub(crate) fn lower_literal_with_diags(
             if let Ok(f) = num_str.parse::<f64>() {
                 return Literal::Float(f.to_bits(), FloatTy::F64);
             }
-            tracing::warn!("Failed to parse float literal: {}", text);
+            // HIR-15 policy: report the malformed literal instead of
+            // silently lowering it to `()`.
+            diags.push(GlyimDiagnostic::type_error(
+                token_span(token),
+                format!("failed to parse float literal: `{text}`"),
+            ));
             Literal::Unit
         }
         SyntaxKind::KwTrue | SyntaxKind::BoolLit if text == "true" => Literal::Bool(true),
@@ -1275,7 +1289,12 @@ pub(crate) fn lower_literal_with_diags(
                     Literal::Uint(c as u128, Some(UintTy::U8))
                 }
                 _ => {
-                    tracing::warn!("failed to parse byte literal: {}", text);
+                    // HIR-15 policy: report the malformed literal instead of
+                    // silently lowering it to `()`.
+                    diags.push(GlyimDiagnostic::type_error(
+                        token_span(token),
+                        format!("failed to parse byte literal: `{text}`"),
+                    ));
                     Literal::Unit
                 }
             }
@@ -2377,10 +2396,7 @@ fn lower_gsx_expr(
     let open = node
         .children()
         .find(|n| n.kind() == SyntaxKind::GsxOpenTag)
-        .or_else(|| {
-            node.children()
-                .find(|n| n.kind() == SyntaxKind::GsxOpenTag)
-        });
+        .or_else(|| node.children().find(|n| n.kind() == SyntaxKind::GsxOpenTag));
     // Fragments have no open tag.
     if node.kind() == SyntaxKind::GsxFragment {
         let mut children = Vec::new();
@@ -2410,12 +2426,16 @@ fn lower_gsx_expr(
     for a in open.children() {
         match a.kind() {
             SyntaxKind::GsxAttr => {
-                if let Some(attr) = lower_gsx_attr(&a, interner, body, diags, struct_field_map, false) {
+                if let Some(attr) =
+                    lower_gsx_attr(&a, interner, body, diags, struct_field_map, false)
+                {
                     attrs.push(attr);
                 }
             }
             SyntaxKind::GsxDirectiveAttr => {
-                if let Some(attr) = lower_gsx_attr(&a, interner, body, diags, struct_field_map, true) {
+                if let Some(attr) =
+                    lower_gsx_attr(&a, interner, body, diags, struct_field_map, true)
+                {
                     attrs.push(attr);
                 }
             }
@@ -2500,7 +2520,7 @@ fn lower_gsx_attr(
     let mut sub: Option<Name> = None;
     let mut saw_colon = false;
     let mut hyphen_parts: Vec<String> = Vec::new();
-    let mut tokens = node
+    let tokens = node
         .children_with_tokens()
         .filter_map(|c| c.into_token())
         .filter(|t| !t.kind().is_trivia());
@@ -2534,13 +2554,12 @@ fn lower_gsx_attr(
                     .strip_prefix('"')
                     .and_then(|x| x.strip_suffix('"'))
                     .unwrap_or(&raw);
-                value_kind = Some(GsxAttrValue::Lit(interner.intern(&process_attr_string(inner))));
+                value_kind = Some(GsxAttrValue::Lit(
+                    interner.intern(&process_attr_string(inner)),
+                ));
             }
             SyntaxKind::LBrace => {
-                if let Some(expr_node) = node
-                    .children()
-                    .find(is_expr_node)
-                {
+                if let Some(expr_node) = node.children().find(is_expr_node) {
                     let eid = lower_expr(&expr_node, interner, body, diags, struct_field_map)
                         .unwrap_or_else(|| body.alloc_missing(node_span(&expr_node)));
                     value_kind = Some(GsxAttrValue::Expr(eid));
@@ -2553,9 +2572,16 @@ fn lower_gsx_attr(
     }
     let value = value_kind.unwrap_or(GsxAttrValue::Bare);
     if directive {
-        let ns = ns.or_else(|| sub.is_none().then_some(interner.intern(&hyphen_parts.join(""))))?;
+        let ns = ns.or_else(|| {
+            sub.is_none()
+                .then_some(interner.intern(&hyphen_parts.join("")))
+        })?;
         let sub = sub?;
-        Some(GsxAttrHIR::Directive { ns, name: sub, value })
+        Some(GsxAttrHIR::Directive {
+            ns,
+            name: sub,
+            value,
+        })
     } else {
         Some(GsxAttrHIR::Plain {
             name: interner.intern(&hyphen_parts.join("-")),
@@ -2587,7 +2613,9 @@ fn collect_gsx_children(
                     .strip_prefix('"')
                     .and_then(|x| x.strip_suffix('"'))
                     .unwrap_or(&raw);
-                out.push(GsxChildHIR::Text(interner.intern(&unescape_gsx_text(inner))));
+                out.push(GsxChildHIR::Text(
+                    interner.intern(&unescape_gsx_text(inner)),
+                ));
             }
             SyntaxKind::GsxBlockChild => {
                 if let Some(expr_node) = c.children().find(is_expr_node) {
