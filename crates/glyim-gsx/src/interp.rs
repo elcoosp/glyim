@@ -41,10 +41,7 @@ impl Value {
     /// Build an object value.
     pub fn obj(pairs: impl IntoIterator<Item = (impl Into<String>, Value)>) -> Value {
         Value::Obj(Rc::new(RefCell::new(
-            pairs
-                .into_iter()
-                .map(|(k, v)| (k.into(), v))
-                .collect(),
+            pairs.into_iter().map(|(k, v)| (k.into(), v)).collect(),
         )))
     }
 
@@ -197,10 +194,7 @@ impl Interp {
     /// A fresh environment with named bindings.
     pub fn new(bindings: impl IntoIterator<Item = (impl Into<String>, Value)>) -> Interp {
         Interp {
-            bindings: bindings
-                .into_iter()
-                .map(|(k, v)| (k.into(), v))
-                .collect(),
+            bindings: bindings.into_iter().map(|(k, v)| (k.into(), v)).collect(),
         }
     }
 
@@ -232,11 +226,9 @@ impl Interp {
             Expr::Field(base, name) => {
                 let b = self.eval(base)?;
                 match b {
-                    Value::Obj(fields) => Ok(fields
-                        .borrow()
-                        .get(name)
-                        .cloned()
-                        .unwrap_or(Value::Null)),
+                    Value::Obj(fields) => {
+                        Ok(fields.borrow().get(name).cloned().unwrap_or(Value::Null))
+                    }
                     _ => Err(InterpError(format!("field `{name}` of non-object"))),
                 }
             }
@@ -348,11 +340,7 @@ impl Interp {
                         let rv = self.eval(rhs)?;
                         match o {
                             BinOp::Add if matches!((&cur, &rv), (Value::Str(_), _)) => {
-                                Value::Str(Rc::from(format!(
-                                    "{}{}",
-                                    cur.display(),
-                                    rv.display()
-                                )))
+                                Value::Str(Rc::from(format!("{}{}", cur.display(), rv.display())))
                             }
                             _ => cur.arith(*o, &rv),
                         }
@@ -377,15 +365,18 @@ impl Interp {
                 for (pat, guard, body) in arms {
                     if pattern_matches(pat, &s) {
                         if let Some(g) = guard
-                            && !self.eval(g)?.truthy() {
-                                continue;
-                            }
+                            && !self.eval(g)?.truthy()
+                        {
+                            continue;
+                        }
                         return self.eval(body);
                     }
                 }
                 Ok(Value::Null)
             }
-            Expr::For { pat, iter, body, .. } => {
+            Expr::For {
+                pat, iter, body, ..
+            } => {
                 let it = self.eval(iter)?;
                 if let Value::List(l) = it {
                     for item in l.borrow().iter() {
@@ -434,7 +425,9 @@ impl Interp {
                     fields.borrow_mut().insert(name.clone(), value);
                     Ok(())
                 } else {
-                    Err(InterpError(format!("assign into non-object field `{name}`")))
+                    Err(InterpError(format!(
+                        "assign into non-object field `{name}`"
+                    )))
                 }
             }
             Expr::Index(base, idx) => {
@@ -442,9 +435,8 @@ impl Interp {
                 let i = self.eval(idx)?;
                 match (b, i) {
                     (Value::List(l), Value::Int(i)) => {
-                        let iu = usize::try_from(i).map_err(|_| {
-                            InterpError("negative index".to_string())
-                        })?;
+                        let iu = usize::try_from(i)
+                            .map_err(|_| InterpError("negative index".to_string()))?;
                         let mut list = l.borrow_mut();
                         if iu < list.len() {
                             list[iu] = value;
@@ -501,15 +493,12 @@ fn pattern_matches(pat: &str, value: &Value) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{split_text_holes, TextPiece};
+    use crate::ast::{TextPiece, split_text_holes};
 
     /// §3.1 handler semantics: `|s, _| s.count -= s.step` mutates state.
     #[test]
     fn handler_state_transformer() {
-        let state = Value::obj([
-            ("count", Value::Int(10)),
-            ("step", Value::Int(3)),
-        ]);
+        let state = Value::obj([("count", Value::Int(10)), ("step", Value::Int(3))]);
         let body = Expr::Assign {
             lhs: Box::new(Expr::field("s", "count")),
             op: Some(BinOp::Sub),
@@ -595,7 +584,10 @@ mod tests {
     /// §6.1 Text slots: interpolation formatting of holes.
     #[test]
     fn text_interpolation_formatting() {
-        let state = Value::obj([("count", Value::Int(-4)), ("name", Value::Str(Rc::from("Glyim")))]);
+        let state = Value::obj([
+            ("count", Value::Int(-4)),
+            ("name", Value::Str(Rc::from("Glyim"))),
+        ]);
         let mut it = Interp::new([("s", state)]);
         let pieces = split_text_holes("{s.count} items for {s.name}");
         let out = pieces
