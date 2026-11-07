@@ -27,7 +27,7 @@ fn dummy_span() -> Span {
 
 fn test_body() -> Body {
     Body {
-            unsafe_blocks: std::collections::HashSet::new(),
+        unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: IndexVec::new(),
         pats: IndexVec::new(),
@@ -162,7 +162,7 @@ fn closure_iife_adds_one() {
     let closure = body.alloc_expr(
         Expr::Closure {
             params: vec![x_pat],
-        param_tys: vec![],
+            param_tys: vec![],
             body: body_expr,
             is_move: false,
         },
@@ -191,7 +191,7 @@ fn closure_iife_multi_param() {
     let closure = body.alloc_expr(
         Expr::Closure {
             params: vec![a_pat, b_pat],
-        param_tys: vec![],
+            param_tys: vec![],
             body: body_expr,
             is_move: false,
         },
@@ -219,7 +219,7 @@ fn bare_closure_errors() {
     let closure = body.alloc_expr(
         Expr::Closure {
             params: vec![x_pat],
-        param_tys: vec![],
+            param_tys: vec![],
             body: body_expr,
             is_move: false,
         },
