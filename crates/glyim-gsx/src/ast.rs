@@ -15,7 +15,7 @@
 //!   the def-map like any item.
 
 use crate::diag::{GsxCode, GsxDiagnostic};
-use crate::expr::{expr_from_cst, Expr};
+use crate::expr::{Expr, expr_from_cst};
 use glyim_syntax::{SyntaxKind, SyntaxNode};
 
 /// A tag name as written.
@@ -166,16 +166,12 @@ pub fn gsx_from_parse(parsed: &glyim_frontend::ParseResult) -> GsxResult {
             )
         })
         .filter(|n| {
-            !n.ancestors()
-                .skip(1)
-                .any(|a| {
-                    matches!(
-                        a.kind(),
-                        SyntaxKind::GsxElement
-                            | SyntaxKind::GsxSelfClosing
-                            | SyntaxKind::GsxFragment
-                    )
-                })
+            !n.ancestors().skip(1).any(|a| {
+                matches!(
+                    a.kind(),
+                    SyntaxKind::GsxElement | SyntaxKind::GsxSelfClosing | SyntaxKind::GsxFragment
+                )
+            })
         })
         .collect();
     let mut ds = vec![];
@@ -190,7 +186,9 @@ pub fn gsx_from_parse(parsed: &glyim_frontend::ParseResult) -> GsxResult {
     out.root = match roots.len() {
         0 => None,
         1 => Some(roots.into_iter().next().unwrap()),
-        _ => Some(GsxNode::Fragment { children: roots.into_iter().map(GsxChild::Node).collect() }),
+        _ => Some(GsxNode::Fragment {
+            children: roots.into_iter().map(GsxChild::Node).collect(),
+        }),
     };
     out.diagnostics = ds;
     out
@@ -363,7 +361,10 @@ fn attr_from_cst(node: &SyntaxNode) -> Option<GsxAttr> {
         .children_with_tokens()
         .filter(|e| {
             let k = e.kind();
-            !k.is_trivia() && k != SyntaxKind::GsxAttr && k != SyntaxKind::GsxDirectiveAttr && k != SyntaxKind::GsxSpread
+            !k.is_trivia()
+                && k != SyntaxKind::GsxAttr
+                && k != SyntaxKind::GsxDirectiveAttr
+                && k != SyntaxKind::GsxSpread
         })
         .map(|e| match e {
             glyim_syntax::SyntaxElement::Token(t) => (t.kind(), t.text().to_string()),
@@ -374,19 +375,20 @@ fn attr_from_cst(node: &SyntaxNode) -> Option<GsxAttr> {
     match node.kind() {
         SyntaxKind::GsxSpread => {
             // `{..expr}` — extract the inner expression node.
-            let inner = node.children().find(|n| crate::expr::is_expr_node(n.kind()))?;
+            let inner = node
+                .children()
+                .find(|n| crate::expr::is_expr_node(n.kind()))?;
             let e = expr_from_cst(&inner);
             Some(GsxAttr::Plain("..".to_string(), AttrValue::Expr(e)))
         }
         SyntaxKind::GsxAttr => {
             if raw.first().map(|(k, _)| *k) == Some(SyntaxKind::LBrace) {
                 // Shorthand `{name}`: the attr's value is the brace expr.
-                let inner = node.children().find(|n| crate::expr::is_expr_node(n.kind()))?;
+                let inner = node
+                    .children()
+                    .find(|n| crate::expr::is_expr_node(n.kind()))?;
                 let e = expr_from_cst(&inner);
-                return Some(GsxAttr::Plain(
-                    shorthand_name(&e),
-                    AttrValue::Expr(e),
-                ));
+                return Some(GsxAttr::Plain(shorthand_name(&e), AttrValue::Expr(e)));
             }
             let (name, value_start) = attr_name_and_value(&raw)?;
             Some(GsxAttr::Plain(name, value_from(value_start, node)))
@@ -450,7 +452,10 @@ fn value_from(start: usize, node: &SyntaxNode) -> AttrValue {
         .children_with_tokens()
         .filter(|e| {
             let k = e.kind();
-            !k.is_trivia() && k != SyntaxKind::GsxAttr && k != SyntaxKind::GsxDirectiveAttr && k != SyntaxKind::GsxSpread
+            !k.is_trivia()
+                && k != SyntaxKind::GsxAttr
+                && k != SyntaxKind::GsxDirectiveAttr
+                && k != SyntaxKind::GsxSpread
         })
         .map(|e| match e {
             glyim_syntax::SyntaxElement::Token(t) => (t.kind(), t.text().to_string()),
@@ -470,7 +475,9 @@ fn value_from(start: usize, node: &SyntaxNode) -> AttrValue {
             AttrValue::Lit(crate::expr::unescape(inner))
         }
         SyntaxKind::LBrace => {
-            let inner = node.children().find(|n| crate::expr::is_expr_node(n.kind()));
+            let inner = node
+                .children()
+                .find(|n| crate::expr::is_expr_node(n.kind()));
             match inner {
                 Some(n) => AttrValue::Expr(expr_from_cst(&n)),
                 None => AttrValue::Bare,
@@ -626,7 +633,10 @@ mod tests {
             &attrs[1],
             GsxAttr::Plain(n, AttrValue::Expr(Expr::Var(v))) if n == "value" && v == "x"
         ));
-        assert_eq!(attrs[2], GsxAttr::Plain("disabled".to_string(), AttrValue::Bare));
+        assert_eq!(
+            attrs[2],
+            GsxAttr::Plain("disabled".to_string(), AttrValue::Bare)
+        );
     }
 
     /// §3.2: text is always a string literal and holes are split at parse
@@ -672,20 +682,14 @@ mod tests {
     #[test]
     fn tag_classification() {
         let (r, _) = parse_gsx("<div/>");
-        assert_eq!(
-            tag_of(&r),
-            TagName::Intrinsic("div".to_string())
-        );
+        assert_eq!(tag_of(&r), TagName::Intrinsic("div".to_string()));
         let (r, _) = parse_gsx("<web:canvas/>");
         assert_eq!(
             tag_of(&r),
             TagName::Dialect("web".to_string(), "canvas".to_string())
         );
         let (r, _) = parse_gsx("<Counter x={1}/>");
-        assert_eq!(
-            tag_of(&r),
-            TagName::Component(vec!["Counter".to_string()])
-        );
+        assert_eq!(tag_of(&r), TagName::Component(vec!["Counter".to_string()]));
         let (r, _) = parse_gsx("<ui::Button/>");
         assert_eq!(
             tag_of(&r),
@@ -735,7 +739,11 @@ mod tests {
         assert!(matches!(r.unwrap(), GsxNode::Fragment { .. }));
         let (r, _) = parse_gsx("<hr/>");
         match r.unwrap() {
-            GsxNode::Element { self_closing, children, .. } => {
+            GsxNode::Element {
+                self_closing,
+                children,
+                ..
+            } => {
                 assert!(self_closing);
                 assert!(children.is_empty());
             }
@@ -771,7 +779,9 @@ mod tests {
         let n = root.unwrap();
         match &n.children()[0] {
             GsxChild::Text(pieces) => {
-                assert!(matches!(&pieces[0], TextPiece::Hole(Expr::Call(name, _)) if name == "trusted"));
+                assert!(
+                    matches!(&pieces[0], TextPiece::Hole(Expr::Call(name, _)) if name == "trusted")
+                );
             }
             other => panic!("unexpected: {other:?}"),
         }
