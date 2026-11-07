@@ -104,7 +104,10 @@ mod tests {
         )
         .with_fixit("wrap in `Signal<i32>`; writes will bump a bit in this component's dirty mask");
         assert_eq!(d.code.display_code(), "G0201");
-        assert!(d.render().starts_with("error[G0201]: slot reads `Cell<i32>`"));
+        assert!(
+            d.render()
+                .starts_with("error[G0201]: slot reads `Cell<i32>`")
+        );
         assert!(d.fixit.as_deref().unwrap().contains("Signal<i32>"));
     }
 
