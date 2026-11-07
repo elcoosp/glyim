@@ -1,6 +1,6 @@
 use crate::linker::{
-    invoke_linker, linker_flags_for_driver, linker_flags_for_raw_ld, linker_flags_for_target,
-    DriverKind,
+    DriverKind, invoke_linker, linker_flags_for_driver, linker_flags_for_raw_ld,
+    linker_flags_for_target,
 };
 use std::path::PathBuf;
 
@@ -25,8 +25,7 @@ fn test_invoke_linker_basic() {
 fn test_linker_flags_clang_driver_emits_target() {
     // Any clang-style driver takes a single-dash `-target <triple>` — that is
     // what lets a darwin host link a darwin executable via its clang `cc`.
-    let flags =
-        linker_flags_for_driver(DriverKind::Clang, "aarch64-unknown-linux-gnu").unwrap();
+    let flags = linker_flags_for_driver(DriverKind::Clang, "aarch64-unknown-linux-gnu").unwrap();
     assert_eq!(flags, vec!["-target", "aarch64-unknown-linux-gnu"]);
 
     let flags = linker_flags_for_driver(DriverKind::Clang, "x86_64-apple-darwin").unwrap();
