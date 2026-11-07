@@ -88,10 +88,14 @@ fn s08_t39_generate_to_file_then_overwrite() {
         glyim_core::LocalDefId::from_raw(999),
     )));
     let bodies = vec![body.clone()];
-    backend.generate(&crate::tests::to_pairs(&bodies), &output).expect("first write");
+    backend
+        .generate(&crate::tests::to_pairs(&bodies), &output)
+        .expect("first write");
     let first_size = std::fs::metadata(&output).expect("file should exist").len();
     // Overwrite same file
-    backend.generate(&crate::tests::to_pairs(&bodies), &output).expect("overwrite");
+    backend
+        .generate(&crate::tests::to_pairs(&bodies), &output)
+        .expect("overwrite");
     let second_size = std::fs::metadata(&output).expect("file should exist").len();
     // Size should be similar (identical object, same target).
     assert_eq!(
