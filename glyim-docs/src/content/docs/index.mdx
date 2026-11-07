@@ -1,0 +1,55 @@
+---
+title: Glyim Documentation
+description: Glyim is a modular, from-scratch compiler for a Rust-like systems programming language, written in Rust, with an LLVM backend, a bytecode VM, an LSP, and the glyip build tool.
+template: splash
+hero:
+  tagline: A modular, from-scratch compiler for a Rust-like systems programming language — written in Rust.
+  image:
+    file: ../../assets/logo-light.png
+  actions:
+    - text: Get started in one pass
+      link: /tutorials/getting-started/
+      icon: right-arrow
+    - text: Command-line reference
+      link: /reference/cli/
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard, Aside, Badge } from '@astrojs/starlight/components';
+
+Glyim implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference and trait solving, borrow checking, optimizations, and two code generation backends (LLVM and a custom bytecode VM). The project is organized as a Cargo workspace with more than 30 crates, designed for clarity, testability, and incremental development. Every stage is a self-contained crate with a narrow public API, so you can study and test each phase in isolation.
+
+## Choose your path
+
+<CardGrid stagger>
+    <Card title="Build your first project" icon="rocket">
+        Follow the golden path: build the compiler, scaffold a project with `glyip`, and run a Glyim program.
+    </Card>
+    <Card title="Solve a specific task" icon="wrench">
+        Use a how-to guide to manage dependencies, write tests, inspect intermediate representations, or tune codegen.
+    </Card>
+    <Card title="Look something up" icon="document">
+        Consult the reference for every CLI flag, `glyip` command, manifest key, lint, and language construct.
+    </Card>
+    <Card title="Understand the design" icon="open-book">
+        Read the explanation section to learn why the pipeline is split into crates and how ownership-driven reactivity works.
+    </Card>
+</CardGrid>
+
+## Feature highlights
+
+- **Rust-like language** — generics, traits with associated types, pattern matching, closures with capture analysis, `async`/`await`, declarative and procedural macros.
+- **Real type system** — inference with unification, trait solving with HRTB, auto-trait computation, monomorphization with polymorphization.
+- **NLL borrow checker** — Polonius-style region inference, cross-block liveness, two-phase borrows, move analysis with partial moves.
+- **Two backends** — LLVM 23 via `inkwell` with real ABI lowering and LTO, plus a stack-machine bytecode backend with its own VM.
+- **Full toolchain** — the `glyim` compiler driver, the Cargo-like `glyip` build tool with dependency resolution and lockfiles, a language server, and a five-mode test harness.
+- **GSX view syntax** <Badge text="experimental" variant="caution" /> — first-class, typed view elements with a dedicated compiler stage, ownership-driven reactivity, and an SSR emitter.
+
+<Aside type="note">
+Glyim is a research-grade compiler under active development. The pipeline is end-to-end functional for a substantial subset of the language, and Glyim is not yet self-hosting: the compiler is written in Rust, while the standard library is written in Glyim.
+</Aside>
+
+## Next steps
+
+<LinkCard title="Getting started tutorial" href="/tutorials/getting-started/" description="Build the compiler and run your first Glyim program end to end." />
