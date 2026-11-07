@@ -71,7 +71,7 @@ fn build_async_hir(n_awaits: usize) -> CrateHir {
     let _ = block;
 
     let body = Body {
-            unsafe_blocks: std::collections::HashSet::new(),
+        unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
@@ -267,7 +267,7 @@ fn build_async_hir_with_loop_await() -> CrateHir {
     let _ = block;
 
     let body = Body {
-            unsafe_blocks: std::collections::HashSet::new(),
+        unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pat_spans: {
@@ -444,7 +444,7 @@ fn build_async_hir_while_loop_await() -> CrateHir {
     let _ = block;
 
     let body = Body {
-            unsafe_blocks: std::collections::HashSet::new(),
+        unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pat_spans: {
