@@ -156,19 +156,25 @@ impl ElementSchema {
                 self.tag
             )),
             ContentModel::Phrasing => match child {
-                ChildShape::Text | ChildShape::Element("h1") | ChildShape::Element("span")
-                | ChildShape::Element("p") | ChildShape::Element("output")
-                | ChildShape::Element("input") | ChildShape::Element("button") => None,
-                ChildShape::Element(other) => {
-                    Some(format!("`{other}` is not phrasing content inside `{}`", self.tag))
-                }
+                ChildShape::Text
+                | ChildShape::Element("h1")
+                | ChildShape::Element("span")
+                | ChildShape::Element("p")
+                | ChildShape::Element("output")
+                | ChildShape::Element("input")
+                | ChildShape::Element("button") => None,
+                ChildShape::Element(other) => Some(format!(
+                    "`{other}` is not phrasing content inside `{}`",
+                    self.tag
+                )),
             },
             ContentModel::ListItems => match child {
                 ChildShape::Element("li") => None,
                 ChildShape::Text => None,
-                ChildShape::Element(other) => {
-                    Some(format!("`{other}` is not a list item inside `{}`", self.tag))
-                }
+                ChildShape::Element(other) => Some(format!(
+                    "`{other}` is not a list item inside `{}`",
+                    self.tag
+                )),
             },
         }
     }
@@ -248,9 +254,10 @@ impl SchemaRegistry {
     ) -> Option<&ElementSchema> {
         if let Some(ns) = namespace {
             if let Some(d) = self.dialects.get(ns)
-                && let Some(s) = d.element(Some(ns), tag) {
-                    return Some(s);
-                }
+                && let Some(s) = d.element(Some(ns), tag)
+            {
+                return Some(s);
+            }
             return None;
         }
         self.dialects
@@ -274,7 +281,9 @@ fn prop(ty: PropTy, affects: Invalidation, escape: EscapeCtx) -> PropSchema {
 /// anywhere.
 pub fn core_dialect() -> Dialect {
     let mut d = Dialect::new("core");
-    for tag in ["Stack", "Text", "Image", "Button", "Toggle", "Input", "Scroll", "List"] {
+    for tag in [
+        "Stack", "Text", "Image", "Button", "Toggle", "Input", "Scroll", "List",
+    ] {
         let mut s = ElementSchema {
             tag: tag.to_string(),
             props: BTreeMap::new(),
@@ -288,23 +297,38 @@ pub fn core_dialect() -> Dialect {
             },
             namespace: None,
         };
-        s.props.insert("label".to_string(), prop(PropTy::Str, Invalidation::Paint, EscapeCtx::Text));
+        s.props.insert(
+            "label".to_string(),
+            prop(PropTy::Str, Invalidation::Paint, EscapeCtx::Text),
+        );
         match tag {
             "Button" => {
                 s.events.insert("click".to_string(), PropTy::Event);
                 s.role = Some("Button".to_string());
             }
             "Toggle" => {
-                s.props.insert("checked".to_string(), prop(PropTy::Bool, Invalidation::Structure, EscapeCtx::Text));
+                s.props.insert(
+                    "checked".to_string(),
+                    prop(PropTy::Bool, Invalidation::Structure, EscapeCtx::Text),
+                );
                 s.events.insert("change".to_string(), PropTy::Event);
             }
             "Input" => {
-                s.props.insert("value".to_string(), prop(PropTy::Str, Invalidation::Paint, EscapeCtx::Text));
+                s.props.insert(
+                    "value".to_string(),
+                    prop(PropTy::Str, Invalidation::Paint, EscapeCtx::Text),
+                );
                 s.events.insert("input".to_string(), PropTy::Event);
             }
             "Stack" => {
-                s.props.insert("axis".to_string(), prop(PropTy::Str, Invalidation::Layout, EscapeCtx::Attr));
-                s.props.insert("gap".to_string(), prop(PropTy::Int, Invalidation::Layout, EscapeCtx::Attr));
+                s.props.insert(
+                    "axis".to_string(),
+                    prop(PropTy::Str, Invalidation::Layout, EscapeCtx::Attr),
+                );
+                s.props.insert(
+                    "gap".to_string(),
+                    prop(PropTy::Int, Invalidation::Layout, EscapeCtx::Attr),
+                );
             }
             _ => {}
         }
@@ -363,39 +387,59 @@ pub fn web_dialect() -> Dialect {
     let section = ElementSchema {
         tag: "section".to_string(),
         props: BTreeMap::from([
-            ("class".to_string(), prop(PropTy::ClassList, Invalidation::Paint, EscapeCtx::Attr)),
-            ("aria_label".to_string(), prop(PropTy::Str, Invalidation::A11y, EscapeCtx::Attr)),
+            (
+                "class".to_string(),
+                prop(PropTy::ClassList, Invalidation::Paint, EscapeCtx::Attr),
+            ),
+            (
+                "aria_label".to_string(),
+                prop(PropTy::Str, Invalidation::A11y, EscapeCtx::Attr),
+            ),
         ]),
         events: BTreeMap::new(),
         content: ContentModel::Any,
         role: None,
-        serialization: Serialization { void: false, boolean_attrs: true, self_closing_ok: false },
+        serialization: Serialization {
+            void: false,
+            boolean_attrs: true,
+            self_closing_ok: false,
+        },
         namespace: None,
     };
     d.register(section);
 
     let h1 = ElementSchema {
         tag: "h1".to_string(),
-        props: BTreeMap::from([
-            ("class".to_string(), prop(PropTy::ClassList, Invalidation::Paint, EscapeCtx::Attr)),
-        ]),
+        props: BTreeMap::from([(
+            "class".to_string(),
+            prop(PropTy::ClassList, Invalidation::Paint, EscapeCtx::Attr),
+        )]),
         events: BTreeMap::new(),
         content: ContentModel::Phrasing,
         role: Some("Heading".to_string()),
-        serialization: Serialization { void: false, boolean_attrs: true, self_closing_ok: false },
+        serialization: Serialization {
+            void: false,
+            boolean_attrs: true,
+            self_closing_ok: false,
+        },
         namespace: None,
     };
     d.register(h1);
 
     let output = ElementSchema {
         tag: "output".to_string(),
-        props: BTreeMap::from([
-            ("class".to_string(), prop(PropTy::ClassList, Invalidation::Paint, EscapeCtx::Attr)),
-        ]),
+        props: BTreeMap::from([(
+            "class".to_string(),
+            prop(PropTy::ClassList, Invalidation::Paint, EscapeCtx::Attr),
+        )]),
         events: BTreeMap::new(),
         content: ContentModel::Phrasing,
         role: None,
-        serialization: Serialization { void: false, boolean_attrs: true, self_closing_ok: false },
+        serialization: Serialization {
+            void: false,
+            boolean_attrs: true,
+            self_closing_ok: false,
+        },
         namespace: None,
     };
     d.register(output);
@@ -403,28 +447,49 @@ pub fn web_dialect() -> Dialect {
     let input = ElementSchema {
         tag: "input".to_string(),
         props: BTreeMap::from([
-            ("value".to_string(), prop(PropTy::Str, Invalidation::Paint, EscapeCtx::Text)),
-            ("placeholder".to_string(), prop(PropTy::Str, Invalidation::Paint, EscapeCtx::Attr)),
-            ("disabled".to_string(), prop(PropTy::Bool, Invalidation::Structure, EscapeCtx::Text)),
-            ("type".to_string(), prop(PropTy::Str, Invalidation::Structure, EscapeCtx::Attr)),
+            (
+                "value".to_string(),
+                prop(PropTy::Str, Invalidation::Paint, EscapeCtx::Text),
+            ),
+            (
+                "placeholder".to_string(),
+                prop(PropTy::Str, Invalidation::Paint, EscapeCtx::Attr),
+            ),
+            (
+                "disabled".to_string(),
+                prop(PropTy::Bool, Invalidation::Structure, EscapeCtx::Text),
+            ),
+            (
+                "type".to_string(),
+                prop(PropTy::Str, Invalidation::Structure, EscapeCtx::Attr),
+            ),
         ]),
         events: BTreeMap::from([("input".to_string(), PropTy::Event)]),
         content: ContentModel::Empty,
         role: None,
-        serialization: Serialization { void: true, boolean_attrs: true, self_closing_ok: true },
+        serialization: Serialization {
+            void: true,
+            boolean_attrs: true,
+            self_closing_ok: true,
+        },
         namespace: None,
     };
     d.register(input);
 
     let ul = ElementSchema {
         tag: "ul".to_string(),
-        props: BTreeMap::from([
-            ("class".to_string(), prop(PropTy::ClassList, Invalidation::Paint, EscapeCtx::Attr)),
-        ]),
+        props: BTreeMap::from([(
+            "class".to_string(),
+            prop(PropTy::ClassList, Invalidation::Paint, EscapeCtx::Attr),
+        )]),
         events: BTreeMap::new(),
         content: ContentModel::ListItems,
         role: None,
-        serialization: Serialization { void: false, boolean_attrs: true, self_closing_ok: false },
+        serialization: Serialization {
+            void: false,
+            boolean_attrs: true,
+            self_closing_ok: false,
+        },
         namespace: None,
     };
     d.register(ul);
@@ -435,20 +500,29 @@ pub fn web_dialect() -> Dialect {
         events: BTreeMap::new(),
         content: ContentModel::Phrasing,
         role: None,
-        serialization: Serialization { void: false, boolean_attrs: true, self_closing_ok: false },
+        serialization: Serialization {
+            void: false,
+            boolean_attrs: true,
+            self_closing_ok: false,
+        },
         namespace: None,
     };
     d.register(li);
 
     let p = ElementSchema {
         tag: "p".to_string(),
-        props: BTreeMap::from([
-            ("class".to_string(), prop(PropTy::ClassList, Invalidation::Paint, EscapeCtx::Attr)),
-        ]),
+        props: BTreeMap::from([(
+            "class".to_string(),
+            prop(PropTy::ClassList, Invalidation::Paint, EscapeCtx::Attr),
+        )]),
         events: BTreeMap::new(),
         content: ContentModel::Phrasing,
         role: None,
-        serialization: Serialization { void: false, boolean_attrs: true, self_closing_ok: false },
+        serialization: Serialization {
+            void: false,
+            boolean_attrs: true,
+            self_closing_ok: false,
+        },
         namespace: None,
     };
     d.register(p);
@@ -457,13 +531,23 @@ pub fn web_dialect() -> Dialect {
     let canvas = ElementSchema {
         tag: "web:canvas".to_string(),
         props: BTreeMap::from([
-            ("width".to_string(), prop(PropTy::Int, Invalidation::Layout, EscapeCtx::Attr)),
-            ("height".to_string(), prop(PropTy::Int, Invalidation::Layout, EscapeCtx::Attr)),
+            (
+                "width".to_string(),
+                prop(PropTy::Int, Invalidation::Layout, EscapeCtx::Attr),
+            ),
+            (
+                "height".to_string(),
+                prop(PropTy::Int, Invalidation::Layout, EscapeCtx::Attr),
+            ),
         ]),
         events: BTreeMap::new(),
         content: ContentModel::Empty,
         role: None,
-        serialization: Serialization { void: false, boolean_attrs: false, self_closing_ok: true },
+        serialization: Serialization {
+            void: false,
+            boolean_attrs: false,
+            self_closing_ok: true,
+        },
         namespace: Some("web".to_string()),
     };
     d.register(canvas);
@@ -554,9 +638,7 @@ mod tests {
         let r = SchemaRegistry::standard();
         let ul = r.resolve("web", None, "ul").unwrap();
         assert!(ul.child_violation(&ChildShape::Element("li")).is_none());
-        assert!(ul
-            .child_violation(&ChildShape::Element("div"))
-            .is_some());
+        assert!(ul.child_violation(&ChildShape::Element("div")).is_some());
         let input = r.resolve("web", None, "input").unwrap();
         assert_eq!(input.content, ContentModel::Empty);
         assert!(input.serialization.void);
@@ -588,12 +670,21 @@ mod tests {
             events: BTreeMap::new(),
             content: ContentModel::Any,
             role: None,
-            serialization: Serialization { void: false, boolean_attrs: false, self_closing_ok: true },
+            serialization: Serialization {
+                void: false,
+                boolean_attrs: false,
+                self_closing_ok: true,
+            },
             namespace: None,
         });
         r.register(tui);
         assert!(r.resolve("tui", None, "box").is_some());
         // And the same passes work over it unchanged.
-        assert!(r.resolve("tui", None, "box").unwrap().child_violation(&ChildShape::Text).is_none());
+        assert!(
+            r.resolve("tui", None, "box")
+                .unwrap()
+                .child_violation(&ChildShape::Text)
+                .is_none()
+        );
     }
 }
