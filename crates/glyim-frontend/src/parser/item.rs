@@ -57,10 +57,7 @@ impl<'a> Parser<'a> {
         // ever ran.
         if matches!(
             self.current_kind(),
-            SyntaxKind::Ident
-                | SyntaxKind::KwCrate
-                | SyntaxKind::KwSuper
-                | SyntaxKind::KwSelf
+            SyntaxKind::Ident | SyntaxKind::KwCrate | SyntaxKind::KwSuper | SyntaxKind::KwSelf
         ) && self.next_non_ws_kind() == SyntaxKind::Bang
         {
             let cp = self.checkpoint();
@@ -270,8 +267,7 @@ impl<'a> Parser<'a> {
     /// this layer — the parser is not yet rewriting them to a different
     /// kind).
     fn at_attribute(&mut self) -> bool {
-        self.current_kind() == SyntaxKind::Hash
-            && self.next_non_ws_kind() == SyntaxKind::LBracket
+        self.current_kind() == SyntaxKind::Hash && self.next_non_ws_kind() == SyntaxKind::LBracket
     }
 
     /// Parse one `#[path(args)]` attribute as an `Attribute` node.
