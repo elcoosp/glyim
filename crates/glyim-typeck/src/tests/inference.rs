@@ -26,7 +26,7 @@ fn inference_param_type() {
     exprs.push(Expr::Path(glyim_hir::Path::from_single(x_name)));
 
     let body = Body {
-            unsafe_blocks: std::collections::HashSet::new(),
+        unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats,
