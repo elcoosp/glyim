@@ -36,16 +36,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      # P1-O1 (production-readiness plan): 44 `// needs-llvm` fixtures
-      # were silently Ignored on this job because GLYIM_LLVM was unset
-      # (~18% of the corpus). This job already installs LLVM 23, so
-      # running them is the honest choice; a pass means the flagship
-      # backend is verified end-to-end, and a fail means we need to fix
-      # something real. If any of these need to be excluded later, use a
-      # per-fixture `// only-target` annotation, not a job-wide skip.
-      GLYIM_LLVM: "1"
+      # P1-O1 (production-readiness plan): `// needs-llvm` fixtures used to be
+      # silently Ignored here (~18% of the corpus). Running them for real is
+      # the honest choice: a pass means the flagship backend is verified
+      # end-to-end. `GLYIM_TEST_REAL_LLVM` is the *capability* signal — it
+      # both swaps the real `LlvmBackend` into the harness's
+      # `PipelineCompiler` (with `--features glyim-test/real-llvm`, so
+      # fixtures are linked into runnable ELFs) and un-skips `needs-llvm`
+      # fixtures, which only pass under that backend (the MIR interpreter
+      # panics on `ref`-pattern projections). Un-keying them on toolchain
+      # presence alone ran them under the interpreter, where they can only
+      # fail. If any of these need to be excluded later, use a per-fixture
+      # `// only-target` annotation, not a job-wide skip.
+      GLYIM_TEST_REAL_LLVM: "1"
       # TEST-3: on *this* job both fixture needs are satisfiable —
-      # `GLYIM_LLVM` is set above (covers `// needs-llvm`), and the
+      # `GLYIM_TEST_REAL_LLVM` is set above (covers `// needs-llvm`), and the
       # runner is `x86_64-unknown-linux-gnu` (covers every `// only-target`
       # in the tree). So an `Ignored` outcome here can only mean the
       # harness was misconfigured, and we want that to be a loud failure
@@ -63,14 +68,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install nextest
         uses: taiki-e/install-action@nextest
+      - name: Build the runtime staticlib
+        # `PipelineCompiler` links every real-backend fixture against
+        # `libglyim_runtime.a` (`glyim_cli::linker::find_runtime_staticlib`);
+        # without it the link step fails and the harness silently falls back
+        # to the MIR interpreter, re-defeating the needs-llvm un-skip above.
+        run: cargo build -p glyim-runtime
       - name: Run tests
-        # §3.5.23: `GLYIM_LLVM=1` only *un-skips* `// needs-llvm`
-        # fixtures; it does not enable the real LLVM backend. Without
-        # `--features glyim-test/real-llvm`, `PipelineCompiler` falls
-        # back to `MockCodegen` and every needs-llvm fixture runs under
-        # the MIR interpreter — which panics on `ref`-patterns (10 of
-        # the 12 fixtures that used to be red here). The same feature
-        # is already passed by `test-differential` and `test-linux-runtime`.
         run: cargo nextest run --workspace --features glyim-test/real-llvm
 
   test-linux-runtime:
@@ -153,13 +157,17 @@ jobs:
 
   # P2-O6 (KNOWN_GAPS §8.4): MSRV gate.
   #
-  # `rust-version = "1.85"` in the root `Cargo.toml` is a *promise*. Before
+  # `rust-version = "1.95"` in the root `Cargo.toml` is a *promise*. Before
   # this job, nothing in CI checked it — a `cargo update` or a new
   # nightly-only language feature could land and silently break MSRV.
   #
+  # Bumped 1.85 -> 1.95 during the dependency-update pass: parking_lot 0.13
+  # (the strictest updated dependency) declares `rust-version = "1.95"`, and
+  # the 2024-edition let-chains the codebase now uses stabilized in 1.88.
+  #
   # `cargo check --workspace --all-targets` (not `cargo test`) is
   # intentional: MSRV is about "does this compile on the declared
-  # minimum", and running the whole test suite on 1.85 would multiply
+  # minimum", and running the whole test suite on the MSRV would multiply
   # the runtime without adding MSRV coverage. `--all-targets` catches
   # MSRV regressions in test code too, not just in lib/bin crates.
   #
@@ -167,18 +175,18 @@ jobs:
   # install it exactly like the other jobs. The `llvm.sh` installer
   # is independent of the Rust toolchain's version.
   msrv:
-    name: MSRV (1.85)
+    name: MSRV (1.95)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - name: Install LLVM 23
         <<: *llvm23-ubuntu
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: dtolnay/rust-toolchain@1.95.0
       - uses: Swatinem/rust-cache@v2
         with:
-          key: msrv-1.85
-      - name: cargo check (MSRV 1.85)
+          key: msrv-1.95
+      - name: cargo check (MSRV 1.95)
         run: cargo check --workspace --all-targets
   miri-check:
     name: Miri (nightly, type/check crates)
