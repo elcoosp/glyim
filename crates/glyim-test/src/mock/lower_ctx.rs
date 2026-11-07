@@ -161,14 +161,19 @@ impl<'a> LowerCtx for MockLowerCtx<'a> {
         // appear in a real compile. Post-fix: an id must be registered via
         // `add_fn_sig` first, or this panics with the id, so a test cannot
         // accidentally drift onto a plausible-but-wrong signature.
-        Some(self.registered_fn_sigs.get(&def_id).cloned().unwrap_or_else(|| {
-            panic!(
-                "MockLowerCtx::fn_sig({:?}) called with no registered signature. \
+        Some(
+            self.registered_fn_sigs
+                .get(&def_id)
+                .cloned()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "MockLowerCtx::fn_sig({:?}) called with no registered signature. \
                  Call `add_fn_sig(def_id, sig)` in the test setup first \
                  (P2-A2: mocks must not answer with dummies).",
-                def_id
-            )
-        }))
+                        def_id
+                    )
+                }),
+        )
     }
 
     fn const_value(
@@ -300,7 +305,9 @@ mod p2_a2_tests {
             span: Span::DUMMY,
         };
         mock.add_const_value(dummy_id, val);
-        let got = mock.const_value(dummy_id, Substitution::empty()).expect("registered const");
+        let got = mock
+            .const_value(dummy_id, Substitution::empty())
+            .expect("registered const");
         assert_eq!(got.ty, ctx.unit_ty());
     }
 
