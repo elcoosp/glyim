@@ -1,0 +1,135 @@
+---
+title: Getting Started with Glyim
+description: Build the Glyim compiler from source, scaffold a project with glyip, and run your first Glyim program end to end.
+type: tutorial
+sidebar:
+  order: 1
+---
+
+import { Steps, Tabs, TabItem, Aside, LinkCard } from '@astrojs/starlight/components';
+
+In this tutorial you build the Glyim compiler from source, create a new project with the `glyip` build tool, and run a Glyim program. You finish with a working toolchain and a mental model of the build workflow.
+
+## Prerequisites
+
+- **Rust** — latest stable toolchain, 2024 edition. Rust 1.94 or newer is recommended; the declared MSRV is 1.85.
+- **LLVM 23** — required by the LLVM backend. The backend is a hard dependency of the workspace; there is no feature flag to build without it.
+- **`just`** and **`watchexec`** — optional, only for the convenience recipes in the repository's `justfile`.
+
+Before building, set `LLVM_SYS_231_PREFIX` to your LLVM 23 installation prefix:
+
+<Tabs>
+   <TabItem label="macOS (Homebrew)">
+        ```bash
+        export LLVM_SYS_231_PREFIX="$(brew --prefix llvm@23)"
+        ```
+   </TabItem>
+   <TabItem label="Debian / Ubuntu">
+        ```bash
+        export LLVM_SYS_231_PREFIX="/usr/lib/llvm-23"
+        ```
+   </TabItem>
+</Tabs>
+
+<Aside type="tip">
+Add the `export` line to your shell profile so every future session picks it up. The CI pipeline installs LLVM 23 with the `llvm.sh 23` script if you need a reproducible reference setup.
+</Aside>
+
+## Build the compiler
+
+<Steps>
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/elcoosp/glyim
+   cd glyim
+   ```
+
+2. Build the workspace in release mode:
+
+   ```bash
+   cargo build --release
+   ```
+
+3. Locate the compiler driver. The binary is at `target/release/glyim-cli` — invoke it as `glyim-cli` (rename or symlink it to `glyim` if you prefer):
+
+   ```bash
+   ./target/release/glyim-cli --version
+   ```
+
+   You can also invoke the driver through Cargo on every call, which avoids symlinks:
+
+   ```bash
+   cargo run -p glyim-cli -- --help
+   ```
+
+</Steps>
+
+## Create and run a project
+
+`glyip` is Cargo's counterpart for Glyim projects. It reads a `Glyip.toml` manifest, resolves dependencies, maintains a `Glyip.lock` lockfile, and drives the compiler.
+
+<Steps>
+
+1. Scaffold a new binary project:
+
+   ```bash
+   cargo run -p glyip -- new hello
+   cd hello
+   ```
+
+2. Inspect what `glyip new` generated. The project contains a `Glyip.toml` manifest and a `src/main.g` source file:
+
+   ```bash
+   cat Glyip.toml
+   cat src/main.g
+   ```
+
+3. Build the project:
+
+   ```bash
+   cargo run -p glyip -- build
+   ```
+
+4. Run it:
+
+   ```bash
+   cargo run -p glyip -- run
+   ```
+
+   `glyip run` is a transparent wrapper: it exits with the compiled program's exit code, so a failing program does not look like a passing command.
+
+</Steps>
+
+## What the scaffold looks like
+
+The scaffolded manifest declares the package and its targets:
+
+```toml
+[package]
+name = "hello"
+version = "0.1.0"
+edition = "2024"
+```
+
+The default template produces a binary that prints a greeting. Edit `src/main.g`, rebuild, and run again — `glyip build` uses SHA-256 source fingerprints, so it recompiles only what changed.
+
+## Compile a single file directly
+
+Once you are comfortable with `glyip`, you can bypass project management and drive the compiler directly. The equivalent of the tutorial so far, in one command:
+
+```bash
+glyim-cli src/main.g --emit exec -o hello
+./hello
+```
+
+The `--emit exec` flag produces a runnable executable; the default `--emit obj` produces an object file. See the [CLI reference](/reference/cli/) for every flag.
+
+## Next steps
+
+You have a working toolchain. From here:
+
+<LinkCard title="Build and run your project" href="/guides/build-and-run/" description="Release builds, optimization levels, LTO, and passing arguments to your program." />
+<LinkCard title="Manage dependencies" href="/guides/manage-dependencies/" description="Path, registry, and git dependencies in Glyip.toml, and how the resolver behaves." />
+<LinkCard title="How the pipeline works" href="/explanation/pipeline/" description="A stage-by-stage walkthrough of what happens between source.g and a native binary." />
