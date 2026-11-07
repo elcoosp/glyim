@@ -129,7 +129,7 @@ impl TestExecutor {
                         r,
                         Arc::clone(&self.compiler),
                         self.bless,
-            self.no_skip,
+                        self.no_skip,
                         self.target_triple.clone(),
                     )
                 })
@@ -233,12 +233,20 @@ fn execute_test(
         };
     }
 
-    if test.config.needs_llvm && std::env::var("GLYIM_LLVM").is_err() {
+    // `needs-llvm` is a *capability* annotation: the fixture only passes when
+    // the real `LlvmBackend` compiled, linked and executed it (118a18d1: the
+    // MIR interpreter panics on `ref`-pattern projections). The signal for
+    // that is `GLYIM_TEST_REAL_LLVM` — the same env var that makes
+    // `PipelineCompiler` swap in the real backend and produce a runnable
+    // executable. Un-skipping on mere toolchain presence (`GLYIM_LLVM`, the
+    // pre-dependency-update key) ran these fixtures under the interpreter,
+    // where they can only fail.
+    if test.config.needs_llvm && std::env::var("GLYIM_TEST_REAL_LLVM").is_err() {
         let outcome = if no_skip {
             TestOutcome::Failed {
                 reason: crate::error::FailureReason::NeedUnsatisfiable {
                     need: "needs-llvm".to_string(),
-                    detail: "GLYIM_LLVM is not set".to_string(),
+                    detail: "GLYIM_TEST_REAL_LLVM is not set (the real LLVM backend would not run this fixture)".to_string(),
                 },
             }
         } else {
