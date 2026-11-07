@@ -91,7 +91,7 @@ smallvec = "1.16.5"
 rowan = "0.17.0"
 smol_str = "0.3.7"
 rayon = "1.12.0"
-inkwell = { git = "https://github.com/TheDan64/inkwell", rev = "c9d9734ae17dbaf1d9902dab3b8ee9d2041781ff" }
+inkwell = { git = "https://github.com/TheDan64/inkwell", rev = "04bfd21f4cbee15776555b05b00d68f403455399" }
 clap = { version = "4.6.7", features = ["derive"] }
 insta = "1.49.0"
 miette = "7.6"
