@@ -5,6 +5,7 @@ mod errors;
 mod float_exponent;
 mod floats;
 mod fragment_kinds;
+mod gsx;
 mod integers;
 mod integration;
 mod keywords;

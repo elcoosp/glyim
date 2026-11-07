@@ -1100,6 +1100,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "glyim-gsx"
+version = "0.1.0"
+dependencies = [
+ "glyim-frontend",
+ "glyim-span",
+ "glyim-syntax",
+]
+
+[[package]]
 name = "glyim-hir"
 version = "0.1.0"
 dependencies = [
@@ -1449,6 +1458,7 @@ dependencies = [
  "glyim-core",
  "glyim-def-map",
  "glyim-diag",
+ "glyim-gsx",
  "glyim-hir",
  "glyim-mir",
  "glyim-solve",

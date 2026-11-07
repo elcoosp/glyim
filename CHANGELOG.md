@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **GSX view syntax** (docs/design/GSX-in-Glyim.md): first-class, typed,
+  host-agnostic view syntax with a dedicated compiler stage.
+  - Frontend: `Gsx*` CST nodes and `parse_gsx_element` (elements, fragments,
+    self-closing, directive attrs `on:`/`class:`/`style:`/`bind:`, spread,
+    shorthand, hyphenated names, `for … by` keyed iteration, text holes split
+    at parse time; zero lexer changes).
+  - HIR: `Expr::Gsx` preserves element structure (no call-tree desugar).
+  - Typeck: `check_gsx` validates tags/props/events/children against dialect
+    schemas and checks hole expressions.
+  - New crate `glyim-gsx`: View IR (skeleton + slots + regions), flat-`u32`
+    blueprints, read/write-set analysis with prefix interference,
+    mutation-specialized patch functions (§7.5), SSR emitter, Host trait +
+    headless op-recording host, keyed-list LIS reconcile, `Signal<T>` (G0201)
+    diagnostics with fix-its. 88 crate tests including the §3.1 Counter
+    example end-to-end.
 - Fuzzing infrastructure: `fuzz_parse` (lexer/parser/CST round-trip) and
   `fuzz_compile` (full-pipeline ICE detector) cargo-fuzz targets with
   corpus seeds and a token dictionary.

@@ -5,6 +5,7 @@ use rowan::Language;
 
 // Submodules containing specific parsing logic
 mod expr;
+mod gsx;
 mod item;
 mod pat;
 mod stmt;
@@ -29,6 +30,14 @@ pub(crate) struct Parser<'a> {
     last_was_path: bool,
     suppress_struct_lit: bool,
     pending_gt_count: u32,
+    /// GSX child context (GSX-in-Glyim §3.2): set while parsing a GSX block
+    /// child `{ … }` so that child-position `for` loops accept the GSX-scoped
+    /// contextual keyword `by` (`for x in xs by key { … }`). Outside GSX
+    /// children, `by` remains an ordinary identifier.
+    gsx_child_context: bool,
+    /// GSX element nesting depth, bounded independently of expression nesting
+    /// (§3.4 parser gotchas) so `<a><a><a>…` cannot overflow the stack.
+    gsx_depth: u32,
     /// Monotonic expression-nesting counter (plan §3.6): guards against a
     /// stack-overflow DoS from pathologically nested source (e.g.
     /// `((((...))))`). `parse_expr` increments it on entry; once it exceeds
@@ -54,6 +63,8 @@ impl<'a> Parser<'a> {
             last_was_path: false,
             suppress_struct_lit: false,
             pending_gt_count: 0,
+            gsx_child_context: false,
+            gsx_depth: 0,
             recursion_depth: 0,
         }
     }
@@ -613,6 +624,9 @@ fn is_exprish(kind: SyntaxKind) -> bool {
         kind,
         SyntaxKind::PathExpr
             | SyntaxKind::LitExpr
+            | SyntaxKind::GsxElement
+            | SyntaxKind::GsxSelfClosing
+            | SyntaxKind::GsxFragment
             | SyntaxKind::BinaryExpr
             | SyntaxKind::CallExpr
             | SyntaxKind::MethodCallExpr

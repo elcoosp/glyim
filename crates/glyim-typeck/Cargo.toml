@@ -11,6 +11,7 @@ glyim-diag = { workspace = true }
 glyim-solve = { workspace = true }
 glyim-span = { workspace = true }
 glyim-hir = { workspace = true }
+glyim-gsx = { workspace = true }
 glyim-def-map = { workspace = true }
 glyim-const-eval = { workspace = true }
 tracing = { workspace = true }

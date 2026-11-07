@@ -793,6 +793,23 @@ impl ReferenceGraph {
                         AccessKind::Read,
                     );
                 }
+                // GSX view expressions (finding F7): holes are body-owned
+                // ExprIds — traverse them so go-to-definition/rename reach
+                // into attribute values and block children.
+                Expr::Gsx(g) => {
+                    for hole in collect_gsx_holes(g) {
+                        walk_expr(
+                            hole,
+                            body,
+                            interner,
+                            _file_id,
+                            add_ref,
+                            function_names,
+                            false,
+                            AccessKind::Read,
+                        );
+                    }
+                }
             }
         }
 
@@ -865,4 +882,32 @@ impl ReferenceGraph {
             .or_default()
             .push(reference);
     }
+}
+
+
+
+/// Collect every hole `ExprId` in a GSX element tree (attrs + block
+/// children, nested elements included).
+fn collect_gsx_holes(g: &glyim_hir::GsxExpr) -> Vec<ExprId> {
+    let mut out = Vec::new();
+    fn push_tree(g: &glyim_hir::GsxExpr, out: &mut Vec<ExprId>) {
+        for attr in &g.attrs {
+            let value = match attr {
+                glyim_hir::GsxAttrHIR::Plain { value, .. }
+                | glyim_hir::GsxAttrHIR::Directive { value, .. } => value,
+            };
+            if let glyim_hir::GsxAttrValue::Expr(e) = value {
+                out.push(*e);
+            }
+        }
+        for child in &g.children {
+            match child {
+                glyim_hir::GsxChildHIR::Expr(e) => out.push(*e),
+                glyim_hir::GsxChildHIR::Node(nested) => push_tree(nested, out),
+                glyim_hir::GsxChildHIR::Text(_) => {}
+            }
+        }
+    }
+    push_tree(g, &mut out);
+    out
 }

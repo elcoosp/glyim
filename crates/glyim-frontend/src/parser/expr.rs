@@ -685,6 +685,24 @@ impl<'a> Parser<'a> {
         self.expect(SyntaxKind::KwIn);
         self.parse_expr();
         self.suppress_struct_lit = false;
+        // GSX keyed iteration (GSX-in-Glyim §3.2): `for x in xs by <key>`.
+        // `by` is a GSX-scoped contextual keyword, accepted ONLY while parsing
+        // a GSX block child, and materializes as a `GsxForBy` node wrapping
+        // the key expression. Outside GSX children `by` stays an identifier.
+        if self.gsx_child_context
+            && self.current_kind() == SyntaxKind::Ident
+            && self.current_text() == "by"
+        {
+            self.start_node(SyntaxKind::GsxForBy);
+            self.bump(); // `by`
+            // Suppress struct literals so the key expression stops at the
+            // body's `{` (`by item.id { … }` must not parse `item.id { … }`
+            // as a struct literal).
+            self.suppress_struct_lit = true;
+            self.parse_expr(); // key expression — stops at the body `{`
+            self.suppress_struct_lit = false;
+            self.finish_node(); // GsxForBy
+        }
         self.parse_block();
         self.finish_node();
     }
@@ -788,6 +806,13 @@ impl<'a> Parser<'a> {
             return;
         }
         match self.current_kind() {
+            SyntaxKind::Lt if self.at_gsx_start() => {
+                // GSX view syntax (GSX-in-Glyim §3, finding F5): prefix
+                // position `<` + ident/`>` is unambiguously an element or
+                // fragment today — binary `<` only occurs in infix position,
+                // which `parse_expr` handles before reaching primary.
+                self.parse_gsx_element();
+            }
             SyntaxKind::Ident | SyntaxKind::KwSelf | SyntaxKind::KwSuper | SyntaxKind::KwCrate => {
                 self.parse_path_expr();
             }

@@ -101,6 +101,10 @@ pub(crate) fn is_expr_node(node: &SyntaxNode) -> bool {
             | SyntaxKind::RangeExpr
             | SyntaxKind::AwaitExpr
             | SyntaxKind::TryExpr
+            // GSX view syntax (finding F7): elements are expressions.
+            | SyntaxKind::GsxElement
+            | SyntaxKind::GsxSelfClosing
+            | SyntaxKind::GsxFragment
     )
 }
 /// Returns true if `node` is one of the HIR pattern syntax kinds.

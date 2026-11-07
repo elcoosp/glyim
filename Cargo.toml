@@ -32,6 +32,7 @@ members = [
     "crates/glyim-db",
     "crates/glyim-pipeline",
     "crates/glyim-cli",
+    "crates/glyim-gsx",
     "crates/glyim-lsp",
     "crates/glyim-runtime",
     "crates/glyim-test",
@@ -58,6 +59,7 @@ glyim-diag = { path = "crates/glyim-diag" }
 glyim-vfs = { path = "crates/glyim-vfs" }
 glyim-syntax = { path = "crates/glyim-syntax" }
 glyim-frontend = { path = "crates/glyim-frontend" }
+glyim-gsx = { path = "crates/glyim-gsx" }
 glyim-def-map = { path = "crates/glyim-def-map" }
 glyim-meta = { path = "crates/glyim-meta" }
 glyim-type = { path = "crates/glyim-type" }

@@ -44,6 +44,19 @@ impl<'a> Parser<'a> {
                 }
                 self.finish_node();
             }
+            // GSX view syntax (GSX-in-Glyim §3): a prefix `<` that starts an
+            // element/fragment is block-like in statement position too — view
+            // bodies are sequences of elements (`fn CounterView(s: &S) -> View
+            // { <section>…</section> }`). Guarded by `at_gsx_start` so a
+            // non-GSX `<` keeps the ordinary error path below.
+            SyntaxKind::Lt if self.at_gsx_start() => {
+                self.start_node(SyntaxKind::ExprStmt);
+                self.parse_primary_expr();
+                if self.current_kind() == SyntaxKind::Semicolon {
+                    self.bump();
+                }
+                self.finish_node();
+            }
             // `return`/`break`/`continue`/`move` are NOT block-like — their
             // operand IS the expression, so the full chain applies.
             SyntaxKind::KwReturn

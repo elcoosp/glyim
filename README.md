@@ -66,6 +66,7 @@ The design is heavily inspired by rustc's architecture (arena-allocated IRs, int
 - **Macros**: declarative `macro_rules!` with fragment specifiers (`:expr`, `:ty`, `:pat`, `:tt`, …), plus built-in `file!`, `line!`, `column!`, `env!`, `option_env!`, `include!`, `include_str!`, `include_bytes!`, `concat!`, `concat_idents!`, `stringify!`.
 - **Procedural macros** through a C-compatible token-stream ABI (`glyim-proc-macro`), with a `dlopen`-based cdylib loader.
 - **Ranges**, `Option`/`Result`/`Vec`/`String`/`Box`/`PhantomData`/`UnsafeCell` as compiler-known builtins.
+- **GSX view syntax**: first-class, typed, host-agnostic view elements (`<button on:click={…}>…</button>`) with a dedicated compiler stage — View IR, flat-`u32` blueprints, ownership-driven reactivity (mutation-specialized patches, no vdom/signals on the fast path), SSR emitter and a headless test host. See `docs/design/GSX-in-Glyim.md` and `docs/design/gsx-implementation.md`.
 
 ### Compiler
 
