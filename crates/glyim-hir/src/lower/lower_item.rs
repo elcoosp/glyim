@@ -16,8 +16,12 @@ pub(crate) fn detect_kw_unsafe_sibling(node: &SyntaxNode) -> bool {
     while let Some(el) = prev {
         match el {
             glyim_syntax::SyntaxElement::Token(t) => {
-                if t.kind() == SyntaxKind::KwUnsafe { return true; }
-                if !t.kind().is_trivia() { return false; }
+                if t.kind() == SyntaxKind::KwUnsafe {
+                    return true;
+                }
+                if !t.kind().is_trivia() {
+                    return false;
+                }
                 prev = t.prev_sibling_or_token();
             }
             glyim_syntax::SyntaxElement::Node(_) => return false,
@@ -38,12 +42,16 @@ pub(crate) fn collect_attributes(
     while let Some(el) = prev {
         match el {
             glyim_syntax::SyntaxElement::Node(n) => {
-                if n.kind() != SyntaxKind::Attribute { break; }
+                if n.kind() != SyntaxKind::Attribute {
+                    break;
+                }
                 attrs_rev.push(lower_attribute_node(&n, interner));
                 prev = n.prev_sibling_or_token();
             }
             glyim_syntax::SyntaxElement::Token(t) => {
-                if !t.kind().is_trivia() { break; }
+                if !t.kind().is_trivia() {
+                    break;
+                }
                 prev = t.prev_sibling_or_token();
             }
         }
@@ -53,10 +61,7 @@ pub(crate) fn collect_attributes(
 }
 
 /// Lower one `Attribute` syntax node into a structured HIR [`Attribute`].
-fn lower_attribute_node(
-    node: &SyntaxNode,
-    interner: &mut Interner,
-) -> crate::Attribute {
+fn lower_attribute_node(node: &SyntaxNode, interner: &mut Interner) -> crate::Attribute {
     let mut is_inner = false;
     let mut path: Vec<crate::Name> = Vec::new();
     let mut args: Option<String> = None;
@@ -92,7 +97,11 @@ fn lower_attribute_node(
             },
         }
     }
-    crate::Attribute { path, args, is_inner }
+    crate::Attribute {
+        path,
+        args,
+        is_inner,
+    }
 }
 use std::collections::HashMap;
 
@@ -793,7 +802,7 @@ pub(crate) fn lower_impl_def(
             .find(|c| c.kind() == SyntaxKind::Block)
         {
             let mut body = Body {
-            unsafe_blocks: std::collections::HashSet::new(),
+                unsafe_blocks: std::collections::HashSet::new(),
                 owner,
                 exprs: IndexVec::new(),
                 pats: temp_pats,
@@ -965,7 +974,7 @@ pub(crate) fn lower_trait_def(
             .find(|c| c.kind() == SyntaxKind::Block)
         {
             let mut body = Body {
-            unsafe_blocks: std::collections::HashSet::new(),
+                unsafe_blocks: std::collections::HashSet::new(),
                 owner,
                 exprs: IndexVec::new(),
                 pats: temp_pats,
@@ -1194,24 +1203,25 @@ pub(crate) fn lower_static_def(
             _ => {}
         }
     }
-    let (body_id, root_expr_id): (Option<BodyId>, Option<crate::ExprId>) = if let Some(init) = init_node {
-        let mut body = Body {
-            unsafe_blocks: std::collections::HashSet::new(),
-            owner,
-            exprs: IndexVec::new(),
-            pats: IndexVec::new(),
-            pat_spans: IndexVec::new(),
-            params: Vec::new(),
-            span: node_span(node),
-            expr_spans: IndexVec::new(),
+    let (body_id, root_expr_id): (Option<BodyId>, Option<crate::ExprId>) =
+        if let Some(init) = init_node {
+            let mut body = Body {
+                unsafe_blocks: std::collections::HashSet::new(),
+                owner,
+                exprs: IndexVec::new(),
+                pats: IndexVec::new(),
+                pat_spans: IndexVec::new(),
+                params: Vec::new(),
+                span: node_span(node),
+                expr_spans: IndexVec::new(),
+            };
+            let root = lower_expr(&init, interner, &mut body, diags, struct_field_map);
+            let bid = bodies.push(body);
+            body_owners.push(owner);
+            (Some(bid), root)
+        } else {
+            (None, None)
         };
-        let root = lower_expr(&init, interner, &mut body, diags, struct_field_map);
-        let bid = bodies.push(body);
-        body_owners.push(owner);
-        (Some(bid), root)
-    } else {
-        (None, None)
-    };
 
     let id = ItemId::from_raw(*item_id_counter);
     *item_id_counter += 1;
