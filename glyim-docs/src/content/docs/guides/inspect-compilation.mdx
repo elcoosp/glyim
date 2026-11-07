@@ -1,0 +1,108 @@
+---
+title: Inspect the Compilation Pipeline
+description: Use glyim to emit MIR, LLVM IR, assembly, or object files, tune optimization and codegen units, read diagnostics as JSON, and adjust lint levels.
+type: how-to
+sidebar:
+  order: 4
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+This guide shows how to look inside the compiler while it processes a single source file: emitting intermediate representations, choosing backends, tuning codegen, and adjusting lint levels.
+
+Every command below compiles a file named `input.g`. Add `--with-stdlib` when your file uses names such as `println`, `Vec`, `Option`, `Result`, `String`, or `Box` — the flag prepends the assembled standard library so those names resolve without explicit `use` statements:
+
+```bash
+glyim input.g --with-stdlib --emit mir
+```
+
+## Emit intermediate representations
+
+The `--emit` flag selects the output artifact:
+
+```bash
+glyim input.g --emit mir        # MIR after lowering — useful for debugging lowering
+glyim input.g --emit llvm-ir    # LLVM IR from the LLVM backend
+glyim input.g --emit asm        # target assembly
+glyim input.g --emit obj        # native object file (default)
+glyim input.g --emit exec -o hello   # runnable executable
+glyim input.g --emit cdylib     # dynamic library, used for proc-macro crates
+```
+
+Write the artifact to a specific path with `-o`:
+
+```bash
+glyim input.g --emit llvm-ir -o out.ll
+```
+
+## Compare the two backends
+
+The `--backend` flag selects between `llvm` (default) and `bytecode`. The bytecode backend emits compact stack-machine bytecode that the `glyim-bytecode-vm` crate executes — useful for testing and embedded execution:
+
+```bash
+glyim input.g --backend bytecode --emit obj
+```
+
+## Tune optimization and codegen units
+
+```bash
+glyim input.g -O2 --lto thin          # optimization level 2, thin LTO
+glyim input.g --codegen-units 4       # partition into 4 codegen units
+```
+
+- `-O/--opt-level` ranges from 0 (default) to 3.
+- `--codegen-units` defaults to the available parallelism capped at 16, mirroring rustc's `-C codegen-units` policy.
+- `--lto` accepts `off` (default), `fat`, or `thin`. `fat` requires multi-CGU support, which is not yet implemented, and errors cleanly. `thin` requires the `llvm-lto2` tool from the LLVM distribution the backend was built against.
+
+## Cross-compile
+
+```bash
+glyim input.g --target aarch64-unknown-linux-gnu
+```
+
+Override the system linker and pass extra flags when needed:
+
+```bash
+glyim input.g --linker /path/to/ld --link-flags "-L/opt/lib -lmylib"
+```
+
+## Get machine-readable diagnostics
+
+Editors and tooling consume diagnostics as JSON, one object per diagnostic:
+
+```bash
+glyim input.g --error-format json
+```
+
+The default `human` format renders diagnostics with `miette`, including source snippets and labels.
+
+## Use procedural macros
+
+Compile proc-macro dependency sources to host cdylibs first, then reference them with a comma-separated list:
+
+```bash
+glyim proc_macro_dep.g --emit cdylib
+glyim main.g --proc-macro-deps proc_macro_dep.g
+```
+
+<Aside type="caution">
+The two-stage host compile for procedural macros is still being wired into the default `glyim-cli` flow. The flag surface exists and the C-ABI bridge (`glyim-proc-macro`, `dlopen`-based) is functional, but expect rough edges.
+</Aside>
+
+## Adjust lint levels
+
+The compiler currently ships two lints: `unsafe_fn_call` (alias `unsafe`) and `unused_generic_params` (alias `unused_generics`). Set their levels with repeatable flags:
+
+```bash
+glyim input.g -D unsafe                     # promote to error
+glyim input.g -A unsafe_fn_call             # suppress
+glyim input.g -W unused_generic_params      # set back to warning (the default)
+glyim -W help                               # list all available lints
+```
+
+`-A` allows (suppresses), `-W` warns (default), and `-D` denies, which aborts compilation at the pipeline's error gate. See the [lint reference](/reference/lints/) for details.
+
+## Next steps
+
+<LinkCard title="glyim CLI reference" href="/reference/cli/" description="Every flag with its type, default, and description." />
+<LinkCard title="The compilation pipeline, explained" href="/explanation/pipeline/" description="What happens at each stage between source.g and a binary." />
