@@ -20,10 +20,10 @@
 //! - **§7.9** `bind:` desugars into a Prop slot + a synthesized handler.
 
 use crate::analysis::Place;
+use crate::ast;
 use crate::diag::{GsxCode, GsxDiagnostic};
 use crate::expr::Expr;
 use crate::schema::{EscapeCtx, Invalidation, SchemaRegistry};
-use crate::ast;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
@@ -57,7 +57,10 @@ pub enum SlotKind {
     /// `style:width={px}` → `set_prop` + `invalidate(Layout)` (G5).
     Style { prop: String, expr: Expr },
     /// `on:click={…}` → one-time `listen` at mount (static handler id).
-    Event { event: String, handler: Rc<HandlerSpec> },
+    Event {
+        event: String,
+        handler: Rc<HandlerSpec>,
+    },
     /// `if / match / for / <Child/>` — structural (§6.3).
     Region { region: usize },
 }
@@ -453,7 +456,12 @@ impl<'a> VirBuilder<'a> {
                 self.push_region_slot(region);
                 VirNode::Region { region }
             }
-            Expr::For { pat, iter, key, body } => {
+            Expr::For {
+                pat,
+                iter,
+                key,
+                body,
+            } => {
                 let region = self.regions.len();
                 let strategy = choose_list_strategy(key.as_deref());
                 let body_vir = self.sub_vir(body);
@@ -538,7 +546,10 @@ impl<'a> VirBuilder<'a> {
                     .collect();
                 if let Some(t) = tail {
                     match t.as_ref() {
-                        Expr::Block { stmts: t2, tail: t3 } => {
+                        Expr::Block {
+                            stmts: t2,
+                            tail: t3,
+                        } => {
                             for s in t2 {
                                 if !matches!(s, Expr::Let { .. }) {
                                     out.push(self.block_expr_to_node(s));
@@ -561,11 +572,17 @@ impl<'a> VirBuilder<'a> {
     fn node_from(&mut self, n: &ast::GsxNode) -> VirNode {
         match n {
             ast::GsxNode::Fragment { children } => VirNode::Fragment {
-                children: children.iter().filter_map(|c| self.child_to_node(c)).collect(),
+                children: children
+                    .iter()
+                    .filter_map(|c| self.child_to_node(c))
+                    .collect(),
             },
-            ast::GsxNode::Element { tag, attrs, children, self_closing } => {
-                self.element_from(tag, attrs, children, *self_closing)
-            }
+            ast::GsxNode::Element {
+                tag,
+                attrs,
+                children,
+                self_closing,
+            } => self.element_from(tag, attrs, children, *self_closing),
         }
     }
 
@@ -586,11 +603,18 @@ impl<'a> VirBuilder<'a> {
             ast::TagName::Dialect(ns, t) => (Some(ns.clone()), t.clone()),
             ast::TagName::Component(_) => unreachable!(),
         };
-        let schema = self.schemas.resolve(&self.options.default_dialect, namespace.as_deref(), &tag_name);
+        let schema = self.schemas.resolve(
+            &self.options.default_dialect,
+            namespace.as_deref(),
+            &tag_name,
+        );
         let Some(schema) = schema else {
             self.diagnostics.push(GsxDiagnostic::new(
                 GsxCode::UnknownProp,
-                format!("no schema for element `{tag_name}` in dialect `{}`", self.options.default_dialect),
+                format!(
+                    "no schema for element `{tag_name}` in dialect `{}`",
+                    self.options.default_dialect
+                ),
             ));
             return VirNode::Fragment { children: vec![] };
         };
@@ -605,9 +629,9 @@ impl<'a> VirBuilder<'a> {
         for attr in attrs {
             match attr {
                 ast::GsxAttr::Plain(name, value) => {
-                    let prop_schema = schema.prop(name).or_else(|| {
-                        schema.prop(&name.replace('-', "_"))
-                    });
+                    let prop_schema = schema
+                        .prop(name)
+                        .or_else(|| schema.prop(&name.replace('-', "_")));
                     let Some(ps) = prop_schema else {
                         self.diagnostics.push(GsxDiagnostic::new(
                             GsxCode::UnknownProp,
@@ -822,22 +846,26 @@ impl<'a> VirBuilder<'a> {
             for c in children {
                 // Content-model check (§5.2).
                 if let ast::GsxChild::Node(inner) = c
-                    && let ast::GsxNode::Element { tag: itag, .. } = inner {
-                        let shape = match itag {
-                            ast::TagName::Intrinsic(t) => ChildName::Intrinsic(t.clone()),
-                            ast::TagName::Dialect(_, t) => ChildName::Intrinsic(t.clone()),
-                            ast::TagName::Component(segs) => {
-                                ChildName::Component(segs.first().cloned().unwrap_or_default())
-                            }
-                        };
-                        let shape_str: &'static str = match &shape {
-                            ChildName::Intrinsic(t) => leak_tag(t),
-                            ChildName::Component(_) => "component",
-                        };
-                        if let Some(v) = schema.child_violation(&crate::schema::ChildShape::Element(shape_str)) {
-                            self.diagnostics.push(GsxDiagnostic::new(GsxCode::ContentModel, v));
+                    && let ast::GsxNode::Element { tag: itag, .. } = inner
+                {
+                    let shape = match itag {
+                        ast::TagName::Intrinsic(t) => ChildName::Intrinsic(t.clone()),
+                        ast::TagName::Dialect(_, t) => ChildName::Intrinsic(t.clone()),
+                        ast::TagName::Component(segs) => {
+                            ChildName::Component(segs.first().cloned().unwrap_or_default())
                         }
+                    };
+                    let shape_str: &'static str = match &shape {
+                        ChildName::Intrinsic(t) => leak_tag(t),
+                        ChildName::Component(_) => "component",
+                    };
+                    if let Some(v) =
+                        schema.child_violation(&crate::schema::ChildShape::Element(shape_str))
+                    {
+                        self.diagnostics
+                            .push(GsxDiagnostic::new(GsxCode::ContentModel, v));
                     }
+                }
                 if let Some(node) = self.child_to_node(c) {
                     child_nodes.push(node);
                 }
@@ -878,7 +906,9 @@ impl<'a> VirBuilder<'a> {
         // Record the region slot first so structural patching has an anchor.
         let region = self.regions.len();
         self.push_region_slot(region);
-        let all_constant = props.iter().all(|(_, v)| matches!(v, ast::AttrValue::Lit(_) | ast::AttrValue::Bare));
+        let all_constant = props
+            .iter()
+            .all(|(_, v)| matches!(v, ast::AttrValue::Lit(_) | ast::AttrValue::Bare));
         let def = self.options.components.get(&head);
         let inline_decision = match def {
             Some(d) if d.inline_never => false,
@@ -999,11 +1029,12 @@ fn merge_static_text(nodes: Vec<VirNode>) -> Vec<VirNode> {
     for n in nodes {
         match (&mut out.last_mut(), &n) {
             (
-                Some(VirNode::Text { pieces: prev, hole_slots: hp }),
+                Some(VirNode::Text {
+                    pieces: prev,
+                    hole_slots: hp,
+                }),
                 VirNode::Text { pieces, hole_slots },
-            ) if hp.iter().all(|h| h.is_none())
-                && hole_slots.iter().all(|h| h.is_none()) =>
-            {
+            ) if hp.iter().all(|h| h.is_none()) && hole_slots.iter().all(|h| h.is_none()) => {
                 for p in pieces {
                     match p {
                         ast::TextPiece::Static(s) => {
@@ -1063,7 +1094,7 @@ pub fn prop_id_for(prop: &str) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{split_text_holes, TextPiece};
+    use crate::ast::{TextPiece, split_text_holes};
 
     fn parse_gsx(src: &str) -> ast::GsxNode {
         let wrapped = format!("fn __g() {{ {src} }}");
@@ -1127,7 +1158,9 @@ mod tests {
     /// §6.3: `if` becomes a Region whose arm bodies are sub-VIRs.
     #[test]
     fn if_becomes_region() {
-        let v = build("<section>{if s.count > 10 { <p>\"big\"</p> } else { <p>\"small\"</p> }}</section>");
+        let v = build(
+            "<section>{if s.count > 10 { <p>\"big\"</p> } else { <p>\"small\"</p> }}</section>",
+        );
         assert_eq!(v.regions.len(), 1);
         match &v.regions[0] {
             Region::If { arms, else_body } => {
@@ -1185,7 +1218,11 @@ mod tests {
     #[test]
     fn bind_desugars() {
         let v = build("<input bind:value={s.name}/>");
-        let prop_slot = v.slots.iter().find(|s| matches!(s.kind, SlotKind::Prop { .. })).unwrap();
+        let prop_slot = v
+            .slots
+            .iter()
+            .find(|s| matches!(s.kind, SlotKind::Prop { .. }))
+            .unwrap();
         match &prop_slot.kind {
             SlotKind::Prop { prop, expr } => {
                 assert_eq!(prop, "value");
@@ -1193,7 +1230,11 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
-        let ev = v.slots.iter().find(|s| matches!(s.kind, SlotKind::Event { .. })).unwrap();
+        let ev = v
+            .slots
+            .iter()
+            .find(|s| matches!(s.kind, SlotKind::Event { .. }))
+            .unwrap();
         match &ev.kind {
             SlotKind::Event { event, handler } => {
                 assert_eq!(event, "input");
@@ -1288,9 +1329,17 @@ mod tests {
             .unwrap();
         assert_eq!(style_prop.escape, EscapeCtx::Style);
         assert_eq!(style_prop.affects, Invalidation::Layout);
-        let style_dir = v.slots.iter().find(|s| matches!(s.kind, SlotKind::Style { .. })).unwrap();
+        let style_dir = v
+            .slots
+            .iter()
+            .find(|s| matches!(s.kind, SlotKind::Style { .. }))
+            .unwrap();
         assert_eq!(style_dir.affects, Invalidation::Layout);
-        let class = v.slots.iter().find(|s| matches!(s.kind, SlotKind::ClassToggle { .. })).unwrap();
+        let class = v
+            .slots
+            .iter()
+            .find(|s| matches!(s.kind, SlotKind::ClassToggle { .. }))
+            .unwrap();
         assert_eq!(class.affects, Invalidation::Paint);
         let aria = v
             .slots
@@ -1304,20 +1353,19 @@ mod tests {
     #[test]
     fn schema_violations_diagnosed() {
         let v = build("<button bogus={1}>\"x\"</button>");
-        assert!(v
-            .diagnostics
-            .iter()
-            .any(|d| d.code == GsxCode::UnknownProp));
+        assert!(v.diagnostics.iter().any(|d| d.code == GsxCode::UnknownProp));
         let v2 = build(r#"<p on:submit={|s, _| {}}>"x"</p>"#);
-        assert!(v2
-            .diagnostics
-            .iter()
-            .any(|d| d.code == GsxCode::UnknownEvent));
+        assert!(
+            v2.diagnostics
+                .iter()
+                .any(|d| d.code == GsxCode::UnknownEvent)
+        );
         let v3 = build("<ul><div>\"x\"</div></ul>");
-        assert!(v3
-            .diagnostics
-            .iter()
-            .any(|d| d.code == GsxCode::ContentModel));
+        assert!(
+            v3.diagnostics
+                .iter()
+                .any(|d| d.code == GsxCode::ContentModel)
+        );
     }
 
     /// §6.2: mount is instantiate + initial slot fills — a static subtree
