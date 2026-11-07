@@ -119,16 +119,13 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 module.add_function("glyim_process_abort_with_msg", fn_ty, None)
             });
 
-        let msg_global_name = format!(
-            "__glyim_abortmsg_{:016x}",
-            {
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::{Hash, Hasher};
-                let mut h = DefaultHasher::new();
-                msg.hash(&mut h);
-                h.finish()
-            }
-        );
+        let msg_global_name = format!("__glyim_abortmsg_{:016x}", {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut h = DefaultHasher::new();
+            msg.hash(&mut h);
+            h.finish()
+        });
         let msg_global = module.get_global(&msg_global_name).unwrap_or_else(|| {
             let const_str = context.const_string(msg.as_bytes(), true);
             let str_ty = context.i8_type().array_type(msg.len() as u32 + 1);
@@ -519,7 +516,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     c.ty,
                 ))])
             }
-            MirConstKind::StaticRef { def_id, init, is_mut } => {
+            MirConstKind::StaticRef {
+                def_id,
+                init,
+                is_mut,
+            } => {
                 // B.1: emit (or reuse) an LLVM global `__glyim_static_<id>`
                 // initialized with `init`, and return its **address** as an
                 // opaque pointer. By-value reads must subsequently load
@@ -602,8 +603,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         } else {
                             let start = *niche_variants.start();
                             (
-                                *niche_start
-                                    + (variant_idx.index() as u128 - start as u128),
+                                *niche_start + (variant_idx.index() as u128 - start as u128),
                                 true,
                             )
                         }
@@ -629,7 +629,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 // `llvm_ty` is an opaque struct of the same size, so the value
                 // is spliced into any destination slot of the enum's type via
                 // the byte-GEP store path used elsewhere.
-                Ok(self.context.const_string(&bytes, false).as_basic_value_enum())
+                Ok(self
+                    .context
+                    .const_string(&bytes, false)
+                    .as_basic_value_enum())
             }
             MirConstKind::Aggregate(elems) => {
                 // Emit a constant aggregate (tuple/array/struct) by recursively
@@ -750,8 +753,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 _ => None,
                             })
                             .unwrap_or(Ty::ERROR);
-                        let i8_ptr_ty =
-                            self.context.ptr_type(AddressSpace::default());
+                        let i8_ptr_ty = self.context.ptr_type(AddressSpace::default());
                         let i64_ty = self.llvm_int_type(64);
                         let base = self
                             .builder
@@ -806,13 +808,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                     "deref_vec len load: {e:?}"
                                 ))]
                             })?;
-                        let slice_ty = self
-                            .ty_ctx
-                            .mk_ty(TyKind::Slice(elem));
-                        let slice_llvm_ty =
-                            self.llvm_type_for_ty(slice_ty)?;
-                        let slice_struct_ty =
-                            slice_llvm_ty.into_struct_type();
+                        let slice_ty = self.ty_ctx.mk_ty(TyKind::Slice(elem));
+                        let slice_llvm_ty = self.llvm_type_for_ty(slice_ty)?;
+                        let slice_struct_ty = slice_llvm_ty.into_struct_type();
                         let alloca = self
                             .builder
                             .build_alloca(slice_llvm_ty, "deref_vec_slice")
@@ -838,13 +836,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                     "deref_vec slice insert 1: {e:?}"
                                 ))]
                             })?;
-                        self.builder
-                            .build_store(alloca, with_l)
-                            .map_err(|e| {
-                                vec![GlyimDiagnostic::internal_error(format!(
-                                    "deref_vec slice store: {e:?}"
-                                ))]
-                            })?;
+                        self.builder.build_store(alloca, with_l).map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "deref_vec slice store: {e:?}"
+                            ))]
+                        })?;
                         ptr = alloca;
                         current_ty = slice_ty;
                         continue;
@@ -1098,8 +1094,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         // the captures (see `glyim-layout/src/lib.rs`).
                         TyKind::Closure(closure_id, substs) => {
                             let closure_id = *closure_id;
-                            let closure_substs =
-                                self.ty_ctx.substitution_args(*substs).to_vec();
+                            let closure_substs = self.ty_ctx.substitution_args(*substs).to_vec();
                             if idx.to_raw() == 0 {
                                 // Field 0 is the code pointer. Represent it
                                 // as a raw pointer to unit — pointer-sized,
@@ -1124,17 +1119,15 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 } else {
                                     // Fallback: consult the closure's ADT.
                                     match self.ty_ctx.closure_adt(closure_id) {
-                                        Some(adt_id) => {
-                                            match self.ty_ctx.adt_def(adt_id) {
-                                                Some(def) => def
-                                                    .fields
-                                                    .as_slice()
-                                                    .get(capture_idx)
-                                                    .map(|f| f.ty)
-                                                    .unwrap_or(Ty::ERROR),
-                                                None => Ty::ERROR,
-                                            }
-                                        }
+                                        Some(adt_id) => match self.ty_ctx.adt_def(adt_id) {
+                                            Some(def) => def
+                                                .fields
+                                                .as_slice()
+                                                .get(capture_idx)
+                                                .map(|f| f.ty)
+                                                .unwrap_or(Ty::ERROR),
+                                            None => Ty::ERROR,
+                                        },
                                         None => Ty::ERROR,
                                     }
                                 }
@@ -1297,9 +1290,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         // Its LLVM representation is the same `{ptr, len}`
                         // fat-pointer struct a slice has, so the following
                         // slice path handles it directly.
-                        TyKind::String => {
-                            self.ty_ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U8))
-                        }
+                        TyKind::String => self
+                            .ty_ctx
+                            .mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U8)),
                         _ => {
                             return Err(vec![GlyimDiagnostic::internal_error(format!(
                                 "internal compiler error: Index projection on non-array/slice type {:?}",
@@ -2363,15 +2356,16 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         match self.ty_ctx.ty_kind(ty) {
             TyKind::String => true,
             TyKind::Adt(id, _) if id.to_raw() == 1050 => true,
-            TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => match self.ty_ctx.ty_kind(*inner)
-            {
-                TyKind::String => true,
-                TyKind::Adt(id, _) if id.to_raw() == 1050 => true,
-                TyKind::Slice(e) => {
-                    matches!(self.ty_ctx.ty_kind(*e), TyKind::Uint(UintTy::U8))
+            TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => {
+                match self.ty_ctx.ty_kind(*inner) {
+                    TyKind::String => true,
+                    TyKind::Adt(id, _) if id.to_raw() == 1050 => true,
+                    TyKind::Slice(e) => {
+                        matches!(self.ty_ctx.ty_kind(*e), TyKind::Uint(UintTy::U8))
+                    }
+                    _ => false,
                 }
-                _ => false,
-            },
+            }
             TyKind::Slice(e) => matches!(self.ty_ctx.ty_kind(*e), TyKind::Uint(UintTy::U8)),
             _ => false,
         }
@@ -2418,11 +2412,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             {
                 let pointee_ty = self.llvm_type_for_ty(*inner)?;
                 self.builder
-                    .build_load(
-                        pointee_ty,
-                        val.into_pointer_value(),
-                        "spl_deref",
-                    )
+                    .build_load(pointee_ty, val.into_pointer_value(), "spl_deref")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
                             "string_ptr_len_typed deref: {e:?}"
@@ -2537,16 +2527,13 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         let (l_ptr, l_len) = self.string_ptr_len_typed(l, l_ty)?;
         let (r_ptr, r_len) = self.string_ptr_len_typed(r, r_ty)?;
         // The runtime signature: `(i8*, usize, i8*, usize) -> i32`.
-        let helper = self
-            .module
-            .get_function("glyim_str_eq")
-            .unwrap_or_else(|| {
-                let ft = self
-                    .context
-                    .i32_type()
-                    .fn_type(&[i8_ptr.into(), len_ty.into(), i8_ptr.into(), len_ty.into()], false);
-                self.module.add_function("glyim_str_eq", ft, None)
-            });
+        let helper = self.module.get_function("glyim_str_eq").unwrap_or_else(|| {
+            let ft = self.context.i32_type().fn_type(
+                &[i8_ptr.into(), len_ty.into(), i8_ptr.into(), len_ty.into()],
+                false,
+            );
+            self.module.add_function("glyim_str_eq", ft, None)
+        });
         let call = self
             .builder
             .build_call(
@@ -2554,7 +2541,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 &[l_ptr.into(), l_len.into(), r_ptr.into(), r_len.into()],
                 "str_eq",
             )
-            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("str_eq call: {e:?}"))])?
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "str_eq call: {e:?}"
+                ))]
+            })?
             .try_as_basic_value()
             .basic()
             .ok_or_else(|| vec![GlyimDiagnostic::internal_error("str_eq void")])?
@@ -2566,11 +2557,19 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             inkwell::IntPredicate::NE
         };
         self.builder
-            .build_int_compare(pred, call, self.context.i32_type().const_zero(), "str_eq_bool")
+            .build_int_compare(
+                pred,
+                call,
+                self.context.i32_type().const_zero(),
+                "str_eq_bool",
+            )
             .map(|v| v.as_basic_value_enum())
-            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("str_eq cmp: {e:?}"))])
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "str_eq cmp: {e:?}"
+                ))]
+            })
     }
-
 
     fn lower_binop(
         &self,
@@ -2692,17 +2691,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     if is_signed {
                         let bits = ri.get_type().get_bit_width();
                         let minus_one = ri.get_type().const_all_ones();
-                        let int_min = ri
-                            .get_type()
-                            .const_int(1u64 << (bits - 1), false);
+                        let int_min = ri.get_type().const_int(1u64 << (bits - 1), false);
                         let is_neg_one = self
                             .builder
-                            .build_int_compare(
-                                IntPredicate::EQ,
-                                ri,
-                                minus_one,
-                                "div_neg_one",
-                            )
+                            .build_int_compare(IntPredicate::EQ, ri, minus_one, "div_neg_one")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
                                     "div -1 cmp: {:?}",
@@ -2711,12 +2703,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             })?;
                         let is_min = self
                             .builder
-                            .build_int_compare(
-                                IntPredicate::EQ,
-                                li,
-                                int_min,
-                                "div_int_min",
-                            )
+                            .build_int_compare(IntPredicate::EQ, li, int_min, "div_int_min")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
                                     "div min cmp: {:?}",
@@ -2727,27 +2714,20 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .builder
                             .build_and(is_neg_one, is_min, "div_overflow")
                             .map_err(|e| {
-                                vec![GlyimDiagnostic::internal_error(format!(
-                                    "div overflow and: {:?}",
-                                    e
-                                ))]
-                            })?;
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "div overflow and: {:?}",
+                                e
+                            ))]
+                        })?;
                         should_panic = self
                             .builder
                             .build_or(should_panic, overflow, "div_should_panic")
                             .map_err(|e| {
-                                vec![GlyimDiagnostic::internal_error(format!(
-                                    "div or: {:?}",
-                                    e
-                                ))]
+                                vec![GlyimDiagnostic::internal_error(format!("div or: {:?}", e))]
                             })?;
                     }
-                    let panic_bb = self
-                        .context
-                        .append_basic_block(self.function, "div_panic");
-                    let cont_bb = self
-                        .context
-                        .append_basic_block(self.function, "div_cont");
+                    let panic_bb = self.context.append_basic_block(self.function, "div_panic");
+                    let cont_bb = self.context.append_basic_block(self.function, "div_cont");
                     self.builder
                         .build_conditional_branch(should_panic, panic_bb, cont_bb)
                         .map_err(|e| {
@@ -2807,17 +2787,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     if is_signed {
                         let bits = ri.get_type().get_bit_width();
                         let minus_one = ri.get_type().const_all_ones();
-                        let int_min = ri
-                            .get_type()
-                            .const_int(1u64 << (bits - 1), false);
+                        let int_min = ri.get_type().const_int(1u64 << (bits - 1), false);
                         let is_neg_one = self
                             .builder
-                            .build_int_compare(
-                                IntPredicate::EQ,
-                                ri,
-                                minus_one,
-                                "rem_neg_one",
-                            )
+                            .build_int_compare(IntPredicate::EQ, ri, minus_one, "rem_neg_one")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
                                     "rem -1 cmp: {:?}",
@@ -2826,12 +2799,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             })?;
                         let is_min = self
                             .builder
-                            .build_int_compare(
-                                IntPredicate::EQ,
-                                li,
-                                int_min,
-                                "rem_int_min",
-                            )
+                            .build_int_compare(IntPredicate::EQ, li, int_min, "rem_int_min")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
                                     "rem min cmp: {:?}",
@@ -2842,27 +2810,20 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .builder
                             .build_and(is_neg_one, is_min, "rem_overflow")
                             .map_err(|e| {
-                                vec![GlyimDiagnostic::internal_error(format!(
-                                    "rem overflow and: {:?}",
-                                    e
-                                ))]
-                            })?;
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "rem overflow and: {:?}",
+                                e
+                            ))]
+                        })?;
                         should_panic = self
                             .builder
                             .build_or(should_panic, overflow, "rem_should_panic")
                             .map_err(|e| {
-                                vec![GlyimDiagnostic::internal_error(format!(
-                                    "rem or: {:?}",
-                                    e
-                                ))]
+                                vec![GlyimDiagnostic::internal_error(format!("rem or: {:?}", e))]
                             })?;
                     }
-                    let panic_bb = self
-                        .context
-                        .append_basic_block(self.function, "rem_panic");
-                    let cont_bb = self
-                        .context
-                        .append_basic_block(self.function, "rem_cont");
+                    let panic_bb = self.context.append_basic_block(self.function, "rem_panic");
+                    let cont_bb = self.context.append_basic_block(self.function, "rem_cont");
                     self.builder
                         .build_conditional_branch(should_panic, panic_bb, cont_bb)
                         .map_err(|e| {
@@ -3658,8 +3619,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     // `i64::MAX` interpreted. The `llvm.fptosi.sat` /
                     // `llvm.fptoui.sat` intrinsics give exactly Rust's
                     // semantics — one call, no trap, backend-conformant.
-                    let src_basic: inkwell::types::BasicTypeEnum =
-                        self.llvm_type_for_ty(src_ty)?.into_float_type().as_basic_type_enum();
+                    let src_basic: inkwell::types::BasicTypeEnum = self
+                        .llvm_type_for_ty(src_ty)?
+                        .into_float_type()
+                        .as_basic_type_enum();
                     let dst_basic: inkwell::types::BasicTypeEnum =
                         target_llvm_ty.into_int_type().as_basic_type_enum();
                     let (intrinsic_name, is_signed) =
@@ -4180,36 +4143,34 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     // the runtime expects as its second argument.
                     // Pass the type's real destructor when it has one, so
                     // `glyim_drop_in_place` actually calls it.
-                    let drop_fn_ptr: BasicValueEnum<'ctx> =
-                        match self.ty_ctx.drop_method_for(ty) {
-                            Some(fn_def_id) => {
-                                let sym = glyim_type::mangle_fn_symbol(
-                                    fn_def_id.to_raw(),
-                                    glyim_type::Substitution::empty(),
-                                );
-                                let callee =
-                                    self.module.get_function(&sym).or_else(|| {
-                                        self.ty_ctx.fn_sig(fn_def_id).cloned().and_then(|sig| {
-                                            self.llvm_fn_type_from_sig(&sig)
-                                                .ok()
-                                                .map(|t| self.module.add_function(&sym, t, None))
-                                        })
-                                    });
-                                match callee {
-                                    Some(f) => f.as_global_value().as_pointer_value().into(),
-                                    None => self
-                                        .context
-                                        .ptr_type(AddressSpace::default())
-                                        .const_null()
-                                        .into(),
-                                }
+                    let drop_fn_ptr: BasicValueEnum<'ctx> = match self.ty_ctx.drop_method_for(ty) {
+                        Some(fn_def_id) => {
+                            let sym = glyim_type::mangle_fn_symbol(
+                                fn_def_id.to_raw(),
+                                glyim_type::Substitution::empty(),
+                            );
+                            let callee = self.module.get_function(&sym).or_else(|| {
+                                self.ty_ctx.fn_sig(fn_def_id).cloned().and_then(|sig| {
+                                    self.llvm_fn_type_from_sig(&sig)
+                                        .ok()
+                                        .map(|t| self.module.add_function(&sym, t, None))
+                                })
+                            });
+                            match callee {
+                                Some(f) => f.as_global_value().as_pointer_value().into(),
+                                None => self
+                                    .context
+                                    .ptr_type(AddressSpace::default())
+                                    .const_null()
+                                    .into(),
                             }
-                            None => self
-                                .context
-                                .ptr_type(AddressSpace::default())
-                                .const_null()
-                                .into(),
-                        };
+                        }
+                        None => self
+                            .context
+                            .ptr_type(AddressSpace::default())
+                            .const_null()
+                            .into(),
+                    };
                     // A zero-sized type has no storage, so `place_ptr` yields
                     // a null address — but it may still have a destructor, and
                     // `glyim_drop_in_place` (correctly) refuses to call one
@@ -4778,8 +4739,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             if matches!(atomic_adt, 1016..=1018)
                 && matches!(
                     method.as_str(),
-                    "new" | "load" | "store" | "fetch_and" | "fetch_or" | "fetch_add"
-                        | "fetch_sub" | "compare_exchange"
+                    "new"
+                        | "load"
+                        | "store"
+                        | "fetch_and"
+                        | "fetch_or"
+                        | "fetch_add"
+                        | "fetch_sub"
+                        | "compare_exchange"
                 )
             {
                 let is_bool = atomic_adt == 1016;
@@ -4866,7 +4833,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .builder
                         .build_call(f, &[header_ptr.into()], "at_ld")
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!("atomic load: {e:?}"))]
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "atomic load: {e:?}"
+                            ))]
                         })?
                         .try_as_basic_value()
                         .basic()
@@ -4899,7 +4868,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     if let Some(target_bb) = target {
                         let tb = *self.bb_map.get(target_bb).expect("atomic load target");
                         self.builder.build_unconditional_branch(tb).map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!("atomic load br: {e:?}"))]
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "atomic load br: {e:?}"
+                            ))]
                         })?;
                     }
                     return Ok(true);
@@ -4952,7 +4923,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     self.builder
                         .build_call(f, &[header_ptr.into(), stored.into()], "at_st")
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!("atomic store: {e:?}"))]
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "atomic store: {e:?}"
+                            ))]
                         })?;
                     self.builder
                         .build_store(dest_ptr, dest_llvm_ty?.const_zero())
@@ -5026,7 +4999,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     };
                     let prev = self
                         .builder
-                        .build_call(f, &[header_ptr.into(), exp_llvm.into(), new_llvm.into()], "at_cas")
+                        .build_call(
+                            f,
+                            &[header_ptr.into(), exp_llvm.into(), new_llvm.into()],
+                            "at_cas",
+                        )
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
                                 "atomic cas: {e:?}"
@@ -5040,7 +5017,12 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     let prev_iv = prev.into_int_value();
                     let is_ok = self
                         .builder
-                        .build_int_compare(inkwell::IntPredicate::EQ, prev_iv, exp_llvm, "at_cas_ok")
+                        .build_int_compare(
+                            inkwell::IntPredicate::EQ,
+                            prev_iv,
+                            exp_llvm,
+                            "at_cas_ok",
+                        )
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
                                 "atomic cas cmp: {e:?}"
@@ -5061,10 +5043,16 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     } else {
                         prev_iv.as_basic_value_enum()
                     };
-                    let ok_val =
-                        self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(0)), &[payload])?;
-                    let err_val =
-                        self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(1)), &[payload])?;
+                    let ok_val = self.build_layout_aggregate(
+                        dest_ty,
+                        Some(VariantIdx::from_raw(0)),
+                        &[payload],
+                    )?;
+                    let err_val = self.build_layout_aggregate(
+                        dest_ty,
+                        Some(VariantIdx::from_raw(1)),
+                        &[payload],
+                    )?;
                     let result = self
                         .builder
                         .build_select(is_ok, ok_val, err_val, "at_cas_sel")
@@ -5136,12 +5124,16 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .builder
                         .build_call(f, &[header_ptr.into(), stored.into()], "at_f")
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!("atomic fetch: {e:?}"))]
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "atomic fetch: {e:?}"
+                            ))]
                         })?
                         .try_as_basic_value()
                         .basic()
                         .ok_or_else(|| {
-                            vec![GlyimDiagnostic::internal_error("atomic fetch returned void")]
+                            vec![GlyimDiagnostic::internal_error(
+                                "atomic fetch returned void",
+                            )]
                         })?;
                     let out: BasicValueEnum = if is_bool {
                         let zero = storage_ty.const_zero();
@@ -5162,12 +5154,16 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         raw
                     };
                     self.builder.build_store(dest_ptr, out).map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!("atomic fetch store: {e:?}"))]
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "atomic fetch store: {e:?}"
+                        ))]
                     })?;
                     if let Some(target_bb) = target {
                         let tb = *self.bb_map.get(target_bb).expect("atomic fetch target");
                         self.builder.build_unconditional_branch(tb).map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!("atomic fetch br: {e:?}"))]
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "atomic fetch br: {e:?}"
+                            ))]
                         })?;
                     }
                     return Ok(true);
@@ -5282,9 +5278,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             })?;
             if let Some(target_bb) = target {
                 let tb = *self.bb_map.get(target_bb).expect("as_str target");
-                self.builder.build_unconditional_branch(tb).map_err(|e| {
-                    vec![GlyimDiagnostic::internal_error(format!("branch: {e:?}"))]
-                })?;
+                self.builder
+                    .build_unconditional_branch(tb)
+                    .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("branch: {e:?}"))])?;
             }
             return Ok(true);
         }
@@ -5494,14 +5490,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         "is_power_of_two eq: {e:?}"
                     ))]
                 })?;
-            let minus_one = self
-                .builder
-                .build_int_sub(iv, one, "ipo_m1")
-                .map_err(|e| {
-                    vec![GlyimDiagnostic::internal_error(format!(
-                        "is_power_of_two sub: {e:?}"
-                    ))]
-                })?;
+            let minus_one = self.builder.build_int_sub(iv, one, "ipo_m1").map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "is_power_of_two sub: {e:?}"
+                ))]
+            })?;
             let and = self
                 .builder
                 .build_and(iv, minus_one, "ipo_and")
@@ -5518,14 +5511,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         "is_power_of_two andz: {e:?}"
                     ))]
                 })?;
-            let not_zero = self
-                .builder
-                .build_not(is_zero, "ipo_nz")
-                .map_err(|e| {
-                    vec![GlyimDiagnostic::internal_error(format!(
-                        "is_power_of_two not: {e:?}"
-                    ))]
-                })?;
+            let not_zero = self.builder.build_not(is_zero, "ipo_nz").map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "is_power_of_two not: {e:?}"
+                ))]
+            })?;
             let result = self
                 .builder
                 .build_and(not_zero, and_zero, "ipo_res")
@@ -5535,22 +5525,18 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     ))]
                 })?;
             let dp = self.place_ptr(destination)?;
-            self.builder
-                .build_store(dp, result)
-                .map_err(|e| {
-                    vec![GlyimDiagnostic::internal_error(format!(
-                        "is_power_of_two store: {e:?}"
-                    ))]
-                })?;
+            self.builder.build_store(dp, result).map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "is_power_of_two store: {e:?}"
+                ))]
+            })?;
             if let Some(target_bb) = target {
                 let tb = *self.bb_map.get(target_bb).expect("is_power_of_two target");
-                self.builder
-                    .build_unconditional_branch(tb)
-                    .map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "is_power_of_two branch: {e:?}"
-                        ))]
-                    })?;
+                self.builder.build_unconditional_branch(tb).map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "is_power_of_two branch: {e:?}"
+                    ))]
+                })?;
             }
             return Ok(true);
         }
@@ -5564,7 +5550,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         // `build_layout_aggregate`, then `select` on the flag. `select` on
         // aggregate values works because both variants share the same
         // `Option<T>` LLVM type.
-        if matches!(method.as_str(), "checked_add" | "checked_sub" | "checked_mul") {
+        if matches!(
+            method.as_str(),
+            "checked_add" | "checked_sub" | "checked_mul"
+        ) {
             let Some(recv_op) = args.first() else {
                 return Ok(false);
             };
@@ -5596,8 +5585,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 self.ty_ctx.ty_kind(recv_ty_for_checked),
                 glyim_type::TyKind::Int(_)
             );
-            let result_struct_ty =
-                self.context.struct_type(&[int_ty.into(), bool_ty.into()], false);
+            let result_struct_ty = self
+                .context
+                .struct_type(&[int_ty.into(), bool_ty.into()], false);
             let fn_ty = result_struct_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
             let intrinsic = match method.as_str() {
                 "checked_add" if signed => format!("llvm.sadd.with.overflow.i{width}"),
@@ -5624,12 +5614,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             let struct_val = call
                 .try_as_basic_value()
                 .basic()
-                .ok_or_else(|| {
-                    vec![GlyimDiagnostic::internal_error(format!(
-                        "{} void",
-                        method
-                    ))]
-                })?
+                .ok_or_else(|| vec![GlyimDiagnostic::internal_error(format!("{} void", method))])?
                 .into_struct_value();
             let wrapped = self
                 .builder
@@ -5681,14 +5666,12 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             })?;
             if let Some(target_bb) = target {
                 let tb = *self.bb_map.get(target_bb).expect("checked target");
-                self.builder
-                    .build_unconditional_branch(tb)
-                    .map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "{} branch: {e:?}",
-                            method
-                        ))]
-                    })?;
+                self.builder.build_unconditional_branch(tb).map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "{} branch: {e:?}",
+                        method
+                    ))]
+                })?;
             }
             return Ok(true);
         }
@@ -5728,61 +5711,144 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 bool_ty.const_zero().into();
 
             let dest_ty_for_signed = self.place_ty(destination);
-            let signed = matches!(self.ty_ctx.ty_kind(dest_ty_for_signed), glyim_type::TyKind::Int(_));
+            let signed = matches!(
+                self.ty_ctx.ty_kind(dest_ty_for_signed),
+                glyim_type::TyKind::Int(_)
+            );
 
             let result_iv: inkwell::values::IntValue<'_> = match method.as_str() {
                 "saturating_add" if signed => {
                     let fn_ty = int_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
                     let name = format!("llvm.sadd.sat.i{width}");
-                    let fv = self.module.get_function(&name).unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
-                    self.builder.build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "sat_sadd")
-                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("saturating_add signed: {e:?}"))])?
-                        .try_as_basic_value().basic()
-                        .ok_or_else(|| vec![GlyimDiagnostic::internal_error("saturating_add signed void")])?
+                    let fv = self
+                        .module
+                        .get_function(&name)
+                        .unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    self.builder
+                        .build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "sat_sadd")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "saturating_add signed: {e:?}"
+                            ))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error(
+                                "saturating_add signed void",
+                            )]
+                        })?
                         .into_int_value()
                 }
                 "saturating_sub" if signed => {
                     let fn_ty = int_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
                     let name = format!("llvm.ssub.sat.i{width}");
-                    let fv = self.module.get_function(&name).unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
-                    self.builder.build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "sat_ssub")
-                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("saturating_sub signed: {e:?}"))])?
-                        .try_as_basic_value().basic()
-                        .ok_or_else(|| vec![GlyimDiagnostic::internal_error("saturating_sub signed void")])?
+                    let fv = self
+                        .module
+                        .get_function(&name)
+                        .unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    self.builder
+                        .build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "sat_ssub")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "saturating_sub signed: {e:?}"
+                            ))]
+                        })?
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error(
+                                "saturating_sub signed void",
+                            )]
+                        })?
                         .into_int_value()
                 }
                 "saturating_mul" if signed => {
-                    let result_struct_ty = self.context.struct_type(&[int_ty.into(), bool_ty.into()], false);
+                    let result_struct_ty = self
+                        .context
+                        .struct_type(&[int_ty.into(), bool_ty.into()], false);
                     let fn_ty = result_struct_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
                     let name = format!("llvm.smul.with.overflow.i{width}");
-                    let fv = self.module.get_function(&name).unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
-                    let call = self.builder.build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "sat_smul")
-                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("saturating_mul signed: {e:?}"))])?;
-                    let struct_val = call.try_as_basic_value().basic()
-                        .ok_or_else(|| vec![GlyimDiagnostic::internal_error("saturating_mul signed void")])?
+                    let fv = self
+                        .module
+                        .get_function(&name)
+                        .unwrap_or_else(|| self.module.add_function(&name, fn_ty, None));
+                    let call = self
+                        .builder
+                        .build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "sat_smul")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "saturating_mul signed: {e:?}"
+                            ))]
+                        })?;
+                    let struct_val = call
+                        .try_as_basic_value()
+                        .basic()
+                        .ok_or_else(|| {
+                            vec![GlyimDiagnostic::internal_error(
+                                "saturating_mul signed void",
+                            )]
+                        })?
                         .into_struct_value();
-                    let product = self.builder.build_extract_value(struct_val, 0, "sat_smul_prod")
-                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("prod: {e:?}"))])?.into_int_value();
-                    let overflow = self.builder.build_extract_value(struct_val, 1, "sat_smul_ovf")
-                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("ovf: {e:?}"))])?.into_int_value();
+                    let product = self
+                        .builder
+                        .build_extract_value(struct_val, 0, "sat_smul_prod")
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("prod: {e:?}"))])?
+                        .into_int_value();
+                    let overflow = self
+                        .builder
+                        .build_extract_value(struct_val, 1, "sat_smul_ovf")
+                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("ovf: {e:?}"))])?
+                        .into_int_value();
                     let zero = int_ty.const_zero();
-                    let a_neg = self.builder.build_int_compare(inkwell::IntPredicate::SLT, lhs_iv, zero, "sat_smul_a_neg")
-                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("a_neg: {e:?}"))])?;
-                    let b_neg = self.builder.build_int_compare(inkwell::IntPredicate::SLT, rhs_iv, zero, "sat_smul_b_neg")
-                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("b_neg: {e:?}"))])?;
-                    let signs_differ = self.builder.build_xor(a_neg, b_neg, "sat_smul_xor")
-                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("xor: {e:?}"))])?;
+                    let a_neg = self
+                        .builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::SLT,
+                            lhs_iv,
+                            zero,
+                            "sat_smul_a_neg",
+                        )
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!("a_neg: {e:?}"))]
+                        })?;
+                    let b_neg = self
+                        .builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::SLT,
+                            rhs_iv,
+                            zero,
+                            "sat_smul_b_neg",
+                        )
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!("b_neg: {e:?}"))]
+                        })?;
+                    let signs_differ = self
+                        .builder
+                        .build_xor(a_neg, b_neg, "sat_smul_xor")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!("xor: {e:?}"))]
+                        })?;
                     let min_raw: u64 = 1u64 << (width - 1);
                     let int_min_val = int_ty.const_int(min_raw, true);
                     let int_max_val = int_ty.const_int(min_raw.wrapping_sub(1), false);
                     let min_bv: inkwell::values::BasicValueEnum<'_> = int_min_val.into();
                     let max_bv: inkwell::values::BasicValueEnum<'_> = int_max_val.into();
-                    let saturated = self.builder.build_select(signs_differ, min_bv, max_bv, "sat_smul_clamp")
-                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("clamp: {e:?}"))])?.into_int_value();
+                    let saturated = self
+                        .builder
+                        .build_select(signs_differ, min_bv, max_bv, "sat_smul_clamp")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!("clamp: {e:?}"))]
+                        })?
+                        .into_int_value();
                     let sat_bv: inkwell::values::BasicValueEnum<'_> = saturated.into();
                     let prod_bv: inkwell::values::BasicValueEnum<'_> = product.into();
-                    self.builder.build_select(overflow, sat_bv, prod_bv, "sat_smul_sel")
-                        .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("final: {e:?}"))])?.into_int_value()
+                    self.builder
+                        .build_select(overflow, sat_bv, prod_bv, "sat_smul_sel")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!("final: {e:?}"))]
+                        })?
+                        .into_int_value()
                 }
                 "saturating_add" => {
                     let fn_ty = int_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
@@ -5827,10 +5893,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .into_int_value()
                 }
                 "saturating_mul" => {
-                    let result_struct_ty =
-                        self.context.struct_type(&[int_ty.into(), bool_ty.into()], false);
-                    let fn_ty =
-                        result_struct_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
+                    let result_struct_ty = self
+                        .context
+                        .struct_type(&[int_ty.into(), bool_ty.into()], false);
+                    let fn_ty = result_struct_ty.fn_type(&[int_ty.into(), int_ty.into()], false);
                     let name = format!("llvm.umul.with.overflow.i{width}");
                     let fv = self
                         .module
@@ -5892,14 +5958,12 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             })?;
             if let Some(target_bb) = target {
                 let tb = *self.bb_map.get(target_bb).expect("saturating target");
-                self.builder
-                    .build_unconditional_branch(tb)
-                    .map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "{} branch: {e:?}",
-                            method
-                        ))]
-                    })?;
+                self.builder.build_unconditional_branch(tb).map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "{} branch: {e:?}",
+                        method
+                    ))]
+                })?;
             }
             return Ok(true);
         }
@@ -5936,15 +6000,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             let lhs_iv = recv_v.into_int_value();
             let rhs_iv = rhs_v.into_int_value();
             let result = match method.as_str() {
-                "wrapping_add" => {
-                    self.builder.build_int_add(lhs_iv, rhs_iv, "wadd")
-                }
-                "wrapping_sub" => {
-                    self.builder.build_int_sub(lhs_iv, rhs_iv, "wsub")
-                }
-                "wrapping_mul" => {
-                    self.builder.build_int_mul(lhs_iv, rhs_iv, "wmul")
-                }
+                "wrapping_add" => self.builder.build_int_add(lhs_iv, rhs_iv, "wadd"),
+                "wrapping_sub" => self.builder.build_int_sub(lhs_iv, rhs_iv, "wsub"),
+                "wrapping_mul" => self.builder.build_int_mul(lhs_iv, rhs_iv, "wmul"),
                 _ => unreachable!(),
             }
             .map_err(|e| {
@@ -5962,14 +6020,12 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             })?;
             if let Some(target_bb) = target {
                 let tb = *self.bb_map.get(target_bb).expect("wrapping target");
-                self.builder
-                    .build_unconditional_branch(tb)
-                    .map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "{} branch: {e:?}",
-                            method
-                        ))]
-                    })?;
+                self.builder.build_unconditional_branch(tb).map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "{} branch: {e:?}",
+                        method
+                    ))]
+                })?;
             }
             return Ok(true);
         }
@@ -6029,9 +6085,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         })?
                         .try_as_basic_value()
                         .basic()
-                        .ok_or_else(|| {
-                            vec![GlyimDiagnostic::internal_error("count_ones void")]
-                        })?
+                        .ok_or_else(|| vec![GlyimDiagnostic::internal_error("count_ones void")])?
                         .into_int_value()
                 }
                 "count_zeros" => {
@@ -6051,15 +6105,15 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         })?
                         .try_as_basic_value()
                         .basic()
-                        .ok_or_else(|| {
-                            vec![GlyimDiagnostic::internal_error("count_zeros void")]
-                        })?
+                        .ok_or_else(|| vec![GlyimDiagnostic::internal_error("count_zeros void")])?
                         .into_int_value();
-                    self.builder.build_int_sub(width_iv, popc, "cz_sub").map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "count_zeros sub: {e:?}"
-                        ))]
-                    })?
+                    self.builder
+                        .build_int_sub(width_iv, popc, "cz_sub")
+                        .map_err(|e| {
+                            vec![GlyimDiagnostic::internal_error(format!(
+                                "count_zeros sub: {e:?}"
+                            ))]
+                        })?
                 }
                 "leading_zeros" => {
                     let fn_ty = int_ty.fn_type(&[int_ty.into(), bool_ty.into()], false);
@@ -6077,9 +6131,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         })?
                         .try_as_basic_value()
                         .basic()
-                        .ok_or_else(|| {
-                            vec![GlyimDiagnostic::internal_error("leading_zeros void")]
-                        })?
+                        .ok_or_else(|| vec![GlyimDiagnostic::internal_error("leading_zeros void")])?
                         .into_int_value()
                 }
                 "trailing_zeros" => {
@@ -6104,14 +6156,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .into_int_value()
                 }
                 "next_power_of_two" => {
-                    let x_minus_1 = self
-                        .builder
-                        .build_int_sub(iv, one_iv, "npo_sub")
-                        .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "next_power_of_two sub: {e:?}"
-                            ))]
-                        })?;
+                    let x_minus_1 =
+                        self.builder
+                            .build_int_sub(iv, one_iv, "npo_sub")
+                            .map_err(|e| {
+                                vec![GlyimDiagnostic::internal_error(format!(
+                                    "next_power_of_two sub: {e:?}"
+                                ))]
+                            })?;
                     let fn_ty = int_ty.fn_type(&[int_ty.into(), bool_ty.into()], false);
                     let name = format!("llvm.ctlz.i{width}");
                     let fv = self
@@ -6168,14 +6220,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .into_int_value()
                 }
                 "leading_ones" => {
-                    let inverted = self
-                        .builder
-                        .build_not(iv, "lo_inv")
-                        .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "leading_ones not: {e:?}"
-                            ))]
-                        })?;
+                    let inverted = self.builder.build_not(iv, "lo_inv").map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "leading_ones not: {e:?}"
+                        ))]
+                    })?;
                     let fn_ty = int_ty.fn_type(&[int_ty.into(), bool_ty.into()], false);
                     let name = format!("llvm.ctlz.i{width}");
                     let fv = self
@@ -6191,20 +6240,15 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         })?
                         .try_as_basic_value()
                         .basic()
-                        .ok_or_else(|| {
-                            vec![GlyimDiagnostic::internal_error("leading_ones void")]
-                        })?
+                        .ok_or_else(|| vec![GlyimDiagnostic::internal_error("leading_ones void")])?
                         .into_int_value()
                 }
                 "trailing_ones" => {
-                    let inverted = self
-                        .builder
-                        .build_not(iv, "to_inv")
-                        .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "trailing_ones not: {e:?}"
-                            ))]
-                        })?;
+                    let inverted = self.builder.build_not(iv, "to_inv").map_err(|e| {
+                        vec![GlyimDiagnostic::internal_error(format!(
+                            "trailing_ones not: {e:?}"
+                        ))]
+                    })?;
                     let fn_ty = int_ty.fn_type(&[int_ty.into(), bool_ty.into()], false);
                     let name = format!("llvm.cttz.i{width}");
                     let fv = self
@@ -6220,9 +6264,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         })?
                         .try_as_basic_value()
                         .basic()
-                        .ok_or_else(|| {
-                            vec![GlyimDiagnostic::internal_error("trailing_ones void")]
-                        })?
+                        .ok_or_else(|| vec![GlyimDiagnostic::internal_error("trailing_ones void")])?
                         .into_int_value()
                 }
                 _ => unreachable!(),
@@ -6260,14 +6302,12 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             })?;
             if let Some(target_bb) = target {
                 let tb = *self.bb_map.get(target_bb).expect("bit intrinsic target");
-                self.builder
-                    .build_unconditional_branch(tb)
-                    .map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "{} branch: {e:?}",
-                            method
-                        ))]
-                    })?;
+                self.builder.build_unconditional_branch(tb).map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "{} branch: {e:?}",
+                        method
+                    ))]
+                })?;
             }
             return Ok(true);
         }
@@ -6311,8 +6351,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             "iter bitcast: {e:?}"
                         ))]
                     })?;
-                let len_val: BasicValueEnum =
-                    self.llvm_int_type(64).const_int(n, false).into();
+                let len_val: BasicValueEnum = self.llvm_int_type(64).const_int(n, false).into();
                 let dst_ty = dest_llvm_ty.into_struct_type();
                 let agg = dst_ty.get_undef();
                 let agg = self
@@ -6341,9 +6380,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 if let Some(t) = target {
                     let tb = *self.bb_map.get(t).expect("iter target");
                     self.builder.build_unconditional_branch(tb).map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "iter br: {e:?}"
-                        ))]
+                        vec![GlyimDiagnostic::internal_error(format!("iter br: {e:?}"))]
                     })?;
                 }
                 return Ok(true);
@@ -6361,9 +6398,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             if let Some(t) = target {
                 let tb = *self.bb_map.get(t).expect("iter target");
                 self.builder.build_unconditional_branch(tb).map_err(|e| {
-                    vec![GlyimDiagnostic::internal_error(format!(
-                        "iter br: {e:?}"
-                    ))]
+                    vec![GlyimDiagnostic::internal_error(format!("iter br: {e:?}"))]
                 })?;
             }
             return Ok(true);
@@ -6514,14 +6549,15 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 Operand::Constant(cc) => cc.ty,
             };
             let elem_ty = match self.ty_ctx.ty_kind(recv_rust_ty) {
-                TyKind::Adt(_, substs) => self
-                    .ty_ctx
-                    .substitution_args(*substs)
-                    .first()
-                    .and_then(|a| match a {
-                        glyim_type::GenericArg::Ty(t) => Some(*t),
-                        _ => None,
-                    }),
+                TyKind::Adt(_, substs) => {
+                    self.ty_ctx
+                        .substitution_args(*substs)
+                        .first()
+                        .and_then(|a| match a {
+                            glyim_type::GenericArg::Ty(t) => Some(*t),
+                            _ => None,
+                        })
+                }
                 TyKind::Ref(_, inner, _) => match self.ty_ctx.ty_kind(*inner) {
                     TyKind::Adt(_, substs) => self
                         .ty_ctx
@@ -6551,13 +6587,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 if let Some(p) = place {
                     self.place_ptr(p)?
                 } else {
-                    let alloca = self.builder.build_alloca(recv_val.get_type(), "vc_hdr").map_err(
-                        |e| {
+                    let alloca = self
+                        .builder
+                        .build_alloca(recv_val.get_type(), "vc_hdr")
+                        .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
                                 "Vec::clone hdr alloca: {e:?}"
                             ))]
-                        },
-                    )?;
+                        })?;
                     self.builder.build_store(alloca, recv_val).map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
                             "Vec::clone hdr store: {e:?}"
@@ -6616,8 +6653,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     ))]
                 })?
                 .into_int_value();
-            let layout_computer =
-                FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
+            let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
             let elem_size = layout_computer
                 .layout_of(elem_ty)
                 .map(|l| l.size.0)
@@ -6630,12 +6666,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             let i64_ty = self.llvm_int_type(64);
             let helper = self.declare_void_helper(
                 "glyim_slice_to_vec",
-                &[
-                    i8_ptr.into(),
-                    i64_ty.into(),
-                    i64_ty.into(),
-                    i8_ptr.into(),
-                ],
+                &[i8_ptr.into(), i64_ty.into(), i64_ty.into(), i8_ptr.into()],
             );
             let cargs: Vec<inkwell::values::BasicMetadataValueEnum> = vec![
                 src_ptr.into(),
@@ -7601,14 +7632,19 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             let base_i8 = self
                 .builder
                 .build_bit_cast(vec_hdr, i8_ptr, "fu_base")
-                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu bitcast: {e:?}"))])?
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "fu bitcast: {e:?}"
+                    ))]
+                })?
                 .into_pointer_value();
             // Byte-offset GEPs must use `i8` as the element type — using the
             // pointer type here would advance by whole pointers (16 * 8 = 128
             // bytes), reading the length word from out of bounds.
             let i8_ty = self.context.i8_type();
             let ptr_ptr = unsafe {
-                self.builder.build_in_bounds_gep(i8_ty, base_i8, &[i64_ty.const_zero()], "fu_pp")
+                self.builder
+                    .build_in_bounds_gep(i8_ty, base_i8, &[i64_ty.const_zero()], "fu_pp")
             }
             .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu gep0: {e:?}"))])?;
             let len_ptr = unsafe {
@@ -7623,12 +7659,20 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             let data_ptr = self
                 .builder
                 .build_load(i8_ptr, ptr_ptr, "fu_ptr")
-                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu load ptr: {e:?}"))])?
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "fu load ptr: {e:?}"
+                    ))]
+                })?
                 .into_pointer_value();
             let data_len = self
                 .builder
                 .build_load(i64_ty, len_ptr, "fu_len")
-                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu load len: {e:?}"))])?
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "fu load len: {e:?}"
+                    ))]
+                })?
                 .into_int_value();
             let check = self
                 .module
@@ -7656,10 +7700,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     "fu_isok",
                 )
                 .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu cmp: {e:?}"))])?;
-            let Some(current_fn) = self
-                .builder
-                .get_insert_block()
-                .and_then(|b| b.get_parent())
+            let Some(current_fn) = self.builder.get_insert_block().and_then(|b| b.get_parent())
             else {
                 return Err(vec![GlyimDiagnostic::internal_error("fu: no fn")]);
             };
@@ -7677,24 +7718,26 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             self.builder.position_at_end(ok_bb);
             // The Ok payload type is `dest_ty`'s variant-0 field 0 (`String`).
             let ok_ty = match self.ty_ctx.ty_kind(dest_ty) {
-                TyKind::Adt(_, s) => self
-                    .ty_ctx
-                    .substitution_args(*s)
-                    .first()
-                    .and_then(|a| match a {
-                        GenericArg::Ty(t) => Some(*t),
-                        _ => None,
-                    }),
+                TyKind::Adt(_, s) => {
+                    self.ty_ctx
+                        .substitution_args(*s)
+                        .first()
+                        .and_then(|a| match a {
+                            GenericArg::Ty(t) => Some(*t),
+                            _ => None,
+                        })
+                }
                 _ => None,
             };
             let Some(ok_ty) = ok_ty else {
                 return Ok(false);
             };
             let ok_llvm = self.llvm_type_for_ty(ok_ty)?;
-            let str_tmp = self
-                .builder
-                .build_alloca(ok_llvm, "fu_str")
-                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu str alloca: {e:?}"))])?;
+            let str_tmp = self.builder.build_alloca(ok_llvm, "fu_str").map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "fu str alloca: {e:?}"
+                ))]
+            })?;
             let mkstr = self.declare_void_helper(
                 "glyim_string_from_bytes",
                 &[i8_ptr.into(), i64_ty.into(), i8_ptr.into()],
@@ -7709,12 +7752,18 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             let str_val = self
                 .builder
                 .build_load(ok_llvm, str_tmp, "fu_strv")
-                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu strload: {e:?}"))])?;
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "fu strload: {e:?}"
+                    ))]
+                })?;
             let ok_agg =
                 self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(0)), &[str_val])?;
-            self.builder
-                .build_store(dest_ptr, ok_agg)
-                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu ok store: {e:?}"))])?;
+            self.builder.build_store(dest_ptr, ok_agg).map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "fu ok store: {e:?}"
+                ))]
+            })?;
             self.builder
                 .build_unconditional_branch(target_bb)
                 .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu ok br: {e:?}"))])?;
@@ -7723,9 +7772,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             self.builder.position_at_end(err_bb);
             let err_agg =
                 self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(1)), &[vec_val])?;
-            self.builder
-                .build_store(dest_ptr, err_agg)
-                .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu err store: {e:?}"))])?;
+            self.builder.build_store(dest_ptr, err_agg).map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "fu err store: {e:?}"
+                ))]
+            })?;
             self.builder
                 .build_unconditional_branch(target_bb)
                 .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu err br: {e:?}"))])?;
@@ -8188,11 +8239,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 _ => 0,
             };
             let stored: BasicValueEnum = if method == "is_empty" {
-                let is_empty = self
-                    .llvm_int_type(1)
-                    .const_int((n == 0) as u64, false);
-                if dest_llvm_ty.is_int_type() && dest_llvm_ty.into_int_type().get_bit_width() == 1
-                {
+                let is_empty = self.llvm_int_type(1).const_int((n == 0) as u64, false);
+                if dest_llvm_ty.is_int_type() && dest_llvm_ty.into_int_type().get_bit_width() == 1 {
                     is_empty.into()
                 } else if dest_llvm_ty.is_int_type() {
                     self.builder
@@ -8245,13 +8293,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             })?;
             if let Some(t) = target {
                 let tb = *self.bb_map.get(t).expect("array len target");
-                self.builder
-                    .build_unconditional_branch(tb)
-                    .map_err(|e| {
-                        vec![GlyimDiagnostic::internal_error(format!(
-                            "array len br: {e:?}"
-                        ))]
-                    })?;
+                self.builder.build_unconditional_branch(tb).map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "array len br: {e:?}"
+                    ))]
+                })?;
             }
             return Ok(true);
         }
