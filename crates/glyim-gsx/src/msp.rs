@@ -24,7 +24,7 @@
 //! G5: each patch emits *one* `host.invalidate(max class)` at its end.
 
 use crate::analysis::{self, Place};
-use crate::emit::{encode_view, Encoded};
+use crate::emit::{Encoded, encode_view};
 use crate::host::{Host, NodeId};
 use crate::interp::{Interp, Value};
 use crate::schema::{EscapeCtx, Invalidation};
@@ -36,7 +36,11 @@ use std::rc::Rc;
 #[derive(Debug, Clone)]
 pub enum PatchOp {
     /// `host.set_text(node, fmt(expr))`.
-    SetText { slot: usize, expr: crate::expr::Expr, node: NodeId },
+    SetText {
+        slot: usize,
+        expr: crate::expr::Expr,
+        node: NodeId,
+    },
     /// `host.set_prop(node, prop, v)` with the compile-time escaper (G6).
     SetProp {
         slot: usize,
@@ -112,7 +116,9 @@ pub struct Msp {
 impl Msp {
     /// The full mask: OR of all patch bits (§7.5 `patch_mask` fallback).
     pub fn full_mask(&self) -> u64 {
-        self.patches.iter().fold(0u64, |acc, p| acc | (1u64 << p.mask_bit))
+        self.patches
+            .iter()
+            .fold(0u64, |acc, p| acc | (1u64 << p.mask_bit))
     }
 }
 
@@ -151,9 +157,10 @@ pub fn build_msps(vir: &Vir, enc: &Encoded) -> Msp {
     let mut bind_places: BTreeSet<String> = BTreeSet::new();
     for slot in &vir.slots {
         if let SlotKind::Event { handler, .. } = &slot.kind
-            && let HandlerSpec::SynthBind { place } = handler.as_ref() {
-                bind_places.insert(analysis::expr_display(place, &sp));
-            }
+            && let HandlerSpec::SynthBind { place } = handler.as_ref()
+        {
+            bind_places.insert(analysis::expr_display(place, &sp));
+        }
     }
 
     // Distinct write-sets → patch fns (§7.5).
@@ -201,8 +208,8 @@ pub fn build_msps(vir: &Vir, enc: &Encoded) -> Msp {
                         }
                         SlotKind::Prop { prop, .. } => {
                             if let Some((expr, escape, node)) = slot_exprs.get(&slot2.id) {
-                                let suppress = bind_places
-                                    .contains(&analysis::expr_display(expr, &sp));
+                                let suppress =
+                                    bind_places.contains(&analysis::expr_display(expr, &sp));
                                 ops.push(PatchOp::SetProp {
                                     slot: slot2.id,
                                     expr: expr.clone(),
@@ -240,9 +247,7 @@ pub fn build_msps(vir: &Vir, enc: &Encoded) -> Msp {
                             // A structural write (§7.6) triggers the region's
                             // keyed reconcile.
                             let hits = ws.iter().any(|w| {
-                                w.subtree
-                                    || w.indexed
-                                    || read_hits_region(vir, *region, w)
+                                w.subtree || w.indexed || read_hits_region(vir, *region, w)
                             });
                             if hits {
                                 let node = enc
@@ -251,7 +256,10 @@ pub fn build_msps(vir: &Vir, enc: &Encoded) -> Msp {
                                     .find(|(id, _)| *id == slot2.id)
                                     .map(|(_, n)| *n)
                                     .unwrap_or(u32::MAX);
-                                ops.push(PatchOp::RegionPatch { region: *region, node });
+                                ops.push(PatchOp::RegionPatch {
+                                    region: *region,
+                                    node,
+                                });
                                 max_class = max_class.max(Invalidation::Structure);
                             }
                         }
@@ -292,9 +300,9 @@ fn read_hits_region(vir: &Vir, region: usize, w: &Place) -> bool {
     single.insert(w.clone());
     match r {
         Region::If { arms, else_body } => {
-            arms.iter()
-                .any(|(c, _)| analysis::any_interference(&analysis::read_set(c, &vir.state_param), &single))
-                || else_body.as_ref().is_some_and(|_| true)
+            arms.iter().any(|(c, _)| {
+                analysis::any_interference(&analysis::read_set(c, &vir.state_param), &single)
+            }) || else_body.as_ref().is_some_and(|_| true)
         }
         Region::Match { scrutinee, .. } => {
             analysis::any_interference(&analysis::read_set(scrutinee, &vir.state_param), &single)
@@ -391,7 +399,8 @@ impl ViewRuntime {
         // Event listeners: one-time listen at mount (§6.1 Event slots).
         let dispatch = self.msp.dispatch.clone();
         for d in dispatch {
-            let slot = self.enc
+            let slot = self
+                .enc
                 .slot_nodes
                 .iter()
                 .find(|(_, n)| *n == d.node)
@@ -411,15 +420,33 @@ impl ViewRuntime {
             match &slot.kind {
                 SlotKind::Prop { expr, prop } => {
                     let node = self.slot_nodes.get(&slot.id).copied().unwrap_or(u32::MAX);
-                    fills.push((node, FillKind::Prop { expr: expr.clone(), prop: prop.clone() }));
+                    fills.push((
+                        node,
+                        FillKind::Prop {
+                            expr: expr.clone(),
+                            prop: prop.clone(),
+                        },
+                    ));
                 }
                 SlotKind::ClassToggle { expr, .. } => {
                     let node = self.slot_nodes.get(&slot.id).copied().unwrap_or(u32::MAX);
-                    fills.push((node, FillKind::Prop { expr: expr.clone(), prop: "class".to_string() }));
+                    fills.push((
+                        node,
+                        FillKind::Prop {
+                            expr: expr.clone(),
+                            prop: "class".to_string(),
+                        },
+                    ));
                 }
                 SlotKind::Style { expr, prop } => {
                     let node = self.slot_nodes.get(&slot.id).copied().unwrap_or(u32::MAX);
-                    fills.push((node, FillKind::Prop { expr: expr.clone(), prop: prop.clone() }));
+                    fills.push((
+                        node,
+                        FillKind::Prop {
+                            expr: expr.clone(),
+                            prop: prop.clone(),
+                        },
+                    ));
                 }
                 _ => {}
             }
@@ -438,7 +465,12 @@ impl ViewRuntime {
     /// Execute blueprint ops (the `instantiate` fast path, G1); returns the
     /// created nodes in order. `row_offset` shifts slot ids for row-scoped
     /// slots (§7.6).
-    fn exec_bp(&mut self, bp: &crate::blueprint::Blueprint, host: &mut dyn Host, row_offset: usize) -> Vec<NodeId> {
+    fn exec_bp(
+        &mut self,
+        bp: &crate::blueprint::Blueprint,
+        host: &mut dyn Host,
+        row_offset: usize,
+    ) -> Vec<NodeId> {
         let strings = bp.strings.clone();
         let ops = bp.decode();
         let mut stack: Vec<NodeId> = vec![self.parent];
@@ -494,7 +526,13 @@ impl ViewRuntime {
         let anchor = anchor.copied().unwrap_or(self.parent);
         self.region_nodes.insert(region, anchor);
         match &r {
-            Region::For { pat, iter, key, body, .. } => {
+            Region::For {
+                pat,
+                iter,
+                key,
+                body,
+                ..
+            } => {
                 let mut interp = Interp::new([("s", state.clone())]);
                 let list = interp.eval(iter).unwrap_or(Value::Null);
                 if let Value::List(l) = list {
@@ -514,7 +552,13 @@ impl ViewRuntime {
                         let nodes = self.mount_row(body, host, state, pat, item, i);
                         mounted.push((key_v, nodes));
                     }
-                    self.region_state.insert(region, RegionState { rows: mounted, arm: None });
+                    self.region_state.insert(
+                        region,
+                        RegionState {
+                            rows: mounted,
+                            arm: None,
+                        },
+                    );
                 }
             }
             Region::If { arms, else_body } => {
@@ -531,7 +575,13 @@ impl ViewRuntime {
                 } else {
                     None
                 });
-                self.region_state.insert(region, RegionState { rows: vec![], arm: chosen });
+                self.region_state.insert(
+                    region,
+                    RegionState {
+                        rows: vec![],
+                        arm: chosen,
+                    },
+                );
                 // Mount the chosen arm's nodes.
                 if let Some(i) = chosen {
                     let sub = if i < arms.len() {
@@ -544,7 +594,13 @@ impl ViewRuntime {
                 }
             }
             Region::Match { arms, .. } => {
-                self.region_state.insert(region, RegionState { rows: vec![], arm: Some(0) });
+                self.region_state.insert(
+                    region,
+                    RegionState {
+                        rows: vec![],
+                        arm: Some(0),
+                    },
+                );
                 if let Some((_, sub)) = arms.first() {
                     let nodes = self.mount_subvir_nodes(sub, host, state);
                     self.region_state.get_mut(&region).unwrap().rows = vec![(Value::Int(0), nodes)];
@@ -585,7 +641,12 @@ impl ViewRuntime {
         self.exec_bp(&bp, host, offset)
     }
 
-    fn mount_subvir_nodes(&mut self, sub: &Vir, host: &mut dyn Host, _state: &Value) -> Vec<NodeId> {
+    fn mount_subvir_nodes(
+        &mut self,
+        sub: &Vir,
+        host: &mut dyn Host,
+        _state: &Value,
+    ) -> Vec<NodeId> {
         let enc = encode_view(sub);
         self.exec_bp(&enc.blueprint, host, 0)
     }
@@ -664,7 +725,14 @@ impl ViewRuntime {
                     let v = interp.eval(expr).unwrap_or(Value::Null);
                     host.set_text(node, &v.display());
                 }
-                PatchOp::SetProp { slot, expr, node, prop, escape: _, suppress_echo } => {
+                PatchOp::SetProp {
+                    slot,
+                    expr,
+                    node,
+                    prop,
+                    escape: _,
+                    suppress_echo,
+                } => {
                     let node = self.live_node(*node, *slot);
                     let mut interp = Interp::new([("s", state.clone())]);
                     let v = interp.eval(expr).unwrap_or(Value::Null);
@@ -675,15 +743,34 @@ impl ViewRuntime {
                     }
                     host.set_prop(node, prop, &v.display(), false);
                 }
-                PatchOp::ToggleClass { slot, expr, node, class } => {
+                PatchOp::ToggleClass {
+                    slot,
+                    expr,
+                    node,
+                    class,
+                } => {
                     let node = self.live_node(*node, *slot);
                     let mut interp = Interp::new([("s", state.clone())]);
                     let on = interp.eval(expr).map(|v| v.truthy()).unwrap_or(false);
                     // Class bits: set_prop("class", class) adds; removing is
                     // the host's class-list concern — model as prop writes.
-                    host.set_prop(node, "class", &if on { format!("+{class}") } else { format!("-{class}") }, false);
+                    host.set_prop(
+                        node,
+                        "class",
+                        &if on {
+                            format!("+{class}")
+                        } else {
+                            format!("-{class}")
+                        },
+                        false,
+                    );
                 }
-                PatchOp::SetStyle { slot, expr, node, prop } => {
+                PatchOp::SetStyle {
+                    slot,
+                    expr,
+                    node,
+                    prop,
+                } => {
                     let node = self.live_node(*node, *slot);
                     let mut interp = Interp::new([("s", state.clone())]);
                     let v = interp.eval(expr).unwrap_or(Value::Null);
@@ -716,7 +803,13 @@ impl ViewRuntime {
             return;
         };
         match &r {
-            Region::For { pat, iter, key, body, strategy } => {
+            Region::For {
+                pat,
+                iter,
+                key,
+                body,
+                strategy,
+            } => {
                 let mut interp = Interp::new([("s", state.clone())]);
                 let list = interp.eval(iter).unwrap_or(Value::Null);
                 let new_keys: Vec<Value> = match &list {
@@ -743,7 +836,11 @@ impl ViewRuntime {
                     .map(|rs| rs.rows.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>())
                     .unwrap_or_default();
                 let plan = crate::host::keyed_reconcile(&old, &new_keys);
-                let anchor = self.region_nodes.get(&region).copied().unwrap_or(self.parent);
+                let anchor = self
+                    .region_nodes
+                    .get(&region)
+                    .copied()
+                    .unwrap_or(self.parent);
                 // Removals.
                 for pos in &plan.remove {
                     if let Some((_, nodes)) = self
@@ -763,13 +860,12 @@ impl ViewRuntime {
                         .get(&region)
                         .and_then(|rs| rs.rows.get(*old_pos))
                         .and_then(|(_, ns)| ns.first().copied());
-                    let before = before_pos
-                        .and_then(|bp| {
-                            self.region_state
-                                .get(&region)
-                                .and_then(|rs| rs.rows.get(bp))
-                                .and_then(|(_, ns)| ns.first().copied())
-                        });
+                    let before = before_pos.and_then(|bp| {
+                        self.region_state
+                            .get(&region)
+                            .and_then(|rs| rs.rows.get(bp))
+                            .and_then(|(_, ns)| ns.first().copied())
+                    });
                     if let Some(n) = node {
                         host.move_before(anchor, n, before);
                     }
@@ -802,7 +898,11 @@ impl ViewRuntime {
                         break;
                     }
                 }
-                let chosen = chosen.or(if else_body.is_some() { Some(arms.len()) } else { None });
+                let chosen = chosen.or(if else_body.is_some() {
+                    Some(arms.len())
+                } else {
+                    None
+                });
                 let prev = self.region_state.get(&region).and_then(|rs| rs.arm);
                 if prev != chosen {
                     // Unmount old arm, mount new (§6.3).
@@ -853,7 +953,10 @@ enum FillKind {
     /// Text hole.
     Text(crate::expr::Expr),
     /// Prop/toggle/style hole with its (schema-resolved) name.
-    Prop { expr: crate::expr::Expr, prop: String },
+    Prop {
+        expr: crate::expr::Expr,
+        prop: String,
+    },
 }
 
 /// Sentinel tag for text nodes in the headless model.
@@ -889,8 +992,7 @@ mod tests {
         let g = crate::ast::gsx_from_parse(&parsed);
         assert!(g.diagnostics.is_empty(), "{:?}", g.diagnostics);
         let schemas = SchemaRegistry::standard();
-        let vir = VirBuilder::new(VirOptions::default(), &schemas)
-            .build(g.root.as_ref().unwrap());
+        let vir = VirBuilder::new(VirOptions::default(), &schemas).build(g.root.as_ref().unwrap());
         ViewRuntime::new(vir, 0)
     }
 
@@ -912,11 +1014,14 @@ mod tests {
         );
         assert_eq!(
             rt.msp.patches[0].write_set,
-            analysis::write_set(&crate::expr::Expr::Assign {
-                lhs: Box::new(crate::expr::Expr::field("s", "count")),
-                op: Some(crate::expr::BinOp::Add),
-                rhs: Box::new(crate::expr::Expr::field("s", "step")),
-            }, "s")
+            analysis::write_set(
+                &crate::expr::Expr::Assign {
+                    lhs: Box::new(crate::expr::Expr::field("s", "count")),
+                    op: Some(crate::expr::BinOp::Add),
+                    rhs: Box::new(crate::expr::Expr::field("s", "step")),
+                },
+                "s"
+            )
         );
     }
 
@@ -949,7 +1054,9 @@ mod tests {
             "one text update (§8.1: 1 host call)"
         );
         assert!(
-            !new_ops.iter().any(|o| matches!(o, crate::host::HostOp::SetProp { .. })),
+            !new_ops
+                .iter()
+                .any(|o| matches!(o, crate::host::HostOp::SetProp { .. })),
             "input prop untouched by the count patch"
         );
         // The count actually changed in state.
@@ -981,10 +1088,11 @@ mod tests {
         rt.mount(&mut host, &state);
         rt.dispatch_mask(&mut host, &state, mask);
         assert!(host.set_text_calls() >= 1);
-        assert!(host
-            .ops
-            .iter()
-            .any(|o| matches!(o, crate::host::HostOp::SetProp { .. })));
+        assert!(
+            host.ops
+                .iter()
+                .any(|o| matches!(o, crate::host::HostOp::SetProp { .. }))
+        );
     }
 
     /// §7.9: the synthesized bind handler updates the place and the patch
@@ -997,14 +1105,22 @@ mod tests {
         rt.mount(&mut host, &state);
         // The mount filled the input once.
         let fills_after_mount = host.count(|o| matches!(o, crate::host::HostOp::SetProp { .. }));
-        rt.dispatch(&mut host, &state, "input", &Value::Str(std::rc::Rc::from("typed")));
-        let new_props = host.count(|o| matches!(o, crate::host::HostOp::SetProp { .. })) - fills_after_mount;
-        assert_eq!(new_props, 0, "echo suppressed: the host already holds `typed`");
+        rt.dispatch(
+            &mut host,
+            &state,
+            "input",
+            &Value::Str(std::rc::Rc::from("typed")),
+        );
+        let new_props =
+            host.count(|o| matches!(o, crate::host::HostOp::SetProp { .. })) - fills_after_mount;
+        assert_eq!(
+            new_props, 0,
+            "echo suppressed: the host already holds `typed`"
+        );
         match &state {
-            Value::Obj(f) => assert_eq!(
-                f.borrow().get("name").cloned().unwrap().display(),
-                "typed"
-            ),
+            Value::Obj(f) => {
+                assert_eq!(f.borrow().get("name").cloned().unwrap().display(), "typed")
+            }
             _ => panic!(),
         }
     }
@@ -1018,10 +1134,7 @@ mod tests {
                 ("done", Value::Bool(false)),
             ])
         };
-        let state = Value::obj([(
-            "items",
-            Value::list([row("a"), row("b"), row("c")]),
-        )]);
+        let state = Value::obj([("items", Value::list([row("a"), row("b"), row("c")]))]);
         let mut rt = compile(concat!(
             "<ul>{for item in s.items.iter() by item.label {",
             "<li on:click={|s, e| s.items[i].done = true}>\"{item.label}\"</li>",
@@ -1035,7 +1148,9 @@ mod tests {
         // Only the clicked row's text re-renders — no reconcile, no
         // re-creation of siblings.
         assert!(
-            !new_ops.iter().any(|o| matches!(o, crate::host::HostOp::Create { .. })),
+            !new_ops
+                .iter()
+                .any(|o| matches!(o, crate::host::HostOp::Create { .. })),
             "no structural work for an element write (§7.6)"
         );
     }
@@ -1072,11 +1187,19 @@ mod tests {
         let p = &rt.msp.patches[0];
         let last = p.ops.last().unwrap();
         assert!(
-            matches!(last, PatchOp::Invalidate { class: Invalidation::Layout }),
+            matches!(
+                last,
+                PatchOp::Invalidate {
+                    class: Invalidation::Layout
+                }
+            ),
             "style writes invalidate Layout (G5), got {last:?}"
         );
         assert_eq!(
-            p.ops.iter().filter(|o| matches!(o, PatchOp::Invalidate { .. })).count(),
+            p.ops
+                .iter()
+                .filter(|o| matches!(o, PatchOp::Invalidate { .. }))
+                .count(),
             1,
             "exactly one invalidate per patch (G5)"
         );
