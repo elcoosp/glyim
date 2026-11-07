@@ -884,8 +884,6 @@ impl ReferenceGraph {
     }
 }
 
-
-
 /// Collect every hole `ExprId` in a GSX element tree (attrs + block
 /// children, nested elements included).
 fn collect_gsx_holes(g: &glyim_hir::GsxExpr) -> Vec<ExprId> {
