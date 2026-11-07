@@ -400,11 +400,13 @@ mod checksum_tests {
     use super::*;
 
     fn hex_of(bytes: &[u8]) -> String {
-        Sha256::digest(bytes).iter().fold(String::with_capacity(64), |mut acc, b| {
-            use std::fmt::Write;
-            let _ = write!(acc, "{b:02x}");
-            acc
-        })
+        Sha256::digest(bytes)
+            .iter()
+            .fold(String::with_capacity(64), |mut acc, b| {
+                use std::fmt::Write;
+                let _ = write!(acc, "{b:02x}");
+                acc
+            })
     }
 
     #[test]
@@ -900,9 +902,7 @@ impl DependencyResolver {
         let locked = LockedCrate {
             name: name.to_string(),
             version: config.package.version.clone(),
-            source: CrateSource::Path {
-                path: stored_path,
-            },
+            source: CrateSource::Path { path: stored_path },
             dependencies: sub_deps
                 .iter()
                 .map(|(n, v, _)| (n.clone(), v.clone().unwrap_or_default()))
@@ -1005,12 +1005,7 @@ impl DependencyResolver {
                 Some(checksum.as_str())
             };
             let dest = cache_dir.join("registry").join(&locked.name);
-            return client.download_crate(
-                &locked.name,
-                &locked.version,
-                expected,
-                &dest,
-            );
+            return client.download_crate(&locked.name, &locked.version, expected, &dest);
         }
         Err(GlyipError::RegistryError(format!(
             "no registry client available to download '{}'",
@@ -1206,9 +1201,7 @@ impl GitFetcher for GitCommandFetcher {
             let dest_str = clone_target
                 .to_str()
                 .ok_or_else(|| {
-                    GlyipError::RegistryError(
-                        "git cache path is not valid UTF-8".to_string(),
-                    )
+                    GlyipError::RegistryError("git cache path is not valid UTF-8".to_string())
                 })?
                 .to_string();
 
@@ -1272,4 +1265,3 @@ pub(crate) fn full_clone_args<'a>(url: &'a str, dest: &'a str) -> Vec<&'a str> {
 pub(crate) fn shallow_fetch_args<'a>(rev: &'a str) -> Vec<&'a str> {
     vec!["fetch", "--depth", "1", "origin", rev]
 }
-
