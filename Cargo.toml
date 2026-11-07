@@ -2,7 +2,10 @@
 edition = "2024"
 version = "0.1.0"
 license = "MIT"
-rust-version = "1.85"
+# Bumped 1.85 -> 1.95 with the dependency-update pass: parking_lot 0.13 (the
+# strictest updated dependency) requires 1.95, and the 2024-edition let-chains
+# now used in the code stabilized in 1.88.
+rust-version = "1.95"
 repository = "https://github.com/elcoosp/glyim"
 readme = "README.md"
 
