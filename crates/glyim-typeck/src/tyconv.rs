@@ -632,8 +632,7 @@ pub fn resolve_path_type(
         // to store, so the two sides of `type Item = I::Item` agree.
         if qname_str == "Self" {
             if let Some(&impl_self_ty) = param_map.get(&qname) {
-                if let Some(resolved) =
-                    ctx.resolve_associated_type_by_self_ty(impl_self_ty, aname)
+                if let Some(resolved) = ctx.resolve_associated_type_by_self_ty(impl_self_ty, aname)
                 {
                     return resolved;
                 }
