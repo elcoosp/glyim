@@ -1,0 +1,97 @@
+---
+title: glyim CLI Reference
+description: Every flag of the glyim compiler driver — emit kinds, backends, optimization, LTO, targets, diagnostics formats, the standard library prelude, and lint levels.
+type: reference
+sidebar:
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The `glyim` compiler driver (built as `glyim-cli`) compiles a single `.g` source file. This page documents the complete command-line surface, verified against the argument parser in `crates/glyim-cli`.
+
+```bash
+glyim <INPUT> [FLAGS]
+```
+
+## Arguments and flags
+
+| Argument | Type | Default | Required | Description |
+|----------|------|---------|----------|-------------|
+| `<INPUT>` | path | — | yes | The `.g` source file to compile. |
+| `-o`, `--output <PATH>` | path | derived | no | Write the output artifact to this path. |
+| `--emit <KIND>` | enum | `obj` | no | Output artifact kind — see [emit kinds](#emit-kinds). |
+| `-O`, `--opt-level <N>` | 0–3 | `0` | no | Optimization level. |
+| `--target <TRIPLE>` | string | host default | no | Target triple, for example `aarch64-unknown-linux-gnu`. Defaults to `x86_64-unknown-linux-gnu` when unset. |
+| `--backend <NAME>` | enum | `llvm` | no | Code generation backend: `llvm` or `bytecode`. |
+| `--linker <PATH>` | path | system linker | no | Override the system linker used to link executables. |
+| `--link-flags <FLAGS>` | string | none | no | Extra flags passed to the linker. |
+| `--lto <KIND>` | enum | `off` | no | Link-time optimization strategy: `off`, `fat`, or `thin`. |
+| `--codegen-units <N>` | integer | parallelism | no | Number of codegen units (CGUs) for parallel code generation. Defaults to the available parallelism, capped at 16. |
+| `--proc-macro-deps <LIST>` | string | none | no | Comma-separated proc-macro dependency source files, compiled for the host triple to cdylibs and loaded via `dlopen`. |
+| `--error-format <FMT>` | enum | `human` | no | Diagnostic format: `human` (miette-rendered) or `json` (one JSON object per diagnostic). |
+| `--with-stdlib` | flag | off | no | Prepend the assembled standard library to the input, so `println`, `Vec`, `Option`, `Result`, `String`, `Box`, `Rc`, and `Iterator` resolve without explicit `use` statements. |
+| `-A`, `--allow <LINT>` | lint name | none | no | Suppress the named lint. Repeatable. |
+| `-W`, `--warn <LINT>` | lint name | none | no | Set the named lint to warning level (the default). Repeatable. `glyim -W help` lists all lints. |
+| `-D`, `--deny <LINT>` | lint name | none | no | Promote the named lint to error level, aborting compilation. Repeatable. |
+| `-h`, `--help` | flag | — | no | Print help. |
+| `-V`, `--version` | flag | — | no | Print version. |
+
+## Emit kinds
+
+| Kind | Output | Notes |
+|------|--------|-------|
+| `obj` | Native object file | The default. |
+| `exec` | Runnable executable | Requires the LLVM backend; the driver links with the system linker. |
+| `mir` | MIR dump | Human-readable mid-level IR, useful for debugging lowering. |
+| `llvm-ir` | LLVM IR | Textual `.ll` output of the LLVM backend. |
+| `asm` | Assembly | Target assembly for the selected `--target`. |
+| `cdylib` | Dynamic library | Used for proc-macro crates; compiled for the host when driven by `--proc-macro-deps`. |
+
+## LTO behavior
+
+| Value | Behavior |
+|-------|----------|
+| `off` | No link-time optimization (default). |
+| `fat` | In-compiler module merge and optimize. Requires multi-CGU support, which is not yet implemented; requesting it with multiple CGUs errors cleanly rather than silently ignoring the request. |
+| `thin` | Requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution the backend was built against. Requesting `thin` with `--backend bytecode` is an explicit error. |
+
+## Internal compiler errors
+
+When the compiler itself panics, the driver catches the unwind and prints a structured ICE (internal compiler error) report instead of a raw Rust backtrace. The report includes the panic message and a backtrace captured at the panic site. A language-oriented error never appears as an ICE; an ICE is always a compiler bug worth reporting.
+
+## Environment
+
+| Variable | Purpose |
+|----------|---------|
+| `LLVM_SYS_231_PREFIX` | LLVM 23 installation prefix, required to build the workspace. Homebrew: `$(brew --prefix llvm@23)`; Debian/Ubuntu: `/usr/lib/llvm-23`. |
+
+<Aside type="caution">
+The LLVM backend is a hard dependency of the pipeline — there is no feature flag to build without it.
+</Aside>
+
+## Examples
+
+```bash
+# Object file with the LLVM backend (defaults)
+glyim input.g -o output.o
+
+# LLVM IR for inspection
+glyim input.g --emit llvm-ir
+
+# Optimized executable with thin LTO
+glyim input.g --emit exec -O2 --lto thin -o hello
+
+# Cross-compile to AArch64 Linux
+glyim input.g --target aarch64-unknown-linux-gnu
+
+# JSON diagnostics for editor tooling
+glyim input.g --error-format json
+
+# Prepend the standard library, deny the unsafe_fn_call lint
+glyim input.g --with-stdlib -D unsafe
+```
+
+## Next steps
+
+See [inspect the compilation pipeline](/guides/inspect-compilation/) for task-oriented walkthroughs of these flags, and the [lint reference](/reference/lints/) for the lint framework.
