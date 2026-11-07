@@ -1,0 +1,71 @@
+---
+title: The Testing Model
+description: Why the compiler ships five test modes, phase mocks, snapshots, and property tests — and how each layer catches a different class of bug.
+type: explanation
+sidebar:
+  order: 5
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Glyim's test harness (`glyim-test`) is a first-class part of the project, not an afterthought. This page explains the reasoning behind its layers: why there are five test modes, why every phase has a mock, and what property tests add.
+
+## One analysis, many failure modes
+
+A compiler bug can surface anywhere. A borrowing rule can be wrongly enforced (a valid program rejected) or wrongly relaxed (an invalid program accepted); a lowering step can drop a drop-flag; a codegen choice can corrupt the ABI. No single testing style catches all of these, so the harness layers five complementary modes over the same `.g` sources, selected by an inline header or the containing directory:
+
+| Mode | Catches |
+|------|---------|
+| `compile-pass` | False rejections: valid programs must compile. |
+| `compile-fail` | False acceptances: invalid programs must fail, with the *right* message, pinned by inline annotations. |
+| `ui` | Unintended changes anywhere in compiler output — CST, def-map, typeck, diagnostics — against `.expected` snapshots. |
+| `run-pass` | Semantic correctness end to end: the program must exit successfully with the expected stdout/stderr. |
+| `run-fail` | Error-path semantics: specific exit codes and output on failure. |
+
+The modes are deliberately coarse-grained: a test file states *what* must hold, and the harness decides *how* to check it. This keeps the corpus readable — each case is a few lines of Glyim plus annotations.
+
+## Inline annotations as an executable spec
+
+A `compile-fail` test pins diagnostics next to the code that produces them:
+
+```glyim
+fn main() {
+    let x: i32 = "hello";
+    //~^ ERROR mismatched types
+    //~| expected i32, found str
+}
+```
+
+The annotation grammar supports continuations (`//~|`), back-references (`//~^`), fuzzy ±1-line matching (`//~~`), and optional diagnostics (`//~?`). The effect: every diagnostic the compiler is expected to produce is written down next to the code that triggers it, so a diagnostic's text or placement cannot drift without a test failing.
+
+## Mocks replace the pipeline
+
+Because every phase communicates through a narrow context trait (`LowerCtx`, `BorrowckCtx`, `TraitSolver`, …), the harness ships mocks that implement each trait in memory: `MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen`, and `TestDbBuilder` for assembling a database from source strings.
+
+The payoff is precision. A move-analysis test can run the borrow checker alone against a hand-built MIR body, with no parser, no type checker, and no LLVM in the loop. When such a test fails, the bug is in the phase under test — not three phases downstream.
+
+## Snapshots for structured output
+
+CST shapes, def-maps, and MIR bodies are compared as snapshots (`insta`). Snapshots shine where the expected output is too large to write by hand but too important to leave unpinned: when an optimization pass changes a MIR body, the snapshot diff shows the exact instruction-level change. Blessing is explicit — `GLYIM_BLESS=1` or `cargo insta review` — so snapshot churn is always a reviewed decision.
+
+## Property tests for the type system
+
+Types have algebraic invariants that example tests underline only accidentally. The harness's property module generates random types (with and without inference variables) and checks invariants such as:
+
+- unification of a type with itself succeeds,
+- unification of two distinct types fails.
+
+Generated cases reach corners that hand-written tests miss — exotic substitutions, deeply nested types, inference variables in unusual positions.
+
+## Fuzzing the boundaries
+
+Two cargo-fuzz targets probe the boundaries where malformed input meets recursive descent: `fuzz_parse` (lexer/parser/CST round-trip) and `fuzz_compile` (a full-pipeline internal-compiler-error detector), with corpus seeds and a token dictionary. Fuzzing complements the corpus: the corpus encodes known behavior, fuzzing hunts unknown crashes.
+
+<Aside type="note">
+The harness runs on the MIR interpreter by default (`glyip test`), which executes tests in-process; `--compiled` runs the same corpus as native executables through the LLVM backend, exercising the full pipeline. The CI differential suite compares both execution paths against each other.
+</Aside>
+
+## Next steps
+
+<LinkCard title="Test your code" href="/guides/test-your-code/" description="How to run and annotate tests in practice." />
+<LinkCard title="Architecture, explained" href="/explanation/architecture/" description="The context-trait design that makes phase mocks possible." />
