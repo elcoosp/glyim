@@ -267,12 +267,7 @@ impl<'a> ExpanderImpl<'a> {
                 // never appear.
                 let in_item_position = node
                     .parent()
-                    .map(|p| {
-                        matches!(
-                            p.kind(),
-                            SyntaxKind::SourceFile | SyntaxKind::Module
-                        )
-                    })
+                    .map(|p| matches!(p.kind(), SyntaxKind::SourceFile | SyntaxKind::Module))
                     .unwrap_or(false);
                 let wrapped = if in_item_position {
                     token_text
@@ -908,11 +903,7 @@ impl<'a> ExpanderImpl<'a> {
                     path.to_path_buf()
                 } else if let Some(vfs) = self.vfs {
                     vfs.file_path(call_site.file)
-                        .and_then(|calling| {
-                            calling
-                                .parent()
-                                .map(|dir| dir.join(path_str))
-                        })
+                        .and_then(|calling| calling.parent().map(|dir| dir.join(path_str)))
                         .unwrap_or_else(|| PathBuf::from(path_str))
                 } else {
                     PathBuf::from(path_str)
@@ -941,8 +932,7 @@ impl<'a> ExpanderImpl<'a> {
                     .iter()
                     .map(|t| TokenTree::Token(t.kind, t.text.clone()))
                     .collect();
-                let green =
-                    self.build_expansion_green(&trees, call_site, _depth, name, false);
+                let green = self.build_expansion_green(&trees, call_site, _depth, name, false);
                 return (Some(green), Vec::new());
             }
             BuiltinMacro::Concat => {
@@ -1182,10 +1172,7 @@ impl<'a> ExpanderImpl<'a> {
                         if !before.is_empty() {
                             emit_push_str(
                                 &mut out,
-                                vec![tt_tok(
-                                    SyntaxKind::StringLit,
-                                    &format!("\"{}\"", before),
-                                )],
+                                vec![tt_tok(SyntaxKind::StringLit, &format!("\"{}\"", before))],
                             );
                         }
                         if matches!(
@@ -1199,15 +1186,11 @@ impl<'a> ExpanderImpl<'a> {
                         for (i, tt) in rest_vec.iter().enumerate() {
                             match tt {
                                 TokenTree::Token(
-                                    SyntaxKind::LParen
-                                    | SyntaxKind::LBracket
-                                    | SyntaxKind::LBrace,
+                                    SyntaxKind::LParen | SyntaxKind::LBracket | SyntaxKind::LBrace,
                                     _,
                                 ) => depth += 1,
                                 TokenTree::Token(
-                                    SyntaxKind::RParen
-                                    | SyntaxKind::RBracket
-                                    | SyntaxKind::RBrace,
+                                    SyntaxKind::RParen | SyntaxKind::RBracket | SyntaxKind::RBrace,
                                     _,
                                 ) => depth -= 1,
                                 TokenTree::Token(SyntaxKind::Comma, _) if depth == 0 => {
@@ -1256,8 +1239,6 @@ impl<'a> ExpanderImpl<'a> {
                     out.push(tt_tok(SyntaxKind::RBrace, "}"));
                     Some(out)
                 }
-
-
 
                 let args_tt = flatten_token_tree(args_node);
                 let mut inner: &[TokenTree] = &args_tt;
