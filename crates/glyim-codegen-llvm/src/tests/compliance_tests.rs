@@ -69,7 +69,9 @@ fn s08_t44_generate_with_empty_bodies_produces_valid_object() {
     let backend = LlvmBackend::new();
     let output = tpath("glyim_empty_module.o");
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
-    backend.generate(&crate::tests::to_pairs(&bodies), &output).unwrap();
+    backend
+        .generate(&crate::tests::to_pairs(&bodies), &output)
+        .unwrap();
     // Verify ELF magic if x86_64-unknown-linux-gnu (default)
     let mut buf = [0u8; 4];
     std::fs::File::open(&output)
