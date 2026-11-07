@@ -59,7 +59,10 @@ impl Blueprint {
         let word = match op {
             BpOp::Create(tag) => encode(TAG_OP_CREATE, tag),
             BpOp::StaticProp(prop, s) => {
-                debug_assert!(prop < (1 << 14) && s < (1 << 15), "StaticProp field overflow");
+                debug_assert!(
+                    prop < (1 << 14) && s < (1 << 15),
+                    "StaticProp field overflow"
+                );
                 encode(TAG_OP_STATIC_PROP, (prop << 15) | s)
             }
             BpOp::Text(s) => encode(TAG_OP_TEXT, s),
@@ -110,11 +113,17 @@ impl Blueprint {
                 BpOp::StaticProp(p, s) => out.push_str(&format!(
                     "StaticProp({}, {:?}) ",
                     p,
-                    self.strings.get(s as usize).map(|x| x.as_str()).unwrap_or("?")
+                    self.strings
+                        .get(s as usize)
+                        .map(|x| x.as_str())
+                        .unwrap_or("?")
                 )),
                 BpOp::Text(s) => out.push_str(&format!(
                     "Text({:?}) ",
-                    self.strings.get(s as usize).map(|x| x.as_str()).unwrap_or("?")
+                    self.strings
+                        .get(s as usize)
+                        .map(|x| x.as_str())
+                        .unwrap_or("?")
                 )),
                 BpOp::Enter => out.push_str("Enter "),
                 BpOp::Leave => out.push_str("Leave "),
