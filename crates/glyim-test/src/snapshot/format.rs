@@ -457,7 +457,11 @@ fn format_const(c: &glyim_mir::MirConst) -> String {
                 parts.join(", ")
             )
         }
-        glyim_mir::MirConstKind::StaticRef { def_id, is_mut, init } => format!(
+        glyim_mir::MirConstKind::StaticRef {
+            def_id,
+            is_mut,
+            init,
+        } => format!(
             "static_ref({:?}, mut={}, init={})",
             def_id,
             is_mut,
