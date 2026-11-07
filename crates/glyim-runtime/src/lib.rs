@@ -2112,7 +2112,6 @@ pub unsafe extern "C" fn glyim_str_eq(
     i32::from(l_slice == r_slice)
 }
 
-
 /// LSP/format FFI: allocate a `{ptr, len}` String from raw bytes.
 ///
 /// Writes 16 bytes (pointer then length, both native-endian) to `out`.
