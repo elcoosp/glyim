@@ -1,0 +1,95 @@
+---
+title: The Compilation Pipeline
+description: A stage-by-stage walkthrough of what happens between source.g and a native binary or bytecode program.
+type: explanation
+sidebar:
+  order: 2
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+This page walks through Glyim's compilation pipeline stage by stage — what each stage consumes, what it produces, and why it exists. The pipeline is end-to-end functional for a substantial subset of the language.
+
+## The map
+
+```text
+source.g
+   │
+   ▼
+Lexer → Parser → CST                (glyim-frontend, glyim-syntax)
+                     │
+                     ▼
+HIR (untyped) ← Def-Map ← Macro     (glyim-hir, glyim-def-map, glyim-meta)
+                     │              expansion
+                     ▼
+Typeck (inference) ⇄ Trait solving  (glyim-typeck, glyim-solve)
+   → THIR (typed)
+                     │
+                     ▼
+Lowering → MIR (CFG)                (glyim-lower, glyim-mir)
+   (monomorphization)
+                     │
+         ┌───────────┼───────────┐
+         ▼           ▼           ▼
+   Borrowck (NLL)  Optimizer   MIR interpreter
+                     │           (const-eval, tests)
+                     ▼
+        LLVM IR → .o / exe      or      Bytecode → .gbc
+        (glyim-codegen-llvm)            (glyim-codegen, glyim-bytecode-vm)
+```
+
+## Frontend: from characters to a lossless tree
+
+The lexer tokenizes the whole file up front — it is eager and context-free, with no mode stack. The parser then builds a **concrete syntax tree** with Rowan: whitespace, comments, and even syntax errors are preserved in the tree. Error recovery is a first-class feature, so a file with a mistake still produces a usable CST for IDE features such as goto-definition and completion.
+
+GSX view elements are parsed in the same pass (`parse_gsx_element`), producing dedicated `Gsx*` CST nodes with zero lexer changes — text in views is always a string literal, which removes the need for lexer modes.
+
+## Name resolution and macros
+
+The def-map builds the module graph and resolves names: item scopes, `use` imports, and visibility checks. Macro expansion interleaves with resolution — `macro_rules!` rules and built-in macros (`file!`, `line!`, `env!`, `include_str!`, and friends) expand over token trees, and procedural macros enter through the C-ABI bridge and a `dlopen`-based loader.
+
+## HIR: structure without types
+
+The high-level IR is an arena of expression variants — `Path`, `Literal`, `Block`, `If`, `While`, `For`, `Match`, `Call`, `MethodCall`, and `Expr::Gsx` for views. HIR keeps structure intact and defers meaning to the next stage. Async functions are desugared here into state machines (straight-line and multi-await bodies).
+
+## Typeck and trait solving
+
+The type checker lowers HIR to **THIR** (typed HIR) while running inference: unification variables (general, integer, and float kinds), an occurs-check, and bidirectional checking. Trait obligations flow into a fulfillment context with an obligation queue; the solver handles higher-ranked trait bounds (`for<'a>`) and computes auto-traits (`Send`, `Sync`, `Unpin`).
+
+GSX expressions are checked here against dialect schemas — tags, props, events, and children are validated as data, not string-matched.
+
+## Lowering and monomorphization
+
+`glyim-lower` turns THIR into **MIR**, a control-flow graph of `Assign(Place, Rvalue)` statements and terminators, with field-granular place projections. Generic functions are monomorphized — specialized for concrete types — with two refinements: polymorphization replaces unused generic parameters with canonical placeholders, and items are partitioned into codegen units (defaulting to the available parallelism, capped at 16) for parallel code generation.
+
+## Borrow checking: NLL on the CFG
+
+The borrow checker runs on MIR with non-lexical lifetimes: region inference in the Polonius style, cross-block liveness analysis, two-phase borrows (a reservation that can be promoted to an active borrow before the call actually happens), and move analysis with partial-move tracking. Drop elaboration inserts the drop flags that make partial moves sound.
+
+Because the checker works on the CFG, a borrow can end after its last use rather than at the end of a lexical scope — that is what "non-lexical" means, and it is why this pattern borrows fine.
+
+## Optimization
+
+`glyim-opt` runs per-body MIR passes: constant propagation, dead code elimination, CFG simplification, unreachable block elimination, slice desugaring, and drop elaboration. There is no MIR-level inliner — inlining is left to LLVM — so GSX specialization runs above MIR, where structure is still visible.
+
+## Code generation
+
+Two backends consume the optimized MIR:
+
+- **LLVM** (`glyim-codegen-llvm`, via `inkwell`) computes type layouts with ABI-aware argument passing (`sret`, `byval`, `Direct`, `Split`), generates vtables for trait objects, emits debug info and exception handling (Itanium and SEH), and supports fat and thin LTO. The linker driver then produces executables with the system linker.
+- **Bytecode** (`glyim-codegen`) emits a compact stack-machine format, executed by `glyim-bytecode-vm` — the backend used for testing and embedded execution.
+
+The **MIR interpreter** (`glyim-mir-interp`) executes MIR directly: it powers `const fn` evaluation and the in-process test runner.
+
+## After the compiler: linking and running
+
+The CLI driver links produced object files into executables, honoring `--linker` and `--link-flags`. `glyip run` wraps the whole flow — build, then execute, then exit with the child's status — and the standard library (`glyim-lang-core`, `glyim-lang-alloc`, `glyim-lang-std`) supplies the `Option`/`Vec`/`io`/`thread` layer written in Glyim itself.
+
+<Aside type="note">
+Incremental compilation spans this whole map: SHA-256 fingerprints of sources and build configuration decide what recompiles, and the monomorphization cache reuses specialized items across compilations.
+</Aside>
+
+## Next steps
+
+<LinkCard title="Borrow checking, explained" href="/explanation/borrow-checking/" description="How NLL region inference and two-phase borrows work on the CFG." />
+<LinkCard title="Inspect the pipeline from the CLI" href="/guides/inspect-compilation/" description="Emit MIR, LLVM IR, and assembly to see the stages yourself." />
