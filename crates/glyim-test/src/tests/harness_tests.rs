@@ -195,8 +195,7 @@ fn test_output_check_stderr_pass() {
     // TEST-1: `check-stderr` is line-anchored. A prefix expectation
     // (`"error:"`) no longer matches `"error: something went wrong"`;
     // the whole line must be given.
-    let check =
-        harness::runner::OutputCheck::new().stderr("error: something went wrong");
+    let check = harness::runner::OutputCheck::new().stderr("error: something went wrong");
     let result = harness::runner::RunResult {
         exit_code: Some(1),
         stdout: String::new(),
