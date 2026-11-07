@@ -19,11 +19,7 @@ fn tempdir() -> std::path::PathBuf {
     // alone is not unique.
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let p = std::env::temp_dir().join(format!(
-        "glyim_tmv_{}_{}",
-        std::process::id(),
-        n,
-    ));
+    let p = std::env::temp_dir().join(format!("glyim_tmv_{}_{}", std::process::id(), n,));
     std::fs::create_dir_all(&p).unwrap();
     p
 }
