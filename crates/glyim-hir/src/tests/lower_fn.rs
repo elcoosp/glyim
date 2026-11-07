@@ -68,7 +68,6 @@ fn test_bare_extern_fn_defaults_to_c_abi() {
     }
 }
 
-
 #[test]
 fn unsafe_fn_sets_is_unsafe() {
     // §3.5.25: `is_unsafe` was hardcoded `false` — the parser emits
