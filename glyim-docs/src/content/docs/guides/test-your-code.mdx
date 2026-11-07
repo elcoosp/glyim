@@ -1,0 +1,94 @@
+---
+title: Test Your Code
+description: Run tests with glyip test, choose between the MIR interpreter and compiled native executables, annotate expected errors inline, and bless snapshot changes.
+type: how-to
+sidebar:
+  order: 3
+---
+
+import { Aside, LinkCard, Steps } from '@astrojs/starlight/components';
+
+This guide shows how to run tests for a Glyim project, how the compiler's own test harness classifies tests, and how to annotate expected diagnostics inline.
+
+## Run your project's tests
+
+From the directory that contains your `Glyip.toml`:
+
+```bash
+glyip test
+```
+
+Useful variations:
+
+```bash
+glyip test --filter parser    # run only tests whose name matches "parser"
+glyip test --no-run           # compile the tests but do not run them
+glyip test --compiled         # compile each test to a native exe and run it
+glyip test --release          # build the tests in release mode
+```
+
+By default tests run in-process on the MIR interpreter. `--compiled` produces a real executable per test and runs it as a subprocess, which exercises the full LLVM codegen path.
+
+## Understand the harness test modes
+
+The compiler's own test harness (`glyim-test`) discovers `.g` files under `tests/` and runs them in one of five modes, selected by an inline header or the containing directory name:
+
+| Mode | Meaning |
+|------|---------|
+| `compile-pass` | The source compiles without errors. |
+| `compile-fail` | The source produces specific errors, checked against inline annotations. |
+| `ui` | The full compiler output (CST, def-map, typeck, diagnostics) matches an `.expected` snapshot. |
+| `run-pass` | The compiled program exits successfully and matches its expected stdout/stderr. |
+| `run-fail` | The compiled program fails with a specific exit code and output. |
+
+## Annotate expected errors inline
+
+A `compile-fail` test names the diagnostics it expects next to the offending line:
+
+```glyim
+fn main() {
+    let x: i32 = "hello";
+    //~^ ERROR mismatched types
+    //~| expected i32, found str
+}
+```
+
+The annotation grammar:
+
+- `//~ ERROR <pattern>` — the annotated line produces an error whose message contains `<pattern>`.
+- `//~| ERROR <pattern>` — a continuation of the previous annotation, for multi-line diagnostic blocks.
+- `//~^`, `//~^^`, … — point at earlier lines instead of the current one.
+- `//~~` — fuzzy matching: the diagnostic may land within ±1 line.
+- `//~? ERROR …` — the diagnostic is optional; the test passes if it is absent.
+
+## Work with snapshots
+
+Snapshot tests for the CST, def-map, and MIR use `insta` inside the compiler workspace:
+
+```rust
+snapshot_cst("my_syntax_case", source);
+snapshot_mir("my_mir_case", &ctx, &body);
+```
+
+When an intentional change alters snapshots, update them:
+
+```bash
+GLYIM_BLESS=1 cargo test -p glyim-test
+# or, for interactive review
+cargo insta review
+```
+
+To see captured program output from run-pass/run-fail tests, set `GLYIM_TEST_SHOW_OUTPUT=1`:
+
+```bash
+GLYIM_TEST_SHOW_OUTPUT=1 cargo test -p glyim-test
+```
+
+<Aside type="note">
+The harness also ships mocking utilities for every compiler phase (`MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen`, `TestDbBuilder`) and a property module that generates random types to check invariants such as "unification of a type with itself succeeds".
+</Aside>
+
+## Next steps
+
+<LinkCard title="glyip test reference" href="/reference/glyip/#glyip-test" description="Every flag the test command accepts." />
+<LinkCard title="Why the compiler has five test modes" href="/explanation/testing-model/" description="The rationale behind the harness's classification and mocks." />
