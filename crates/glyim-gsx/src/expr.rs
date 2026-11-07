@@ -209,7 +209,9 @@ impl Expr {
                 }
                 v
             }
-            Expr::For { iter, key, body, .. } => {
+            Expr::For {
+                iter, key, body, ..
+            } => {
                 let mut v = vec![e(iter)];
                 if let Some(k) = key {
                     v.push(e(k));
@@ -261,7 +263,8 @@ pub fn expr_from_cst(node: &SyntaxNode) -> Expr {
             let mut kids = expr_children(node);
             let field = node
                 .children_with_tokens()
-                .filter_map(|e| e.into_token()).find(|t| t.kind() == SyntaxKind::Ident);
+                .filter_map(|e| e.into_token())
+                .find(|t| t.kind() == SyntaxKind::Ident);
             match (kids.pop(), field) {
                 (Some(base), Some(t)) => Expr::Field(Box::new(base), t.text().to_string()),
                 (Some(base), None) => base, // tuple index `.0` — keep the base
@@ -274,7 +277,8 @@ pub fn expr_from_cst(node: &SyntaxNode) -> Expr {
             let mut kids = expr_children(node);
             let name = node
                 .children_with_tokens()
-                .filter_map(|e| e.into_token()).find(|t| t.kind() == SyntaxKind::Ident)
+                .filter_map(|e| e.into_token())
+                .find(|t| t.kind() == SyntaxKind::Ident)
                 .map(|t| t.text().to_string())
                 .unwrap_or_default();
             let args = if kids.len() >= 2 {
@@ -444,7 +448,9 @@ pub fn expr_from_cst(node: &SyntaxNode) -> Expr {
                         .map(|a| {
                             let pat = a
                                 .children()
-                                .find(|n| n.kind() != SyntaxKind::MatchArmList && !is_expr_node(n.kind()))
+                                .find(|n| {
+                                    n.kind() != SyntaxKind::MatchArmList && !is_expr_node(n.kind())
+                                })
                                 .map(|n| n.text().to_string())
                                 .unwrap_or_default();
                             let guard = a
@@ -487,7 +493,10 @@ pub fn expr_from_cst(node: &SyntaxNode) -> Expr {
                 .children()
                 .find(|n| n.kind() == SyntaxKind::Block)
                 .map(|n| expr_from_cst(&n))
-                .unwrap_or_else(|| Expr::Block { stmts: vec![], tail: None });
+                .unwrap_or_else(|| Expr::Block {
+                    stmts: vec![],
+                    tail: None,
+                });
             Expr::For {
                 pat,
                 iter: Box::new(iter),
@@ -516,7 +525,9 @@ pub fn expr_from_cst(node: &SyntaxNode) -> Expr {
                             value: Box::new(value),
                         });
                     }
-                    SyntaxKind::GsxElement | SyntaxKind::GsxSelfClosing | SyntaxKind::GsxFragment => {
+                    SyntaxKind::GsxElement
+                    | SyntaxKind::GsxSelfClosing
+                    | SyntaxKind::GsxFragment => {
                         let (node, _ds) = crate::ast::node_from_cst_pub(&child);
                         if let Some(node) = node {
                             if child.kind() == SyntaxKind::ExprStmt {
@@ -583,10 +594,7 @@ pub fn expr_from_cst(node: &SyntaxNode) -> Expr {
                 .filter_map(|e| e.into_token())
                 .any(|t| t.kind() == SyntaxKind::KwMut);
             match kids.pop() {
-                Some(e) => Expr::Unary(
-                    if has_mut { UnOp::RefMut } else { UnOp::Ref },
-                    Box::new(e),
-                ),
+                Some(e) => Expr::Unary(if has_mut { UnOp::RefMut } else { UnOp::Ref }, Box::new(e)),
                 None => Expr::Opaque(node.text().to_string()),
             }
         }
@@ -801,7 +809,10 @@ mod tests {
             .find(|n| n.kind() == SyntaxKind::FnDef)
             .and_then(|f| f.children().find(|n| n.kind() == SyntaxKind::Block))
             .expect("block");
-        let let_stmt = block.children().find(|n| n.kind() == SyntaxKind::LetStmt).expect("let");
+        let let_stmt = block
+            .children()
+            .find(|n| n.kind() == SyntaxKind::LetStmt)
+            .expect("let");
         let value = let_stmt
             .children()
             .find(|n| is_expr_node(n.kind()))
@@ -813,16 +824,10 @@ mod tests {
     /// (`s.count`, `s.user.name`).
     #[test]
     fn state_place_reads() {
-        assert_eq!(
-            model("s.count"),
-            Expr::field("s", "count")
-        );
+        assert_eq!(model("s.count"), Expr::field("s", "count"));
         assert_eq!(
             model("s.user.name"),
-            Expr::Field(
-                Box::new(Expr::field("s", "user")),
-                "name".to_string()
-            )
+            Expr::Field(Box::new(Expr::field("s", "user")), "name".to_string())
         );
     }
 
@@ -878,11 +883,14 @@ mod tests {
     /// keeps its static text; the hole becomes its own expression.
     #[test]
     fn literals_and_operators() {
-        assert_eq!(model("s.count < 0"), Expr::Binary(
-            BinOp::Lt,
-            Box::new(Expr::field("s", "count")),
-            Box::new(Expr::Lit(Lit::Int(0))),
-        ));
+        assert_eq!(
+            model("s.count < 0"),
+            Expr::Binary(
+                BinOp::Lt,
+                Box::new(Expr::field("s", "count")),
+                Box::new(Expr::Lit(Lit::Int(0))),
+            )
+        );
         assert_eq!(model("\"hi\""), Expr::Lit(Lit::Str("hi".to_string())));
         assert_eq!(model("true"), Expr::Lit(Lit::Bool(true)));
         assert_eq!(model("12.5"), Expr::Lit(Lit::Float(12.5)));
