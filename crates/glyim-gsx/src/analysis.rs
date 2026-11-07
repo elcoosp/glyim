@@ -110,7 +110,9 @@ pub fn interferes(a: &Place, b: &Place) -> bool {
 
 /// Whether any place of `reads` interferes with any place of `writes`.
 pub fn any_interference(reads: &BTreeSet<Place>, writes: &BTreeSet<Place>) -> bool {
-    reads.iter().any(|r| writes.iter().any(|w| interferes(r, w)))
+    reads
+        .iter()
+        .any(|r| writes.iter().any(|w| interferes(r, w)))
 }
 
 /// Whether a read-set touches an untrackable value (§7.7): reads through
@@ -129,7 +131,13 @@ pub struct ReadFlags {
 /// Compute the read-set of an expression rooted at `state_param` (§7.4).
 pub fn read_set(e: &Expr, state_param: &str) -> BTreeSet<Place> {
     let mut set = BTreeSet::new();
-    collect_reads(e, state_param, Place::root(), &mut set, &mut ReadFlags::default());
+    collect_reads(
+        e,
+        state_param,
+        Place::root(),
+        &mut set,
+        &mut ReadFlags::default(),
+    );
     set
 }
 
@@ -165,8 +173,10 @@ fn collect_reads(
         }
         Expr::Method(recv, name, args) => {
             // Untrackable reads (§7.7): reads through RefCell-ish surfaces.
-            if matches!(name.as_str(), "borrow" | "borrow_mut" | "clone" | "take" | "replace")
-                && is_cellish(recv)
+            if matches!(
+                name.as_str(),
+                "borrow" | "borrow_mut" | "clone" | "take" | "replace"
+            ) && is_cellish(recv)
             {
                 flags.untrackable = true;
                 if flags.untrackable_what.is_none() {
@@ -240,7 +250,12 @@ fn collect_reads(
                 collect_reads(b, state_param, base.clone(), set, flags);
             }
         }
-        Expr::For { pat, iter, key, body } => {
+        Expr::For {
+            pat,
+            iter,
+            key,
+            body,
+        } => {
             collect_reads(iter, state_param, base.clone(), set, flags);
             if let Some(k) = key {
                 collect_reads(k, state_param, base.clone(), set, flags);
@@ -373,11 +388,12 @@ fn collect_writes(e: &Expr, state_param: &str, set: &mut BTreeSet<Place>) {
         }
         Expr::Method(recv, name, args) => {
             if is_mutating_method(name)
-                && let Some(p) = arg_place(recv, state_param) {
-                    let mut p2 = p;
-                    p2.subtree = true;
-                    set.insert(p2);
-                }
+                && let Some(p) = arg_place(recv, state_param)
+            {
+                let mut p2 = p;
+                p2.subtree = true;
+                set.insert(p2);
+            }
             for a in args {
                 collect_writes(a, state_param, set);
             }
@@ -404,7 +420,9 @@ fn collect_writes(e: &Expr, state_param: &str, set: &mut BTreeSet<Place>) {
                 collect_writes(b, state_param, set);
             }
         }
-        Expr::For { iter, key, body, .. } => {
+        Expr::For {
+            iter, key, body, ..
+        } => {
             collect_writes(iter, state_param, set);
             if let Some(k) = key {
                 collect_writes(k, state_param, set);
@@ -437,8 +455,18 @@ fn is_mutating_call(name: &str) -> bool {
 fn is_mutating_method(name: &str) -> bool {
     matches!(
         name,
-        "push" | "insert" | "remove" | "swap" | "sort" | "clear" | "truncate" | "pop"
-            | "set" | "borrow_mut" | "replace" | "take"
+        "push"
+            | "insert"
+            | "remove"
+            | "swap"
+            | "sort"
+            | "clear"
+            | "truncate"
+            | "pop"
+            | "set"
+            | "borrow_mut"
+            | "replace"
+            | "take"
     )
 }
 
@@ -447,7 +475,11 @@ pub fn expr_display(e: &Expr, _state_param: &str) -> String {
     match e {
         Expr::Var(v) => v.clone(),
         Expr::Field(b, n) => format!("{}.{}", expr_display(b, _state_param), n),
-        Expr::Index(b, i) => format!("{}[{}]", expr_display(b, _state_param), expr_display(i, _state_param)),
+        Expr::Index(b, i) => format!(
+            "{}[{}]",
+            expr_display(b, _state_param),
+            expr_display(i, _state_param)
+        ),
         Expr::Method(r, n, _) => format!("{}.{}(..)", expr_display(r, _state_param), n),
         Expr::Call(n, _) => format!("{n}(..)"),
         Expr::Lit(l) => match l {
@@ -459,7 +491,10 @@ pub fn expr_display(e: &Expr, _state_param: &str) -> String {
 }
 
 /// The read-set of a whole slot kind (§7.4), including region scrutinees.
-pub fn slot_read_set(kind: &crate::vir::SlotKind, state_param: &str) -> (BTreeSet<Place>, ReadFlags) {
+pub fn slot_read_set(
+    kind: &crate::vir::SlotKind,
+    state_param: &str,
+) -> (BTreeSet<Place>, ReadFlags) {
     let mut set = BTreeSet::new();
     let mut flags = ReadFlags::default();
     match kind {
@@ -531,10 +566,7 @@ mod tests {
     /// argument place.
     #[test]
     fn opaque_call_reads_subtree() {
-        let e = Expr::Call(
-            "format_name".to_string(),
-            vec![Expr::field("s", "user")],
-        );
+        let e = Expr::Call("format_name".to_string(), vec![Expr::field("s", "user")]);
         let rs = read_set(&e, "s");
         let user = rs.iter().find(|p| p.steps.len() == 1).unwrap();
         assert!(user.subtree, "opaque call reads the whole subtree");
@@ -631,7 +663,13 @@ mod tests {
         );
         let (_, flags) = read_set_with_flags(&e, "s");
         assert!(flags.untrackable);
-        assert!(flags.untrackable_what.as_deref().unwrap().contains("shared_cell"));
+        assert!(
+            flags
+                .untrackable_what
+                .as_deref()
+                .unwrap()
+                .contains("shared_cell")
+        );
     }
 
     /// Deep vs shallow writes: `s.user` write interferes with `s.user.name`
@@ -646,14 +684,14 @@ mod tests {
             },
             "s",
         );
-        let read_name = read_set(&Expr::Field(
-            Box::new(Expr::field("s", "user")),
-            "name".to_string(),
-        ), "s");
-        let read_other = read_set(&Expr::Field(
-            Box::new(Expr::field("s", "other")),
-            "x".to_string(),
-        ), "s");
+        let read_name = read_set(
+            &Expr::Field(Box::new(Expr::field("s", "user")), "name".to_string()),
+            "s",
+        );
+        let read_other = read_set(
+            &Expr::Field(Box::new(Expr::field("s", "other")), "x".to_string()),
+            "s",
+        );
         assert!(any_interference(&read_name, &ws));
         assert!(!any_interference(&read_other, &ws));
     }
