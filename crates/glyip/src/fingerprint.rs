@@ -53,7 +53,6 @@ impl Fingerprint {
     pub fn matches(&self, other: &Fingerprint) -> bool {
         self.hash == other.hash
     }
-
 }
 
 /// Persistent store of file fingerprints for incremental compilation.
