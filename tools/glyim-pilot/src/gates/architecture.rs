@@ -114,7 +114,9 @@ fn check_cargo_toml(
 }
 
 fn extract_crate_name(content: &str) -> Option<String> {
-    let value: toml::Value = content.parse().ok()?;
+    // Parse into `Table` (the document type): since toml 1.x, parsing into
+    // `toml::Value` only accepts a bare value, not a full document.
+    let value: toml::Table = content.parse().ok()?;
     value
         .get("package")?
         .get("name")?
@@ -123,7 +125,9 @@ fn extract_crate_name(content: &str) -> Option<String> {
 }
 
 fn extract_dependencies(content: &str) -> Vec<String> {
-    let value: toml::Value = match content.parse() {
+    // Parse into `Table` (the document type): since toml 1.x, parsing into
+    // `toml::Value` only accepts a bare value, not a full document.
+    let value: toml::Table = match content.parse() {
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };
