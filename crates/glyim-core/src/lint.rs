@@ -34,8 +34,7 @@ pub enum LintId {
 impl LintId {
     /// Every lint known to the compiler, in registration order. Used by
     /// `-W help` to enumerate available lint names.
-    pub const ALL: &'static [LintId] =
-        &[LintId::UnsafeFnCall, LintId::UnusedGenericParams];
+    pub const ALL: &'static [LintId] = &[LintId::UnsafeFnCall, LintId::UnusedGenericParams];
 }
 
 impl LintId {
@@ -54,9 +53,7 @@ impl LintId {
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "unsafe_fn_call" | "unsafe" => Some(LintId::UnsafeFnCall),
-            "unused_generic_params" | "unused_generics" => {
-                Some(LintId::UnusedGenericParams)
-            }
+            "unused_generic_params" | "unused_generics" => Some(LintId::UnusedGenericParams),
             _ => None,
         }
     }
