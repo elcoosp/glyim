@@ -63,7 +63,6 @@ fn test_mock_codegen_generate() {
     // symbol the pipeline threads through for per-instantiation uniqueness
     // (see HANDOFF_SESSION_13_FINAL.md §2). This test doesn't exercise
     // generic instantiations, so the plain legacy form is fine.
-    let body = body;
     let symbol = format!("__glyim_fn_{}", body.owner.local_id.to_raw());
     let result = mock.generate(&[(symbol, body)], std::path::Path::new("test.o"));
     assert!(result.is_ok());
