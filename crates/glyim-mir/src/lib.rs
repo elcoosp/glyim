@@ -191,9 +191,7 @@ impl Place {
                     TyKind::Adt(adt_id, substs) if adt_id.to_raw() == 1020 => {
                         let args = ctx.substitution_args(*substs);
                         match args.first() {
-                            Some(glyim_type::GenericArg::Ty(t)) => {
-                                ctx.intern_ty(TyKind::Slice(*t))
-                            }
+                            Some(glyim_type::GenericArg::Ty(t)) => ctx.intern_ty(TyKind::Slice(*t)),
                             _ => ctx.error_ty(),
                         }
                     }
@@ -413,9 +411,7 @@ impl Place {
                     TyKind::Adt(adt_id, substs) if adt_id.to_raw() == 1020 => {
                         let args = ctx.substitution_args(*substs);
                         match args.first() {
-                            Some(glyim_type::GenericArg::Ty(t)) => {
-                                ctx.intern_ty(TyKind::Slice(*t))
-                            }
+                            Some(glyim_type::GenericArg::Ty(t)) => ctx.intern_ty(TyKind::Slice(*t)),
                             _ => ctx.error_ty(),
                         }
                     }
