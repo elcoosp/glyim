@@ -90,10 +90,7 @@ fn check_corpus_agreement(corpus: &str) {
         // that is documented as unsupported for these fixtures is
         // architecturally meaningless.
         if test.config.needs_llvm {
-            skipped.push(format!(
-                "{}: // needs-llvm (interp unsupported)",
-                test.name
-            ));
+            skipped.push(format!("{}: // needs-llvm (interp unsupported)", test.name));
             continue;
         }
         if test.config.only_target.is_some() {
