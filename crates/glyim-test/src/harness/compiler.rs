@@ -208,11 +208,20 @@ impl TestCompiler for PipelineCompiler {
                 target_triple = Some(flags[i + 1].clone());
                 i += 1;
             } else if f == "-A" || f == "--allow" {
-                if i + 1 < flags.len() { lint_allow.push(flags[i + 1].clone()); i += 1; }
+                if i + 1 < flags.len() {
+                    lint_allow.push(flags[i + 1].clone());
+                    i += 1;
+                }
             } else if f == "-W" || f == "--warn" {
-                if i + 1 < flags.len() { lint_warn.push(flags[i + 1].clone()); i += 1; }
+                if i + 1 < flags.len() {
+                    lint_warn.push(flags[i + 1].clone());
+                    i += 1;
+                }
             } else if f == "-D" || f == "--deny" {
-                if i + 1 < flags.len() { lint_deny.push(flags[i + 1].clone()); i += 1; }
+                if i + 1 < flags.len() {
+                    lint_deny.push(flags[i + 1].clone());
+                    i += 1;
+                }
             }
             i += 1;
         }
@@ -265,9 +274,21 @@ impl TestCompiler for PipelineCompiler {
         // §3.5.30 framework: forward `-A/-W/-D <lint>`.
         {
             let mut lint_map = glyim_core::lint::LintMap::new();
-            glyim_core::lint::apply_named(&mut lint_map, &lint_allow, glyim_core::lint::LintLevel::Allow);
-            glyim_core::lint::apply_named(&mut lint_map, &lint_warn, glyim_core::lint::LintLevel::Warn);
-            glyim_core::lint::apply_named(&mut lint_map, &lint_deny, glyim_core::lint::LintLevel::Deny);
+            glyim_core::lint::apply_named(
+                &mut lint_map,
+                &lint_allow,
+                glyim_core::lint::LintLevel::Allow,
+            );
+            glyim_core::lint::apply_named(
+                &mut lint_map,
+                &lint_warn,
+                glyim_core::lint::LintLevel::Warn,
+            );
+            glyim_core::lint::apply_named(
+                &mut lint_map,
+                &lint_deny,
+                glyim_core::lint::LintLevel::Deny,
+            );
             db.set_lints(lint_map);
         }
 
