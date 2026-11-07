@@ -43,7 +43,10 @@ impl CompilePassStrategy {
                         errors: vec![format!(
                             "expected warning matching {:?}, got none (warnings: {:?})",
                             pat,
-                            warnings.iter().map(|d| d.message.clone()).collect::<Vec<_>>(),
+                            warnings
+                                .iter()
+                                .map(|d| d.message.clone())
+                                .collect::<Vec<_>>(),
                         )],
                     },
                 };
@@ -56,7 +59,10 @@ impl CompilePassStrategy {
                         errors: vec![format!(
                             "forbidden warning matching {:?} fired (warnings: {:?})",
                             pat,
-                            warnings.iter().map(|d| d.message.clone()).collect::<Vec<_>>(),
+                            warnings
+                                .iter()
+                                .map(|d| d.message.clone())
+                                .collect::<Vec<_>>(),
                         )],
                     },
                 };
