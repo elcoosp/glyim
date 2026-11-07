@@ -1,0 +1,56 @@
+---
+title: Lint Reference
+description: The compiler lint framework — available lints, their aliases, severity levels, and the -A/-W/-D command-line flags.
+type: reference
+sidebar:
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The compiler's lint framework (§3.5.30 in the internal plan) assigns a severity level to named checks. This page documents every available lint and the flags that control them.
+
+## Lints
+
+| Lint | Alias | Default level | Fires when |
+|------|-------|---------------|------------|
+| `unsafe_fn_call` | `unsafe` | warn | A declared `unsafe fn` is called outside any enclosing `unsafe { }` block. |
+| `unused_generic_params` | `unused_generics` | warn | A monomorphized function does not use one or more of its generic parameters. Checked post-monomorphization by `glyim-lower`. |
+
+The lint list is small by design and grows deliberately: adding a lint means adding a variant, a canonical name, the check that emits the diagnostic, and a drift-detection test so the lint cannot become invisible to `-W help`.
+
+## Levels
+
+| Level | Flag | Behavior |
+|-------|------|----------|
+| allow | `-A`, `--allow` | Suppress the diagnostic entirely. |
+| warn | `-W`, `--warn` | Emit as a warning. This is the default. |
+| deny | `-D`, `--deny` | Emit as an error and abort compilation at the pipeline's error gate. |
+
+All three flags are repeatable, and later flags override earlier ones for the same lint.
+
+## Usage
+
+```bash
+# Promote the unsafe_fn_call lint to an error
+glyim input.g -D unsafe
+
+# Suppress it
+glyim input.g -A unsafe_fn_call
+
+# Explicitly set warning level
+glyim input.g -W unused_generic_params
+
+# List every available lint name and alias
+glyim -W help
+```
+
+`glyim -W help` answers before argument parsing enforces the required input file, so it works as a standalone command.
+
+<Aside type="caution">
+Unknown lint names are currently ignored silently by the flag parser. Attribute-based control (`#[allow(..)]` and friends) is not yet implemented; levels are set from the command line only.
+</Aside>
+
+## Next steps
+
+See the [CLI reference](/reference/cli/) for the full flag table, and the [language reference](/reference/language/#unsafe) for `unsafe fn` semantics.
