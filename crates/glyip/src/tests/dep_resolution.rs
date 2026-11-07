@@ -397,10 +397,9 @@ fn mock_registry_download_count() {
     assert_eq!(mock.download_count(), 0);
 
     let dir = TempDir::new().unwrap();
-    mock.download_crate("counted", "0.1.0", None, dir.path()).unwrap();
+    mock.download_crate("counted", "0.1.0", None, dir.path())
+        .unwrap();
     assert_eq!(mock.download_count(), 1);
-
-
 }
 
 #[test]
@@ -456,7 +455,6 @@ fn path_dep_stored_relative_to_project_dir() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-
 /// P2-F2: a registry client that reports a non-default `base_url_display`.
 /// The `fetch_index` and `download_crate` impls are `unimplemented!()`
 /// because the test never calls them — the resolver's lockfile-write path
@@ -503,11 +501,10 @@ fn custom_registry_url_recorded_in_lockfile() {
         checksums: HashMap::new(),
     });
 
-    let resolver = DependencyResolver::new(index).with_registry_client(Box::new(
-        CustomUrlRegistryClient {
+    let resolver =
+        DependencyResolver::new(index).with_registry_client(Box::new(CustomUrlRegistryClient {
             url: custom.to_string(),
-        },
-    ));
+        }));
 
     let project_dir = TempDir::new().unwrap();
     let config = GlyipToml {
