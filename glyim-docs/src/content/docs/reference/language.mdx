@@ -1,0 +1,146 @@
+---
+title: Language Reference
+description: The Glyim language — declarations, types, traits, pattern matching, closures, async/await, macros, and compiler-known builtin types.
+type: reference
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Glyim is a Rust-like systems programming language with its own file extension, `.g`. This page lists the constructs the compiler accepts. The full grammar is still evolving — the `glyim-lang-core`, `glyim-lang-alloc`, and `glyim-lang-std` crates contain the current standard library source, written in Glyim, and serve as the compiler's bootstrapping corpus.
+
+## A tour in one block
+
+```glyim
+// Structs, enums, generics, traits.
+struct Point<T> {
+    x: T,
+    y: T,
+}
+
+enum Shape {
+    Circle(f64),
+    Rectangle(f64, f64),
+    Point,
+}
+
+trait Area {
+    fn area(&self) -> f64;
+}
+
+impl Area for Shape {
+    fn area(&self) -> f64 {
+        match self {
+            Shape::Circle(r) => 3.14159 * r * r,
+            Shape::Rectangle(w, h) => w * h,
+            Shape::Point => 0.0,
+        }
+    }
+}
+
+// Pattern matching, ranges, guards.
+fn classify(n: i32) -> &str {
+    match n {
+        0 => "zero",
+        1 | 2 => "small",
+        x if x < 0 => "negative",
+        _ => "large",
+    }
+}
+
+// Closures and iterators.
+fn sum_of_squares(values: &[i32]) -> i32 {
+    values.iter().map(|x| *x * *x).sum()
+}
+
+// Async / await.
+async fn fetch_twice() -> i32 {
+    let a = fetch_one().await;
+    let b = fetch_one().await;
+    a + b
+}
+```
+
+## Constructs
+
+### Declarations
+
+| Construct | Syntax | Notes |
+|-----------|--------|-------|
+| Function | `fn name(params) -> Ret { … }` | Free functions and associated functions in `impl` blocks. |
+| Struct | `struct Name { field: T, … }` | Tuple and unit forms supported. Generic parameters with bounds and where-clauses. |
+| Enum | `enum Name { A, B(T), C { x: T } }` | Algebraic data types. |
+| Trait | `trait Name { fn method(&self); }` | Default methods and associated types are supported. |
+| Impl | `impl Trait for Type { … }` / `impl Type { … }` | Static dispatch through the trait system. |
+| Local binding | `let pattern: Type = expr;` | Types are usually inferred. |
+
+### Control flow
+
+| Construct | Forms |
+|-----------|-------|
+| Conditional | `if expr { … } else { … }` |
+| Loop | `while cond { … }`, `loop { … }`, `for x in iter { … }` |
+| Match | `match expr { pattern => arm, … }` |
+| Async | `async fn …` and `expr.await` — desugared to state machines (straight-line and multi-await bodies). |
+
+### Pattern matching
+
+Patterns support literals, ranges, or-patterns (`1 | 2`), slices, structs, tuples, enums, bindings, and `if` guards. The wildcard `_` covers unmatched cases. Match arms are checked for exhaustiveness by the type checker.
+
+### Generics and traits
+
+- Type parameters: `struct Point<T>`, `fn f<T: Trait>(…)`, and where-clauses.
+- Trait bounds participate in the trait solver, which handles higher-ranked trait bounds (`for<'a>`).
+- Auto-traits (`Send`, `Sync`, `Unpin`) are computed automatically.
+- Trait objects use vtable generation for dynamic dispatch.
+
+### Closures
+
+Closures capture their environment with capture analysis that classifies each capture as `ByValue`, `ByRef(Mut)`, or `ByRef(Not)`. Closure syntax mirrors Rust: `|x| x + 1`, `|x: i32| -> i32 { x + 1 }`.
+
+### Unsafe
+
+`unsafe fn` declares a function with unchecked contracts. Calls to an `unsafe fn` outside an enclosing `unsafe { }` block trigger the [`unsafe_fn_call` lint](/reference/lints/), which warns by default and can be allowed or denied from the CLI.
+
+### Macros
+
+Declarative macros use `macro_rules!` with fragment specifiers including `:expr`, `:ty`, `:pat`, and `:tt`. Built-in macros:
+
+| Macro | Purpose |
+|-------|---------|
+| `file!`, `line!`, `column!` | Source location reporting. |
+| `env!`, `option_env!` | Environment variable access (required / optional). |
+| `include!`, `include_str!`, `include_bytes!` | Embed other files at compile time. |
+| `concat!`, `concat_idents!` | Literal and identifier concatenation. |
+| `stringify!` | Render an expression as a string literal. |
+
+Procedural macros are supported through a C-compatible token-stream ABI (`glyim-proc-macro`) with a `dlopen`-based cdylib loader, driven by the `--proc-macro-deps` CLI flag.
+
+### Compiler-known builtin types
+
+| Category | Types |
+|----------|-------|
+| Primitives | `i32`, `u32`, `f64`, `bool`, `char`, `str`, `&str` and friends |
+| Ranges | `Range`, `RangeInclusive`, and the `..` / `..=` syntax |
+| Optional / fallible | `Option<T>`, `Result<T, E>` |
+| Collections | `Vec<T>`, `String` |
+| Smart pointers | `Box<T>`, `Rc`, `PhantomData<T>`, `UnsafeCell<T>` |
+
+<Aside type="note">
+Some builtin methods on `Vec`, `String`, `Result`, and `Option` lower to synthetic function bodies that the LLVM backend must intrinsic-lower; unimplemented ones produce an explicit compiler error rather than wrong code.
+</Aside>
+
+## Standard library
+
+The standard library is written in Glyim and ships in three crates:
+
+- **`glyim-lang-core`** — `Option`, `Result`, `iter`, `slice`, `str`, `cell`, `mem`, `ptr`, `ops`, `cmp`, `marker`, `panic`, `hint`, `convert`, `default`, `future`.
+- **`glyim-lang-alloc`** — `Box`, `Vec`, `String`, `Rc`, `RawVec`.
+- **`glyim-lang-std`** — `io`, `fs`, `net`, `thread`, `sync`, `env`, `time`, `process`, `task`.
+
+Pass [`--with-stdlib`](/reference/cli/) to the compiler (or use `glyip`, which does this for you) to make these names resolve without explicit `use` statements.
+
+## Next steps
+
+See the [GSX reference](/reference/gsx/) for view syntax, and [the pipeline explained](/explanation/pipeline/) for how the compiler processes these constructs.
