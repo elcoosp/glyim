@@ -1,0 +1,57 @@
+---
+title: Ownership-Driven Reactivity
+description: How GSX uses the borrow checker's read/write sets instead of a virtual DOM — skeletons, slots, mutation-specialized patches, and the cost model.
+type: explanation
+sidebar:
+  order: 4
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Most view frameworks optimize updates by diffing a virtual DOM at runtime, or by wiring signals that notify subscribers. GSX takes a third path, available because Glyim owns the compiler and the borrow checker: **the compiler proves who can write to what, and specializes the update code in advance.** This page explains the idea and its machinery.
+
+## The thesis
+
+React's arrangement — a view is a runtime function-call tree the compiler cannot see into — forces every optimization to *recover* structure that syntax threw away. GSX inverts it: a view element is a first-class, typed expression that survives deep into the compiler, so structure is never erased early. The compiler sees the static skeleton, the dynamic holes, and which writes can touch which slots.
+
+Three principles follow:
+
+1. **Structure is never erased early.** A view stays an `Expr::Gsx` through HIR and typeck; only a dedicated pass lowers it further.
+2. **The compiler is host-agnostic; hosts are libraries.** Passes know schemas, slots, regions, and invalidation classes — never HTML. HTML, native widgets, terminals, and test hosts are dialects plugged in from outside.
+3. **Ownership is the reactivity system.** Where the borrow checker can prove exactly which places a handler writes, no runtime diffing or signal machinery is needed on the fast path.
+
+## Skeleton, slots, and regions
+
+The `glyim-gsx` stage lowers checked views into **View IR (VIR)** with three ingredients:
+
+- **Skeleton** — the static part of the view: element shapes, static attributes, fixed text.
+- **Slots** — the dynamic holes: interpolated text, dynamic attributes, event handlers. Each slot has a *read-set*: the places it depends on. A text hole showing `{s.count}` reads `s.count`.
+- **Regions** — the control-flow parts: `if`/`match` regions and keyed `for` regions, which own their own skeletons and can be mounted or torn down as a unit.
+
+## Mutation-specialized patches
+
+For every event handler the analysis computes a **write-set**: the places the handler can write, derived from the same place-granular facts the borrow checker uses. The stage then emits one **mutation-specialized patch (MSP)** per distinct write-set — a straight-line function that updates exactly the slots affected by that handler, with no diffing:
+
+- A handler that writes `s.count` produces a patch that updates the slots reading `s.count`, and nothing else.
+- When two slots' read-sets overlap by prefix (both read `s` and one reads `s.count`), **prefix interference** is detected and the affected slots are grouped conservatively.
+- Structural changes — an `if` region flipping, a keyed list reordering — route to region-level operations: the `if` region mounts its else-branch skeleton, and keyed lists reconcile with a longest-increasing-subsequence algorithm that minimizes element moves.
+- Two-way `bind:` attributes desugar to a write on the bound place plus echo suppression, so the input that caused the update does not re-render itself.
+
+The output is a **blueprint**: a flat `u32` operation array plus a string table, encodable as a static. Mount interprets it once per host; patches are the specialized functions above.
+
+## The cost model
+
+Because patches are straight-line and chosen by write-set, the update cost is statically known. The headless, op-recording host makes this a test subject: the flagship Counter test asserts the *exact* sequence and count of host operations for a mount, a click, and a patch. A regression in update cost fails the test — the cost model is part of the specification, not a benchmark footnote.
+
+## Where signals still appear
+
+Ownership analysis covers the common shapes: local state, handler writes, inlined components composed as lens compositions. When a value is genuinely aliased and mutable — a shared cell that several owners can write — the analysis cannot prove a write-set. That is the escape hatch: the compiler emits the `Signal<T>` diagnostic (G0201) with a fix-it, and the host falls back to signal bits for that slot. Signals are the exception path, not the fast path.
+
+<Aside type="note">
+GSX is experimental: the stage is implemented and tested as a library, and CLI driver wiring has not landed yet. See the GSX reference for the exact status table.
+</Aside>
+
+## Next steps
+
+<LinkCard title="GSX reference" href="/reference/gsx/" description="The grammar, the stage's public API, and diagnostics." />
+<LinkCard title="Write GSX views" href="/guides/write-gsx-views/" description="The flagship Counter example, step by step." />
