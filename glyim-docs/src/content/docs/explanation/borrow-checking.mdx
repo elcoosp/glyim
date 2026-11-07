@@ -1,0 +1,59 @@
+---
+title: Borrow Checking
+description: How Glyim's NLL borrow checker works — Polonius-style region inference, cross-block liveness, two-phase borrows, and move analysis on the MIR control-flow graph.
+type: explanation
+sidebar:
+  order: 3
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Glyim implements a non-lexical lifetime (NLL) borrow checker, the same family of design that rustc uses in production. This page explains what that means for the programs you write and how the checker works internally.
+
+## What NLL buys you
+
+A borrow in Glyim ends at its **last use**, not at the end of the enclosing lexical scope. Because the checker works on the MIR control-flow graph rather than on brace structure, it tracks precisely where each borrow is live:
+
+- A mutable borrow ends as soon as the value is no longer used, so a later borrow of the same place is accepted.
+- A borrow can flow through a conditional and outlive the branch it was created in.
+- Loops are handled as control-flow cycles, with liveness computed across block boundaries (cross-block liveness analysis).
+
+This is "non-lexical": lifetimes are tied to program points in the CFG, not to source-level scopes.
+
+## Where the checker sits
+
+Borrow checking runs on MIR, after type checking, lowering, and monomorphization. By that point every type is concrete, every generic function is specialized, and every implicit drop is explicit — so the checker reasons about a flat control-flow graph of assignments, calls, and terminators, with field-granular place projections (`local.field[i]` is one place).
+
+## Region inference in the Polonius style
+
+The checker formulates borrowing as a constraint problem:
+
+1. Every borrow creates a region — the set of program points where the borrow may be used.
+2. Liveness constraints add the program points where the borrowed value is later used.
+3. Outlives constraints (`'a: 'b`) flow from type signatures and propagate through the graph.
+4. The solver computes a fixpoint: if every region contains all the points its constraints demand, the function passes.
+
+This is the Polonius-style formulation — regions as computed sets, checked against a logic of loans and accesses — rather than a lexical approximation.
+
+## Two-phase borrows
+
+A shared borrow that becomes mutable (the `args.push(args.len())` shape) is a source of false errors in naive checkers. Glyim implements **two-phase borrows**: the borrow starts as a *reservation* that permits reads, and is *activated* only at the mutating use. If an intervening access conflicts, the activation fails with a diagnostic instead of the whole borrow being rejected.
+
+## Move analysis and drop elaboration
+
+Assigning a non-`Copy` value moves it. Move analysis tracks this per place, including **partial moves** — moving one field out of a struct leaves the other fields usable, and the analysis records exactly which parts moved. Where a partially-moved value meets the end of its scope, **drop-flag elaboration** inserts the flags that make the runtime behavior precise: only the still-present components are dropped.
+
+## How it connects to the rest of the pipeline
+
+- The type checker's regions and predicates feed the outlives constraints.
+- The borrow checker's demand for drop flags is answered by drop elaboration in the optimizer.
+- Diagnostics carry spans back to the source, rendered by `miette` in the CLI and published over LSP in the editor.
+
+<Aside type="note">
+Two known limits shape current behavior: `panic!` aborts without unwinding (exit code 101), and cross-frame unwinding in the MIR interpreter supports single-frame cleanup so far — both are tracked gaps in the development plan, not design decisions.
+</Aside>
+
+## Next steps
+
+<LinkCard title="The pipeline, explained" href="/explanation/pipeline/" description="Where borrow checking sits in the full compilation flow." />
+<LinkCard title="Test your code" href="/guides/test-your-code/" description="Write compile-fail tests that pin borrow-checker diagnostics." />
