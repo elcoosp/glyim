@@ -20,7 +20,7 @@
 
 use glyim_gsx::analysis::write_set;
 use glyim_gsx::ast;
-use glyim_gsx::emit::{emit, HostFlavor};
+use glyim_gsx::emit::{HostFlavor, emit};
 use glyim_gsx::host::{HeadlessHost, HostOp};
 use glyim_gsx::interp::{Interp, Value};
 use glyim_gsx::msp::ViewRuntime;
@@ -56,8 +56,14 @@ fn counter_state() -> Value {
         (
             "history",
             Value::list([
-                Value::obj([("id", Value::Int(1)), ("label", Value::Str(Rc::from("first")))]),
-                Value::obj([("id", Value::Int(2)), ("label", Value::Str(Rc::from("second")))]),
+                Value::obj([
+                    ("id", Value::Int(1)),
+                    ("label", Value::Str(Rc::from("first"))),
+                ]),
+                Value::obj([
+                    ("id", Value::Int(2)),
+                    ("label", Value::Str(Rc::from("second"))),
+                ]),
             ]),
         ),
     ])
@@ -74,8 +80,12 @@ fn compile_counter() -> ViewRuntime {
     let g = ast::gsx_from_parse(&parsed);
     assert!(g.diagnostics.is_empty(), "{:?}", g.diagnostics);
     let schemas = SchemaRegistry::standard();
-    let vir = VirBuilder::new(VirOptions::default(), &schemas).build(&g.root.as_ref().unwrap());
-    assert!(vir.diagnostics.is_empty(), "schema checks must pass: {:?}", vir.diagnostics);
+    let vir = VirBuilder::new(VirOptions::default(), &schemas).build(g.root.as_ref().unwrap());
+    assert!(
+        vir.diagnostics.is_empty(),
+        "schema checks must pass: {:?}",
+        vir.diagnostics
+    );
     ViewRuntime::new(vir, 0)
 }
 
@@ -90,7 +100,10 @@ fn counter_mounts_in_one_bulk_pass() {
     assert!(host.create_calls() >= 10, "full skeleton instantiated");
     // §6.2: initial fills — h1 hole, count hole, name prop, 2 row holes.
     let text_fills = host.count(|o| matches!(o, HostOp::SetText { .. }));
-    assert!(text_fills >= 4, "initial slot fills evaluated once: {text_fills}");
+    assert!(
+        text_fills >= 4,
+        "initial slot fills evaluated once: {text_fills}"
+    );
     // Event slots listen once at mount (G8: static handler ids).
     assert_eq!(host.count(|o| matches!(o, HostOp::Listen { .. })), 3);
     // The initial SSR of the same view agrees with the mounted text.
@@ -98,7 +111,10 @@ fn counter_mounts_in_one_bulk_pass() {
     let mut interp = Interp::new([("s", state.clone())]);
     let a = emit(&rt.vir.clone(), HostFlavor::Stream);
     let html = a.ssr.as_ref().unwrap().render_to(&mut interp);
-    assert!(html.contains("<section"), "SSR renders the skeleton: {html}");
+    assert!(
+        html.contains("<section"),
+        "SSR renders the skeleton: {html}"
+    );
     assert!(html.contains("Hello, Glyim!"), "holes interpolated: {html}");
     assert!(html.contains("first"), "keyed rows rendered: {html}");
 }
@@ -157,14 +173,20 @@ fn counter_click_dispatch_is_minimal() {
     let before = host.ops.len();
     rt.dispatch_id(&mut host, &state, "click", &Value::Null, plus_id);
     let ops = &host.ops[before..];
-    let set_texts = ops.iter().filter(|o| matches!(o, HostOp::SetText { .. })).count();
+    let set_texts = ops
+        .iter()
+        .filter(|o| matches!(o, HostOp::SetText { .. }))
+        .count();
     assert_eq!(set_texts, 1, "§8.1: one host call for the one dirty slot");
     assert!(
         !ops.iter().any(|o| matches!(o, HostOp::Create { .. })),
         "no structural work on a value write"
     );
     // G5: the patch ends with exactly one invalidate(Paint).
-    let invalidates: Vec<_> = ops.iter().filter(|o| matches!(o, HostOp::Invalidate { .. })).collect();
+    let invalidates: Vec<_> = ops
+        .iter()
+        .filter(|o| matches!(o, HostOp::Invalidate { .. }))
+        .collect();
     assert_eq!(invalidates.len(), 1, "one terminal invalidate (G5)");
     // State mutated exactly once (9 − 7 = +step).
     match &state {
@@ -227,14 +249,17 @@ fn counter_stream_flavor_has_no_patches() {
     let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
     let g = ast::gsx_from_parse(&parsed);
     let schemas = SchemaRegistry::standard();
-    let vir = VirBuilder::new(VirOptions::default(), &schemas).build(&g.root.as_ref().unwrap());
+    let vir = VirBuilder::new(VirOptions::default(), &schemas).build(g.root.as_ref().unwrap());
     let a = emit(&vir, HostFlavor::Stream);
     assert!(a.ssr.is_some());
     // G7: dynamic SSR = chunks around holes; escaping from hole position.
     let mut interp = Interp::new([("s", counter_state())]);
     let html = a.ssr.as_ref().unwrap().render_to(&mut interp);
     assert!(html.contains("<h1>Hello, Glyim!</h1>"), "{html}");
-    assert!(html.contains("data-on-click"), "listeners marked for hydration (G16)");
+    assert!(
+        html.contains("data-on-click"),
+        "listeners marked for hydration (G16)"
+    );
     // A hostile name cannot inject markup (G6).
     let hostile = Value::obj([
         ("count", Value::Int(7)),
@@ -257,7 +282,7 @@ fn untrackable_reads_are_diagnosed() {
     let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
     let g = ast::gsx_from_parse(&parsed);
     let schemas = SchemaRegistry::standard();
-    let vir = VirBuilder::new(VirOptions::default(), &schemas).build(&g.root.as_ref().unwrap());
+    let vir = VirBuilder::new(VirOptions::default(), &schemas).build(g.root.as_ref().unwrap());
     assert!(
         vir.diagnostics
             .iter()
