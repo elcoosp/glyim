@@ -1,0 +1,80 @@
+---
+title: GSX Reference
+description: The GSX view syntax and the glyim-gsx compiler stage API — grammar, directives, regions, blueprints, hosts, and diagnostics.
+type: reference
+sidebar:
+  order: 6
+---
+
+import { Aside, Badge, LinkCard } from '@astrojs/starlight/components';
+
+GSX is Glyim's first-class, typed, host-agnostic view syntax: JSX's ergonomics, but a compiler-visible structure instead of a runtime function-call tree. Elements are data described by schemas, and the same source can target HTML, SSR strings, native widgets, terminals, and headless test hosts.
+
+<Aside type="caution">
+GSX is experimental <Badge text="v0.1" variant="note" />. The parsing, type checking, and the `glyim-gsx` stage are implemented and tested, but the CLI driver does not run the GSX stage yet — see the [authoring guide](/guides/write-gsx-views/) for the current usage path.
+</Aside>
+
+## Grammar
+
+| Construct | Syntax | Notes |
+|-----------|--------|-------|
+| Element | `<tag attrs> children </tag>` or `<tag attrs />` | Prefix-position `<` followed by an identifier. Lowercase tags resolve through the active dialect schema; uppercase tags resolve through the def-map as components. |
+| Fragment | `<> … </>` | Grouping without a host element. |
+| Text | `"Hello"`, `"Hello {name}"` | Always a string literal — there is no raw-text mode, so the lexer is unchanged. The parser splits the literal into static pieces and typed holes at parse time. |
+| Dynamic child | `{expr}` | Any expression of type `View` or a text-able type. |
+| Attribute | `name="lit"`, `name={expr}` | Static string or dynamic expression. |
+| Bare attribute | `disabled` | Equivalent to `disabled={true}`. |
+| Shorthand | `{name}` | Equivalent to `name={name}`. |
+| Spread | `{..props}` | Typed against the target's prop struct. |
+| Event directive | `on:click={handler}` | Handlers are state transformers `fn(&mut S, E)`, not capturing closures. |
+| Class directive | `class:active={cond}` | Statically decomposed into slots. |
+| Style directive | `style:width={px}` | Statically decomposed into slots. |
+| Two-way binding | `bind:value={place}` | `place` is a place expression (lvalue); desugared with echo suppression. |
+| Control flow | `if`, `match`, `for` inside `{ }` | The language is the template language. The compiler recognizes these forms as regions. |
+| Keyed iteration | `for x in xs by key { … }` | `by` is a GSX-scoped contextual keyword, accepted only in child-position `for`. |
+| Namespaced dialect | `<web:canvas/>`, `<native:window/>` | Escape hatch for host-specific elements. |
+| Macro escape hatch | `gsx! { … }` | Optional token-tree entry for use inside macros. |
+
+Hyphenated attribute and tag names (such as `aria-label`) are accepted.
+
+## The compilation model
+
+A GSX expression travels through the pipeline as structure, never as a desugared call tree:
+
+1. **CST** — dedicated `Gsx*` node kinds (`GsxElement`, `GsxFragment`, `GsxDirectiveAttr`, `GsxSpread`, `GsxTextLit`, `GsxBlockChild`, `GsxForBy`, …) parsed by `parse_gsx_element` with zero lexer changes.
+2. **HIR** — `Expr::Gsx` preserves the element structure.
+3. **Typeck** — `check_gsx` validates tags, props, events, and children against the active dialect schema and checks every hole expression.
+4. **The `glyim-gsx` stage** — where views become programs:
+   - **VIR** (View IR): static skeleton, dynamic slots, and regions (`if`, `match`, keyed `for`, component).
+   - **Analyses**: read-sets and write-sets per slot, with prefix interference detection.
+   - **MSPs** (mutation-specialized patches): one straight-line patch function per distinct write-set.
+   - **Emit**: a `Blueprint` — a flat `u32` operation array plus a string table — and an SSR string emitter.
+
+## Public API surface (`glyim-gsx`)
+
+| Item | Role |
+|------|------|
+| Schema / Dialect registry | Describes tags, props, events, and children per host dialect; the compiler validates against schemas, never against tag-name strings. |
+| `Host` trait | The interface a rendering backend implements: mount, patch, patch-mask, dispatch, SSR. |
+| Headless host | An op-recording `Host` implementation for tests; assertions state exact update costs. |
+| `ViewRuntime::mount` | Mounts a blueprint onto a host and returns a live view handle. |
+| Blueprint | Flat-`u32` ops plus string table; encodable as a static for AOT embedding. |
+| SSR emitter | Renders a blueprint to an HTML-like string server-side. |
+| Keyed-list reconciliation | Longest-increasing-subsequence algorithm for `for … by` lists. |
+
+## Diagnostics
+
+| Code | Meaning |
+|------|---------|
+| `G0201` | A value cannot be tracked by ownership analysis and needs the `Signal<T>` escape hatch; the diagnostic ships a fix-it, and the host falls back to signal bits for that slot. |
+| hand-off diagnostic | A GSX-containing body reached the end of typeck without the GSX stage running — a clean pointer to the stage API, not an internal error. |
+
+## Status and scope :badge[experimental]{variant="caution"}
+
+- Implemented and tested: syntax, HIR preservation, schema-driven typeck, VIR, analyses, MSPs, blueprint + SSR emission, keyed reconciliation, `bind:` desugaring with echo suppression, composition as lens composition for inlined components, the §3.1 Counter example end to end (flagship tests in `crates/glyim-gsx/tests/counter.rs`).
+- Not started: host dialect `.g` libraries (`glyim-lang-ui`), arena node trees, layout, styles, accessibility-tree emission, a WASM host protocol, a VM-based hot-reload host, and CLI driver wiring.
+
+## Next steps
+
+<LinkCard title="Write GSX views" href="/guides/write-gsx-views/" description="A task-oriented walkthrough with the flagship Counter example." />
+<LinkCard title="Ownership-driven reactivity" href="/explanation/gsx-reactivity/" description="Why mutation-specialized patches replace vdom diffing." />
