@@ -1,0 +1,27 @@
+{
+  "name": "glyim-docs",
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build && node scripts/generate-llms.mjs",
+    "preview": "astro preview",
+    "check": "astro check",
+    "lint": "markdownlint-cli2 \"src/content/docs/**/*.{md,mdx}\""
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.10",
+    "astro": "7.4.7",
+    "sharp": "^0.35.3",
+    "starlight-heading-badges": "^0.8.0",
+    "starlight-image-zoom": "^0.16.2",
+    "starlight-links-validator": "^0.27.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@emnapi/runtime": "1.11.1",
+    "markdownlint-cli2": "^0.18.1",
+    "typescript": "6.0.3"
+  }
+}
