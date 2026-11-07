@@ -216,9 +216,7 @@ impl<'a> MonoCtx<'a> {
             // unwrap` vs `Option<Option<i32>>::unwrap`) get distinct
             // symbols and no longer collide on the plain `__glyim_fn_<id>`.
             let symbol = match &item {
-                MonoItem::Fn { def_id, substs } => {
-                    mangle_fn_symbol(def_id.to_raw(), *substs)
-                }
+                MonoItem::Fn { def_id, substs } => mangle_fn_symbol(def_id.to_raw(), *substs),
                 _ => format!("{:?}", item),
             };
             let id = self.items.push(MonoItemData {
@@ -432,22 +430,19 @@ impl<'a> MonoCtx<'a> {
                     None => *substs,
                 };
                 let is_concrete = match self.ty_ctx {
-                    Some(ty_ctx) => !ty_ctx
-                        .substitution_args(resolved_substs)
-                        .iter()
-                        .any(|arg| {
-                            matches!(
-                                arg,
-                                &glyim_type::GenericArg::Ty(t)
-                                    if matches!(
-                                        *ty_ctx.ty_kind(t),
-                                        TyKind::Param(_)
-                                            | TyKind::Bound(_, _)
-                                            | TyKind::Projection(_)
-                                            | TyKind::Infer(_)
-                                    )
-                            )
-                        }),
+                    Some(ty_ctx) => !ty_ctx.substitution_args(resolved_substs).iter().any(|arg| {
+                        matches!(
+                            arg,
+                            &glyim_type::GenericArg::Ty(t)
+                                if matches!(
+                                    *ty_ctx.ty_kind(t),
+                                    TyKind::Param(_)
+                                        | TyKind::Bound(_, _)
+                                        | TyKind::Projection(_)
+                                        | TyKind::Infer(_)
+                                )
+                        )
+                    }),
                     None => true,
                 };
                 if is_concrete {
@@ -463,7 +458,9 @@ impl<'a> MonoCtx<'a> {
             // `MonoItem::Const` (which would require a lowered const body)
             // for value-namespace const references yet.
             MirConstKind::ConstRef(_, _) => {}
-            MirConstKind::StaticRef { def_id: _, init, .. } => {
+            MirConstKind::StaticRef {
+                def_id: _, init, ..
+            } => {
                 // Don't enqueue `MonoItem::Static` here: statics have no
                 // lowered MIR body (typeck never registers one — only
                 // function bodies go through `thir_bodies`), and codegen
