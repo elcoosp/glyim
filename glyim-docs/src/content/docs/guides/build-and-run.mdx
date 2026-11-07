@@ -1,0 +1,72 @@
+---
+title: Build and Run Your Project
+description: Use glyip build and glyip run to produce debug and release builds, choose a backend, set optimization levels and LTO, and pass arguments to your program.
+type: how-to
+sidebar:
+  order: 1
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+This guide shows how to drive the day-to-day build workflow with `glyip`: debug and release builds, backend selection, optimization levels, link-time optimization, and running the result.
+
+## Build a project
+
+Run this command in the directory that contains your `Glyip.toml`:
+
+```bash
+glyip build
+```
+
+The build is incremental: `glyip` fingerprints sources and build configuration with SHA-256 and recompiles only what changed.
+
+## Build in release mode
+
+```bash
+glyip build --release
+```
+
+Combine `--release` with an explicit optimization level and LTO strategy when you want a tuned build:
+
+```bash
+glyip build --release -O2 --lto fat
+```
+
+<Aside type="caution">
+`fat` LTO performs an in-compiler module merge and optimize step. `thin` LTO requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution that `glyim-codegen-llvm` was built against; requesting `thin` with the bytecode backend is an explicit error rather than a silent no-op.
+</Aside>
+
+## Choose a backend
+
+`glyip build --backend` accepts `llvm` (the default, producing native executables) or `bytecode` (Glyim's own opcode format, used for testing and embedded execution — its output is not directly runnable):
+
+```bash
+glyip build --backend bytecode
+```
+
+`glyip run` always builds with the LLVM backend, because running needs something the operating system can execute.
+
+## Run your program with arguments
+
+Everything after `--` is passed to your program:
+
+```bash
+glyip run -- --flag value
+```
+
+`glyip run` builds first, then executes the binary, and exits with the child's exit status. A program that exits with a failure status produces a failing `glyip run` invocation.
+
+## Cross-compile with a target triple
+
+Pass a target triple to build for another architecture:
+
+```bash
+glyip run --target aarch64-unknown-linux-gnu
+```
+
+The default triple is `x86_64-unknown-linux-gnu`. The same `--target` flag exists on `glyim` (see the [CLI reference](/reference/cli/)).
+
+## Next steps
+
+<LinkCard title="Inspect intermediate representations" href="/guides/inspect-compilation/" description="Emit MIR, LLVM IR, or assembly to see what the compiler does with your code." />
+<LinkCard title="glyip command reference" href="/reference/glyip/" description="Every glyip command, flag, and manifest key." />
