@@ -259,7 +259,9 @@ fn walk_pattern(ctx: &TyCtx, pat: &thir::Pattern, f: &mut impl FnMut(Ty)) {
         | thir::PatternKind::ConstBlock(_)
         | thir::PatternKind::Error => {}
         thir::PatternKind::Binding {
-            binding_ty, subpattern, ..
+            binding_ty,
+            subpattern,
+            ..
         } => {
             if let Some(bt) = binding_ty {
                 f(*bt);
@@ -547,7 +549,9 @@ fn zonk_pattern(infer: &InferenceTable, ctx: &TyCtx, pat: &mut thir::Pattern) {
         | thir::PatternKind::ConstBlock(_)
         | thir::PatternKind::Error => {}
         thir::PatternKind::Binding {
-            binding_ty, subpattern, ..
+            binding_ty,
+            subpattern,
+            ..
         } => {
             if let Some(bt) = binding_ty {
                 *bt = zonk_ty(infer, ctx, *bt);
@@ -851,8 +855,9 @@ pub fn zonk_closure_sigs(infer: &InferenceTable, ctx: &mut glyim_type::TyCtxMut)
         let mut new_inputs: Vec<glyim_type::GenericArg> = Vec::new();
         for arg in view.substitution_args(sig.inputs) {
             match arg {
-                glyim_type::GenericArg::Ty(t) => new_inputs
-                    .push(glyim_type::GenericArg::Ty(zonk_ty(infer, &view, *t))),
+                glyim_type::GenericArg::Ty(t) => {
+                    new_inputs.push(glyim_type::GenericArg::Ty(zonk_ty(infer, &view, *t)))
+                }
                 other => new_inputs.push(other.clone()),
             }
         }
@@ -1088,7 +1093,11 @@ fn walk_expr_for_variant_ctor_calls(
                 walk_expr_for_variant_ctor_calls(infer, ctx, a, out);
             }
         }
-        thir::ExprKind::If { cond, then_branch, else_branch } => {
+        thir::ExprKind::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
             walk_expr_for_variant_ctor_calls(infer, ctx, cond, out);
             walk_expr_for_variant_ctor_calls(infer, ctx, then_branch, out);
             if let Some(e) = else_branch {
@@ -1242,7 +1251,7 @@ pub fn check_literal_ranges(
     ctx: &TyCtx,
     bodies: &[(glyim_core::def_id::LocalDefId, thir::Body)],
 ) -> Vec<glyim_diag::GlyimDiagnostic> {
-    use glyim_core::primitives::{IntTy, UnOp, UintTy};
+    use glyim_core::primitives::{IntTy, UintTy, UnOp};
     use glyim_type::TyKind;
 
     /// `(min, max, name)` for an integer type, all in `i128` range
@@ -1282,19 +1291,22 @@ pub fn check_literal_ranges(
         match lit {
             thir::Literal::Int(v, _) => Some(*v),
             thir::Literal::Uint(v, _) => {
-                if *v > i128::MAX as u128 { None } else { Some(*v as i128) }
+                if *v > i128::MAX as u128 {
+                    None
+                } else {
+                    Some(*v as i128)
+                }
             }
             _ => None,
         }
     }
 
-    fn check_expr(
-        ctx: &TyCtx,
-        expr: &thir::Expr,
-        diags: &mut Vec<glyim_diag::GlyimDiagnostic>,
-    ) {
+    fn check_expr(ctx: &TyCtx, expr: &thir::Expr, diags: &mut Vec<glyim_diag::GlyimDiagnostic>) {
         // Negation special case: `-<literal>` where the negated value fits.
-        if let thir::ExprKind::Unary { op: UnOp::Neg, operand } = &expr.kind
+        if let thir::ExprKind::Unary {
+            op: UnOp::Neg,
+            operand,
+        } = &expr.kind
             && let thir::ExprKind::Literal(lit) = &operand.kind
             && let Some(raw) = literal_value(lit)
             && let Some((min, _max, name)) = int_bounds(ctx.ty_kind(expr.ty))
@@ -1458,13 +1470,11 @@ pub fn check_literal_ranges(
         }
     }
 
-    fn check_stmt(
-        ctx: &TyCtx,
-        stmt: &thir::Stmt,
-        diags: &mut Vec<glyim_diag::GlyimDiagnostic>,
-    ) {
+    fn check_stmt(ctx: &TyCtx, stmt: &thir::Stmt, diags: &mut Vec<glyim_diag::GlyimDiagnostic>) {
         match stmt {
-            thir::Stmt::Let { init: Some(expr), .. } => check_expr(ctx, expr, diags),
+            thir::Stmt::Let {
+                init: Some(expr), ..
+            } => check_expr(ctx, expr, diags),
             thir::Stmt::Expr { expr } => check_expr(ctx, expr, diags),
             thir::Stmt::Assign { lhs, rhs, .. } => {
                 check_expr(ctx, lhs, diags);
