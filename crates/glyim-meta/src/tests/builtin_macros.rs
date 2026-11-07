@@ -252,7 +252,11 @@ fn test_include_macro() {
         "include! of an existing file must not diagnose: {:?}",
         result.diagnostics
     );
-    let text = result.expanded.expect("include! should expand").text().to_string();
+    let text = result
+        .expanded
+        .expect("include! should expand")
+        .text()
+        .to_string();
     // The file's tokens are spliced in verbatim.
     assert!(
         text.contains("included"),
