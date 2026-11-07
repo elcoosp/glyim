@@ -46,7 +46,6 @@ mod u_codegen;
 mod unary_ops;
 mod unsigned_cmp;
 
-
 /// Test-only helper: pair each `Arc<Body>` with the plain legacy LLVM
 /// symbol (`__glyim_fn_<local_id>`). Tests don't exercise generic
 /// instantiations, so the un-mangled form is sufficient — it's what the
