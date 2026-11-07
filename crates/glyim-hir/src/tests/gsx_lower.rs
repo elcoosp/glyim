@@ -87,7 +87,10 @@ fn gsx_attr_values_lower() {
             }
             assert!(matches!(
                 &g.attrs[1],
-                crate::GsxAttrHIR::Plain { value: crate::GsxAttrValue::Bare, .. }
+                crate::GsxAttrHIR::Plain {
+                    value: crate::GsxAttrValue::Bare,
+                    ..
+                }
             ));
             assert!(matches!(
                 &g.attrs[2],
