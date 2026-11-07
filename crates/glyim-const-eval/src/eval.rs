@@ -325,11 +325,7 @@ impl<'a> ConstEvaluator<'a> {
     /// Register a name -> `FnDefId` mapping so a bare path in a const
     /// initializer that names a top-level `fn` folds to
     /// `ConstValue::Fn`.
-    pub fn with_fn_def(
-        mut self,
-        name: Name,
-        def_id: glyim_core::def_id::FnDefId,
-    ) -> Self {
+    pub fn with_fn_def(mut self, name: Name, def_id: glyim_core::def_id::FnDefId) -> Self {
         self.fn_defs.insert(name, def_id);
         self
     }
@@ -1097,10 +1093,7 @@ impl<'a> ConstEvaluator<'a> {
         let variant_name = path.segments.get(1)?.name;
         let adt_id = ctx.adt_id_by_name(qualifier)?;
         let def = ctx.adt_def(adt_id)?;
-        let idx = def
-            .variants
-            .iter()
-            .position(|v| v.name == variant_name)?;
+        let idx = def.variants.iter().position(|v| v.name == variant_name)?;
         let variant = def.variants.get(idx)?;
         if !variant.fields.is_empty() {
             return None;
