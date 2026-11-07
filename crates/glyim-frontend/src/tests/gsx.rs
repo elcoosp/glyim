@@ -5,7 +5,7 @@
 //! always a string literal (finding F4 — zero lexer changes), and the CST
 //! gains the `Gsx*` node kinds listed in §3.4.
 
-use glyim_syntax::{AstNode, SyntaxKind};
+use glyim_syntax::SyntaxKind;
 
 /// Parse `src` as the body of `fn __g() { ... }` and return the top-level
 /// expression-ish nodes of that body.
@@ -18,10 +18,7 @@ fn parse_body(src: &str) -> Vec<glyim_syntax::SyntaxNode> {
         .find(|n| n.kind() == SyntaxKind::FnDef)
         .and_then(|f| f.children().find(|n| n.kind() == SyntaxKind::Block))
         .expect("body block");
-    block
-        .children()
-        .filter(|n| !n.kind().is_trivia())
-        .collect()
+    block.children().filter(|n| !n.kind().is_trivia()).collect()
 }
 
 /// Parse a single expression and return its root node.
@@ -30,10 +27,7 @@ fn parse_single(src: &str) -> glyim_syntax::SyntaxNode {
     assert_eq!(stmts.len(), 1, "expected exactly one statement: {stmts:?}");
     let stmt = &stmts[0];
     // Tail expr: the block itself holds the expression child. ExprStmt holds one.
-    let inner: Vec<_> = stmt
-        .children()
-        .filter(|n| !n.kind().is_trivia())
-        .collect();
+    let inner: Vec<_> = stmt.children().filter(|n| !n.kind().is_trivia()).collect();
     let expr = match stmt.kind() {
         SyntaxKind::Block => stmt
             .children()
@@ -317,7 +311,7 @@ fn binary_lt_is_not_gsx() {
 /// clean parse error (not a GSX node, no panic, no ICE).
 #[test]
 fn prefix_lt_without_ident_is_an_error() {
-    let wrapped = format!("fn __g() {{ let _x = < 3; }}");
+    let wrapped = "fn __g() { let _x = < 3; }".to_string();
     let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
     assert!(
         !parsed.diagnostics.is_empty(),
@@ -329,7 +323,7 @@ fn prefix_lt_without_ident_is_an_error() {
 /// without hanging or panicking.
 #[test]
 fn gsx_unterminated_element_recovers() {
-    let wrapped = format!("fn __g() {{ let _x = <div>\"hi\"; }}");
+    let wrapped = "fn __g() { let _x = <div>\"hi\"; }".to_string();
     let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
     assert!(
         !parsed.diagnostics.is_empty(),
@@ -372,4 +366,3 @@ fn gsx_tree_is_lossless() {
     let full = parsed.root.to_string();
     assert!(full.contains(src), "source text must survive: {full}");
 }
-
