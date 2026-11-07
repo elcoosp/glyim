@@ -84,7 +84,10 @@ impl<'a> Parser<'a> {
                 self.finish_node(); // GsxElement
             }
             found => {
-                self.error(format!("expected `>` or `/>` to close the tag, found {:?}", found));
+                self.error(format!(
+                    "expected `>` or `/>` to close the tag, found {:?}",
+                    found
+                ));
                 self.start_node_at(cp, SyntaxKind::GsxSelfClosing);
                 self.finish_node();
             }
@@ -156,8 +159,8 @@ impl<'a> Parser<'a> {
     /// `ns:name={…}` → [`SyntaxKind::GsxDirectiveAttr`],
     /// `name="lit" | name={expr} | bare` → [`SyntaxKind::GsxAttr`].
     fn parse_gsx_attr(&mut self) {
-        let is_directive =
-            self.peek_kind() == Some(SyntaxKind::Colon) && self.peek_non_ws_kind(1) == SyntaxKind::Ident;
+        let is_directive = self.peek_kind() == Some(SyntaxKind::Colon)
+            && self.peek_non_ws_kind(1) == SyntaxKind::Ident;
         let kind = if is_directive {
             SyntaxKind::GsxDirectiveAttr
         } else {
@@ -186,7 +189,10 @@ impl<'a> Parser<'a> {
                     self.expect(SyntaxKind::RBrace);
                 }
                 found => {
-                    self.error(format!("expected string literal or `{{expr}}`, found {:?}", found));
+                    self.error(format!(
+                        "expected string literal or `{{expr}}`, found {:?}",
+                        found
+                    ));
                 }
             }
         } else if is_directive && self.current_kind() == SyntaxKind::LBrace {
@@ -249,9 +255,7 @@ impl<'a> Parser<'a> {
 
     /// `</tag>` / `</>`. Optionally verifies the name matches the open tag.
     fn parse_gsx_close_tag(&mut self, open_name: Option<&str>) {
-        if self.current_kind() != SyntaxKind::Lt
-            || self.peek_kind() != Some(SyntaxKind::Slash)
-        {
+        if self.current_kind() != SyntaxKind::Lt || self.peek_kind() != Some(SyntaxKind::Slash) {
             self.error(format!(
                 "expected closing tag `{}</{}>`",
                 open_name.unwrap_or(""),
@@ -273,7 +277,10 @@ impl<'a> Parser<'a> {
         self.finish_node();
         if let (Some(open), false) = (open_name, name.is_empty()) {
             if open != name {
-                self.error(format!("mismatched closing tag: expected `</{}>`, found `</{}>`", open, name));
+                self.error(format!(
+                    "mismatched closing tag: expected `</{}>`, found `</{}>`",
+                    open, name
+                ));
             }
         }
     }
