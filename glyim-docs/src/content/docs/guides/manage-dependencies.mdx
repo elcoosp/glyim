@@ -1,0 +1,63 @@
+---
+title: Manage Dependencies
+description: Declare path, registry, and git dependencies in Glyip.toml, understand the lockfile, and diagnose resolution conflicts.
+type: how-to
+sidebar:
+  order: 2
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+This guide shows how to declare dependencies in `Glyip.toml`, how `glyip` resolves them, and how to read a resolution failure.
+
+## Declare a dependency
+
+`glyip` accepts two dependency syntaxes. Use a bare string for a registry requirement:
+
+```toml
+[dependencies]
+serde = "1.0"
+```
+
+Use a table for path, git, or mixed requirements:
+
+```toml
+[dependencies]
+local_util = { path = "../local_util" }
+my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }
+```
+
+A git dependency pins exactly one ref: `branch`, `tag`, or an exact `rev` hash. With none of them, the repository's default branch tip is used.
+
+Development-only dependencies go into `[dev-dependencies]` and use the same syntax:
+
+```toml
+[dev-dependencies]
+test_helpers = { path = "../test_helpers" }
+```
+
+<Aside type="tip">
+Unknown keys in `Glyip.toml` are rejected — the manifest parser uses `deny_unknown_fields`, so a typo such as `dependecies` fails loudly instead of being ignored.
+</Aside>
+
+## Understand the lockfile
+
+`glyip` maintains a `Glyip.lock` lockfile next to the manifest. Lockfile entries are keyed by `name-version`, and the lockfile records the resolved graph so repeated builds are reproducible.
+
+## Expect the resolver's semantics
+
+`glyip`'s resolver is deliberately simpler than Cargo's. Knowing the differences up front saves debugging a resolution failure that is not a bug:
+
+- **Greedy breadth-first, no backtracking.** The resolver walks the graph breadth-first from the root manifest. When it encounters `foo = "1.0"`, it picks the highest version that satisfies the requirement at that moment and moves on. If a later transitive dependency needs an incompatible `foo`, the resolver reports a conflict instead of retrying with a lower version.
+- **One version per crate name.** Two requirements on the same crate that disagree on versions are a hard `DependencyConflict` error, not two parallel copies.
+- **Deterministic version selection.** "Highest matching version" is computed by parsing every candidate and sorting by SemVer 2.0 precedence (caret, tilde, wildcard, and comparison operators are supported), not by trusting registry listing order. An unsatisfiable requirement surfaces as `DependencyNotFound` rather than a silent upgrade.
+- **Cycle detection.** A path-dependency cycle (crate A depends on B, B depends on A) is caught by the visited check before infinite recursion. Two path dependencies with the same declared package name but different directories resolve as distinct crates.
+
+## Diagnose a conflict
+
+When two requesters disagree, the `DependencyConflict` error names the crate, every distinct requirement gathered, and every `(requester, requirement)` edge. For example, a diamond where your crate requires `foo = "1.0"` and another dependency requires `foo = "2.0"` produces an error listing both edges — align the two requirements to resolve it.
+
+## Next steps
+
+<LinkCard title="glyip reference" href="/reference/glyip/" description="The complete Glyip.toml manifest schema and command flags." />
+<LinkCard title="Test your code" href="/guides/test-your-code/" description="Run tests with glyip test, inline annotations, and snapshots." />
