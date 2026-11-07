@@ -372,8 +372,7 @@ impl InferenceTable {
                     a
                 };
                 if let Some(bound) = self.ty_vars[var].value {
-                    let other_resolved =
-                        self.resolve_ty_shallow_preserve_int(ctx, other_ty);
+                    let other_resolved = self.resolve_ty_shallow_preserve_int(ctx, other_ty);
                     let _ = self.unify_tys(ctx, bound, other_resolved, span);
                     return Ok(Vec::new());
                 }
