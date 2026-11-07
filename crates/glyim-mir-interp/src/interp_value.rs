@@ -54,8 +54,12 @@ impl PartialEq for InterpValue {
             (InterpValue::Unit, InterpValue::Unit) => true,
             (InterpValue::Aggregate(a), InterpValue::Aggregate(b)) => a == b,
             (
-                InterpValue::Ref { frame: a, local: b, .. },
-                InterpValue::Ref { frame: c, local: d, .. },
+                InterpValue::Ref {
+                    frame: a, local: b, ..
+                },
+                InterpValue::Ref {
+                    frame: c, local: d, ..
+                },
             ) => {
                 // Address identity: two Refs are "equal" iff they point at
                 // the same (frame, local) base. Projection is not compared
