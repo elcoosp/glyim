@@ -185,7 +185,13 @@ impl<'a> MirBuilder<'a> {
                 let (fn_def_id, substs) = match self.ctx.ty_ctx().ty_kind(expr.ty) {
                     TyKind::FnDef(id, sub) => (id, sub),
                     _ => {
-                        tracing::warn!("FnRef with non-FnDef type, emitting Error constant");
+                        // Typeck must have rejected a non-FnDef callee
+                        // (E0609/E0425-style). Reaching this arm means a
+                        // typeck diagnostic was suppressed — surface a loud
+                        // internal error rather than silently continuing.
+                        self.diagnostics.push(GlyimDiagnostic::internal_error(
+                            "FnRef expression reached lowering with a non-FnDef type",
+                        ));
                         return glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(
                             glyim_mir::MirConst {
                                 kind: glyim_mir::MirConstKind::Error,
@@ -232,8 +238,7 @@ impl<'a> MirBuilder<'a> {
                 //
                 // Fallback: if the initializer hasn't been const-evaluated
                 // (e.g. it references a runtime value), surface a diagnostic.
-                let const_alias =
-                    glyim_core::def_id::ConstDefId::from_raw(static_def_id.to_raw());
+                let const_alias = glyim_core::def_id::ConstDefId::from_raw(static_def_id.to_raw());
                 let substs = glyim_type::Substitution::empty();
                 let Some(init) = self.ctx.const_value(const_alias, substs) else {
                     // Typeck must have rejected a non-const-evaluable
@@ -242,11 +247,12 @@ impl<'a> MirBuilder<'a> {
                     // suppressed — surface a loud internal error rather
                     // than silently folding to 0, which would turn a
                     // compile error into a runtime miscompile.
-                    self.diagnostics.push(GlyimDiagnostic::internal_error(format!(
-                        "static {} reached lowering without a const-evaluated \
+                    self.diagnostics
+                        .push(GlyimDiagnostic::internal_error(format!(
+                            "static {} reached lowering without a const-evaluated \
                          initializer; typeck should have rejected it",
-                        static_def_id.to_raw()
-                    )));
+                            static_def_id.to_raw()
+                        )));
                     return glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(
                         glyim_mir::MirConst {
                             kind: glyim_mir::MirConstKind::Error,
@@ -255,10 +261,7 @@ impl<'a> MirBuilder<'a> {
                         },
                     ));
                 };
-                let is_mut = self
-                    .ctx
-                    .ty_ctx()
-                    .static_is_mut(*static_def_id);
+                let is_mut = self.ctx.ty_ctx().static_is_mut(*static_def_id);
                 let static_ref_const = glyim_mir::MirConst {
                     kind: glyim_mir::MirConstKind::StaticRef {
                         def_id: *static_def_id,
@@ -275,8 +278,8 @@ impl<'a> MirBuilder<'a> {
                     expr.ty,
                     glyim_core::primitives::Mutability::Not,
                 ));
-                let addr_local = self
-                    .alloc_local(ptr_ty, glyim_core::primitives::Mutability::Not, expr.span);
+                let addr_local =
+                    self.alloc_local(ptr_ty, glyim_core::primitives::Mutability::Not, expr.span);
                 self.push_stmt(
                     glyim_mir::StatementKind::Assign(
                         glyim_mir::Place::new(addr_local),
@@ -284,12 +287,10 @@ impl<'a> MirBuilder<'a> {
                     ),
                     expr.span,
                 );
-                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(
-                    glyim_mir::Place {
-                        local: addr_local,
-                        projection: vec![glyim_mir::ProjectionElem::Deref].into_boxed_slice(),
-                    },
-                ))
+                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(glyim_mir::Place {
+                    local: addr_local,
+                    projection: vec![glyim_mir::ProjectionElem::Deref].into_boxed_slice(),
+                }))
             }
             thir::ExprKind::VariantRef(adt_id, variant_idx) => {
                 // A unit enum variant used as a value (`Color::Red`) constructs
@@ -561,13 +562,9 @@ impl<'a> MirBuilder<'a> {
                             def_id.to_raw(),
                             x if x == u32::MAX - 3 || x == u32::MAX - 1
                         );
-                        if is_copy_sentinel
-                            && let Some(arg_expr) = args.first()
-                        {
+                        if is_copy_sentinel && let Some(arg_expr) = args.first() {
                             let arg_ty = arg_expr.ty;
-                            if arg_ty == expr.ty
-                                && self.ctx.ty_ctx().is_copy(arg_ty)
-                            {
+                            if arg_ty == expr.ty && self.ctx.ty_ctx().is_copy(arg_ty) {
                                 return glyim_mir::Rvalue::Use(
                                     self.lower_expr_to_operand(arg_expr),
                                 );
@@ -622,10 +619,7 @@ impl<'a> MirBuilder<'a> {
                             })
                             .unwrap_or(false);
                         if sig_returns_never {
-                            self.terminate(
-                                glyim_mir::TerminatorKind::Unreachable,
-                                expr.span,
-                            );
+                            self.terminate(glyim_mir::TerminatorKind::Unreachable, expr.span);
                         }
                         return glyim_mir::Rvalue::Use(glyim_mir::Operand::Move(
                             glyim_mir::Place::new(dest_local),
@@ -781,13 +775,13 @@ impl<'a> MirBuilder<'a> {
                 let tail_ty = tail.as_ref().map(|t| t.ty).unwrap_or(Ty::UNIT);
                 let tail_rvalue = match tail {
                     Some(t) => self.lower_expr_to_rvalue(t),
-                    None => glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(
-                        glyim_mir::MirConst {
+                    None => {
+                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(glyim_mir::MirConst {
                             kind: glyim_mir::MirConstKind::Unit,
                             ty: Ty::UNIT,
                             span: expr.span,
-                        },
-                    )),
+                        }))
+                    }
                 };
                 if self.current_block.is_none() {
                     // The tail itself diverged.
@@ -795,11 +789,8 @@ impl<'a> MirBuilder<'a> {
                     return tail_rvalue;
                 }
 
-                let result_local = self.alloc_local(
-                    tail_ty,
-                    glyim_core::primitives::Mutability::Mut,
-                    expr.span,
-                );
+                let result_local =
+                    self.alloc_local(tail_ty, glyim_core::primitives::Mutability::Mut, expr.span);
                 self.push_stmt(
                     glyim_mir::StatementKind::Assign(
                         glyim_mir::Place::new(result_local),
@@ -933,10 +924,7 @@ impl<'a> MirBuilder<'a> {
                     self.terminate(
                         glyim_mir::TerminatorKind::Call {
                             func: glyim_mir::Operand::Constant(glyim_mir::MirConst {
-                                kind: glyim_mir::MirConstKind::Fn(
-                                    info.fn_def_id,
-                                    info.fn_substs,
-                                ),
+                                kind: glyim_mir::MirConstKind::Fn(info.fn_def_id, info.fn_substs),
                                 ty: info.fn_ty,
                                 span: iterable.span,
                             }),
@@ -1014,10 +1002,8 @@ impl<'a> MirBuilder<'a> {
                                     });
                                 match elem_t {
                                     Some(elem_t) => {
-                                        let slice_ty = self
-                                            .ctx
-                                            .ty_ctx()
-                                            .mk_ty(TyKind::Slice(elem_t));
+                                        let slice_ty =
+                                            self.ctx.ty_ctx().mk_ty(TyKind::Slice(elem_t));
                                         let ref_slice_ty = self.ctx.ty_ctx().mk_ref(
                                             glyim_type::Region::Erased,
                                             slice_ty,
@@ -1071,9 +1057,9 @@ impl<'a> MirBuilder<'a> {
                                                  TyCtxMut::register_builtin_methods — this is \
                                                  a compiler bug (for-loop desugaring depends on it)",
                                             );
-                                        let substs = self.ctx.ty_ctx().intern_substitution(
-                                            vec![glyim_type::GenericArg::Ty(elem_t)],
-                                        );
+                                        let substs = self.ctx.ty_ctx().intern_substitution(vec![
+                                            glyim_type::GenericArg::Ty(elem_t),
+                                        ]);
                                         let fn_ty = self
                                             .ctx
                                             .ty_ctx()
@@ -1118,13 +1104,12 @@ impl<'a> MirBuilder<'a> {
                 );
                 let iter_is_bare_slice =
                     matches!(self.ctx.ty_ctx().ty_kind(iter_ty), TyKind::Slice(_));
-                let take_array_path = (matches!(
-                    self.ctx.ty_ctx().ty_kind(iter_ty),
-                    TyKind::Array(_, _)
-                ) && next.is_none()
-                    && self.ctx.iterator_next_fn(iter_ty, elem_ty).is_none())
-                    || iter_is_ref_slice
-                    || iter_is_bare_slice;
+                let take_array_path =
+                    (matches!(self.ctx.ty_ctx().ty_kind(iter_ty), TyKind::Array(_, _))
+                        && next.is_none()
+                        && self.ctx.iterator_next_fn(iter_ty, elem_ty).is_none())
+                        || iter_is_ref_slice
+                        || iter_is_bare_slice;
                 let array_loop_state: Option<(glyim_mir::LocalIdx, glyim_mir::LocalIdx)> =
                     if take_array_path {
                         let usize_ty = Ty::USIZE;
@@ -1157,10 +1142,7 @@ impl<'a> MirBuilder<'a> {
                             Place::new(iter_local)
                         };
                         self.push_stmt(
-                            StatementKind::Assign(
-                                Place::new(len_local),
-                                Rvalue::Len(len_place),
-                            ),
+                            StatementKind::Assign(Place::new(len_local), Rvalue::Len(len_place)),
                             expr.span,
                         );
                         Some((idx_local, len_local))
@@ -1223,9 +1205,8 @@ impl<'a> MirBuilder<'a> {
                                 glyim_mir::ProjectionElem::Index(idx_local),
                             ]);
                         } else {
-                            base.projection = Box::new([
-                                glyim_mir::ProjectionElem::Index(idx_local),
-                            ]);
+                            base.projection =
+                                Box::new([glyim_mir::ProjectionElem::Index(idx_local)]);
                         }
                         base
                     };
@@ -1250,8 +1231,7 @@ impl<'a> MirBuilder<'a> {
                     } else {
                         elem_ty
                     };
-                    let raw_elem_local =
-                        self.alloc_local(raw_elem_ty, Mutability::Not, expr.span);
+                    let raw_elem_local = self.alloc_local(raw_elem_ty, Mutability::Not, expr.span);
                     self.push_stmt(StatementKind::StorageLive(raw_elem_local), expr.span);
                     self.push_stmt(
                         StatementKind::Assign(
@@ -1404,12 +1384,13 @@ impl<'a> MirBuilder<'a> {
                         self.push_stmt(
                             glyim_mir::StatementKind::Assign(
                                 glyim_mir::Place::new(discr_local),
-                                glyim_mir::Rvalue::Discriminant(glyim_mir::Place::new(option_local)),
+                                glyim_mir::Rvalue::Discriminant(glyim_mir::Place::new(
+                                    option_local,
+                                )),
                             ),
                             expr.span,
                         );
-                        let discr_op =
-                            glyim_mir::Operand::Copy(glyim_mir::Place::new(discr_local));
+                        let discr_op = glyim_mir::Operand::Copy(glyim_mir::Place::new(discr_local));
                         let some_bb = self.new_block();
                         let none_bb = exit_bb;
                         let switch_targets =
@@ -1998,9 +1979,9 @@ impl<'a> MirBuilder<'a> {
                 let (is_result, success_variant, err_variant) =
                     match self.ctx.ty_ctx().ty_kind(inner_ty) {
                         TyKind::Adt(id, _) => match id.to_raw() {
-                            1011 => (true, 0u32, 1u32), // Result
+                            1011 => (true, 0u32, 1u32),  // Result
                             1010 => (false, 1u32, 0u32), // Option
-                            _ => (true, 0u32, 1u32),    // defensive; typeck rejects
+                            _ => (true, 0u32, 1u32),     // defensive; typeck rejects
                         },
                         _ => (true, 0u32, 1u32),
                     };
@@ -2021,14 +2002,12 @@ impl<'a> MirBuilder<'a> {
                 );
 
                 // Discriminant local.
-                let u8_ty = self.ctx.ty_ctx().mk_ty(TyKind::Uint(
-                    glyim_core::primitives::UintTy::U8,
-                ));
-                let discr_local = self.alloc_local(
-                    u8_ty,
-                    glyim_core::primitives::Mutability::Not,
-                    expr.span,
-                );
+                let u8_ty = self
+                    .ctx
+                    .ty_ctx()
+                    .mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U8));
+                let discr_local =
+                    self.alloc_local(u8_ty, glyim_core::primitives::Mutability::Not, expr.span);
                 self.push_stmt(
                     glyim_mir::StatementKind::Assign(
                         glyim_mir::Place::new(discr_local),
@@ -2038,11 +2017,8 @@ impl<'a> MirBuilder<'a> {
                 );
 
                 // Success value slot.
-                let dest_local = self.alloc_local(
-                    expr.ty,
-                    glyim_core::primitives::Mutability::Mut,
-                    expr.span,
-                );
+                let dest_local =
+                    self.alloc_local(expr.ty, glyim_core::primitives::Mutability::Mut, expr.span);
                 let dest_place = glyim_mir::Place::new(dest_local);
 
                 let ok_bb = self.new_block();
@@ -2134,11 +2110,8 @@ impl<'a> MirBuilder<'a> {
                     ),
                     agg_args,
                 );
-                let ret_local = self.alloc_local(
-                    ret_ty,
-                    glyim_core::primitives::Mutability::Mut,
-                    expr.span,
-                );
+                let ret_local =
+                    self.alloc_local(ret_ty, glyim_core::primitives::Mutability::Mut, expr.span);
                 self.push_stmt(
                     glyim_mir::StatementKind::Assign(glyim_mir::Place::new(ret_local), ret_agg),
                     expr.span,
@@ -2149,9 +2122,9 @@ impl<'a> MirBuilder<'a> {
                 self.push_stmt(
                     glyim_mir::StatementKind::Assign(
                         glyim_mir::Place::new(local0),
-                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(
-                            glyim_mir::Place::new(ret_local),
-                        )),
+                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(glyim_mir::Place::new(
+                            ret_local,
+                        ))),
                     ),
                     expr.span,
                 );
@@ -2352,15 +2325,42 @@ impl<'a> MirBuilder<'a> {
                 // `Place{temp, [Deref]}` so the caller writes THROUGH the
                 // global, not into a stack temporary. Mirrors the rvalue
                 // arm's two-step lowering.
-                let const_alias =
-                    glyim_core::def_id::ConstDefId::from_raw(static_def_id.to_raw());
+                let const_alias = glyim_core::def_id::ConstDefId::from_raw(static_def_id.to_raw());
                 let substs = glyim_type::Substitution::empty();
                 let Some(init) = self.ctx.const_value(const_alias, substs) else {
-                    tracing::warn!(
-                        "static {} could not be const-evaluated (StaticRef place)",
-                        static_def_id.to_raw()
+                    // Typeck must have rejected a non-const-evaluable
+                    // static initializer (Rust E0015). Reaching this arm
+                    // means typeck's `ItemKind::Static` diagnostic was
+                    // suppressed — surface a loud internal error rather
+                    // than silently folding to 0, which would turn a
+                    // compile error into a runtime miscompile. Mirrors the
+                    // rvalue arm above; the Error constant propagates so
+                    // downstream stages see the failure explicitly.
+                    self.diagnostics
+                        .push(GlyimDiagnostic::internal_error(format!(
+                            "static {} reached lowering without a const-evaluated \
+                         initializer; typeck should have rejected it",
+                            static_def_id.to_raw()
+                        )));
+                    let err_local = self.alloc_local(
+                        expr.ty,
+                        glyim_core::primitives::Mutability::Mut,
+                        expr.span,
                     );
-                    return glyim_mir::Place::new(LocalIdx::from_raw(0));
+                    self.push_stmt(
+                        glyim_mir::StatementKind::Assign(
+                            glyim_mir::Place::new(err_local),
+                            glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(
+                                glyim_mir::MirConst {
+                                    kind: glyim_mir::MirConstKind::Error,
+                                    ty: expr.ty,
+                                    span: expr.span,
+                                },
+                            )),
+                        ),
+                        expr.span,
+                    );
+                    return glyim_mir::Place::new(err_local);
                 };
                 let is_mut = self.ctx.ty_ctx().static_is_mut(*static_def_id);
                 let static_ref_const = glyim_mir::MirConst {
@@ -2376,8 +2376,8 @@ impl<'a> MirBuilder<'a> {
                     expr.ty,
                     glyim_core::primitives::Mutability::Not,
                 ));
-                let addr_local = self
-                    .alloc_local(ptr_ty, glyim_core::primitives::Mutability::Not, expr.span);
+                let addr_local =
+                    self.alloc_local(ptr_ty, glyim_core::primitives::Mutability::Not, expr.span);
                 self.push_stmt(
                     glyim_mir::StatementKind::Assign(
                         glyim_mir::Place::new(addr_local),
@@ -2604,8 +2604,7 @@ impl<'a> MirBuilder<'a> {
                         let field_proj = ProjectionElem::Field(FieldIdx::from_raw(idx as u32));
                         let copy_field =
                             self.place_with_projection(init.clone(), field_proj.clone());
-                        let orig_field =
-                            self.place_with_projection(orig.clone(), field_proj);
+                        let orig_field = self.place_with_projection(orig.clone(), field_proj);
                         let temp_local = self.alloc_local(
                             field_pat.ty,
                             glyim_core::primitives::Mutability::Not,
@@ -2662,7 +2661,8 @@ impl<'a> MirBuilder<'a> {
                     // advanced `written` and looped forever / panicked.
                     let is_enum = self.ctx.adt_def(*adt_id).kind == crate::lower::AdtKind::Enum;
                     let (field_base, orig_base) = if is_enum {
-                        let dc = ProjectionElem::Downcast(glyim_mir::VariantIdx::from_raw(*variant_idx));
+                        let dc =
+                            ProjectionElem::Downcast(glyim_mir::VariantIdx::from_raw(*variant_idx));
                         (
                             self.place_with_projection(init_place.clone(), dc.clone()),
                             self.place_with_projection(orig.clone(), dc),
@@ -2736,12 +2736,7 @@ impl<'a> MirBuilder<'a> {
             }
             thir::PatternKind::Or(pats) => {
                 if let Some(first_pat) = pats.first() {
-                    self.bind_pattern(
-                        first_pat,
-                        copy_place,
-                        orig_place,
-                        span,
-                    );
+                    self.bind_pattern(first_pat, copy_place, orig_place, span);
                 }
             }
             // `Literal` and `ConstBlock` patterns bind no names of their
@@ -2769,7 +2764,8 @@ impl<'a> MirBuilder<'a> {
                             min_length: (prefix.len() + suffix.len()) as u64,
                             from_end: false,
                         };
-                        let elem_place = self.place_with_projection(init_place.clone(), proj.clone());
+                        let elem_place =
+                            self.place_with_projection(init_place.clone(), proj.clone());
                         let orig_elem = self.place_with_projection(orig.clone(), proj);
                         let temp_local = self.alloc_local(
                             sub_pat.ty,
@@ -2798,7 +2794,8 @@ impl<'a> MirBuilder<'a> {
                             min_length: (prefix.len() + suffix.len()) as u64,
                             from_end: true,
                         };
-                        let elem_place = self.place_with_projection(init_place.clone(), proj.clone());
+                        let elem_place =
+                            self.place_with_projection(init_place.clone(), proj.clone());
                         let orig_elem = self.place_with_projection(orig.clone(), proj);
                         let temp_local = self.alloc_local(
                             sub_pat.ty,
@@ -2827,7 +2824,8 @@ impl<'a> MirBuilder<'a> {
                             to: suffix.len() as u64,
                             from_end: true,
                         };
-                        let rest_place = self.place_with_projection(init_place.clone(), proj.clone());
+                        let rest_place =
+                            self.place_with_projection(init_place.clone(), proj.clone());
                         let orig_rest = self.place_with_projection(orig.clone(), proj);
                         let temp_local = self.alloc_local(
                             rest_pat.ty,
@@ -3583,10 +3581,7 @@ impl<'a> MirBuilder<'a> {
                     Operand::Copy(Place::new(temp)),
                     Ty::USIZE,
                 );
-                self.push_stmt(
-                    StatementKind::Assign(Place::new(start_local), cast),
-                    span,
-                );
+                self.push_stmt(StatementKind::Assign(Place::new(start_local), cast), span);
             } else {
                 let start_rvalue = self.lower_expr_to_rvalue(start_expr);
                 self.push_stmt(
@@ -3628,10 +3623,7 @@ impl<'a> MirBuilder<'a> {
                     Operand::Copy(Place::new(temp)),
                     Ty::USIZE,
                 );
-                self.push_stmt(
-                    StatementKind::Assign(Place::new(end_local), cast),
-                    span,
-                );
+                self.push_stmt(StatementKind::Assign(Place::new(end_local), cast), span);
             } else {
                 let end_rvalue = self.lower_expr_to_rvalue(end_expr);
                 self.push_stmt(
@@ -3839,8 +3831,7 @@ impl<'a> MirBuilder<'a> {
         // Both cases therefore become: take the *address* of the first
         // element (arrays) or the already-loaded pointer (slices),
         // `PtrToInt` to `usize`, store.
-        let base_is_array =
-            matches!(self.ctx.ty_ctx().ty_kind(base_ty), TyKind::Array(_, _));
+        let base_is_array = matches!(self.ctx.ty_ctx().ty_kind(base_ty), TyKind::Array(_, _));
         let data_ptr_ptr = self.alloc_local(Ty::USIZE, Mutability::Not, span);
         self.push_stmt(StatementKind::StorageLive(data_ptr_ptr), span);
         if base_is_array {
