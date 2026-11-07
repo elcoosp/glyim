@@ -251,7 +251,9 @@ impl CompileCache {
     /// task, no per-store directory walk when under budget.
     fn evict_if_needed(&self) {
         let Some(max) = self.max_bytes else { return };
-        let Ok(entries) = std::fs::read_dir(self.objects_dir()) else { return };
+        let Ok(entries) = std::fs::read_dir(self.objects_dir()) else {
+            return;
+        };
 
         struct Entry {
             path: PathBuf,
@@ -273,10 +275,12 @@ impl CompileCache {
                 continue;
             }
             total = total.saturating_add(meta.len());
-            let mtime = meta
-                .modified()
-                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-            files.push(Entry { path, size: meta.len(), mtime });
+            let mtime = meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+            files.push(Entry {
+                path,
+                size: meta.len(),
+                mtime,
+            });
         }
         if total <= max {
             return;
