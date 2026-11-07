@@ -174,10 +174,7 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
                 // Apply the ADT's substitution to each field type (generic
                 // structs). `subst_ty` handles Param/Tuple/Adt/Ref/RawPtr.
                 let mut local_ctx = glyim_type::TyCtxMut::from_ty_ctx(ctx);
-                let subst_map: std::collections::HashMap<
-                    u32,
-                    glyim_type::GenericArg,
-                > = ctx
+                let subst_map: std::collections::HashMap<u32, glyim_type::GenericArg> = ctx
                     .substitution_args(*subst)
                     .iter()
                     .enumerate()
@@ -187,8 +184,7 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
                     .iter()
                     .map(|t| local_ctx.subst_ty(*t, &subst_map))
                     .collect();
-                let mut fields: Vec<BasicTypeEnum<'ctx>> =
-                    Vec::with_capacity(resolved.len());
+                let mut fields: Vec<BasicTypeEnum<'ctx>> = Vec::with_capacity(resolved.len());
                 let mut ok = true;
                 for ft in &resolved {
                     match llvm_type_for_ty(ctx, target_info, context, *ft) {
