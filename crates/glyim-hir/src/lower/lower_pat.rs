@@ -115,9 +115,9 @@ pub(crate) fn lower_pat(
                 // `ref mut x` the nearest sibling is `mut`, with `ref`
                 // just behind it.
                 let has_ref = {
-                    let in_children = node.children_with_tokens().any(|c| {
-                        c.as_token().is_some_and(|t| t.kind() == SyntaxKind::KwRef)
-                    });
+                    let in_children = node
+                        .children_with_tokens()
+                        .any(|c| c.as_token().is_some_and(|t| t.kind() == SyntaxKind::KwRef));
                     let before = {
                         let mut prev = node.prev_sibling_or_token();
                         let mut found = false;
