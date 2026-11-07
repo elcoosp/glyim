@@ -418,7 +418,14 @@ fn p2_f4_shallow_clone_args_carry_depth_one() {
     let args = crate::dep::shallow_clone_args("https://example.com/repo", "/tmp/x");
     assert_eq!(
         args,
-        vec!["clone", "--no-checkout", "--depth", "1", "https://example.com/repo", "/tmp/x"],
+        vec![
+            "clone",
+            "--no-checkout",
+            "--depth",
+            "1",
+            "https://example.com/repo",
+            "/tmp/x"
+        ],
         "shallow clone must specify --depth 1 and --no-checkout"
     );
     assert!(
@@ -432,7 +439,12 @@ fn p2_f4_full_clone_args_lack_depth() {
     let args = crate::dep::full_clone_args("https://example.com/repo", "/tmp/x");
     assert_eq!(
         args,
-        vec!["clone", "--no-checkout", "https://example.com/repo", "/tmp/x"],
+        vec![
+            "clone",
+            "--no-checkout",
+            "https://example.com/repo",
+            "/tmp/x"
+        ],
         "full-clone fallback must NOT specify --depth (that's the whole point)"
     );
     assert!(
