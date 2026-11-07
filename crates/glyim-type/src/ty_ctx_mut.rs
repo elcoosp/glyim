@@ -488,7 +488,9 @@ impl TyCtxMut {
                 let new_args: Vec<GenericArg> = args
                     .into_iter()
                     .map(|a| match a {
-                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty_depth(t, subst, depth + 1)),
+                        GenericArg::Ty(t) => {
+                            GenericArg::Ty(self.subst_ty_depth(t, subst, depth + 1))
+                        }
                         other => other,
                     })
                     .collect();
@@ -500,7 +502,9 @@ impl TyCtxMut {
                 let new_args: Vec<GenericArg> = args
                     .into_iter()
                     .map(|a| match a {
-                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty_depth(t, subst, depth + 1)),
+                        GenericArg::Ty(t) => {
+                            GenericArg::Ty(self.subst_ty_depth(t, subst, depth + 1))
+                        }
                         other => other,
                     })
                     .collect();
@@ -512,7 +516,9 @@ impl TyCtxMut {
                 let new_args: Vec<GenericArg> = args
                     .into_iter()
                     .map(|a| match a {
-                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty_depth(t, subst, depth + 1)),
+                        GenericArg::Ty(t) => {
+                            GenericArg::Ty(self.subst_ty_depth(t, subst, depth + 1))
+                        }
                         other => other,
                     })
                     .collect();
@@ -536,7 +542,9 @@ impl TyCtxMut {
                     .to_vec()
                     .into_iter()
                     .map(|a| match a {
-                        GenericArg::Ty(t) => GenericArg::Ty(self.subst_ty_depth(t, subst, depth + 1)),
+                        GenericArg::Ty(t) => {
+                            GenericArg::Ty(self.subst_ty_depth(t, subst, depth + 1))
+                        }
                         other => other,
                     })
                     .collect();
@@ -1069,7 +1077,10 @@ impl TyCtxMut {
 
     /// Look up the level for a lint. Missing entries default to `Warn`.
     pub fn lint_level(&self, id: glyim_core::lint::LintId) -> glyim_core::lint::LintLevel {
-        self.lints.get(&id).copied().unwrap_or(glyim_core::lint::LintLevel::Warn)
+        self.lints
+            .get(&id)
+            .copied()
+            .unwrap_or(glyim_core::lint::LintLevel::Warn)
     }
 
     /// Register the value type of a constant definition so `check_path` can
