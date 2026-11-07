@@ -36,9 +36,17 @@ pub enum HostOp {
     /// `remove(node)`.
     Remove { node: NodeId },
     /// `move_before(parent, child, before)` — keyed reorder (G11).
-    MoveBefore { parent: NodeId, child: NodeId, before: Option<NodeId> },
+    MoveBefore {
+        parent: NodeId,
+        child: NodeId,
+        before: Option<NodeId>,
+    },
     /// `listen(node, ev, handler_id)` — one-time at mount (§6.1 Event slot).
-    Listen { node: NodeId, event: String, handler_id: u32 },
+    Listen {
+        node: NodeId,
+        event: String,
+        handler_id: u32,
+    },
     /// `invalidate(class)` — one per patch, max class (G5).
     Invalidate { class: crate::schema::Invalidation },
     /// `instantiate(&BLUEPRINT)` — the bulk fast path (G1).
@@ -215,9 +223,7 @@ pub fn keyed_reconcile<T: PartialEq>(old: &[T], new: &[T]) -> ReorderPlan {
             None => insert.push(ni),
         }
     }
-    let remove: Vec<usize> = (0..old.len())
-        .filter(|oi| !keep_old.contains(oi))
-        .collect();
+    let remove: Vec<usize> = (0..old.len()).filter(|oi| !keep_old.contains(oi)).collect();
     // LIS over keep_old (values = old positions): rows already in relative
     // order stay put; the rest move.
     let lis = longest_increasing_subsequence(&keep_old);
@@ -291,10 +297,11 @@ mod tests {
         assert_eq!(h.set_text_calls(), 1);
         assert_eq!(h.text_of(n), Some(&"hi".to_string()));
         assert_eq!(h.prop_of(n, "class"), Some(&"a".to_string()));
-        assert!(h
-            .ops
-            .iter()
-            .any(|o| matches!(o, HostOp::Listen { handler_id: 42, .. })));
+        assert!(
+            h.ops
+                .iter()
+                .any(|o| matches!(o, HostOp::Listen { handler_id: 42, .. }))
+        );
     }
 
     /// §7.9: echo suppression — a bind patch that writes the value the host
