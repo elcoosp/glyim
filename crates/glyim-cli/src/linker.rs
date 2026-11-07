@@ -300,7 +300,6 @@ pub fn annotate_link_error_if_stale_runtime(err: String) -> String {
     annotate_link_error_if_stale_runtime_with(err, path.as_deref())
 }
 
-
 /// Link using structured `LinkArgs` (plan §18.2): emits `-L`/`-l`/objects
 /// before appending any user-supplied flags.
 pub fn link_with_args(
@@ -610,9 +609,17 @@ fn gcc_triple_matches_host(triple: &str) -> bool {
 /// Whether `triple` names an ELF platform (Linux/BSD/Solaris-style). Only
 /// ELF toolchains default to PIE executables, so only those need `-no-pie`.
 fn is_elf_triple(triple: &str) -> bool {
-    ["linux", "freebsd", "netbsd", "openbsd", "dragonfly", "solaris", "elf"]
-        .iter()
-        .any(|marker| triple.contains(marker))
+    [
+        "linux",
+        "freebsd",
+        "netbsd",
+        "openbsd",
+        "dragonfly",
+        "solaris",
+        "elf",
+    ]
+    .iter()
+    .any(|marker| triple.contains(marker))
 }
 
 /// Tries to find a suitable C linker on Unix-like systems.
@@ -898,12 +905,13 @@ mod tests {
             "thin_lto_link must error with no bitcode inputs"
         );
         assert!(
-            result.unwrap_err().contains("at least one per-CGU bitcode input"),
+            result
+                .unwrap_err()
+                .contains("at least one per-CGU bitcode input"),
             "error should name the empty-input condition"
         );
     }
 }
-
 
 #[cfg(test)]
 mod annotate_tests {
@@ -945,21 +953,18 @@ mod annotate_tests {
         let err = "Undefined symbols for architecture arm64:\n  \
                    \"_glyim_alloc\", referenced from:\n      __glyim_fn_1\n"
             .to_string();
-        let out = annotate_link_error_if_stale_runtime_with(
-            err,
-            Some(std::path::Path::new("/x.a")),
-        );
+        let out =
+            annotate_link_error_if_stale_runtime_with(err, Some(std::path::Path::new("/x.a")));
         assert!(out.contains("cargo build -p glyim-runtime"));
     }
 
     #[test]
     fn msvc_lnk2019_also_matches() {
-        let err = "error LNK2019: unresolved external symbol glyim_panic referenced in function main"
-            .to_string();
-        let out = annotate_link_error_if_stale_runtime_with(
-            err,
-            Some(std::path::Path::new("/x.lib")),
-        );
+        let err =
+            "error LNK2019: unresolved external symbol glyim_panic referenced in function main"
+                .to_string();
+        let out =
+            annotate_link_error_if_stale_runtime_with(err, Some(std::path::Path::new("/x.lib")));
         assert!(out.contains("cargo build -p glyim-runtime"));
     }
 }
