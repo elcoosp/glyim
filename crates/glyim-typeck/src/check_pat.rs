@@ -21,8 +21,12 @@ impl<'a> FnCtxt<'a> {
         out: &mut std::collections::HashSet<Name>,
     ) {
         match &pats[pat_id] {
-            Pat::Binding { name, subpattern, .. }
-            | Pat::RefBinding { name, subpattern, .. } => {
+            Pat::Binding {
+                name, subpattern, ..
+            }
+            | Pat::RefBinding {
+                name, subpattern, ..
+            } => {
                 out.insert(*name);
                 if let Some(sub) = subpattern {
                     Self::collect_binding_names(pats, *sub, out);
@@ -81,13 +85,13 @@ impl<'a> FnCtxt<'a> {
                 thir::LocalVarId::from_raw(id.to_raw())
             }
             Pat::RefBinding {
-                name, ref_mutability, ..
+                name,
+                ref_mutability,
+                ..
             } => {
-                let ref_ty = self.ctx.mk_ref(
-                    glyim_type::Region::Erased,
-                    ty,
-                    *ref_mutability,
-                );
+                let ref_ty = self
+                    .ctx
+                    .mk_ref(glyim_type::Region::Erased, ty, *ref_mutability);
                 let id = self.env.add_binding(*name, ref_ty, mutability);
                 thir::LocalVarId::from_raw(id.to_raw())
             }
@@ -153,7 +157,9 @@ impl<'a> FnCtxt<'a> {
         // types and binds `x: Param(T)` — then the arm body (`x` as an
         // `i32`) fails "mismatched types: T vs i32". Resolving at entry
         // gives every arm the concrete `Option<i32>`.
-        let expected_ty = self.infer.resolve_ty_shallow_preserve_int(self.ctx, expected_ty);
+        let expected_ty = self
+            .infer
+            .resolve_ty_shallow_preserve_int(self.ctx, expected_ty);
         let pat = &self.body.pats[pat_id];
         match pat {
             Pat::Wild => thir::Pattern::wild(expected_ty, span),
@@ -169,11 +175,9 @@ impl<'a> FnCtxt<'a> {
                 // arm the `ref` keyword never made it to typeck, so `x`
                 // was bound as `T` and `*x` failed with
                 // "cannot dereference non-pointer type".
-                let ref_ty = self.ctx.mk_ref(
-                    glyim_type::Region::Erased,
-                    expected_ty,
-                    *ref_mutability,
-                );
+                let ref_ty =
+                    self.ctx
+                        .mk_ref(glyim_type::Region::Erased, expected_ty, *ref_mutability);
                 let ctx_name = self.remap_name(*name);
                 let id = self.env.add_binding(*name, ref_ty, *mutability);
                 if ctx_name != *name {
@@ -455,10 +459,7 @@ impl<'a> FnCtxt<'a> {
                             // Remap HIR Name → TyCtx interner, then find that
                             // name's declared index for the field type.
                             let remapped = self.remap_name(*h_field_name);
-                            let di = field_names
-                                .iter()
-                                .position(|n| *n == remapped)
-                                .unwrap_or(i);
+                            let di = field_names.iter().position(|n| *n == remapped).unwrap_or(i);
                             (remapped, di)
                         } else {
                             // Tuple variant: positional binding, no source
@@ -467,9 +468,10 @@ impl<'a> FnCtxt<'a> {
                             // is only used by codegen-lower's name-based
                             // lookup for *struct* variants, so an
                             // unidentifiable placeholder here is harmless.
-                            let n = field_names.get(i).copied().unwrap_or_else(|| {
-                                self.ctx.resolver().intern(&format!("_{}", i))
-                            });
+                            let n = field_names
+                                .get(i)
+                                .copied()
+                                .unwrap_or_else(|| self.ctx.resolver().intern(&format!("_{}", i)));
                             (n, i)
                         };
                         // Plan unstub-5 P5: the formal field type (e.g. `T` for
