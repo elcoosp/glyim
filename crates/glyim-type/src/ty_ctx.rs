@@ -316,7 +316,9 @@ impl TyCtx {
                         entries
                             .iter()
                             .find(|(name, _)| *name == assoc_name)
-                            .map(|(_, ty)| self.subst_impl_params_into_assoc(*impl_sty, self_ty, *ty))
+                            .map(|(_, ty)| {
+                                self.subst_impl_params_into_assoc(*impl_sty, self_ty, *ty)
+                            })
                     })
             }
             _ => None,
