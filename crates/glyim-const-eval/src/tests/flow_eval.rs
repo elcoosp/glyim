@@ -23,7 +23,7 @@ fn dummy_span() -> Span {
 
 fn test_body() -> Body {
     Body {
-            unsafe_blocks: std::collections::HashSet::new(),
+        unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: IndexVec::new(),
         pats: IndexVec::new(),
