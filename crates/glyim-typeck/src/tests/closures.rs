@@ -81,7 +81,7 @@ fn closure_captures_enclosing_param() {
     });
 
     let body = Body {
-            unsafe_blocks: std::collections::HashSet::new(),
+        unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats,
@@ -194,7 +194,7 @@ fn move_closure_captures_by_value() {
     });
 
     let body = Body {
-            unsafe_blocks: std::collections::HashSet::new(),
+        unsafe_blocks: std::collections::HashSet::new(),
         owner: LocalDefId::from_raw(0),
         exprs: exprs.clone(),
         pats,
