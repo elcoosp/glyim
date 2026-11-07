@@ -539,8 +539,7 @@ impl<'a> FnCtxt<'a> {
                 // takes the real multi-iteration path without re-solving the
                 // trait. Mirrors `resolve_trait_method_fn`'s impl scan, scoped
                 // to the `Iterator` trait's `next` method.
-                let is_array_iterable =
-                    matches!(self.ctx.ty_kind(iter_ty), TyKind::Array(_, _));
+                let is_array_iterable = matches!(self.ctx.ty_kind(iter_ty), TyKind::Array(_, _));
                 let mut next_info = if is_array_iterable {
                     None
                 } else {
@@ -671,14 +670,14 @@ impl<'a> FnCtxt<'a> {
                     let ref_vec_elem_inner: Option<Ty> = match self.ctx.ty_kind(iter_ty) {
                         TyKind::Ref(_, inner, glyim_core::primitives::Mutability::Not) => {
                             match self.ctx.ty_kind(*inner) {
-                                TyKind::Adt(id, substs) if id.to_raw() == 1020 => self
-                                    .ctx
-                                    .substitution_args(*substs)
-                                    .first()
-                                    .and_then(|a| match a {
-                                        GenericArg::Ty(t) => Some(*t),
-                                        _ => None,
-                                    }),
+                                TyKind::Adt(id, substs) if id.to_raw() == 1020 => {
+                                    self.ctx.substitution_args(*substs).first().and_then(
+                                        |a| match a {
+                                            GenericArg::Ty(t) => Some(*t),
+                                            _ => None,
+                                        },
+                                    )
+                                }
                                 _ => None,
                             }
                         }
@@ -723,10 +722,8 @@ impl<'a> FnCtxt<'a> {
                     // iterable) `i32` rather than being skipped as
                     // "unresolved". Only `Infer` is resolved — a `Param` or
                     // `Projection` genuinely has no concrete answer yet.
-                    let resolved_iter_ty = if matches!(
-                        self.ctx.ty_kind(iter_ty),
-                        TyKind::Infer(_)
-                    ) {
+                    let resolved_iter_ty = if matches!(self.ctx.ty_kind(iter_ty), TyKind::Infer(_))
+                    {
                         self.infer.resolve_ty_shallow(self.ctx, iter_ty)
                     } else {
                         iter_ty
@@ -795,8 +792,7 @@ impl<'a> FnCtxt<'a> {
                     if known.is_none()
                         && next_info.is_some()
                         && !is_unresolved
-                        && (is_ref_to_deref_slice
-                            || (is_vec_by_value && into_iter_info.is_none()))
+                        && (is_ref_to_deref_slice || (is_vec_by_value && into_iter_info.is_none()))
                     {
                         next_info = None;
                     }
@@ -853,7 +849,8 @@ impl<'a> FnCtxt<'a> {
                                  slice, or range"
                             ),
                         };
-                        self.diagnostics.push(GlyimDiagnostic::type_error(span, msg));
+                        self.diagnostics
+                            .push(GlyimDiagnostic::type_error(span, msg));
                     }
                     known.unwrap_or_else(|| self.fresh_infer_ty())
                 };
@@ -1090,8 +1087,7 @@ impl<'a> FnCtxt<'a> {
                             // so the last segment is always the callee
                             // name regardless of path length.
                             let display = match &self.body.exprs[*func] {
-                                Expr::Path(p) if !p.segments.is_empty() => {
-                                    let last = p.segments.last().unwrap();
+                                Expr::Path(p) if let Some(last) = p.segments.last() => {
                                     self.ctx.name_str(last.name).to_string()
                                 }
                                 _ => format!("fn#{}", fn_id.to_raw()),
@@ -1102,13 +1098,15 @@ impl<'a> FnCtxt<'a> {
                                 "call to unsafe function `{}` outside of an `unsafe` block",
                                 display,
                             );
-                            match self.effective_lint_level(glyim_core::lint::LintId::UnsafeFnCall) {
+                            match self.effective_lint_level(glyim_core::lint::LintId::UnsafeFnCall)
+                            {
                                 glyim_core::lint::LintLevel::Allow => {}
                                 glyim_core::lint::LintLevel::Warn => {
                                     self.diagnostics.push(GlyimDiagnostic::warning(span, msg));
                                 }
                                 glyim_core::lint::LintLevel::Deny => {
-                                    self.diagnostics.push(GlyimDiagnostic::type_error(span, msg));
+                                    self.diagnostics
+                                        .push(GlyimDiagnostic::type_error(span, msg));
                                 }
                             }
                         }
@@ -1659,7 +1657,9 @@ impl<'a> FnCtxt<'a> {
                 // which we (a) hand to closure-literal args so their own
                 // params are seeded from the expected `fn(..)` signature, and
                 // (b) unify each arg against after checking it.
-                let has_closure_arg = args.iter().any(|&a| matches!(&self.body.exprs[a], Expr::Closure { .. }));
+                let has_closure_arg = args
+                    .iter()
+                    .any(|&a| matches!(&self.body.exprs[a], Expr::Closure { .. }));
                 let (ret_ty, method_formals, method_own_generics, dispatch) =
                     self.resolve_method_call(recv_ty, *method, span, has_closure_arg);
                 let ret_ty = self.extract_return_ty(ret_ty, span);
@@ -1726,7 +1726,6 @@ impl<'a> FnCtxt<'a> {
                 }
                 let thir_expr = match dispatch {
                     Some(MethodDispatch::Static(fn_def_id)) => {
-
                         // Static dispatch: call the concrete impl function
                         // directly. `self` is the first argument (the
                         // receiver); the remaining `arg_exprs` are the
@@ -1779,10 +1778,7 @@ impl<'a> FnCtxt<'a> {
                                     if f == recv_expr.ty {
                                         return true;
                                     }
-                                    match (
-                                        self.ctx.ty_kind(f),
-                                        self.ctx.ty_kind(recv_expr.ty),
-                                    ) {
+                                    match (self.ctx.ty_kind(f), self.ctx.ty_kind(recv_expr.ty)) {
                                         (
                                             TyKind::Ref(
                                                 _,
@@ -1865,8 +1861,7 @@ impl<'a> FnCtxt<'a> {
                         // the definition is `FnDef(362, [Option<i32>])` — the
                         // link fails on an undefined `__glyim_fn_362`.
                         let impl_part: Vec<GenericArg> = {
-                            let resolved_recv_ty =
-                                self.infer.resolve_ty_shallow(self.ctx, recv_ty);
+                            let resolved_recv_ty = self.infer.resolve_ty_shallow(self.ctx, recv_ty);
                             let mut recv_inner = resolved_recv_ty;
                             for _ in 0..8 {
                                 let inner = match self.ctx.ty_kind(recv_inner) {
@@ -1922,7 +1917,7 @@ impl<'a> FnCtxt<'a> {
                                 })
                                 .collect()
                         } else {
-                            method_own_generics.iter().cloned().collect()
+                            method_own_generics.to_vec()
                         };
                         // Bind the method's own *fresh inference vars* (from
                         // `resolve_method_call`'s `method_own_generics`) to
@@ -1939,10 +1934,9 @@ impl<'a> FnCtxt<'a> {
                         // unbound Infer to ERROR) and the runtime store went
                         // through a null pointer — the `"3.14".parse::<f64>()`
                         // segfault.
-                        for (own, explicit) in
-                            method_own_generics.iter().zip(method_part.iter())
-                        {
-                            if let (GenericArg::Ty(own_ty), GenericArg::Ty(exp_ty)) = (own, explicit)
+                        for (own, explicit) in method_own_generics.iter().zip(method_part.iter()) {
+                            if let (GenericArg::Ty(own_ty), GenericArg::Ty(exp_ty)) =
+                                (own, explicit)
                             {
                                 if matches!(self.ctx.ty_kind(*own_ty), TyKind::Infer(_))
                                     && !matches!(self.ctx.ty_kind(*exp_ty), TyKind::Infer(_))
@@ -1996,9 +1990,9 @@ impl<'a> FnCtxt<'a> {
                             for (i, a) in method_own_generics.iter().enumerate() {
                                 let idx = (impl_part.len() + i) as u32;
                                 let resolved = match a {
-                                    GenericArg::Ty(t) => GenericArg::Ty(
-                                        self.infer.resolve_ty_shallow(self.ctx, *t),
-                                    ),
+                                    GenericArg::Ty(t) => {
+                                        GenericArg::Ty(self.infer.resolve_ty_shallow(self.ctx, *t))
+                                    }
                                     other => other.clone(),
                                 };
                                 m.insert(idx, resolved);
@@ -2033,9 +2027,9 @@ impl<'a> FnCtxt<'a> {
                         let method_part_resolved: Vec<GenericArg> = method_own_generics
                             .iter()
                             .map(|a| match a {
-                                GenericArg::Ty(t) => GenericArg::Ty(
-                                    self.infer.resolve_ty_shallow(self.ctx, *t),
-                                ),
+                                GenericArg::Ty(t) => {
+                                    GenericArg::Ty(self.infer.resolve_ty_shallow(self.ctx, *t))
+                                }
                                 other => other.clone(),
                             })
                             .collect();
@@ -3354,8 +3348,12 @@ impl<'a> FnCtxt<'a> {
         let target = id.as_str();
         let mut override_level: Option<glyim_core::lint::LintLevel> = None;
         for attr in &self.body_attrs {
-            if attr.is_inner { continue; }
-            if attr.path.len() != 1 { continue; }
+            if attr.is_inner {
+                continue;
+            }
+            if attr.path.len() != 1 {
+                continue;
+            }
             let name = self.ctx.name_str(attr.path[0]).to_string();
             let level = match name.as_str() {
                 "allow" => glyim_core::lint::LintLevel::Allow,
@@ -3409,96 +3407,95 @@ impl<'a> FnCtxt<'a> {
         tail: &Option<ExprId>,
         span: Span,
     ) -> (thir::Expr, Ty) {
-                // BLOCK-SCOPE-FIX: a block is a lexical scope. Without
-                // this, `let x = 5; { let x = 10; } x` resolved the
-                // trailing `x` to the inner binding (10, not 5) — a
-                // silent wrong-value bug. `LocalEnv::enter_scope` /
-                // `leave_scope` (see `env::tests::env_scoping_and_shadowing`)
-                // correctly unwind shadowed names; the block arm simply
-                // never invoked them.
-                self.env.enter_scope();
-                let mut thir_stmts = Vec::new();
-                for &stmt_id in stmts {
-                    // Statements are *not* expressions: routing them through
-                    // `check_expr` hits the `Expr::Let`/`Expr::Assign` arms
-                    // that return `thir::Expr::err`, corrupting any statement
-                    // nested inside a block (e.g. an `if` body). Use the shared
-                    // statement checker that produces proper `thir::Stmt`s.
-                    thir_stmts.push(self.check_stmt_to_thir(stmt_id, false));
-                }
-                if let Some(tail_id) = tail {
-                    // TAIL-ASSIGN-STMT: a block tail that is statement-shaped
-                    // (`let x = ..` or `p = ..`) is a *statement*, not a value
-                    // expression. `check_expr`'s `Expr::Assign` arm type-checks
-                    // both sides and then discards the assignment (it returns
-                    // `Literal(Unit)`, since THIR has no assignment-expression
-                    // node). That silently dropped `unsafe { *p = 7 }` and any
-                    // `{ x = y }` block tail. Route it through the statement
-                    // checker so the store survives; the block's value is `()`.
-                    if matches!(
-                        &self.body.exprs[*tail_id],
-                        Expr::Assign { .. } | Expr::Let { .. }
-                    ) {
-                        thir_stmts.push(self.check_stmt_to_thir(*tail_id, false));
-                        let unit = thir::Expr {
-                            kind: thir::ExprKind::Literal(thir::Literal::Unit),
-                            ty: Ty::UNIT,
-                            span,
-                        };
-                        let block_expr = thir::Expr {
-                            kind: thir::ExprKind::Block {
-                                stmts: thir_stmts,
-                                tail: Some(Box::new(unit)),
-                            },
-                            ty: Ty::UNIT,
-                            span,
-                        };
-                        self.env.leave_scope();
-                        return (block_expr, Ty::UNIT);
-                    }
-                    let (tail_expr, tail_ty) = self.check_expr(*tail_id);
-                    let block_expr = thir::Expr {
-                        kind: thir::ExprKind::Block {
-                            stmts: thir_stmts,
-                            tail: Some(Box::new(tail_expr)),
-                        },
-                        ty: tail_ty,
-                        span,
-                    };
-                    self.env.leave_scope();
-                    (block_expr, tail_ty)
-                } else {
-                    // A block with no tail whose *last statement* is a
-                    // divergent expression (`return` / `break`) has type `!`
-                    // (never), not `()`. Without this, an
-                    // `if cond { x } else { return y; }` unifies the `x`
-                    // arm's type against `()` and reports
-                    // "expected integer type, found ()" — exactly the shape
-                    // of `let digit: u32 = if .. { .. } else { return ..; };`
-                    // in net.g's `parse_u16_hex` / `parse_u16_dec`.
-                    let diverges = stmts
-                        .last()
-                        .map(|&sid| {
-                            matches!(
-                                &self.body.exprs[sid],
-                                Expr::Return { .. } | Expr::Break { .. }
-                            )
-                        })
-                        .unwrap_or(false);
-                    let ty = if diverges { Ty::NEVER } else { Ty::UNIT };
-                    let unit_expr = thir::Expr {
-                        kind: thir::ExprKind::Block {
-                            stmts: thir_stmts,
-                            tail: None,
-                        },
-                        ty,
-                        span,
-                    };
-                    self.env.leave_scope();
-                    (unit_expr, ty)
-                }
+        // BLOCK-SCOPE-FIX: a block is a lexical scope. Without
+        // this, `let x = 5; { let x = 10; } x` resolved the
+        // trailing `x` to the inner binding (10, not 5) — a
+        // silent wrong-value bug. `LocalEnv::enter_scope` /
+        // `leave_scope` (see `env::tests::env_scoping_and_shadowing`)
+        // correctly unwind shadowed names; the block arm simply
+        // never invoked them.
+        self.env.enter_scope();
+        let mut thir_stmts = Vec::new();
+        for &stmt_id in stmts {
+            // Statements are *not* expressions: routing them through
+            // `check_expr` hits the `Expr::Let`/`Expr::Assign` arms
+            // that return `thir::Expr::err`, corrupting any statement
+            // nested inside a block (e.g. an `if` body). Use the shared
+            // statement checker that produces proper `thir::Stmt`s.
+            thir_stmts.push(self.check_stmt_to_thir(stmt_id, false));
+        }
+        if let Some(tail_id) = tail {
+            // TAIL-ASSIGN-STMT: a block tail that is statement-shaped
+            // (`let x = ..` or `p = ..`) is a *statement*, not a value
+            // expression. `check_expr`'s `Expr::Assign` arm type-checks
+            // both sides and then discards the assignment (it returns
+            // `Literal(Unit)`, since THIR has no assignment-expression
+            // node). That silently dropped `unsafe { *p = 7 }` and any
+            // `{ x = y }` block tail. Route it through the statement
+            // checker so the store survives; the block's value is `()`.
+            if matches!(
+                &self.body.exprs[*tail_id],
+                Expr::Assign { .. } | Expr::Let { .. }
+            ) {
+                thir_stmts.push(self.check_stmt_to_thir(*tail_id, false));
+                let unit = thir::Expr {
+                    kind: thir::ExprKind::Literal(thir::Literal::Unit),
+                    ty: Ty::UNIT,
+                    span,
+                };
+                let block_expr = thir::Expr {
+                    kind: thir::ExprKind::Block {
+                        stmts: thir_stmts,
+                        tail: Some(Box::new(unit)),
+                    },
+                    ty: Ty::UNIT,
+                    span,
+                };
+                self.env.leave_scope();
+                return (block_expr, Ty::UNIT);
+            }
+            let (tail_expr, tail_ty) = self.check_expr(*tail_id);
+            let block_expr = thir::Expr {
+                kind: thir::ExprKind::Block {
+                    stmts: thir_stmts,
+                    tail: Some(Box::new(tail_expr)),
+                },
+                ty: tail_ty,
+                span,
+            };
+            self.env.leave_scope();
+            (block_expr, tail_ty)
+        } else {
+            // A block with no tail whose *last statement* is a
+            // divergent expression (`return` / `break`) has type `!`
+            // (never), not `()`. Without this, an
+            // `if cond { x } else { return y; }` unifies the `x`
+            // arm's type against `()` and reports
+            // "expected integer type, found ()" — exactly the shape
+            // of `let digit: u32 = if .. { .. } else { return ..; };`
+            // in net.g's `parse_u16_hex` / `parse_u16_dec`.
+            let diverges = stmts
+                .last()
+                .map(|&sid| {
+                    matches!(
+                        &self.body.exprs[sid],
+                        Expr::Return { .. } | Expr::Break { .. }
+                    )
+                })
+                .unwrap_or(false);
+            let ty = if diverges { Ty::NEVER } else { Ty::UNIT };
+            let unit_expr = thir::Expr {
+                kind: thir::ExprKind::Block {
+                    stmts: thir_stmts,
+                    tail: None,
+                },
+                ty,
+                span,
+            };
+            self.env.leave_scope();
+            (unit_expr, ty)
+        }
     }
-
 
     // Helper: substitute generic args in a type (simplified)
     fn substitute_type(&mut self, ty: Ty, substs: glyim_type::Substitution, _span: Span) -> Ty {
@@ -3527,10 +3524,9 @@ impl<'a> FnCtxt<'a> {
     /// every downstream compilation.
     fn ty_has_unresolved(&self, ty: Ty) -> bool {
         match self.ctx.ty_kind(ty) {
-            TyKind::Infer(_)
-            | TyKind::Param(_)
-            | TyKind::Bound(_, _)
-            | TyKind::Projection(_) => true,
+            TyKind::Infer(_) | TyKind::Param(_) | TyKind::Bound(_, _) | TyKind::Projection(_) => {
+                true
+            }
             TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) | TyKind::Slice(inner) => {
                 self.ty_has_unresolved(*inner)
             }
@@ -3740,10 +3736,9 @@ impl<'a> FnCtxt<'a> {
                         // existing fresh-infer-var shape; the caller's
                         // use-site unification will bind it to the intended
                         // target.
-                        let is_direct_copy = !matches!(
-                            self.ctx.ty_kind(step_ty),
-                            TyKind::Ref(_, _, _)
-                        ) && self.ctx.is_copy(step_ty);
+                        let is_direct_copy =
+                            !matches!(self.ctx.ty_kind(step_ty), TyKind::Ref(_, _, _))
+                                && self.ctx.is_copy(step_ty);
                         let out_ty = if is_direct_copy {
                             step_ty
                         } else {
@@ -3797,8 +3792,7 @@ impl<'a> FnCtxt<'a> {
                             TyKind::Ref(_, inner, _) => *inner,
                             _ => step_ty,
                         };
-                        let resolved_step =
-                            self.infer.resolve_ty_shallow(self.ctx, peeled_step);
+                        let resolved_step = self.infer.resolve_ty_shallow(self.ctx, peeled_step);
                         let int_fn_name: Option<&str> = match self.ctx.ty_kind(resolved_step) {
                             TyKind::Int(glyim_core::primitives::IntTy::I32) => {
                                 Some("i32_to_string")
@@ -3829,9 +3823,7 @@ impl<'a> FnCtxt<'a> {
                                 self.current_module,
                             );
                             let resolved = resolver.resolve_path(&core_path);
-                            if let Some((local, _vis)) =
-                                resolved.values.or(resolved.types)
-                            {
+                            if let Some((local, _vis)) = resolved.values.or(resolved.types) {
                                 let fn_id = FnDefId::from_raw(local.to_raw());
                                 return Some((out_ty, fn_id));
                             }
@@ -3911,8 +3903,12 @@ impl<'a> FnCtxt<'a> {
         // already-concrete types. Without this resolve, the matches!
         // below fails for Infer(Int(_)) and the primitive lookup never runs.
         let resolved_step = self.infer.resolve_ty_shallow(self.ctx, step_ty);
-        if matches!(self.ctx.ty_kind(resolved_step), TyKind::Int(_) | TyKind::Uint(_)) {
-            if let Some((fn_id, sig)) = self.ctx.lookup_primitive_method(resolved_step, method_name) {
+        if matches!(
+            self.ctx.ty_kind(resolved_step),
+            TyKind::Int(_) | TyKind::Uint(_)
+        ) {
+            if let Some((fn_id, sig)) = self.ctx.lookup_primitive_method(resolved_step, method_name)
+            {
                 let output = sig.output;
                 return Some((output, fn_id));
             }
@@ -4182,276 +4178,320 @@ impl<'a> FnCtxt<'a> {
         ];
 
         let recv_is_param = matches!(self.ctx.ty_kind(recv_ty), TyKind::Param(_));
-        let collect_for = |this: &mut Self, step_ty: Ty| -> Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>)> {
-            let mut found: Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>)> = Vec::new();
-            for (_id, item) in this.hir.items.iter_enumerated() {
-                if let glyim_hir::ItemKind::Impl(impl_item) = &item.kind {
-                    // Instantiate the impl's generic params with *fresh
-                    // inference variables* (not rigid `Param`s) so a generic
-                    // self type like `impl<T> [T]` unifies with a concrete
-                    // receiver `[u8]` (binding `T := u8`). `build_param_tys`
-                    // yields `TyKind::Param`, which is rigid and cannot unify
-                    // with a concrete type — that was why `impl str` /
-                    // `impl<T> [T]` methods (`as_ptr`, `len`, …) never matched
-                    // their primitive receivers.
-                    let mut param_map: HashMap<Name, Ty> = HashMap::new();
-                    for (i, gp) in impl_item.generic_params.iter().enumerate() {
-                        let var = this.infer.new_ty_var(this.ctx);
-                        let ty = this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
-                        // Index and name both key the map: `resolve_type_ref`
-                        // looks up by `Name`.
-                        let _ = i;
-                        param_map.insert(gp.name, ty);
-                    }
-                    let impl_self_ty = crate::tyconv::resolve_type_ref(
-                        this.ctx,
-                        this.infer,
-                        this.def_map,
-                        this.diagnostics,
-                        &impl_item.self_ty,
-                        &param_map,
-                        span,
-                    );
-                    // Plan unstub-5 P5 (generic-body monomorphization): when the
-                    // receiver is a *type parameter* (`f: F`, `&F`, `&mut F`), a
-                    // concrete `impl Trait for AddOne`'s `Self` can never unify
-                    // with the rigid param `F`. The hard `unify(Param, Adt)`
-                    // below would emit a spurious `F vs Adt` error. Skip
-                    // concrete-impl matching for generic receivers and let the
-                    // generic-receiver fallback (lower in this fn) resolve the
-                    // method from the bound trait's HIR, so `f.poll()` on a
-                    // generic `F: MyFuture` type-checks instead of erroring.
-                    if recv_is_param {
-                        continue;
-                    }
-                    // Script 110/129: skip the slice impl (`impl<T> [T]`) and
-                    // the builtin String impl (which resolves to AdtId 1050)
-                    // when the receiver's *underlying* type is the `str`
-                    // primitive — both bare `str` and `&str` (`&str` is
-                    // `Ref(_, String, _)`). Otherwise every `s.len()` on a
-                    // string literal reports an ambiguity between `str::len`
-                    // and `<[T]>::len` / `String::len`.
-                    //
-                    // The `impl String` case is a bug in unify: it should not
-                    // unify `Adt(1050)` (the builtin String struct) against
-                    // `TyKind::String` (the str primitive). This skip is a
-                    // targeted workaround at the candidate-collection site.
-                    // Script 208: also match `TyKind::Adt(1050, _)` (the
-                    // builtin `String` struct), not just `TyKind::String`
-                    // (the str primitive). `impl String { fn len }` in
-                    // string.g registers against Adt(1050), and the
-                    // unrelated `impl str { fn len }` in str.g unifies
-                    // against it too (unify treats the two as compatible);
-                    // without this the receiver `String` produced
-                    // "ambiguous method `len` found in multiple impls for
-                    // type `Adt1050`". Cover references to either form.
-                    let step_is_str_like = match this.ctx.ty_kind(step_ty) {
-                        TyKind::String => true,
-                        TyKind::Adt(id, _) if id.to_raw() == 1050 => true,
-                        TyKind::Ref(_, inner, _) => match this.ctx.ty_kind(*inner) {
-                            TyKind::String => true,
-                            TyKind::Adt(id, _) if id.to_raw() == 1050 => true,
-                            _ => false,
-                        },
-                        _ => false,
-                    };
-                    if step_is_str_like {
-                        let is_slice_like = matches!(
-                            impl_item.self_ty,
-                            glyim_hir::TypeRef::Slice(_) | glyim_hir::TypeRef::Array { .. }
+        let collect_for =
+            |this: &mut Self,
+             step_ty: Ty|
+             -> Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>)> {
+                let mut found: Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>)> =
+                    Vec::new();
+                for (_id, item) in this.hir.items.iter_enumerated() {
+                    if let glyim_hir::ItemKind::Impl(impl_item) = &item.kind {
+                        // Instantiate the impl's generic params with *fresh
+                        // inference variables* (not rigid `Param`s) so a generic
+                        // self type like `impl<T> [T]` unifies with a concrete
+                        // receiver `[u8]` (binding `T := u8`). `build_param_tys`
+                        // yields `TyKind::Param`, which is rigid and cannot unify
+                        // with a concrete type — that was why `impl str` /
+                        // `impl<T> [T]` methods (`as_ptr`, `len`, …) never matched
+                        // their primitive receivers.
+                        let mut param_map: HashMap<Name, Ty> = HashMap::new();
+                        for (i, gp) in impl_item.generic_params.iter().enumerate() {
+                            let var = this.infer.new_ty_var(this.ctx);
+                            let ty = this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
+                            // Index and name both key the map: `resolve_type_ref`
+                            // looks up by `Name`.
+                            let _ = i;
+                            param_map.insert(gp.name, ty);
+                        }
+                        let impl_self_ty = crate::tyconv::resolve_type_ref(
+                            this.ctx,
+                            this.infer,
+                            this.def_map,
+                            this.diagnostics,
+                            &impl_item.self_ty,
+                            &param_map,
+                            span,
                         );
-                        let is_string_adt = matches!(
-                            this.ctx.ty_kind(impl_self_ty),
-                            TyKind::Adt(id, _) if id.to_raw() == 1050
-                        );
-                        if is_slice_like || is_string_adt {
+                        // Plan unstub-5 P5 (generic-body monomorphization): when the
+                        // receiver is a *type parameter* (`f: F`, `&F`, `&mut F`), a
+                        // concrete `impl Trait for AddOne`'s `Self` can never unify
+                        // with the rigid param `F`. The hard `unify(Param, Adt)`
+                        // below would emit a spurious `F vs Adt` error. Skip
+                        // concrete-impl matching for generic receivers and let the
+                        // generic-receiver fallback (lower in this fn) resolve the
+                        // method from the bound trait's HIR, so `f.poll()` on a
+                        // generic `F: MyFuture` type-checks instead of erroring.
+                        if recv_is_param {
                             continue;
                         }
-                    }
-                    // Probe whether this impl's `Self` type unifies with the
-                    // receiver *without* committing side effects (a non-matching
-                    // candidate must not emit a spurious "mismatched types"
-                    // diagnostic — only the ultimately-selected method may).
-                    // Snapshot the inference table and the diagnostics buffer;
-                    // roll both back if the probe fails.
-                    let inf_snap = this.infer.snapshot();
-                    let diag_len = this.diagnostics.len();
-                    let matches = this.unify(step_ty, impl_self_ty, span);
-                    if !matches {
-                        this.infer.rollback_to(inf_snap);
-                        this.diagnostics.truncate(diag_len);
-                        continue;
-                    }
-                    // Track whether this impl actually contributed a
-                    // candidate. `unify(step_ty, impl_self_ty)` above binds
-                    // side effects (e.g. `impl<T> Option<Option<T>>`'s
-                    // `unify(Adt(1010, [X]), Adt(1010, [Adt(1010, [T])]))`
-                    // binds `X := Adt(1010, [T])`). If the impl has no
-                    // method of the requested name (`flatten` when we asked
-                    // for `unwrap`), the loop pushes nothing — but the
-                    // binding would otherwise persist, orphaning X's real
-                    // payload type and later surfacing as
-                    // `Adt1010<?ty> vs i32`. Roll back unless a candidate
-                    // is actually pushed.
-                    let pushed_before = found.len();
-                    for method in &impl_item.methods {
-                        if method.name == method_name {
-                            // Script 317: `param_map` currently holds only the
-                            // impl's generic params (e.g. `T` from `impl<T>`).
-                            // A method with its OWN generic params
-                            // (`fn map<U>(self, f: fn(T) -> U) -> Option<U>`)
-                            // needs those in scope too — otherwise `U` in the
-                            // return type fell through to "unresolved type U".
-                            //
-                            // Build a per-method param map: impl generics
-                            // (already fresh inference vars from the caller's
-                            // setup) plus method generics as their own fresh
-                            // vars. The `U` here is rigid in the method
-                            // signature, but a fresh var is fine — the return
-                            // type is unified against the call's expected
-                            // return, which pins `U` at the call site.
-                            let mut method_pm = param_map.clone();
-                            for (i, gp) in method.generic_params.iter().enumerate() {
-                                let _ = i;
-                                let v = this.infer.new_ty_var(this.ctx);
-                                let ty = this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)));
-                                method_pm.insert(gp.name, ty);
+                        // Script 110/129: skip the slice impl (`impl<T> [T]`) and
+                        // the builtin String impl (which resolves to AdtId 1050)
+                        // when the receiver's *underlying* type is the `str`
+                        // primitive — both bare `str` and `&str` (`&str` is
+                        // `Ref(_, String, _)`). Otherwise every `s.len()` on a
+                        // string literal reports an ambiguity between `str::len`
+                        // and `<[T]>::len` / `String::len`.
+                        //
+                        // The `impl String` case is a bug in unify: it should not
+                        // unify `Adt(1050)` (the builtin String struct) against
+                        // `TyKind::String` (the str primitive). This skip is a
+                        // targeted workaround at the candidate-collection site.
+                        // Script 208: also match `TyKind::Adt(1050, _)` (the
+                        // builtin `String` struct), not just `TyKind::String`
+                        // (the str primitive). `impl String { fn len }` in
+                        // string.g registers against Adt(1050), and the
+                        // unrelated `impl str { fn len }` in str.g unifies
+                        // against it too (unify treats the two as compatible);
+                        // without this the receiver `String` produced
+                        // "ambiguous method `len` found in multiple impls for
+                        // type `Adt1050`". Cover references to either form.
+                        let step_is_str_like = match this.ctx.ty_kind(step_ty) {
+                            TyKind::String => true,
+                            TyKind::Adt(id, _) if id.to_raw() == 1050 => true,
+                            TyKind::Ref(_, inner, _) => match this.ctx.ty_kind(*inner) {
+                                TyKind::String => true,
+                                TyKind::Adt(id, _) if id.to_raw() == 1050 => true,
+                                _ => false,
+                            },
+                            _ => false,
+                        };
+                        if step_is_str_like {
+                            let is_slice_like = matches!(
+                                impl_item.self_ty,
+                                glyim_hir::TypeRef::Slice(_) | glyim_hir::TypeRef::Array { .. }
+                            );
+                            let is_string_adt = matches!(
+                                this.ctx.ty_kind(impl_self_ty),
+                                TyKind::Adt(id, _) if id.to_raw() == 1050
+                            );
+                            if is_slice_like || is_string_adt {
+                                continue;
                             }
-                            let return_ty = if let Some(return_ty_ref) = &method.return_ty {
-                                crate::tyconv::resolve_type_ref(
-                                    this.ctx,
-                                    this.infer,
-                                    this.def_map,
-                                    this.diagnostics,
-                                    return_ty_ref,
-                                    &method_pm,
-                                    span,
-                                )
-                            } else {
-                                Ty::UNIT
-                            };
-                            // Resolve the impl method's `FnDefId` from
-                            // `body_owner_map` (populated by the typeck pass as
-                            // it walks impl items). If this call site is checked
-                            // *before* the impl item (e.g. `main` calling
-                            // `f.poll()` where `f`'s `impl Future` is
-                            // desugar-generated and appears later in the item
-                            // list), `body_owner_map` misses — `hir.body_owners`
-                            // is NOT a valid substitute because desugar bodies
-                            // inherit their original owner id. Route through
-                            // `Virtual(trait_id)` instead: monomorphization's
-                            // devirtualizer consults the impl-method dispatch
-                            // table (`TyCtx::impl_method_fns`), populated for
-                            // *every* impl — including desugar-generated ones —
-                            // by the time mono runs.
-                            let fn_def_id: Option<FnDefId> = method.body.and_then(|bid| {
-                                this.body_owner_map
-                                    .get(&bid)
-                                    .copied()
-                                    .map(|local| FnDefId::from_raw(local.to_raw()))
-                            });
-                            let dispatch = fn_def_id.map(MethodDispatch::Static).or_else(|| {
-                                // Desugar-generated or not-yet-walked body: use
-                                // the impl's trait identity so mono can
-                                // devirtualize against the concrete receiver.
-                                impl_item
-                                    .trait_ref
-                                    .as_ref()
-                                    .and_then(|tp| {
-                                        crate::tyconv::resolve_path_to_trait_def_id(
-                                            this.def_map,
-                                            this.ctx,
-                                            tp,
-                                            span,
-                                        )
-                                    })
-                                    .map(MethodDispatch::Virtual)
-                            });
-                            if dbg_flags::cand_push() {
-                                let mn = this.ctx.name_str(method_name).to_string();
-                                if mn == "len" {
-                                    let step_kind = format!("{:?}", this.ctx.ty_kind(step_ty));
-                                    let self_kind = format!("{:?}", this.ctx.ty_kind(impl_self_ty));
-                                    let hir_kind = format!("{:?}", impl_item.self_ty);
-                                    eprintln!(
-                                        "[CAND] method={} step_ty={} hir_self={} resolved={}",
-                                        mn, step_kind, hir_kind, self_kind
-                                    );
+                        }
+                        // Probe whether this impl's `Self` type unifies with the
+                        // receiver *without* committing side effects (a non-matching
+                        // candidate must not emit a spurious "mismatched types"
+                        // diagnostic — only the ultimately-selected method may).
+                        // Snapshot the inference table and the diagnostics buffer;
+                        // roll both back if the probe fails.
+                        let inf_snap = this.infer.snapshot();
+                        let diag_len = this.diagnostics.len();
+                        let matches = this.unify(step_ty, impl_self_ty, span);
+                        if !matches {
+                            this.infer.rollback_to(inf_snap);
+                            this.diagnostics.truncate(diag_len);
+                            continue;
+                        }
+                        // Track whether this impl actually contributed a
+                        // candidate. `unify(step_ty, impl_self_ty)` above binds
+                        // side effects (e.g. `impl<T> Option<Option<T>>`'s
+                        // `unify(Adt(1010, [X]), Adt(1010, [Adt(1010, [T])]))`
+                        // binds `X := Adt(1010, [T])`). If the impl has no
+                        // method of the requested name (`flatten` when we asked
+                        // for `unwrap`), the loop pushes nothing — but the
+                        // binding would otherwise persist, orphaning X's real
+                        // payload type and later surfacing as
+                        // `Adt1010<?ty> vs i32`. Roll back unless a candidate
+                        // is actually pushed.
+                        let pushed_before = found.len();
+                        for method in &impl_item.methods {
+                            if method.name == method_name {
+                                // Script 317: `param_map` currently holds only the
+                                // impl's generic params (e.g. `T` from `impl<T>`).
+                                // A method with its OWN generic params
+                                // (`fn map<U>(self, f: fn(T) -> U) -> Option<U>`)
+                                // needs those in scope too — otherwise `U` in the
+                                // return type fell through to "unresolved type U".
+                                //
+                                // Build a per-method param map: impl generics
+                                // (already fresh inference vars from the caller's
+                                // setup) plus method generics as their own fresh
+                                // vars. The `U` here is rigid in the method
+                                // signature, but a fresh var is fine — the return
+                                // type is unified against the call's expected
+                                // return, which pins `U` at the call site.
+                                let mut method_pm = param_map.clone();
+                                for (i, gp) in method.generic_params.iter().enumerate() {
+                                    let _ = i;
+                                    let v = this.infer.new_ty_var(this.ctx);
+                                    let ty = this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)));
+                                    method_pm.insert(gp.name, ty);
                                 }
-                            }
-                            // (a) Formals for closure seeding.
-                            // (b) Method's OWN generic args — appended
-                            //     to the call's `substs` so codegen sees
-                            //     a fully-substituted sig. The registered
-                            //     sig's generic params are
-                            //     [impl generics..., method generics...];
-                            //     the call site carries the receiver's
-                            //     args only, so without this the method's
-                            //     `Param(1)` (e.g. `U` on `Option::map`)
-                            //     is never substituted and codegen hits
-                            //     `UnknownType` on the closure's ABI.
-                            let formal_tys: Vec<Ty> = if need_formals {
-                                let self_name = this.ctx.resolver().intern("self");
-                                let skip = if method.params.first().map(|pp| pp.name == self_name).unwrap_or(false) { 1 } else { 0 };
-                                // Resolve each `method_pm` value through the
-                                // inference table before building formals.
-                                // The impl's `T` is bound (by the candidate
-                                // unify above) to the receiver's payload,
-                                // but `method_pm["T"]` still holds the raw
-                                // `Infer` var. Seeding a closure param with
-                                // that raw var makes the closure body's
-                                // `s.method()` dispatch against an
-                                // unresolved var — `no method found`
-                                // (thread.g's `Option<&String>.map(|s|
-                                // s.as_str())`). Resolving first gives the
-                                // closure `s: &String` (concrete), so its
-                                // methods resolve.
-                                let resolved_pm: std::collections::HashMap<Name, Ty> = method_pm
+                                let return_ty = if let Some(return_ty_ref) = &method.return_ty {
+                                    crate::tyconv::resolve_type_ref(
+                                        this.ctx,
+                                        this.infer,
+                                        this.def_map,
+                                        this.diagnostics,
+                                        return_ty_ref,
+                                        &method_pm,
+                                        span,
+                                    )
+                                } else {
+                                    Ty::UNIT
+                                };
+                                // Resolve the impl method's `FnDefId` from
+                                // `body_owner_map` (populated by the typeck pass as
+                                // it walks impl items). If this call site is checked
+                                // *before* the impl item (e.g. `main` calling
+                                // `f.poll()` where `f`'s `impl Future` is
+                                // desugar-generated and appears later in the item
+                                // list), `body_owner_map` misses — `hir.body_owners`
+                                // is NOT a valid substitute because desugar bodies
+                                // inherit their original owner id. Route through
+                                // `Virtual(trait_id)` instead: monomorphization's
+                                // devirtualizer consults the impl-method dispatch
+                                // table (`TyCtx::impl_method_fns`), populated for
+                                // *every* impl — including desugar-generated ones —
+                                // by the time mono runs.
+                                let fn_def_id: Option<FnDefId> = method.body.and_then(|bid| {
+                                    this.body_owner_map
+                                        .get(&bid)
+                                        .copied()
+                                        .map(|local| FnDefId::from_raw(local.to_raw()))
+                                });
+                                let dispatch =
+                                    fn_def_id.map(MethodDispatch::Static).or_else(|| {
+                                        // Desugar-generated or not-yet-walked body: use
+                                        // the impl's trait identity so mono can
+                                        // devirtualize against the concrete receiver.
+                                        impl_item
+                                            .trait_ref
+                                            .as_ref()
+                                            .and_then(|tp| {
+                                                crate::tyconv::resolve_path_to_trait_def_id(
+                                                    this.def_map,
+                                                    this.ctx,
+                                                    tp,
+                                                    span,
+                                                )
+                                            })
+                                            .map(MethodDispatch::Virtual)
+                                    });
+                                if dbg_flags::cand_push() {
+                                    let mn = this.ctx.name_str(method_name).to_string();
+                                    if mn == "len" {
+                                        let step_kind = format!("{:?}", this.ctx.ty_kind(step_ty));
+                                        let self_kind =
+                                            format!("{:?}", this.ctx.ty_kind(impl_self_ty));
+                                        let hir_kind = format!("{:?}", impl_item.self_ty);
+                                        eprintln!(
+                                            "[CAND] method={} step_ty={} hir_self={} resolved={}",
+                                            mn, step_kind, hir_kind, self_kind
+                                        );
+                                    }
+                                }
+                                // (a) Formals for closure seeding.
+                                // (b) Method's OWN generic args — appended
+                                //     to the call's `substs` so codegen sees
+                                //     a fully-substituted sig. The registered
+                                //     sig's generic params are
+                                //     [impl generics..., method generics...];
+                                //     the call site carries the receiver's
+                                //     args only, so without this the method's
+                                //     `Param(1)` (e.g. `U` on `Option::map`)
+                                //     is never substituted and codegen hits
+                                //     `UnknownType` on the closure's ABI.
+                                let formal_tys: Vec<Ty> = if need_formals {
+                                    let self_name = this.ctx.resolver().intern("self");
+                                    let skip = if method
+                                        .params
+                                        .first()
+                                        .map(|pp| pp.name == self_name)
+                                        .unwrap_or(false)
+                                    {
+                                        1
+                                    } else {
+                                        0
+                                    };
+                                    // Resolve each `method_pm` value through the
+                                    // inference table before building formals.
+                                    // The impl's `T` is bound (by the candidate
+                                    // unify above) to the receiver's payload,
+                                    // but `method_pm["T"]` still holds the raw
+                                    // `Infer` var. Seeding a closure param with
+                                    // that raw var makes the closure body's
+                                    // `s.method()` dispatch against an
+                                    // unresolved var — `no method found`
+                                    // (thread.g's `Option<&String>.map(|s|
+                                    // s.as_str())`). Resolving first gives the
+                                    // closure `s: &String` (concrete), so its
+                                    // methods resolve.
+                                    let resolved_pm: std::collections::HashMap<Name, Ty> =
+                                        method_pm
+                                            .iter()
+                                            .map(|(n, t)| {
+                                                (*n, this.infer.resolve_ty_shallow(this.ctx, *t))
+                                            })
+                                            .collect();
+                                    method
+                                        .params
+                                        .iter()
+                                        .skip(skip)
+                                        .map(|pp| match &pp.ty {
+                                            Some(tr) => {
+                                                let t = crate::tyconv::resolve_type_ref(
+                                                    this.ctx,
+                                                    this.infer,
+                                                    this.def_map,
+                                                    this.diagnostics,
+                                                    tr,
+                                                    &resolved_pm,
+                                                    span,
+                                                );
+                                                if t == Ty::ERROR {
+                                                    let v = this.infer.new_ty_var(this.ctx);
+                                                    this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)))
+                                                } else {
+                                                    t
+                                                }
+                                            }
+                                            None => {
+                                                let v = this.infer.new_ty_var(this.ctx);
+                                                this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)))
+                                            }
+                                        })
+                                        .collect()
+                                } else {
+                                    Vec::new()
+                                };
+                                let method_own_generics: Vec<GenericArg> = method
+                                    .generic_params
                                     .iter()
-                                    .map(|(n, t)| {
-                                        (*n, this.infer.resolve_ty_shallow(this.ctx, *t))
+                                    .map(|gp| {
+                                        method_pm
+                                            .get(&gp.name)
+                                            .copied()
+                                            .map(GenericArg::Ty)
+                                            .unwrap_or(GenericArg::Ty(Ty::ERROR))
                                     })
                                     .collect();
-                                method.params.iter().skip(skip).map(|pp| match &pp.ty {
-                                    Some(tr) => {
-                                        let t = crate::tyconv::resolve_type_ref(
-                                            this.ctx, this.infer, this.def_map, this.diagnostics,
-                                            tr, &resolved_pm, span,
-                                        );
-                                        if t == Ty::ERROR { let v = this.infer.new_ty_var(this.ctx); this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v))) } else { t }
-                                    }
-                                    None => { let v = this.infer.new_ty_var(this.ctx); this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v))) }
-                                }).collect()
-                            } else { Vec::new() };
-                            let method_own_generics: Vec<GenericArg> = method
-                                .generic_params
-                                .iter()
-                                .map(|gp| {
-                                    method_pm.get(&gp.name).copied()
-                                        .map(GenericArg::Ty)
-                                        .unwrap_or(GenericArg::Ty(Ty::ERROR))
-                                })
-                                .collect();
-                            found.push((impl_self_ty, return_ty, formal_tys, method_own_generics, dispatch));
+                                found.push((
+                                    impl_self_ty,
+                                    return_ty,
+                                    formal_tys,
+                                    method_own_generics,
+                                    dispatch,
+                                ));
+                            }
+                        }
+                        // If this impl matched the receiver's self-type but had
+                        // no method of the requested name, discard the unify
+                        // bindings it installed — otherwise they leak. Every
+                        // `impl<T> Option<T>` visited for a call to a name it
+                        // doesn't define would otherwise leave
+                        // `X := <that impl's T>` behind (e.g.
+                        // `impl<T> Option<Option<T>>` visited for `.unwrap()`
+                        // binds the receiver's payload var to a nested Option),
+                        // orphaning the real payload type.
+                        if found.len() == pushed_before {
+                            this.infer.rollback_to(inf_snap);
+                            this.diagnostics.truncate(diag_len);
                         }
                     }
-                    // If this impl matched the receiver's self-type but had
-                    // no method of the requested name, discard the unify
-                    // bindings it installed — otherwise they leak. Every
-                    // `impl<T> Option<T>` visited for a call to a name it
-                    // doesn't define would otherwise leave
-                    // `X := <that impl's T>` behind (e.g.
-                    // `impl<T> Option<Option<T>>` visited for `.unwrap()`
-                    // binds the receiver's payload var to a nested Option),
-                    // orphaning the real payload type.
-                    if found.len() == pushed_before {
-                        this.infer.rollback_to(inf_snap);
-                        this.diagnostics.truncate(diag_len);
-                    }
                 }
-            }
-            found
-        };
+                found
+            };
 
         // For primitive slice/str receivers, consult the builtin method table
         // *before* the user-impl scan. `slice.g` / `str.g` declare `fn len` as
@@ -4540,12 +4580,18 @@ impl<'a> FnCtxt<'a> {
         {
             for &step in steps.iter().chain(autoref_steps.iter()) {
                 if let Some((out_ty, fn_id)) = self.try_builtin_method(step, method_name) {
-                    return (out_ty, Vec::new(), Vec::new(), Some(MethodDispatch::Builtin(fn_id)));
+                    return (
+                        out_ty,
+                        Vec::new(),
+                        Vec::new(),
+                        Some(MethodDispatch::Builtin(fn_id)),
+                    );
                 }
             }
         }
 
-        let mut candidates: Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>)> = Vec::new();
+        let mut candidates: Vec<(Ty, Ty, Vec<Ty>, Vec<GenericArg>, Option<MethodDispatch>)> =
+            Vec::new();
         for &step in steps.iter().chain(autoref_steps.iter()) {
             let found = collect_for(self, step);
             if !found.is_empty() {
@@ -4561,7 +4607,12 @@ impl<'a> FnCtxt<'a> {
             // applies to type-parameter receivers.
             for &step in steps.iter().chain(autoref_steps.iter()) {
                 if let Some((out_ty, fn_id)) = self.try_builtin_method(step, method_name) {
-                    return (out_ty, Vec::new(), Vec::new(), Some(MethodDispatch::Builtin(fn_id)));
+                    return (
+                        out_ty,
+                        Vec::new(),
+                        Vec::new(),
+                        Some(MethodDispatch::Builtin(fn_id)),
+                    );
                 }
             }
             // Concrete ADT receiver with `impl Trait for Self`: resolve inherited
@@ -4891,10 +4942,20 @@ impl<'a> FnCtxt<'a> {
             ));
             // Still return the first candidate's type so downstream typing is
             // not worse than before; the diagnostic is the real signal.
-            return (candidates[0].1, candidates[0].2.clone(), candidates[0].3.clone(), None);
+            return (
+                candidates[0].1,
+                candidates[0].2.clone(),
+                candidates[0].3.clone(),
+                None,
+            );
         }
 
-        (candidates[0].1, candidates[0].2.clone(), candidates[0].3.clone(), candidates[0].4.clone())
+        (
+            candidates[0].1,
+            candidates[0].2.clone(),
+            candidates[0].3.clone(),
+            candidates[0].4.clone(),
+        )
     }
 
     /// Resolve `IntoIterator::into_iter` for `recv_ty` with **exact** receiver
@@ -5123,10 +5184,7 @@ impl<'a> FnCtxt<'a> {
                                     })
                                     .collect();
                                 let substs = self.ctx.intern_substitution(resolved_params);
-                                return Some((
-                                    FnDefId::from_raw(local.to_raw()),
-                                    substs,
-                                ));
+                                return Some((FnDefId::from_raw(local.to_raw()), substs));
                             }
                         }
                     }
@@ -5211,10 +5269,12 @@ impl<'a> FnCtxt<'a> {
             GsxTag::Dialect(ns, tag) => {
                 let ns = self.hir.interner.resolve(*ns);
                 let tag = self.hir.interner.resolve(*tag);
-                if registry.resolve("web", Some(&ns), &tag).is_none() {
+                if registry.resolve("web", Some(ns), tag).is_none() {
                     self.diagnostics.push(GlyimDiagnostic::type_error(
                         span,
-                        format!("no schema for `<{ns}:{tag}>` — dialect-namespace escape hatch (§3.2)"),
+                        format!(
+                            "no schema for `<{ns}:{tag}>` — dialect-namespace escape hatch (§3.2)"
+                        ),
                     ));
                 }
             }
@@ -5228,7 +5288,9 @@ impl<'a> FnCtxt<'a> {
         // 2. Attributes: hole exprs checked; props/events validated.
         for attr in &g.attrs {
             let (kind_head, kind_name, value): (&str, Option<&str>, &GsxAttrValue) = match attr {
-                GsxAttrHIR::Plain { name, value } => (self.hir.interner.resolve(*name), None, value),
+                GsxAttrHIR::Plain { name, value } => {
+                    (self.hir.interner.resolve(*name), None, value)
+                }
                 GsxAttrHIR::Directive { ns, name, value } => {
                     let ns = self.hir.interner.resolve(*ns);
                     let n = self.hir.interner.resolve(*name);
@@ -5278,7 +5340,9 @@ impl<'a> FnCtxt<'a> {
                             let tag = self.hir.interner.resolve(*name);
                             registry
                                 .resolve("web", None, tag)
-                                .and_then(|s| s.prop(prop).or_else(|| s.prop(&prop.replace('-', "_"))))
+                                .and_then(|s| {
+                                    s.prop(prop).or_else(|| s.prop(&prop.replace('-', "_")))
+                                })
                                 .is_some()
                         }
                         _ => true,
