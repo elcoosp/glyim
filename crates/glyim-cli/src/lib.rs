@@ -130,7 +130,9 @@ pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
                     eprintln!("  {}", id.as_str());
                 }
                 eprintln!();
-                eprintln!("Aliases: `unsafe` = `unsafe_fn_call`, `unused_generics` = `unused_generic_params`.");
+                eprintln!(
+                    "Aliases: `unsafe` = `unsafe_fn_call`, `unused_generics` = `unused_generic_params`."
+                );
                 return Ok(());
             }
         }
@@ -477,7 +479,11 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     // §3.5.30 framework: translate `-A/-W/-D <lint>`.
     {
         let mut lint_map = glyim_core::lint::LintMap::new();
-        glyim_core::lint::apply_named(&mut lint_map, &args.allow, glyim_core::lint::LintLevel::Allow);
+        glyim_core::lint::apply_named(
+            &mut lint_map,
+            &args.allow,
+            glyim_core::lint::LintLevel::Allow,
+        );
         glyim_core::lint::apply_named(&mut lint_map, &args.warn, glyim_core::lint::LintLevel::Warn);
         glyim_core::lint::apply_named(&mut lint_map, &args.deny, glyim_core::lint::LintLevel::Deny);
         db.set_lints(lint_map);
@@ -542,12 +548,11 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     // entry pre-pass. Without it, an item-emitting proc macro shifts the
     // LocalDefId numbering so the id returned here points at the wrong
     // item — miscompiling `main`.
-    let entry_main =
-        glyim_pipeline::Pipeline::entry_main_local_id_with_proc_registry(
-            &mut db,
-            input,
-            proc_registry_ref,
-        );
+    let entry_main = glyim_pipeline::Pipeline::entry_main_local_id_with_proc_registry(
+        &mut db,
+        input,
+        proc_registry_ref,
+    );
     let target_info = glyim_core::TargetInfo::from_triple(&target_triple);
     let mut llvm = LlvmBackend::with_db(&db)
         .with_target(&target_triple)
@@ -613,9 +618,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
         // build with a different `--codegen-units` silently serves the
         // previous object.
         extra_key_bytes.extend_from_slice(b"\x1fcgu\x1f");
-        extra_key_bytes.extend_from_slice(
-            &args.codegen_units.unwrap_or(0).to_le_bytes(),
-        );
+        extra_key_bytes.extend_from_slice(&args.codegen_units.unwrap_or(0).to_le_bytes());
         extra_key_bytes.extend_from_slice(b"\x1flto\x1f");
         extra_key_bytes.push(match lto {
             glyim_codegen_llvm::passes::LtoKind::None => 0,
@@ -829,9 +832,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     // message, mirroring the thin-LTO/bytecode check above. The VM itself
     // (correctness, wiring `glyim run --backend bytecode`) is a Phase 4
     // concern; today the honest outcome is a clean error.
-    if args.backend == "bytecode"
-        && matches!(emit, EmitKind::Exec | EmitKind::Cdylib)
-    {
+    if args.backend == "bytecode" && matches!(emit, EmitKind::Exec | EmitKind::Cdylib) {
         return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(
             "`--backend=bytecode` cannot produce an executable or cdylib: it emits \
              raw VM opcode bytes, not a relocatable object, so the system linker \
