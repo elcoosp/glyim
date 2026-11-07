@@ -1,0 +1,71 @@
+---
+title: Use the Language Server
+description: Run the glyim-lsp language server and integrate its diagnostics, navigation, and code actions into your editor workflow.
+type: how-to
+sidebar:
+  order: 5
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+This guide shows how to start the Glyim language server and wire it into an editor that speaks the Language Server Protocol.
+
+## Start the server
+
+After building the workspace (see the [getting started tutorial](/tutorials/getting-started/)), the server binary is available at `target/release/glyim-lsp`:
+
+```bash
+./target/release/glyim-lsp
+```
+
+The server communicates over stdio, the standard LSP transport, and publishes diagnostics with `textDocument/publishDiagnostics` as you edit.
+
+## Configure your editor
+
+Point your editor's LSP client at the `glyim-lsp` binary. Most editors expose this as a "custom server command" setting. A generic configuration pattern:
+
+```json
+{
+  "languageserver": {
+    "glyim": {
+      "command": "/absolute/path/to/glyim/target/release/glyim-lsp",
+      "args": [],
+      "filetypes": ["glyim"]
+    }
+  }
+}
+```
+
+<Aside type="tip">
+Use an absolute path to the binary. The server needs to find the compiler's components, and a relative path resolves against the editor's working directory, not yours.
+</Aside>
+
+## Available capabilities
+
+`glyim-lsp` implements:
+
+- **Diagnostics** — compiler errors and warnings pushed as you type, driven by the same pipeline the CLI uses.
+- **Navigation** — goto definition, find references, workspace symbols, and document folding ranges.
+- **Hover and completion** — type information on hover and completion suggestions from the def-map.
+- **Formatting** — document formatting for consistent layout.
+- **Rename** — symbol renaming across the workspace.
+- **Code actions** — quick fixes, including:
+  - add missing `match` arms,
+  - generate an `impl` block,
+  - remove unused imports,
+  - auto-import for unresolved names.
+
+## Fall back to JSON diagnostics
+
+If you drive tooling without LSP, the compiler emits one JSON object per diagnostic:
+
+```bash
+glyim input.g --error-format json
+```
+
+This is the same feed the language server uses internally, which makes it suitable for custom integrations, CI checks, and log analysis.
+
+## Next steps
+
+<LinkCard title="Inspect the compilation pipeline" href="/guides/inspect-compilation/" description="Emit MIR, LLVM IR, and assembly from the command line." />
+<LinkCard title="Crate reference" href="/reference/crates/" description="Which crate implements which LSP capability." />
