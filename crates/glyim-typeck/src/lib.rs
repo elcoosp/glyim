@@ -49,7 +49,9 @@ pub mod zonk;
 use std::collections::HashMap;
 
 use glyim_core::arena::IndexVec;
-use glyim_core::def_id::{AdtId, ConstDefId, CrateId, DefId, FnDefId, LocalDefId, StaticDefId, TraitDefId};
+use glyim_core::def_id::{
+    AdtId, ConstDefId, CrateId, DefId, FnDefId, LocalDefId, StaticDefId, TraitDefId,
+};
 use glyim_core::interner::Name;
 use glyim_core::primitives::{Abi, Mutability, Safety};
 use glyim_def_map::{CrateDefMap, ModuleId, Resolver};
@@ -578,11 +580,11 @@ pub fn typeck_crate(
         let mut register_const_type = |item: &glyim_hir::Item, module_id: ModuleId| {
             match &item.kind {
                 ItemKind::Const(c) => {
-                    let const_def_id =
-                        match def_map.modules[module_id].scope.values.get(&item.name) {
-                            Some((id, _, _)) => ConstDefId::from_raw(id.to_raw()),
-                            None => return, // unregistered — later branch handles it
-                        };
+                    let const_def_id = match def_map.modules[module_id].scope.values.get(&item.name)
+                    {
+                        Some((id, _, _)) => ConstDefId::from_raw(id.to_raw()),
+                        None => return, // unregistered — later branch handles it
+                    };
                     let empty_params: HashMap<Name, Ty> = HashMap::new();
                     let mut local_diags = Vec::new();
                     let const_ty = tyconv::resolve_type_ref(
@@ -620,10 +622,7 @@ pub fn typeck_crate(
                     // Also alias into `const_tys` under the same raw id
                     // so `PipelineLowerCtx::const_value` can recover the
                     // type (it does `const_ty(def_id)` for the alias).
-                    ctx.register_const_ty(
-                        ConstDefId::from_raw(static_def_id.to_raw()),
-                        static_ty,
-                    );
+                    ctx.register_const_ty(ConstDefId::from_raw(static_def_id.to_raw()), static_ty);
                 }
                 _ => {}
             }
@@ -1201,8 +1200,7 @@ pub fn typeck_crate(
     // unbound var has been replaced by `Ty::ERROR` and the distinction
     // between "no annotation possible" and "explicit error sentinel" is
     // lost.
-    let mut unresolved_ty_var_spans: HashMap<LocalDefId, Vec<glyim_span::Span>> =
-        HashMap::new();
+    let mut unresolved_ty_var_spans: HashMap<LocalDefId, Vec<glyim_span::Span>> = HashMap::new();
     for (owner, body) in thir_bodies.iter() {
         let spans = zonk::collect_unresolved_ty_var_spans(&infer, &frozen_ctx, body);
         if !spans.is_empty() {
@@ -1459,7 +1457,8 @@ fn pre_allocate_impl_method_ids(
                         _ => None,
                     };
                     if let Some(tn) = pre_self_ty_name {
-                        ctx.inherent_methods_by_name.insert((tn, method.name), fn_id);
+                        ctx.inherent_methods_by_name
+                            .insert((tn, method.name), fn_id);
                     }
                 }
             }
@@ -1987,9 +1986,8 @@ fn check_fn_items_in_module(
                             Some(trait_item.methods.clone())
                         })
                         .unwrap_or_default();
-                    let trait_def_id_opt = tyconv::resolve_path_to_trait_def_id(
-                        def_map, ctx, trait_path, impl_span,
-                    );
+                    let trait_def_id_opt =
+                        tyconv::resolve_path_to_trait_def_id(def_map, ctx, trait_path, impl_span);
                     for tm in &trait_methods {
                         if impl_method_names.contains(&tm.name) {
                             continue;
@@ -2044,8 +2042,7 @@ fn check_fn_items_in_module(
                             FnDefId::from_raw(local_def_id.to_raw()),
                             tm.is_unsafe,
                         );
-                        if let (Some(self_ty), Some(trait_def_id)) =
-                            (self_ty_opt, trait_def_id_opt)
+                        if let (Some(self_ty), Some(trait_def_id)) = (self_ty_opt, trait_def_id_opt)
                         {
                             ctx.register_impl_method(
                                 trait_def_id,
@@ -2102,8 +2099,7 @@ fn check_fn_items_in_module(
             ItemKind::Static(s) => {
                 // Resolve the static's value type and register it so
                 // `check_path` can produce a `StaticRef` with the right type.
-                let static_def_id = match def_map.modules[module_id].scope.values.get(&item.name)
-                {
+                let static_def_id = match def_map.modules[module_id].scope.values.get(&item.name) {
                     Some((id, _, _)) => StaticDefId::from_raw(id.to_raw()),
                     None => {
                         let id = *next_local_def_id;
@@ -2123,10 +2119,7 @@ fn check_fn_items_in_module(
                 );
                 ctx.register_static_ty(static_def_id, static_ty);
                 ctx.register_static_is_mut(static_def_id, s.is_mut);
-                ctx.register_const_ty(
-                    ConstDefId::from_raw(static_def_id.to_raw()),
-                    static_ty,
-                );
+                ctx.register_const_ty(ConstDefId::from_raw(static_def_id.to_raw()), static_ty);
 
                 // Const-evaluate the static's initializer so lowering can
                 // fold the static to a `MirConst`. Statics and consts share
@@ -2134,8 +2127,7 @@ fn check_fn_items_in_module(
                 // under a `ConstDefId` aliasing the static's raw id.
                 if let (Some(body_id), Some(root_expr)) = (s.body, s.root_expr) {
                     let const_alias = ConstDefId::from_raw(static_def_id.to_raw());
-                    let primitive_tys =
-                        glyim_const_eval::ConstEvaluator::build_primitive_tys(ctx);
+                    let primitive_tys = glyim_const_eval::ConstEvaluator::build_primitive_tys(ctx);
                     let body = &hir.bodies[body_id];
                     let mut evaluator = glyim_const_eval::ConstEvaluator::new(body)
                         .with_interner(ctx.resolver())
@@ -2148,10 +2140,8 @@ fn check_fn_items_in_module(
                                 .get(&fn_item.name)
                                 .map(|(id, _, _)| *id);
                             if let Some(local) = fn_local_def_id {
-                                evaluator = evaluator.with_fn_def(
-                                    fn_item.name,
-                                    FnDefId::from_raw(local.to_raw()),
-                                );
+                                evaluator = evaluator
+                                    .with_fn_def(fn_item.name, FnDefId::from_raw(local.to_raw()));
                             }
                         }
                     }
@@ -2303,10 +2293,8 @@ fn check_fn_items_in_module(
                                 .get(&fn_item.name)
                                 .map(|(id, _, _)| *id);
                             if let Some(local) = fn_local_def_id {
-                                evaluator = evaluator.with_fn_def(
-                                    fn_item.name,
-                                    FnDefId::from_raw(local.to_raw()),
-                                );
+                                evaluator = evaluator
+                                    .with_fn_def(fn_item.name, FnDefId::from_raw(local.to_raw()));
                             }
                         }
                     }
