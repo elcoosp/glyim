@@ -1,0 +1,70 @@
+---
+title: Architecture
+description: Why Glyim is split into more than 30 single-responsibility crates, and how context traits, arena-allocated IRs, and interning make every phase testable in isolation.
+type: explanation
+sidebar:
+  order: 1
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Glyim's architecture follows one rule: every compilation phase is a self-contained crate with a narrow public API, so each phase can be studied and tested in isolation — and replaced without touching the rest. This page explains the ideas behind that rule and the mechanisms that make it work.
+
+## Why small crates
+
+Most compiler projects grow a single binary with internal modules. Glyim takes the Cargo-workspace route, with more than 30 crates, because the boundaries between phases are where compilers get muddy: the type checker reaches into the parser's internals, the borrow checker re-derives facts the type checker already knew, and tests grow tangled fixtures. A crate boundary is a compiler-enforced wall. `glyim-opt` cannot depend on parser internals, because its `Cargo.toml` does not list `glyim-frontend` as a dependency.
+
+The split also makes the dependency direction visible. Each phase consumes the previous phase's IR and exposes a minimal interface, so the pipeline reads as a straight line: frontend to def-map to HIR to typeck to MIR to borrow checking to codegen. See the [pipeline walkthrough](/explanation/pipeline/) for the full sequence.
+
+## Context traits: dependency injection for compiler phases
+
+Every phase defines a narrow trait that describes exactly what it needs from the rest of the compiler — `LowerCtx` for lowering, `BorrowckCtx` for borrow checking, `TypeLookup` for type queries, `TraitSolver` for trait obligations. The pipeline driver implements these traits against the real compilation database (`glyim-db`).
+
+This decoupling has two payoffs:
+
+- **The core logic cannot over-reach.** A lowering function that only receives a `LowerCtx` has no access to, say, the diagnostic sink's formatting internals. The trait signature is the permission list.
+- **Tests substitute mocks.** `glyim-test` ships `MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen`, and `TestDbBuilder`. A test that checks move analysis does not need an LLVM context, because the borrow checker consumes a `BorrowckCtx`, and the mock implements that trait.
+
+## Arena-allocated IRs
+
+Intermediate representations are arena-allocated: all nodes of one IR live in a single vector, and references between them are typed indices instead of pointers. `IndexVec<I, T>` gives every IR node a typed, cheaply-copyable ID — a `DefId` cannot be confused with a `LocalId`, because the index types differ.
+
+The consequences:
+
+- **No reference-counting or borrowing fights** while the IR is being built. Allocation is a push into a vector.
+- **Cheap, stable handles.** An ID stays valid for the IR's lifetime and is `Copy`, so passing it around costs nothing.
+- **Destructive rewrites are safe.** Optimization passes mutate bodies in place, keyed by index, with no aliasing hazards.
+
+## Interned types
+
+Types are interned in `TyCtx`: each distinct type exists once, and every mention of it holds the same interned handle. Two types are equal when their handles are equal — a pointer compare, not a structural walk. Interning also makes substitutions cheap, because a substitution produces a new handle from the existing arena rather than rebuilding type trees.
+
+This is what makes the trait solver and the unification engine tractable: inference variables, predicates, and regions are all interned values with stable identities.
+
+## Diagnostics as data
+
+Every phase returns `Vec<GlyimDiagnostic>` — diagnostics are values, not side effects. The driver collects them and renders them with `miette` (human-readable, with source snippets and labels) or serializes them to JSON for editors and tooling.
+
+Because diagnostics are data with source spans, they compose: the test harness matches them against inline `//~ ERROR` annotations, the language server publishes them over LSP, and the CLI formats them as JSON on request. One representation serves three consumers.
+
+## Incremental compilation
+
+The pipeline fingerprints sources and build configuration with SHA-256. `glyip build` uses these fingerprints to skip recompilation of unchanged inputs, and the monomorphization cache (`mono_cache` in `glyim-pipeline` and `glyim-db`) reuses monomorphized items across compilations. Polymorphization — replacing unused generic parameters with canonical placeholders — increases cache hits, because a function monomorphized for `Vec<T>` that never touches `T` needs one instance, not one per `T`.
+
+## Error philosophy
+
+The pipeline distinguishes sharply between program errors and compiler bugs:
+
+- **Program errors** are diagnostics with error codes, rendered for humans or machines.
+- **Internal compiler errors (ICEs)** are panics. The CLI driver installs a panic hook that captures the message and a backtrace at the panic site, then prints a structured ICE report instead of a raw Rust backtrace. An ICE is always a compiler bug worth reporting.
+
+Release builds enable `overflow-checks`, so arithmetic overflow inside the compiler is an ICE, never a silent wrap.
+
+<Aside type="note">
+The design is heavily inspired by rustc's architecture — arena-allocated IRs, interned types, query-style contexts, trait-based dependency injection — but written from scratch with readable code and testability as the priorities.
+</Aside>
+
+## Next steps
+
+<LinkCard title="The pipeline, explained" href="/explanation/pipeline/" description="Walk the stages from source.g to a native binary." />
+<LinkCard title="Crate reference" href="/reference/crates/" description="Which crate owns which responsibility." />
