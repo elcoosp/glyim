@@ -342,9 +342,7 @@ pub fn std_source_assembled() -> String {
         ("result", "Result", ["Ok", "Err"]),
     ] {
         for v in variants {
-            out.push_str(&format!(
-                "pub use {module}::{enum_name}::{v};\n",
-            ));
+            out.push_str(&format!("pub use {module}::{enum_name}::{v};\n",));
         }
     }
     out.push('\n');
@@ -508,9 +506,7 @@ pub fn std_source_assembled_minimal() -> String {
         ("result", "Result", ["Ok", "Err"]),
     ] {
         for v in variants {
-            out.push_str(&format!(
-                "pub use {module}::{enum_name}::{v};\n",
-            ));
+            out.push_str(&format!("pub use {module}::{enum_name}::{v};\n",));
         }
     }
     out.push('\n');
