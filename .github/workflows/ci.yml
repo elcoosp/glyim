@@ -18,18 +18,6 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
-# Reusable LLVM 23 install for Ubuntu runners.
-# NOTE: history had `./llvm.sh 22` next to `llvm-23-dev` packages; the
-# mismatch broke resolution. The script version and the package versions
-# must both be 23.
-x-llvm23-ubuntu: &llvm23-ubuntu
-  run: |
-    wget -q https://apt.llvm.org/llvm.sh
-    chmod +x llvm.sh
-    sudo ./llvm.sh 23
-    sudo apt-get install -y llvm-23-dev libpolly-23-dev
-    echo "LLVM_SYS_231_PREFIX=/usr/lib/llvm-23" >> "$GITHUB_ENV"
-
 jobs:
   test-ubuntu:
     name: Test (ubuntu-latest)
@@ -63,7 +51,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install LLVM 23
-        <<: *llvm23-ubuntu
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 23
+          sudo apt-get install -y llvm-23-dev libpolly-23-dev
+          echo "LLVM_SYS_231_PREFIX=/usr/lib/llvm-23" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install nextest
@@ -84,7 +77,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install LLVM 23
-        <<: *llvm23-ubuntu
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 23
+          sudo apt-get install -y llvm-23-dev libpolly-23-dev
+          echo "LLVM_SYS_231_PREFIX=/usr/lib/llvm-23" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install nextest
@@ -108,7 +106,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install LLVM 23
-        <<: *llvm23-ubuntu
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 23
+          sudo apt-get install -y llvm-23-dev libpolly-23-dev
+          echo "LLVM_SYS_231_PREFIX=/usr/lib/llvm-23" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install nextest
@@ -181,7 +184,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install LLVM 23
-        <<: *llvm23-ubuntu
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 23
+          sudo apt-get install -y llvm-23-dev libpolly-23-dev
+          echo "LLVM_SYS_231_PREFIX=/usr/lib/llvm-23" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@1.95.0
       - uses: Swatinem/rust-cache@v2
         with:
