@@ -10,3 +10,6 @@ miette = { workspace = true }
 tracing = { workspace = true }
 [dev-dependencies]
 glyim-test = { workspace = true }
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true
