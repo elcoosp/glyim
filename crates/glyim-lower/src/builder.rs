@@ -436,7 +436,6 @@ impl<'a> MirBuilder<'a> {
         self.ctx.ty_ctx().needs_drop(ty)
     }
 
-    /// Phase 4 (GLYIM_DESTUB_PLAN): when a droppable `let`-bound local is
     /// declared, pre-allocate its drop-flag, `StorageLive` it, and initialize
     /// it to `true` (fully initialized) at the declaration site — which
     /// dominates every later path, so the flag is always defined before
@@ -465,7 +464,7 @@ impl<'a> MirBuilder<'a> {
         );
     }
 
-    /// Phase 4 (GLYIM_DESTUB_PLAN): a field of a non-`Copy` parent was just
+    /// Phase 4 (`GLYIM_DESTUB_PLAN)`: a field of a non-`Copy` parent was just
     /// moved out of (read as an rvalue operand in the `Field` arm of
     /// `lower_expr_to_rvalue`). Ensure the parent local has a drop-flag, and
     /// emit the statement that clears it — marking the whole value as "no
@@ -500,7 +499,6 @@ impl<'a> MirBuilder<'a> {
     }
 
     /// Lower a closure expression: generate its MIR body and return an aggregate.
-    #[allow(dead_code)]
     pub(crate) fn lower_closure(
         &mut self,
         thir_body: &thir::Body,
@@ -539,7 +537,7 @@ impl<'a> MirBuilder<'a> {
         // Allocate locals for parameters and populate param_map.
         // Map each parameter's real LocalVarId (from the THIR Param) to its MIR
         // local so the body's VarRefs resolve correctly.
-        for param in thir_body.params.iter() {
+        for param in &thir_body.params {
             let mutability = match &param.pat.kind {
                 thir::PatternKind::Binding { mutability, .. } => *mutability,
                 _ => glyim_core::primitives::Mutability::Not,
