@@ -71,7 +71,6 @@ fn use_after_move_error() {
     let error_msg = errors[0].to_string();
     assert!(
         error_msg.contains("use of moved value"),
-        "Error message did not mention use of moved value: {}",
-        error_msg
+        "Error message did not mention use of moved value: {error_msg}"
     );
 }
