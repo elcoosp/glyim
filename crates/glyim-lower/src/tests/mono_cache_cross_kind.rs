@@ -15,7 +15,7 @@ fn dummy_body() -> Arc<Body> {
     )))
 }
 
-/// Fn and Const with same DefId raw index but different substitution lengths.
+/// Fn and Const with same `DefId` raw index but different substitution lengths.
 #[test]
 fn fn_and_const_same_raw_different_subst_len() {
     let mut ty_ctx = test_ty_ctx();
@@ -101,23 +101,29 @@ fn static_dedup_across_collects() {
         def_id: StaticDefId::from_raw(1),
     };
 
-    ctx.collect(&[item.clone()], &|_def_id, _substs| dummy_body(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| dummy_body(),
+        &|_ty| dummy_body(),
+    );
     assert_eq!(ctx.item_count(), 1);
 
-    ctx.collect(&[item.clone()], &|_def_id, _substs| dummy_body(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| dummy_body(),
+        &|_ty| dummy_body(),
+    );
     assert_eq!(
         ctx.item_count(),
         1,
         "static should be deduplicated across collects"
     );
 
-    ctx.collect(&[item.clone()], &|_def_id, _substs| dummy_body(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| dummy_body(),
+        &|_ty| dummy_body(),
+    );
     assert_eq!(ctx.item_count(), 1, "static should still be deduplicated");
 }
 
@@ -148,7 +154,7 @@ fn items_in_collection_order() {
     }
 }
 
-/// MonoCtx starts empty and has consistent counts.
+/// `MonoCtx` starts empty and has consistent counts.
 #[test]
 fn fresh_ctx_is_empty() {
     let ctx = MonoCtx::new();
@@ -207,21 +213,21 @@ fn interleaved_collect_no_readd() {
     };
 
     ctx.collect(
-        &[item_a.clone()],
+        std::slice::from_ref(&item_a),
         &|_def_id, _substs| dummy_body(),
         &|_ty| dummy_body(),
     );
     assert_eq!(ctx.item_count(), 1);
 
     ctx.collect(
-        &[item_b.clone()],
+        std::slice::from_ref(&item_b),
         &|_def_id, _substs| dummy_body(),
         &|_ty| dummy_body(),
     );
     assert_eq!(ctx.item_count(), 2);
 
     ctx.collect(
-        &[item_a.clone()],
+        std::slice::from_ref(&item_a),
         &|_def_id, _substs| dummy_body(),
         &|_ty| dummy_body(),
     );
