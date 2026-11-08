@@ -435,7 +435,7 @@ fn test_many_statements() {
     let source = format!(
         "fn f() {{ {} }}",
         (0..50)
-            .map(|i| format!("let x{} = {};", i, i))
+            .map(|i| format!("let x{i} = {i};"))
             .collect::<Vec<_>>()
             .join(" ")
     );
@@ -445,10 +445,10 @@ fn test_many_statements() {
 #[test]
 fn test_many_struct_fields() {
     let fields = (0..30)
-        .map(|i| format!("f{}: i32", i))
+        .map(|i| format!("f{i}: i32"))
         .collect::<Vec<_>>()
         .join(", ");
-    let source = format!("struct Big {{ {} }}", fields);
+    let source = format!("struct Big {{ {fields} }}");
     let result = parse_to_syntax(&source, file_id());
     assert!(result.diagnostics.is_empty());
 }
@@ -482,7 +482,7 @@ fn make_animal() -> impl Animal {
 fn test_snapshot_closures_and_iterators() {
     glyim_test::snapshot_cst(
         "closures_iterators",
-        r#"
+        r"
 fn sum_of_squares(values: &[i32]) -> i32 {
     values.iter().map(|&x| x * x).sum()
 }
@@ -490,7 +490,7 @@ fn sum_of_squares(values: &[i32]) -> i32 {
 fn filter_and_collect(values: Vec<i32>) -> Vec<i32> {
     values.into_iter().filter(|&x| x > 0).collect()
 }
-"#,
+",
     );
 }
 
