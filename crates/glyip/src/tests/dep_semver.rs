@@ -1,4 +1,4 @@
-//! Regression tests for de-stubbing plan §21.5: real SemVer 2.0 matching in
+//! Regression tests for de-stubbing plan §21.5: real `SemVer` 2.0 matching in
 //! `CrateIndex::resolve_version` (replaces naive `starts_with(req)` prefix
 //! matching). Covers caret, tilde, wildcard, comparison operators, and exact
 //! requirements, plus the historical unparseable-req → latest fallback.
