@@ -28,7 +28,7 @@ fn make_usize_ty(ctx: &mut TyCtxMut) -> Ty {
 
 fn make_array_ty(ctx: &mut TyCtxMut, elem_ty: Ty, len: u64) -> Ty {
     let len_const = Const {
-        kind: ConstKind::Uint(len as u128),
+        kind: ConstKind::Uint(u128::from(len)),
         ty: make_usize_ty(ctx),
     };
     ctx.mk_ty(TyKind::Array(elem_ty, len_const))
