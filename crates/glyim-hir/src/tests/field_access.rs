@@ -16,7 +16,7 @@ fn get_body_hir(source: &str) -> (crate::CrateHir, Interner, BodyId) {
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
     let body_id = match &hir.items[ItemId::from_raw(0)].kind {
         ItemKind::Fn(fn_item) => fn_item.body.expect("no body"),
-        other => panic!("expected Fn item, got {:?}", other),
+        other => panic!("expected Fn item, got {other:?}"),
     };
     (hir, interner, body_id)
 }
@@ -91,7 +91,7 @@ fn find_field_expr(
 #[test]
 fn test_tuple_field_access_zero() {
     // W3-C03-T01: Tuple field access `tuple.0` produces correct HIR
-    let source = r#"fn f() { (1, true).0 }"#;
+    let source = r"fn f() { (1, true).0 }";
     let (hir, interner, body_id) = get_body_hir(source);
     let body = get_body(&hir, body_id);
 
@@ -114,13 +114,13 @@ fn test_tuple_field_access_zero() {
         Expr::Tuple(elems) => {
             assert_eq!(elems.len(), 2, "Tuple should have 2 elements");
         }
-        other => panic!("Expected Tuple expression as receiver, got {:?}", other),
+        other => panic!("Expected Tuple expression as receiver, got {other:?}"),
     }
 }
 
 #[test]
 fn test_tuple_field_access_index_one() {
-    let source = r#"fn f() { (1, true, 3).1 }"#;
+    let source = r"fn f() { (1, true, 3).1 }";
     let (hir, interner, body_id) = get_body_hir(source);
     let body = get_body(&hir, body_id);
 
@@ -142,7 +142,7 @@ fn test_tuple_field_access_index_one() {
 #[test]
 fn test_struct_field_access() {
     // W3-C03-T02: Struct field access uses resolved field name
-    let source = r#"fn f() { p.x }"#;
+    let source = r"fn f() { p.x }";
     let (hir, interner, body_id) = get_body_hir(source);
     let body = get_body(&hir, body_id);
 
@@ -164,7 +164,7 @@ fn test_struct_field_access() {
 #[test]
 fn test_tuple_field_access_with_path_receiver() {
     // Named variable tuple access: t.0
-    let source = r#"fn f() { t.0 }"#;
+    let source = r"fn f() { t.0 }";
     let (hir, interner, body_id) = get_body_hir(source);
     let body = get_body(&hir, body_id);
 
@@ -186,6 +186,6 @@ fn test_tuple_field_access_with_path_receiver() {
         Expr::Path(path) => {
             assert_eq!(path.as_name(), Some(interner.intern("t")));
         }
-        other => panic!("Expected Path expression as receiver, got {:?}", other),
+        other => panic!("Expected Path expression as receiver, got {other:?}"),
     }
 }
