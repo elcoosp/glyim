@@ -56,8 +56,7 @@ use std::path::{Path, PathBuf};
 
 /// Default upper bound on the cache's on-disk size.
 ///
-/// **P1-O2 (KNOWN_GAPS §7):** the cache previously grew unbounded — every
-/// distinct (source, target, opt, has_main) combination left a `.o` file
+/// **P1-O2 (`KNOWN_GAPS` §7):** the cache previously grew unbounded — every
 /// in `objects/` forever. Long-running users (or a busy CI host) would
 /// silently fill the disk. This default (~1 GiB) is enough for tens of
 /// thousands of normal compiles and small enough that a developer laptop
@@ -91,6 +90,7 @@ impl CompileCache {
     /// Open the cache at the process-wide default location.
     ///
     /// See the module docs for the priority order.
+    #[must_use]
     pub fn open_default() -> Self {
         if let Ok(dir) = std::env::var("GLYIM_CACHE_DIR") {
             return Self::open(dir);
@@ -107,6 +107,7 @@ impl CompileCache {
     }
 
     /// Directory holding the cached objects.
+    #[must_use]
     pub fn objects_dir(&self) -> PathBuf {
         self.root.join("objects")
     }
@@ -124,6 +125,7 @@ impl CompileCache {
     /// guards against.
     /// T128-PATCHED [CLI-4]: same as `key` but also hashes an `extra`
     /// byte slice (used for proc-macro dependency files).
+    #[must_use]
     pub fn key_with_extra(
         source: &str,
         target: &str,
@@ -149,6 +151,8 @@ impl CompileCache {
         s
     }
 
+    #[must_use]
+    /// Builds the content-addressed SHA-256 cache key for a compilation.
     pub fn key(source: &str, target: &str, opt_level: u8, entry_main: bool) -> String {
         let mut h = Sha256::new();
         // Field separator so `("ab", "c")` and `("a", "bc")` cannot collide.
@@ -185,7 +189,7 @@ impl CompileCache {
         h.update(b"\x1fopt\x1f");
         h.update([opt_level]);
         h.update(b"\x1fentry\x1f");
-        h.update([entry_main as u8]);
+        h.update([u8::from(entry_main)]);
         let digest = h.finalize();
         // Lowercase hex without pulling in `hex` as a dependency.
         let mut s = String::with_capacity(digest.len() * 2);
@@ -197,6 +201,7 @@ impl CompileCache {
     }
 
     /// Path an object for `key` would occupy, whether or not it exists.
+    #[must_use]
     pub fn object_path(&self, key: &str) -> PathBuf {
         self.objects_dir().join(format!("{key}.o"))
     }
@@ -206,6 +211,7 @@ impl CompileCache {
     /// "Non-empty" guards against a partially-written file left by a previous
     /// crash (the writer is atomic, but a foreign process could still corrupt
     /// the directory; an empty file is never a valid object).
+    #[must_use]
     pub fn lookup(&self, key: &str) -> Option<PathBuf> {
         let path = self.object_path(key);
         match std::fs::metadata(&path) {
@@ -247,7 +253,7 @@ impl CompileCache {
     /// a cache smaller than a single object — deleting the newly-written
     /// file would be more hostile than briefly exceeding the budget).
     ///
-    /// **P1-O2 (KNOWN_GAPS §7).** Called once per `store`; no background
+    /// **P1-O2 (`KNOWN_GAPS` §7).** Called once per `store`; no background
     /// task, no per-store directory walk when under budget.
     fn evict_if_needed(&self) {
         let Some(max) = self.max_bytes else { return };
@@ -350,21 +356,17 @@ mod tests {
         }
         assert!(
             total <= 2048,
-            "cache should be <= 2 KiB after eviction, is {} bytes; survivors: {:?}",
-            total,
-            surviving_keys
+            "cache should be <= 2 KiB after eviction, is {total} bytes; survivors: {surviving_keys:?}"
         );
         // Newest (key5) must survive — it was just stored.
         assert!(
             cache.lookup("key5").is_some(),
-            "newest object must survive eviction; survivors: {:?}",
-            surviving_keys
+            "newest object must survive eviction; survivors: {surviving_keys:?}"
         );
         // Oldest (key0) must be gone.
         assert!(
             cache.lookup("key0").is_none(),
-            "oldest object must be evicted; survivors: {:?}",
-            surviving_keys
+            "oldest object must be evicted; survivors: {surviving_keys:?}"
         );
     }
 
