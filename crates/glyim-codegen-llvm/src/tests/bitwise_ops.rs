@@ -18,11 +18,7 @@ fn test_bitand_i32() {
         .lower_body_to_module(&context, &body)
         .expect("lowering");
     let ir = module.print_to_string().to_string();
-    assert!(
-        ir.contains("store i32 8"),
-        "Expected 'store i32 8':\n{}",
-        ir
-    );
+    assert!(ir.contains("store i32 8"), "Expected 'store i32 8':\n{ir}");
 }
 
 #[test]
@@ -42,8 +38,7 @@ fn test_bitor_i32() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i32 14"),
-        "Expected 'store i32 14':\n{}",
-        ir
+        "Expected 'store i32 14':\n{ir}"
     );
 }
 
@@ -62,11 +57,7 @@ fn test_bitxor_i32() {
         .lower_body_to_module(&context, &body)
         .expect("lowering");
     let ir = module.print_to_string().to_string();
-    assert!(
-        ir.contains("store i32 6"),
-        "Expected 'store i32 6':\n{}",
-        ir
-    );
+    assert!(ir.contains("store i32 6"), "Expected 'store i32 6':\n{ir}");
 }
 
 #[test]
@@ -84,11 +75,7 @@ fn test_shl_i32() {
         .lower_body_to_module(&context, &body)
         .expect("lowering");
     let ir = module.print_to_string().to_string();
-    assert!(
-        ir.contains("store i32 8"),
-        "Expected 'store i32 8':\n{}",
-        ir
-    );
+    assert!(ir.contains("store i32 8"), "Expected 'store i32 8':\n{ir}");
 }
 
 #[test]
@@ -106,9 +93,5 @@ fn test_shr_i32() {
         .lower_body_to_module(&context, &body)
         .expect("lowering");
     let ir = module.print_to_string().to_string();
-    assert!(
-        ir.contains("store i32 4"),
-        "Expected 'store i32 4':\n{}",
-        ir
-    );
+    assert!(ir.contains("store i32 4"), "Expected 'store i32 4':\n{ir}");
 }
