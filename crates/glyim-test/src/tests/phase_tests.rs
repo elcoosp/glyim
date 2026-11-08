@@ -34,7 +34,7 @@ fn test_mir_assert() {
         glyim_core::def_id::CrateId::from_raw(0),
         glyim_core::def_id::LocalDefId::from_raw(0),
     ));
-    assert_mir(&ctx, &body)
+    let _ = assert_mir(&ctx, &body)
         .block_count(1)
         .local_count(1)
         .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "Unreachable");
