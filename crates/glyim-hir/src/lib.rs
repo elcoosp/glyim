@@ -8,28 +8,7 @@
 //! own `PathSegment` with `generic_args: Option<Vec<TypeRef>>`,
 //! which differs from `glyim_core::path::PathSegment` (name-only).
 // Stylistic clippy lints suppressed crate-wide (test-noise lints).
-#![allow(
-    clippy::cloned_ref_to_slice_refs,
-    clippy::vec_init_then_push,
-    clippy::assertions_on_constants,
-    clippy::type_complexity,
-    clippy::too_many_arguments,
-    clippy::manual_c_str_literals,
-    clippy::doc_lazy_continuation,
-    clippy::empty_line_after_doc_comments,
-    clippy::manual_strip,
-    clippy::needless_range_loop,
-    clippy::unnecessary_cast,
-    clippy::clone_on_copy,
-    clippy::mutable_key_type,
-    clippy::only_used_in_recursion,
-    clippy::let_unit_value,
-    clippy::unnecessary_literal_unwrap,
-    clippy::format_in_format_args,
-    clippy::permissions_set_readonly_false,
-    clippy::needless_lifetimes,
-    clippy::collapsible_if
-)]
+
 // Plan §3.1 (ratchet, not a hard ban): HIR lowering consumes untrusted user
 // input, so `unwrap`/`expect`/`panic!` on source-derived values must become
 // `Diagnostic`/Result. `#[warn]` (not `#[deny]`) surfaces the count under
@@ -40,7 +19,6 @@
 // the production-code opt-in strict (warn) but allow the same lints
 // inside `#[cfg(test)]` modules so test helpers stay concise.
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
-
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::LocalDefId;
 use glyim_core::interner::{Interner, Name};
@@ -54,22 +32,22 @@ glyim_core::define_idx!(BodyId);
 glyim_core::define_idx!(ItemId);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// HirId.
+/// `HirId`.
 pub struct HirId {
-    /// Struct.
+    /// `Struct`.
     pub owner: LocalDefId,
-    /// Struct.
+    /// `Struct`.
     pub local: u32,
 }
 
 #[derive(Clone, Debug)]
-/// CrateHir.
+/// `CrateHir`.
 pub struct CrateHir {
-    /// Struct.
+    /// `Struct`.
     pub items: IndexVec<ItemId, Item>,
-    /// Struct.
+    /// `Struct`.
     pub bodies: IndexVec<BodyId, Body>,
-    /// Struct.
+    /// `Struct`.
     pub body_owners: IndexVec<BodyId, LocalDefId>,
     /// The `Interner` used while lowering this crate. Names embedded in the
     /// HIR (`Body::pats`, `PathSegment`s, …) are valid `Name` ids in THIS
@@ -82,44 +60,44 @@ pub struct CrateHir {
 }
 
 #[derive(Clone, Debug)]
-/// Item.
+/// `Item`.
 pub struct Item {
-    /// Struct.
+    /// `Struct`.
     pub id: ItemId,
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
-    /// Struct.
+    /// `Struct`.
     pub kind: ItemKind,
-    /// Struct.
+    /// `Struct`.
     pub visibility: Visibility,
-    /// Struct.
+    /// `Struct`.
     pub span: Span,
 }
 
 #[derive(Clone, Debug)]
-/// ItemKind.
+/// `ItemKind`.
 pub enum ItemKind {
-    #[allow(missing_docs)]
+    /// Function item.
     Fn(FnItem),
-    #[allow(missing_docs)]
+    /// Struct item.
     Struct(StructItem),
-    #[allow(missing_docs)]
+    /// Enum item.
     Enum(EnumItem),
-    #[allow(missing_docs)]
+    /// Trait item.
     Trait(TraitItem),
-    #[allow(missing_docs)]
+    /// Impl item.
     Impl(ImplItem),
-    #[allow(missing_docs)]
+    /// Type alias item.
     TypeAlias(TypeAliasItem),
-    #[allow(missing_docs)]
+    /// Const item.
     Const(ConstItem),
-    #[allow(missing_docs)]
+    /// Static item.
     Static(StaticItem),
-    #[allow(missing_docs)]
+    /// Module item.
     Mod(ModItem),
-    #[allow(missing_docs)]
+    /// Use item.
     Use(UseItem),
-    #[allow(missing_docs)]
+    /// Extern block item.
     Extern(ExternBlockItem),
 }
 
@@ -135,23 +113,23 @@ pub struct Attribute {
 }
 
 #[derive(Clone, Debug)]
-/// FnItem.
+/// `FnItem`.
 pub struct FnItem {
-    /// Struct.
+    /// `Struct`.
     pub params: Vec<Param>,
-    /// Struct.
+    /// `Struct`.
     pub return_ty: Option<TypeRef>,
-    /// Struct.
+    /// `Struct`.
     pub body: Option<BodyId>,
-    /// Struct.
+    /// `Struct`.
     pub is_unsafe: bool,
-    /// Struct.
+    /// `Struct`.
     pub is_async: bool,
-    /// Struct.
+    /// `Struct`.
     pub is_const: bool,
-    /// Struct.
+    /// `Struct`.
     pub generic_params: Vec<GenericParam>,
-    /// Struct.
+    /// `Struct`.
     pub where_clauses: Vec<crate::where_clause::WhereClause>,
     /// Calling convention for FFI (`extern "C" fn`), if declared. `None`
     /// means the default Glyim ABI (unstub-5 Phase 4).
@@ -162,52 +140,52 @@ pub struct FnItem {
 }
 
 #[derive(Clone, Debug)]
-/// StructItem.
+/// `StructItem`.
 pub struct StructItem {
-    /// Struct.
+    /// `Struct`.
     pub fields: Vec<Field>,
-    /// Struct.
+    /// `Struct`.
     pub kind: StructKind,
-    /// Struct.
+    /// `Struct`.
     pub generic_params: Vec<GenericParam>,
-    /// Struct.
+    /// `Struct`.
     pub where_clauses: Vec<crate::where_clause::WhereClause>,
 }
 
 #[derive(Clone, Debug)]
-/// EnumItem.
+/// `EnumItem`.
 pub struct EnumItem {
-    /// Struct.
+    /// `Struct`.
     pub variants: Vec<Variant>,
-    /// Struct.
+    /// `Struct`.
     pub generic_params: Vec<GenericParam>,
-    /// Struct.
+    /// `Struct`.
     pub where_clauses: Vec<crate::where_clause::WhereClause>,
 }
 
 #[derive(Clone, Debug)]
-/// Variant.
+/// `Variant`.
 pub struct Variant {
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
-    /// Struct.
+    /// `Struct`.
     pub fields: Vec<Field>,
-    /// Struct.
+    /// `Struct`.
     pub kind: StructKind,
-    /// Struct.
+    /// `Struct`.
     pub span: Span,
 }
 
 #[derive(Clone, Debug)]
-/// TraitMethod.
+/// `TraitMethod`.
 pub struct TraitMethod {
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
-    /// Struct.
+    /// `Struct`.
     pub params: Vec<Param>,
-    /// Struct.
+    /// `Struct`.
     pub return_ty: Option<TypeRef>,
-    /// Struct.
+    /// `Struct`.
     pub default_body: Option<BodyId>,
     /// §3.5.30: whether this trait method was declared `unsafe fn`.
     /// Populated by `lower_item::lower_trait_def` from the sibling
@@ -224,17 +202,17 @@ pub struct TraitMethod {
 }
 
 #[derive(Clone, Debug)]
-/// ImplMethod.
+/// `ImplMethod`.
 pub struct ImplMethod {
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
-    /// Struct.
+    /// `Struct`.
     pub body: Option<BodyId>,
-    /// Struct.
+    /// `Struct`.
     pub params: Vec<Param>,
-    /// Struct.
+    /// `Struct`.
     pub generic_params: Vec<GenericParam>,
-    /// Struct.
+    /// `Struct`.
     pub return_ty: Option<TypeRef>,
     /// §3.5.30: whether this method was declared `unsafe fn`. Populated by
     /// `lower_item::lower_impl_block` from the sibling `KwUnsafe` token on
@@ -248,41 +226,41 @@ pub struct ImplMethod {
 }
 
 #[derive(Clone, Debug)]
-/// AssociatedTy.
+/// `AssociatedTy`.
 pub struct AssociatedTy {
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
-    /// Struct.
+    /// `Struct`.
     pub bounds: Vec<TypeRef>,
-    /// Struct.
+    /// `Struct`.
     pub default: Option<TypeRef>,
 }
 
 #[derive(Clone, Debug)]
-/// TraitItem.
+/// `TraitItem`.
 pub struct TraitItem {
-    /// Struct.
+    /// `Struct`.
     pub associated_types: Vec<AssociatedTy>,
-    /// Struct.
+    /// `Struct`.
     pub methods: Vec<TraitMethod>,
-    /// Struct.
+    /// `Struct`.
     pub generic_params: Vec<GenericParam>,
-    /// Struct.
+    /// `Struct`.
     pub where_clauses: Vec<crate::where_clause::WhereClause>,
 }
 
 #[derive(Clone, Debug)]
-/// ImplItem.
+/// `ImplItem`.
 pub struct ImplItem {
-    /// Struct.
+    /// `Struct`.
     pub trait_ref: Option<Path>,
-    /// Struct.
+    /// `Struct`.
     pub self_ty: TypeRef,
-    /// Struct.
+    /// `Struct`.
     pub methods: Vec<ImplMethod>,
-    /// Struct.
+    /// `Struct`.
     pub generic_params: Vec<GenericParam>,
-    /// Struct.
+    /// `Struct`.
     pub where_clauses: Vec<crate::where_clause::WhereClause>,
     /// Associated type definitions, e.g. `type Output = i32;` inside
     /// `impl MyFuture for AddOne`. Captured so projection (`Self::Output`,
@@ -292,22 +270,22 @@ pub struct ImplItem {
 }
 
 #[derive(Clone, Debug)]
-/// TypeAliasItem.
+/// `TypeAliasItem`.
 pub struct TypeAliasItem {
-    /// Struct.
+    /// `Struct`.
     pub ty: Option<TypeRef>,
-    /// Struct.
+    /// `Struct`.
     pub generic_params: Vec<GenericParam>,
-    /// Struct.
+    /// `Struct`.
     pub where_clauses: Vec<crate::where_clause::WhereClause>,
 }
 
 #[derive(Clone, Debug)]
-/// ConstItem.
+/// `ConstItem`.
 pub struct ConstItem {
-    /// Struct.
+    /// `Struct`.
     pub ty: TypeRef,
-    /// Struct.
+    /// `Struct`.
     pub body: Option<BodyId>,
     /// Root expression of the constant's initializer body, used by const
     /// evaluation (Part C: const value materialization) to evaluate the value.
@@ -315,171 +293,172 @@ pub struct ConstItem {
 }
 
 #[derive(Clone, Debug)]
-/// StaticItem.
+/// `StaticItem`.
 pub struct StaticItem {
-    /// Struct.
+    /// `Struct`.
     pub ty: TypeRef,
-    /// Struct.
+    /// `Struct`.
     pub body: Option<BodyId>,
     /// Root expression of the static's initializer body, used by const
     /// evaluation in typeck (mirrors `ConstItem::root_expr`).
     pub root_expr: Option<ExprId>,
-    /// Struct.
+    /// `Struct`.
     pub is_mut: bool,
 }
 
 #[derive(Clone, Debug)]
-/// ModItem.
+/// `ModItem`.
 pub struct ModItem {
-    /// Struct.
+    /// `Struct`.
     pub children: Vec<ItemId>,
 }
 
 #[derive(Clone, Debug)]
-/// UseItem.
+/// `UseItem`.
 pub struct UseItem {
-    /// Struct.
+    /// `Struct`.
     pub path: Path,
-    /// Struct.
+    /// `Struct`.
     pub alias: Option<Name>,
 }
 
 #[derive(Clone, Debug)]
-/// ExternBlockItem.
+/// `ExternBlockItem`.
 pub struct ExternBlockItem {
-    /// Struct.
+    /// `Struct`.
     pub items: Vec<ItemId>,
-    /// Struct.
+    /// `Struct`.
     pub abi: Option<Name>,
 }
 
 #[derive(Clone, Debug)]
-/// Param.
+/// `Param`.
 pub struct Param {
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
-    /// Struct.
+    /// `Struct`.
     pub ty: Option<TypeRef>,
-    /// Struct.
+    /// `Struct`.
     pub span: Span,
 }
 
 #[derive(Clone, Debug)]
-/// Field.
+/// `Field`.
 pub struct Field {
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
-    /// Struct.
+    /// `Struct`.
     pub ty: TypeRef,
-    /// Struct.
+    /// `Struct`.
     pub span: Span,
 }
 
 #[derive(Clone, Debug)]
-/// GenericParam.
+/// `GenericParam`.
 pub struct GenericParam {
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
-    /// Struct.
+    /// `Struct`.
     pub kind: GenericParamKind,
-    /// Struct.
+    /// `Struct`.
     pub span: Span,
 }
 
 #[derive(Clone, Debug)]
-/// GenericParamKind.
+/// `GenericParamKind`.
 pub enum GenericParamKind {
-    /// Variant.
+    /// `Variant`.
     Type {
-        /// Struct.
+        /// `Struct`.
         default: Option<TypeRef>,
         /// Trait bounds declared on the param, e.g. the `MyFuture` in
         /// `fn block_on<F: MyFuture>`. Captured so typeck can solve the bound
         /// and project associated types (`F::Output`); previously dropped.
         bounds: Vec<TypeRef>,
     },
-    /// Variant.
+    /// `Variant`.
     Lifetime,
-    /// Variant.
+    /// `Variant`.
     Const {
-        /// Struct.
+        /// `Struct`.
         ty: TypeRef,
-        /// Struct.
+        /// `Struct`.
         default: Option<ConstRef>,
     },
 }
 
 #[derive(Clone, Debug)]
-/// TypeRef.
+/// `TypeRef`.
 pub enum TypeRef {
-    #[allow(missing_docs)]
+    /// `Path`.
     Path(Path),
-    /// Variant.
+    /// `Variant`.
     Fn {
-        /// Struct.
+        /// `Struct`.
         params: Vec<TypeRef>,
-        /// Struct.
+        /// `Struct`.
         ret: Option<Box<TypeRef>>,
     },
-    /// Variant.
+    /// `Variant`.
     Ref {
-        /// Struct.
+        /// `Struct`.
         inner: Box<TypeRef>,
-        /// Struct.
+        /// `Struct`.
         mutability: Mutability,
     },
     /// A raw pointer type `*const T` / `*mut T`.
     RawPtr {
-        /// Struct.
+        /// `Struct`.
         inner: Box<TypeRef>,
-        /// Struct.
+        /// `Struct`.
         mutability: Mutability,
     },
-    #[allow(missing_docs)]
+    /// `Slice`.
     Slice(Box<TypeRef>),
-    /// Variant.
+    /// `Variant`.
     Array {
-        /// Struct.
+        /// `Struct`.
         inner: Box<TypeRef>,
-        /// Struct.
+        /// `Struct`.
         len: ConstRef,
     },
-    #[allow(missing_docs)]
+    /// `Tuple`.
     Tuple(Vec<TypeRef>),
-    /// Variant.
+    /// `Variant`.
     Never,
-    /// Variant.
+    /// `Variant`.
     Infer,
     /// `dyn Trait` — an unsized trait object. The inner `TypeRef` is the
     /// trait (with its bounds). Lowered from `SyntaxKind::DynType` so that
     /// `dyn Trait` is distinguishable from merely naming the trait type.
     Dyn(Box<TypeRef>),
-    /// Variant.
+    /// `Variant`.
     Error,
 }
 
 #[derive(Clone, Debug)]
-/// ConstRef.
+/// `ConstRef`.
 pub enum ConstRef {
-    #[allow(missing_docs)]
+    /// `Literal`.
     Literal(Literal),
-    #[allow(missing_docs)]
+    /// `Path`.
     Path(Path),
-    /// Variant.
+    /// `Variant`.
     Error,
 }
 
 #[derive(Clone, Debug)]
-/// Path.
+/// `Path`.
 pub struct Path {
-    /// Struct.
+    /// `Struct`.
     pub segments: Vec<PathSegment>,
-    /// Struct.
+    /// `Struct`.
     pub kind: PathKind,
 }
 
 impl Path {
-    /// from_single.
+    /// `from_single`.
+    #[must_use]
     pub fn from_single(name: Name) -> Self {
         Self {
             segments: vec![PathSegment {
@@ -489,7 +468,8 @@ impl Path {
             kind: PathKind::Plain,
         }
     }
-    /// as_name.
+    /// `as_name`.
+    #[must_use]
     pub fn as_name(&self) -> Option<Name> {
         if self.segments.len() == 1 && self.kind == PathKind::Plain {
             Some(self.segments[0].name)
@@ -500,22 +480,22 @@ impl Path {
 }
 
 #[derive(Clone, Debug)]
-/// PathSegment.
+/// `PathSegment`.
 pub struct PathSegment {
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
-    /// Struct.
+    /// `Struct`.
     pub generic_args: Option<Vec<TypeRef>>,
 }
 
 #[derive(Clone, Debug)]
-/// Body.
+/// `Body`.
 pub struct Body {
-    /// Struct.
+    /// `Struct`.
     pub owner: LocalDefId,
-    /// Struct.
+    /// `Struct`.
     pub exprs: IndexVec<ExprId, Expr>,
-    /// Struct.
+    /// `Struct`.
     pub pats: IndexVec<PatId, Pat>,
     /// T053-PATCHED [LSP-4]: source span for every `PatId`. Parallel to
     /// `pats`; entries for compiler-synthesized patterns (async desugar,
@@ -523,11 +503,11 @@ pub struct Body {
     /// diagnostics) can now produce an accurate range for real
     /// user-authored patterns instead of falling back to `0..0`.
     pub pat_spans: IndexVec<PatId, Span>,
-    /// Struct.
+    /// `Struct`.
     pub params: Vec<PatId>,
-    /// Struct.
+    /// `Struct`.
     pub span: Span,
-    /// Struct.
+    /// `Struct`.
     pub expr_spans: IndexVec<ExprId, Span>, // Added field
     /// §3.5.30 piece (1b): `ExprId`s of `Expr::Block` nodes whose source
     /// was `unsafe { ... }`. Populated by `lower_block_to_expr` via a
@@ -541,72 +521,72 @@ pub struct Body {
 }
 
 #[derive(Clone, Debug)]
-/// Expr.
+/// `Expr`.
 pub enum Expr {
-    /// Variant.
+    /// `Variant`.
     Missing,
-    #[allow(missing_docs)]
+    /// `Path`.
     Path(Path),
-    #[allow(missing_docs)]
+    /// `Literal`.
     Literal(Literal),
-    /// Variant.
+    /// `Variant`.
     Block {
-        /// Struct.
+        /// `Struct`.
         stmts: Vec<ExprId>,
-        /// Struct.
+        /// `Struct`.
         tail: Option<ExprId>,
     },
-    /// Variant.
+    /// `Variant`.
     If {
-        /// Struct.
+        /// `Struct`.
         cond: ExprId,
-        /// Struct.
+        /// `Struct`.
         then_branch: ExprId,
-        /// Struct.
+        /// `Struct`.
         else_branch: Option<ExprId>,
     },
-    /// Variant.
+    /// `Variant`.
     While {
-        /// Struct.
+        /// `Struct`.
         cond: ExprId,
-        /// Struct.
+        /// `Struct`.
         body: ExprId,
     },
-    /// Variant.
+    /// `Variant`.
     Loop {
-        /// Struct.
+        /// `Struct`.
         body: ExprId,
     },
-    /// Variant.
+    /// `Variant`.
     For {
-        /// Struct.
+        /// `Struct`.
         pat: PatId,
-        /// Struct.
+        /// `Struct`.
         iterable: ExprId,
-        /// Struct.
+        /// `Struct`.
         body: ExprId,
     },
-    /// Variant.
+    /// `Variant`.
     Match {
-        /// Struct.
+        /// `Struct`.
         scrutinee: ExprId,
-        /// Struct.
+        /// `Struct`.
         arms: Vec<MatchArm>,
     },
-    /// Variant.
+    /// `Variant`.
     Call {
-        /// Struct.
+        /// `Struct`.
         func: ExprId,
-        /// Struct.
+        /// `Struct`.
         args: Vec<ExprId>,
     },
-    /// Variant.
+    /// `Variant`.
     MethodCall {
-        /// Struct.
+        /// `Struct`.
         receiver: ExprId,
-        /// Struct.
+        /// `Struct`.
         method: Name,
-        /// Struct.
+        /// `Struct`.
         args: Vec<ExprId>,
         /// Turbofish type arguments written after the method name
         /// (`x.parse::<i32>()`), if any. These are the call-site's explicit
@@ -615,72 +595,72 @@ pub enum Expr {
         /// them (e.g. `str::parse<T>` where `T` is not the receiver type).
         generic_args: Option<Vec<TypeRef>>,
     },
-    /// Variant.
+    /// `Variant`.
     Field {
-        /// Struct.
+        /// `Struct`.
         receiver: ExprId,
-        /// Struct.
+        /// `Struct`.
         field: Name,
     },
-    /// Variant.
+    /// `Variant`.
     Index {
-        /// Struct.
+        /// `Struct`.
         base: ExprId,
-        /// Struct.
+        /// `Struct`.
         index: ExprId,
     },
-    /// Variant.
+    /// `Variant`.
     Unary {
-        /// Struct.
+        /// `Struct`.
         op: UnOp,
-        /// Struct.
+        /// `Struct`.
         expr: ExprId,
     },
-    /// Variant.
+    /// `Variant`.
     Binary {
-        /// Struct.
+        /// `Struct`.
         op: BinOp,
-        /// Struct.
+        /// `Struct`.
         lhs: ExprId,
-        /// Struct.
+        /// `Struct`.
         rhs: ExprId,
     },
-    /// Variant.
+    /// `Variant`.
     Cast {
-        /// Struct.
+        /// `Struct`.
         expr: ExprId,
-        /// Struct.
+        /// `Struct`.
         ty: TypeRef,
     },
-    /// Variant.
+    /// `Variant`.
     Ref {
-        /// Struct.
+        /// `Struct`.
         expr: ExprId,
-        /// Struct.
+        /// `Struct`.
         mutability: Mutability,
     },
-    /// Variant.
+    /// `Variant`.
     Assign {
-        /// Struct.
+        /// `Struct`.
         lhs: ExprId,
-        /// Struct.
+        /// `Struct`.
         rhs: ExprId,
     },
-    /// Variant.
+    /// `Variant`.
     Return {
-        /// Struct.
+        /// `Struct`.
         value: Option<ExprId>,
     },
-    /// Variant.
+    /// `Variant`.
     Break {
-        /// Struct.
+        /// `Struct`.
         value: Option<ExprId>,
     },
-    /// Variant.
+    /// `Variant`.
     Continue,
-    /// Variant.
+    /// `Variant`.
     Closure {
-        /// Struct.
+        /// `Struct`.
         params: Vec<PatId>,
         /// Per-param type annotations written in source (`|x: &i32| ..`).
         /// `Pat::Binding` has no `ty` field, so without this the annotation
@@ -690,26 +670,26 @@ pub enum Expr {
         /// vars, making `*x` fail with "cannot dereference non-pointer
         /// type". Parallel to `params`; `None` where unannotated.
         param_tys: Vec<Option<TypeRef>>,
-        /// Struct.
+        /// `Struct`.
         body: ExprId,
-        /// Struct.
+        /// `Struct`.
         is_move: bool,
     },
-    #[allow(missing_docs)]
+    /// `Array`.
     Array(Vec<ExprId>),
-    #[allow(missing_docs)]
+    /// `Tuple`.
     Tuple(Vec<ExprId>),
     /// `let <pat> = <value>` — a named-binding statement (and the only place a
     /// new local is introduced). The pattern is bound into the local
     /// environment when this is converted to THIR `Stmt::Let`.
     Let {
-        /// Struct.
+        /// `Struct`.
         pat: PatId,
         /// Span of the pattern (specifically the bound identifier), for
         /// precise LSP rename edits. Without it, a rename used the whole
         /// `let` statement's span and clobbered the initializer.
         pat_span: Span,
-        /// Struct.
+        /// `Struct`.
         value: ExprId,
         /// Optional type annotation written after the pattern (`let x: T = ..`).
         /// Without it, `let r: Result<M, i32> = Result::Ok(M { .. })` bound
@@ -720,27 +700,27 @@ pub enum Expr {
         /// declared element type.
         ty: Option<TypeRef>,
     },
-    /// Variant.
+    /// `Variant`.
     Struct {
-        /// Struct.
+        /// `Struct`.
         path: Path,
         #[doc = "field"]
         fields: Vec<(Name, ExprId)>,
-        /// Struct.
+        /// `Struct`.
         spread: Option<ExprId>,
     },
-    /// Variant.
+    /// `Variant`.
     Range {
-        /// Struct.
+        /// `Struct`.
         start: Option<ExprId>,
-        /// Struct.
+        /// `Struct`.
         end: Option<ExprId>,
-        /// Struct.
+        /// `Struct`.
         inclusive: bool,
     },
     /// `e.await` — suspends until the future `e` resolves. Lowered by the
     /// async desugaring pass (`lower_async`) into a poll loop.
-    /// Struct.
+    /// `Struct`.
     Await {
         /// expr field.
         expr: ExprId,
@@ -756,7 +736,7 @@ pub enum Expr {
     /// to a call tree. The dedicated `glyim-gsx` stage lowers it to VIR/
     /// blueprints/patches; typeck validates it against dialect schemas.
     Gsx(Box<GsxExpr>),
-    /// Variant.
+    /// `Variant`.
     Err,
 }
 
@@ -791,7 +771,7 @@ pub enum GsxAttrHIR {
     Plain {
         /// Attribute name.
         name: Name,
-        /// Value.
+        /// `Value`.
         value: GsxAttrValue,
     },
     /// `ns:name=value` — `on:`/`class:`/`style:`/`bind:` directives (§3.2).
@@ -800,7 +780,7 @@ pub enum GsxAttrHIR {
         ns: Name,
         /// Directive sub-name (`click`, `warn`, `width`, `value`).
         name: Name,
-        /// Value.
+        /// `Value`.
         value: GsxAttrValue,
     },
 }
@@ -830,28 +810,28 @@ pub enum GsxChildHIR {
 }
 
 #[derive(Clone, Debug)]
-/// MatchArm.
+/// `MatchArm`.
 pub struct MatchArm {
-    /// Struct.
+    /// `Struct`.
     pub pat: PatId,
-    /// Struct.
+    /// `Struct`.
     pub guard: Option<ExprId>,
-    /// Struct.
+    /// `Struct`.
     pub body: ExprId,
 }
 
 #[derive(Clone, Debug)]
-/// Pat.
+/// `Pat`.
 pub enum Pat {
-    /// Variant.
+    /// `Variant`.
     Wild,
-    /// Variant.
+    /// `Variant`.
     Binding {
-        /// Struct.
+        /// `Struct`.
         name: Name,
-        /// Struct.
+        /// `Struct`.
         mutability: Mutability,
-        /// Struct.
+        /// `Struct`.
         subpattern: Option<PatId>,
     },
     /// `ref x` / `ref mut x` — binds a *reference* to the matched place
@@ -861,73 +841,73 @@ pub enum Pat {
     /// without it the `ref` was dropped and `v` typed `T`, so `*v`
     /// reported "cannot dereference non-pointer type".
     RefBinding {
-        /// Struct.
+        /// `Struct`.
         name: Name,
         /// Mutability of the *binding* (`ref mut` → `Mut`).
         mutability: Mutability,
         /// Mutability of the *reference* (`ref mut` → `&mut T`).
         ref_mutability: Mutability,
-        /// Struct.
+        /// `Struct`.
         subpattern: Option<PatId>,
     },
-    /// Variant.
+    /// `Variant`.
     Struct {
-        /// Struct.
+        /// `Struct`.
         path: Path,
         #[doc = "field"]
         fields: Vec<(Name, PatId)>,
-        /// Struct.
+        /// `Struct`.
         rest: bool,
     },
-    #[allow(missing_docs)]
+    /// `Tuple`.
     Tuple(Vec<PatId>),
-    #[allow(missing_docs)]
+    /// `Slice`.
     Slice(Vec<PatId>),
-    #[allow(missing_docs)]
+    /// `Or`.
     Or(Vec<PatId>),
-    #[allow(missing_docs)]
+    /// `Literal`.
     Literal(Literal),
-    /// Variant.
+    /// `Variant`.
     Range {
-        /// Struct.
+        /// `Struct`.
         start: Option<Literal>,
-        /// Struct.
+        /// `Struct`.
         end: Option<Literal>,
-        /// Struct.
+        /// `Struct`.
         inclusive: bool,
     },
-    #[allow(missing_docs)]
+    /// `Path`.
     Path(Path),
-    /// Variant.
+    /// `Variant`.
     Err,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-/// Literal.
+/// `Literal`.
 pub enum Literal {
-    #[allow(missing_docs)]
+    /// `Int`.
     Int(i128, Option<IntTy>),
-    #[allow(missing_docs)]
+    /// `Uint`.
     Uint(u128, Option<UintTy>),
-    #[allow(missing_docs)]
+    /// `Float`.
     Float(u64, FloatTy),
-    #[allow(missing_docs)]
+    /// `Bool`.
     Bool(bool),
-    #[allow(missing_docs)]
+    /// `Char`.
     Char(char),
-    #[allow(missing_docs)]
+    /// `String`.
     String(Name),
-    /// Variant.
+    /// `Variant`.
     Unit,
 }
 
 mod lower;
 
-/// pipeline_api.
+/// `pipeline_api`.
 pub mod pipeline_api;
 #[cfg(test)]
 mod tests;
-/// where_clause.
+/// `where_clause`.
 pub mod where_clause;
 
 impl Body {
