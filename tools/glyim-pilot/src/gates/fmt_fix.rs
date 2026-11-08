@@ -2,7 +2,7 @@ use crate::error::PilotError;
 use crate::gates::helpers::run_gate_command;
 use crate::gates::types::{GateContext, GateResult, GateSideEffect};
 
-/// run_fmt_fix.
+/// `run_fmt_fix`.
 pub async fn run_fmt_fix(ctx: &GateContext) -> Result<GateResult, PilotError> {
     let output = run_gate_command(
         "cargo",
