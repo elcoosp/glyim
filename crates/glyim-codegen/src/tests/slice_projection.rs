@@ -1,6 +1,6 @@
 //! Tests for slice/array projection code generation in the bytecode backend.
 //!
-//! Tier 5.4: `from_end` ConstantIndex on an *array* resolves to a
+//! Tier 5.4: `from_end` `ConstantIndex` on an *array* resolves to a
 //! compile-time constant offset; on a *slice* the length is only known at
 //! runtime, so the backend emits `OP_LEN; OP_SUB; OP_MUL; OP_ADD` to compute
 //! `base + (runtime_len - offset) * elem_size`. This backend has no VM, so
