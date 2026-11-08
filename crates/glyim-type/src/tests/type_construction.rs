@@ -1,5 +1,5 @@
-//! Exhaustive TyKind variant construction tests.
-//! Ensures every TyKind variant can be constructed and roundtripped through the context.
+//! Exhaustive `TyKind` variant construction tests.
+//! Ensures every `TyKind` variant can be constructed and roundtripped through the context.
 
 use glyim_core::def_id::*;
 use glyim_core::primitives::*;
@@ -268,7 +268,7 @@ fn ty_kind_bound() {
 #[test]
 fn ty_kind_debug_format() {
     let kind = TyKind::Int(IntTy::I32);
-    let debug = format!("{:?}", kind);
+    let debug = format!("{kind:?}");
     assert!(debug.contains("Int"));
     assert!(debug.contains("I32"));
 }
