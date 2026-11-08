@@ -10,7 +10,7 @@ use glyim_syntax::SyntaxKind;
 /// Parse `src` as the body of `fn __g() { ... }` and return the top-level
 /// expression-ish nodes of that body.
 fn parse_body(src: &str) -> Vec<glyim_syntax::SyntaxNode> {
-    let wrapped = format!("fn __g() {{ {} }}", src);
+    let wrapped = format!("fn __g() {{ {src} }}");
     let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
     let block = parsed
         .root
@@ -57,7 +57,7 @@ fn text_of(node: &glyim_syntax::SyntaxNode) -> String {
 fn open_tag_name(open: &glyim_syntax::SyntaxNode) -> String {
     let raw = open
         .children_with_tokens()
-        .filter_map(|e| e.into_token())
+        .filter_map(rowan::NodeOrToken::into_token)
         .skip_while(|t| t.kind() != SyntaxKind::Lt)
         .collect::<Vec<_>>();
     // tokens after `<`: Ident (Colon Ident)* or Ident (ColonColon Ident)*
@@ -76,8 +76,8 @@ fn open_tag_name(open: &glyim_syntax::SyntaxNode) -> String {
     name
 }
 
-fn first_child_of<'a>(
-    node: &'a glyim_syntax::SyntaxNode,
+fn first_child_of(
+    node: &glyim_syntax::SyntaxNode,
     kind: SyntaxKind,
 ) -> Option<glyim_syntax::SyntaxNode> {
     node.children().find(|c| c.kind() == kind)
@@ -100,7 +100,6 @@ fn gsx_self_closing_element() {
 }
 
 /// §3.2: Element — paired form with a quoted text child (F4: text is a string
-/// literal, GsxTextLit node).
 #[test]
 fn gsx_element_with_text_child() {
     let e = parse_single("<h1>\"Hello\"</h1>");
@@ -204,7 +203,7 @@ fn gsx_hyphenated_attr_name() {
     assert_eq!(text_of(&attrs[0]), "aria-label=\"Counter\"");
 }
 
-/// §3.2: directive attributes `ns:name={…}` become GsxDirectiveAttr nodes:
+/// §3.2: directive attributes `ns:name={…}` become `GsxDirectiveAttr` nodes:
 /// `on:click`, `class:warn`, `style:width`, `bind:value`.
 #[test]
 fn gsx_directive_attrs() {
@@ -256,7 +255,6 @@ fn gsx_if_else_block_child() {
 
 /// §3.2: keyed iteration `for x in xs by <key-expr> { … }` — `by` is a
 /// GSX-scoped contextual keyword, accepted only in child-position `for`, and
-/// materializes as a GsxForBy node.
 #[test]
 fn gsx_for_by_keyed_iteration() {
     let src = "<ul>{for item in s.history.iter() by item.id { <li>\"x\"</li> }}</ul>";
@@ -271,7 +269,6 @@ fn gsx_for_by_keyed_iteration() {
 }
 
 /// Interpolated text (§3.2) keeps its holes syntactically visible: the literal
-/// is one GsxTextLit; glyim-gsx splits static pieces from holes at parse time.
 #[test]
 fn gsx_interpolated_text_literal() {
     let e = parse_single("<h1>\"Hello, {s.name}!\"</h1>");
@@ -351,7 +348,7 @@ fn gsx_deep_nesting_is_bounded() {
     for _ in 0..400 {
         src.push_str("</div>");
     }
-    let wrapped = format!("fn __g() {{ {} }}", src);
+    let wrapped = format!("fn __g() {{ {src} }}");
     let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
     // Either parses fine or reports bounded diagnostics; must not panic/hang.
     let _ = parsed.diagnostics.len();
@@ -361,7 +358,7 @@ fn gsx_deep_nesting_is_bounded() {
 #[test]
 fn gsx_tree_is_lossless() {
     let src = "<section class=\"counter\" aria-label=\"Counter\"><h1>\"Hi\"</h1></section>";
-    let wrapped = format!("fn __g() {{ {} }}", src);
+    let wrapped = format!("fn __g() {{ {src} }}");
     let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
     let full = parsed.root.to_string();
     assert!(full.contains(src), "source text must survive: {full}");
