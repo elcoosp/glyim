@@ -2,7 +2,7 @@ use super::Parser;
 use glyim_syntax::{GlyimLang, SyntaxKind};
 use rowan::Language;
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     pub(crate) fn parse_type(&mut self) {
         // FE-6 sibling: types recurse just as hard as expressions
         // (`&&&&…T`, `A<A<A<…>>>`). Without this guard a deeply nested
@@ -252,7 +252,7 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let found = self.current_kind();
-                self.error(format!("expected type, found {:?}", found));
+                self.error(format!("expected type, found {found:?}"));
                 if self.current().is_some() {
                     self.bump();
                 }
