@@ -8,7 +8,7 @@ fn get_def_map(source: &str) -> (crate::CrateDefMap, Vec<glyim_diag::GlyimDiagno
     if !trace.parse_diagnostics.is_empty() {
         println!("--- PARSE DIAGNOSTICS ---");
         for d in &trace.parse_diagnostics {
-            println!("{:?}", d);
+            println!("{d:?}");
         }
         println!("--- END PARSE DIAGNOSTICS ---");
     }
@@ -23,14 +23,14 @@ fn get_def_map(source: &str) -> (crate::CrateDefMap, Vec<glyim_diag::GlyimDiagno
 
 #[test]
 fn u08_t01_std_io_read_imports_read() {
-    let source = r#"
+    let source = r"
         mod std {
             pub mod io {
                 pub struct Read;
             }
         }
         use std::io::Read;
-    "#;
+    ";
 
     let (def_map, _) = get_def_map(source);
 
@@ -51,10 +51,10 @@ fn u08_t01_std_io_read_imports_read() {
 
 #[test]
 fn u08_t02_crate_foo_imports_foo() {
-    let source = r#"
+    let source = r"
         pub struct Foo;
         use crate::Foo;
-    "#;
+    ";
     let (def_map, _) = get_def_map(source);
 
     let root_mod = def_map.root;
@@ -66,10 +66,10 @@ fn u08_t02_crate_foo_imports_foo() {
 
 #[test]
 fn u08_t03_self_bar_imports_bar() {
-    let source = r#"
+    let source = r"
         pub struct Bar;
         use self::Bar;
-    "#;
+    ";
     let (def_map, _) = get_def_map(source);
 
     let root_mod = def_map.root;
@@ -80,13 +80,13 @@ fn u08_t03_self_bar_imports_bar() {
 
 #[test]
 fn u08_t04_super_baz_imports_baz() {
-    let source = r#"
+    let source = r"
         pub struct Baz;
         mod child {
             use super::Baz;
             fn check() {}
         }
-    "#;
+    ";
     let (def_map, _) = get_def_map(source);
 
     let root_mod = def_map.root;
@@ -108,7 +108,7 @@ fn u08_t04_super_baz_imports_baz() {
 
 #[test]
 fn u08_t05_nested_imports() {
-    let source = r#"
+    let source = r"
         mod std {
             pub mod io {
                 pub struct Read;
@@ -116,7 +116,7 @@ fn u08_t05_nested_imports() {
             }
         }
         use std::io::{Read, Write};
-    "#;
+    ";
     let (def_map, _) = get_def_map(source);
 
     let root_mod = def_map.root;
@@ -135,7 +135,7 @@ fn u08_t05_nested_imports() {
 
 #[test]
 fn u08_t06_glob_import() {
-    let source = r#"
+    let source = r"
         mod std {
             pub mod io {
                 pub struct Read;
@@ -143,7 +143,7 @@ fn u08_t06_glob_import() {
             }
         }
         use std::io::*;
-    "#;
+    ";
     let (def_map, _) = get_def_map(source);
 
     let root_mod = def_map.root;
@@ -162,7 +162,7 @@ fn u08_t06_glob_import() {
 
 #[test]
 fn u08_t07_deeply_nested_path() {
-    let source = r#"
+    let source = r"
         mod std {
             pub mod io {
                 pub mod fs {
@@ -171,7 +171,7 @@ fn u08_t07_deeply_nested_path() {
             }
         }
         use std::io::fs::File;
-    "#;
+    ";
     let (def_map, _) = get_def_map(source);
 
     let root_mod = def_map.root;
@@ -185,7 +185,7 @@ fn u08_t07_deeply_nested_path() {
 
 #[test]
 fn u08_t08_nested_glob_import() {
-    let source = r#"
+    let source = r"
         mod std {
             pub mod io {
                 pub mod fs {
@@ -195,7 +195,7 @@ fn u08_t08_nested_glob_import() {
             }
         }
         use std::io::fs::*;
-    "#;
+    ";
     let (def_map, _) = get_def_map(source);
 
     let root_mod = def_map.root;
@@ -214,7 +214,7 @@ fn u08_t08_nested_glob_import() {
 
 #[test]
 fn u08_t09_multiple_super_levels() {
-    let source = r#"
+    let source = r"
         pub struct Root;
         mod parent {
             pub struct Parent;
@@ -224,7 +224,7 @@ fn u08_t09_multiple_super_levels() {
                 fn check() {}
             }
         }
-    "#;
+    ";
     let (def_map, _) = get_def_map(source);
 
     let root_mod = def_map.root;
@@ -259,14 +259,14 @@ fn u08_t09_multiple_super_levels() {
 
 #[test]
 fn u08_t10_module_self_import() {
-    let source = r#"
+    let source = r"
         mod std {
             pub mod io {
                 pub struct Read;
             }
         }
         use std::io;
-    "#;
+    ";
     let (def_map, _) = get_def_map(source);
 
     let root_mod = def_map.root;
@@ -280,7 +280,7 @@ fn u08_t10_module_self_import() {
 
 #[test]
 fn u08_t11_mixed_nested_import() {
-    let source = r#"
+    let source = r"
         mod std {
             pub mod io {
                 pub struct Read;
@@ -292,7 +292,7 @@ fn u08_t11_mixed_nested_import() {
         }
         use std::io::{Read, Write};
         use std::fs::File;
-    "#;
+    ";
     let (def_map, _) = get_def_map(source);
 
     let root_mod = def_map.root;
@@ -316,7 +316,7 @@ fn u08_t11_mixed_nested_import() {
 
 #[test]
 fn u08_t12_glob_with_nested_path() {
-    let source = r#"
+    let source = r"
         mod std {
             pub mod io {
                 pub mod net {
@@ -326,7 +326,7 @@ fn u08_t12_glob_with_nested_path() {
             }
         }
         use std::io::net::*;
-    "#;
+    ";
     let (def_map, _) = get_def_map(source);
 
     let root_mod = def_map.root;
@@ -350,7 +350,7 @@ fn u08_t12_glob_with_nested_path() {
 // pass would leave `c`'s glob empty.
 #[test]
 fn u08_t13_cross_module_glob_fixed_point() {
-    let source = r#"
+    let source = r"
         mod a {
             pub struct Widget;
         }
@@ -361,7 +361,7 @@ fn u08_t13_cross_module_glob_fixed_point() {
             pub use crate::b::*;
         }
         use crate::c::Widget;
-    "#;
+    ";
     let (def_map, _) = get_def_map(source);
 
     let root_mod = def_map.root;
