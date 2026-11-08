@@ -12,12 +12,12 @@ use super::mir_builder::{
 
 /// Nested if: shared borrow in outer scope, used in inner branches → no error.
 ///
-///   BB0: local_2 = &shared local_1; goto BB1
-///   BB1: switch local_3 -> [true: BB2, false: BB5]
-///   BB2: switch local_4 -> [true: BB3, false: BB4]
-///   BB3: local_5 = copy local_2; goto BB6
-///   BB4: local_6 = copy local_2; goto BB6
-///   BB5: local_7 = copy local_2; goto BB6
+///   BB0: `local_2` = &shared `local_1`; goto BB1
+///   BB1: switch `local_3` -> [true: BB2, false: BB5]
+///   BB2: switch `local_4` -> [true: BB3, false: BB4]
+///   BB3: `local_5` = copy `local_2`; goto BB6
+///   BB4: `local_6` = copy `local_2`; goto BB6
+///   BB5: `local_7` = copy `local_2`; goto BB6
 ///   BB6: return
 #[test]
 fn nested_if_shared_borrow_no_error() {
@@ -63,13 +63,13 @@ fn nested_if_shared_borrow_no_error() {
 /// Nested if: mut borrow in outer scope, conflicting access in branch where
 /// the mut ref is also used after the branch (so it's live) → error.
 ///
-///   BB0: local_2 = &mut local_1; goto BB1
-///   BB1: switch local_3 -> [true: BB2, false: BB4]
-///   BB2: switch local_4 -> [true: BB3, false: BB6]
-///   BB3: local_5 = copy local_2; goto BB5          (use mut ref, OK)
-///   BB4: local_6 = copy local_1; goto BB5          (direct read while mut borrowed, ERROR)
-///   BB5: local_7 = copy local_2; return            (use mut ref — makes local_2 live on ALL paths into BB5)
-///   BB6: local_8 = copy local_2; goto BB5          (use mut ref, OK)
+///   BB0: `local_2` = &mut `local_1`; goto BB1
+///   BB1: switch `local_3` -> [true: BB2, false: BB4]
+///   BB2: switch `local_4` -> [true: BB3, false: BB6]
+///   BB3: `local_5` = copy `local_2`; goto BB5          (use mut ref, OK)
+///   BB4: `local_6` = copy `local_1`; goto BB5          (direct read while mut borrowed, ERROR)
+///   BB5: `local_7` = copy `local_2`; return            (use mut ref — makes `local_2` live on ALL paths into BB5)
+///   BB6: `local_8` = copy `local_2`; goto BB5          (use mut ref, OK)
 #[test]
 fn nested_if_mut_borrow_conflict_in_branch_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -127,11 +127,11 @@ fn nested_if_mut_borrow_conflict_in_branch_error() {
 /// Nested if: mut borrow only used on one branch, conflicting access on
 /// another branch where the ref is dead → no error (correct NLL).
 ///
-///   BB0: local_2 = &mut local_1; goto BB1
-///   BB1: switch local_3 -> [true: BB2, false: BB3]
-///   BB2: local_4 = copy local_2; goto BB4          (use mut ref, then merge)
-///   BB3: local_5 = copy local_1; goto BB4          (mut ref dead on this path, OK)
-///   BB4: return                           (local_2 not used here, so dead on BB3 path)
+///   BB0: `local_2` = &mut `local_1`; goto BB1
+///   BB1: switch `local_3` -> [true: BB2, false: BB3]
+///   BB2: `local_4` = copy `local_2`; goto BB4          (use mut ref, then merge)
+///   BB3: `local_5` = copy `local_1`; goto BB4          (mut ref dead on this path, OK)
+///   BB4: return                           (`local_2` not used here, so dead on BB3 path)
 #[test]
 fn nested_if_mut_borrow_dead_on_other_branch_no_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -178,11 +178,11 @@ fn nested_if_mut_borrow_dead_on_other_branch_no_error() {
 
 /// Diamond CFG: shared borrow created before branch, used after merge → no error.
 ///
-///   BB0: local_2 = &shared local_1; goto BB1
-///   BB1: switch local_3 -> [true: BB2, false: BB3]
+///   BB0: `local_2` = &shared `local_1`; goto BB1
+///   BB1: switch `local_3` -> [true: BB2, false: BB3]
 ///   BB2: goto BB4
 ///   BB3: goto BB4
-///   BB4: local_4 = copy local_2; return
+///   BB4: `local_4` = copy `local_2`; return
 #[test]
 fn diamond_cfg_shared_borrow_no_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -217,12 +217,12 @@ fn diamond_cfg_shared_borrow_no_error() {
 /// Shared borrow in one branch of diamond, used after merge.
 /// The borrow only exists on one path, but the ref local may be used after.
 ///
-///   BB0: switch local_3 -> [true: BB1, false: BB2]
-///   BB1: local_2 = &shared local_1; goto BB3
+///   BB0: switch `local_3` -> [true: BB1, false: BB2]
+///   BB1: `local_2` = &shared `local_1`; goto BB3
 ///   BB2: goto BB3
-///   BB3: local_4 = copy local_2; return
+///   BB3: `local_4` = copy `local_2`; return
 ///
-/// No borrow conflict — the borrow of local_1 only exists on the BB1 path,
+/// No borrow conflict — the borrow of `local_1` only exists on the BB1 path,
 /// and on the BB2 path there is no active loan to conflict with.
 #[test]
 fn borrow_in_one_branch_of_diamond_no_conflict() {
