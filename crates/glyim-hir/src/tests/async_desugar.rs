@@ -8,7 +8,7 @@
 //! NOT yet emit `Expr::Await` for `.await` postfixes inside async bodies — the
 //! `.await` operand is dropped and `let` bindings in async bodies are omitted,
 //! so a parsed `async fn` body never contains `Expr::Await`. That parser gap is
-//! tracked separately in §6.1 / KNOWN_GAPS; here we test the desugar logic in
+//! tracked separately in §6.1 / `KNOWN_GAPS`; here we test the desugar logic in
 //! isolation, which is the part §1.1 owns.
 //!
 //! The multi-poll poll-body uses placeholder `i32` future/live-local field types
@@ -155,12 +155,11 @@ fn single_await_no_state_enum() {
     let enums = enum_item_names(&hir);
     assert!(
         !enums.iter().any(|n| n.contains("State")),
-        "single-await fn should not produce a *State enum; found: {:?}",
-        enums
+        "single-await fn should not produce a *State enum; found: {enums:?}"
     );
 }
 
-/// §Phase 3 safety guard (GLYIM_DESTUB_PLAN): a function with TWO `.await`s
+/// §Phase 3 safety guard (`GLYIM_DESTUB_PLAN)`: a function with TWO `.await`s
 /// must NOT be silently desugared into the broken `Poll::Pending`-hardcoded
 /// skeleton (which would hang forever). The v1 resume-dispatch that splits the
 /// body at each await requires post-type-check future types (the planned MIR
@@ -180,163 +179,14 @@ fn multi_await_is_rejected_with_diagnostic() {
             let m = d.message.to_lowercase();
             m.contains("state-machine") || m.contains("v1") || m.contains("await")
         }),
-        "diagnostic must mention the unsupported multi-await state-machine shape: {:?}",
-        diags
+        "diagnostic must mention the unsupported multi-await state-machine shape: {diags:?}"
     );
     // No `*State` enum may be produced: the function was not desugared.
     let enums = enum_item_names(&hir);
     assert!(
         !enums.iter().any(|n| n.contains("State")),
-        "multi-await fn must NOT produce a *State enum (would be the broken skeleton): {:?}",
-        enums
+        "multi-await fn must NOT produce a *State enum (would be the broken skeleton): {enums:?}"
     );
-}
-
-/// Build a `CrateHir` with an `async fn bad(a, b)` whose body is
-/// `for i in 0..3 { let _ = a.await; }` — i.e. an `.await` *inside* a `for`
-/// loop body. Phase 3 (GLYIM_DESTUB_PLAN) must reject this shape with a clear
-/// compile-time diagnostic rather than silently miscompiling it into an
-/// infinite-`Pending` hang.
-#[allow(dead_code)]
-fn build_async_hir_with_loop_await() -> CrateHir {
-    let interner = Interner::new();
-    let bad_name: Name = interner.intern("bad");
-    let a_name: Name = interner.intern("a");
-    let b_name: Name = interner.intern("b");
-    let i_name: Name = interner.intern("i");
-
-    let mut exprs: IndexVec<ExprId, Expr> = IndexVec::new();
-    let mut pats: IndexVec<crate::PatId, crate::Pat> = IndexVec::new();
-
-    let path_expr = |_interner: &Interner, n: Name, exprs: &mut IndexVec<ExprId, Expr>| -> ExprId {
-        let p = Path {
-            segments: vec![PathSegment {
-                name: n,
-                generic_args: None,
-            }],
-            kind: PathKind::Plain,
-        };
-        exprs.push(Expr::Path(p))
-    };
-
-    let a_path = path_expr(&interner, a_name, &mut exprs);
-
-    // `a.await`
-    let await_expr = exprs.push(Expr::Await { expr: a_path });
-    // `let _x = a.await;` (use a name binding as the pattern)
-    let wild_pat_id = pats.push(crate::Pat::Binding {
-        name: i_name,
-        mutability: glyim_core::primitives::Mutability::Not,
-        subpattern: None,
-    });
-    let let_expr = exprs.push(Expr::Let {
-        pat: wild_pat_id,
-        pat_span: Span::DUMMY,
-        value: await_expr,
-        ty: None,
-    });
-    // loop body: `let _x = a.await;` (no enclosing Block needed; pointing the
-    // For body directly at the Let keeps the root block the only Block, so
-    // `root_expr_id` resolves to it and the in_loop walk context is preserved)
-    let loop_body = let_expr;
-    // for iterator `0..3`
-    let zero = exprs.push(Expr::Literal(Literal::Int(0, None)));
-    let three = exprs.push(Expr::Literal(Literal::Int(3, None)));
-    let range = exprs.push(Expr::Range {
-        start: Some(zero),
-        end: Some(three),
-        inclusive: false,
-    });
-    let i_pat = pats.push(crate::Pat::Binding {
-        name: i_name,
-        mutability: glyim_core::primitives::Mutability::Not,
-        subpattern: None,
-    });
-    // `for i in 0..3 { let _x = a.await; }`
-    let for_expr = exprs.push(Expr::For {
-        pat: i_pat,
-        iterable: range,
-        body: loop_body,
-    });
-    // root block: the for loop, tail `b`
-    let b_path = path_expr(&interner, b_name, &mut exprs);
-    let block = exprs.push(Expr::Block {
-        stmts: vec![for_expr],
-        tail: Some(b_path),
-    });
-    let _ = block;
-
-    let body = Body {
-        unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
-        exprs: exprs.clone(),
-        pat_spans: {
-            // T053-PATCHED [LSP-4]: tests build `pats` manually and don't
-            // track spans; parallel array of DUMMY is fine for HIR tests.
-            let mut s = IndexVec::new();
-            for _ in 0..pats.len() {
-                s.push(Span::DUMMY);
-            }
-            s
-        },
-        pats,
-        params: Vec::new(),
-        span: Span::DUMMY,
-        expr_spans: {
-            let mut s = IndexVec::new();
-            for _ in 0..exprs.len() {
-                s.push(Span::DUMMY);
-            }
-            s
-        },
-    };
-    let body_id = BodyId::from_raw(0);
-
-    let params = vec![
-        Param {
-            name: a_name,
-            ty: None,
-            span: Span::DUMMY,
-        },
-        Param {
-            name: b_name,
-            ty: None,
-            span: Span::DUMMY,
-        },
-    ];
-    let fn_item = FnItem {
-        params,
-        return_ty: None,
-        body: Some(body_id),
-        is_unsafe: false,
-        is_async: true,
-        is_const: false,
-        generic_params: Vec::new(),
-        where_clauses: Vec::new(),
-        abi: None,
-        attrs: Vec::new(),
-    };
-    let item = Item {
-        id: ItemId::from_raw(0),
-        name: bad_name,
-        kind: ItemKind::Fn(fn_item),
-        visibility: Visibility::Inherited,
-        span: Span::DUMMY,
-    };
-
-    let mut items: IndexVec<ItemId, Item> = IndexVec::new();
-    items.push(item);
-    let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
-    bodies.push(body);
-    let mut body_owners: IndexVec<BodyId, LocalDefId> = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
-
-    CrateHir {
-        items,
-        bodies,
-        body_owners,
-        interner,
-    }
 }
 
 /// Builds `async fn loop_await(n: i32) -> i32 { let mut total = 0; let mut i = 0;
@@ -522,8 +372,7 @@ fn while_loop_await_desugars_to_state_machine() {
     // Supported shape: no error diagnostic expected.
     assert!(
         diags.iter().all(|d| !d.is_error()),
-        "while-loop-await should desugar cleanly; got diagnostics: {:?}",
-        diags
+        "while-loop-await should desugar cleanly; got diagnostics: {diags:?}"
     );
     // It must have produced a `*State` enum (the coroutine state machine).
     let has_state_enum = hir.items.iter().any(|it| {
