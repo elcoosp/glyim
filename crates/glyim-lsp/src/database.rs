@@ -12,10 +12,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 #[derive(Clone)]
-/// SourceMap.
+/// `SourceMap`.
 pub struct SourceMap {
-    #[allow(unused)]
-    path: PathBuf,
     file_id: FileId,
     content: String,
     line_starts: Vec<usize>,
@@ -23,22 +21,24 @@ pub struct SourceMap {
 
 impl SourceMap {
     /// new.
-    pub fn new(path: PathBuf, file_id: FileId, content: String) -> Self {
+    #[must_use]
+    pub fn new(file_id: FileId, content: String) -> Self {
         let line_starts = std::iter::once(0)
             .chain(content.match_indices('\n').map(|(i, _)| i + 1))
             .collect();
         Self {
-            path,
             file_id,
             content,
             line_starts,
         }
     }
-    /// file_id.
+    /// `file_id`.
+    #[must_use]
     pub fn file_id(&self) -> FileId {
         self.file_id
     }
     /// source.
+    #[must_use]
     pub fn source(&self) -> &str {
         &self.content
     }
@@ -55,12 +55,13 @@ impl SourceMap {
         // Count UTF-16 units between the line start and `offset`.
         let col16 = self.content[line_start..offset]
             .chars()
-            .map(|c| c.len_utf16())
+            .map(char::len_utf16)
             .sum();
         (line, col16)
     }
 
-    /// span_to_position.
+    /// `span_to_position`.
+    #[must_use]
     pub fn span_to_position(
         &self,
         lo: usize,
@@ -73,13 +74,13 @@ impl SourceMap {
     /// code-unit count; it is converted to a byte offset on the line's char
     /// boundaries. Returns `None` if the column is past the end of the line
     /// (it never spills into the next line).
+    #[must_use]
     pub fn line_col_to_offset(&self, line: usize, col: usize) -> Option<usize> {
         let start = *self.line_starts.get(line)?;
         // The line runs to the next newline (or EOF).
         let line_end = self.content[start..]
             .find('\n')
-            .map(|i| start + i)
-            .unwrap_or(self.content.len());
+            .map_or(self.content.len(), |i| start + i);
         let line_text = &self.content[start..line_end];
         let mut u16_count = 0usize;
         for (i, ch) in line_text.char_indices() {
@@ -98,7 +99,7 @@ impl SourceMap {
     }
 }
 
-/// FileMap.
+/// `FileMap`.
 pub struct FileMap {
     path_to_id: HashMap<PathBuf, FileId>,
     id_to_path: HashMap<FileId, PathBuf>,
@@ -113,6 +114,7 @@ impl Default for FileMap {
 
 impl FileMap {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             path_to_id: HashMap::new(),
@@ -120,7 +122,7 @@ impl FileMap {
             next_id: 0,
         }
     }
-    /// get_or_create.
+    /// `get_or_create`.
     pub fn get_or_create(&mut self, path: &PathBuf) -> FileId {
         if let Some(id) = self.path_to_id.get(path) {
             return *id;
@@ -131,11 +133,13 @@ impl FileMap {
         self.id_to_path.insert(id, path.clone());
         id
     }
-    /// get_by_path.
+    /// `get_by_path`.
+    #[must_use]
     pub fn get_by_path(&self, path: &Path) -> Option<FileId> {
         self.path_to_id.get(path).copied()
     }
     /// path.
+    #[must_use]
     pub fn path(&self, id: FileId) -> Option<&PathBuf> {
         self.id_to_path.get(&id)
     }
@@ -147,32 +151,32 @@ impl FileMap {
     }
 }
 
-/// AnalysisDatabase.
+/// `AnalysisDatabase`.
 pub struct AnalysisDatabase {
-    /// Struct.
+    /// `Struct`.
     pub file_map: RwLock<FileMap>,
-    /// Struct.
+    /// `Struct`.
     pub source_maps: RwLock<HashMap<FileId, SourceMap>>,
-    /// Struct.
+    /// `Struct`.
     pub symbol_index: RwLock<SymbolIndex>,
-    /// Struct.
+    /// `Struct`.
     pub reference_graph: RwLock<ReferenceGraph>,
-    /// Struct.
+    /// `Struct`.
     pub hirs: RwLock<HashMap<FileId, glyim_hir::CrateHir>>,
     /// Per-file type-checking result + the `TyCtx` it was produced with.
     /// Populated by the analysis driver (Tier 6.4) so completions/hover can
     /// resolve the type of any expression via `expr_ty_at` /
     /// `type_at_offset`. Keyed by `FileId`.
     pub typeck: RwLock<HashMap<FileId, (Arc<glyim_type::TyCtx>, TypeckResult)>>,
-    /// Struct.
+    /// `Struct`.
     pub diagnostics: RwLock<HashMap<FileId, Vec<lsp_types::Diagnostic>>>,
-    /// Struct.
+    /// `Struct`.
     /// Raw `GlyimDiagnostic`s (preserving the `structured` payload) for each
     /// file, in 1:1 correspondence with `diagnostics` (same order). The LSP
     /// `Diagnostic` type cannot carry `structured`, so code actions that need it
     /// (e.g. the §5.1 match-arm skeleton quick-fix) read from here by index.
     pub raw_diagnostics: RwLock<HashMap<FileId, Vec<GlyimDiagnostic>>>,
-    /// Struct.
+    /// `Struct`.
     pub file_access_times: RwLock<HashMap<FileId, Instant>>,
 }
 
@@ -184,6 +188,7 @@ impl Default for AnalysisDatabase {
 
 impl AnalysisDatabase {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             file_map: RwLock::new(FileMap::new()),
@@ -200,7 +205,7 @@ impl AnalysisDatabase {
 
     /// touch.
     pub fn touch(&self, _file_id: FileId) {}
-    /// evict_stale.
+    /// `evict_stale`.
     pub fn evict_stale(&self, _max_age: std::time::Duration) {}
 
     /// Resolve the type of the HIR expression that contains `offset` in
@@ -236,7 +241,7 @@ impl AnalysisDatabase {
                 let hi = span.hi.to_usize();
                 if lo <= offset && offset <= hi {
                     let size = hi.saturating_sub(lo);
-                    if receiver_best.map(|(b, _, _)| size < b).unwrap_or(true) {
+                    if receiver_best.is_none_or(|(b, _, _)| size < b) {
                         let owner = hir.body_owners[body_id];
                         receiver_best = Some((size, owner, recv_id));
                     }
@@ -260,7 +265,7 @@ impl AnalysisDatabase {
                 let ends_before = hi == offset || hi == offset.saturating_sub(1);
                 if contains || ends_before {
                     let size = hi.saturating_sub(lo);
-                    if best.map(|(b, _, _)| size < b).unwrap_or(true) {
+                    if best.is_none_or(|(b, _, _)| size < b) {
                         let owner = hir.body_owners[body_id];
                         best = Some((size, owner, expr_id));
                     }
@@ -293,14 +298,9 @@ impl AnalysisDatabase {
 mod source_map_tests {
     use super::SourceMap;
     use glyim_span::FileId;
-    use std::path::PathBuf;
 
     fn sm(content: &str) -> SourceMap {
-        SourceMap::new(
-            PathBuf::from("/t.g"),
-            FileId::from_raw(1),
-            content.to_string(),
-        )
+        SourceMap::new(FileId::from_raw(1), content.to_string())
     }
 
     /// INF-11: LSP columns are UTF-16 code units. Round-trip on ASCII.
@@ -321,7 +321,7 @@ mod source_map_tests {
         let m = sm("aé b\n");
         // UTF-16 column 3 is the `b` (a=1, é=1, space=1, b at col 3).
         let off = m.line_col_to_offset(0, 3).unwrap();
-        assert_eq!(&m.source()[off..off + 1], "b");
+        assert_eq!(&m.source()[off..=off], "b");
         // Byte offset of `b` is 4 (a=1, é=2, space=1).
         assert_eq!(off, 4);
         // And span_to_position maps that byte offset back to UTF-16 col 3.
