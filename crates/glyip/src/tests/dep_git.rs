@@ -147,7 +147,7 @@ fn git_rev_dependency_records_exact_rev() {
     let locked = lockfile.crates().find(|c| c.name == "pinned").unwrap();
     match &locked.source {
         CrateSource::Git { rev, .. } => {
-            assert_eq!(rev.as_deref(), Some("deadbeef"), "exact rev is preserved")
+            assert_eq!(rev.as_deref(), Some("deadbeef"), "exact rev is preserved");
         }
         other => panic!("expected CrateSource::Git, got {other:?}"),
     }
@@ -292,14 +292,14 @@ fn compatible_version_requirements_do_not_conflict() {
 
 // Keep `Arc` referenced for potential future shared-mock usage without tripping
 // the unused-import lint in minimal test configs.
-#[allow(dead_code)]
+
 fn _assert_arc_used() -> Arc<u8> {
     Arc::new(0)
 }
 
 /// Plan §4.3: resolution must be a pure function of its inputs. Resolving the
 /// same graph twice yields byte-identical lockfiles regardless of any internal
-/// (HashMap / VecDeque) ordering.
+/// (`HashMap` / `VecDeque`) ordering.
 #[test]
 fn resolution_is_deterministic_across_runs() {
     // An index with multiple candidates in *non-sorted* order so a
