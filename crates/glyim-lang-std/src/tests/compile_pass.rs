@@ -15,7 +15,7 @@ fn file_id() -> FileId {
 
 /// Helper: lex a std module source and assert no errors.
 fn lex_module(name: &str) {
-    let source = std_source(name).unwrap_or_else(|| panic!("no source for module '{}'", name));
+    let source = std_source(name).unwrap_or_else(|| panic!("no source for module '{name}'"));
     let result = lex(source, file_id());
     assert!(
         result.diagnostics.is_empty(),
@@ -27,7 +27,7 @@ fn lex_module(name: &str) {
 
 /// Helper: parse a std module source and log any errors (soft check).
 fn parse_module_soft(name: &str) -> bool {
-    let source = std_source(name).unwrap_or_else(|| panic!("no source for module '{}'", name));
+    let source = std_source(name).unwrap_or_else(|| panic!("no source for module '{name}'"));
     let result = parse_to_syntax(source, file_id());
     if result.diagnostics.is_empty() {
         true
