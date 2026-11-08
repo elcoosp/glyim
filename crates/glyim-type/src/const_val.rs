@@ -2,44 +2,44 @@ use crate::ty::{ConstVar, Ty};
 use glyim_core::interner::Name;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// Const.
+/// `Const`.
 pub struct Const {
-    /// Struct.
+    /// `Struct`.
     pub kind: ConstKind,
-    /// Struct.
+    /// `Struct`.
     pub ty: Ty,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// ConstKind.
+/// `ConstKind`.
 pub enum ConstKind {
-    #[allow(missing_docs)]
+    /// `Int`.
     Int(i128),
-    #[allow(missing_docs)]
+    /// `Uint`.
     Uint(u128),
-    #[allow(missing_docs)]
+    /// `FloatBits`.
     FloatBits(u64),
-    #[allow(missing_docs)]
+    /// `Bool`.
     Bool(bool),
-    #[allow(missing_docs)]
+    /// `Char`.
     Char(char),
-    #[allow(missing_docs)]
+    /// `String`.
     String(Name),
-    /// Variant.
+    /// `Variant`.
     Unit,
-    #[allow(missing_docs)]
+    /// `Infer`.
     Infer(ConstVar),
-    #[allow(missing_docs)]
+    /// `Param`.
     Param(ParamConst),
-    /// Variant.
+    /// `Variant`.
     Error,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// ParamConst.
+/// `ParamConst`.
 pub struct ParamConst {
-    /// Struct.
+    /// `Struct`.
     pub index: u32,
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
 }
