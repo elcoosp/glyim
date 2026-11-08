@@ -9,7 +9,7 @@ fn file_id() -> FileId {
 fn assert_child_node(node: &SyntaxNode, kind: SyntaxKind) -> SyntaxNode {
     node.children()
         .find(|c| c.kind() == kind)
-        .unwrap_or_else(|| panic!("missing node {:?}", kind))
+        .unwrap_or_else(|| panic!("missing node {kind:?}"))
 }
 
 // -------------------- Expression tests --------------------
@@ -540,7 +540,7 @@ fn test_turbofish() {
 fn test_snapshot_complex_program() {
     glyim_test::snapshot_cst(
         "complex_program",
-        r#"
+        r"
 pub struct Point<T> {
     x: T,
     y: T,
@@ -563,7 +563,7 @@ fn main() {
         return;
     }
 }
-"#,
+",
     );
 }
 
@@ -590,7 +590,7 @@ fn classify(x: i32) -> &str {
 fn test_snapshot_enum_pattern() {
     glyim_test::snapshot_cst(
         "enum_pattern",
-        r#"
+        r"
 enum Option<T> {
     Some(T),
     None,
@@ -602,6 +602,6 @@ fn unwrap_or<T>(opt: Option<T>, default: T) -> T {
         Option::None => default,
     }
 }
-"#,
+",
     );
 }
