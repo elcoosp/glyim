@@ -172,7 +172,7 @@ fn build_caller_with_args_body(tcx: &mut TyCtxMut, callee_def_id: DefId, arg_val
         local_decl(i32_ty, Mutability::Mut),
     ]);
     let fn_const = Operand::Constant(MirConst {
-        kind: MirConstKind::Int(callee_def_id.local_id.to_raw() as i128),
+        kind: MirConstKind::Int(i128::from(callee_def_id.local_id.to_raw())),
         ty: i32_ty,
         span: Span::DUMMY,
     });
@@ -472,7 +472,6 @@ fn bool_not_false() {
 // ============ Uint constant ============
 
 #[test]
-
 fn uint_constant_interpreted_as_int() {
     let mut tcx_mut = test_ty_ctx();
     let u32_ty = tcx_mut.mk_ty(TyKind::Uint(glyim_core::UintTy::U32));
