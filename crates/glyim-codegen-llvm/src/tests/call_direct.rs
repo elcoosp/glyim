@@ -106,8 +106,7 @@ fn call_direct_produces_call_instruction() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("call"),
-        "LLVM IR must contain 'call' instruction:\n{}",
-        ir
+        "LLVM IR must contain 'call' instruction:\n{ir}"
     );
 }
 
@@ -227,15 +226,13 @@ fn call_via_fndef_const_resolves_to_glyim_fn_symbol() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("call") && ir.contains("__glyim_fn_7"),
-        "call via FnDef constant must target the emitted __glyim_fn_7 symbol:\n{}",
-        ir
+        "call via FnDef constant must target the emitted __glyim_fn_7 symbol:\n{ir}"
     );
     // The symbol must be a *defined* function (not merely declared), so a
     // later link step can resolve the call.
     assert!(
         ir.contains("define") && ir.contains("__glyim_fn_7"),
-        "call target __glyim_fn_7 must be a defined function:\n{}",
-        ir
+        "call target __glyim_fn_7 must be a defined function:\n{ir}"
     );
 }
 
@@ -404,14 +401,10 @@ fn call_closure_value_lowers_to_defined_closure_fn() {
     let fn_name = format!("__glyim_fn_{}", closure_id.to_raw());
     assert!(
         ir.contains("call") && ir.contains(&fn_name),
-        "closure call must target the emitted {} symbol:\n{}",
-        fn_name,
-        ir
+        "closure call must target the emitted {fn_name} symbol:\n{ir}"
     );
     assert!(
         ir.contains("define") && ir.contains(&fn_name),
-        "closure body {} must be a defined function:\n{}",
-        fn_name,
-        ir
+        "closure body {fn_name} must be a defined function:\n{ir}"
     );
 }
