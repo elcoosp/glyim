@@ -26,7 +26,7 @@ impl TokenTree {
     }
 }
 
-/// Parse a syntax node subtree into a flat vector of TokenTrees.
+/// Parse a syntax node subtree into a flat vector of `TokenTrees`.
 pub(crate) fn collect_token_trees(node: &glyim_syntax::SyntaxNode) -> Vec<TokenTree> {
     let mut trees = Vec::new();
     for child in node.children_with_tokens() {
@@ -78,7 +78,7 @@ pub(crate) fn collect_token_trees(node: &glyim_syntax::SyntaxNode) -> Vec<TokenT
     trees
 }
 
-/// Flatten a TokenTree node into a flat token list.
+/// Flatten a `TokenTree` node into a flat token list.
 pub(crate) fn flatten_token_tree(node: &glyim_syntax::SyntaxNode) -> Vec<TokenTree> {
     collect_token_trees(node)
 }
