@@ -93,13 +93,11 @@ fn recovery_after_incomplete_exponent() {
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert!(
         kinds.contains(&SyntaxKind::IntLit),
-        "should still lex integers, got {:?}",
-        kinds
+        "should still lex integers, got {kinds:?}"
     );
     assert!(
         kinds.contains(&SyntaxKind::Plus),
-        "should still lex plus, got {:?}",
-        kinds
+        "should still lex plus, got {kinds:?}"
     );
 }
 
