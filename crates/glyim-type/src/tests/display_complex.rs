@@ -1,4 +1,4 @@
-//! Tests for PrintTy display formatting of complex types.
+//! Tests for `PrintTy` display formatting of complex types.
 
 use glyim_core::def_id::AdtId;
 use glyim_core::primitives::{Abi, IntTy, Mutability, Safety, UintTy};
