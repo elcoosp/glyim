@@ -1,4 +1,4 @@
-//! S10-T02: Resolver::resolve_path finds items in parent modules
+//! S10-T02: `Resolver::resolve_path` finds items in parent modules
 
 use super::test_utils::{find_child_module, parse_and_build, resolver_for};
 use glyim_core::path::{Path, PathKind, PathSegment};
@@ -14,7 +14,7 @@ fn simple_path(name_str: &str, interner: &glyim_core::interner::Interner) -> Pat
     }
 }
 
-/// Helper to build a self::name path.
+/// Helper to build a `self::name` path.
 fn self_path(name_str: &str, interner: &glyim_core::interner::Interner) -> Path {
     Path {
         segments: vec![PathSegment {
@@ -25,7 +25,7 @@ fn self_path(name_str: &str, interner: &glyim_core::interner::Interner) -> Path 
     }
 }
 
-/// Helper to build a super::name path.
+/// Helper to build a `super::name` path.
 fn super_path(name_str: &str, interner: &glyim_core::interner::Interner) -> Path {
     Path {
         segments: vec![PathSegment {
@@ -36,7 +36,7 @@ fn super_path(name_str: &str, interner: &glyim_core::interner::Interner) -> Path
     }
 }
 
-/// Helper to build a crate::name path.
+/// Helper to build a `crate::name` path.
 fn crate_path(name_str: &str, interner: &glyim_core::interner::Interner) -> Path {
     Path {
         segments: vec![PathSegment {
@@ -47,7 +47,7 @@ fn crate_path(name_str: &str, interner: &glyim_core::interner::Interner) -> Path
     }
 }
 
-/// Helper to build a multi-segment path like foo::bar.
+/// Helper to build a multi-segment path like `foo::bar`.
 fn multi_path(
     segments: &[&str],
     kind: PathKind,
@@ -108,12 +108,12 @@ fn test_resolve_self_path() {
 
 #[test]
 fn test_resolve_super_path_from_child() {
-    let source = r#"
+    let source = r"
         fn parent_fn() {}
         mod child {
             fn dummy() {}
         }
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     let child =
         find_child_module(&def_map, def_map.root, "child").expect("should find child module");
@@ -128,14 +128,14 @@ fn test_resolve_super_path_from_child() {
 
 #[test]
 fn test_resolve_crate_path_from_nested() {
-    let source = r#"
+    let source = r"
         pub fn root_fn() {}
         mod a {
             mod b {
                 fn dummy() {}
             }
         }
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     let a = find_child_module(&def_map, def_map.root, "a").expect("should find a");
     let b = find_child_module(&def_map, a, "b").expect("should find b");
@@ -150,11 +150,11 @@ fn test_resolve_crate_path_from_nested() {
 
 #[test]
 fn test_resolve_nested_module_path() {
-    let source = r#"
+    let source = r"
         mod outer {
             struct Inner;
         }
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     let resolver = resolver_for(&def_map, def_map.root);
     let path = multi_path(&["outer", "Inner"], PathKind::Plain, &def_map.interner);
@@ -177,11 +177,11 @@ fn test_resolve_nonexistent_name() {
 
 #[test]
 fn test_resolve_module_child() {
-    let source = r#"
+    let source = r"
         mod my_mod {
             fn inner() {}
         }
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     let resolver = resolver_for(&def_map, def_map.root);
     let path = simple_path("my_mod", &def_map.interner);
@@ -194,14 +194,14 @@ fn test_resolve_module_child() {
 
 #[test]
 fn test_resolve_double_super() {
-    let source = r#"
+    let source = r"
         fn top_fn() {}
         mod a {
             mod b {
                 fn dummy() {}
             }
         }
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     let a = find_child_module(&def_map, def_map.root, "a").expect("should find a");
     let b = find_child_module(&def_map, a, "b").expect("should find b");
@@ -241,10 +241,10 @@ fn test_resolve_super_from_root_is_noop() {
 
 #[test]
 fn test_resolve_path_returns_visibility() {
-    let source = r#"
+    let source = r"
         pub fn public_fn() {}
         fn private_fn() {}
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     let resolver = resolver_for(&def_map, def_map.root);
     let pub_path = simple_path("public_fn", &def_map.interner);
