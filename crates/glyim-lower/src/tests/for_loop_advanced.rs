@@ -1,4 +1,4 @@
-//! S06-T01: For-loop lowering with Iterator::next calls and Option switching.
+//! S06-T01: For-loop lowering with `Iterator::next` calls and Option switching.
 
 use crate::lower::{IteratorNextInfo, lower_body};
 use crate::tests::mock_lower_ctx::TestLowerCtx;
