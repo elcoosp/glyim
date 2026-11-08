@@ -1,4 +1,4 @@
-//! Tests for child_of_kind utility
+//! Tests for `child_of_kind` utility
 
 use crate::{GlyimLang, SyntaxKind, SyntaxNode, child_of_kind};
 use rowan::GreenNodeBuilder;
