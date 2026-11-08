@@ -1,4 +1,4 @@
-//! Tests for GlyimLang rowan::Language impl
+//! Tests for `GlyimLang` `rowan::Language` impl
 
 use crate::{GlyimLang, SyntaxKind};
 use rowan::Language;
@@ -18,7 +18,7 @@ fn kind_from_raw_roundtrip() {
     for kind in all_kinds {
         let raw = GlyimLang::kind_to_raw(kind);
         let roundtrip = GlyimLang::kind_from_raw(raw);
-        assert_eq!(roundtrip, kind, "Roundtrip failed for {:?}", kind);
+        assert_eq!(roundtrip, kind, "Roundtrip failed for {kind:?}");
     }
 }
 
