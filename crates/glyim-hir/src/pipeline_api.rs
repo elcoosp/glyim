@@ -100,11 +100,11 @@ mod tests {
         // (`Self::Output` / `F::Output`) has a defining type to resolve
         // against. Previously the impl body only lowered `fn`s, so the assoc
         // type (and thus all projection) was silently dropped.
-        let src = r#"
+        let src = r"
             trait MyFuture { type Output; fn poll(&mut self) -> i32; }
             struct AddOne { x: i32 }
             impl MyFuture for AddOne { type Output = i32; fn poll(&mut self) -> i32 { self.x } }
-        "#;
+        ";
         let root = parse_to_syntax(src, FileId::BOGUS).root;
         let mut interner = Interner::new();
         let (hir, _) = lower_crate_for_pipeline(&root, &mut interner);
@@ -136,11 +136,11 @@ mod tests {
         // impl-check / projection machinery) knows the trait carries an
         // associated type. Previously `lower_trait_def` hardcoded
         // `associated_types: Vec::new()`, dropping the declaration.
-        let src = r#"
+        let src = r"
             trait MyFuture { type Output; fn poll(&mut self) -> i32; }
             struct AddOne { x: i32 }
             impl MyFuture for AddOne { type Output = i32; fn poll(&mut self) -> i32 { self.x } }
-        "#;
+        ";
         let root = parse_to_syntax(src, FileId::BOGUS).root;
         let mut interner = Interner::new();
         let (hir, _) = lower_crate_for_pipeline(&root, &mut interner);
