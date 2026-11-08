@@ -1,4 +1,4 @@
-//! Tests for Binder, BoundVariableKind.
+//! Tests for Binder, `BoundVariableKind`.
 
 use glyim_core::interner::Interner;
 
@@ -81,7 +81,7 @@ fn bound_ty_kind_anon() {
 
 #[test]
 fn bound_ty_kind_param() {
-    let (ctx, _) = with_fresh_ty_ctx(|c| {
+    let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let name = c.resolver().intern("T");
         let btk = BoundTyKind::Param(name);
         assert!(matches!(btk, BoundTyKind::Param(_)));
