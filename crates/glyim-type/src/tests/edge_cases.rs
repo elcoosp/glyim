@@ -1,4 +1,4 @@
-//! Edge case tests: large indices, many types, fn_def/closure flags propagation.
+//! Edge case tests: large indices, many types, `fn_def/closure` flags propagation.
 
 use glyim_core::def_id::{AdtId, ClosureId, FnDefId};
 use glyim_core::primitives::{Abi, IntTy, Mutability, Safety, UintTy};
@@ -221,6 +221,6 @@ fn error_region_in_ref_no_special_flags() {
 #[test]
 fn ty_debug_format_custom() {
     let ty = Ty::from_raw(999);
-    let debug = format!("{:?}", ty);
+    let debug = format!("{ty:?}");
     assert_eq!(debug, "Ty(999)");
 }
