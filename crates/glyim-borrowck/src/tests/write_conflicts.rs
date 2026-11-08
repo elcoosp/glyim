@@ -10,8 +10,8 @@ use super::mir_builder::{MirBodyBuilder, TestBorrowckCtx, assign_borrow, assign_
 
 /// Write to shared-borrowed place across blocks → error.
 ///
-///   BB0: local_2 = &shared local_1; goto BB1
-///   BB1: local_1 = copy local_3; local_4 = copy local_2; return
+///   BB0: `local_2` = &shared `local_1`; goto BB1
+///   BB1: `local_1` = copy `local_3`; `local_4` = copy `local_2`; return
 ///
 /// Even a shared borrow prevents writes to the borrowed place.
 #[test]
@@ -49,10 +49,9 @@ fn write_to_shared_borrowed_place_across_blocks_error() {
 
 /// Write to shared-borrowed place after borrow expires → no error.
 ///
-///   BB0: local_2 = &shared local_1; local_3 = copy local_2; goto BB1
-///   BB1: local_1 = copy local_4; return
+///   BB0: `local_2` = &shared `local_1`; `local_3` = copy `local_2`; goto BB1
+///   BB1: `local_1` = copy `local_4`; return
 ///
-/// The borrow of local_1 expires after local_3 = copy local_2 (last use of local_2).
 #[test]
 fn write_after_shared_borrow_expires_no_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -88,8 +87,8 @@ fn write_after_shared_borrow_expires_no_error() {
 
 /// Write to mut-borrowed place across blocks → error.
 ///
-///   BB0: local_2 = &mut local_1; goto BB1
-///   BB1: local_1 = copy local_3; local_4 = copy local_2; return
+///   BB0: `local_2` = &mut `local_1`; goto BB1
+///   BB1: `local_1` = copy `local_3`; `local_4` = copy `local_2`; return
 #[test]
 fn write_to_mut_borrowed_place_across_blocks_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -134,8 +133,8 @@ fn write_to_mut_borrowed_place_across_blocks_error() {
 
 /// Write to a different place while another is borrowed → no error.
 ///
-///   BB0: local_2 = &shared local_1; goto BB1
-///   BB1: local_3 = copy local_4; local_5 = copy local_2; return
+///   BB0: `local_2` = &shared `local_1`; goto BB1
+///   BB1: `local_3` = copy `local_4`; `local_5` = copy `local_2`; return
 #[test]
 fn write_to_different_place_while_borrowed_no_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
