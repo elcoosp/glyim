@@ -3,35 +3,35 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 #[derive(Clone, Debug)]
-/// TestConfig.
+/// `TestConfig`.
 pub struct TestConfig {
-    /// Struct.
+    /// `Struct`.
     pub mode: TestMode,
-    /// Struct.
+    /// `Struct`.
     pub revisions: Vec<String>,
-    /// Struct.
+    /// `Struct`.
     pub revision_compile_flags: HashMap<String, Vec<String>>,
-    /// Struct.
+    /// `Struct`.
     pub compile_flags: Vec<String>,
-    /// Struct.
+    /// `Struct`.
     pub error_patterns: Vec<String>,
-    /// Struct.
+    /// `Struct`.
     pub needs_llvm: bool,
-    /// Struct.
+    /// `Struct`.
     pub min_version: Option<String>,
-    /// Struct.
+    /// `Struct`.
     pub ignore: bool,
-    /// Struct.
+    /// `Struct`.
     pub only_target: Option<String>,
-    /// Struct.
+    /// `Struct`.
     pub aux_files: Vec<PathBuf>,
-    /// Struct.
+    /// `Struct`.
     pub timeout_secs: u64,
-    /// Struct.
+    /// `Struct`.
     pub check_stdout: Option<String>,
-    /// Struct.
+    /// `Struct`.
     pub check_stderr: Option<String>,
-    /// Struct.
+    /// `Struct`.
     pub expected_exit_code: Option<i32>,
     /// §3.5.30 item 4: warning-presence assertions for `compile-pass`
     /// fixtures. Each pattern must match at least one warning diagnostic
@@ -39,6 +39,7 @@ pub struct TestConfig {
     /// (`forbid-warning:`). Locks compiler-warning behaviour into CI
     /// (run-pass `check-stderr` only sees *program* stderr).
     pub expect_warnings: Vec<String>,
+    /// Patterns that must match zero warnings (`forbid-warning:`).
     pub forbid_warnings: Vec<String>,
 }
 
@@ -66,17 +67,17 @@ impl Default for TestConfig {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// TestMode.
+/// `TestMode`.
 pub enum TestMode {
-    /// Variant.
+    /// `Variant`.
     CompilePass,
-    /// Variant.
+    /// `Variant`.
     CompileFail,
-    /// Variant.
+    /// `Variant`.
     Ui,
-    /// Variant.
+    /// `Variant`.
     RunPass,
-    /// Variant.
+    /// `Variant`.
     RunFail,
 }
 
@@ -90,19 +91,19 @@ impl FromStr for TestMode {
             "run-pass" => Ok(Self::RunPass),
             "run-fail" => Ok(Self::RunFail),
             other => Err(format!(
-                "unknown test-mode: {:?}. Expected: compile-pass, compile-fail, ui, run-pass, run-fail",
-                other
+                "unknown test-mode: {other:?}. Expected: compile-pass, compile-fail, ui, run-pass, run-fail"
             )),
         }
     }
 }
 
 impl TestMode {
-    /// from_str_exact.
+    /// `from_str_exact`.
     pub fn from_str_exact(s: &str) -> Result<Self, String> {
         s.parse()
     }
-    /// dir_name.
+    /// `dir_name`.
+    #[must_use]
     pub fn dir_name(self) -> &'static str {
         match self {
             Self::CompilePass => "compile-pass",
@@ -114,15 +115,15 @@ impl TestMode {
     }
 }
 
-/// ParsedConfig.
+/// `ParsedConfig`.
 pub struct ParsedConfig {
-    /// Struct.
+    /// `Struct`.
     pub config: TestConfig,
-    /// Struct.
+    /// `Struct`.
     pub has_explicit_mode: bool,
 }
 
-/// parse_test_config.
+/// `parse_test_config`.
 pub fn parse_test_config(source: &str) -> Result<ParsedConfig, String> {
     let mut config = TestConfig::default();
     let mut has_explicit_mode = false;
@@ -149,7 +150,7 @@ pub fn parse_test_config(source: &str) -> Result<ParsedConfig, String> {
                     .or_default()
                     .extend(
                         shell_words::split(value.trim())
-                            .map_err(|e| format!("invalid compile flags: {}", e))?,
+                            .map_err(|e| format!("invalid compile flags: {e}"))?,
                     );
             }
             continue;
@@ -163,7 +164,7 @@ pub fn parse_test_config(source: &str) -> Result<ParsedConfig, String> {
         } else if let Some(value) = content.strip_prefix("compile-flags:") {
             config.compile_flags.extend(
                 shell_words::split(value.trim())
-                    .map_err(|e| format!("invalid compile flags: {}", e))?,
+                    .map_err(|e| format!("invalid compile flags: {e}"))?,
             );
         } else if let Some(value) = content.strip_prefix("error-pattern:") {
             config.error_patterns.push(value.trim().to_string());
