@@ -1,0 +1,25 @@
+[package]
+name = "glyim-metrics"
+version = "0.1.0"
+edition = "2024"
+description = "M0.6 repo-health metrics: deterministic source-tree measurements plus the baseline ratchet used by CI"
+publish = false
+
+[dependencies]
+serde_json = "1.0"
+
+[lib]
+name = "glyim_metrics"
+path = "src/lib.rs"
+
+[[bin]]
+name = "glyim-metrics"
+path = "src/main.rs"
+
+[[bench]]
+name = "scan_bench"
+harness = false
+path = "benches/scan_bench.rs"
+
+[lints]
+workspace = true
