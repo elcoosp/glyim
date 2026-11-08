@@ -17,9 +17,9 @@ use super::mir_builder::{
 /// exists on any path, so this should produce no borrow errors.
 ///
 /// MIR:
-///   BB0: local_2 = &shared local_1; switch local_3 -> [true: BB1, false: BB2]
-///   BB1: local_4 = copy local_2; goto BB3
-///   BB2: local_5 = copy local_2; goto BB3
+///   BB0: `local_2` = &shared `local_1`; switch `local_3` -> [true: BB1, false: BB2]
+///   BB1: `local_4` = copy `local_2`; goto BB3
+///   BB2: `local_5` = copy `local_2`; goto BB3
 ///   BB3: return
 #[test]
 fn borrow_crosses_basic_block_if_condition_no_error() {
@@ -56,10 +56,10 @@ fn borrow_crosses_basic_block_if_condition_no_error() {
 /// V08-T02: Mutable borrow of field used after loop → allowed.
 ///
 /// MIR:
-///   BB0: local_2 = &mut local_1; goto BB1
-///   BB1: switch local_3 -> [true: BB2, false: BB3]
-///   BB2: local_4 = copy local_2; goto BB1       (loop body)
-///   BB3: local_5 = copy local_2; return         (after loop)
+///   BB0: `local_2` = &mut `local_1`; goto BB1
+///   BB1: switch `local_3` -> [true: BB2, false: BB3]
+///   BB2: `local_4` = copy `local_2`; goto BB1       (loop body)
+///   BB3: `local_5` = copy `local_2`; return         (after loop)
 #[test]
 fn mutable_borrow_used_after_loop_allowed() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -104,9 +104,9 @@ fn mutable_borrow_used_after_loop_allowed() {
 /// V08-T03: Borrow expires after last use in different block → no error.
 ///
 /// MIR:
-///   BB0: local_2 = &shared local_1; goto BB1
-///   BB1: local_3 = copy local_2; goto BB2        (last use of local_2)
-///   BB2: local_4 = copy local_1; return          (borrow expired, direct access OK)
+///   BB0: `local_2` = &shared `local_1`; goto BB1
+///   BB1: `local_3` = copy `local_2`; goto BB2        (last use of `local_2`)
+///   BB2: `local_4` = copy `local_1`; return          (borrow expired, direct access OK)
 #[test]
 fn borrow_expires_after_last_use_different_block_no_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
