@@ -102,5 +102,5 @@ fn call_fn_ptr_produces_indirect_call() {
 
     let module = result.unwrap();
     let ir = module.print_to_string().to_string();
-    assert!(ir.contains("call"), "LLVM IR must contain 'call':\n{}", ir);
+    assert!(ir.contains("call"), "LLVM IR must contain 'call':\n{ir}");
 }
