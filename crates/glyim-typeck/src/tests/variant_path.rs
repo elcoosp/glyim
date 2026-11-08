@@ -29,53 +29,53 @@ fn compile(src: &str) -> CompileOutput {
 
 #[test]
 fn unit_variant_referenced_by_single_segment_path() {
-    let src = r#"
+    let src = r"
         enum Color { Red, Green, Blue }
         fn main() {
             let _ = Color::Red;
             let _ = Color::Green;
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
 
 #[test]
 fn unit_variant_referenced_by_multi_segment_path() {
-    let src = r#"
+    let src = r"
         mod palette {
             enum Color { Red, Green }
         }
         fn main() {
             let _ = palette::Color::Red;
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
 
 #[test]
 fn data_variant_constructor_called_by_single_segment_path() {
-    let src = r#"
+    let src = r"
         enum OptionI32 { None, Some(i32) }
         fn main() {
             let _ = OptionI32::Some(5);
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
 
 #[test]
 fn data_variant_constructor_called_by_multi_segment_path() {
-    let src = r#"
+    let src = r"
         mod palette {
             enum Color { Red, Green(i32) }
         }
         fn main() {
             let _ = palette::Color::Green(7);
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
