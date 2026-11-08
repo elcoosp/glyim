@@ -160,8 +160,7 @@ fn test_all_binary_ops_on_ints() {
         assert_eq!(
             *interp.get_local_value(local_r).unwrap(),
             InterpValue::Int(*expected),
-            "failed for op {:?}",
-            op
+            "failed for op {op:?}"
         );
     }
 }
@@ -206,8 +205,7 @@ fn test_comparison_ops() {
         assert_eq!(
             *interp.get_local_value(local_r).unwrap(),
             InterpValue::Bool(*expected),
-            "failed for op {:?}",
-            op
+            "failed for op {op:?}"
         );
     }
 }
@@ -407,9 +405,8 @@ fn test_len_on_different_array_sizes() {
             .unwrap();
         assert_eq!(
             *interp.get_local_value(local_len).unwrap(),
-            InterpValue::Int(*size as i128),
-            "failed for size {}",
-            size
+            InterpValue::Int(i128::from(*size)),
+            "failed for size {size}"
         );
     }
 }
