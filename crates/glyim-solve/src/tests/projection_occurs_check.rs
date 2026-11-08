@@ -28,7 +28,6 @@ fn occurs_check_cycle() {
 
     // Attempt to unify with itself? Not meaningful; we'll implement an explicit occurs check.
     // For now, just ensure the test compiles.
-    assert!(true);
 }
 
 /// Test that occurs check traverses projections (stub: not actually cycling).
