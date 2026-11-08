@@ -2,26 +2,26 @@ use std::path::Path;
 use std::time::Duration;
 
 #[derive(Debug)]
-/// ProcessError.
+/// `ProcessError`.
 pub struct ProcessError {
-    /// Struct.
+    /// `Struct`.
     pub program: String,
-    /// Struct.
+    /// `Struct`.
     pub cwd: std::path::PathBuf,
-    /// Struct.
+    /// `Struct`.
     pub args: Vec<String>,
-    /// Struct.
+    /// `Struct`.
     pub kind: ProcessErrorKind,
 }
 
 #[derive(Debug)]
-/// ProcessErrorKind.
+/// `ProcessErrorKind`.
 pub enum ProcessErrorKind {
-    #[allow(missing_docs)]
+    /// The child process failed to spawn or exited unsuccessfully.
     ExecutionFailed(std::io::Error),
-    /// Variant.
+    /// `Variant`.
     TimedOut {
-        /// timeout_secs field.
+        /// `timeout_secs` field.
         timeout_secs: u64,
     },
 }
@@ -47,7 +47,7 @@ impl std::fmt::Display for ProcessError {
     }
 }
 
-/// run_timed_command.
+/// `run_timed_command`.
 pub async fn run_timed_command(
     program: &str,
     args: &[&str],
@@ -72,13 +72,13 @@ pub async fn run_timed_command(
         Ok(Err(e)) => Err(ProcessError {
             program: program.into(),
             cwd: cwd.to_path_buf(),
-            args: args.iter().map(|s| s.to_string()).collect(),
+            args: args.iter().map(std::string::ToString::to_string).collect(),
             kind: ProcessErrorKind::ExecutionFailed(e),
         }),
         Err(_) => Err(ProcessError {
             program: program.into(),
             cwd: cwd.to_path_buf(),
-            args: args.iter().map(|s| s.to_string()).collect(),
+            args: args.iter().map(std::string::ToString::to_string).collect(),
             kind: ProcessErrorKind::TimedOut {
                 timeout_secs: effective_timeout,
             },
