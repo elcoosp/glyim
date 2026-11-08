@@ -52,8 +52,7 @@ fn setup_test_db_with_references() -> (Arc<AnalysisDatabase>, FileMap, PathBuf) 
     graph.insert_test_reference("foo", use_ref);
 
     // Create a source map for the file so that get_symbol_name_at_position works
-    let source_map =
-        crate::database::SourceMap::new(path.clone(), file_id, "fn foo() { foo(); }".to_string());
+    let source_map = crate::database::SourceMap::new(file_id, "fn foo() { foo(); }".to_string());
     db.source_maps.write().insert(file_id, source_map);
     *db.reference_graph.write() = graph;
 
@@ -87,5 +86,5 @@ fn find_references_returns_locations() {
     let result = find_references(&db, &file_map, &params);
     assert!(result.is_some());
     let locations = result.unwrap();
-    assert!(!locations.is_empty());
+    assert_ne!(locations, [] as [lsp_types::Location; 0]);
 }
