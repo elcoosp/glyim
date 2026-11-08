@@ -6,7 +6,7 @@ use glyim_span::FileId;
 use glyim_syntax::SyntaxKind;
 
 fn token_from_literal(src: &str) -> glyim_syntax::SyntaxToken {
-    let full_src = format!("fn main() {{ {} }}", src);
+    let full_src = format!("fn main() {{ {src} }}");
     let parse = parse_to_syntax(&full_src, FileId::from_raw(1));
     let fn_def = parse
         .root
@@ -25,7 +25,7 @@ fn token_from_literal(src: &str) -> glyim_syntax::SyntaxToken {
         .expect("LitExpr not found");
     lit_expr
         .children_with_tokens()
-        .filter_map(|el| el.into_token())
+        .filter_map(rowan::NodeOrToken::into_token)
         .find(|t| t.kind().is_literal())
         .expect("literal token not found")
         .clone()
@@ -64,7 +64,6 @@ fn test_int_binary() {
 }
 
 #[test]
-#[allow(clippy::approx_constant)]
 fn test_float_suffix_f64() {
     let tok = token_from_literal("3.14f64");
     let mut interner = glyim_core::Interner::default();
@@ -79,7 +78,6 @@ fn test_float_suffix_f64() {
 }
 
 #[test]
-#[allow(clippy::approx_constant)]
 fn test_float_no_suffix() {
     let tok = token_from_literal("2.71828");
     let mut interner = glyim_core::Interner::default();
