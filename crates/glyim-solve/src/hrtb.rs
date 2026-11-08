@@ -67,7 +67,7 @@ fn build_region_substitution(
     // slot per bound var and fill only the region positions.
     let mut region_map: Vec<Region> = Vec::with_capacity(bound_vars.len());
     let mut placeholder_idx = 0;
-    for var in bound_vars.iter() {
+    for var in bound_vars {
         match var {
             BoundVariableKind::Region(_) => {
                 if placeholder_idx < placeholders.len() {
@@ -103,6 +103,7 @@ pub struct BoundVarSubstitution {
 
 impl BoundVarSubstitution {
     /// Create an empty substitution.
+    #[must_use]
     pub fn empty() -> Self {
         Self {
             region_map: Vec::new(),
@@ -114,6 +115,7 @@ impl BoundVarSubstitution {
 /// Trait for types that can have their bound variables substituted.
 pub trait SubstituteBoundVars: Sized {
     /// Substitute bound variables according to the given mapping.
+    #[must_use]
     fn substitute(self, sub: &BoundVarSubstitution, ctx: &mut TyCtxMut) -> Self;
 }
 
@@ -516,10 +518,10 @@ pub fn check_hrtb(
             } else {
                 // No inference/placeholder/param type vars, and no region
                 // variables anywhere -> owned type, provably outlives all.
-                if !ty_has_open_components(tp.ty, &ctx) {
-                    crate::solver::SolverResult::Proven
-                } else {
+                if ty_has_open_components(tp.ty, &ctx) {
                     crate::solver::SolverResult::Ambiguous
+                } else {
+                    crate::solver::SolverResult::Proven
                 }
             }
         }
@@ -557,7 +559,7 @@ pub fn check_hrtb(
     (result, ctx)
 }
 
-/// instantiate_hrtb_predicate.
+/// `instantiate_hrtb_predicate`.
 pub fn instantiate_hrtb_predicate(
     binder: &Binder<Predicate>,
     infer: &mut crate::InferenceTable,
@@ -611,11 +613,10 @@ mod tests {
             TyKind::Ref(region, _, _) => {
                 assert!(
                     matches!(region, Region::Placeholder(_)),
-                    "Bound region should be replaced with placeholder, got {:?}",
-                    region
+                    "Bound region should be replaced with placeholder, got {region:?}"
                 );
             }
-            other => panic!("Expected Ref type, got {:?}", other),
+            other => panic!("Expected Ref type, got {other:?}"),
         }
     }
 
@@ -637,11 +638,10 @@ mod tests {
             TyKind::Ref(region, _, _) => {
                 assert!(
                     matches!(region, Region::Static),
-                    "Static region should be preserved, got {:?}",
-                    region
+                    "Static region should be preserved, got {region:?}"
                 );
             }
-            other => panic!("Expected Ref type, got {:?}", other),
+            other => panic!("Expected Ref type, got {other:?}"),
         }
     }
 }
