@@ -23,3 +23,6 @@ tracing = { workspace = true }
 tempfile = "3"
 glyim-core = { workspace = true }
 glyim-test = { workspace = true }
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true
