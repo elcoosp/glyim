@@ -1,0 +1,24 @@
+[package]
+name = "glyim-ledger"
+version = "0.1.0"
+edition = "2024"
+description = "M1.1 Readiness Ledger CLI: `ledger check` registry gate and JSON-Schema export"
+publish = false
+
+[dependencies]
+ledger-schema = { path = "../ledger-schema" }
+serde_json = "1.0"
+
+[dev-dependencies]
+tempfile = "3.27"
+
+[lib]
+name = "glyim_ledger"
+path = "src/lib.rs"
+
+[[bin]]
+name = "glyim-ledger"
+path = "src/main.rs"
+
+[lints]
+workspace = true
