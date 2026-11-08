@@ -1,11 +1,11 @@
-//! S15-T01: layout_of computes correct size/align for structs
+//! S15-T01: `layout_of` computes correct size/align for structs
 
 use crate::*;
 use glyim_core::arena::IndexVec;
 use glyim_core::primitives::*;
 use glyim_test::with_fresh_ty_ctx;
 
-/// Helper: build a struct AdtDef with the given field types, register it, and return the Ty.
+/// Helper: build a struct `AdtDef` with the given field types, register it, and return the Ty.
 fn make_struct_ty(
     ctx: &mut glyim_type::TyCtxMut,
     adt_id: glyim_core::AdtId,
@@ -14,7 +14,7 @@ fn make_struct_ty(
     let mut fields: IndexVec<glyim_type::FieldIdx, glyim_type::FieldDef> = IndexVec::new();
     for (i, ty) in field_tys.into_iter().enumerate() {
         fields.push(glyim_type::FieldDef {
-            name: ctx.resolver().intern(&format!("f{}", i)),
+            name: ctx.resolver().intern(&format!("f{i}")),
             ty,
         });
     }
