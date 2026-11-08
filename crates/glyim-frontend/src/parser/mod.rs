@@ -12,13 +12,13 @@ mod stmt;
 mod ty;
 
 #[derive(Clone, Debug)]
-/// ParseResult.
+/// `ParseResult`.
 pub struct ParseResult {
-    /// Struct.
+    /// `Struct`.
     pub green_node: GreenNode,
-    /// Struct.
+    /// `Struct`.
     pub diagnostics: Vec<GlyimDiagnostic>,
-    /// Struct.
+    /// `Struct`.
     pub root: SyntaxNode,
 }
 
@@ -39,7 +39,6 @@ pub(crate) struct Parser<'a> {
     /// (§3.4 parser gotchas) so `<a><a><a>…` cannot overflow the stack.
     gsx_depth: u32,
     /// Monotonic expression-nesting counter (plan §3.6): guards against a
-    /// stack-overflow DoS from pathologically nested source (e.g.
     /// `((((...))))`). `parse_expr` increments it on entry; once it exceeds
     /// `MAX_EXPR_DEPTH` we emit a diagnostic and bail instead of recursing
     /// further. It is never decremented — monotonic tracking is sufficient for
@@ -48,7 +47,6 @@ pub(crate) struct Parser<'a> {
 }
 
 /// Plan §3.6: maximum expression nesting depth before the parser bails with a
-/// diagnostic. Deeply nested expressions are a classic stack-overflow DoS
 /// vector in recursive-descent parsers; this bounds recursion without rejecting
 /// any realistic program (real code rarely nests beyond a few dozen levels).
 const MAX_EXPR_DEPTH: u32 = 256;
@@ -67,11 +65,6 @@ impl<'a> Parser<'a> {
             gsx_depth: 0,
             recursion_depth: 0,
         }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn pos(&self) -> usize {
-        self.pos
     }
 
     /// Emit any trivia tokens (whitespace, comments) at the current position
@@ -166,15 +159,12 @@ impl<'a> Parser<'a> {
             self.bump();
         } else {
             let found = self.current_kind();
-            self.error(format!("expected {:?}, found {:?}", expected, found));
+            self.error(format!("expected {expected:?}, found {found:?}"));
         }
     }
 
     fn error(&mut self, message: impl Into<String>) {
-        let span = self
-            .current()
-            .map(|t| t.span)
-            .unwrap_or(glyim_span::Span::DUMMY);
+        let span = self.current().map_or(glyim_span::Span::DUMMY, |t| t.span);
         self.diagnostics
             .push(GlyimDiagnostic::parse_error(span, message));
     }
@@ -182,7 +172,7 @@ impl<'a> Parser<'a> {
     fn bump_expected(&mut self, expected: SyntaxKind) {
         if self.current_kind() != expected {
             let found = self.current_kind();
-            self.error(format!("expected {:?}, found {:?}", expected, found));
+            self.error(format!("expected {expected:?}, found {found:?}"));
         }
         if self.current().is_some() || self.pending_gt_count > 0 {
             self.bump();
@@ -244,7 +234,8 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// parse_to_syntax.
+/// `parse_to_syntax`.
+#[must_use]
 pub fn parse_to_syntax(source: &str, file_id: FileId) -> ParseResult {
     let lex_result = crate::lexer::lex_with_trivia(source, file_id);
     let mut parser = Parser::new(&lex_result.tokens);
@@ -270,6 +261,7 @@ pub fn parse_to_syntax(source: &str, file_id: FileId) -> ParseResult {
 /// as long as the structural shape is correct — the macro expander will surface
 /// real diagnostics later. This keeps fragment matching permissive about
 /// unfinished expressions while still rejecting structurally invalid input.
+#[must_use]
 pub fn try_parse_fragment(kind: &str, src: &str) -> Option<()> {
     // `:meta` is validated by its own token-level grammar (plan §2.3),
     // independent of the wrapper-parse below — attributes aren't a distinct
@@ -300,14 +292,14 @@ pub fn try_parse_fragment(kind: &str, src: &str) -> Option<()> {
     // Wrap the fragment in a context that makes it a single top-level construct
     // of the requested kind, then inspect the parse tree.
     let wrapped = match kind {
-        "expr" | "stmt" => format!("fn __f() {{ {} }}", src),
+        "expr" | "stmt" => format!("fn __f() {{ {src} }}"),
         // For `:block` the fragment *is* the function body — if it parses as a
         // bare block, it becomes `__f`'s body directly.
-        "block" => format!("fn __f() {}", src),
-        "ty" => format!("fn __f(__x: {}) {{ }}", src),
-        "pat" => format!("fn __f() {{ let {} = 0; }}", src),
-        "item" => format!("fn __f() {{ {} }}", src),
-        "meta" => format!("#[{}] fn __f() {{ }}", src),
+        "block" => format!("fn __f() {src}"),
+        "ty" => format!("fn __f(__x: {src}) {{ }}"),
+        "pat" => format!("fn __f() {{ let {src} = 0; }}"),
+        "item" => format!("fn __f() {{ {src} }}"),
+        "meta" => format!("#[{src}] fn __f() {{ }}"),
         // Unknown spec — fall back to permissive single-token acceptance.
         _ => return None,
     };
@@ -515,9 +507,6 @@ fn is_fragment_tt(src: &str) -> bool {
 ///   * `Word`       — `Path`
 ///   * `NameValue`  — `Path '=' Lit`
 ///   * `List`       — `Path '(' MetaItemList ')'`
-/// Malformed input such as `#[attr(]` (unbalanced list) or `#[=foo]` (missing
-/// path) returns `false`, so the macro matcher rejects it instead of silently
-/// accepting any non-empty content.
 fn validate_meta_fragment(src: &str) -> bool {
     use crate::lexer::lex;
     use glyim_syntax::SyntaxKind;
