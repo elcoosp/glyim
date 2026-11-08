@@ -28,12 +28,12 @@ fn item_is_accessible(
 
 #[test]
 fn test_public_item_accessible_from_child_module() {
-    let source = r#"
+    let source = r"
         pub fn public_fn() {}
         mod child {
             fn dummy() {}
         }
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     let child =
         find_child_module(&def_map, def_map.root, "child").expect("should find child module");
@@ -45,9 +45,9 @@ fn test_public_item_accessible_from_child_module() {
 
 #[test]
 fn test_private_item_accessible_from_same_module() {
-    let source = r#"
+    let source = r"
         fn private_fn() {}
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     assert!(
         item_is_accessible(&def_map, def_map.root, "private_fn", def_map.root),
@@ -57,14 +57,14 @@ fn test_private_item_accessible_from_same_module() {
 
 #[test]
 fn test_private_item_not_accessible_from_sibling_module() {
-    let source = r#"
+    let source = r"
         mod a {
             fn secret() {}
         }
         mod b {
             fn dummy() {}
         }
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     let a = find_child_module(&def_map, def_map.root, "a").expect("should find a");
     let b = find_child_module(&def_map, def_map.root, "b").expect("should find b");
@@ -76,12 +76,12 @@ fn test_private_item_not_accessible_from_sibling_module() {
 
 #[test]
 fn test_inherited_item_accessible_from_descendant() {
-    let source = r#"
+    let source = r"
         fn parent_fn() {}
         mod child {
             fn dummy() {}
         }
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     let child =
         find_child_module(&def_map, def_map.root, "child").expect("should find child module");
@@ -93,14 +93,14 @@ fn test_inherited_item_accessible_from_descendant() {
 
 #[test]
 fn test_public_item_accessible_from_anywhere() {
-    let source = r#"
+    let source = r"
         pub struct Config;
         mod a {
             mod b {
                 fn user() {}
             }
         }
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     let a = find_child_module(&def_map, def_map.root, "a").expect("should find a");
     let b = find_child_module(&def_map, a, "b").expect("should find b");
@@ -142,11 +142,11 @@ fn test_is_accessible_from_inherited_same_module() {
 
 #[test]
 fn test_is_accessible_from_inherited_child_module() {
-    let source = r#"
+    let source = r"
         mod child {
             fn dummy() {}
         }
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     let child = find_child_module(&def_map, def_map.root, "child").expect("should find child");
     assert!(
@@ -157,14 +157,14 @@ fn test_is_accessible_from_inherited_child_module() {
 
 #[test]
 fn test_is_accessible_from_inherited_unrelated_module() {
-    let source = r#"
+    let source = r"
         mod a {
             fn dummy() {}
         }
         mod b {
             fn dummy() {}
         }
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     let a = find_child_module(&def_map, def_map.root, "a").expect("should find a");
     let b = find_child_module(&def_map, def_map.root, "b").expect("should find b");
@@ -176,14 +176,14 @@ fn test_is_accessible_from_inherited_unrelated_module() {
 
 #[test]
 fn test_module_visibility_tracked() {
-    let source = r#"
+    let source = r"
         pub mod public_mod {
             fn a() {}
         }
         mod private_mod {
             fn b() {}
         }
-    "#;
+    ";
     let (def_map, _diags) = parse_and_build(source);
     let pub_mod =
         find_child_module(&def_map, def_map.root, "public_mod").expect("should find public_mod");
