@@ -1,4 +1,4 @@
-//! Tests for TypeFlags computation.
+//! Tests for `TypeFlags` computation.
 
 use glyim_core::primitives::{IntTy, Mutability, UintTy};
 
@@ -220,9 +220,7 @@ fn plain_types_have_no_flags() {
         let flags = frozen.ty_flags(ty);
         assert!(
             flags.is_empty(),
-            "{} should have no flags, got {:?}",
-            label,
-            flags
+            "{label} should have no flags, got {flags:?}"
         );
     }
 }
