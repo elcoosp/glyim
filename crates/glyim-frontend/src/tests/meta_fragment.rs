@@ -1,7 +1,7 @@
 //! Regression tests for de-stubbing plan §2.3: `:meta` fragment grammar.
 //!
 //! `try_parse_fragment("meta", src)` must now validate a real meta-item
-//! grammar (Word / NameValue / List) instead of accepting any non-empty
+//! grammar (Word / `NameValue` / List) instead of accepting any non-empty
 //! content. Well-formed meta items should be accepted; malformed input
 //! (unbalanced list, missing path, trailing tokens) must be rejected.
 
