@@ -25,7 +25,7 @@ fn index_vec_with_capacity() {
     let mut vec: IndexVec<Idx<u8>, String> = IndexVec::with_capacity(10);
     vec.push("a".to_string());
     vec.reserve(5);
-    assert!(vec.len() == 1);
+    assert_eq!(vec.len(), 1);
     // capacity is not exposed; skipping assertion
     let raw = vec.into_raw();
     assert_eq!(raw, vec!["a".to_string()]);
