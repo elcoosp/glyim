@@ -4,7 +4,7 @@ use crate::ty::Ty;
 use std::fmt;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-/// Substitution.
+/// `Substitution`.
 pub struct Substitution {
     index: u32,
     len: u16,
@@ -16,18 +16,22 @@ impl Substitution {
     }
 
     /// Create an empty substitution with no generic arguments.
+    #[must_use]
     pub fn empty() -> Self {
         Self { index: 0, len: 0 }
     }
     /// index.
+    #[must_use]
     pub fn index(self) -> u32 {
         self.index
     }
     /// len.
+    #[must_use]
     pub fn len(self) -> u16 {
         self.len
     }
-    /// is_empty.
+    /// `is_empty`.
+    #[must_use]
     pub fn is_empty(self) -> bool {
         self.len == 0
     }
@@ -40,13 +44,13 @@ impl fmt::Debug for Substitution {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// GenericArg.
+/// `GenericArg`.
 pub enum GenericArg {
-    #[allow(missing_docs)]
+    /// `Ty`.
     Ty(Ty),
-    #[allow(missing_docs)]
+    /// `Lifetime`.
     Lifetime(Region),
-    #[allow(missing_docs)]
+    /// Const item.
     Const(Const),
 }
 
@@ -59,9 +63,10 @@ pub enum GenericArg {
 /// `Option<Option<i32>>::unwrap`) produce different ones. An empty
 /// substitution keeps the un-suffixed legacy name so non-generic functions
 /// (`main`, etc.) don't churn.
+#[must_use]
 pub fn mangle_fn_symbol(def_id: u32, substs: Substitution) -> String {
     if substs.is_empty() {
-        format!("__glyim_fn_{}", def_id)
+        format!("__glyim_fn_{def_id}")
     } else {
         format!("__glyim_fn_{}_{}_{}", def_id, substs.index(), substs.len())
     }
