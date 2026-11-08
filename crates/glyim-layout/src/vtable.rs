@@ -1,4 +1,4 @@
-//! VTable layout and construction for trait objects.
+//! `VTable` layout and construction for trait objects.
 //!
 //! A vtable is a structure containing function pointers for all methods
 //! of a trait, plus metadata (drop, size, alignment). It is emitted as
@@ -16,7 +16,7 @@ pub struct VTableEntry {
     pub name: Name,
     /// The function type signature
     pub sig: FnSig,
-    /// The DefId of the concrete method being pointed to
+    /// The `DefId` of the concrete method being pointed to
     pub fn_def_id: FnDefId,
 }
 
@@ -48,6 +48,7 @@ pub struct VTableSize {
 
 impl VTableLayout {
     /// Compute the memory layout (size and alignment) of this vtable.
+    #[must_use]
     pub fn memory_size(&self, ptr_size: u64) -> VTableSize {
         // Vtable structure:
         // [0] drop_fn pointer (or null)
@@ -62,6 +63,7 @@ impl VTableLayout {
     }
 
     /// Returns the offset (in bytes) of the method pointer at the given index.
+    #[must_use]
     pub fn method_offset(&self, index: usize, ptr_size: u64) -> u64 {
         // Skip drop_fn, size, align
         (3 + index) as u64 * ptr_size
