@@ -23,11 +23,11 @@ use std::rc::Rc;
 pub enum Value {
     /// Signed integer.
     Int(i64),
-    /// Float.
+    /// `Float`.
     Float(f64),
-    /// Boolean.
+    /// `Boolean`.
     Bool(bool),
-    /// String.
+    /// `String`.
     Str(Rc<str>),
     /// Absent (`None`-ish).
     Null,
@@ -59,7 +59,7 @@ impl Value {
                 if f.fract() == 0.0 && f.is_finite() && f.abs() < 1e15 {
                     format!("{}", *f as i64)
                 } else {
-                    format!("{}", f)
+                    format!("{f}")
                 }
             }
             Value::Bool(b) => b.to_string(),
@@ -86,7 +86,7 @@ impl Value {
         match self {
             Value::Int(i) => *i as f64,
             Value::Float(f) => *f,
-            Value::Bool(b) => *b as i64 as f64,
+            Value::Bool(b) => i64::from(*b) as f64,
             Value::Null => 0.0,
             _ => 0.0,
         }
@@ -263,8 +263,8 @@ impl Interp {
                 match (name.as_str(), &r) {
                     // The iterator protocol surface views use (§3.1:
                     // `s.history.iter()`).
-                    ("iter", _) | ("clone", _) => Ok(r),
-                    ("len", _) | ("count", _) => match r {
+                    ("iter" | "clone", _) => Ok(r),
+                    ("len" | "count", _) => match r {
                         Value::List(l) => Ok(Value::Int(l.borrow().len() as i64)),
                         Value::Str(s) => Ok(Value::Int(s.chars().count() as i64)),
                         _ => Ok(Value::Int(0)),
