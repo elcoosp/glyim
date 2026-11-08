@@ -60,6 +60,7 @@ impl AsyncTransformPlan {
     /// `Start` (fresh poll), `S_k` for each suspend site `k` (resume just
     /// before re-evaluating site `k`'s `Ready` arm), and `Done` (the
     /// continuation after the final `.await`).
+    #[must_use]
     pub fn variant_count(n_suspend: usize) -> usize {
         n_suspend + 1
     }
@@ -73,6 +74,7 @@ impl AsyncTransformPlan {
 /// actually `Future::poll` rather than an ordinary function call. Here we treat
 /// every `Call` terminator as a candidate suspend site, which is sufficient
 /// for the analysis and for the synthetic-body unit tests.
+#[must_use]
 pub fn split_at_suspend_points(body: &Body) -> Vec<SuspendSite> {
     let mut sites = Vec::new();
     for (block, data) in body.basic_blocks.iter_enumerated() {
@@ -99,6 +101,7 @@ pub fn split_at_suspend_points(body: &Body) -> Vec<SuspendSite> {
 /// For each suspend site, compute the set of locals live *after* the site's
 /// block. These are the locals that must be preserved across the suspension
 /// (stored in the `S_k` state variant and restored on resume).
+#[must_use]
 pub fn compute_live_across_suspends(body: &Body, sites: &[SuspendSite]) -> Vec<FixedBitSet> {
     let liveness = compute_liveness(body);
     sites
@@ -111,6 +114,7 @@ pub fn compute_live_across_suspends(body: &Body, sites: &[SuspendSite]) -> Vec<F
 }
 
 /// Build the complete transform plan for an async `poll` body.
+#[must_use]
 pub fn plan_async_transform(body: &Body) -> AsyncTransformPlan {
     let sites = split_at_suspend_points(body);
     // Liveness-across-suspends is only needed to build the state-machine
@@ -139,6 +143,7 @@ pub fn plan_async_transform(body: &Body) -> AsyncTransformPlan {
 /// `S_k` variant, and the `Return` of `Poll::Pending`) is performed by the
 /// pipeline codegen in [`transform_async_body`]. Keeping the analysis separate
 /// makes the logic unit-testable without constructing full enum MIR.
+#[must_use]
 pub fn plan_resume_arm(plan: &AsyncTransformPlan, site_index: usize) -> ResumeArmPlan {
     let next_state = site_index + 1; // S_k resumes at site k+1's Ready arm
     let live = plan
@@ -176,6 +181,7 @@ pub struct ResumeArmPlan {
 /// — is implemented in the pipeline wiring (M3) and cannot be runtime-verified
 /// on this host. The function returns the plan so the caller can drive the
 /// real emission.
+#[must_use]
 pub fn transform_async_body(body: &Body) -> AsyncTransformPlan {
     // A body with no suspend sites resolves on the first poll; a body with a
     // single suspend site is handled by the single-poll desugar; only bodies
