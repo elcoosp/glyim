@@ -2,38 +2,45 @@ use glyim_core::interner::Interner;
 use glyim_core::primitives::*;
 use glyim_type::{Region, Ty, TyCtx, TyCtxMut, TyKind};
 
-/// SourceBuilder.
+/// `SourceBuilder`.
 pub struct SourceBuilder {
     lines: Vec<String>,
 }
 
 impl SourceBuilder {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self { lines: Vec::new() }
     }
     /// line.
+    #[must_use]
     pub fn line(mut self, line: impl Into<String>) -> Self {
         self.lines.push(line.into());
         self
     }
     /// empty.
+    #[must_use]
     pub fn empty(self) -> Self {
         self.line("")
     }
-    /// fn_def.
+    /// `fn_def`.
+    #[must_use]
     pub fn fn_def(self, name: &str, params: &str, body: &str) -> Self {
-        self.line(format!("fn {}({}) {{ {} }}", name, params, body))
+        self.line(format!("fn {name}({params}) {{ {body} }}"))
     }
     /// mode.
+    #[must_use]
     pub fn mode(self, mode: &str) -> Self {
-        self.line(format!("// test-mode: {}", mode))
+        self.line(format!("// test-mode: {mode}"))
     }
     /// annotation.
+    #[must_use]
     pub fn annotation(self, ann: &str) -> Self {
-        self.line(format!("//~ {}", ann))
+        self.line(format!("//~ {ann}"))
     }
     /// build.
+    #[must_use]
     pub fn build(self) -> String {
         self.lines.join("\n")
     }
@@ -45,27 +52,31 @@ impl Default for SourceBuilder {
     }
 }
 
-/// TyCtxBuilder.
+/// `TyCtxBuilder`.
 pub struct TyCtxBuilder {
     interner: Option<Interner>,
 }
 
 impl TyCtxBuilder {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self { interner: None }
     }
-    /// with_interner.
+    /// `with_interner`.
+    #[must_use]
     pub fn with_interner(mut self, interner: Interner) -> Self {
         self.interner = Some(interner);
         self
     }
-    /// build_mut.
+    /// `build_mut`.
+    #[must_use]
     pub fn build_mut(self) -> TyCtxMut {
         let interner = self.interner.unwrap_or_default();
         TyCtxMut::new(interner)
     }
     /// build.
+    #[must_use]
     pub fn build(self) -> TyCtx {
         self.build_mut().freeze()
     }
@@ -77,7 +88,7 @@ impl Default for TyCtxBuilder {
     }
 }
 
-/// TyFactory.
+/// `TyFactory`.
 pub struct TyFactory;
 
 impl TyFactory {
@@ -105,11 +116,11 @@ impl TyFactory {
     pub fn f64(ctx: &mut TyCtxMut) -> Ty {
         ctx.mk_ty(TyKind::Float(FloatTy::F64))
     }
-    /// ref_to.
+    /// `ref_to`.
     pub fn ref_to(ctx: &mut TyCtxMut, inner: Ty, mutability: Mutability) -> Ty {
         ctx.mk_ref(Region::Erased, inner, mutability)
     }
-    /// slice_of.
+    /// `slice_of`.
     pub fn slice_of(ctx: &mut TyCtxMut, inner: Ty) -> Ty {
         ctx.mk_ty(TyKind::Slice(inner))
     }
