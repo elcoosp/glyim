@@ -66,7 +66,7 @@ fn drop_glue_for_array_of_droppable_drops_each_element() {
     );
 }
 
-/// Phase 2 (GLYIM_DESTUB_PLAN): const-generic array length must be resolved
+/// Phase 2 (`GLYIM_DESTUB_PLAN)`: const-generic array length must be resolved
 /// *before* drop-glue generation, and the substitution must flow all the way
 /// into `generate_drop_glue` so the right number of per-element `Drop`
 /// terminators are produced.
@@ -151,7 +151,7 @@ fn const_generic_array_drop_glue_resolves_length_through_substitution() {
     );
 }
 
-/// Phase 2c (GLYIM_DESTUB_PLAN): `generate_array_drop_glue` must *panic* (hard
+/// Phase 2c (`GLYIM_DESTUB_PLAN)`: `generate_array_drop_glue` must *panic* (hard
 /// assertion) when it receives a non-monomorphic array length, instead of the
 /// old silent "skip every destructor" fallback. This is the regression guard
 /// that turns "leaks memory in release" into "caught immediately by CI."
