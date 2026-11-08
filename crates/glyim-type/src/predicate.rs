@@ -4,61 +4,61 @@ use crate::ty::Ty;
 use glyim_core::def_id::TraitDefId;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// Predicate.
+/// `Predicate`.
 pub enum Predicate {
-    #[allow(missing_docs)]
+    /// Trait item.
     Trait(TraitPredicate),
-    #[allow(missing_docs)]
+    /// `RegionOutlives`.
     RegionOutlives(RegionOutlivesPredicate),
-    #[allow(missing_docs)]
+    /// `TypeOutlives`.
     TypeOutlives(TypeOutlivesPredicate),
-    #[allow(missing_docs)]
+    /// `WellFormed`.
     WellFormed(Ty),
-    #[allow(missing_docs)]
+    /// `Coerce`.
     Coerce(Ty, Ty),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// TraitPredicate.
+/// `TraitPredicate`.
 pub struct TraitPredicate {
-    /// Struct.
+    /// `Struct`.
     pub trait_ref: TraitRef,
-    /// Struct.
+    /// `Struct`.
     pub polarity: ImplPolarity,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// TraitRef.
+/// `TraitRef`.
 pub struct TraitRef {
-    /// Struct.
+    /// `Struct`.
     pub def_id: TraitDefId,
-    /// Struct.
+    /// `Struct`.
     pub substs: Substitution,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// ImplPolarity.
+/// `ImplPolarity`.
 pub enum ImplPolarity {
-    /// Variant.
+    /// `Variant`.
     Positive,
-    /// Variant.
+    /// `Variant`.
     Negative,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// RegionOutlivesPredicate.
+/// `RegionOutlivesPredicate`.
 pub struct RegionOutlivesPredicate {
-    /// Struct.
+    /// `Struct`.
     pub a: Region,
-    /// Struct.
+    /// `Struct`.
     pub b: Region,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// TypeOutlivesPredicate.
+/// `TypeOutlivesPredicate`.
 pub struct TypeOutlivesPredicate {
-    /// Struct.
+    /// `Struct`.
     pub ty: Ty,
-    /// Struct.
+    /// `Struct`.
     pub region: Region,
 }
