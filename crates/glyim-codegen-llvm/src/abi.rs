@@ -9,7 +9,6 @@ pub(crate) struct FullLayoutComputer<'a> {
     simple: SimpleLayoutComputer<'a>,
     ctx: &'a TyCtx,
     /// T123-PATCHED [LL-22]: per-instance layout cache. `layout_of` is
-    /// called recursively from every place_ptr, alloc_local, and
     /// field-offset query in the codegen backend; without memoization
     /// the same recursive layout is recomputed for every operand.
     cache: std::cell::RefCell<std::collections::HashMap<Ty, Layout>>,
@@ -248,7 +247,7 @@ impl FullLayoutComputer<'_> {
                         } else {
                             64 - (n_variants - 1).leading_zeros()
                         };
-                        let tag_size_bytes = tag_bits.div_ceil(8) as u64;
+                        let tag_size_bytes = u64::from(tag_bits.div_ceil(8));
                         let tag_size = Size(tag_size_bytes);
                         let tag_align = Align::from_bytes(tag_size_bytes);
 
@@ -366,8 +365,8 @@ impl FullLayoutComputer<'_> {
 /// Recursively substitute generic `Param(i)` with `substs[i]` so that a
 /// monomorphized ADT whose field/variant types still reference the generic
 /// params (e.g. `Poll<T>`'s `Ready(T)` variant) lays out correctly instead of
-/// ICEing on a bare `Param`. Shared with `SimpleLayoutComputer::subst_params`.
-impl<'a> FullLayoutComputer<'a> {
+/// `ICEing` on a bare `Param`. Shared with `SimpleLayoutComputer::subst_params`.
+impl FullLayoutComputer<'_> {
     fn subst_params(&self, ty: Ty, substs: &[glyim_type::GenericArg]) -> Ty {
         if substs.is_empty() {
             return ty;
