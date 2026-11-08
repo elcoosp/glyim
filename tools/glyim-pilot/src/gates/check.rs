@@ -4,11 +4,11 @@ use crate::gates::types::GateContext;
 use crate::gates::{Gate, GateResult};
 use async_trait::async_trait;
 
-/// CheckGate.
+/// `CheckGate`.
 pub struct CheckGate;
 #[async_trait]
 impl Gate for CheckGate {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "check"
     }
     async fn run(&self, ctx: &GateContext) -> Result<GateResult, PilotError> {
