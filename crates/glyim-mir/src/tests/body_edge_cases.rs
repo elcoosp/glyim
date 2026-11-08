@@ -138,6 +138,6 @@ fn body_clone() {
 #[test]
 fn body_debug_format() {
     let body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-    let debug_str = format!("{:?}", body);
+    let debug_str = format!("{body:?}");
     assert!(debug_str.contains("Body"));
 }
