@@ -6,24 +6,24 @@ use lsp_types::{
 
 #[test]
 fn test_code_action_removes_unused_import() {
-    let source = r#"use std::collections::HashMap;
+    let source = r"use std::collections::HashMap;
 
 fn main() {
     let x = 5;
 }
-"#;
+";
     let (db, file_map, uri, _file_id) = setup_test_db(source, "/test/main.g");
     let params = CodeActionParams {
         text_document: TextDocumentIdentifier { uri: uri.clone() },
-        range: Default::default(),
-        context: Default::default(),
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        range: Range::default(),
+        context: lsp_types::CodeActionContext::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
+        partial_result_params: lsp_types::PartialResultParams::default(),
     };
     let actions = provide_code_actions(&db, &file_map, &params);
     assert!(actions.is_some());
     let actions = actions.unwrap();
-    assert!(!actions.is_empty());
+    assert_ne!(actions, [] as [lsp_types::CodeActionOrCommand; 0]);
     let action = &actions[0];
     if let lsp_types::CodeActionOrCommand::CodeAction(ca) = action {
         assert!(ca.title.contains("Remove unused import"));
@@ -69,10 +69,10 @@ fn test_code_action_add_missing_match_arm() {
 
     let params = CodeActionParams {
         text_document: TextDocumentIdentifier { uri: uri.clone() },
-        range: Default::default(),
-        context: Default::default(),
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        range: Range::default(),
+        context: lsp_types::CodeActionContext::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
+        partial_result_params: lsp_types::PartialResultParams::default(),
     };
     let actions = provide_code_actions(&db, &file_map, &params).unwrap();
     let ca = actions
@@ -134,10 +134,10 @@ fn test_code_action_generate_impl() {
 
     let params = CodeActionParams {
         text_document: TextDocumentIdentifier { uri: uri.clone() },
-        range: Default::default(),
-        context: Default::default(),
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        range: Range::default(),
+        context: lsp_types::CodeActionContext::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
+        partial_result_params: lsp_types::PartialResultParams::default(),
     };
     let actions = provide_code_actions(&db, &file_map, &params).unwrap();
     let ca = actions
