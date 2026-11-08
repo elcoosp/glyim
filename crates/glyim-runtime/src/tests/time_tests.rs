@@ -23,7 +23,7 @@ fn time_now_nanos_precision() {
     let nanos = instant.elapsed().subsec_nanos();
 
     // Nanos should be in [0, 1_000_000_000)
-    assert!(nanos < 1_000_000_000, "Nanos out of range: {}", nanos);
+    assert!(nanos < 1_000_000_000, "Nanos out of range: {nanos}");
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn time_system_secs_epoch() {
 
     // Should be a reasonable timestamp (after year 2000)
     assert!(
-        since_epoch.as_secs() > 946684800,
+        since_epoch.as_secs() > 946_684_800,
         "System time seems invalid"
     );
 }
@@ -50,9 +50,5 @@ fn time_system_nanos_precision() {
         .expect("System time before epoch")
         .subsec_nanos();
 
-    assert!(
-        nanos < 1_000_000_000,
-        "System nanos out of range: {}",
-        nanos
-    );
+    assert!(nanos < 1_000_000_000, "System nanos out of range: {nanos}");
 }
