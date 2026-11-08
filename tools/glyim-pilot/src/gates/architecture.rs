@@ -7,13 +7,14 @@ use crate::gates::types::GateContext;
 use crate::gates::{Gate, GateResult};
 use async_trait::async_trait;
 
-/// ArchitectureGate.
+/// `ArchitectureGate`.
 pub struct ArchitectureGate {
     rules: Vec<DependencyRule>,
 }
 
 impl ArchitectureGate {
     /// new.
+    #[must_use]
     pub fn new(rules: Vec<DependencyRule>) -> Self {
         Self {
             rules: if rules.is_empty() {
@@ -23,7 +24,8 @@ impl ArchitectureGate {
             },
         }
     }
-    /// with_default_rules.
+    /// `with_default_rules`.
+    #[must_use]
     pub fn with_default_rules() -> Self {
         Self::new(default_architecture_rules())
     }
@@ -36,7 +38,7 @@ impl Default for ArchitectureGate {
 
 #[async_trait]
 impl Gate for ArchitectureGate {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "architecture"
     }
 
@@ -121,7 +123,7 @@ fn extract_crate_name(content: &str) -> Option<String> {
         .get("package")?
         .get("name")?
         .as_str()
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
 }
 
 fn extract_dependencies(content: &str) -> Vec<String> {
