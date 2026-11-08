@@ -89,8 +89,7 @@ fn v27_t01_sret_large_struct_return() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("sret"),
-        "IR should contain sret attribute, got:\n{}",
-        ir
+        "IR should contain sret attribute, got:\n{ir}"
     );
     assert!(ir.contains("call"), "IR should contain a call instruction");
 }
@@ -151,8 +150,7 @@ fn v27_t02_argument_byval_with_abi_alignment() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("call"),
-        "IR should contain a call instruction, got:\n{}",
-        ir
+        "IR should contain a call instruction, got:\n{ir}"
     );
 }
 
@@ -206,8 +204,7 @@ fn v27_t03_variadic_function_call() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("..."),
-        "Variadic function should have '...' in declaration, got:\n{}",
-        ir
+        "Variadic function should have '...' in declaration, got:\n{ir}"
     );
 }
 
@@ -268,7 +265,6 @@ fn v27_t04_arm_hva_struct_four_floats_simd() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("call"),
-        "IR should contain a call instruction, got:\n{}",
-        ir
+        "IR should contain a call instruction, got:\n{ir}"
     );
 }
