@@ -43,7 +43,7 @@ fn goto_definition_returns_location() {
         .write()
         .insert_test_symbol(file_id, sym);
 
-    let source_map = crate::SourceMap::new(path.clone(), file_id, "foo".to_string());
+    let source_map = crate::SourceMap::new(file_id, "foo".to_string());
     analysis.source_maps.write().insert(file_id, source_map);
 
     let file_map_guard = analysis.file_map.read();
@@ -64,8 +64,8 @@ fn goto_definition_returns_location() {
                 character: 0,
             },
         },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: WorkDoneProgressParams::default(),
+        partial_result_params: PartialResultParams::default(),
     };
     let response = goto_definition(&analysis, file_map, &params);
     assert!(response.is_some());
@@ -108,13 +108,9 @@ fn goto_definition_cross_file() {
         .write()
         .insert_test_symbol(file_id2, sym);
 
-    let source_map1 = crate::SourceMap::new(
-        path1.clone(),
-        file_id1,
-        "fn main() { helper(); }".to_string(),
-    );
+    let source_map1 = crate::SourceMap::new(file_id1, "fn main() { helper(); }".to_string());
     analysis.source_maps.write().insert(file_id1, source_map1);
-    let source_map2 = crate::SourceMap::new(path2.clone(), file_id2, "fn helper() {}".to_string());
+    let source_map2 = crate::SourceMap::new(file_id2, "fn helper() {}".to_string());
     analysis.source_maps.write().insert(file_id2, source_map2);
 
     let usage_span = Span::new(
@@ -153,8 +149,8 @@ fn goto_definition_cross_file() {
                 character: 17,
             },
         },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: WorkDoneProgressParams::default(),
+        partial_result_params: PartialResultParams::default(),
     };
     let response = goto_definition(&analysis, file_map, &params);
     assert!(response.is_some());
