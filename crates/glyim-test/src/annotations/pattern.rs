@@ -1,24 +1,26 @@
 use std::fmt;
 
 #[derive(Clone, Debug)]
-/// MatchPattern.
+/// `MatchPattern`.
 pub enum MatchPattern {
-    /// Variant.
+    /// `Variant`.
     Any,
-    #[allow(missing_docs)]
+    /// Matches when the haystack contains this substring.
     Substring(String),
-    #[allow(missing_docs)]
+    /// Matches when this regex finds a match in the haystack.
     Regex(regex::Regex),
-    #[allow(missing_docs)]
+    /// Matches only on exact whole-string equality.
     Exact(String),
 }
 
 impl MatchPattern {
     /// substring.
+    #[must_use]
     pub fn substring(s: &str) -> Self {
         Self::Substring(s.to_string())
     }
     /// exact.
+    #[must_use]
     pub fn exact(s: &str) -> Self {
         Self::Exact(s.to_string())
     }
@@ -28,6 +30,7 @@ impl MatchPattern {
     }
 
     /// matches.
+    #[must_use]
     pub fn matches(&self, message: &str) -> bool {
         match self {
             Self::Any => true,
@@ -38,12 +41,13 @@ impl MatchPattern {
     }
 
     /// description.
+    #[must_use]
     pub fn description(&self) -> String {
         match self {
             Self::Any => "<any>".into(),
-            Self::Substring(s) => format!("contains {:?}", s),
+            Self::Substring(s) => format!("contains {s:?}"),
             Self::Regex(re) => format!("matches {:?}", re.as_str()),
-            Self::Exact(s) => format!("== {:?}", s),
+            Self::Exact(s) => format!("== {s:?}"),
         }
     }
 }
