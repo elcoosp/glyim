@@ -25,14 +25,14 @@ fn compile(src: &str) -> CompileOutput {
 
 #[test]
 fn module_function_called_via_multi_segment_value_path() {
-    let src = r#"
+    let src = r"
         mod math {
             fn square(x: i32) -> i32 { x * x }
         }
         fn main() {
             let _ = math::square(5);
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
