@@ -3,21 +3,21 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 #[derive(Clone, Debug)]
-/// RunResult.
+/// `RunResult`.
 pub struct RunResult {
-    /// Struct.
+    /// `Struct`.
     pub exit_code: Option<i32>,
-    /// Struct.
+    /// `Struct`.
     pub stdout: String,
-    /// Struct.
+    /// `Struct`.
     pub stderr: String,
-    /// Struct.
+    /// `Struct`.
     pub timed_out: bool,
-    /// Struct.
+    /// `Struct`.
     pub duration: Duration,
 }
 
-/// ProgramRunner.
+/// `ProgramRunner`.
 pub struct ProgramRunner {
     program: PathBuf,
     args: Vec<String>,
@@ -37,30 +37,35 @@ impl ProgramRunner {
     }
 
     /// arg.
+    #[must_use]
     pub fn arg(mut self, arg: impl Into<String>) -> Self {
         self.args.push(arg.into());
         self
     }
 
     /// args.
+    #[must_use]
     pub fn args(mut self, args: impl IntoIterator<Item = impl Into<String>>) -> Self {
         self.args.extend(args.into_iter().map(Into::into));
         self
     }
 
     /// stdin.
+    #[must_use]
     pub fn stdin(mut self, input: impl Into<String>) -> Self {
         self.stdin_input = Some(input.into());
         self
     }
 
     /// env.
+    #[must_use]
     pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.env.push((key.into(), value.into()));
         self
     }
 
     /// run.
+    #[must_use]
     pub fn run(self, timeout: Duration) -> RunResult {
         let start = std::time::Instant::now();
 
@@ -85,7 +90,7 @@ impl ProgramRunner {
                 return RunResult {
                     exit_code: None,
                     stdout: String::new(),
-                    stderr: format!("failed to spawn process: {}", e),
+                    stderr: format!("failed to spawn process: {e}"),
                     timed_out: false,
                     duration: start.elapsed(),
                 };
@@ -141,7 +146,7 @@ impl ProgramRunner {
             ChildResult::Error(e) => RunResult {
                 exit_code: None,
                 stdout: String::new(),
-                stderr: format!("process error: {}", e),
+                stderr: format!("process error: {e}"),
                 timed_out: false,
                 duration,
             },
@@ -190,35 +195,39 @@ fn run_child_with_timeout(child: std::process::Child, timeout: Duration) -> Chil
 }
 
 #[derive(Clone, Debug, Default)]
-/// OutputCheck.
+/// `OutputCheck`.
 pub struct OutputCheck {
-    /// Struct.
+    /// `Struct`.
     pub expected_stdout: Option<String>,
-    /// Struct.
+    /// `Struct`.
     pub expected_stderr: Option<String>,
-    /// Struct.
+    /// `Struct`.
     pub expected_exit_code: Option<i32>,
 }
 
 impl OutputCheck {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// stdout.
+    #[must_use]
     pub fn stdout(mut self, expected: impl Into<String>) -> Self {
         self.expected_stdout = Some(expected.into());
         self
     }
 
     /// stderr.
+    #[must_use]
     pub fn stderr(mut self, expected: impl Into<String>) -> Self {
         self.expected_stderr = Some(expected.into());
         self
     }
 
-    /// exit_code.
+    /// `exit_code`.
+    #[must_use]
     pub fn exit_code(mut self, code: i32) -> Self {
         self.expected_exit_code = Some(code);
         self
