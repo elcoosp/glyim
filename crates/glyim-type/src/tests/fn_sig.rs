@@ -1,4 +1,4 @@
-//! Tests for FnSig construction and field access.
+//! Tests for `FnSig` construction and field access.
 
 use glyim_core::primitives::{Abi, IntTy, Safety, UintTy};
 
@@ -131,7 +131,7 @@ fn fn_sig_debug_format() {
         unsafety: Safety::Safe,
         abi: Abi::Glyim,
     };
-    let debug = format!("{:?}", sig);
+    let debug = format!("{sig:?}");
     assert!(debug.contains("FnSig"));
     assert!(debug.contains("c_variadic"));
     assert!(debug.contains("unsafety"));
