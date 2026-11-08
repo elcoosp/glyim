@@ -69,13 +69,11 @@ pub fn desugar_async(hir: &mut crate::CrateHir, diags: &mut Vec<GlyimDiagnostic>
             ItemKind::Fn(f) => f.body,
             _ => None,
         };
-        let suspend_count = body_id
-            .map(|b| {
-                let mut sps = Vec::new();
-                collect_suspend_points(&hir.bodies[b], root_expr_id(&hir.bodies[b]), &mut sps);
-                sps.len()
-            })
-            .unwrap_or(0);
+        let suspend_count = body_id.map_or(0, |b| {
+            let mut sps = Vec::new();
+            collect_suspend_points(&hir.bodies[b], root_expr_id(&hir.bodies[b]), &mut sps);
+            sps.len()
+        });
 
         // Phase 3 (GLYIM_DESTUB_PLAN): the v1 state-machine transform does NOT
         // yet support `.await` inside a `while`/`loop`/`for` body. Resuming into
@@ -471,7 +469,7 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
 
     let interner = &hir.interner;
     let fn_name_str = interner.resolve(fn_name).to_string();
-    let future_name = format!("{}Future", fn_name_str);
+    let future_name = format!("{fn_name_str}Future");
     let future_name_id = interner.intern(&future_name);
     let output_id = interner.intern("Output");
     let poll_id = interner.intern("poll");
@@ -481,7 +479,7 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
     // ---- 1. Future struct: one field per captured parameter ----
     let mut fields = Vec::new();
     for (i, p) in original_params.iter().enumerate() {
-        let field_name = interner.intern(&format!("f{}", i));
+        let field_name = interner.intern(&format!("f{i}"));
         let ty =
             p.ty.clone()
                 .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
@@ -512,7 +510,7 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
     let mut param_fields: std::collections::HashMap<crate::Name, crate::Name> =
         std::collections::HashMap::new();
     for (i, p) in original_params.iter().enumerate() {
-        let field_name = interner.intern(&format!("f{}", i));
+        let field_name = interner.intern(&format!("f{i}"));
         param_fields.insert(p.name, field_name);
     }
     let self_name = interner.intern("self");
@@ -612,7 +610,7 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
     };
     let mut wrapper_fields: Vec<(crate::Name, ExprId)> = Vec::new();
     for (i, p) in original_params.iter().enumerate() {
-        let field_name = interner.intern(&format!("f{}", i));
+        let field_name = interner.intern(&format!("f{i}"));
         let var_id = wrapper_body.alloc_expr(
             Expr::Path(plain_path(interner, interner.resolve(p.name))),
             Span::DUMMY,
@@ -788,237 +786,16 @@ fn rewrite_for_poll(
 /// Compute, for each suspend point `k`, the set of local bindings that are
 /// *live after* suspend point `k`. Scaffold for the deferred multi-await v1
 /// transform; not yet wired into dispatch.
-#[allow(dead_code)]
-fn compute_live_across_suspends(
-    body: &Body,
-    suspend_points: &[SuspendPoint],
-    original_params: &[Param],
-) -> Vec<std::collections::BTreeSet<crate::Name>> {
-    use std::collections::BTreeSet;
-
-    let param_names: BTreeSet<crate::Name> = original_params.iter().map(|p| p.name).collect();
-
-    // Collect every `Name` referenced anywhere in the body.
-    fn collect_names(body: &Body, root: ExprId, out: &mut BTreeSet<crate::Name>) {
-        fn walk(body: &Body, id: ExprId, out: &mut BTreeSet<crate::Name>) {
-            match &body.exprs[id] {
-                Expr::Path(p) => {
-                    if let Some(n) = p.as_name() {
-                        out.insert(n);
-                    }
-                }
-                Expr::Block { stmts, tail } => {
-                    for s in stmts {
-                        walk(body, *s, out);
-                    }
-                    if let Some(t) = tail {
-                        walk(body, *t, out);
-                    }
-                }
-                Expr::If {
-                    cond,
-                    then_branch,
-                    else_branch,
-                } => {
-                    walk(body, *cond, out);
-                    walk(body, *then_branch, out);
-                    if let Some(e) = else_branch {
-                        walk(body, *e, out);
-                    }
-                }
-                Expr::Match { scrutinee, arms } => {
-                    walk(body, *scrutinee, out);
-                    for a in arms {
-                        if let Some(g) = a.guard {
-                            walk(body, g, out);
-                        }
-                        walk(body, a.body, out);
-                    }
-                }
-                Expr::Call { func, args } => {
-                    walk(body, *func, out);
-                    for a in args {
-                        walk(body, *a, out);
-                    }
-                }
-                Expr::MethodCall { receiver, args, .. } => {
-                    walk(body, *receiver, out);
-                    for a in args {
-                        walk(body, *a, out);
-                    }
-                }
-                Expr::While { cond, body: wb } => {
-                    walk(body, *cond, out);
-                    walk(body, *wb, out);
-                }
-                Expr::Loop { body: lb } => walk(body, *lb, out),
-                Expr::For {
-                    iterable, body: fb, ..
-                } => {
-                    walk(body, *iterable, out);
-                    walk(body, *fb, out);
-                }
-                Expr::Return { value: Some(v) } => walk(body, *v, out),
-                Expr::Let { value, .. } => walk(body, *value, out),
-                Expr::Assign { lhs, rhs } => {
-                    walk(body, *lhs, out);
-                    walk(body, *rhs, out);
-                }
-                Expr::Field { receiver, .. } => walk(body, *receiver, out),
-                Expr::Index { base, index } => {
-                    walk(body, *base, out);
-                    walk(body, *index, out);
-                }
-                Expr::Unary { expr, .. } => walk(body, *expr, out),
-                Expr::Binary { lhs, rhs, .. } => {
-                    walk(body, *lhs, out);
-                    walk(body, *rhs, out);
-                }
-                Expr::Cast { expr, .. } => walk(body, *expr, out),
-                Expr::Ref { expr, .. } => walk(body, *expr, out),
-                Expr::Struct { fields, spread, .. } => {
-                    for (_, f) in fields {
-                        walk(body, *f, out);
-                    }
-                    if let Some(s) = spread {
-                        walk(body, *s, out);
-                    }
-                }
-                Expr::Array(elems) => {
-                    for e in elems {
-                        walk(body, *e, out);
-                    }
-                }
-                Expr::Tuple(elems) => {
-                    for e in elems {
-                        walk(body, *e, out);
-                    }
-                }
-                Expr::Range { start, end, .. } => {
-                    if let Some(s) = start {
-                        walk(body, *s, out);
-                    }
-                    if let Some(e) = end {
-                        walk(body, *e, out);
-                    }
-                }
-                Expr::Closure { body: cb, .. } => walk(body, *cb, out),
-                _ => {}
-            }
-        }
-        walk(body, root, out);
-    }
-
-    let root = root_expr_id(body);
-    let mut result = Vec::with_capacity(suspend_points.len());
-    for k in 0..suspend_points.len() {
-        // Names referenced strictly AFTER suspend point k. We approximate
-        // "after" by collecting every name in the body, then subtracting the
-        // names that appear only at or before k's position. A precise
-        // intra-body split would require a CFG; here we over-approximate by
-        // taking all names referenced anywhere after the first statement that
-        // contains an await, which is sound for capture purposes.
-        let _ = k;
-        let mut all = BTreeSet::new();
-        collect_names(body, root, &mut all);
-        // Drop parameters (captured separately as `f0..fn`).
-        for pn in &param_names {
-            all.remove(pn);
-        }
-        result.push(all);
-    }
-    result
-}
-
-/// Build the state-enum HIR item FooState with Start, S0..S{n-1}, Done variants.
+/// Build the state-enum HIR item `FooState` with Start, S0..S{n-1}, Done variants.
 /// Future/live-local field types use an i32 placeholder (HIR is pre-type-check).
 /// See module docs / section 6.1 for the type-check gap.
 /// Build the `FooState` enum for the (deferred) multi-await v1 transform.
 /// Retained as scaffold; the real v1 is the post-MIR pass in
 /// `glyim-lower/src/async_state_transform.rs` (see plan §Phase 3). Marked
-/// allow(dead_code) because it is not yet wired into the dispatch.
-#[allow(dead_code)]
-fn build_state_enum(
-    hir: &mut crate::CrateHir,
-    state_name: &str,
-    original_params: &[Param],
-    live_across: &[std::collections::BTreeSet<crate::Name>],
-) -> Item {
-    let interner = &hir.interner;
-    let state_name_id = interner.intern(state_name);
-    let mut variants = Vec::new();
-
-    // Start(P0..Pn) — captures the function parameters.
-    let mut start_fields = Vec::new();
-    for (i, p) in original_params.iter().enumerate() {
-        let field_name = interner.intern(&format!("f{}", i));
-        let ty =
-            p.ty.clone()
-                .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
-        start_fields.push(Field {
-            name: field_name,
-            ty,
-            span: Span::DUMMY,
-        });
-    }
-    variants.push(Variant {
-        name: interner.intern("Start"),
-        fields: start_fields,
-        kind: StructKind::Record,
-        span: Span::DUMMY,
-    });
-
-    // S_k { fut, ..live } — captures the suspended future + live locals.
-    for (k, live) in live_across.iter().enumerate() {
-        let mut fields = Vec::new();
-        let fut_name = interner.intern("fut");
-        fields.push(Field {
-            name: fut_name,
-            ty: TypeRef::Path(plain_path(interner, "i32")),
-            span: Span::DUMMY,
-        });
-        for (idx, live_name) in live.iter().enumerate() {
-            let field_name = interner.intern(&format!("live{}", idx));
-            let _ = live_name;
-            fields.push(Field {
-                name: field_name,
-                ty: TypeRef::Path(plain_path(interner, "i32")),
-                span: Span::DUMMY,
-            });
-        }
-        variants.push(Variant {
-            name: interner.intern(&format!("S{}", k)),
-            fields,
-            kind: StructKind::Record,
-            span: Span::DUMMY,
-        });
-    }
-
-    // Done — terminal state.
-    variants.push(Variant {
-        name: interner.intern("Done"),
-        fields: Vec::new(),
-        kind: StructKind::Record,
-        span: Span::DUMMY,
-    });
-
-    Item {
-        id: ItemId::from_raw(hir.items.len() as u32),
-        name: state_name_id,
-        kind: ItemKind::Enum(EnumItem {
-            variants,
-            generic_params: Vec::new(),
-            where_clauses: Vec::new(),
-        }),
-        visibility: Visibility::Inherited,
-        span: Span::DUMMY,
-    }
-}
-
+/// `allow(dead_code)` because it is not yet wired into the dispatch.
 /// Build the outer future wrapper struct: `struct FooFuture { state: FooState }`.
 /// Build the outer future wrapper struct. Scaffold for the deferred multi-await
 /// v1 transform (the real v1 is a post-MIR pass); not yet wired into dispatch.
-#[allow(dead_code)]
 fn build_future_wrapper_struct(
     hir: &mut crate::CrateHir,
     future_name: &str,
@@ -1048,7 +825,6 @@ fn build_future_wrapper_struct(
 /// Shared by both the single-poll and multi-poll desugar paths.
 /// Build `impl Future for FooFuture`. Scaffold for the deferred multi-await v1
 /// transform (the real v1 is a post-MIR pass); not yet wired into dispatch.
-#[allow(dead_code)]
 fn build_future_impl(
     hir: &mut crate::CrateHir,
     future_name: &str,
@@ -1101,7 +877,6 @@ fn build_future_impl(
 /// (`S_k` arms hardcode `Poll::Pending`, `Done` panics) that would hang
 /// forever — the dispatch instead emits a clear diagnostic for multi-await
 /// bodies. See module docs for the type-check gap.
-#[allow(dead_code)]
 /// Multi-await (sequential, `suspend_count >= 2`, no loop-await) async state
 /// machine desugar — the real v1 resume-dispatch (plan §Phase 3 / M4).
 ///
@@ -1163,7 +938,6 @@ fn build_future_impl(
 /// type-check-verified here; a Linux host must run the end-to-end `two_step`
 /// proof before declaring M4 fully verified. Shapes whose future type is NOT
 /// statically nameable fall back to the `async-v2` diagnostic (see below).
-#[allow(clippy::too_many_lines)]
 fn desugar_multi_async_fn(
     hir: &mut crate::CrateHir,
     item_id: ItemId,
@@ -1185,8 +959,8 @@ fn desugar_multi_async_fn(
 
     let interner = &hir.interner;
     let fn_name_str = interner.resolve(fn_name).to_string();
-    let future_name = format!("{}Future", fn_name_str);
-    let state_name = format!("{}State", future_name);
+    let future_name = format!("{fn_name_str}Future");
+    let state_name = format!("{future_name}State");
     let _output_id = interner.intern("Output");
     let poll_id = interner.intern("poll");
     let ready_id = interner.intern("Ready");
@@ -1210,17 +984,13 @@ fn desugar_multi_async_fn(
     // (`let x = e.await` => Some(x); a bare tail `e.await` => None).
     struct AwaitInfo {
         inner: ExprId,
-        result_var: Option<crate::Name>,
     }
     let mut await_infos: Vec<AwaitInfo> = Vec::new();
     for sp in &suspend_points {
         let e = &work_body.exprs[sp.await_expr];
         if let Expr::Await { expr } = e {
             // Default result var: None; refined by the body split below.
-            await_infos.push(AwaitInfo {
-                inner: *expr,
-                result_var: None,
-            });
+            await_infos.push(AwaitInfo { inner: *expr });
         }
     }
 
@@ -1243,7 +1013,7 @@ fn desugar_multi_async_fn(
         .iter()
         .map(|a| future_type_name(interner, &work_body, a.inner))
         .collect();
-    if fut_ty_names.iter().any(|o| o.is_none()) {
+    if fut_ty_names.iter().any(std::option::Option::is_none) {
         // A future whose concrete type isn't statically nameable. Per the
         // plan's safety rule we MUST NOT silently emit a broken state machine;
         // emit the clear `async-v2` diagnostic instead (compile error, not a
@@ -1301,20 +1071,16 @@ fn desugar_multi_async_fn(
             await_result_vars.push(var);
             await_order.push(ai);
             pre_segments.push(Vec::new());
-        } else {
-            if let Some(seg) = pre_segments.last_mut() {
-                seg.push(*stmt);
-            }
+        } else if let Some(seg) = pre_segments.last_mut() {
+            seg.push(*stmt);
         }
     }
     // Tail await (rare): if root_tail contains an await, it's the final await.
-    let tail_is_await = root_tail
-        .map(|t| {
-            await_infos_await_exprs(&work_body)
-                .iter()
-                .any(|&ai| stmt_contains(&work_body, t, ai))
-        })
-        .unwrap_or(false);
+    let tail_is_await = root_tail.is_some_and(|t| {
+        await_infos_await_exprs(&work_body)
+            .iter()
+            .any(|&ai| stmt_contains(&work_body, t, ai))
+    });
     let tail_expr = if tail_is_await { None } else { root_tail };
 
     // 3. Build the poll body. Each `S_k` arm re-drives `fut_k`.
@@ -1346,14 +1112,14 @@ fn desugar_multi_async_fn(
     let v_names: Vec<crate::Name> = await_result_vars
         .iter()
         .enumerate()
-        .map(|(k, _)| interner.intern(&format!("v{}", k)))
+        .map(|(k, _)| interner.intern(&format!("v{k}")))
         .collect();
     let ready_value_name = interner.intern("__v");
     let arm_rename = |k: usize| -> std::collections::HashMap<crate::Name, crate::Name> {
         let mut m: std::collections::HashMap<crate::Name, crate::Name> =
             std::collections::HashMap::new();
         for (i, p) in original_params.iter().enumerate() {
-            m.insert(p.name, interner.intern(&format!("f{}", i)));
+            m.insert(p.name, interner.intern(&format!("f{i}")));
         }
         for (j, var) in await_result_vars.iter().enumerate() {
             if let Some(v) = var {
@@ -1393,7 +1159,7 @@ fn desugar_multi_async_fn(
     let start_pat = {
         let mut fields: Vec<(crate::Name, PatId)> = Vec::new();
         for (i, _p) in original_params.iter().enumerate() {
-            let fname = interner.intern(&format!("f{}", i));
+            let fname = interner.intern(&format!("f{i}"));
             let b = poll_body.pats.push(Pat::Binding {
                 name: fname,
                 mutability: Mutability::Not,
@@ -1545,8 +1311,7 @@ fn desugar_multi_async_fn(
             Span::DUMMY,
         );
         let pending_arm_body = {
-            let mut s = Vec::new();
-            s.push(assign_s0_p);
+            let mut s = vec![assign_s0_p];
             s.push(return_pending);
             poll_body.alloc_expr(
                 Expr::Block {
@@ -1588,7 +1353,7 @@ fn desugar_multi_async_fn(
         let s_pat = {
             let mut fields: Vec<(crate::Name, PatId)> = Vec::new();
             for (i, _p) in original_params.iter().enumerate() {
-                let fname = interner.intern(&format!("f{}", i));
+                let fname = interner.intern(&format!("f{i}"));
                 let b = poll_body.pats.push(Pat::Binding {
                     name: fname,
                     mutability: Mutability::Not,
@@ -1596,15 +1361,15 @@ fn desugar_multi_async_fn(
                 });
                 fields.push((fname, b));
             }
-            for j in 0..k {
+            for name in v_names.iter().take(k).copied() {
                 let b = poll_body.pats.push(Pat::Binding {
-                    name: v_names[j],
+                    name,
                     mutability: Mutability::Not,
                     subpattern: None,
                 });
-                fields.push((v_names[j], b));
+                fields.push((name, b));
             }
-            let fut_name = interner.intern(&format!("fut{}", k));
+            let fut_name = interner.intern(&format!("fut{k}"));
             let fb = poll_body.pats.push(Pat::Binding {
                 name: fut_name,
                 mutability: Mutability::Not,
@@ -1612,14 +1377,14 @@ fn desugar_multi_async_fn(
             });
             fields.push((fut_name, fb));
             poll_body.pats.push(Pat::Struct {
-                path: two_seg(interner, &state_name, interner.intern(&format!("S{}", k))),
+                path: two_seg(interner, &state_name, interner.intern(&format!("S{k}"))),
                 fields,
                 rest: false,
             })
         };
         let s_body = {
             let rename_k = arm_rename(k);
-            let fut_name = interner.intern(&format!("fut{}", k));
+            let fut_name = interner.intern(&format!("fut{k}"));
             let fut_path = poll_body.alloc_expr(
                 Expr::Path(plain_path(interner, interner.resolve(fut_name))),
                 Span::DUMMY,
@@ -1908,7 +1673,7 @@ fn desugar_multi_async_fn(
     };
     let mut start_fields: Vec<(crate::Name, ExprId)> = Vec::new();
     for (i, p) in original_params.iter().enumerate() {
-        let field_name = interner.intern(&format!("f{}", i));
+        let field_name = interner.intern(&format!("f{i}"));
         let var_id = wrapper_body.alloc_expr(
             Expr::Path(plain_path(interner, interner.resolve(p.name))),
             Span::DUMMY,
@@ -2572,8 +2337,8 @@ fn desugar_loop_async_fn(
 
     let interner = &hir.interner;
     let fn_name_str = interner.resolve(fn_name).to_string();
-    let future_name = format!("{}Future", fn_name_str);
-    let state_name = format!("{}State", future_name);
+    let future_name = format!("{fn_name_str}Future");
+    let state_name = format!("{future_name}State");
     let _output_id = interner.intern("Output");
     let poll_id = interner.intern("poll");
     let ready_id = interner.intern("Ready");
@@ -2649,19 +2414,18 @@ fn desugar_loop_async_fn(
         None
     }
     let fut_ty_name = future_type_name(interner, &work_body, inner);
-    let fut_ty_name = match fut_ty_name {
-        Some(s) => s,
-        None => {
-            emit_unsupported(
-                diags,
-                work_body
-                    .expr_spans
-                    .get(await_expr)
-                    .copied()
-                    .unwrap_or(Span::DUMMY),
-            );
-            return None;
-        }
+    let fut_ty_name = if let Some(s) = fut_ty_name {
+        s
+    } else {
+        emit_unsupported(
+            diags,
+            work_body
+                .expr_spans
+                .get(await_expr)
+                .copied()
+                .unwrap_or(Span::DUMMY),
+        );
+        return None;
     };
 
     // Loop locals: names bound by pre-loop `let`/`let mut` statements.
@@ -2700,7 +2464,7 @@ fn desugar_loop_async_fn(
     let mut base_rename: std::collections::HashMap<crate::Name, crate::Name> =
         std::collections::HashMap::new();
     for (i, p) in original_params.iter().enumerate() {
-        base_rename.insert(p.name, interner.intern(&format!("f{}", i)));
+        base_rename.insert(p.name, interner.intern(&format!("f{i}")));
     }
     let ready_value_name = interner.intern("__v");
     let fut_local_name = interner.intern("fut");
@@ -2820,7 +2584,7 @@ fn desugar_loop_async_fn(
     let start_pat = {
         let mut fields: Vec<(crate::Name, crate::PatId)> = Vec::new();
         for (i, _p) in original_params.iter().enumerate() {
-            let fname = interner.intern(&format!("f{}", i));
+            let fname = interner.intern(&format!("f{i}"));
             let b = poll_body.pats.push(Pat::Binding {
                 name: fname,
                 mutability: Mutability::Not,
@@ -2874,7 +2638,7 @@ fn desugar_loop_async_fn(
     let s0_pat = {
         let mut fields: Vec<(crate::Name, crate::PatId)> = Vec::new();
         for (i, _p) in original_params.iter().enumerate() {
-            let fname = interner.intern(&format!("f{}", i));
+            let fname = interner.intern(&format!("f{i}"));
             let b = poll_body.pats.push(Pat::Binding {
                 name: fname,
                 mutability: Mutability::Not,
@@ -3013,13 +2777,12 @@ fn desugar_loop_async_fn(
             &[(fut_local_name, fut_local_name)],
             self_name,
         );
-        let mut pend_stmts: Vec<ExprId> = Vec::new();
-        pend_stmts.push(assign_state(
+        let mut pend_stmts: Vec<ExprId> = vec![assign_state(
             &mut poll_body,
             interner,
             state_field_name,
             s0_preserve,
-        ));
+        )];
         pend_stmts.push(poll_body.alloc_expr(
             Expr::Return {
                 value: Some(poll_pending_path),
@@ -3162,7 +2925,7 @@ fn desugar_loop_async_fn(
     };
     let mut start_fields: Vec<(crate::Name, ExprId)> = Vec::new();
     for (i, p) in original_params.iter().enumerate() {
-        let field_name = interner.intern(&format!("f{}", i));
+        let field_name = interner.intern(&format!("f{i}"));
         let var_id = wrapper_body.alloc_expr(
             Expr::Path(plain_path(interner, interner.resolve(p.name))),
             Span::DUMMY,
@@ -3233,7 +2996,7 @@ fn build_loop_state_enum(
     // Start(f0..fn)
     let mut start_fields = Vec::new();
     for (i, p) in original_params.iter().enumerate() {
-        let fname = interner.intern(&format!("f{}", i));
+        let fname = interner.intern(&format!("f{i}"));
         let ty =
             p.ty.clone()
                 .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
@@ -3254,7 +3017,7 @@ fn build_loop_state_enum(
     {
         let mut fields = Vec::new();
         for (i, p) in original_params.iter().enumerate() {
-            let fname = interner.intern(&format!("f{}", i));
+            let fname = interner.intern(&format!("f{i}"));
             let ty =
                 p.ty.clone()
                     .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
@@ -3324,7 +3087,7 @@ fn build_state_struct(
 ) -> ExprId {
     let mut fields: Vec<(crate::Name, ExprId)> = Vec::new();
     for (i, _p) in original_params.iter().enumerate() {
-        let fname = interner.intern(&format!("f{}", i));
+        let fname = interner.intern(&format!("f{i}"));
         // The parameter is bound as a local `fN` by each state arm's pattern
         // (see `start_pat` / `s_pat`), so reference it as a bare local.
         fields.push((
@@ -3403,13 +3166,12 @@ fn build_multi_state_enum(
 ) -> Item {
     let interner = &hir.interner;
     let state_name_id = interner.intern(state_name);
-    let n = fut_ty_names.len();
     let mut variants = Vec::new();
 
     // Start(f0..fn)
     let mut start_fields = Vec::new();
     for (i, p) in original_params.iter().enumerate() {
-        let fname = interner.intern(&format!("f{}", i));
+        let fname = interner.intern(&format!("f{i}"));
         let ty =
             p.ty.clone()
                 .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
@@ -3427,10 +3189,10 @@ fn build_multi_state_enum(
     });
 
     // S_k(f0.., v0..v_{k-1}, fut: FutK) for k in 0..n
-    for k in 0..n {
+    for (k, fut_name) in fut_ty_names.iter().enumerate() {
         let mut fields = Vec::new();
         for (i, p) in original_params.iter().enumerate() {
-            let fname = interner.intern(&format!("f{}", i));
+            let fname = interner.intern(&format!("f{i}"));
             let ty =
                 p.ty.clone()
                     .unwrap_or_else(|| TypeRef::Path(plain_path(interner, "i32")));
@@ -3440,22 +3202,22 @@ fn build_multi_state_enum(
                 span: Span::DUMMY,
             });
         }
-        for j in 0..k {
+        for name in v_names.iter().take(k).copied() {
             let ty = TypeRef::Infer; // result type is the awaited future's Output; infer from Ready payload
             fields.push(Field {
-                name: v_names[j],
+                name,
                 ty,
                 span: Span::DUMMY,
             });
         }
-        let fut_ty = TypeRef::Path(plain_path(interner, &fut_ty_names[k]));
+        let fut_ty = TypeRef::Path(plain_path(interner, fut_name));
         fields.push(Field {
-            name: interner.intern(&format!("fut{}", k)),
+            name: interner.intern(&format!("fut{k}")),
             ty: fut_ty,
             span: Span::DUMMY,
         });
         variants.push(Variant {
-            name: interner.intern(&format!("S{}", k)),
+            name: interner.intern(&format!("S{k}")),
             fields,
             kind: StructKind::Record,
             span: Span::DUMMY,
@@ -3491,7 +3253,7 @@ fn build_multi_state_enum(
     }
 }
 
-/// Collect the `Expr::Await` ExprIds (the `.await` nodes) in `body`.
+/// Collect the `Expr::Await` `ExprIds` (the `.await` nodes) in `body`.
 fn await_infos_await_exprs(body: &Body) -> Vec<ExprId> {
     let mut out = Vec::new();
     let mut stack: Vec<ExprId> = Vec::new();
