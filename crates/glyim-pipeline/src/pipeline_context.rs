@@ -36,7 +36,7 @@ impl<'a> PipelineLowerCtx<'a> {
     }
 }
 
-impl<'a> LowerCtx for PipelineLowerCtx<'a> {
+impl LowerCtx for PipelineLowerCtx<'_> {
     fn ty_ctx(&self) -> &TyCtx {
         self.ty_ctx
     }
@@ -97,8 +97,8 @@ impl<'a> LowerCtx for PipelineLowerCtx<'a> {
         );
         let item_id = glyim_hir::ItemId::from_raw(def_id.local_id.to_raw());
 
-        match self.hir.items.get(item_id) {
-            Some(item) => match &item.kind {
+        if let Some(item) = self.hir.items.get(item_id) {
+            match &item.kind {
                 ItemKind::Struct(s) => {
                     let fields = s
                         .fields
@@ -150,13 +150,12 @@ impl<'a> LowerCtx for PipelineLowerCtx<'a> {
                         kind: AdtKind::Struct,
                     }
                 }
-            },
-            None => {
-                warn!("ADT id {:?} not found in HIR items", id);
-                AdtDef {
-                    variants: Vec::new(),
-                    kind: AdtKind::Struct,
-                }
+            }
+        } else {
+            warn!("ADT id {:?} not found in HIR items", id);
+            AdtDef {
+                variants: Vec::new(),
+                kind: AdtKind::Struct,
             }
         }
     }
@@ -220,7 +219,7 @@ impl<'a> LowerCtx for PipelineLowerCtx<'a> {
         })
     }
 
-    /// Phase 1 (GLYIM_DESTUB_PLAN): resolve `Iterator::next` for a for-loop's
+    /// Phase 1 (`GLYIM_DESTUB_PLAN)`: resolve `Iterator::next` for a for-loop's
     /// iterable type. Typeck threads this through the THIR `For.next` node when
     /// it can resolve the `impl Iterator` via its def-map; this method is the
     /// lowering-context fallback that resolves it directly from the program's
@@ -268,8 +267,7 @@ impl<'a> LowerCtx for PipelineLowerCtx<'a> {
                 let option_ty = self
                     .ty_ctx
                     .fn_sig(fn_def_id)
-                    .map(|s| s.output)
-                    .unwrap_or_else(|| self.ty_ctx.error_ty());
+                    .map_or_else(|| self.ty_ctx.error_ty(), |s| s.output);
                 let ref_iter_ty = self.ty_ctx.mk_ref(Region::Erased, iter_ty, Mutability::Mut);
                 let discr_ty = self.ty_ctx.mk_ty(TyKind::Uint(UintTy::U8));
                 return Some(glyim_lower::IteratorNextInfo {
@@ -286,7 +284,7 @@ impl<'a> LowerCtx for PipelineLowerCtx<'a> {
     }
 }
 
-impl<'a> PipelineLowerCtx<'a> {
+impl PipelineLowerCtx<'_> {
     /// Resolve a HIR `TypeRef` to a `Ty` read-only, using the frozen `TyCtx`'s
     /// by-name ADT table. Supports the shapes a for-loop iterable's `Self` can
     /// take: plain ADTs (`Counter`, `Range<T>`) and references (`&mut T`).
@@ -368,7 +366,7 @@ impl<'a> PipelineLowerCtx<'a> {
     }
 }
 
-impl<'a> PipelineLowerCtx<'a> {
+impl PipelineLowerCtx<'_> {
     /// Recursively convert a `ConstValue` into a `MirConst`, deriving each
     /// element's type from the value's declared `Ty` (`ty`):
     /// - tuple element types come from `TyKind::Tuple`'s substitution;
@@ -501,11 +499,10 @@ impl<'a> PipelineLowerCtx<'a> {
                         .ty_ctx
                         .substitution_args(*substs)
                         .iter()
-                        .filter_map(|a| match a {
+                        .find_map(|a| match a {
                             glyim_type::GenericArg::Ty(t) => Some(*t),
                             _ => None,
                         })
-                        .next()
                         .unwrap_or_else(|| self.ty_ctx.error_ty()),
                     _ => return None,
                 };
@@ -544,7 +541,7 @@ impl<'a> PipelineBorrowckCtx<'a> {
     }
 }
 
-impl<'a> BorrowckCtx for PipelineBorrowckCtx<'a> {
+impl BorrowckCtx for PipelineBorrowckCtx<'_> {
     fn ty_ctx(&self) -> &TyCtx {
         self.ty_ctx
     }
@@ -567,7 +564,7 @@ mod tests {
     use glyim_core::primitives::IntTy;
     use glyim_type::{GenericArg, TyCtxMut};
 
-    /// Phase 6 (GLYIM_DESTUB_PLAN): `cv_const` must fold a `Range` const into a
+    /// Phase 6 (`GLYIM_DESTUB_PLAN)`: `cv_const` must fold a `Range` const into a
     /// real `MirConstKind::Aggregate([start, end])` instead of falling back to
     /// `None` (which forced a zero-init `ConstRef`). This unit test drives
     /// `cv_const` directly (the public `let r: Range<i32> = 0..10;` path is
@@ -592,7 +589,7 @@ mod tests {
             interner: Interner::default(),
         };
 
-        let ctx = PipelineLowerCtx::new(&frozen, &hir, Default::default());
+        let ctx = PipelineLowerCtx::new(&frozen, &hir, HashMap::default());
 
         let value = ConstValue::Range(
             Some(Box::new(ConstValue::Int(0, IntTy::I32))),
