@@ -10,17 +10,17 @@ use glyim_core::interner::Name;
 use glyim_core::primitives::{Abi, Mutability, Safety};
 use std::fmt;
 
-/// TypeLookup.
+/// `TypeLookup`.
 pub trait TypeLookup {
-    /// ty_kind.
+    /// `ty_kind`.
     fn ty_kind(&self, ty: Ty) -> &TyKind;
-    /// ty_flags.
+    /// `ty_flags`.
     fn ty_flags(&self, ty: Ty) -> TypeFlags;
-    /// substitution_args.
+    /// `substitution_args`.
     fn substitution_args(&self, sub: Substitution) -> &[GenericArg];
-    /// name_str.
+    /// `name_str`.
     fn name_str(&self, name: Name) -> &str;
-    /// error_ty.
+    /// `error_ty`.
     fn error_ty(&self) -> Ty;
     /// Returns `true` if the given ADT has interior mutability (contains `UnsafeCell`).
     fn is_interior_mutable_adt(&self, _adt_id: AdtId) -> bool {
@@ -73,7 +73,7 @@ pub trait TypeLookup {
     /// Needed by `Place::ty` on a generic ADT's field: `wrap.v` for
     /// `struct Wrap<T> { v: Vec<T> }` is `Adt(1020, [Param(0)])` — a
     /// *nested* Param that leaf-only substitution leaves in place, so
-    /// `Index` then extracts `Param(0)`. See KNOWN_GAPS §3.4 Bug A.
+    /// `Index` then extracts `Param(0)`. See `KNOWN_GAPS` §3.4 Bug A.
     fn subst_ty_in(&self, ty: Ty, subst: Substitution) -> Ty {
         if let TyKind::Param(p) = self.ty_kind(ty) {
             return self
@@ -91,7 +91,7 @@ pub trait TypeLookup {
 
 const MAX_DISPLAY_DEPTH: u32 = 10;
 
-/// PrintTy.
+/// `PrintTy`.
 pub struct PrintTy<'a, L: TypeLookup> {
     ty: Ty,
     lookup: &'a L,
@@ -265,13 +265,13 @@ impl<L: TypeLookup> fmt::Display for PrintTy<'_, L> {
             TyKind::Param(param) => write!(f, "{}", self.lookup.name_str(param.name)),
             TyKind::Bound(var, bound) => match bound.kind {
                 BoundTyKind::Param(n) => write!(f, "{}", self.lookup.name_str(n)),
-                BoundTyKind::Anon => write!(f, "?{}", var),
+                BoundTyKind::Anon => write!(f, "?{var}"),
             },
         }
     }
 }
 
-/// Display a region in type position, given a TypeLookup for resolving names.
+/// Display a region in type position, given a `TypeLookup` for resolving names.
 pub fn write_region<L: TypeLookup>(
     f: &mut fmt::Formatter<'_>,
     region: &Region,
@@ -282,7 +282,7 @@ pub fn write_region<L: TypeLookup>(
         Region::EarlyBound(e) => write!(f, "'{}", e.index),
         Region::LateBound(_, _idx, kind) => match kind {
             BoundRegionKind::BrNamed(name) => write!(f, "'{}", lookup.name_str(*name)),
-            BoundRegionKind::BrAnon(n) => write!(f, "'_{}", n),
+            BoundRegionKind::BrAnon(n) => write!(f, "'_{n}"),
             BoundRegionKind::BrEnv => write!(f, "'_env"),
         },
         Region::Var(v) => write!(f, "'?{}", v.to_raw()),
@@ -296,7 +296,7 @@ pub fn write_region<L: TypeLookup>(
     }
 }
 
-/// DebugTy.
+/// `DebugTy`.
 pub struct DebugTy<'a, L: TypeLookup>(pub PrintTy<'a, L>);
 
 impl<L: TypeLookup> fmt::Debug for DebugTy<'_, L> {
