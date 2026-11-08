@@ -98,13 +98,11 @@ fn u05_t03_len_of_array_returns_correct_length() {
         .expect("generate_ir should succeed");
 
     assert!(
-        ir.contains("5"),
-        "IR should contain the constant 5 for array length, got:\n{}",
-        ir
+        ir.contains('5'),
+        "IR should contain the constant 5 for array length, got:\n{ir}"
     );
     assert!(
         ir.contains("[5 x i32]"),
-        "IR should contain array type [5 x i32], got:\n{}",
-        ir
+        "IR should contain array type [5 x i32], got:\n{ir}"
     );
 }
