@@ -528,7 +528,7 @@ fn test_fully_resolve_nested_ref() {
     // Resolve the inner type manually.
     if let TyKind::Ref(_, inner, _) = frozen.ty_kind(ref_ty) {
         let concrete_inner = infer.resolve_ty_shallow(&frozen, *inner);
-        assert_ty(&frozen, concrete_inner).is_int(IntTy::I32);
+        let _ = assert_ty(&frozen, concrete_inner).is_int(IntTy::I32);
     } else {
         panic!("expected ref type");
     }
@@ -554,7 +554,7 @@ fn test_fully_resolve_deeply_nested() {
     if let TyKind::Ref(_, inner, _) = frozen.ty_kind(outer_ref) {
         if let TyKind::Ref(_, deep_inner, _) = frozen.ty_kind(*inner) {
             let concrete_inner = infer.resolve_ty_shallow(&frozen, *deep_inner);
-            assert_ty(&frozen, concrete_inner).is_int(IntTy::I32);
+            let _ = assert_ty(&frozen, concrete_inner).is_int(IntTy::I32);
         } else {
             panic!("expected inner ref");
         }
