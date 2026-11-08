@@ -22,7 +22,7 @@ fn token_has_kind_span_text_fields() {
     let token = &result.tokens[0];
     assert_eq!(token.kind, SyntaxKind::KwFn);
     assert_eq!(token.text, "fn");
-    let _span = token.span;
+    let _ = token.span;
 }
 
 #[test]
@@ -44,7 +44,7 @@ fn token_is_clone_and_debug() {
     let result = lex("fn", FileId::from_raw(0));
     let token = result.tokens[0].clone();
     assert_eq!(token.kind, SyntaxKind::KwFn);
-    let debug_str = format!("{:?}", token);
+    let debug_str = format!("{token:?}");
     assert!(debug_str.contains("KwFn"));
 }
 
@@ -53,8 +53,8 @@ fn lex_result_is_clone_and_debug() {
     let result = lex("fn", FileId::from_raw(0));
     let cloned = result.clone();
     assert_eq!(cloned.tokens.len(), result.tokens.len());
-    let debug_str = format!("{:?}", result);
-    assert!(!debug_str.is_empty());
+    let debug_str = format!("{result:?}");
+    assert_ne!(debug_str, "");
 }
 
 #[test]
