@@ -1,0 +1,9 @@
+# Toolchain rails for local development and the enforced gate.
+#
+# The M0 gate (`.github/workflows/ci.yml` job `lint`) needs rustfmt and
+# clippy on a stable toolchain; both components ship with the `stable`
+# toolchain installed here. The MSRV floor is exercised separately by the
+# `msrv` CI job (1.95.0, pinned via the dtolnay action, which overrides
+# this file); this file only records what local development uses.
+[toolchain]
+channel = "stable"
