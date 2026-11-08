@@ -258,7 +258,7 @@ fn make_drop_body(fn_def_id: FnDefId, _dropped_adt_id: AdtId) -> Body {
     }
 }
 
-/// Helper: create a body referencing a constant via ConstRef in an Assign statement.
+/// Helper: create a body referencing a constant via `ConstRef` in an Assign statement.
 fn make_const_ref_body(fn_def_id: FnDefId, const_id: ConstDefId, substs: Substitution) -> Body {
     let owner = DefId::new(
         CrateId::from_raw(0),
@@ -311,7 +311,7 @@ fn make_const_ref_body(fn_def_id: FnDefId, const_id: ConstDefId, substs: Substit
     }
 }
 
-/// Helper: generic body lookup closure that matches by raw def_id.
+/// Helper: generic body lookup closure that matches by raw `def_id`.
 fn make_body_lookup(
     fn_bodies: Vec<(FnDefId, Substitution, Arc<Body>)>,
     const_bodies: Vec<(ConstDefId, Substitution, Arc<Body>)>,
@@ -651,8 +651,7 @@ fn transitive_call_chain() {
             ctx.items().iter().any(
                 |d| matches!(&d.item, MonoItem::Fn { def_id, .. } if def_id.to_raw() == raw_id)
             ),
-            "function with raw id {} should be collected",
-            raw_id
+            "function with raw id {raw_id} should be collected"
         );
     }
 }
