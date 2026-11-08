@@ -9,7 +9,7 @@ static COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn unique_name(base: &str) -> String {
     let id = COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{}-{}", base, id)
+    format!("{base}-{id}")
 }
 
 fn create_test_project(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
