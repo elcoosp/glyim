@@ -8,33 +8,34 @@ use crate::git_ops::{commit_all, emergency_wip_commit};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
-/// CommitDecision.
+/// `CommitDecision`.
 pub enum CommitDecision {
-    /// Variant.
+    /// `Variant`.
     Committed {
-        /// Struct.
+        /// `Struct`.
         message: String,
-        /// Struct.
+        /// `Struct`.
         new_fix_round: u32,
     },
-    /// Variant.
+    /// `Variant`.
     GateFailed {
-        /// Struct.
+        /// `Struct`.
         new_fix_round: u32,
-        /// Struct.
+        /// `Struct`.
         feedback: String,
     },
-    /// Variant.
+    /// `Variant`.
     Escalated {
-        /// Struct.
+        /// `Struct`.
         new_fix_round: u32,
-        /// Struct.
+        /// `Struct`.
         feedback: String,
     },
 }
 
 impl CommitDecision {
-    /// new_fix_round.
+    /// `new_fix_round`.
+    #[must_use]
     pub fn new_fix_round(&self) -> u32 {
         match self {
             Self::Committed { new_fix_round, .. } => *new_fix_round,
@@ -45,29 +46,29 @@ impl CommitDecision {
 }
 
 #[derive(Debug, Clone)]
-/// CommitContext.
+/// `CommitContext`.
 pub struct CommitContext {
-    /// Struct.
+    /// `Struct`.
     pub worktree_dir: PathBuf,
-    /// Struct.
+    /// `Struct`.
     pub project_root: PathBuf,
-    /// Struct.
+    /// `Struct`.
     pub stream_id: String,
-    /// Struct.
+    /// `Struct`.
     pub commit_message: String,
-    /// Struct.
+    /// `Struct`.
     pub current_fix_round: u32,
-    /// Struct.
+    /// `Struct`.
     pub timeout_secs: u64,
-    /// Struct.
+    /// `Struct`.
     pub default_branch: String,
-    /// Struct.
+    /// `Struct`.
     pub branch_version: String,
-    /// Struct.
+    /// `Struct`.
     pub changed_files: Vec<String>,
 }
 
-/// CommitEngine.
+/// `CommitEngine`.
 pub struct CommitEngine {
     gate_config: ResolvedCommitGates,
     max_fix_rounds: u32,
@@ -77,6 +78,7 @@ pub struct CommitEngine {
 
 impl CommitEngine {
     /// new.
+    #[must_use]
     pub fn new(
         gate_config: ResolvedCommitGates,
         max_fix_rounds: u32,
@@ -91,7 +93,7 @@ impl CommitEngine {
         }
     }
 
-    /// evaluate_commit.
+    /// `evaluate_commit`.
     pub async fn evaluate_commit(&self, ctx: &CommitContext) -> Result<CommitDecision, PilotError> {
         let gate_ctx = GateContext::new(
             ctx.worktree_dir.clone(),
@@ -138,7 +140,7 @@ impl CommitEngine {
                     .await
                     .unwrap_or_default()
                     .lines()
-                    .map(|l| l.to_string())
+                    .map(std::string::ToString::to_string)
                     .filter(|l| !l.is_empty())
                     .collect();
                     let retry_ctx = GateContext::new(
@@ -171,11 +173,11 @@ impl CommitEngine {
                         });
                     }
                     let feedback = retry_result.failure_message();
-                    return self.escalate_or_retry(ctx, ctx.current_fix_round + 1, &feedback);
+                    return Ok(self.escalate_or_retry(ctx, ctx.current_fix_round + 1, &feedback));
                 }
             }
             let feedback = pipeline_result.failure_message();
-            self.escalate_or_retry(ctx, ctx.current_fix_round + 1, &feedback)
+            Ok(self.escalate_or_retry(ctx, ctx.current_fix_round + 1, &feedback))
         }
     }
 
@@ -184,21 +186,21 @@ impl CommitEngine {
         _ctx: &CommitContext,
         new_fix_round: u32,
         feedback: &str,
-    ) -> Result<CommitDecision, PilotError> {
+    ) -> CommitDecision {
         if new_fix_round > self.max_fix_rounds {
-            Ok(CommitDecision::Escalated {
+            CommitDecision::Escalated {
                 new_fix_round,
                 feedback: feedback.to_string(),
-            })
+            }
         } else {
-            Ok(CommitDecision::GateFailed {
+            CommitDecision::GateFailed {
                 new_fix_round,
                 feedback: feedback.to_string(),
-            })
+            }
         }
     }
 
-    /// emergency_commit.
+    /// `emergency_commit`.
     pub async fn emergency_commit(&self, ctx: &CommitContext) -> Result<(), PilotError> {
         emergency_wip_commit(&ctx.worktree_dir, &ctx.stream_id, ctx.timeout_secs).await
     }
@@ -239,7 +241,7 @@ mod tests {
             branch_version: "v0.1.0".into(),
             changed_files: vec![],
         };
-        let result = engine.escalate_or_retry(&ctx, 2, "fail").unwrap();
+        let result = engine.escalate_or_retry(&ctx, 2, "fail");
         match result {
             CommitDecision::GateFailed { new_fix_round, .. } => assert_eq!(new_fix_round, 2),
             _ => panic!("expected GateFailed"),
@@ -260,7 +262,7 @@ mod tests {
             branch_version: "v0.1.0".into(),
             changed_files: vec![],
         };
-        let result = engine.escalate_or_retry(&ctx, 4, "fail").unwrap();
+        let result = engine.escalate_or_retry(&ctx, 4, "fail");
         match result {
             CommitDecision::Escalated { new_fix_round, .. } => assert_eq!(new_fix_round, 4),
             _ => panic!("expected Escalated"),
