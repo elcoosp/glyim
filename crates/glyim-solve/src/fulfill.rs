@@ -3,41 +3,41 @@ use glyim_type::*;
 use std::collections::VecDeque;
 
 #[derive(Clone, Debug)]
-/// Obligation.
+/// `Obligation`.
 pub struct Obligation {
-    /// Struct.
+    /// `Struct`.
     pub predicate: Predicate,
-    /// Struct.
+    /// `Struct`.
     pub cause: ObligationCause,
 }
 
 #[derive(Clone, Debug)]
-/// ObligationCause.
+/// `ObligationCause`.
 pub struct ObligationCause {
-    /// Struct.
+    /// `Struct`.
     pub span: glyim_span::Span,
-    /// Struct.
+    /// `Struct`.
     pub code: ObligationCauseCode,
 }
 
 #[derive(Clone, Debug)]
-/// ObligationCauseCode.
+/// `ObligationCauseCode`.
 pub enum ObligationCauseCode {
-    /// Variant.
+    /// `Variant`.
     WellFormed,
-    /// Variant.
+    /// `Variant`.
     TypeConstruction,
-    /// Variant.
+    /// `Variant`.
     MatchArm,
-    /// Variant.
+    /// `Variant`.
     IfThenElse,
 }
 
-/// FulfillmentCtx.
+/// `FulfillmentCtx`.
 pub struct FulfillmentCtx<'a> {
-    /// Struct.
+    /// `Struct`.
     pub solver: &'a mut dyn crate::solver::TraitSolver,
-    /// Struct.
+    /// `Struct`.
     pub ctx: &'a TyCtx,
     obligations: VecDeque<Obligation>,
     processed_count: usize,
@@ -45,11 +45,11 @@ pub struct FulfillmentCtx<'a> {
 }
 
 #[derive(Clone, Debug)]
-/// OverflowError.
+/// `OverflowError`.
 pub struct OverflowError {
-    /// Struct.
+    /// `Struct`.
     pub predicate: Predicate,
-    /// Struct.
+    /// `Struct`.
     pub depth: usize,
     /// Source location of the obligation that exceeded the limit. Carried so
     /// the caller can emit the overflow diagnostic at a real span rather than
@@ -57,7 +57,8 @@ pub struct OverflowError {
     pub span: glyim_span::Span,
 }
 
-/// can_coerce.
+/// `can_coerce`.
+#[must_use]
 pub fn can_coerce(ctx: &TyCtx, a: Ty, b: Ty) -> bool {
     if a == b {
         return true;
@@ -103,8 +104,7 @@ pub fn can_coerce(ctx: &TyCtx, a: Ty, b: Ty) -> bool {
                 .closure_adt(*closure_id)
                 .and_then(|adt_id| ctx.adt_def(adt_id))
                 .and_then(|adt| adt.variants.first())
-                .map(|v| v.fields.len())
-                .unwrap_or(0);
+                .map_or(0, |v| v.fields.len());
             if capture_count != 0 {
                 return false;
             }
@@ -138,12 +138,12 @@ impl<'a> FulfillmentCtx<'a> {
         }
     }
 
-    /// register_obligation.
+    /// `register_obligation`.
     pub fn register_obligation(&mut self, obligation: Obligation) {
         self.obligations.push_back(obligation);
     }
 
-    /// process_obligations.
+    /// `process_obligations`.
     pub fn process_obligations(&mut self, limit: usize) -> Result<(), OverflowError> {
         while let Some(obligation) = self.obligations.pop_front() {
             self.processed_count += 1;
@@ -160,13 +160,13 @@ impl<'a> FulfillmentCtx<'a> {
                     crate::solver::SolverResult::Ambiguous => {
                         self.diagnostics.push(GlyimDiagnostic::type_error(
                             obligation.cause.span,
-                            format!("ambiguous trait bound: {:?}", trait_pred),
+                            format!("ambiguous trait bound: {trait_pred:?}"),
                         ));
                     }
                     crate::solver::SolverResult::DefiniteNo => {
                         self.diagnostics.push(GlyimDiagnostic::type_error(
                             obligation.cause.span,
-                            format!("trait bound not satisfied: {:?}", trait_pred),
+                            format!("trait bound not satisfied: {trait_pred:?}"),
                         ));
                     }
                 },
@@ -179,13 +179,14 @@ impl<'a> FulfillmentCtx<'a> {
         Ok(())
     }
 
-    /// into_diagnostics.
+    /// `into_diagnostics`.
+    #[must_use]
     pub fn into_diagnostics(self) -> Vec<GlyimDiagnostic> {
         self.diagnostics
     }
 }
 
-impl<'a> Extend<Obligation> for FulfillmentCtx<'a> {
+impl Extend<Obligation> for FulfillmentCtx<'_> {
     fn extend<T: IntoIterator<Item = Obligation>>(&mut self, iter: T) {
         for ob in iter {
             self.register_obligation(ob);
