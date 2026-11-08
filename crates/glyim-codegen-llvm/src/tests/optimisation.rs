@@ -301,7 +301,7 @@ fn test_verify_module_after_optimization() {
         .lower_bodies_to_module(&context, &crate::tests::to_pairs(&[body]))
         .expect("lowering failed");
     if let Err(msg) = module.verify() {
-        panic!("Module verification failed after passes: {}", msg);
+        panic!("Module verification failed after passes: {msg}");
     }
 }
 
