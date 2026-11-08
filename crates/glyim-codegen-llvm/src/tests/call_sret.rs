@@ -8,7 +8,6 @@ use glyim_type::{FnSig, GenericArg, TyCtxMut, TyKind};
 
 use crate::LlvmBackend;
 
-/// Build a function that returns a large tuple (5 x i64 = 40 bytes > 2*ptr_size=16 on x86_64)
 /// which should trigger sret passing convention.
 fn make_sret_call_body(ctx: &mut TyCtxMut) -> Body {
     let i64_ty = ctx.mk_ty(TyKind::Int(glyim_core::IntTy::I64));
@@ -128,7 +127,7 @@ fn sret_call_compiles() {
 
     let module = result.unwrap();
     let ir = module.print_to_string().to_string();
-    assert!(ir.contains("call"), "LLVM IR must contain 'call':\n{}", ir);
+    assert!(ir.contains("call"), "LLVM IR must contain 'call':\n{ir}");
 }
 
 #[test]
@@ -146,7 +145,6 @@ fn sret_call_contains_sret_attribute() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("sret") || ir.contains("call"),
-        "LLVM IR should contain sret attribute or call:\n{}",
-        ir
+        "LLVM IR should contain sret attribute or call:\n{ir}"
     );
 }
