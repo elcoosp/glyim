@@ -3,7 +3,7 @@ use chrono::{DateTime, Duration, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// ProviderPool.
+/// `ProviderPool`.
 pub struct ProviderPool {
     providers: HashMap<String, ProviderState>,
 }
@@ -17,6 +17,7 @@ struct ProviderState {
 
 impl ProviderPool {
     /// new.
+    #[must_use]
     pub fn new(providers: &HashMap<String, ProviderConfig>) -> Self {
         let mut states = HashMap::new();
         for (id, config) in providers {
@@ -51,7 +52,8 @@ impl ProviderPool {
             state.active_slots = state.active_slots.saturating_sub(1);
         }
     }
-    /// most_slots_available.
+    /// `most_slots_available`.
+    #[must_use]
     pub fn most_slots_available(&self) -> Option<(String, usize)> {
         self.providers
             .iter()
@@ -62,7 +64,8 @@ impl ProviderPool {
 }
 
 impl ProviderPool {
-    /// get_config.
+    /// `get_config`.
+    #[must_use]
     pub fn get_config(&self, provider_id: &str) -> Option<Arc<ProviderConfig>> {
         self.providers.get(provider_id).map(|s| s.config.clone())
     }
@@ -76,16 +79,17 @@ impl ProviderPool {
 }
 
 impl ProviderPool {
-    /// provider_ids.
+    /// `provider_ids`.
+    #[must_use]
     pub fn provider_ids(&self) -> Vec<String> {
         self.providers.keys().cloned().collect()
     }
 
-    /// available_slots.
+    /// `available_slots`.
+    #[must_use]
     pub fn available_slots(&self, provider_id: &str) -> usize {
-        self.providers
-            .get(provider_id)
-            .map(|s| s.config.max_concurrent.saturating_sub(s.active_slots))
-            .unwrap_or(0)
+        self.providers.get(provider_id).map_or(0, |s| {
+            s.config.max_concurrent.saturating_sub(s.active_slots)
+        })
     }
 }
