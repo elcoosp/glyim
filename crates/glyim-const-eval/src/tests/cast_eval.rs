@@ -88,7 +88,7 @@ fn const_eval_rejects_cast_typeck_would_reject() {
     let err = evaluator
         .evaluate(cast_id)
         .expect_err("bool as f64 must be rejected by is_valid_cast");
-    assert!(format!("{:?}", err).contains("illegal cast rejected by is_valid_cast"));
+    assert!(format!("{err:?}").contains("illegal cast rejected by is_valid_cast"));
 }
 
 #[test]
