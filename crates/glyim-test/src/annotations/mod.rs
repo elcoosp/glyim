@@ -6,29 +6,30 @@ pub use pattern::MatchPattern;
 use glyim_diag::DiagSeverity;
 
 #[derive(Clone, Debug)]
-/// Annotation.
+/// `Annotation`.
 pub struct Annotation {
-    /// Struct.
+    /// `Struct`.
     pub line: usize,
-    /// Struct.
+    /// `Struct`.
     pub line_offset: usize,
-    /// Struct.
+    /// `Struct`.
     pub severity: DiagSeverity,
-    /// Struct.
+    /// `Struct`.
     pub pattern: MatchPattern,
-    /// Struct.
+    /// `Struct`.
     pub optional: bool,
-    /// Struct.
+    /// `Struct`.
     pub fuzzy: bool,
 }
 
 impl Annotation {
-    /// target_line.
+    /// `target_line`.
+    #[must_use]
     pub fn target_line(&self) -> usize {
         self.line.saturating_sub(self.line_offset)
     }
 
-    /// parse_all.
+    /// `parse_all`.
     pub fn parse_all(source: &str) -> Result<Vec<Self>, String> {
         let mut annotations = Vec::new();
         let mut last_target_line: Option<usize> = None;
