@@ -34,7 +34,7 @@ impl<'a> TestCtx<'a> {
     }
 }
 
-impl<'a> BorrowckCtx for TestCtx<'a> {
+impl BorrowckCtx for TestCtx<'_> {
     fn ty_ctx(&self) -> &TyCtx {
         self.ty_ctx
     }
@@ -103,7 +103,7 @@ fn assert_accepts(ctx: &TyCtx, body: &Body, why: &str) {
 /// A naive "every Drop must be preceded by an init" check rejects it.
 #[test]
 fn drop_after_move_is_accepted() {
-    let (ctx, _) = with_fresh_ty_ctx(|_| {});
+    let (ctx, ()) = with_fresh_ty_ctx(|_| {});
     let ty = Ty::UNIT;
 
     // Blocks: 0 = move + drop, 1 = return. Both locals are i32 (no real
@@ -135,7 +135,7 @@ fn drop_after_move_is_accepted() {
 /// Move out of one local, then read a *different* local: accepted.
 #[test]
 fn move_one_local_read_another_is_accepted() {
-    let (ctx, _) = with_fresh_ty_ctx(|_| {});
+    let (ctx, ()) = with_fresh_ty_ctx(|_| {});
     let ty = Ty::UNIT;
 
     let blocks = vec![BasicBlockData {
@@ -162,7 +162,7 @@ fn move_one_local_read_another_is_accepted() {
 /// accepted (the two loans do not overlap in liveness).
 #[test]
 fn sequential_borrows_of_same_place_are_accepted() {
-    let (ctx, _) = with_fresh_ty_ctx(|_| {});
+    let (ctx, ()) = with_fresh_ty_ctx(|_| {});
     let ty = Ty::UNIT;
 
     let blocks = vec![BasicBlockData {
@@ -199,7 +199,7 @@ fn sequential_borrows_of_same_place_are_accepted() {
 /// Two simultaneous shared borrows of the same place: accepted.
 #[test]
 fn two_shared_borrows_are_accepted() {
-    let (ctx, _) = with_fresh_ty_ctx(|_| {});
+    let (ctx, ()) = with_fresh_ty_ctx(|_| {});
     let ty = Ty::UNIT;
 
     let blocks = vec![BasicBlockData {

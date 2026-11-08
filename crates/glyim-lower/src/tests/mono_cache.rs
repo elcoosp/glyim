@@ -7,7 +7,7 @@ use glyim_test::test_ty_ctx;
 use glyim_type::{GenericArg, Substitution};
 use std::sync::Arc;
 
-/// Helper: create a Fn MonoItem.
+/// Helper: create a Fn `MonoItem`.
 fn make_fn_item(fn_def_id: FnDefId, substs: Substitution) -> MonoItem {
     MonoItem::Fn {
         def_id: fn_def_id,
@@ -15,7 +15,7 @@ fn make_fn_item(fn_def_id: FnDefId, substs: Substitution) -> MonoItem {
     }
 }
 
-/// Helper: create a Const MonoItem.
+/// Helper: create a Const `MonoItem`.
 fn make_const_item(const_def_id: ConstDefId, substs: Substitution) -> MonoItem {
     MonoItem::Const {
         def_id: const_def_id,
@@ -23,7 +23,7 @@ fn make_const_item(const_def_id: ConstDefId, substs: Substitution) -> MonoItem {
     }
 }
 
-/// Helper: create a Static MonoItem.
+/// Helper: create a Static `MonoItem`.
 fn make_static_item(static_def_id: StaticDefId) -> MonoItem {
     MonoItem::Static {
         def_id: static_def_id,
@@ -101,15 +101,19 @@ fn cache_survives_across_collects() {
     let mut ctx = MonoCtx::new();
 
     // First collect
-    ctx.collect(&[item.clone()], &|_def_id, _substs| dummy_body(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| dummy_body(),
+        &|_ty| dummy_body(),
+    );
     assert_eq!(ctx.item_count(), 1);
 
     // Second collect with same item — should not duplicate
-    ctx.collect(&[item.clone()], &|_def_id, _substs| dummy_body(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| dummy_body(),
+        &|_ty| dummy_body(),
+    );
     assert_eq!(
         ctx.item_count(),
         1,
@@ -117,9 +121,11 @@ fn cache_survives_across_collects() {
     );
 
     // Third collect with same item — still one
-    ctx.collect(&[item.clone()], &|_def_id, _substs| dummy_body(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| dummy_body(),
+        &|_ty| dummy_body(),
+    );
     assert_eq!(
         ctx.item_count(),
         1,
@@ -141,9 +147,11 @@ fn no_duplicate_arc_body() {
     let mut ctx = MonoCtx::new();
 
     // First collect
-    ctx.collect(&[item.clone()], &|_def_id, _substs| body.clone(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| body.clone(),
+        &|_ty| dummy_body(),
+    );
     assert_eq!(ctx.item_count(), 1);
 
     // Second collect: provide a different body via closure to prove it's not called
@@ -152,7 +160,7 @@ fn no_duplicate_arc_body() {
         LocalDefId::from_raw(99),
     )));
     ctx.collect(
-        &[item.clone()],
+        std::slice::from_ref(&item),
         &|_def_id, _substs| different_body.clone(),
         &|_ty| dummy_body(),
     );
@@ -186,9 +194,11 @@ fn lookup_returns_correct_id() {
         "lookup should return None before collect"
     );
 
-    ctx.collect(&[item.clone()], &|_def_id, _substs| dummy_body(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| dummy_body(),
+        &|_ty| dummy_body(),
+    );
 
     // After collect, lookup should return Some
     let id = ctx
@@ -212,7 +222,7 @@ fn lookup_across_collects() {
 
     // First collect: item_a
     ctx.collect(
-        &[item_a.clone()],
+        std::slice::from_ref(&item_a),
         &|_def_id, _substs| dummy_body(),
         &|_ty| dummy_body(),
     );
@@ -220,7 +230,7 @@ fn lookup_across_collects() {
 
     // Second collect: item_b
     ctx.collect(
-        &[item_b.clone()],
+        std::slice::from_ref(&item_b),
         &|_def_id, _substs| dummy_body(),
         &|_ty| dummy_body(),
     );
@@ -242,9 +252,11 @@ fn static_items_cached() {
     let item = make_static_item(static_id);
 
     let mut ctx = MonoCtx::new();
-    ctx.collect(&[item.clone()], &|_def_id, _substs| dummy_body(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| dummy_body(),
+        &|_ty| dummy_body(),
+    );
     assert_eq!(ctx.item_count(), 1);
 
     let id = ctx.lookup(&item).expect("should find static item");
@@ -260,9 +272,11 @@ fn const_items_cached() {
     let item = make_const_item(const_id, empty_subst);
 
     let mut ctx = MonoCtx::new();
-    ctx.collect(&[item.clone()], &|_def_id, _substs| dummy_body(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| dummy_body(),
+        &|_ty| dummy_body(),
+    );
     assert_eq!(ctx.item_count(), 1);
 
     let id = ctx.lookup(&item).expect("should find const item");
@@ -364,14 +378,18 @@ fn root_and_discovered_dedup() {
     let mut ctx = MonoCtx::new();
 
     // Same item as root
-    ctx.collect(&[item.clone()], &|_def_id, _substs| dummy_body(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| dummy_body(),
+        &|_ty| dummy_body(),
+    );
 
     // Collect again with same item as root (simulates re-discovery)
-    ctx.collect(&[item.clone()], &|_def_id, _substs| dummy_body(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| dummy_body(),
+        &|_ty| dummy_body(),
+    );
 
     assert_eq!(
         ctx.item_count(),

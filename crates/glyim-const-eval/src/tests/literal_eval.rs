@@ -38,7 +38,7 @@ fn test_body() -> Body {
     }
 }
 
-/// Helper: allocate a literal expression into the body, returning its ExprId.
+/// Helper: allocate a literal expression into the body, returning its `ExprId`.
 fn alloc_lit(body: &mut Body, lit: Literal) -> ExprId {
     body.alloc_expr(Expr::Literal(lit), dummy_span())
 }

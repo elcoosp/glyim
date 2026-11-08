@@ -4,12 +4,12 @@ use crate::gates::types::GateContext;
 use crate::gates::{Gate, GateResult};
 use async_trait::async_trait;
 
-/// AuditGate.
+/// `AuditGate`.
 pub struct AuditGate;
 
 #[async_trait]
 impl Gate for AuditGate {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "audit"
     }
 
@@ -39,7 +39,7 @@ impl Gate for AuditGate {
                     Ok(GateResult::fail_with_details(
                         "audit",
                         "Security vulnerabilities found",
-                        format!("{}{}", stdout, stderr),
+                        format!("{stdout}{stderr}"),
                     ))
                 }
             }

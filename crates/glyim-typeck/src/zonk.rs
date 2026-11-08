@@ -65,17 +65,18 @@ pub fn zonk_bodies(
 /// Whether any `Ty` reachable from `body` still carries an integer or float
 /// inference variable. Used by the debug-only invariant check in
 /// `typeck_crate` (see module docs).
+#[must_use]
 pub fn body_has_infer_ints_or_floats(ctx: &TyCtx, body: &thir::Body) -> bool {
     let mut found = false;
     if has_infer_int_or_float(ctx, body.return_ty) {
         found = true;
     }
-    for param in body.params.iter() {
+    for param in &body.params {
         if has_infer_int_or_float(ctx, param.ty) {
             found = true;
         }
     }
-    for stmt in body.stmts.iter() {
+    for stmt in &body.stmts {
         let mut stmt_found = false;
         walk_stmt(ctx, stmt, &mut |ty| {
             if has_infer_int_or_float(ctx, ty) {
@@ -731,8 +732,7 @@ fn has_infer_int_or_float(ctx: &TyCtx, ty: Ty) -> bool {
     walk_ty(ctx, ty, &mut |t| {
         if matches!(
             ctx.ty_kind(t),
-            TyKind::Infer(glyim_type::InferVar::Int(_))
-                | TyKind::Infer(glyim_type::InferVar::Float(_))
+            TyKind::Infer(glyim_type::InferVar::Int(_) | glyim_type::InferVar::Float(_))
         ) {
             found = true;
         }
@@ -805,7 +805,7 @@ pub fn zonk_fn_sigs(infer: &InferenceTable, ctx: &mut glyim_type::TyCtxMut) {
         for arg in view.substitution_args(sig.inputs) {
             match arg {
                 glyim_type::GenericArg::Ty(t) => {
-                    new_inputs.push(glyim_type::GenericArg::Ty(zonk_ty(infer, &view, *t)))
+                    new_inputs.push(glyim_type::GenericArg::Ty(zonk_ty(infer, &view, *t)));
                 }
                 other => new_inputs.push(other.clone()),
             }
@@ -856,7 +856,7 @@ pub fn zonk_closure_sigs(infer: &InferenceTable, ctx: &mut glyim_type::TyCtxMut)
         for arg in view.substitution_args(sig.inputs) {
             match arg {
                 glyim_type::GenericArg::Ty(t) => {
-                    new_inputs.push(glyim_type::GenericArg::Ty(zonk_ty(infer, &view, *t)))
+                    new_inputs.push(glyim_type::GenericArg::Ty(zonk_ty(infer, &view, *t)));
                 }
                 other => new_inputs.push(other.clone()),
             }
@@ -900,7 +900,7 @@ pub fn zonk_adt_defs(infer: &InferenceTable, ctx: &mut glyim_type::TyCtxMut) {
         for field in def.fields.iter_mut() {
             field.ty = zonk_ty(infer, &view, field.ty);
         }
-        for variant in def.variants.iter_mut() {
+        for variant in &mut def.variants {
             for field in variant.fields.iter_mut() {
                 field.ty = zonk_ty(infer, &view, field.ty);
             }
@@ -918,6 +918,7 @@ pub fn zonk_adt_defs(infer: &InferenceTable, ctx: &mut glyim_type::TyCtxMut) {
 /// Whether any ADT field in `ctx` still carries an int/float inference
 /// variable. Counterpart to [`body_has_infer_ints_or_floats`] for the
 /// debug-only invariant.
+#[must_use]
 pub fn adt_defs_have_infer_ints_or_floats(ctx: &TyCtx) -> bool {
     for adt_id in ctx.adt_def_ids() {
         let Some(def) = ctx.adt_def(adt_id) else {
@@ -928,7 +929,7 @@ pub fn adt_defs_have_infer_ints_or_floats(ctx: &TyCtx) -> bool {
                 return true;
             }
         }
-        for variant in def.variants.iter() {
+        for variant in &def.variants {
             for field in variant.fields.iter() {
                 if has_infer_int_or_float(ctx, field.ty) {
                     return true;
@@ -1079,7 +1080,7 @@ fn walk_expr_for_variant_ctor_calls(
             walk_expr_for_variant_ctor_calls(infer, ctx, rhs, out);
         }
         thir::ExprKind::Unary { operand, .. } => {
-            walk_expr_for_variant_ctor_calls(infer, ctx, operand, out)
+            walk_expr_for_variant_ctor_calls(infer, ctx, operand, out);
         }
         thir::ExprKind::Call { func, args } => {
             walk_expr_for_variant_ctor_calls(infer, ctx, func, out);
@@ -1122,10 +1123,10 @@ fn walk_expr_for_variant_ctor_calls(
             }
         }
         thir::ExprKind::Ref { operand, .. } => {
-            walk_expr_for_variant_ctor_calls(infer, ctx, operand, out)
+            walk_expr_for_variant_ctor_calls(infer, ctx, operand, out);
         }
         thir::ExprKind::Field { receiver, .. } => {
-            walk_expr_for_variant_ctor_calls(infer, ctx, receiver, out)
+            walk_expr_for_variant_ctor_calls(infer, ctx, receiver, out);
         }
         thir::ExprKind::Index { base, index } => {
             walk_expr_for_variant_ctor_calls(infer, ctx, base, out);
@@ -1239,14 +1240,15 @@ fn walk_ty_resolved(infer: &InferenceTable, ctx: &TyCtx, ty: Ty, f: &mut impl Fn
 /// binary operand, `if` condition, `return` value, match arm, nested block,
 /// struct field, etc. — is checked.
 ///
-/// **Negation.** `-2147483648` (i32::MIN) parses as `Unary { Neg,
-/// Literal(2147483648) }`. The operand literal on its own exceeds i32::MAX,
-/// but the negated value is exactly i32::MIN and valid. Handled as a single
+/// **Negation.** `-2147483648` (`i32::MIN`) parses as `Unary { Neg,
+/// Literal(2147483648) }`. The operand literal on its own exceeds `i32::MAX`,
+/// but the negated value is exactly `i32::MIN` and valid. Handled as a single
 /// case at the `Unary` node: negate the raw literal and compare against the
 /// outer expression's range, then *do not* descend (which would flag the
 /// operand). `-2147483649` for i32 is then correctly rejected.
 ///
 /// **Still wraps:** nothing. This is the full §3.5.18 close.
+#[must_use]
 pub fn check_literal_ranges(
     ctx: &TyCtx,
     bodies: &[(glyim_core::def_id::LocalDefId, thir::Body)],

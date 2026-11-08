@@ -106,7 +106,7 @@ fn test_deeply_nested_terminators() {
             },
             source_info: SourceInfo::new(Span::DUMMY),
         }));
-        let _prev_bb = next_bb;
+        let _ = next_bb;
     }
 
     basic_blocks.push(BasicBlockData::new(Terminator {

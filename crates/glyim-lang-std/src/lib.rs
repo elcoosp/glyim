@@ -6,15 +6,18 @@
 //!
 //! The std library builds on top of `glyim-lang-core` and provides:
 //! - `std::io` — I/O primitives (Read, Write, stdin/stdout/stderr)
-//! - `std::fs` — Filesystem operations (File, OpenOptions, directory operations)
+//! - `std::fs` — Filesystem operations (File, `OpenOptions`, directory operations)
 //! - `std::net` — Networking (TCP, UDP, IP addresses)
 //! - `std::thread` — Native thread spawning and management
-//! - `std::sync` — Synchronization primitives (Mutex, RwLock, Arc, atomics)
+//! - `std::sync` — Synchronization primitives (Mutex, `RwLock`, Arc, atomics)
 //! - `std::env` — Environment variables, process arguments, current directory
-//! - `std::time` — Time measurement (Duration, Instant, SystemTime)
+//! - `std::time` — Time measurement (Duration, Instant, `SystemTime`)
 //! - `std::process` — Child process spawning and management
 
+use std::fmt::Write as _;
+
 /// Returns the source code of a standard library module by name.
+#[must_use]
 pub fn std_source(name: &str) -> Option<&'static str> {
     match name {
         "io" => Some(include_str!("../lib/io.g")),
@@ -79,6 +82,7 @@ pub fn std_source(name: &str) -> Option<&'static str> {
 }
 
 /// Returns the names of all standard library modules.
+#[must_use]
 pub fn std_modules() -> &'static [&'static str] {
     &[
         "io", "fs", "net", "thread", "sync", "env", "time", "process",
@@ -86,11 +90,12 @@ pub fn std_modules() -> &'static [&'static str] {
 }
 
 /// Returns the combined source of all standard library modules.
+#[must_use]
 pub fn std_source_all() -> String {
     let mut out = String::new();
     for name in std_modules() {
         if let Some(src) = std_source(name) {
-            out.push_str(&format!("// === module: {} ===\n", name));
+            let _ = writeln!(out, "// === module: {name} ===");
             out.push_str(src);
             out.push('\n');
         }
@@ -114,6 +119,7 @@ pub fn std_source_all() -> String {
 ///
 /// Glob re-exports (`use io::*`) are not supported by the resolver, so each
 /// module's public items are listed explicitly in `MODULE_PUBS`.
+#[must_use]
 pub fn std_source_assembled() -> String {
     // (name, [item, ...]) — emitted as `pub mod name { … }` + `pub use name::item;`
     // per item, so bare names resolve at the crate root.
@@ -321,7 +327,7 @@ pub fn std_source_assembled() -> String {
     for (name, _items) in pubs {
         if let Some(src) = std_source(name) {
             let pub_src = make_pub(src);
-            out.push_str(&format!("pub mod {name} {{\n"));
+            let _ = writeln!(out, "pub mod {name} {{");
             out.push_str(&pub_src);
             out.push_str("\n}\n\n");
         }
@@ -329,7 +335,7 @@ pub fn std_source_assembled() -> String {
     out.push_str("// Root re-exports so bare names resolve crate-wide.\n");
     for (name, items) in pubs {
         for item in *items {
-            out.push_str(&format!("pub use {name}::{item};\n"));
+            let _ = writeln!(out, "pub use {name}::{item};");
         }
     }
     // §3.5.36-adjacent: enum variants into the root value namespace so
@@ -342,7 +348,7 @@ pub fn std_source_assembled() -> String {
         ("result", "Result", ["Ok", "Err"]),
     ] {
         for v in variants {
-            out.push_str(&format!("pub use {module}::{enum_name}::{v};\n",));
+            let _ = writeln!(out, "pub use {module}::{enum_name}::{v};");
         }
     }
     out.push('\n');
@@ -356,6 +362,7 @@ pub fn std_source_assembled() -> String {
 /// from compiling cleanly. `--with-stdlib` uses this variant by default so a
 /// user's first program type-checks and runs; the full stdlib is opt-in via
 /// `--with-full-stdlib` until those remaining gaps are closed.
+#[must_use]
 pub fn std_source_assembled_minimal() -> String {
     let pubs: &[(&str, &[&str])] = &[
         ("option", &["Option"]),
@@ -485,7 +492,7 @@ pub fn std_source_assembled_minimal() -> String {
     for (name, _items) in pubs {
         if let Some(src) = std_source(name) {
             let pub_src = make_pub(src);
-            out.push_str(&format!("pub mod {name} {{\n"));
+            let _ = writeln!(out, "pub mod {name} {{");
             out.push_str(&pub_src);
             out.push_str("\n}\n\n");
         }
@@ -493,7 +500,7 @@ pub fn std_source_assembled_minimal() -> String {
     out.push_str("// Root re-exports so bare names resolve crate-wide.\n");
     for (name, items) in pubs {
         for item in *items {
-            out.push_str(&format!("pub use {name}::{item};\n"));
+            let _ = writeln!(out, "pub use {name}::{item};");
         }
     }
     // §3.5.36-adjacent: enum variants into the root value namespace so
@@ -506,7 +513,7 @@ pub fn std_source_assembled_minimal() -> String {
         ("result", "Result", ["Ok", "Err"]),
     ] {
         for v in variants {
-            out.push_str(&format!("pub use {module}::{enum_name}::{v};\n",));
+            let _ = writeln!(out, "pub use {module}::{enum_name}::{v};");
         }
     }
     out.push('\n');
@@ -572,6 +579,7 @@ fn make_pub(src: &str) -> String {
 }
 
 /// Returns the total number of standard library modules.
+#[must_use]
 pub fn std_module_count() -> usize {
     std_modules().len()
 }

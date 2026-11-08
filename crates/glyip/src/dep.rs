@@ -53,6 +53,7 @@ pub struct CrateIndex {
 
 impl CrateIndex {
     /// Create a new empty index.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -63,13 +64,14 @@ impl CrateIndex {
     }
 
     /// Look up a crate by name.
+    #[must_use]
     pub fn get(&self, name: &str) -> Option<&IndexEntry> {
         self.entries.get(name)
     }
 
     /// Resolve the best matching version for a version requirement.
     ///
-    /// Real SemVer 2.0 matching (de-stubbing plan §21.5) via the `semver`
+    /// Real `SemVer` 2.0 matching (de-stubbing plan §21.5) via the `semver`
     /// crate, replacing the old naive prefix-match (`starts_with(req)`):
     /// supports caret (`^1.2.3`), tilde (`~1.2.3`), wildcard (`1.2.*`),
     /// comparison operators (`>=`, `<`, `>`, `<=`, `=`), and exact
@@ -102,11 +104,13 @@ impl CrateIndex {
     }
 
     /// Number of entries in the index.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Whether the index is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -146,9 +150,9 @@ impl CrateIndex {
     pub fn save_to_dir(&self, dir: &Path) -> GlyipResult<()> {
         fs::create_dir_all(dir)?;
         for (name, entry) in &self.entries {
-            let path = dir.join(format!("{}.json", name));
+            let path = dir.join(format!("{name}.json"));
             let content = serde_json::to_string_pretty(entry).map_err(|e| {
-                GlyipError::CacheCorrupted(format!("serialize index entry '{}': {}", name, e))
+                GlyipError::CacheCorrupted(format!("serialize index entry '{name}': {e}"))
             })?;
             fs::write(path, content)?;
         }
@@ -158,7 +162,6 @@ impl CrateIndex {
 
 /// Select the highest version from `versions` satisfying `version_req`.
 ///
-/// Real SemVer 2.0 matching via the `semver` crate (de-stubbing plan §21.5):
 /// supports caret (`^1.2.3`), tilde (`~1.2.3`), wildcard (`1.2.*`, `*`),
 /// comparison operators (`>=`, `<`, `>`, `<=`, `=`), and exact `1.2.3`. The
 /// version list order is irrelevant — matches are sorted and the highest
@@ -181,7 +184,7 @@ fn select_best_version(versions: &[String], version_req: Option<&str>) -> Option
             .filter_map(|v| Version::parse(v).ok())
             .collect();
         parsed.sort();
-        return parsed.last().map(|v| v.to_string());
+        return parsed.last().map(std::string::ToString::to_string);
     };
     // Real SemVer 2.0 matching. A requirement that fails to parse, or parses
     // but matches no available version, yields `None` only when truly absent —
@@ -195,7 +198,7 @@ fn select_best_version(versions: &[String], version_req: Option<&str>) -> Option
         .filter(|v| req.matches(v))
         .collect();
     matching.sort();
-    matching.last().map(|v| v.to_string())
+    matching.last().map(std::string::ToString::to_string)
 }
 
 /// Trait for fetching crate metadata and source from a remote registry.
@@ -283,6 +286,7 @@ impl HttpRegistryClient {
     ///
     /// `base_url` is the registry root (e.g. `https://index.glyim.dev`).
     /// `cache_dir` is where downloaded crates are stored.
+    #[must_use]
     pub fn new(base_url: &str, cache_dir: PathBuf) -> Self {
         let client = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
@@ -297,12 +301,14 @@ impl HttpRegistryClient {
     }
 
     /// Return the cache directory path.
+    #[must_use]
     pub fn cache_dir(&self) -> &Path {
         &self.cache_dir
     }
     /// T192-PATCHED [GLYIP-6]: expose the resolved base URL so the
     /// lockfile records real provenance (custom or local indexes were
     /// being silently rewritten to the public URL).
+    #[must_use]
     pub fn base_url_display(&self) -> String {
         self.base_url.clone()
     }
@@ -318,7 +324,7 @@ impl RegistryClient for HttpRegistryClient {
             .client
             .get(&url)
             .send()
-            .map_err(|e| GlyipError::RegistryError(format!("fetch index '{}': {}", name, e)))?;
+            .map_err(|e| GlyipError::RegistryError(format!("fetch index '{name}': {e}")))?;
 
         if !response.status().is_success() {
             return Err(GlyipError::RegistryError(format!(
@@ -330,7 +336,7 @@ impl RegistryClient for HttpRegistryClient {
 
         let entry: IndexEntry = response
             .json()
-            .map_err(|e| GlyipError::RegistryError(format!("parse index '{}': {}", name, e)))?;
+            .map_err(|e| GlyipError::RegistryError(format!("parse index '{name}': {e}")))?;
 
         info!(
             "Fetched index for '{}' with {} versions",
@@ -353,9 +359,10 @@ impl RegistryClient for HttpRegistryClient {
         );
         debug!("Downloading '{}' v{} from {}", name, version, url);
 
-        let response = self.client.get(&url).send().map_err(|e| {
-            GlyipError::RegistryError(format!("download '{}' v{}: {}", name, version, e))
-        })?;
+        let response =
+            self.client.get(&url).send().map_err(|e| {
+                GlyipError::RegistryError(format!("download '{name}' v{version}: {e}"))
+            })?;
 
         if !response.status().is_success() {
             return Err(GlyipError::RegistryError(format!(
@@ -367,7 +374,7 @@ impl RegistryClient for HttpRegistryClient {
         }
 
         let bytes = response.bytes().map_err(|e| {
-            GlyipError::RegistryError(format!("read response '{}' v{}: {}", name, version, e))
+            GlyipError::RegistryError(format!("read response '{name}' v{version}: {e}"))
         })?;
 
         // P0-3 (production-readiness plan §5): verify the sha256 before
@@ -377,18 +384,18 @@ impl RegistryClient for HttpRegistryClient {
 
         // Persist the tarball to cache.
         std::fs::create_dir_all(dest)?;
-        let tarball_path = dest.join(format!("{}-{}.crate", name, version));
+        let tarball_path = dest.join(format!("{name}-{version}.crate"));
         std::fs::write(&tarball_path, &bytes)?;
 
         // Extract the gzip + tar archive.
-        let extract_dir = dest.join(format!("{}-{}", name, version));
+        let extract_dir = dest.join(format!("{name}-{version}"));
         std::fs::create_dir_all(&extract_dir)?;
 
         let gz_decoder = flate2::read::GzDecoder::new(&bytes[..]);
         let mut archive = tar::Archive::new(gz_decoder);
-        archive.unpack(&extract_dir).map_err(|e| {
-            GlyipError::RegistryError(format!("extract '{}' v{}: {}", name, version, e))
-        })?;
+        archive
+            .unpack(&extract_dir)
+            .map_err(|e| GlyipError::RegistryError(format!("extract '{name}' v{version}: {e}")))?;
 
         info!("Downloaded and extracted '{}' v{}", name, version);
         Ok(extract_dir)
@@ -475,6 +482,7 @@ impl std::fmt::Debug for DependencyResolver {
 
 impl DependencyResolver {
     /// Create a new resolver with the given crate index.
+    #[must_use]
     pub fn new(index: CrateIndex) -> Self {
         Self {
             index,
@@ -484,6 +492,7 @@ impl DependencyResolver {
     }
 
     /// Create a resolver with an empty index (for path-only dependencies).
+    #[must_use]
     pub fn new_no_index() -> Self {
         Self {
             index: CrateIndex::new(),
@@ -496,6 +505,7 @@ impl DependencyResolver {
     ///
     /// When a dependency is not found in the local [`CrateIndex`], the
     /// resolver will attempt to fetch its metadata from the registry.
+    #[must_use]
     pub fn with_registry_client(mut self, client: Box<dyn RegistryClient>) -> Self {
         self.registry_client = Some(client);
         self
@@ -505,6 +515,7 @@ impl DependencyResolver {
     ///
     /// When omitted, a default [`GitCommandFetcher`] (shelling out to the
     /// system `git`) is used. Tests inject a mock to avoid network access.
+    #[must_use]
     pub fn with_git_fetcher(mut self, fetcher: Box<dyn GitFetcher>) -> Self {
         self.git_fetcher = Some(fetcher);
         self
@@ -568,9 +579,9 @@ impl DependencyResolver {
             let key = if let Some(ref p) = path {
                 format!("{}@{}(path)", name, p.display())
             } else if let Some(ref v) = version_req {
-                format!("{}-{}(git)", name, v)
+                format!("{name}-{v}(git)")
             } else {
-                format!("{}(git)", name)
+                format!("{name}(git)")
             };
 
             if visited.contains(&key) {
@@ -582,12 +593,12 @@ impl DependencyResolver {
             let git_spec = config
                 .dependencies
                 .get(&name)
-                .and_then(|d| d.git_spec())
+                .and_then(super::config::Dependency::git_spec)
                 .or_else(|| {
                     config
                         .dev_dependencies
                         .get(&name)
-                        .and_then(|d| d.git_spec())
+                        .and_then(super::config::Dependency::git_spec)
                 });
 
             let (locked, sub_deps) = if let Some(spec) = git_spec {
@@ -687,11 +698,9 @@ impl DependencyResolver {
                 .map(|c| c.version.clone());
             let satisfied = if let Some(ref v) = locked_version {
                 match Version::parse(v) {
-                    Ok(parsed) => unique_reqs.iter().all(|req| {
-                        VersionReq::parse(req)
-                            .map(|r| r.matches(&parsed))
-                            .unwrap_or(false)
-                    }),
+                    Ok(parsed) => unique_reqs
+                        .iter()
+                        .all(|req| VersionReq::parse(req).is_ok_and(|r| r.matches(&parsed))),
                     Err(_) => false,
                 }
             } else {
@@ -732,10 +741,10 @@ impl DependencyResolver {
     /// provenance* entry — anyone reading the lockfile would see the
     /// public index, not where the crate actually came from.
     fn current_registry_base_url(&self) -> String {
-        self.registry_client
-            .as_ref()
-            .map(|c| c.base_url_display())
-            .unwrap_or_else(|| "https://index.glyim.dev".to_string())
+        self.registry_client.as_ref().map_or_else(
+            || "https://index.glyim.dev".to_string(),
+            |c| c.base_url_display(),
+        )
     }
 
     fn resolve_registry_dep(
@@ -759,9 +768,7 @@ impl DependencyResolver {
                         // the wrong provenance in the lockfile.
                         url: self
                             .registry_client
-                            .as_ref()
-                            .map(|c| c.base_url_display())
-                            .unwrap_or_else(|| "local-index".to_string()),
+                            .as_ref().map_or_else(|| "local-index".to_string(), |c| c.base_url_display()),
                         checksum,
                     },
                     dependencies: sub_deps
@@ -896,8 +903,10 @@ impl DependencyResolver {
             .strip_prefix(project_dir)
             .ok()
             .filter(|rel| !rel.as_os_str().is_empty())
-            .map(|rel| rel.to_string_lossy().into_owned())
-            .unwrap_or_else(|| path.to_string_lossy().into_owned());
+            .map_or_else(
+                || path.to_string_lossy().into_owned(),
+                |rel| rel.to_string_lossy().into_owned(),
+            );
 
         let locked = LockedCrate {
             name: name.to_string(),
@@ -931,8 +940,7 @@ impl DependencyResolver {
         let fetcher: &dyn GitFetcher = self
             .git_fetcher
             .as_ref()
-            .map(|b| b.as_ref())
-            .unwrap_or(owned_fetcher.as_ref());
+            .map_or(owned_fetcher.as_ref(), std::convert::AsRef::as_ref);
 
         let rev = fetcher.resolve_rev(url, spec)?;
 
@@ -1115,7 +1123,12 @@ fn repo_cache_name(url: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(url.as_bytes());
     let digest = hasher.finalize();
-    digest[..16].iter().map(|b| format!("{:02x}", b)).collect()
+    let mut name = String::with_capacity(32);
+    for b in &digest[..16] {
+        use std::fmt::Write as _;
+        let _ = write!(name, "{b:02x}");
+    }
+    name
 }
 
 /// Production [`GitFetcher`] that drives the system `git` binary.
@@ -1127,6 +1140,7 @@ pub struct GitCommandFetcher {
 
 impl GitCommandFetcher {
     /// Create a fetcher with an explicit cache directory.
+    #[must_use]
     pub fn new(cache_dir: PathBuf) -> Self {
         Self { cache_dir }
     }
@@ -1262,6 +1276,6 @@ pub(crate) fn full_clone_args<'a>(url: &'a str, dest: &'a str) -> Vec<&'a str> {
 
 /// P2-F4: the `git fetch` argument vector for a shallow fetch of a single
 /// revision.
-pub(crate) fn shallow_fetch_args<'a>(rev: &'a str) -> Vec<&'a str> {
+pub(crate) fn shallow_fetch_args(rev: &str) -> Vec<&str> {
     vec!["fetch", "--depth", "1", "origin", rev]
 }

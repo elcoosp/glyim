@@ -10,7 +10,7 @@ use crate::substitution::GenericArg;
 use crate::ty::TyKind;
 use crate::*;
 
-/// Helper: create an ADT with given field types, returning (frozen_ctx, adt_ty)
+/// Helper: create an ADT with given field types, returning (`frozen_ctx`, `adt_ty`)
 fn make_single_field_adt(field_ty: Ty) -> (TyCtx, Ty) {
     with_fresh_ty_ctx(|ctx: &mut TyCtxMut| {
         let adt_id = AdtId::from_raw(100);
@@ -992,7 +992,7 @@ fn implements_auto_trait_convenience_method() {
 
 #[test]
 fn frozen_context_negative_and_manual_impl_queries() {
-    let (ctx, _) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
+    let (ctx, ()) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let adt_id = AdtId::from_raw(600);
         c.register_negative_impl(adt_id, AutoTrait::Send);
         c.register_manual_impl(adt_id, AutoTrait::Sync);
@@ -1006,7 +1006,7 @@ fn frozen_context_negative_and_manual_impl_queries() {
 
 #[test]
 fn frozen_context_adt_repr_accessor() {
-    let (ctx, _) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
+    let (ctx, ()) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let adt_id = AdtId::from_raw(700);
         c.register_adt_repr(adt_id, vec![c.bool_ty()]);
     });

@@ -1,11 +1,11 @@
-//! Tests for Predicate, TraitPredicate, TraitRef, ImplPolarity.
+//! Tests for Predicate, `TraitPredicate`, `TraitRef`, `ImplPolarity`.
 
 use super::helpers::with_fresh_ty_ctx;
 use crate::*;
 
 #[test]
 fn trait_predicate_positive() {
-    let (ctx, _) = with_fresh_ty_ctx(|c| {
+    let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![GenericArg::Ty(c.bool_ty())]);
         let trait_ref = TraitRef {
             def_id: glyim_core::def_id::TraitDefId::from_raw(1),
@@ -22,7 +22,7 @@ fn trait_predicate_positive() {
 
 #[test]
 fn trait_predicate_negative() {
-    let (ctx, _) = with_fresh_ty_ctx(|c| {
+    let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![]);
         let trait_ref = TraitRef {
             def_id: glyim_core::def_id::TraitDefId::from_raw(2),
@@ -39,7 +39,7 @@ fn trait_predicate_negative() {
 
 #[test]
 fn predicate_trait_variant() {
-    let (ctx, _) = with_fresh_ty_ctx(|c| {
+    let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![]);
         let trait_ref = TraitRef {
             def_id: glyim_core::def_id::TraitDefId::from_raw(1),
@@ -65,7 +65,7 @@ fn predicate_region_outlives() {
 
 #[test]
 fn predicate_type_outlives() {
-    let (ctx, _) = with_fresh_ty_ctx(|c| {
+    let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let pred = Predicate::TypeOutlives(TypeOutlivesPredicate {
             ty: c.bool_ty(),
             region: Region::Static,
@@ -77,7 +77,7 @@ fn predicate_type_outlives() {
 
 #[test]
 fn predicate_well_formed() {
-    let (ctx, _) = with_fresh_ty_ctx(|c| {
+    let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let pred = Predicate::WellFormed(c.bool_ty());
         assert!(matches!(pred, Predicate::WellFormed(_)));
     });
@@ -86,7 +86,7 @@ fn predicate_well_formed() {
 
 #[test]
 fn predicate_coerce() {
-    let (ctx, _) = with_fresh_ty_ctx(|c| {
+    let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let pred = Predicate::Coerce(
             c.bool_ty(),
             c.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I32)),
@@ -107,13 +107,13 @@ fn impl_polarity_copy() {
 
 #[test]
 fn trait_ref_debug() {
-    let (ctx, _) = with_fresh_ty_ctx(|c| {
+    let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![GenericArg::Ty(c.bool_ty())]);
         let tr = TraitRef {
             def_id: glyim_core::def_id::TraitDefId::from_raw(42),
             substs,
         };
-        let debug = format!("{:?}", tr);
+        let debug = format!("{tr:?}");
         assert!(debug.contains("42"));
     });
     let _ = ctx;

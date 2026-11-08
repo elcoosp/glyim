@@ -16,17 +16,17 @@ fn setup_analysis(content: &str) -> (AnalysisDatabase, Uri) {
     )
     .unwrap();
     let file_id = db.file_map.write().get_or_create(&path);
-    let source_map = SourceMap::new(path, file_id, content.to_string());
+    let source_map = SourceMap::new(file_id, content.to_string());
     db.source_maps.write().insert(file_id, source_map);
     (db, uri)
 }
 
 #[test]
 fn test_remove_unused_import_code_action() {
-    let content = r#"use std::collections::HashMap;
+    let content = r"use std::collections::HashMap;
 fn main() {
     let x = 42;
-}"#;
+}";
     let (db, uri) = setup_analysis(content);
     let params = CodeActionParams {
         text_document: TextDocumentIdentifier { uri: uri.clone() },
@@ -40,7 +40,7 @@ fn main() {
     drop(file_map_guard);
     assert!(actions.is_some());
     let actions = actions.unwrap();
-    assert!(!actions.is_empty());
-    let action_str = format!("{:?}", actions);
+    assert_ne!(actions, [] as [lsp_types::CodeActionOrCommand; 0]);
+    let action_str = format!("{actions:?}");
     assert!(action_str.contains("Remove unused import: HashMap"));
 }

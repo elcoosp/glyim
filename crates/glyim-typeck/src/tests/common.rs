@@ -3,10 +3,9 @@ use glyim_core::interner::Name;
 /// Common utilities for typeck tests.
 use glyim_diag::GlyimDiagnostic;
 use glyim_hir::*;
-use glyim_solve::{InferenceTable, TraitContext};
+use glyim_solve::InferenceTable;
 use glyim_span::Span;
 use glyim_type::{Ty, TyCtxMut};
-use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -17,8 +16,8 @@ use crate::thir;
 // ------------------------------------------------------------------
 // Global interner for all tests (prevents lasso key errors)
 // ------------------------------------------------------------------
-static GLOBAL_INTERNER: Lazy<Mutex<glyim_core::interner::Interner>> =
-    Lazy::new(|| Mutex::new(glyim_core::interner::Interner::new()));
+static GLOBAL_INTERNER: std::sync::LazyLock<Mutex<glyim_core::interner::Interner>> =
+    std::sync::LazyLock::new(|| Mutex::new(glyim_core::interner::Interner::new()));
 
 /// Get a clone of the global interner.
 pub fn global_interner() -> glyim_core::interner::Interner {
@@ -31,7 +30,7 @@ pub fn name(s: &str) -> glyim_core::interner::Name {
     interner.intern(s)
 }
 
-/// Test helper: constructs FnCtxt and runs the check.
+/// Test helper: constructs `FnCtxt` and runs the check.
 pub fn check_function_body(
     ctx: &mut TyCtxMut,
     infer: &mut InferenceTable,
@@ -44,15 +43,12 @@ pub fn check_function_body(
 ) -> (thir::Body, Vec<GlyimDiagnostic>) {
     let body = &hir.bodies[body_id];
     let mut diagnostics = Vec::new();
-    let mut obligations = Vec::new();
     let env = LocalEnv::new();
 
-    let trait_ctx = TraitContext::new();
     let fn_ctxt = FnCtxt {
         ctx,
         infer,
         diagnostics: &mut diagnostics,
-        pending_obligations: &mut obligations,
         hir,
         body,
         env,
@@ -61,7 +57,6 @@ pub fn check_function_body(
         expr_cache: HashMap::new(),
         def_map,
         current_module: glyim_def_map::ModuleId::from_raw(0),
-        trait_ctx: &trait_ctx,
         capture_log: Vec::new(),
         body_owner_map: &HashMap::new(),
         param_map: HashMap::new(),
@@ -86,7 +81,7 @@ pub fn make_single_body_hir(
         items: IndexVec::new(),
         bodies: IndexVec::new(),
         body_owners: IndexVec::new(),
-        interner: Default::default(),
+        interner: glyim_core::Interner::default(),
     };
     let mut expr_vec = IndexVec::new();
     for expr in exprs {
@@ -166,9 +161,9 @@ pub fn empty_def_map() -> glyim_def_map::CrateDefMap {
         modules,
         krate: CrateId::from_raw(0),
         interner,
-        variant_map: Default::default(),
+        variant_map: HashMap::default(),
         max_local_def_id: 0,
-        def_to_module: Default::default(),
+        def_to_module: HashMap::default(),
     }
 }
 

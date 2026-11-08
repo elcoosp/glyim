@@ -11,7 +11,7 @@ fn get_body_hir(source: &str) -> (crate::CrateHir, Interner, BodyId) {
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
     let body_id = match &hir.items[ItemId::from_raw(0)].kind {
         ItemKind::Fn(fn_item) => fn_item.body.expect("no body"),
-        other => panic!("expected Fn item, got {:?}", other),
+        other => panic!("expected Fn item, got {other:?}"),
     };
     (hir, interner, body_id)
 }
@@ -51,7 +51,7 @@ fn test_pat_struct() {
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
     let body_id = match &hir.items[ItemId::from_raw(1)].kind {
         ItemKind::Fn(fn_item) => fn_item.body.expect("no body"),
-        other => panic!("expected Fn item, got {:?}", other),
+        other => panic!("expected Fn item, got {other:?}"),
     };
     let body = &hir.bodies[body_id];
     let block_id = ExprId::from_raw(body.exprs.len() as u32 - 1);

@@ -29,7 +29,7 @@ fn multiple_region_vars() {
 
 #[test]
 fn region_vars_preserved_after_freeze() {
-    let (frozen, _) = with_fresh_ty_ctx(|c| {
+    let (frozen, ()) = with_fresh_ty_ctx(|c| {
         let _v0 = c.new_region_var(Region::Erased);
         let _v1 = c.new_region_var(Region::Static);
     });

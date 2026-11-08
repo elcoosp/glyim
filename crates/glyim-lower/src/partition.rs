@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 /// Output is deterministic for identical input (groups are keyed by module id and
 /// each group's indices are kept sorted), so the partition can be relied on by
 /// content-addressed caches.
+#[must_use]
 pub fn partition(items: &[MonoItemData], max_cgus: usize) -> Vec<Vec<usize>> {
     if items.is_empty() {
         return vec![];
@@ -115,7 +116,7 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for g in &cgus {
             for &idx in g {
-                assert!(seen.insert(idx), "item {} duplicated across CGUs", idx);
+                assert!(seen.insert(idx), "item {idx} duplicated across CGUs");
             }
         }
         assert_eq!(seen.len(), items.len());

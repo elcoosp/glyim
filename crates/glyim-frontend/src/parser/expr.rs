@@ -2,7 +2,7 @@ use super::Parser;
 use glyim_syntax::{GlyimLang, SyntaxKind};
 use rowan::Language;
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     pub(crate) fn parse_block(&mut self) {
         // FE-6: nested blocks `{{{{…}}}}` are a stack-overflow vector; bound them.
         if self.recursion_depth > super::MAX_EXPR_DEPTH {
@@ -466,8 +466,7 @@ impl<'a> Parser<'a> {
                             let is_explicit = self
                                 .tokens
                                 .get(peek)
-                                .map(|t| t.kind == SyntaxKind::Colon)
-                                .unwrap_or(false);
+                                .is_some_and(|t| t.kind == SyntaxKind::Colon);
                             if is_explicit {
                                 // Explicit field: name: expr
                                 self.start_node_at(field_cp, SyntaxKind::StructField);
@@ -978,7 +977,7 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let found = self.current_kind();
-                self.error(format!("expected expression, found {:?}", found));
+                self.error(format!("expected expression, found {found:?}"));
                 if self.current().is_some() {
                     self.bump();
                 }

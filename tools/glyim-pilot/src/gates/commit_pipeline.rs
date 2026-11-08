@@ -10,7 +10,7 @@ use crate::gates::{
 use std::sync::Arc;
 use std::time::Instant;
 
-/// run_commit_pipeline.
+/// `run_commit_pipeline`.
 pub async fn run_commit_pipeline(
     ctx: &GateContext,
     config: &ResolvedCommitGates,

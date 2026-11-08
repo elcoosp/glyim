@@ -43,7 +43,10 @@ fn eval_err(body: &Body, expr_id: ExprId) -> ConstEvalError {
 #[test]
 fn overflow_on_add_produces_error() {
     let mut body = test_body();
-    let max_val = alloc_lit(&mut body, Literal::Int(i32::MAX as i128, Some(IntTy::I32)));
+    let max_val = alloc_lit(
+        &mut body,
+        Literal::Int(i128::from(i32::MAX), Some(IntTy::I32)),
+    );
     let one = alloc_lit(&mut body, Literal::Int(1, Some(IntTy::I32)));
     let add = body.alloc_expr(
         Expr::Binary {
@@ -65,7 +68,10 @@ fn overflow_on_add_produces_error() {
 #[test]
 fn overflow_on_negate_min_int_produces_error() {
     let mut body = test_body();
-    let min_val = alloc_lit(&mut body, Literal::Int(i32::MIN as i128, Some(IntTy::I32)));
+    let min_val = alloc_lit(
+        &mut body,
+        Literal::Int(i128::from(i32::MIN), Some(IntTy::I32)),
+    );
     let neg = body.alloc_expr(
         Expr::Unary {
             op: glyim_core::primitives::UnOp::Neg,

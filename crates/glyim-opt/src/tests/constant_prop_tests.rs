@@ -92,11 +92,11 @@ fn constant_prop_single_block() {
                             match &lc.kind {
                                 MirConstKind::Int(5) => {}
                                 _ => panic!("Expected Int(5)"),
-                            };
+                            }
                             match &rc.kind {
                                 MirConstKind::Int(1) => {}
                                 _ => panic!("Expected Int(1)"),
-                            };
+                            }
                         }
                         _ => panic!("Expected constant operands"),
                     }

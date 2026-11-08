@@ -24,26 +24,26 @@ fn compile(src: &str) -> CompileOutput {
 
 #[test]
 fn top_level_const_referenced_by_path() {
-    let src = r#"
+    let src = r"
         const ANSWER: i32 = 42;
         fn main() {
             let _ = ANSWER;
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
 
 #[test]
 fn module_const_referenced_by_multi_segment_path() {
-    let src = r#"
+    let src = r"
         mod config {
             const MAX: i32 = 100;
         }
         fn main() {
             let _ = config::MAX;
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
@@ -54,13 +54,13 @@ fn module_const_referenced_by_multi_segment_path() {
 /// global. This exercises `PipelineLowerCtx::cv_const` for aggregate values.
 #[test]
 fn aggregate_const_folds_to_aggregate_mir_const() {
-    let src = r#"
+    let src = r"
         const PAIR: (i32, i32) = (1, 2);
         fn use_pair(p: (i32, i32)) -> i32 { p.0 + p.1 }
         fn main() -> i32 {
             use_pair(PAIR)
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 
@@ -96,8 +96,7 @@ fn aggregate_const_folds_to_aggregate_mir_const() {
 
     assert!(
         aggregate_count >= 1,
-        "expected at least 1 folded Aggregate constant (PAIR), found {}",
-        aggregate_count
+        "expected at least 1 folded Aggregate constant (PAIR), found {aggregate_count}"
     );
     assert_eq!(
         constref_count, 0,

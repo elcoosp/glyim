@@ -4,7 +4,7 @@
 //! node because the concrete impl is only known at a `Call` site (where
 //! static/virtual dispatch rewrites the callee). A trait method used as a
 //! *value* (`let x = T::f;`) has no such rewrite, so the error node survived
-//! to codegen and ICEd with "Attempted to lower TyKind::Error".
+//! to codegen and `ICEd` with "Attempted to lower `TyKind::Error`".
 //!
 //! The fix adds an `in_callee_position` flag: the diagnostic fires only for
 //! the value case, while call sites keep working.
@@ -19,7 +19,7 @@ fn tempdir() -> std::path::PathBuf {
     // alone is not unique.
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let p = std::env::temp_dir().join(format!("glyim_tmv_{}_{}", std::process::id(), n,));
+    let p = std::env::temp_dir().join(format!("glyim_tmv_{}_{}", std::process::id(), n));
     std::fs::create_dir_all(&p).unwrap();
     p
 }
@@ -29,7 +29,7 @@ fn cli_bin() -> std::path::PathBuf {
 }
 
 /// A trait method used as a value must produce a clean diagnostic, never an
-/// ICE.
+/// `ICE`.
 #[test]
 fn trait_method_as_value_is_a_diagnostic_not_an_ice() {
     let dir = tempdir();

@@ -1,4 +1,4 @@
-//! Tests for field_ty lookup (S04-T02)
+//! Tests for `field_ty` lookup (S04-T02)
 
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::AdtId;
@@ -8,7 +8,7 @@ use super::helpers::with_fresh_ty_ctx;
 use crate::adt_def::{AdtDef, AdtKind, FieldDef, VariantDef};
 use crate::ty::{FieldIdx, TyKind};
 
-/// S04-T02: `field_ty` returns correct type for ADT field index via adt_defs.
+/// S04-T02: `field_ty` returns correct type for ADT field index via `adt_defs`.
 #[test]
 fn field_ty_returns_correct_type_from_adt_def() {
     let (frozen, (adt_id, i32_ty, bool_ty)) = with_fresh_ty_ctx(|ctx| {
@@ -59,7 +59,7 @@ fn field_ty_returns_correct_type_from_adt_def() {
     );
 }
 
-/// S04-T02b: `field_ty` on TyCtxMut returns correct types.
+/// S04-T02b: `field_ty` on `TyCtxMut` returns correct types.
 #[test]
 fn field_ty_mut_returns_correct_type_from_adt_def() {
     use super::helpers::test_ty_ctx;
@@ -113,7 +113,7 @@ fn field_ty_mut_returns_correct_type_from_adt_def() {
     );
 }
 
-/// S04-T02c: `field_ty` falls back to adt_reprs when adt_defs has no entry.
+/// S04-T02c: `field_ty` falls back to `adt_reprs` when `adt_defs` has no entry.
 #[test]
 fn field_ty_falls_back_to_adt_reprs() {
     let (frozen, (adt_id, i32_ty, bool_ty)) = with_fresh_ty_ctx(|ctx| {
@@ -138,7 +138,7 @@ fn field_ty_falls_back_to_adt_reprs() {
     );
 }
 
-/// S04-T02d: `field_ty` returns error_ty for unknown ADT.
+/// S04-T02d: `field_ty` returns `error_ty` for unknown ADT.
 #[test]
 fn field_ty_returns_error_for_unknown_adt() {
     let (frozen, adt_id) = with_fresh_ty_ctx(|_| AdtId::from_raw(999));

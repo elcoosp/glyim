@@ -8,3 +8,6 @@ description = "Procedural macro bridge: C-compatible TokenStream ABI, in-process
 [dependencies]
 glyim-syntax = { workspace = true }
 libloading = { workspace = true }
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true

@@ -4,13 +4,13 @@ use glyim_syntax::SyntaxKind;
 use smol_str::SmolStr;
 
 #[derive(Clone, Debug)]
-/// Token.
+/// `Token`.
 pub struct Token {
-    /// Struct.
+    /// `Struct`.
     pub kind: SyntaxKind,
-    /// Struct.
+    /// `Struct`.
     pub span: Span,
-    /// Struct.
+    /// `Struct`.
     pub text: SmolStr,
 }
 
@@ -26,15 +26,15 @@ impl Token {
 }
 
 #[derive(Clone, Debug)]
-/// LexResult.
+/// `LexResult`.
 pub struct LexResult {
-    /// Struct.
+    /// `Struct`.
     pub tokens: Vec<Token>,
-    /// Struct.
+    /// `Struct`.
     pub diagnostics: Vec<GlyimDiagnostic>,
 }
 
-/// Lexer.
+/// `Lexer`.
 pub struct Lexer<'a> {
     source: &'a str,
     file_id: FileId,
@@ -44,6 +44,7 @@ pub struct Lexer<'a> {
 
 impl<'a> Lexer<'a> {
     /// new.
+    #[must_use]
     pub fn new(source: &'a str, file_id: FileId) -> Self {
         Self {
             source,
@@ -83,6 +84,7 @@ impl<'a> Lexer<'a> {
     /// This is the historical `Lexer::lex` behavior; it is preserved for
     /// callers (tests, fragment validation) that want only meaningful tokens.
     /// The parser uses `Lexer::lex_all` so tree byte offsets match the source.
+    #[must_use]
     pub fn lex(self) -> LexResult {
         let mut r = self.lex_all();
         r.tokens.retain(|t| !t.kind.is_trivia());
@@ -98,6 +100,7 @@ impl<'a> Lexer<'a> {
     /// tree), which is why every diagnostic span downstream pointed at the
     /// wrong source text. Existing callers that want the historical
     /// trivia-free stream use `Lexer::lex`.
+    #[must_use]
     pub fn lex_all(mut self) -> LexResult {
         let mut tokens = Vec::new();
 
@@ -127,7 +130,7 @@ impl<'a> Lexer<'a> {
                 'a'..='z' | 'A'..='Z' | '_' => {
                     // Byte literals: `b'x'` or `b"..."` (and uppercase `B`).
                     let nb = self.peek_next();
-                    if (self.source[start..self.pos + 1].chars().count() == 1)
+                    if (self.source[start..=self.pos].chars().count() == 1)
                         && (self.source[start..].starts_with('b')
                             || self.source[start..].starts_with('B'))
                         && (nb == Some('\'') || nb == Some('"'))
@@ -165,8 +168,8 @@ impl<'a> Lexer<'a> {
                     let after_quote = self.pos + 1;
                     let src = self.source;
                     let mut ident_end = after_quote;
-                    #[allow(unused_assignments)]
-                    let mut is_lifetime = false;
+
+                    let is_lifetime;
 
                     let mut chars = src[after_quote..].chars();
                     if let Some(first) = chars.next() {
@@ -440,7 +443,7 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     self.diagnostics.push(GlyimDiagnostic::lex_error(
                         self.span(start, self.pos),
-                        format!("unexpected character: '{}'", ch),
+                        format!("unexpected character: '{ch}'"),
                     ));
                     tokens.push(Token::new(
                         SyntaxKind::Error,
@@ -630,7 +633,7 @@ impl<'a> Lexer<'a> {
                 let exp_text = &self.source[exp_start..exp_end];
                 self.diagnostics.push(GlyimDiagnostic::lex_error(
                     self.span(exp_start, exp_end),
-                    format!("incomplete float exponent: '{}'", exp_text),
+                    format!("incomplete float exponent: '{exp_text}'"),
                 ));
                 self.pos = exp_start;
                 return if is_float {
@@ -638,9 +641,8 @@ impl<'a> Lexer<'a> {
                 } else {
                     SyntaxKind::IntLit
                 };
-            } else {
-                is_float = true;
             }
+            is_float = true;
         }
 
         self.lex_number_suffix();
@@ -671,7 +673,7 @@ impl<'a> Lexer<'a> {
                         ByteIdx::from_raw(self.pos as u32),
                         SyntaxContext::ROOT,
                     ),
-                    format!("invalid number suffix: '{}'", suffix),
+                    format!("invalid number suffix: '{suffix}'"),
                 ));
             }
         }
@@ -991,6 +993,7 @@ fn lookup_keyword(ident: &str) -> SyntaxKind {
 }
 
 /// lex.
+#[must_use]
 pub fn lex(source: &str, file_id: FileId) -> LexResult {
     Lexer::new(source, file_id).lex()
 }
@@ -998,6 +1001,7 @@ pub fn lex(source: &str, file_id: FileId) -> LexResult {
 /// Lex a source string to a token stream that **includes** trivia tokens
 /// (`Whitespace`, `LineComment`, `BlockComment`). Used by the parser so the
 /// syntax tree's byte offsets match the source text.
+#[must_use]
 pub fn lex_with_trivia(source: &str, file_id: FileId) -> LexResult {
     Lexer::new(source, file_id).lex_all()
 }

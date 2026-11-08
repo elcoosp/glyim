@@ -7,6 +7,7 @@ use crate::mono::MonoItem;
 use crate::mono::MonoItemData;
 
 /// Check for unsized locals in instantiated MIR bodies.
+#[must_use]
 pub fn check_unsized_locals(items: &[MonoItemData], ctx: &TyCtx) -> Vec<GlyimDiagnostic> {
     let mut diags = Vec::new();
     for item in items {
@@ -42,6 +43,7 @@ pub fn check_unsized_locals(items: &[MonoItemData], ctx: &TyCtx) -> Vec<GlyimDia
 /// here, at monomorphization time, as a clean spanned diagnostic so it never
 /// reaches codegen. Mirrors rustc's `E0277` ("the trait bound `X: Trait` is
 /// not satisfied").
+#[must_use]
 pub fn check_unresolved_virtual_methods(
     items: &[MonoItemData],
     ctx: &TyCtx,
@@ -63,10 +65,10 @@ pub fn check_unresolved_virtual_methods(
             else {
                 continue;
             };
-            let trait_name = ctx
-                .trait_def(*trait_def_id)
-                .map(|t| ctx.name_str(t.name).to_string())
-                .unwrap_or_else(|| format!("#{}", trait_def_id.index()));
+            let trait_name = ctx.trait_def(*trait_def_id).map_or_else(
+                || format!("#{}", trait_def_id.index()),
+                |t| ctx.name_str(t.name).to_string(),
+            );
             let self_name = match self_ty {
                 Some(t) => glyim_type::PrintTy::new(*t, ctx).to_string(),
                 None => "<unknown>".to_string(),
@@ -84,6 +86,7 @@ pub fn check_unresolved_virtual_methods(
 }
 
 /// Warn if the number of mono items exceeds the given threshold.
+#[must_use]
 pub fn check_large_mono_set(items: &[MonoItemData], threshold: usize) -> Vec<GlyimDiagnostic> {
     if items.len() > threshold {
         let msg = format!(
@@ -131,6 +134,7 @@ pub fn check_large_mono_set(items: &[MonoItemData], threshold: usize) -> Vec<Gly
 /// pipeline), where `Param` references still appear. `None` (the unit tests'
 /// path — their hand-built bodies already carry `Param` when relevant) falls
 /// back to `item.body`.
+#[must_use]
 pub fn check_unused_generic_params(
     items: &[MonoItemData],
     pre_mono_bodies: Option<
@@ -151,8 +155,7 @@ pub fn check_unused_generic_params(
                         glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()),
                     ))
                 })
-                .map(|arc| arc.as_ref())
-                .unwrap_or_else(|| item.body.as_ref());
+                .map_or_else(|| item.body.as_ref(), std::convert::AsRef::as_ref);
             if !body_uses_any_param(checked_body, ctx) {
                 // `item.symbol` is a Debug-formatted `MonoItem`; not suitable
                 // for a user-facing message. Render the function as

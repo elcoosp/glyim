@@ -8,10 +8,10 @@ fn empty_crate_no_errors() {
     let ctx = super::test_utils::make_ty_ctx();
     let def_map = empty_def_map();
     let hir = CrateHir {
-        items: Default::default(),
-        bodies: Default::default(),
-        body_owners: Default::default(),
-        interner: Default::default(),
+        items: glyim_core::arena::IndexVec::default(),
+        bodies: glyim_core::arena::IndexVec::default(),
+        body_owners: glyim_core::arena::IndexVec::default(),
+        interner: glyim_core::Interner::default(),
     };
     let mut solver = MockSolver::new().respond_for_any(glyim_solve::SolverResult::Proven);
     let (_, result) = typeck_crate(ctx, &def_map, &hir, &mut solver);

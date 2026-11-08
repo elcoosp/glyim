@@ -176,7 +176,7 @@ fn test_glyim_process_getppid() {
 #[test]
 fn test_glyim_process_kill_invalid_handle() {
     unsafe {
-        let result = crate::glyim_process_kill(999999, 9);
+        let result = crate::glyim_process_kill(999_999, 9);
         assert_eq!(result, -1, "should fail for invalid handle");
     }
 }
@@ -188,7 +188,7 @@ fn test_glyim_process_kill_honors_signal() {
     unsafe {
         let mut handle: usize = 0;
         let spawn = crate::glyim_process_spawn(
-            b"sleep\x00".as_ptr(),
+            c"sleep".as_ptr().cast::<u8>(),
             5,
             std::ptr::null(),
             0,

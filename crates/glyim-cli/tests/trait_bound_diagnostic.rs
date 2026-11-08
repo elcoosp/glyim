@@ -4,7 +4,7 @@
 //! Background: `needs_foo::<Bar>(..)` where `Bar: !Foo` (and
 //! `"42".parse::<i32>()` where there is no `impl FromStr for i32`) used to
 //! leave an undevirtualized `MirConstKind::VirtualMethod` callee that codegen
-//! ICEd on with `MirConstKind::VirtualMethod reached LLVM codegen`.
+//! `ICEd` on with `MirConstKind::VirtualMethod reached LLVM codegen`.
 //!
 //! The fix emits a `[T0001] the trait bound ... is not satisfied` diagnostic
 //! at monomorphization time instead. This test pins the *behavior*: exit 1,
@@ -20,7 +20,7 @@ fn tempdir() -> std::path::PathBuf {
     // alone is not unique.
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let p = std::env::temp_dir().join(format!("glyim_trait_bound_{}_{}", std::process::id(), n,));
+    let p = std::env::temp_dir().join(format!("glyim_trait_bound_{}_{}", std::process::id(), n));
     std::fs::create_dir_all(&p).unwrap();
     p
 }

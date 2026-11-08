@@ -4,15 +4,13 @@ use super::executor::TestExecutor;
 use super::reporter::TestReporter;
 use crate::error::TestDiscoveryError;
 use std::path::PathBuf;
-use std::time::Duration;
 
-/// TestRunner.
+/// `TestRunner`.
 pub struct TestRunner {
     root: PathBuf,
     mode_override: Option<TestMode>,
     parallel: bool,
     filter: Option<String>,
-    timeout: Duration,
     max_concurrent: usize,
     use_pipeline: bool,
 }
@@ -25,37 +23,36 @@ impl TestRunner {
             mode_override: None,
             parallel: true,
             filter: None,
-            timeout: Duration::from_secs(60),
             max_concurrent: 8,
             use_pipeline: true,
         }
     }
     /// mode.
+    #[must_use]
     pub fn mode(mut self, mode: TestMode) -> Self {
         self.mode_override = Some(mode);
         self
     }
     /// parallel.
+    #[must_use]
     pub fn parallel(mut self, yes: bool) -> Self {
         self.parallel = yes;
         self
     }
     /// filter.
+    #[must_use]
     pub fn filter(mut self, f: impl Into<String>) -> Self {
         self.filter = Some(f.into());
         self
     }
-    /// timeout.
-    pub fn timeout(mut self, d: Duration) -> Self {
-        self.timeout = d;
-        self
-    }
-    /// max_concurrent.
+    /// `max_concurrent`.
+    #[must_use]
     pub fn max_concurrent(mut self, n: usize) -> Self {
         self.max_concurrent = n;
         self
     }
-    /// frontend_only.
+    /// `frontend_only`.
+    #[must_use]
     pub fn frontend_only(mut self) -> Self {
         self.use_pipeline = false;
         self
@@ -68,7 +65,6 @@ impl TestRunner {
         Ok(TestPlan {
             tests,
             parallel: self.parallel,
-            default_timeout: self.timeout,
             max_concurrent: self.max_concurrent,
             use_pipeline: self.use_pipeline,
             bless: resolve_bless_flag(
@@ -110,11 +106,10 @@ impl TestRunner {
 fn resolve_bless_flag(ci: Option<&str>, bless: Option<&str>) -> bool {
     let bless_requested = bless.is_some();
     let in_ci = ci.is_some();
-    if bless_requested && in_ci {
-        panic!(
-            "GLYIM_BLESS is set but CI is also set: refusing to bless              snapshots in CI. `GLYIM_BLESS=1` rewrites `.expected` files              and reports every fixture as passing, which would silently              hide regressions. Unset GLYIM_BLESS for the CI run (or, for              a deliberate re-bless, run locally with CI unset)."
-        );
-    }
+    assert!(
+        !(bless_requested && in_ci),
+        "GLYIM_BLESS is set but CI is also set: refusing to bless              snapshots in CI. `GLYIM_BLESS=1` rewrites `.expected` files              and reports every fixture as passing, which would silently              hide regressions. Unset GLYIM_BLESS for the CI run (or, for              a deliberate re-bless, run locally with CI unset)."
+    );
     bless_requested
 }
 
@@ -126,36 +121,35 @@ fn resolve_no_skip_flag(no_skip: Option<&str>) -> bool {
     no_skip.is_some()
 }
 
-/// TestPlan.
+/// `TestPlan`.
 pub struct TestPlan {
-    /// Struct.
+    /// `Struct`.
     pub tests: Vec<std::sync::Arc<super::collector::DiscoveredTest>>,
-    /// Struct.
+    /// `Struct`.
     pub parallel: bool,
-    /// Struct.
-    pub default_timeout: Duration,
-    /// Struct.
+    /// Upper bound on fixtures compiled or run in parallel.
     pub max_concurrent: usize,
-    #[allow(missing_docs)]
+    /// Run fixtures through the full pipeline compiler (vs frontend-only).
     pub use_pipeline: bool,
-    /// Struct.
+    /// `Struct`.
     pub bless: bool,
     /// TEST-3: unmet needs become hard failures.
     pub no_skip: bool,
-    /// Struct.
+    /// `Struct`.
     pub verbose: bool,
 }
 
-/// ExecutionResult.
+/// `ExecutionResult`.
 pub struct ExecutionResult {
-    /// Struct.
+    /// `Struct`.
     pub results: Vec<super::executor::TestResult>,
-    /// Struct.
+    /// `Struct`.
     pub summary: TestSummary,
 }
 
 impl TestPlan {
     /// execute.
+    #[must_use]
     pub fn execute(self) -> ExecutionResult {
         let _ = tracing_subscriber::fmt()
             .with_max_level(tracing::Level::INFO)
@@ -172,10 +166,8 @@ impl TestPlan {
         eprintln!("running {} tests", self.tests.len());
 
         let executor = TestExecutor::new(
-            self.default_timeout,
             self.bless,
             self.no_skip,
-            self.verbose,
             self.max_concurrent,
             self.use_pipeline,
         );
@@ -212,15 +204,15 @@ impl TestPlan {
 }
 
 #[derive(Clone, Debug, Default)]
-/// TestSummary.
+/// `TestSummary`.
 pub struct TestSummary {
-    /// Struct.
+    /// `Struct`.
     pub total: usize,
-    /// Struct.
+    /// `Struct`.
     pub passed: usize,
-    /// Struct.
+    /// `Struct`.
     pub failed: usize,
-    /// Struct.
+    /// `Struct`.
     pub ignored: usize,
 }
 

@@ -8,8 +8,7 @@ fn core_source_no_stub_macros() {
         let src = core_source(name).unwrap();
         assert!(
             !src.contains("stub!"),
-            "core module '{}' should not contain stub!() macros",
-            name
+            "core module '{name}' should not contain stub!() macros"
         );
     }
 }
@@ -20,8 +19,7 @@ fn core_source_no_todo_macros() {
         let src = core_source(name).unwrap();
         assert!(
             !src.contains("todo!"),
-            "core module '{}' should not contain todo!() macros",
-            name
+            "core module '{name}' should not contain todo!() macros"
         );
     }
 }
@@ -39,8 +37,7 @@ fn core_source_has_keyword_definitions() {
             || src.contains("macro ");
         assert!(
             has_definition,
-            "core module '{}' should contain at least one definition (fn/struct/enum/trait/impl/type/macro)",
-            name
+            "core module '{name}' should contain at least one definition (fn/struct/enum/trait/impl/type/macro)"
         );
     }
 }
@@ -55,12 +52,11 @@ fn core_source_all_is_non_empty() {
 fn core_source_all_modules_appear_exactly_once() {
     let all = core_source_all();
     for name in core_modules() {
-        let header = format!("// === module: {} ===", name);
+        let header = format!("// === module: {name} ===");
         let count = all.matches(&header).count();
         assert_eq!(
             count, 1,
-            "core_source_all should contain exactly one header for '{}', found {}",
-            name, count
+            "core_source_all should contain exactly one header for '{name}', found {count}"
         );
     }
 }
@@ -71,8 +67,7 @@ fn core_source_each_module_starts_with_doc_comment() {
         let src = core_source(name).unwrap();
         assert!(
             src.starts_with("//!"),
-            "core module '{}' should start with a module-level doc comment (//!)",
-            name
+            "core module '{name}' should start with a module-level doc comment (//!)"
         );
     }
 }

@@ -6,7 +6,7 @@ fn crate_id_roundtrip() {
     let id = CrateId::from_raw(raw);
     assert_eq!(id.to_raw(), raw);
     assert_eq!(id.index(), raw as usize);
-    assert_eq!(format!("{}", id), "crate[42]");
+    assert_eq!(format!("{id}"), "crate[42]");
 }
 
 #[test]
@@ -24,7 +24,7 @@ fn def_id_new_display() {
     let def = DefId::new(krate, local);
     assert_eq!(def.krate, krate);
     assert_eq!(def.local_id, local);
-    assert_eq!(format!("{}", def), "crate[1]::2");
+    assert_eq!(format!("{def}"), "crate[1]::2");
 }
 
 #[test]

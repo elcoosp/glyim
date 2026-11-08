@@ -610,12 +610,12 @@ fn char_in_match() {
 
 #[test]
 fn full_function_with_comments() {
-    let source = r#"// This is a function
+    let source = r"// This is a function
 fn compute(x: i32) -> i32 {
     /* block comment */
     let y = x + 1; // add one
     y
-}"#;
+}";
     let kinds = lex_kinds(source);
     assert_eq!(kinds[0], SyntaxKind::KwFn);
     assert!(kinds.contains(&SyntaxKind::IntLit));

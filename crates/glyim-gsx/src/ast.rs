@@ -115,7 +115,7 @@ pub enum GsxNode {
     },
     /// `<> children </>` (§3.2).
     Fragment {
-        /// Children.
+        /// `Children`.
         children: Vec<GsxChild>,
     },
 }
@@ -149,8 +149,8 @@ pub struct GsxResult {
 
 /// Convert the top-level `Gsx*` nodes of a parse tree into the GSX AST.
 ///
-/// A view body is a sequence of elements (`fn CounterView(s: &S) -> View {
-/// <section>…</section> }`); when the body holds several sibling elements
+/// A view body is a sequence of elements; e.g. a view fn whose body is
+/// `<section>…</section>`. When the body holds several sibling elements
 /// they are wrapped in a synthetic fragment (§3.2: fragments group children
 /// without a host node).
 pub fn gsx_from_parse(parsed: &glyim_frontend::ParseResult) -> GsxResult {
@@ -593,7 +593,7 @@ pub fn split_text_holes(text: &str) -> Vec<TextPiece> {
 
 /// Parse one hole's source text through the frontend and extract the model.
 fn parse_hole_expr(src: &str) -> Expr {
-    let wrapped = format!("fn __g() {{ let _h = {}; }}", src);
+    let wrapped = format!("fn __g() {{ let _h = {src}; }}");
     let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
     parsed
         .root
@@ -611,7 +611,7 @@ mod tests {
 
     /// Parse GSX source and return (root, diagnostics).
     fn parse_gsx(src: &str) -> (Option<GsxNode>, Vec<GsxDiagnostic>) {
-        let wrapped = format!("fn __g() {{ {} }}", src);
+        let wrapped = format!("fn __g() {{ {src} }}");
         let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
         let g = gsx_from_parse(&parsed);
         (g.root, g.diagnostics)

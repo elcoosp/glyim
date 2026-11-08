@@ -26,7 +26,7 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
         TyKind::Float(ft) => match ft.bit_width() {
             32 => context.f32_type().into(),
             64 => context.f64_type().into(),
-            other => panic!("Unsupported float width {} in TyKind::Float", other),
+            other => panic!("Unsupported float width {other} in TyKind::Float"),
         },
         TyKind::Char => int_type(context, 32).into(),
         TyKind::String => {
@@ -68,12 +68,11 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
             let mut ok = true;
             for a in args {
                 if let glyim_type::GenericArg::Ty(t) = a {
-                    match llvm_type_for_ty(ctx, target_info, context, *t) {
-                        Ok(bt) => fields.push(bt),
-                        Err(_) => {
-                            ok = false;
-                            break;
-                        }
+                    if let Ok(bt) = llvm_type_for_ty(ctx, target_info, context, *t) {
+                        fields.push(bt);
+                    } else {
+                        ok = false;
+                        break;
                     }
                 } else {
                     ok = false;
@@ -104,7 +103,7 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
             // point that exceeds u32::MAX is a genuine codegen error.
             let n = match &count.kind {
                 glyim_type::ConstKind::Uint(n) => {
-                    if *n > u32::MAX as u128 {
+                    if *n > u128::from(u32::MAX) {
                         return Err(vec![GlyimDiagnostic::internal_error(
                             "array count exceeds u32::MAX",
                         )]);
@@ -112,7 +111,7 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
                     *n as u32
                 }
                 glyim_type::ConstKind::Int(n) => {
-                    if *n < 0 || (*n as u128) > u32::MAX as u128 {
+                    if *n < 0 || (*n as u128) > u128::from(u32::MAX) {
                         return Err(vec![GlyimDiagnostic::internal_error(
                             "array count is negative or exceeds u32::MAX",
                         )]);
@@ -164,9 +163,7 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
             let is_builtin = (1000..2000).contains(&adt_id.to_raw());
             let adt_def = ctx.adt_def(*adt_id);
             let is_struct = !is_builtin
-                && adt_def
-                    .map(|d| d.kind == glyim_type::adt_def::AdtKind::Struct)
-                    .unwrap_or(false);
+                && adt_def.is_some_and(|d| d.kind == glyim_type::adt_def::AdtKind::Struct);
             if is_struct {
                 let field_tys: Vec<glyim_type::Ty> = adt_def
                     .map(|d| d.fields.iter().map(|f| f.ty).collect())
@@ -187,12 +184,11 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
                 let mut fields: Vec<BasicTypeEnum<'ctx>> = Vec::with_capacity(resolved.len());
                 let mut ok = true;
                 for ft in &resolved {
-                    match llvm_type_for_ty(ctx, target_info, context, *ft) {
-                        Ok(bt) => fields.push(bt),
-                        Err(_) => {
-                            ok = false;
-                            break;
-                        }
+                    if let Ok(bt) = llvm_type_for_ty(ctx, target_info, context, *ft) {
+                        fields.push(bt);
+                    } else {
+                        ok = false;
+                        break;
                     }
                 }
                 if ok {
@@ -279,26 +275,23 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
         }
         TyKind::Param(param) => {
             return Err(vec![GlyimDiagnostic::internal_error(format!(
-                "internal compiler error: TyKind::Param({:?}) reached LLVM codegen – monomorphization should have resolved this",
-                param
+                "internal compiler error: TyKind::Param({param:?}) reached LLVM codegen – monomorphization should have resolved this"
             ))]);
         }
         TyKind::Bound(debruijn, var) => {
             return Err(vec![GlyimDiagnostic::internal_error(format!(
-                "internal compiler error: TyKind::Bound({:?}, {:?}) reached LLVM codegen – binder instantiation failed",
-                debruijn, var
+                "internal compiler error: TyKind::Bound({debruijn:?}, {var:?}) reached LLVM codegen – binder instantiation failed"
             ))]);
         }
         TyKind::Infer(var) => {
             return Err(vec![GlyimDiagnostic::internal_error(format!(
-                "internal compiler error: TyKind::Infer({:?}) reached LLVM codegen – type inference incomplete",
-                var
+                "internal compiler error: TyKind::Infer({var:?}) reached LLVM codegen – type inference incomplete"
             ))]);
         }
     })
 }
 
-fn int_type<'ctx>(context: &'ctx Context, bits: u32) -> IntType<'ctx> {
+fn int_type(context: &Context, bits: u32) -> IntType<'_> {
     let non_zero = NonZeroU32::new(bits).unwrap_or_else(|| NonZeroU32::new(64).unwrap());
     context.custom_width_int_type(non_zero).unwrap()
 }

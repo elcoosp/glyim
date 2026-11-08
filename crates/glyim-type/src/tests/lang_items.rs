@@ -23,7 +23,7 @@ fn require_missing_is_error() {
     let items = LangItems::default();
     match items.require(LangItem::Option) {
         Err(LangItemError::Missing(LangItem::Option)) => {}
-        other => panic!("expected Missing(Option), got {:?}", other),
+        other => panic!("expected Missing(Option), got {other:?}"),
     }
     assert_eq!(items.get(LangItem::Option), None);
 }
@@ -42,7 +42,7 @@ fn duplicate_distinct_def_id_errors() {
             assert_eq!(existing, def(0, 1));
             assert_eq!(new, def(0, 2));
         }
-        other => panic!("expected Duplicate, got {:?}", other),
+        other => panic!("expected Duplicate, got {other:?}"),
     }
 }
 

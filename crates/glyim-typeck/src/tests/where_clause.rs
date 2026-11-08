@@ -19,7 +19,7 @@ fn dummy_span() -> Span {
     Span::DUMMY
 }
 
-/// Build a CrateDefMap with the given names registered as types in the root scope.
+/// Build a `CrateDefMap` with the given names registered as types in the root scope.
 fn build_def_map_with_names(
     interner: &mut Interner,
     krate: CrateId,
@@ -54,13 +54,13 @@ fn build_def_map_with_names(
         modules,
         krate,
         interner: interner.clone(),
-        variant_map: Default::default(),
+        variant_map: std::collections::HashMap::default(),
         max_local_def_id: 0,
-        def_to_module: Default::default(),
+        def_to_module: std::collections::HashMap::default(),
     }
 }
 
-/// Build a minimal CrateHir with one function item.
+/// Build a minimal `CrateHir` with one function item.
 fn build_simple_hir(
     inter: &mut Interner,
     generic_params: Vec<GenericParam>,
@@ -73,7 +73,7 @@ fn build_simple_hir(
         items: IndexVec::new(),
         bodies: IndexVec::new(),
         body_owners: IndexVec::new(),
-        interner: Default::default(),
+        interner: Interner::default(),
     };
     let mut exprs = IndexVec::new();
     for e in body_exprs {
@@ -415,7 +415,6 @@ fn t07_where_bound_not_satisfied_error() {
     assert_has_errors(&result.diagnostics);
 }
 
-/// Build a CrateDefMap where `mod_name::trait_name` is resolvable: a child
 /// module whose scope contains the trait name mapped to `trait_local_id`.
 fn build_def_map_with_nested_trait(
     interner: &mut Interner,
@@ -471,9 +470,9 @@ fn build_def_map_with_nested_trait(
         modules,
         krate,
         interner: interner.clone(),
-        variant_map: Default::default(),
+        variant_map: std::collections::HashMap::default(),
         max_local_def_id: 0,
-        def_to_module: Default::default(),
+        def_to_module: std::collections::HashMap::default(),
     }
 }
 

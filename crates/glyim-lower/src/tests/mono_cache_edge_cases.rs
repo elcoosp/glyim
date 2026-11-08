@@ -14,7 +14,7 @@ fn dummy_body() -> Arc<Body> {
     )))
 }
 
-/// Verify MonoItemId values are sequential starting from 0.
+/// Verify `MonoItemId` values are sequential starting from 0.
 #[test]
 fn sequential_mono_item_ids() {
     let mut ty_ctx = test_ty_ctx();
@@ -53,9 +53,11 @@ fn lookup_nonexistent_returns_none() {
         def_id: FnDefId::from_raw(1),
         substs: empty_subst,
     };
-    ctx.collect(&[item.clone()], &|_def_id, _substs| dummy_body(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| dummy_body(),
+        &|_ty| dummy_body(),
+    );
 
     let other = MonoItem::Fn {
         def_id: FnDefId::from_raw(999),
@@ -67,7 +69,7 @@ fn lookup_nonexistent_returns_none() {
     );
 }
 
-/// Same DefId with different kinds (Fn vs Const) are distinct items.
+/// Same `DefId` with different kinds (Fn vs Const) are distinct items.
 #[test]
 fn same_def_id_different_kinds() {
     let mut ty_ctx = test_ty_ctx();
@@ -172,17 +174,18 @@ fn symbol_names_generated() {
     let item = MonoItem::Static {
         def_id: StaticDefId::from_raw(42),
     };
-    ctx.collect(&[item.clone()], &|_def_id, _substs| dummy_body(), &|_ty| {
-        dummy_body()
-    });
+    ctx.collect(
+        std::slice::from_ref(&item),
+        &|_def_id, _substs| dummy_body(),
+        &|_ty| dummy_body(),
+    );
 
     let id = ctx.lookup(&item).expect("should find item");
     let symbol = &ctx.items()[id.to_raw() as usize].symbol;
     assert!(!symbol.is_empty(), "symbol should not be empty");
     assert!(
         symbol.contains("42"),
-        "symbol should contain the DefId index: got {}",
-        symbol
+        "symbol should contain the DefId index: got {symbol}"
     );
 }
 

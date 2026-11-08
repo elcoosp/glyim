@@ -24,7 +24,7 @@ fn unary_negation_lowers_correctly() {
     );
     let body = b.into_body(vec![thir::Stmt::Expr { expr: neg_expr }], vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn unary_not_lowers_correctly() {
     );
     let body = b.into_body(vec![thir::Stmt::Expr { expr: not_expr }], vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }
 
 #[test]
@@ -71,5 +71,5 @@ fn unary_deref_lowers_correctly() {
     );
     let body = b.into_body(vec![thir::Stmt::Expr { expr: deref_expr }], vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }

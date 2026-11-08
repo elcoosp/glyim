@@ -1,5 +1,5 @@
 //! S12-T03: Auto trait computation identifies Send/Sync correctly.
-//! Comprehensive tests for auto trait flags through TypeLookup, TyCtxMut, and TyCtx.
+//! Comprehensive tests for auto trait flags through `TypeLookup`, `TyCtxMut`, and `TyCtx`.
 
 use glyim_core::def_id::AdtId;
 use glyim_core::primitives::{IntTy, Mutability};

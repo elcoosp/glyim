@@ -21,6 +21,7 @@ use std::sync::Arc;
 use glyim_db::Database;
 use glyim_mir_interp::Interpreter;
 use glyim_pipeline::compile_file_to_mir;
+use std::fmt::Write as _;
 
 fn compile_and_run_struct_with_drop(src: &str) -> Result<(), String> {
     // Each call writes its source to a temp file the pipeline reads back. The
@@ -32,7 +33,7 @@ fn compile_and_run_struct_with_drop(src: &str) -> Result<(), String> {
     let call_id = CALL_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let unique_tag = format!("{}_{}", std::process::id(), call_id);
     let dir = std::env::temp_dir();
-    let path = dir.join(format!("glyim_struct_drop_{}.g", unique_tag));
+    let path = dir.join(format!("glyim_struct_drop_{unique_tag}.g"));
 
     {
         let mut f = std::fs::File::create(&path).map_err(|e| e.to_string())?;
@@ -49,7 +50,7 @@ fn compile_and_run_struct_with_drop(src: &str) -> Result<(), String> {
     let mir = compile_file_to_mir(&mut db, &path).map_err(|diags| {
         diags
             .iter()
-            .map(|d| format!("{:?}", d))
+            .map(|d| format!("{d:?}"))
             .collect::<Vec<_>>()
             .join("\n")
     })?;
@@ -77,7 +78,7 @@ fn compile_and_run_struct_with_drop(src: &str) -> Result<(), String> {
     }
     interp
         .run_body(main_body)
-        .map_err(|e| format!("interpreter error: {}", e))
+        .map_err(|e| format!("interpreter error: {e}"))
 }
 
 #[test]
@@ -88,7 +89,7 @@ fn struct_with_drop_runs_via_real_pipeline_and_interpreter() {
     // `[bool; N]` flag-array type inside the arena-sharing `TyCtxMut`) and for
     // the resulting MIR to run in the interpreter without the cross-context
     // OOB panic that the old per-context `Vec` design produced.
-    let src = r#"
+    let src = r"
 trait Drop {
     fn drop(&mut self);
 }
@@ -107,7 +108,7 @@ fn main() {
     let _a = WithDrop { id: 1 };
     let _b = WithDrop { id: 2 };
 }
-"#;
+";
     compile_and_run_struct_with_drop(src)
         .expect("struct-with-Drop must compile + run without the cross-context OOB panic");
 }
@@ -119,7 +120,7 @@ fn struct_with_drop_and_array_field_runs() {
     // `main`. Uses plain `i32` fields (nested-struct field resolution is a
     // separate, out-of-scope type-checker concern) — the point is that every
     // synthesized `[bool; N]` flag-array handle stays valid across contexts.
-    let src = r#"
+    let src = r"
 trait Drop {
     fn drop(&mut self);
 }
@@ -149,7 +150,7 @@ fn main() {
     let _b = B { y: 2 };
     let _c = A { x: 3 };
 }
-"#;
+";
     compile_and_run_struct_with_drop(src).expect(
         "struct-with-multiple-drop-impls must compile + run without the cross-context OOB panic",
     );
@@ -163,7 +164,7 @@ fn compile_and_run_for_loop(src: &str) -> Result<i128, String> {
     let call_id = CALL_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let unique_tag = format!("{}_{}", std::process::id(), call_id);
     let dir = std::env::temp_dir();
-    let path = dir.join(format!("glyim_for_loop_{}.g", unique_tag));
+    let path = dir.join(format!("glyim_for_loop_{unique_tag}.g"));
 
     {
         let mut f = std::fs::File::create(&path).map_err(|e| e.to_string())?;
@@ -180,7 +181,7 @@ fn compile_and_run_for_loop(src: &str) -> Result<i128, String> {
     let mir = compile_file_to_mir(&mut db, &path).map_err(|diags| {
         diags
             .iter()
-            .map(|d| format!("{:?}", d))
+            .map(|d| format!("{d:?}"))
             .collect::<Vec<_>>()
             .join("\n")
     })?;
@@ -206,18 +207,19 @@ fn compile_and_run_for_loop(src: &str) -> Result<i128, String> {
     }
     interp.run_body(main_body).map_err(|e| {
         let mut s = String::new();
-        s.push_str(&format!("interpreter error: {}\n", e));
+        let _ = writeln!(s, "interpreter error: {e}");
         for b in &bodies {
-            s.push_str(&format!(
+            let _ = write!(
+                s,
                 "BODY owner={:?} arg_count={} n_locals={}:\n{:#?}\n",
                 b.owner,
                 b.arg_count,
                 b.locals.len(),
                 b
-            ));
+            );
         }
-        s.push_str(&format!("MAIN BODY:\n{:#?}\n", main_body));
-        eprintln!("{}", s);
+        let _ = write!(s, "MAIN BODY:\n{main_body:#?}\n");
+        eprintln!("{s}");
         s
     })?;
 
@@ -226,7 +228,7 @@ fn compile_and_run_for_loop(src: &str) -> Result<i128, String> {
         .ok_or_else(|| "no return value from main".to_string())?;
     match ret {
         glyim_mir_interp::InterpValue::Int(v) => Ok(v),
-        other => Err(format!("main returned non-int value: {:?}", other)),
+        other => Err(format!("main returned non-int value: {other:?}")),
     }
 }
 
@@ -238,7 +240,7 @@ fn for_loop_iterates_multiple_times_via_pipeline() {
     // one-iteration fallback. Proof: the loop sums 0..5 via a custom iterator;
     // the fallback would bind the *whole iterable* to the pattern and run the
     // body once (sum == 0), whereas a correct iterator yields 0+1+2+3+4 == 10.
-    let src = r#"
+    let src = r"
 enum Option<T> {
     None,
     Some(T),
@@ -275,7 +277,7 @@ fn main() -> i32 {
     }
     return sum;
 }
-"#;
+";
     let result = compile_and_run_for_loop(src)
         .expect("for-loop program must compile + run through the real pipeline");
     assert_eq!(

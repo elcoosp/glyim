@@ -9,7 +9,6 @@ use glyim_span::Span;
 use glyim_type::{ImplPolarity, Substitution, Ty, TyCtxMut};
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub struct ResolvedImplHeader {
     pub trait_def_id: Option<TraitDefId>,
     pub trait_name: Option<Name>,
@@ -22,12 +21,8 @@ pub struct ResolvedImplHeader {
 }
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 struct RegisteredImpl {
-    trait_def_id: TraitDefId,
     self_ty: Ty,
-    self_type_name: Option<Name>,
-    is_blanket: bool,
     polarity: ImplPolarity,
     span: Span,
 }
@@ -136,7 +131,6 @@ impl<'a> CoherenceChecker<'a> {
     }
 
     /// Checks if a type is a blanket impl (contains a type parameter).
-
     /// Resolve a name in any module of the crate, recursively.
     fn resolve_name_in_any_module(&self, name: Name) -> Option<glyim_core::def_id::LocalDefId> {
         let mut stack = vec![self.def_map.root];
@@ -150,14 +144,6 @@ impl<'a> CoherenceChecker<'a> {
             }
         }
         None
-    }
-
-    /// Returns true if there is a negative impl for the given trait and self type.
-    #[allow(dead_code)]
-    fn has_negative_impl(&self, trait_def_id: TraitDefId, self_ty: Ty) -> bool {
-        self.negative_impls
-            .iter()
-            .any(|(tid, ty)| *tid == trait_def_id && *ty == self_ty)
     }
 
     pub fn check_and_register(
@@ -199,15 +185,14 @@ impl<'a> CoherenceChecker<'a> {
             return Ok(());
         }
 
-        let trait_str = header
-            .trait_def_id
-            .map(|id| format!("trait #{}", id.to_raw()))
-            .unwrap_or_else(|| "<unresolved>".to_string());
+        let trait_str = header.trait_def_id.map_or_else(
+            || "<unresolved>".to_string(),
+            |id| format!("trait #{}", id.to_raw()),
+        );
         let self_str = format!("{:?}", header.self_ty);
 
         let msg = format!(
-            "orphan rule violation: cannot implement foreign {} for foreign type {}",
-            trait_str, self_str,
+            "orphan rule violation: cannot implement foreign {trait_str} for foreign type {self_str}",
         );
         Err(vec![GlyimDiagnostic::type_error(header.span, msg)])
     }
@@ -256,12 +241,12 @@ impl<'a> CoherenceChecker<'a> {
         new: &ResolvedImplHeader,
         old: &RegisteredImpl,
     ) -> Vec<GlyimDiagnostic> {
-        let trait_str = new
-            .trait_def_id
-            .map(|id| format!("trait #{}", id.to_raw()))
-            .unwrap_or_else(|| "<inherent>".to_string());
+        let trait_str = new.trait_def_id.map_or_else(
+            || "<inherent>".to_string(),
+            |id| format!("trait #{}", id.to_raw()),
+        );
 
-        let msg = format!("conflicting implementations of {}", trait_str);
+        let msg = format!("conflicting implementations of {trait_str}");
         let mut diag = GlyimDiagnostic::type_error(new.span, msg);
         diag = diag.with_sub(SubDiagnostic {
             severity: DiagSeverity::Note,
@@ -271,8 +256,8 @@ impl<'a> CoherenceChecker<'a> {
         vec![diag]
     }
 
-    /// Compatibility helper for tests — uses the polarity parameter.
-    #[allow(dead_code)]
+    /// Compatibility helper for tests — overrides the polarity parameter.
+    #[cfg(test)]
     pub(crate) fn check_and_register_impl_compat(
         &mut self,
         header: &ResolvedImplHeader,
@@ -291,8 +276,6 @@ impl<'a> CoherenceChecker<'a> {
             None => return,
         };
 
-        let is_blanket = !header.generic_param_names.is_empty();
-
         let polarity = header.polarity;
 
         if polarity == ImplPolarity::Negative {
@@ -303,10 +286,7 @@ impl<'a> CoherenceChecker<'a> {
             .entry(trait_def_id)
             .or_default()
             .push(RegisteredImpl {
-                trait_def_id,
                 self_ty: header.self_ty,
-                self_type_name: header.self_type_name,
-                is_blanket,
                 polarity,
                 span: header.span,
             });

@@ -521,7 +521,7 @@ fn t28_multiple_traits_registered() {
     for i in 0..5 {
         ctx.register_trait(TraitDef {
             def_id: TraitDefId::from_raw(100 + i),
-            name: interner.intern(&format!("Trait{}", i)),
+            name: interner.intern(&format!("Trait{i}")),
             associated_types: vec![],
             predicates: vec![],
         });
@@ -578,7 +578,7 @@ fn t33_register_many_traits_and_impls() {
         let tid = TraitDefId::from_raw(1000 + i);
         ctx.register_trait(TraitDef {
             def_id: tid,
-            name: interner.intern(&format!("Trait{}", i)),
+            name: interner.intern(&format!("Trait{i}")),
             associated_types: vec![],
             predicates: vec![],
         });
@@ -844,7 +844,7 @@ fn t61_trait_def_with_many_associated_types() {
     let interner = Interner::new();
     let mut ctx = TraitContext::new();
     let assoc: Vec<_> = (0..10)
-        .map(|i| interner.intern(&format!("Assoc{}", i)))
+        .map(|i| interner.intern(&format!("Assoc{i}")))
         .collect();
     ctx.register_trait(TraitDef {
         def_id: TraitDefId::from_raw(61),

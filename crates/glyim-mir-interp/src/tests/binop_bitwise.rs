@@ -3,7 +3,7 @@ use glyim_core::{BinOp, CrateId, DefId, IndexVec, LocalDefId, Mutability};
 use glyim_mir::*;
 use glyim_type::Ty;
 
-/// Helper: build a body that computes left_val OP right_val and returns the result.
+/// Helper: build a body that computes `left_val` OP `right_val` and returns the result.
 fn build_binop_body_int(op: BinOp, left: i128, right: i128) -> Body {
     let crate_id = CrateId::from_raw(0);
     let local_def_id = LocalDefId::from_raw(0);
@@ -267,7 +267,7 @@ fn run_int_body(body: &Body) -> InterpValue {
     let ctx = glyim_test::test_frozen_ty_ctx();
     let mut interp = Interpreter::new(&ctx);
     let result = interp.run_body(body);
-    assert!(result.is_ok(), "run_body failed: {:?}", result);
+    assert!(result.is_ok(), "run_body failed: {result:?}");
     interp
         .get_local_value(LocalIdx::from_raw(0))
         .cloned()

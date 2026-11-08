@@ -10,7 +10,7 @@ static COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn unique_name(base: &str) -> String {
     let id = COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{}-{}", base, id)
+    format!("{base}-{id}")
 }
 
 fn create_hello_world_project(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
@@ -36,7 +36,7 @@ fn s23_t01_build_compiles_hello_world() {
             // but the build process reached the compilation stage.
         }
         Err(other) => {
-            panic!("unexpected error: {:?}", other);
+            panic!("unexpected error: {other:?}");
         }
     }
 }
@@ -60,7 +60,7 @@ fn s23_t02_second_build_is_incremental() {
             cache.mark_built().unwrap();
         }
         Err(other) => {
-            panic!("unexpected error: {:?}", other);
+            panic!("unexpected error: {other:?}");
         }
     }
 
@@ -155,7 +155,7 @@ fn build_with_target_triple() {
             // Compilation may fail, but target should be accepted
         }
         Err(other) => {
-            panic!("unexpected error for --target: {:?}", other);
+            panic!("unexpected error for --target: {other:?}");
         }
     }
 }
@@ -182,7 +182,7 @@ fn build_release_with_target() {
         }
         Err(GlyipError::BuildFailed(_)) => {}
         Err(other) => {
-            panic!("unexpected error: {:?}", other);
+            panic!("unexpected error: {other:?}");
         }
     }
 }

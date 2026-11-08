@@ -1,12 +1,11 @@
 //! One-fixture probe: run the MIR interpreter against a single run-pass
-//! fixture with GLYIM_INTERP_TRACE=1 to capture a clean (un-interleaved)
+//! fixture with `GLYIM_INTERP_TRACE=1` to capture a clean (un-interleaved)
 //! trace. Not part of the regular suite — meant for debugging.
 //!
 //! Usage:
-//!   GLYIM_INTERP_TRACE=1 cargo test -p glyim-test --features real-llvm \
-//!     --test probe_single -- --nocapture
+//!   `GLYIM_INTERP_TRACE=1` cargo test -p glyim-test --features real-llvm \
+//!     --test `probe_single` -- --nocapture
 #![cfg(feature = "real-llvm")]
-
 use glyim_test::harness::compiler::{PipelineCompiler, TestCompiler};
 use glyim_test::harness::interpreter_runner::InterpRunner;
 use glyim_test::mock::MockCodegen;
@@ -14,7 +13,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 fn probe(fixture: &str, flags: &[&str]) {
-    eprintln!("\n========== PROBE: {} ==========", fixture);
+    eprintln!("\n========== PROBE: {fixture} ==========");
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join(fixture);

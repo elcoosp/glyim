@@ -152,10 +152,9 @@ fn xref_probe_cross_frame_mut_self_deref() {
     );
     let main_body = interp.function_table.get(&main_id).unwrap().clone();
     let res = interp.run_body(&main_body);
-    println!("XREF_PROBE_RESULT={:?}", res);
+    println!("XREF_PROBE_RESULT={res:?}");
     assert!(
         res.is_ok(),
-        "cross-frame &mut self deref must work: {:?}",
-        res
+        "cross-frame &mut self deref must work: {res:?}"
     );
 }

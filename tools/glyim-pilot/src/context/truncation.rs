@@ -1,7 +1,8 @@
 //! Smart truncation preserving structural lines (functions, modules, etc.)
 //! Uses brace depth and comment/string skipping.
 
-/// smart_truncate.
+/// `smart_truncate`.
+#[must_use]
 pub fn smart_truncate(content: &str, max_lines: usize) -> String {
     let lines: Vec<&str> = content.lines().collect();
     if lines.len() <= max_lines {
@@ -178,7 +179,7 @@ mod tests {
         let truncated = smart_truncate(input, 3);
         assert!(truncated.contains("fn main() {"));
         assert!(truncated.contains("..."));
-        assert!(truncated.contains("}"));
+        assert!(truncated.contains('}'));
         assert!(truncated.lines().count() <= 5);
     }
 

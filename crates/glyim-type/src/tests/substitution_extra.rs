@@ -53,7 +53,7 @@ fn substitution_mixed_args() {
 #[test]
 fn substitution_debug_format() {
     let sub = Substitution::from_raw(5, 3);
-    let debug = format!("{:?}", sub);
+    let debug = format!("{sub:?}");
     assert!(debug.contains("index=5"));
     assert!(debug.contains("len=3"));
 }

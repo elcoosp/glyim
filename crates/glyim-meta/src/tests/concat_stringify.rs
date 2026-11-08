@@ -26,8 +26,8 @@ fn register_builtin(expander: &mut Expander, name: &str, handler: BuiltinMacro) 
     expander.register_macro(macro_def);
 }
 
-/// Build a SyntaxNode argument for concat! containing mixed tokens.
-/// E.g. concat!("a", 1, "+") produces tokens: StringLit "a", Comma, IntLit 1, Comma, StringLit "+"
+/// Build a `SyntaxNode` argument for concat! containing mixed tokens.
+/// E.g. concat!("a", 1, "+") produces tokens: `StringLit` "a", Comma, `IntLit` 1, Comma, `StringLit` "+"
 fn build_concat_args_mixed() -> SyntaxNode {
     let mut builder = rowan::GreenNodeBuilder::new();
     builder.start_node(GlyimLang::kind_to_raw(SyntaxKind::TokenTree));
@@ -42,7 +42,7 @@ fn build_concat_args_mixed() -> SyntaxNode {
     SyntaxNode::new_root(builder.finish())
 }
 
-/// Build a SyntaxNode argument for stringify!(foo(bar))
+/// Build a `SyntaxNode` argument for stringify!(foo(bar))
 /// Produces flat tokens: (, foo, (, bar, ), )
 fn build_stringify_foo_bar() -> SyntaxNode {
     let mut builder = rowan::GreenNodeBuilder::new();
@@ -57,7 +57,7 @@ fn build_stringify_foo_bar() -> SyntaxNode {
     SyntaxNode::new_root(builder.finish())
 }
 
-/// Build a SyntaxNode argument for stringify!(concat!("a", "b"))
+/// Build a `SyntaxNode` argument for stringify!(concat!("a", "b"))
 /// Produces flat tokens: (, concat, !, (, "a", ,, "b", ), )
 fn build_stringify_concat_ab() -> SyntaxNode {
     let mut builder = rowan::GreenNodeBuilder::new();
@@ -96,8 +96,7 @@ fn concat_mixed_args() {
     let text = expanded.text().to_string();
     assert!(
         text.contains("\"a1+\""),
-        "Expected concat!(\"a\", 1, \"+\") to produce \"a1+\", got: {}",
-        text
+        "Expected concat!(\"a\", 1, \"+\") to produce \"a1+\", got: {text}"
     );
 }
 
@@ -122,8 +121,7 @@ fn stringify_foo_bar() {
     let text = expanded.text().to_string();
     assert!(
         text.contains("foo (bar)"),
-        "Expected stringify!(foo(bar)) to contain 'foo (bar)', got: {}",
-        text
+        "Expected stringify!(foo(bar)) to contain 'foo (bar)', got: {text}"
     );
 }
 
@@ -149,14 +147,12 @@ fn stringify_concat_ab() {
     // The expanded StringLit token contains escaped inner quotes: \"a\" and \"b\"
     assert!(
         text.contains("concat"),
-        "Expected stringify!(concat!(\"a\", \"b\")) to contain 'concat'; got: {}",
-        text
+        "Expected stringify!(concat!(\"a\", \"b\")) to contain 'concat'; got: {text}"
     );
     // Tier 4.4 correction: the old buggy spacing inserted spaces around the
     // quoted args (`concat ! ( "a" , "b" )`). The fixed output must not.
     assert!(
         !text.contains("\"a\" ,") && !text.contains(", \"b\""),
-        "stringify! must not insert space around quoted args' commas; got: {}",
-        text
+        "stringify! must not insert space around quoted args' commas; got: {text}"
     );
 }

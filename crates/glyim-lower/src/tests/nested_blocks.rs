@@ -41,7 +41,7 @@ fn deeply_nested_blocks_lower_correctly() {
     );
     let body = b.into_body(vec![thir::Stmt::Expr { expr: outer }], vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }
 
 #[test]
@@ -77,5 +77,5 @@ fn block_with_multiple_statements() {
     stmts.push(thir::Stmt::Expr { expr: sum });
     let body = b.into_body(stmts, vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }

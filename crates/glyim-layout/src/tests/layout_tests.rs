@@ -102,8 +102,7 @@ fn s04_t13_layout_dyn_is_unsized() {
     // Now dyn Trait is laid out as fat pointer (data + vtable), not unsized
     assert!(
         result.is_ok(),
-        "Expected fat pointer layout, got {:?}",
-        result
+        "Expected fat pointer layout, got {result:?}"
     );
     let layout = result.unwrap();
     let ptr_size = computer.ptr_size();

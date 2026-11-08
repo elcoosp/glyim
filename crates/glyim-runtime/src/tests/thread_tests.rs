@@ -29,8 +29,7 @@ fn thread_yield_and_sleep() {
     // Should have slept at least 40ms (allowing for scheduling variance)
     assert!(
         elapsed >= Duration::from_millis(40),
-        "Sleep was too short: {:?}",
-        elapsed
+        "Sleep was too short: {elapsed:?}"
     );
 
     // Yield should not panic and should return quickly
@@ -61,7 +60,7 @@ fn thread_current_id_and_parallelism() {
     assert_eq!(id1, id2, "Same thread should have same ID");
 
     let parallelism = thread::available_parallelism()
-        .map(|n| n.get())
+        .map(std::num::NonZeroUsize::get)
         .unwrap_or(1);
     assert!(parallelism >= 1, "Should have at least 1 parallelism");
 }

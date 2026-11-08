@@ -1,5 +1,5 @@
-//! S12-T02: TypeLookup::field_ty resolves ADT fields via default impl,
-//! and TyCtxMut/TyCtx field_ty methods work correctly.
+//! S12-T02: `TypeLookup::field_ty` resolves ADT fields via default impl,
+//! and TyCtxMut/TyCtx `field_ty` methods work correctly.
 
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::AdtId;
@@ -153,7 +153,7 @@ impl TypeLookup for MinimalTypeLookup {
     fn substitution_args(&self, _sub: Substitution) -> &[GenericArg] {
         &[]
     }
-    fn name_str(&self, _name: glyim_core::interner::Name) -> &str {
+    fn name_str(&self, _name: glyim_core::interner::Name) -> &'static str {
         ""
     }
     fn error_ty(&self) -> Ty {

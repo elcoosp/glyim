@@ -109,13 +109,11 @@ fn v29_t05_bool_switch_only_true_branch() {
 
     assert!(
         ir.contains("switch i1"),
-        "Expected LLVM switch for bool switch with only true branch, got:\n{}",
-        ir
+        "Expected LLVM switch for bool switch with only true branch, got:\n{ir}"
     );
     assert!(
         !ir.contains("switch_eq_0"),
-        "Expected no 'switch_eq_0' label for production switch, got:\n{}",
-        ir
+        "Expected no 'switch_eq_0' label for production switch, got:\n{ir}"
     );
 }
 
@@ -134,8 +132,7 @@ fn v29_t06_bool_switch_only_false_branch() {
 
     assert!(
         ir.contains("switch i1"),
-        "Expected LLVM switch for bool switch with only false branch, got:\n{}",
-        ir
+        "Expected LLVM switch for bool switch with only false branch, got:\n{ir}"
     );
 }
 
@@ -151,8 +148,7 @@ fn v29_t07_empty_switch_always_default() {
 
     assert!(
         ir.contains("br label"),
-        "Expected unconditional branch for empty switch, got:\n{}",
-        ir
+        "Expected unconditional branch for empty switch, got:\n{ir}"
     );
 }
 
@@ -177,13 +173,11 @@ fn v29_t08_u8_switch_medium_range() {
 
     assert!(
         ir.contains("switch"),
-        "Expected LLVM switch for u8 medium-range switch (5 cases), got:\n{}",
-        ir
+        "Expected LLVM switch for u8 medium-range switch (5 cases), got:\n{ir}"
     );
     assert!(
         ir.contains("i8"),
-        "Expected i8 type in switch for u8 discriminant, got:\n{}",
-        ir
+        "Expected i8 type in switch for u8 discriminant, got:\n{ir}"
     );
 }
 
@@ -198,7 +192,7 @@ fn v29_t09_u64_switch_large_values() {
             (1000u128, BasicBlockIdx::from_raw(2)),
             (1000000u128, BasicBlockIdx::from_raw(3)),
             (999999999u128, BasicBlockIdx::from_raw(4)),
-            (u64::MAX as u128, BasicBlockIdx::from_raw(5)),
+            (u128::from(u64::MAX), BasicBlockIdx::from_raw(5)),
         ]),
         BasicBlockIdx::from_raw(6),
     );
@@ -208,13 +202,11 @@ fn v29_t09_u64_switch_large_values() {
 
     assert!(
         ir.contains("switch"),
-        "Expected LLVM switch for u64 large values, got:\n{}",
-        ir
+        "Expected LLVM switch for u64 large values, got:\n{ir}"
     );
     assert!(
         ir.contains("i64"),
-        "Expected i64 type in switch for u64 discriminant, got:\n{}",
-        ir
+        "Expected i64 type in switch for u64 discriminant, got:\n{ir}"
     );
 }
 
@@ -239,8 +231,7 @@ fn v29_t10_i64_signed_switch() {
 
     assert!(
         ir.contains("switch"),
-        "Expected LLVM switch for i64 signed switch (5 cases), got:\n{}",
-        ir
+        "Expected LLVM switch for i64 signed switch (5 cases), got:\n{ir}"
     );
 }
 
@@ -256,8 +247,7 @@ fn v29_t11_bool_switch_empty_branches() {
 
     assert!(
         ir.contains("br label"),
-        "Expected unconditional branch for empty bool switch, got:\n{}",
-        ir
+        "Expected unconditional branch for empty bool switch, got:\n{ir}"
     );
 }
 
@@ -280,23 +270,19 @@ fn v29_t12_three_case_switch_uses_llvm_switch() {
 
     assert!(
         ir.contains("switch"),
-        "Expected LLVM switch for 3-case switch, got:\n{}",
-        ir
+        "Expected LLVM switch for 3-case switch, got:\n{ir}"
     );
     assert!(
         ir.contains("i32 5"),
-        "Expected case i32 5 in switch, got:\n{}",
-        ir
+        "Expected case i32 5 in switch, got:\n{ir}"
     );
     assert!(
         ir.contains("i32 10"),
-        "Expected case i32 10 in switch, got:\n{}",
-        ir
+        "Expected case i32 10 in switch, got:\n{ir}"
     );
     assert!(
         ir.contains("i32 15"),
-        "Expected case i32 15 in switch, got:\n{}",
-        ir
+        "Expected case i32 15 in switch, got:\n{ir}"
     );
 }
 
@@ -320,8 +306,7 @@ fn v29_t13_four_case_switch_uses_llvm_switch() {
 
     assert!(
         ir.contains("switch"),
-        "Expected LLVM switch for 4-case switch (exceeds small switch threshold), got:\n{}",
-        ir
+        "Expected LLVM switch for 4-case switch (exceeds small switch threshold), got:\n{ir}"
     );
 }
 
@@ -344,8 +329,7 @@ fn v29_t14_switch_with_same_target_blocks() {
 
     assert!(
         ir.contains("icmp eq") || ir.contains("switch"),
-        "Expected icmp or switch for same-target switch, got:\n{}",
-        ir
+        "Expected icmp or switch for same-target switch, got:\n{ir}"
     );
 }
 
@@ -364,18 +348,15 @@ fn v29_t15_single_case_switch_icmp() {
 
     assert!(
         ir.contains("switch i32"),
-        "Expected LLVM switch for single-case switch, got:\n{}",
-        ir
+        "Expected LLVM switch for single-case switch, got:\n{ir}"
     );
     assert!(
         !ir.contains("switch_eq"),
-        "Expected no switch_eq label for production switch, got:\n{}",
-        ir
+        "Expected no switch_eq label for production switch, got:\n{ir}"
     );
     assert!(
         ir.contains("i32 42"),
-        "Expected case value 42 in switch, got:\n{}",
-        ir
+        "Expected case value 42 in switch, got:\n{ir}"
     );
 }
 
@@ -397,18 +378,15 @@ fn v29_t16_two_case_switch_icmp_ladder() {
 
     assert!(
         ir.contains("switch i32"),
-        "Expected LLVM switch for 2-case small switch, got:\n{}",
-        ir
+        "Expected LLVM switch for 2-case small switch, got:\n{ir}"
     );
     assert!(
         !ir.contains("switch_eq_0"),
-        "Expected no switch_eq_0 label, got:\n{}",
-        ir
+        "Expected no switch_eq_0 label, got:\n{ir}"
     );
     assert!(
         !ir.contains("switch_eq_1"),
-        "Expected no switch_eq_1 label, got:\n{}",
-        ir
+        "Expected no switch_eq_1 label, got:\n{ir}"
     );
 }
 
@@ -430,8 +408,7 @@ fn v29_t17_switch_with_zero_case_value() {
 
     assert!(
         ir.contains("switch i32"),
-        "Expected LLVM switch for zero-case-value switch, got:\n{}",
-        ir
+        "Expected LLVM switch for zero-case-value switch, got:\n{ir}"
     );
 }
 
@@ -454,8 +431,7 @@ fn v29_t18_large_switch_many_cases_all_unique_blocks() {
 
     assert!(
         ir.contains("switch"),
-        "Expected LLVM switch for 50-case switch, got:\n{}",
-        ir
+        "Expected LLVM switch for 50-case switch, got:\n{ir}"
     );
 }
 
@@ -477,8 +453,7 @@ fn v29_t19_bool_switch_both_branches_same_block() {
 
     assert!(
         ir.contains("switch i1"),
-        "Expected LLVM switch for bool switch with same target, got:\n{}",
-        ir
+        "Expected LLVM switch for bool switch with same target, got:\n{ir}"
     );
 }
 
@@ -492,7 +467,7 @@ fn v29_t20_switch_with_max_u32_value() {
             (0u128, BasicBlockIdx::from_raw(1)),
             (1u128, BasicBlockIdx::from_raw(2)),
             (2u128, BasicBlockIdx::from_raw(3)),
-            (u32::MAX as u128, BasicBlockIdx::from_raw(4)),
+            (u128::from(u32::MAX), BasicBlockIdx::from_raw(4)),
             (2147483647u128, BasicBlockIdx::from_raw(5)),
         ]),
         BasicBlockIdx::from_raw(6),
@@ -503,7 +478,6 @@ fn v29_t20_switch_with_max_u32_value() {
 
     assert!(
         ir.contains("switch"),
-        "Expected LLVM switch for large-value i32 switch (5 cases), got:\n{}",
-        ir
+        "Expected LLVM switch for large-value i32 switch (5 cases), got:\n{ir}"
     );
 }

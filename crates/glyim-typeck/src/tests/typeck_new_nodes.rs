@@ -25,7 +25,7 @@ fn compile(src: &str) -> CompileOutput {
 #[test]
 fn match_guard_uses_binding() {
     let output = compile(
-        r#"
+        r"
         enum OptionI32 { None, Some(i32) }
         fn main() {
             let x = OptionI32::Some(5);
@@ -34,7 +34,7 @@ fn match_guard_uses_binding() {
                 _ => {}
             }
         }
-        "#,
+        ",
     );
     assert_no_errors(&output.diagnostics);
 }
@@ -42,14 +42,14 @@ fn match_guard_uses_binding() {
 #[test]
 fn or_pattern_same_types() {
     let output = compile(
-        r#"
+        r"
         fn main() {
             match 1 {
                 1 | 2 => {},
                 _ => {}
             }
         }
-        "#,
+        ",
     );
     assert_no_errors(&output.diagnostics);
 }
@@ -57,14 +57,14 @@ fn or_pattern_same_types() {
 #[test]
 fn range_pattern_integer() {
     let output = compile(
-        r#"
+        r"
         fn main() {
             match 5 {
                 1..=10 => {},
                 _ => {}
             }
         }
-        "#,
+        ",
     );
     assert_no_errors(&output.diagnostics);
 }
@@ -72,7 +72,7 @@ fn range_pattern_integer() {
 #[test]
 fn slice_pattern_array() {
     let output = compile(
-        r#"
+        r"
         fn main() {
             let arr = [1, 2, 3];
             match arr {
@@ -80,7 +80,7 @@ fn slice_pattern_array() {
                 _ => {}
             }
         }
-        "#,
+        ",
     );
     assert_no_errors(&output.diagnostics);
 }
@@ -88,12 +88,12 @@ fn slice_pattern_array() {
 #[test]
 fn index_expression_array() {
     let output = compile(
-        r#"
+        r"
         fn main() {
             let arr = [1, 2, 3];
             let x = arr[0];
         }
-        "#,
+        ",
     );
     assert_no_errors(&output.diagnostics);
 }
@@ -101,13 +101,13 @@ fn index_expression_array() {
 #[test]
 fn struct_literal_with_spread() {
     let output = compile(
-        r#"
+        r"
         struct S { x: i32, y: i32 }
         fn main() {
             let a = S { x: 1, y: 2 };
             let b = S { x: 3, ..a };
         }
-        "#,
+        ",
     );
     assert_no_errors(&output.diagnostics);
 }

@@ -6,31 +6,31 @@ use glyim_type::{Region, Ty, TyKind};
 #[test]
 fn test_ty_assert_is_int() {
     let (ctx, ty) = with_fresh_ty_ctx(|ctx| ctx.mk_ty(TyKind::Int(IntTy::I32)));
-    assert_ty(&ctx, ty).is_int(IntTy::I32);
+    let _ = assert_ty(&ctx, ty).is_int(IntTy::I32);
 }
 
 #[test]
 fn test_ty_assert_is_bool() {
     let (ctx, ty) = with_fresh_ty_ctx(|ctx| ctx.bool_ty());
-    assert_ty(&ctx, ty).is_bool();
+    let _ = assert_ty(&ctx, ty).is_bool();
 }
 
 #[test]
 fn test_ty_assert_is_unit() {
     let (ctx, ty) = with_fresh_ty_ctx(|ctx| ctx.unit_ty());
-    assert_ty(&ctx, ty).is_unit();
+    let _ = assert_ty(&ctx, ty).is_unit();
 }
 
 #[test]
 fn test_ty_assert_is_never() {
     let (ctx, ty) = with_fresh_ty_ctx(|ctx| ctx.never_ty());
-    assert_ty(&ctx, ty).is_never();
+    let _ = assert_ty(&ctx, ty).is_never();
 }
 
 #[test]
 fn test_ty_assert_is_error() {
     let ctx = test_frozen_ty_ctx();
-    assert_ty(&ctx, Ty::ERROR).is_error();
+    let _ = assert_ty(&ctx, Ty::ERROR).is_error();
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn test_ty_assert_chained_ref() {
     let inner = ctx_mut.bool_ty();
     let ref_ty = ctx_mut.mk_ref(Region::Erased, inner, Mutability::Mut);
     let ctx = ctx_mut.freeze();
-    assert_ty(&ctx, ref_ty).is_ref(Mutability::Mut).is_bool();
+    let _ = assert_ty(&ctx, ref_ty).is_ref(Mutability::Mut).is_bool();
 }
 
 #[test]
@@ -48,19 +48,19 @@ fn test_ty_assert_chained_ref_immut() {
     let inner = ctx_mut.unit_ty();
     let ref_ty = ctx_mut.mk_ref(Region::Erased, inner, Mutability::Not);
     let ctx = ctx_mut.freeze();
-    assert_ty(&ctx, ref_ty).is_ref(Mutability::Not).is_unit();
+    let _ = assert_ty(&ctx, ref_ty).is_ref(Mutability::Not).is_unit();
 }
 
 #[test]
 fn test_ty_assert_uint() {
     let (ctx, ty) = with_fresh_ty_ctx(|ctx| ctx.mk_ty(TyKind::Uint(UintTy::U32)));
-    assert_ty(&ctx, ty).is_uint(UintTy::U32);
+    let _ = assert_ty(&ctx, ty).is_uint(UintTy::U32);
 }
 
 #[test]
 fn test_ty_assert_float() {
     let (ctx, ty) = with_fresh_ty_ctx(|ctx| ctx.mk_ty(TyKind::Float(FloatTy::F64)));
-    assert_ty(&ctx, ty).is_float(FloatTy::F64);
+    let _ = assert_ty(&ctx, ty).is_float(FloatTy::F64);
 }
 
 #[test]

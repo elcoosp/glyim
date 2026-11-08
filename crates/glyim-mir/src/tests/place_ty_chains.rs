@@ -1,4 +1,4 @@
-//! Tests for complex projection chains in Place::ty()
+//! Tests for complex projection chains in `Place::ty()`
 
 use crate::*;
 use glyim_core::arena::IndexVec;

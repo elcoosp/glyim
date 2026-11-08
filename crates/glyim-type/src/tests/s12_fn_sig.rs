@@ -1,5 +1,5 @@
-//! S12-T01 extended: Tests for register_fn_sig, fn_sig, register_closure_sig,
-//! closure_sig, register_body_ty, body_ty methods.
+//! S12-T01 extended: Tests for `register_fn_sig`, `fn_sig`, `register_closure_sig`,
+//! `closure_sig`, `register_body_ty`, `body_ty` methods.
 
 use glyim_core::def_id::{ClosureId, FnDefId, LocalDefId, TraitDefId};
 use glyim_core::primitives::{Abi, IntTy, Safety, UintTy};
@@ -79,7 +79,7 @@ fn register_multiple_fn_sigs() {
 
 #[test]
 fn fn_sig_survives_freeze() {
-    let (frozen, _) = with_fresh_ty_ctx(|ctx| {
+    let (frozen, ()) = with_fresh_ty_ctx(|ctx| {
         let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let inputs = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
         let sig = FnSig {
@@ -150,7 +150,7 @@ fn closure_sig_returns_none_for_unregistered() {
 
 #[test]
 fn closure_sig_survives_freeze() {
-    let (frozen, _) = with_fresh_ty_ctx(|ctx| {
+    let (frozen, ()) = with_fresh_ty_ctx(|ctx| {
         let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let inputs = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
         let sig = FnSig {

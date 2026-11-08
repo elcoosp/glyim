@@ -14,6 +14,8 @@
 //! G16: `adopt` (hydration) is generated only for regions containing
 //! handlers or reactive slots; static regions are never walked.
 
+use std::fmt::Write as _;
+
 use crate::analysis::Place;
 use crate::blueprint::{Blueprint, BpOp};
 use crate::interp::{Interp, Value};
@@ -232,7 +234,6 @@ pub struct SsrProgram {
 
 /// One SSR chunk.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
 pub enum SsrChunk {
     /// `&'static str` — memcpy'd (G7).
     Static(String),
@@ -254,8 +255,8 @@ pub enum SsrChunk {
     Region(RegionSsr),
 }
 
-/// A region chunk: the sub-VIRs render_to expands against the state (§6.3).
 #[derive(Debug, Clone)]
+/// Region-level SSR emission plan (design doc §6.4).
 pub enum RegionSsr {
     /// `if/else` arms.
     If {
@@ -266,7 +267,7 @@ pub enum RegionSsr {
     },
     /// `match` arms.
     Match {
-        /// Scrutinee.
+        /// `Scrutinee`.
         scrutinee: crate::expr::Expr,
         /// `(pattern, body)` arms.
         arms: Vec<(String, Vir)>,
@@ -275,7 +276,7 @@ pub enum RegionSsr {
     For {
         /// Loop pattern.
         pat: String,
-        /// Iterable.
+        /// `Iterable`.
         iter: crate::expr::Expr,
         /// Optional key.
         key: Option<crate::expr::Expr>,
@@ -361,7 +362,7 @@ impl SsrProgram {
                 SsrChunk::Listener { event, .. } => {
                     // G16: `adopt` re-attaches the static handler id at this
                     // marker; the SSR itself emits no script.
-                    out.push_str(&format!(" data-on-{}=\"\"", escape_attr_name(event)));
+                    let _ = write!(out, " data-on-{}=\"\"", escape_attr_name(event));
                 }
                 SsrChunk::Region(kind) => match kind {
                     RegionSsr::If { arms, else_body } => {
@@ -427,7 +428,7 @@ fn ssr_node(node: &VirNode, vir: &Vir, p: &mut SsrProgram) {
             children,
             ..
         } => {
-            p.chunks.push(SsrChunk::Static(format!("<{}", tag)));
+            p.chunks.push(SsrChunk::Static(format!("<{tag}")));
             for sp in static_props {
                 p.chunks.push(SsrChunk::Static(format!(
                     " {}=\"{}\"",
@@ -475,7 +476,7 @@ fn ssr_node(node: &VirNode, vir: &Vir, p: &mut SsrProgram) {
             for c in children {
                 ssr_node(c, vir, p);
             }
-            p.chunks.push(SsrChunk::Static(format!("</{}>", tag)));
+            p.chunks.push(SsrChunk::Static(format!("</{tag}")));
         }
         VirNode::Fragment { children } => {
             for c in children {
@@ -564,9 +565,11 @@ pub fn escape_url(s: &str) -> String {
     for b in s.as_bytes() {
         match b {
             b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
-                out.push(*b as char)
+                out.push(*b as char);
             }
-            _ => out.push_str(&format!("%{:02X}", b)),
+            _ => {
+                let _ = write!(out, "%{b:02X}");
+            }
         }
     }
     out
@@ -641,8 +644,8 @@ mod tests {
         VirBuilder::new(VirOptions::default(), &schemas).build(g.root.as_ref().unwrap())
     }
 
-    /// §6.1: the static skeleton encodes to Create/StaticProp/Text/Enter/
-    /// Leave ops with SlotMarkers exactly at dynamic holes.
+    /// §6.1: the static skeleton encodes to `Create`/`StaticProp`/`Text`/`Enter`/
+    /// `Leave` ops with `SlotMarker`s exactly at dynamic holes.
     #[test]
     fn blueprint_encoding_matches_ops() {
         let v =
@@ -663,7 +666,6 @@ mod tests {
     }
 
     /// G17: stream hosts compile no patch code at all — and no mount plan
-    /// beyond the initial fill; retained hosts compile no render_to.
     #[test]
     fn host_flavor_dead_code() {
         let v = build("<output>\"{s.count}\"</output>");

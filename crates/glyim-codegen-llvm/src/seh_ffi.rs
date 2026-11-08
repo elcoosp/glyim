@@ -13,6 +13,7 @@ use llvm_sys::prelude::{LLVMBasicBlockRef, LLVMBuilderRef, LLVMValueRef};
 use std::os::raw::{c_char, c_uint};
 
 unsafe extern "C" {
+    /// `LLVMBuildCleanupPad`.
     pub fn LLVMBuildCleanupPad(
         B: LLVMBuilderRef,
         ParentPad: LLVMValueRef,
@@ -21,12 +22,14 @@ unsafe extern "C" {
         Name: *const c_char,
     ) -> LLVMValueRef;
 
+    /// `LLVMBuildCleanupRet`.
     pub fn LLVMBuildCleanupRet(
         B: LLVMBuilderRef,
         CleanupPad: LLVMValueRef,
         BB: LLVMBasicBlockRef,
     ) -> LLVMValueRef;
 
+    /// `LLVMBuildCatchSwitch`.
     pub fn LLVMBuildCatchSwitch(
         B: LLVMBuilderRef,
         ParentPad: LLVMValueRef,
@@ -35,6 +38,7 @@ unsafe extern "C" {
         Name: *const c_char,
     ) -> LLVMValueRef;
 
+    /// `LLVMBuildCatchPad`.
     pub fn LLVMBuildCatchPad(
         B: LLVMBuilderRef,
         ParentPad: LLVMValueRef,
@@ -43,22 +47,13 @@ unsafe extern "C" {
         Name: *const c_char,
     ) -> LLVMValueRef;
 
+    /// `LLVMBuildCatchRet`.
     pub fn LLVMBuildCatchRet(
         B: LLVMBuilderRef,
         CatchPad: LLVMValueRef,
         BB: LLVMBasicBlockRef,
     ) -> LLVMValueRef;
 
+    /// `LLVMAddHandler`.
     pub fn LLVMAddHandler(CatchSwitch: LLVMValueRef, Dest: LLVMBasicBlockRef);
-}
-
-/// Helper: a null-terminated C string for an instruction name, used by the
-/// raw `LLVMBuild*` funclet builders which take a `const char *Name`.
-///
-/// We keep the temporary in a `CString` at the call site; this helper just
-/// hands back the raw pointer. Marked `#[allow(dead_code)]` until the catch-pad
-/// paths (currently unused — only cleanuppad/cleanupret are wired) need it.
-#[allow(dead_code)]
-pub(crate) fn c_name(name: &str) -> std::ffi::CString {
-    std::ffi::CString::new(name).unwrap_or_else(|_| std::ffi::CString::new("").unwrap())
 }

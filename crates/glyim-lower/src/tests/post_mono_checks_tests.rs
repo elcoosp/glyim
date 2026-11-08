@@ -70,7 +70,7 @@ fn make_def_id(raw: u32) -> DefId {
     DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(raw))
 }
 
-/// Create a MonoItemData for a function with the given substitution.
+/// Create a `MonoItemData` for a function with the given substitution.
 fn make_mono_fn_with_subst(def_id_raw: u32, subst: Substitution, body: Body) -> MonoItemData {
     MonoItemData {
         item: MonoItem::Fn {
@@ -78,7 +78,7 @@ fn make_mono_fn_with_subst(def_id_raw: u32, subst: Substitution, body: Body) -> 
             substs: subst,
         },
         body: Arc::new(body),
-        symbol: format!("fn_{}", def_id_raw),
+        symbol: format!("fn_{def_id_raw}"),
         source_module: 0,
     }
 }

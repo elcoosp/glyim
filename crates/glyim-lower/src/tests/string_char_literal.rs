@@ -6,7 +6,7 @@ use glyim_test::test_ty_ctx;
 use glyim_type::*;
 use glyim_typeck::thir::{self, ExprKind, Literal};
 
-/// S20-T04: String literal creates valid MirConst::String
+/// S20-T04: String literal creates valid `MirConst::String`
 #[test]
 fn string_literal_lowers_to_mir_const_string() {
     let mut ctx_mut = test_ty_ctx();
@@ -34,7 +34,7 @@ fn string_literal_lowers_to_mir_const_string() {
     assert!(found_string, "expected MirConstKind::String in MIR");
 }
 
-/// S20-T04 (cont): Char literal creates valid MirConst::Int
+/// S20-T04 (cont): Char literal creates valid `MirConst::Int`
 #[test]
 fn char_literal_lowers_to_int_const() {
     let mut ctx_mut = test_ty_ctx();

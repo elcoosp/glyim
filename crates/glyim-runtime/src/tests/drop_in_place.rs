@@ -1,6 +1,6 @@
-//! Tests for glyim_drop_in_place FFI function.
+//! Tests for `glyim_drop_in_place` FFI function.
 //!
-//! Tests that drop_in_place correctly calls the provided drop function
+//! Tests that `drop_in_place` correctly calls the provided drop function
 //! and handles null/None cases safely.
 
 use crate::{DropFn, glyim_alloc, glyim_dealloc, glyim_drop_in_place};
@@ -45,7 +45,7 @@ fn test_alloc_and_drop_in_place_sequence() {
     // Simulates the pattern: allocate, write, drop_in_place, dealloc
     for i in 0..10 {
         let ptr = glyim_alloc(16, 8);
-        assert!(!ptr.is_null(), "allocation {} failed", i);
+        assert!(!ptr.is_null(), "allocation {i} failed");
         unsafe {
             std::ptr::write_bytes(ptr, i as u8, 16);
         }

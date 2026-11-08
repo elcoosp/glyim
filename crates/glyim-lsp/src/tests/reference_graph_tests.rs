@@ -4,17 +4,17 @@ use glyim_core::Interner;
 
 #[test]
 fn test_find_references_on_function_finds_call_sites() {
-    let src = r#"
+    let src = r"
 fn foo() {}
 fn bar() {
     foo();
     foo();
 }
-"#;
+";
     let mut interner = Interner::new();
     let file_id = create_test_file_id(1);
     let (hir, diags) = compile_to_hir(src, file_id, &mut interner);
-    assert!(diags.is_empty(), "Compilation had diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Compilation had diagnostics: {diags:?}");
 
     let mut ref_graph = ReferenceGraph::new();
     ref_graph.build_from_hir(file_id, &hir, &interner);
@@ -50,17 +50,17 @@ fn test_reference_graph_cross_file_use() {
     let file_id_a = create_test_file_id(1);
     let file_id_b = create_test_file_id(2);
 
-    let src_a = r#"
+    let src_a = r"
 fn helper() {}
-"#;
+";
     let (hir_a, diags_a) = compile_to_hir(src_a, file_id_a, &mut interner);
     assert!(diags_a.is_empty());
 
-    let src_b = r#"
+    let src_b = r"
 fn caller() {
     helper();
 }
-"#;
+";
     let (hir_b, diags_b) = compile_to_hir(src_b, file_id_b, &mut interner);
     assert!(diags_b.is_empty());
 
@@ -92,7 +92,7 @@ fn caller() {
 /// exactly one place so we can prove its containing expression form is walked.
 #[test]
 fn test_reference_graph_walks_range_and_closure() {
-    let src = r#"
+    let src = r"
 fn main() {
     let range_only = 0;
     let closure_only = 0;
@@ -100,11 +100,11 @@ fn main() {
     let _ = index_base_only[1..range_only];
     let f = |a| closure_only + a;
 }
-"#;
+";
     let mut interner = Interner::new();
     let file_id = create_test_file_id(1);
     let (hir, diags) = compile_to_hir(src, file_id, &mut interner);
-    assert!(diags.is_empty(), "Compilation had diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Compilation had diagnostics: {diags:?}");
 
     let mut ref_graph = ReferenceGraph::new();
     ref_graph.build_from_hir(file_id, &hir, &interner);
@@ -121,24 +121,21 @@ fn main() {
     let range_refs = ref_graph.find_references("range_only");
     assert!(
         range_refs.len() >= 2,
-        "range-only variable must be found via the Range `end` arm; got {:?}",
-        range_refs
+        "range-only variable must be found via the Range `end` arm; got {range_refs:?}"
     );
 
     // `closure_only` is used *only* inside the closure body `|a| closure_only + a`.
     let closure_refs = ref_graph.find_references("closure_only");
     assert!(
         closure_refs.len() >= 2,
-        "closure-only variable must be found via the closure body; got {:?}",
-        closure_refs
+        "closure-only variable must be found via the closure body; got {closure_refs:?}"
     );
 
     // `index_base_only` is used as the `base` of `index_base_only[..]` (an Index).
     let index_refs = ref_graph.find_references("index_base_only");
     assert!(
         index_refs.len() >= 2,
-        "index base must add the Index use to the let use; got {:?}",
-        index_refs
+        "index base must add the Index use to the let use; got {index_refs:?}"
     );
 }
 
@@ -151,7 +148,7 @@ fn main() {
 /// `_ => {}` arm and silently skipped their children, so the use was missing.
 #[test]
 fn test_reference_graph_walks_for_closure_struct_field() {
-    let src = r#"
+    let src = r"
 struct Foo { field: i32 }
 fn main() {
     let for_only = 0;
@@ -163,11 +160,11 @@ fn main() {
     let _f = |a| closure_only + a;
     let _s = Foo { field: struct_only };
 }
-"#;
+";
     let mut interner = Interner::new();
     let file_id = create_test_file_id(1);
     let (hir, diags) = compile_to_hir(src, file_id, &mut interner);
-    assert!(diags.is_empty(), "Compilation had diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Compilation had diagnostics: {diags:?}");
 
     let mut ref_graph = ReferenceGraph::new();
     ref_graph.build_from_hir(file_id, &hir, &interner);
@@ -176,24 +173,21 @@ fn main() {
     let for_refs = ref_graph.find_references("for_only");
     assert!(
         for_refs.len() >= 2,
-        "for-loop-body variable must be found via the For arm; got {:?}",
-        for_refs
+        "for-loop-body variable must be found via the For arm; got {for_refs:?}"
     );
 
     // `closure_only` is used *only* inside the closure body.
     let closure_refs = ref_graph.find_references("closure_only");
     assert!(
         closure_refs.len() >= 2,
-        "closure-capture variable must be found via the Closure arm; got {:?}",
-        closure_refs
+        "closure-capture variable must be found via the Closure arm; got {closure_refs:?}"
     );
 
     // `struct_only` is used *only* inside the struct-literal field value.
     let struct_refs = ref_graph.find_references("struct_only");
     assert!(
         struct_refs.len() >= 2,
-        "struct-field-value variable must be found via the Struct arm; got {:?}",
-        struct_refs
+        "struct-field-value variable must be found via the Struct arm; got {struct_refs:?}"
     );
 }
 
@@ -209,7 +203,7 @@ fn main() {
 /// borrow operand MUST add one.
 #[test]
 fn test_reference_graph_read_write_access() {
-    let src = r#"
+    let src = r"
 fn main() {
     let let_only = 0;
     let immut_used = 0;
@@ -217,11 +211,11 @@ fn main() {
     let _ = &immut_used;   // Read only: must NOT add a Write
     let _ = &mut mut_used; // &mut operand: MUST add a Write
 }
-"#;
+";
     let mut interner = Interner::new();
     let file_id = create_test_file_id(1);
     let (hir, diags) = compile_to_hir(src, file_id, &mut interner);
-    assert!(diags.is_empty(), "Compilation had diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Compilation had diagnostics: {diags:?}");
 
     let mut ref_graph = ReferenceGraph::new();
     ref_graph.build_from_hir(file_id, &hir, &interner);

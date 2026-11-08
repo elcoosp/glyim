@@ -43,6 +43,7 @@ members = [
     "crates/glyip",
     "crates/glyim-lang-std",
     "crates/glyim-lang-alloc",
+    "tools/glyim-metrics",
     "tools/glyim-pilot",
 
     "crates/glyim-const-eval",
@@ -106,7 +107,6 @@ num_enum = "0.7.6"
 fixedbitset = "0.5.7"
 anyhow = "1.0.104"
 petgraph = "0.8.3"
-regalloc2 = "0.15.2"
 owo-colors = "4.4.0"
 textwrap = "0.16.4"
 dashmap = "6.2.1"
@@ -124,6 +124,159 @@ libloading = "0.9"
 # incrementally rather than hard-failing the build while the doc pass lands.
 [workspace.lints.rust]
 missing_docs = "warn"
+
+# lsp-types 0.97 deprecates `DocumentSymbol::deprecated` and
+# `SymbolInformation::deprecated` in favor of `tags`, but neither struct
+# derives `Default`, so exhaustive struct literals must still name the
+# field; glyim-lsp always passes `None` for wire compatibility with
+# clients that predate 3.15 tags. Revisit when lsp-types drops the
+# field or ships a `Default` impl.
+deprecated = "allow"
+
+# Plan M0 rails (§2 C4, §7.4): the `pedantic` group is wired workspace-wide
+# as the review baseline; every member opts in via `[lints] workspace = true`.
+# Cargo forbids overriding inherited lints per crate, so each relaxation is
+# a single, rationale-annotated entry here — reviewable in one place, and a
+# candidate list to SHRINK as the codebase matures (gates never weaken, C9).
+# The enforced-but-overridden classes are tracked as ratchet follow-ups.
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Compiler-internal arithmetic narrows and re-widens handle/index widths
+# (usize <-> u32 handles, i128 consts) by construction; the lossy casts are
+# deliberate and guarded by construction invariants, not by doc sections.
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+cast_precision_loss = "allow"
+# Adding #[must_use] across hundreds of internal getters changes the public
+# API surface without a bug-class payoff; revisit as a ratchet follow-up.
+must_use_candidate = "allow"
+# MIR/lowering matches intentionally share bodies across distinct IR
+# variants; merging arms to please the lint hides the variant structure.
+match_same_arms = "allow"
+# Doc-section pass (# Errors / # Panics) is a scheduled follow-up; blocking
+# every milestone PR on ~200 doc sections stalls the rails themselves.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# Compiler IR uses conventional short handles (lo/hi, ty/tyk, def/defs);
+# renaming 130+ bindings is churn without a defect class.
+similar_names = "allow"
+# Mechanical `map(..).unwrap_or(..)` rewrites are pending (follow-up);
+# the pattern is semantically equivalent and everywhere-consistent today.
+map_unwrap_or = "allow"
+# let-else migration touches control flow at 120+ sites; scheduled as a
+# mechanical codemod follow-up rather than a hand edit per site.
+manual_let_else = "allow"
+# `_`-prefixed bindings are read in macro-ish and conditional-debug code;
+# renaming is tracked with the underscore-hygiene follow-up.
+used_underscore_binding = "allow"
+# Wildcard imports are confined to test modules and internal preludes;
+# narrowing to explicit paths is a scheduled follow-up.
+wildcard_imports = "allow"
+# `match x { A => .., _ => .. }` vs `if let` is a style call on hot dispatch
+# tables; single-arm handling reads better in the interpreter loop.
+single_match_else = "allow"
+# Iterating `v.iter()` vs `&v` is style; the explicit form is used
+# consistently in codegen loops that index alongside iteration.
+explicit_iter_loop = "allow"
+# Items-after-statements appear in generated lowering code where keeping the
+# item next to its use aids review; hoisting is a follow-up codemod.
+items_after_statements = "allow"
+# Long dispatch functions (driver, interpreter loop) exceed 100 lines by
+# design; splitting is tracked in the M6 query-engine work, not here.
+too_many_lines = "allow"
+# Internal ABI helpers take operands by value for ownership clarity; taking
+# references instead would cascade through every caller.
+needless_pass_by_value = "allow"
+trivially_copy_pass_by_ref = "allow"
+unused_self = "allow"
+# Pilot config gate-bundles are deliberate boolean flag sets mirrored 1:1 in
+# the TOML schema; converting them to bitflags/enum flags would change the
+# serialized configuration format for no defect class.
+struct_excessive_bools = "allow"
+# `glyim-runtime` is the process/FFI boundary (allocator hooks, libc calls,
+# stack setup) where raw-pointer casts and `&T -> *const T` views are the
+# domain language. The style lints below steer towards `ptr::from_ref`-style
+# APIs without removing any hazard; the actual defences for this code are the
+# Miri job and the unsafe-audit ratchet, not pointer-cast spelling.
+ptr_as_ptr = "allow"
+ref_as_ptr = "allow"
+borrow_as_ptr = "allow"
+ptr_cast_constness = "allow"
+cast_ptr_alignment = "allow"
+# Rowan/SyntaxElement traversals read naturally as `|e| e.into_token()`
+# closures; the method-path form needs crate-qualified paths that fight the
+# syntax-crate re-exports and broke the build once (E0433).
+redundant_closure = "allow"
+redundant_closure_for_method_calls = "allow"
+# Forward-compat wildcard arms in IR dispatch and `panic!()` test arms where
+# enumerating the single remaining variant freezes the match forever.
+match_wildcard_for_single_variants = "allow"
+# Hex magic constants (FNV-1a offset basis / prime, sentinel words) are more
+# recognizable unseparated; decimal literals get separators case by case.
+unreadable_literal = "allow"
+# Match-arm flow style: `continue` at the end of a match arm documents the
+# skip intent even when the loop would fall through anyway.
+needless_continue = "allow"
+# Internal helper signatures returning Result/Option for API-shape symmetry
+# with their callers; unwrapping the wrapper cascades through every caller.
+unnecessary_wraps = "allow"
+# Test asserts like `assert!(v.is_empty())`; clippy's `assert_eq!(v, [] as
+# [T; 0])` alternative is noisier and hides the intent.
+assert_is_empty = "allow"
+# Lowering helpers take `&Option<T>` where `Option<&T>` would be more
+# idiomatic; the enum-state builders mirror rustc's lowering shapes.
+ref_option = "allow"
+# Visitor/lowering scopes legitimately use conventional single-letter
+# bindings (t, n, e) for tokens/nodes/exprs.
+many_single_char_names = "allow"
+# The GSX interpreter's numeric Eq is exact-by-spec (integral f64 compare);
+# the lint's epsilon suggestion would change language semantics.
+float_cmp = "allow"
+# Auto-trait queries take `&HashMap<AdtId, AdtRepr>`; the FxHash migration
+# (plan ADR-012) will swap the map type wholesale — generalizing the
+# parameter now would be churn undone in the same milestone.
+implicit_hasher = "allow"
+# Borrowck/lowering/typeck entry points take the full analysis context
+# positionally; params-struct refactors are scheduled with the M5 typed-IR
+# pipeline and would be churn now.
+too_many_arguments = "allow"
+# Inherent `from_str` constructors predate a `FromStr` migration; the
+# inherent form is what every call site uses today.
+should_implement_trait = "allow"
+# Lexer tests deliberately feed `3.14` / `2.71828` as *data*; the lint's
+# named-constant suggestion would defeat the test's purpose.
+approx_constant = "allow"
+# LSP `Url` keys are protocol-idiomatic; `lsp_types::Url` is interior-mutable
+# by design, which is exactly what the lint objects to.
+mutable_key_type = "allow"
+# `FullMatch`/`PartialMatch`/`NoMatch` naming is load-bearing in expander
+# diagnostics; renaming variants to please the prefix lint hurts the logs.
+enum_variant_names = "allow"
+# `SsrChunk::Region` carries the region payload by value on purpose; boxing
+# adds an indirection to the hot emit path.
+large_enum_variant = "allow"
+# C-ABI entry points take raw pointers by definition; every deref happens
+# inside an explicit `unsafe` block behind the boundary checks.
+not_unsafe_ptr_arg_deref = "allow"
+# The type arena stores `Vec<Box<TyKind>>` deliberately: `Box` keeps
+# `&TyKind` stable across arena growth (the unsafe Send/Sync invariant).
+vec_box = "allow"
+# Nested guards in lowering/dispatch mirror the IR case structure; merging
+# with `&&` reorders the guard clauses against the match-arm layout.
+collapsible_if = "allow"
+# Recursion accumulators (def-map/hir lowering) carry context that only the
+# recursive call consumes; threading it through a state struct is churn.
+only_used_in_recursion = "allow"
+# Interpreter helpers take `&mut self` and recurse through it; threading the
+# state into a free function would be churn without a defect class.
+self_only_used_in_recursion = "allow"
+# Three-way width/order comparisons in codegen read naturally as
+# if/else-if chains over `<`/`==`/`>`; an `Ordering` match hides the shape.
+comparison_chain = "allow"
+# Long lowering/tuple-unification chains produce compound types; a params
+# struct per site is churn against the M5 typed-IR rework.
+type_complexity = "allow"
 
 # Plan §2.5 — build/link profile.
 #

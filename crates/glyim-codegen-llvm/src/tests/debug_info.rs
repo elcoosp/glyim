@@ -450,8 +450,8 @@ fn test_debug_info_multiline_source_line_numbers() {
     }
     assert!(!locations.is_empty(), "No debug locations found");
     for (line, col) in &locations {
-        assert!(*line >= 1, "Line number should be >= 1, got {}", line);
-        assert!(col >= &0, "Column should be >= 0, got {}", col);
+        assert!(*line >= 1, "Line number should be >= 1, got {line}");
+        assert!(col >= &0, "Column should be >= 0, got {col}");
     }
 }
 
@@ -620,12 +620,10 @@ fn macro_defined_function_has_correct_line_numbers_in_ir() {
         .with_ty_ctx(ctx_mut.freeze());
     let ir = backend.generate_ir(&body).expect("IR generation failed");
     let call_site_line = source[..call_site.lo.to_usize()].matches('\n').count() + 1;
-    let expected_line_pattern = format!("line: {}", call_site_line);
+    let expected_line_pattern = format!("line: {call_site_line}");
     assert!(
         ir.contains(&expected_line_pattern),
-        "IR missing correct line number.\nIR:\n{}\nExpected line: {}",
-        ir,
-        call_site_line
+        "IR missing correct line number.\nIR:\n{ir}\nExpected line: {call_site_line}"
     );
 }
 
@@ -721,12 +719,10 @@ fn nested_macro_expansions_produce_correct_inline_locations() {
         .matches('\n')
         .count()
         + 1;
-    let expected_line_pattern = format!("line: {}", outer_call_site_line);
+    let expected_line_pattern = format!("line: {outer_call_site_line}");
     assert!(
         ir.contains(&expected_line_pattern),
-        "IR missing correct line number for nested macro expansion.\nIR:\n{}\nExpected line: {}",
-        ir,
-        outer_call_site_line
+        "IR missing correct line number for nested macro expansion.\nIR:\n{ir}\nExpected line: {outer_call_site_line}"
     );
 }
 
@@ -816,8 +812,7 @@ fn tier5_2_reference_debug_type_is_real_pointer() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("DW_TAG_pointer_type"),
-        "Ref/RawPtr/Slice debug types should emit DW_TAG_pointer_type (real pointer shape).\nIR:\n{}",
-        ir
+        "Ref/RawPtr/Slice debug types should emit DW_TAG_pointer_type (real pointer shape).\nIR:\n{ir}"
     );
 }
 
@@ -879,14 +874,12 @@ fn phase6_2_closure_debug_type_has_capture_members() {
     // list carries the captured types — NOT an opaque empty struct.
     assert!(
         ir.contains("DW_TAG_structure_type") && ir.contains("elements:"),
-        "Closure debug type should be a real struct with captured-member elements, not an opaque blob.\nIR:\n{}",
-        ir
+        "Closure debug type should be a real struct with captured-member elements, not an opaque blob.\nIR:\n{ir}"
     );
     // The captured types must actually appear as members of the closure struct
     // (i32 for `captured_x`, bool for `captured_flag`).
     assert!(
         ir.contains("closure2000000") && ir.contains("i32") && ir.contains("bool"),
-        "Closure debug type should reference its captured value types (i32, bool).\nIR:\n{}",
-        ir
+        "Closure debug type should reference its captured value types (i32, bool).\nIR:\n{ir}"
     );
 }

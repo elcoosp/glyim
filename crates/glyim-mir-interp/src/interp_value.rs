@@ -1,15 +1,16 @@
 #[derive(Debug, Clone)]
-/// InterpValue.
+/// `InterpValue`.
 pub enum InterpValue {
-    #[allow(missing_docs)]
+    /// A signed integer scalar.
     Int(i128),
-    #[allow(missing_docs)]
+    /// An unsigned integer scalar.
     Uint(u128),
-    #[allow(missing_docs)]
+    /// A boolean scalar.
     Bool(bool),
-    /// Variant.
+    /// `Variant`.
     Unit,
-    #[allow(missing_docs)]
+    /// An aggregate value: struct fields, tuple elements, or array
+    /// elements, in declaration order.
     Aggregate(Vec<InterpValue>),
     /// A reference to a local (or a sub-place of one) in the current
     /// frame or an ancestor frame.
@@ -20,20 +21,23 @@ pub enum InterpValue {
     /// `_5`) when the ref is later dereferenced. Before this field
     /// existed, projections were discarded at ref-creation, so
     /// `w.v.len()` (where `v` is a struct field of `w`) derefed to the
-    /// whole `W` and read the wrong length. See KNOWN_GAPS §8.
-    #[allow(missing_docs)]
+    /// whole aggregate and returned the wrong length.
     Ref {
+        /// The frame whose local the `Ref` borrows (kept alive via the archive).
         frame: usize,
+        /// The borrowed local's index in that frame.
         local: usize,
+        /// Projection chain applied on top of the local (e.g. a field access).
         projection: Box<[glyim_mir::ProjectionElem]>,
     },
-    #[allow(missing_docs)]
+    /// A floating-point scalar.
     Float(f64),
-    #[allow(missing_docs)]
+    /// `String`.
     String(String),
-    #[allow(missing_docs)]
+    /// A symbolic reference to a function definition, resolved at
+    /// codegen.
     Fn(glyim_core::DefId),
-    #[allow(missing_docs)]
+    /// A symbolic reference to a `const` item, resolved at codegen.
     ConstRef(glyim_core::DefId),
     /// Opaque pointer to a `static` item (an address into the
     /// interpreter's `globals` map). Produced by evaluating

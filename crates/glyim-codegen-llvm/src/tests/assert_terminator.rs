@@ -34,8 +34,7 @@ fn assert_with_overflow_add_emits_comparison() {
     let ir = ir.unwrap();
     assert!(
         ir.contains("br") || ir.contains("icmp"),
-        "Assert should emit comparison and branch, got:\n{}",
-        ir
+        "Assert should emit comparison and branch, got:\n{ir}"
     );
 }
 
@@ -65,8 +64,7 @@ fn assert_with_division_by_zero_emits_comparison() {
     let ir = ir.unwrap();
     assert!(
         ir.contains("br"),
-        "Assert DivisionByZero should emit conditional branch, got:\n{}",
-        ir
+        "Assert DivisionByZero should emit conditional branch, got:\n{ir}"
     );
 }
 
@@ -96,8 +94,7 @@ fn assert_with_bounds_check_emits_comparison() {
     let ir = ir.unwrap();
     assert!(
         ir.contains("br"),
-        "Assert BoundsCheck should emit conditional branch, got:\n{}",
-        ir
+        "Assert BoundsCheck should emit conditional branch, got:\n{ir}"
     );
 }
 
@@ -127,8 +124,7 @@ fn assert_with_expected_false_negates_condition() {
     let ir = ir.unwrap();
     assert!(
         ir.contains("br"),
-        "Assert with expected=false should emit conditional branch, got:\n{}",
-        ir
+        "Assert with expected=false should emit conditional branch, got:\n{ir}"
     );
 }
 

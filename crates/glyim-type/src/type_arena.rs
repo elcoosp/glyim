@@ -41,12 +41,10 @@ use std::sync::{Mutex, RwLock};
 pub struct TypeArena {
     /// Stable heap storage for `TyKind` entries (boxed so addresses survive
     /// `Vec` reallocations). Never moved/freed after allocation.
-    #[allow(clippy::vec_box)]
     types: *mut Vec<Box<TyKind>>,
     /// Parallel stable storage for type flags.
     type_flags: *mut Vec<TypeFlags>,
     /// Stable storage for substitution argument lists (boxed smallvecs).
-    #[allow(clippy::vec_box)]
     substitution_data: *mut Vec<Box<SmallVec<[GenericArg; 4]>>>,
     /// Fast structural de-duplication so the same logical type maps to the same
     /// `Ty` handle (the "interning" property) within a compilation.
@@ -56,7 +54,7 @@ pub struct TypeArena {
     type_index: RwLock<HashMap<TyKind, Ty>>,
     /// Parallel de-duplication table for substitutions (plan §2.1). `RwLock` (§1.1)
     /// for the same reader/writer split. The old linear `data.iter().position(...)`
-    /// re-scan under the write gate (§1.2) has been removed — the HashMap alone is
+    /// re-scan under the write gate (§1.2) has been removed — the `HashMap` alone is
     /// the single source of truth under the write gate, so a concurrent insert is
     /// impossible in the single-threaded-per-compilation model.
     subst_index: RwLock<HashMap<SmallVec<[GenericArg; 4]>, Substitution>>,
@@ -135,19 +133,20 @@ impl TypeArena {
     }
 
     #[inline]
+    /// Ty Kind.
     pub fn ty_kind(&self, ty: Ty) -> &TyKind {
         // SAFETY: `types` is stable heap storage; this compilation is
         // single-threaded, so no concurrent write reallocates the `Vec` while
         // we hold the resulting `&TyKind`.
-        #[allow(clippy::borrowed_box)]
+
         unsafe {
-            let v: &Vec<Box<TyKind>> = &*self.types;
-            let b: &Box<TyKind> = &v[ty.index()];
-            b
+            let v = &*self.types;
+            &v[ty.index()]
         }
     }
 
     #[inline]
+    /// Ty Flags.
     pub fn ty_flags(&self, ty: Ty) -> TypeFlags {
         // SAFETY: same reasoning as `ty_kind`.
         unsafe {
@@ -160,7 +159,7 @@ impl TypeArena {
     ///
     /// §1.2 fix: the old code did an O(n) linear re-scan (`data.iter().position(...)`)
     /// after taking the write gate. With `subst_index` in place (plan §2.1), if the
-    /// fast-path read-lock found no match, the write-gate path can trust the HashMap —
+    /// fast-path read-lock found no match, the write-gate path can trust the `HashMap` —
     /// no other thread inserts concurrently (single-threaded per compilation). Removing
     /// the re-scan makes substitution interning O(1) amortized instead of O(n) per call
     /// → O(n²) across a compilation.
@@ -192,17 +191,17 @@ impl TypeArena {
     }
 
     #[inline]
+    /// Substitution Args.
     pub fn substitution_args(&self, sub: Substitution) -> &[GenericArg] {
         if sub.is_empty() {
             return &[];
         }
         // SAFETY: `substitution_data` is stable heap storage; single-threaded
         // per compilation.
-        #[allow(clippy::borrowed_box)]
+
         unsafe {
-            let v: &Vec<Box<SmallVec<[GenericArg; 4]>>> = &*self.substitution_data;
-            let b: &Box<SmallVec<[GenericArg; 4]>> = &v[sub.index() as usize];
-            b
+            let v = &*self.substitution_data;
+            &v[sub.index() as usize]
         }
     }
 }

@@ -94,7 +94,7 @@ fn call_with_cleanup_compiles() {
 
     let module = result.unwrap();
     let ir = module.print_to_string().to_string();
-    assert!(ir.contains("call"), "LLVM IR must contain 'call':\n{}", ir);
+    assert!(ir.contains("call"), "LLVM IR must contain 'call':\n{ir}");
 }
 
 #[test]
@@ -112,7 +112,6 @@ fn call_with_cleanup_has_landingpad() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("landingpad") || ir.contains("cleanup"),
-        "LLVM IR with cleanup should contain landingpad or cleanup:\n{}",
-        ir
+        "LLVM IR with cleanup should contain landingpad or cleanup:\n{ir}"
     );
 }

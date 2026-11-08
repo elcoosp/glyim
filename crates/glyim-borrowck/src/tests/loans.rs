@@ -15,8 +15,8 @@ use super::mir_builder::{MirBodyBuilder, TestBorrowckCtx, assign_borrow, assign_
 /// time should not produce an error.
 ///
 /// MIR:
-///   BB0: local_2 = &shared local_1; local_3 = &shared local_1; goto BB1
-///   BB1: local_4 = copy local_2; local_5 = copy local_3; return
+///   BB0: `local_2` = &shared `local_1`; `local_3` = &shared `local_1`; goto BB1
+///   BB1: `local_4` = copy `local_2`; `local_5` = copy `local_3`; return
 #[test]
 fn multiple_shared_loans_no_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -49,8 +49,8 @@ fn multiple_shared_loans_no_error() {
 /// V08-T04b: Nested borrows — shared ref to a shared ref → no error.
 ///
 /// MIR:
-///   BB0: local_2 = &shared local_1; local_3 = &shared local_2; goto BB1
-///   BB1: local_4 = copy local_3; return
+///   BB0: `local_2` = &shared `local_1`; `local_3` = &shared `local_2`; goto BB1
+///   BB1: `local_4` = copy `local_3`; return
 #[test]
 fn nested_shared_borrows_no_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {

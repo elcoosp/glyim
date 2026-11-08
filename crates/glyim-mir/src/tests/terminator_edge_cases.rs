@@ -31,7 +31,7 @@ fn call_no_target_unwinding() {
         } => {
             assert_eq!(*cb, BasicBlockIdx::from_raw(5));
         }
-        other => panic!("Expected Call with no target, got {:?}", other),
+        other => panic!("Expected Call with no target, got {other:?}"),
     }
 }
 

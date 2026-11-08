@@ -23,7 +23,6 @@
 //!    phase are treated as shared borrows for conflict purposes.
 #![warn(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
-
 mod liveness;
 pub use fixedbitset::FixedBitSet;
 pub use liveness::LivenessResult;
@@ -47,19 +46,19 @@ use crate::visitor::{
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug)]
-/// BorrowckResult.
+/// `BorrowckResult`.
 pub struct BorrowckResult {
-    /// Struct.
+    /// `Struct`.
     pub errors: Vec<GlyimDiagnostic>,
 }
 
-/// BorrowckCtx.
+/// `BorrowckCtx`.
 pub trait BorrowckCtx {
-    /// ty_ctx.
+    /// `ty_ctx`.
     fn ty_ctx(&self) -> &glyim_type::TyCtx;
-    /// local_decl.
+    /// `local_decl`.
     fn local_decl(&self, local: LocalIdx) -> &glyim_mir::LocalDecl;
-    /// is_copy.
+    /// `is_copy`.
     fn is_copy(&self, ty: glyim_type::Ty) -> bool {
         self.ty_ctx().is_copy(ty)
     }
@@ -178,7 +177,6 @@ impl ReadVisitor for PlaceCollector<'_> {
 /// `active_loans` contains all loans whose `dest_local` is live at this
 /// program point, meaning the reference is still in use and the borrow
 /// is still active.
-#[allow(clippy::too_many_arguments)]
 fn check_terminator_conflicts(
     activation_cache: &std::collections::HashMap<usize, twophase::ReservationAnalysis>,
     ctx: &dyn BorrowckCtx,
@@ -262,7 +260,6 @@ fn check_terminator_conflicts(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn check_stmt_conflicts(
     activation_cache: &std::collections::HashMap<usize, twophase::ReservationAnalysis>,
     ctx: &dyn BorrowckCtx,
@@ -274,24 +271,68 @@ fn check_stmt_conflicts(
 ) {
     match &stmt.kind {
         StatementKind::Assign(dest, rvalue) => {
-            match rvalue {
-                Rvalue::Ref(borrowed, kind) => {
-                    // Creating a new borrow — check if it conflicts with
-                    // any *already active* loan on the same place.
+            if let Rvalue::Ref(borrowed, kind) = rvalue {
+                // Creating a new borrow — check if it conflicts with
+                // any *already active* loan on the same place.
+                for loan in active_loans.iter().copied() {
+                    if places_conflict(borrowed, &loan.borrowed_place) {
+                        let activation = activation_cache.get(&loan.index);
+                        let in_reservation = if let Some(act) = activation {
+                            loan_is_in_reservation(loan, current_block, current_stmt_idx, act)
+                        } else {
+                            false
+                        };
+                        let conflict = conflicts_with_active(&loan.kind, kind, in_reservation);
+                        if conflict {
+                            let name = ctx.local_name(borrowed.local);
+                            let msg = format!(
+                                "cannot borrow `{name}` as {} because it is also borrowed as {}",
+                                borrow_kind_label(kind),
+                                borrow_kind_label(&loan.kind)
+                            );
+                            let mut diag =
+                                GlyimDiagnostic::borrow_error(stmt.source_info.span, msg);
+                            diag = diag.with_sub(SubDiagnostic {
+                                severity: DiagSeverity::Note,
+                                message: format!(
+                                    "previous {} borrow occurs here",
+                                    borrow_kind_label(&loan.kind)
+                                ),
+                                span: Some(MultiSpan::from_span(loan.span)),
+                            });
+                            errors.push(diag);
+                        }
+                    }
+                }
+            } else {
+                // Not a borrow creation. Check two things:
+                // (a) reads of a place that is mutably/unique-borrowed
+                // (b) writes to a place that is borrowed at all
+
+                // (a) Read conflicts — collect places read by the rvalue
+                let mut read_places: SmallVec<[Place; 4]> = SmallVec::new();
+                {
+                    let mut collector = PlaceCollector {
+                        places: &mut read_places,
+                    };
+                    walk_rvalue_reads(rvalue, &mut collector);
+                }
+
+                for place in &read_places {
                     for loan in active_loans.iter().copied() {
-                        if places_conflict(borrowed, &loan.borrowed_place) {
+                        if places_conflict(place, &loan.borrowed_place) {
                             let activation = activation_cache.get(&loan.index);
                             let in_reservation = if let Some(act) = activation {
                                 loan_is_in_reservation(loan, current_block, current_stmt_idx, act)
                             } else {
                                 false
                             };
-                            let conflict = conflicts_with_active(&loan.kind, kind, in_reservation);
-                            if conflict {
-                                let name = ctx.local_name(borrowed.local);
+                            if matches!(loan.kind, BorrowKind::Mut { .. } | BorrowKind::Unique)
+                                && !in_reservation
+                            {
+                                let name = ctx.local_name(place.local);
                                 let msg = format!(
-                                    "cannot borrow `{name}` as {} because it is also borrowed as {}",
-                                    borrow_kind_label(kind),
+                                    "cannot use `{name}` because it is {} borrowed",
                                     borrow_kind_label(&loan.kind)
                                 );
                                 let mut diag =
@@ -299,7 +340,7 @@ fn check_stmt_conflicts(
                                 diag = diag.with_sub(SubDiagnostic {
                                     severity: DiagSeverity::Note,
                                     message: format!(
-                                        "previous {} borrow occurs here",
+                                        "{} borrow occurs here",
                                         borrow_kind_label(&loan.kind)
                                     ),
                                     span: Some(MultiSpan::from_span(loan.span)),
@@ -309,80 +350,27 @@ fn check_stmt_conflicts(
                         }
                     }
                 }
-                _ => {
-                    // Not a borrow creation. Check two things:
-                    // (a) reads of a place that is mutably/unique-borrowed
-                    // (b) writes to a place that is borrowed at all
 
-                    // (a) Read conflicts — collect places read by the rvalue
-                    let mut read_places: SmallVec<[Place; 4]> = SmallVec::new();
-                    {
-                        let mut collector = PlaceCollector {
-                            places: &mut read_places,
-                        };
-                        walk_rvalue_reads(rvalue, &mut collector);
-                    }
-
-                    for place in &read_places {
-                        for loan in active_loans.iter().copied() {
-                            if places_conflict(place, &loan.borrowed_place) {
-                                let activation = activation_cache.get(&loan.index);
-                                let in_reservation = if let Some(act) = activation {
-                                    loan_is_in_reservation(
-                                        loan,
-                                        current_block,
-                                        current_stmt_idx,
-                                        act,
-                                    )
-                                } else {
-                                    false
-                                };
-                                if matches!(loan.kind, BorrowKind::Mut { .. } | BorrowKind::Unique)
-                                    && !in_reservation
-                                {
-                                    let name = ctx.local_name(place.local);
-                                    let msg = format!(
-                                        "cannot use `{name}` because it is {} borrowed",
-                                        borrow_kind_label(&loan.kind)
-                                    );
-                                    let mut diag =
-                                        GlyimDiagnostic::borrow_error(stmt.source_info.span, msg);
-                                    diag = diag.with_sub(SubDiagnostic {
-                                        severity: DiagSeverity::Note,
-                                        message: format!(
-                                            "{} borrow occurs here",
-                                            borrow_kind_label(&loan.kind)
-                                        ),
-                                        span: Some(MultiSpan::from_span(loan.span)),
-                                    });
-                                    errors.push(diag);
-                                }
-                            }
-                        }
-                    }
-
-                    // (b) Write conflicts — assigning to a borrowed place.
-                    // In MIR, direct writes to a shared-borrowed place are ALWAYS illegal.
-                    // Interior mutability (e.g. Cell) does NOT manifest as a direct `Assign`
-                    // to the borrowed local; it uses method calls and `&mut` derived from
-                    // `&UnsafeCell`. Therefore, any active loan (Shared, Mut, or Unique)
-                    // conflicts with a write to an overlapping place.
-                    for loan in active_loans.iter() {
-                        if places_conflict(dest, &loan.borrowed_place) {
-                            let name = ctx.local_name(dest.local);
-                            let msg = format!("cannot assign to `{name}` because it is borrowed",);
-                            let mut diag =
-                                GlyimDiagnostic::borrow_error(stmt.source_info.span, msg);
-                            diag = diag.with_sub(SubDiagnostic {
-                                severity: DiagSeverity::Note,
-                                message: format!(
-                                    "{} borrow occurs here",
-                                    borrow_kind_label(&loan.kind)
-                                ),
-                                span: Some(MultiSpan::from_span(loan.span)),
-                            });
-                            errors.push(diag);
-                        }
+                // (b) Write conflicts — assigning to a borrowed place.
+                // In MIR, direct writes to a shared-borrowed place are ALWAYS illegal.
+                // Interior mutability (e.g. Cell) does NOT manifest as a direct `Assign`
+                // to the borrowed local; it uses method calls and `&mut` derived from
+                // `&UnsafeCell`. Therefore, any active loan (Shared, Mut, or Unique)
+                // conflicts with a write to an overlapping place.
+                for loan in active_loans {
+                    if places_conflict(dest, &loan.borrowed_place) {
+                        let name = ctx.local_name(dest.local);
+                        let msg = format!("cannot assign to `{name}` because it is borrowed");
+                        let mut diag = GlyimDiagnostic::borrow_error(stmt.source_info.span, msg);
+                        diag = diag.with_sub(SubDiagnostic {
+                            severity: DiagSeverity::Note,
+                            message: format!(
+                                "{} borrow occurs here",
+                                borrow_kind_label(&loan.kind)
+                            ),
+                            span: Some(MultiSpan::from_span(loan.span)),
+                        });
+                        errors.push(diag);
                     }
                 }
             }

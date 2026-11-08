@@ -4,11 +4,11 @@ use crate::gates::types::GateContext;
 use crate::gates::{Gate, GateResult};
 use async_trait::async_trait;
 
-/// ClippyGate.
+/// `ClippyGate`.
 pub struct ClippyGate;
 #[async_trait]
 impl Gate for ClippyGate {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "clippy"
     }
     async fn run(&self, ctx: &GateContext) -> Result<GateResult, PilotError> {

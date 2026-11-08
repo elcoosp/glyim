@@ -37,5 +37,5 @@ fn array_index_to_index_projection() {
 
     let body = b.into_body(stmts, vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }

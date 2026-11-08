@@ -3,6 +3,7 @@ use glyim_core::primitives::Mutability;
 use glyim_mir::{LocalDecl, LocalIdx, VarDebugInfoValue};
 use glyim_type::TyCtx;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::sync::OnceLock;
 
 // Names interned for snapshot annotations must round-trip through a single
@@ -11,15 +12,16 @@ use std::sync::OnceLock;
 // `resolve` panics on an id it does not own.
 static SNAPSHOT_INTERNER: OnceLock<Interner> = OnceLock::new();
 
-/// Intern a name via the snapshot module's shared interner. Use this (not a
-/// fresh `Interner`) when constructing `VarDebugInfo` expected to be rendered
-/// by `format_mir_body_verbose`.
-#[allow(dead_code)]
+/// Intern a name via the snapshot module's shared interner. Test-only: use
+/// this (not a fresh `Interner`) when constructing `VarDebugInfo` expected
+/// to be rendered by `format_mir_body_verbose` in snapshot tests.
+#[cfg(test)]
 pub(crate) fn intern_name(s: &str) -> glyim_core::Name {
     SNAPSHOT_INTERNER.get_or_init(Interner::new).intern(s)
 }
 
-/// format_mir_body.
+/// `format_mir_body`.
+#[must_use]
 pub fn format_mir_body(ctx: &TyCtx, body: &glyim_mir::Body) -> String {
     format_mir_body_impl(ctx, body, false)
 }
@@ -27,18 +29,20 @@ pub fn format_mir_body(ctx: &TyCtx, body: &glyim_mir::Body) -> String {
 /// Verbose variant (plan §24.3): annotates every place with its resolved type
 /// (e.g. `$1: i32 = ...`) and each local with its debug-info variable name
 /// (e.g. `$1 /* x */: i32`). The default `format_mir_body` stays terse.
+#[must_use]
 pub fn format_mir_body_verbose(ctx: &TyCtx, body: &glyim_mir::Body) -> String {
     format_mir_body_impl(ctx, body, true)
 }
 
 fn format_mir_body_impl(ctx: &TyCtx, body: &glyim_mir::Body, verbose: bool) -> String {
     let mut out = String::new();
-    out.push_str(&format!("fn {}():\n", body.owner));
-    out.push_str(&format!("  arg_count: {}\n", body.arg_count));
-    out.push_str(&format!(
-        "  return_ty: {}\n",
+    let _ = writeln!(out, "fn {}():", body.owner);
+    let _ = writeln!(out, "  arg_count: {}", body.arg_count);
+    let _ = writeln!(
+        out,
+        "  return_ty: {}",
         glyim_type::PrintTy::new(body.return_ty, ctx)
-    ));
+    );
     out.push_str("  locals:\n");
     // Build a map from LocalIdx -> debug variable name for verbose annotation.
     let debug_names: HashMap<LocalIdx, String> = if verbose {
@@ -65,15 +69,16 @@ fn format_mir_body_impl(ctx: &TyCtx, body: &glyim_mir::Body, verbose: bool) -> S
         };
         let dbg = if verbose {
             if let Some(name) = debug_names.get(&idx) {
-                format!(" /* {} */", name)
+                format!(" /* {name} */")
             } else {
                 String::new()
             }
         } else {
             String::new()
         };
-        out.push_str(&format!(
-            "    ${}{}: {} ({}){}\n",
+        let _ = writeln!(
+            out,
+            "    ${}{}: {} ({}){}",
             idx.to_raw(),
             dbg,
             glyim_type::PrintTy::new(local.ty, ctx),
@@ -83,38 +88,37 @@ fn format_mir_body_impl(ctx: &TyCtx, body: &glyim_mir::Body, verbose: bool) -> S
             } else {
                 String::new()
             },
-        ));
+        );
     }
     if !body.var_debug_info.is_empty() {
         out.push_str("  debug:\n");
         for info in &body.var_debug_info {
-            out.push_str(&format!("    {:?}: ", info.name));
+            let _ = write!(out, "    {:?}: ", info.name);
             match &info.value {
                 VarDebugInfoValue::Place(place) => {
-                    out.push_str(&format!(
-                        "{}\n",
-                        format_place(place, verbose, ctx, &body.locals)
-                    ));
+                    let _ = writeln!(out, "{}", format_place(place, verbose, ctx, &body.locals));
                 }
                 VarDebugInfoValue::Const(c) => {
-                    out.push_str(&format!("const {}\n", format_const(c)));
+                    let _ = writeln!(out, "const {}", format_const(c));
                 }
             }
         }
     }
     for (idx, block) in body.basic_blocks.iter_enumerated() {
         let _cleanup_tag = if block.is_cleanup { " (cleanup)" } else { "" };
-        out.push_str(&format!("  bb{}:\n", idx.to_raw()));
+        let _ = writeln!(out, "  bb{}:", idx.to_raw());
         for stmt in &block.statements {
-            out.push_str(&format!(
-                "    {}\n",
+            let _ = writeln!(
+                out,
+                "    {}",
                 format_statement(&stmt.kind, verbose, ctx, &body.locals)
-            ));
+            );
         }
-        out.push_str(&format!(
-            "    -> {}\n",
+        let _ = writeln!(
+            out,
+            "    -> {}",
             format_terminator(&block.terminator.kind, verbose, ctx, &body.locals)
-        ));
+        );
     }
     out
 }
@@ -217,7 +221,7 @@ fn format_rvalue(
 
 fn format_aggregate_kind(kind: &glyim_mir::AggregateKind) -> String {
     match kind {
-        glyim_mir::AggregateKind::Array(ty) => format!("Array({:?})", ty),
+        glyim_mir::AggregateKind::Array(ty) => format!("Array({ty:?})"),
         glyim_mir::AggregateKind::Tuple => "Tuple".to_string(),
         glyim_mir::AggregateKind::Adt(adt_id, variant, substs) => {
             format!(
@@ -228,7 +232,7 @@ fn format_aggregate_kind(kind: &glyim_mir::AggregateKind) -> String {
             )
         }
         glyim_mir::AggregateKind::Closure(closure_id, substs) => {
-            format!("Closure({:?}, substs={:?})", closure_id, substs)
+            format!("Closure({closure_id:?}, substs={substs:?})")
         }
     }
 }
@@ -240,7 +244,7 @@ fn format_borrow_kind(bk: &glyim_mir::BorrowKind) -> String {
         glyim_mir::BorrowKind::Mut {
             allow_two_phase_borrow,
         } => {
-            format!("Mut(two_phase={})", allow_two_phase_borrow)
+            format!("Mut(two_phase={allow_two_phase_borrow})")
         }
     }
 }
@@ -356,7 +360,7 @@ fn format_terminator(
 
 fn format_assert_message(msg: &glyim_mir::AssertMessage) -> String {
     match msg {
-        glyim_mir::AssertMessage::Overflow(op) => format!("Overflow({:?})", op),
+        glyim_mir::AssertMessage::Overflow(op) => format!("Overflow({op:?})"),
         glyim_mir::AssertMessage::DivisionByZero => "DivisionByZero".to_string(),
         glyim_mir::AssertMessage::RemainderByZero => "RemainderByZero".to_string(),
         glyim_mir::AssertMessage::BoundsCheck => "BoundsCheck".to_string(),
@@ -382,7 +386,7 @@ fn format_place(
     };
     if verbose {
         let ty = place.ty(ctx, locals);
-        s.push_str(&format!(": {}", glyim_type::PrintTy::new(ty, ctx)));
+        let _ = write!(s, ": {}", glyim_type::PrintTy::new(ty, ctx));
     }
     s
 }
@@ -399,12 +403,11 @@ fn format_projection_elem(elem: &glyim_mir::ProjectionElem) -> String {
             offset,
             min_length,
             from_end,
-        } => format!(
-            "ConstantIndex(offset={}, min_length={}, from_end={})",
-            offset, min_length, from_end
-        ),
+        } => {
+            format!("ConstantIndex(offset={offset}, min_length={min_length}, from_end={from_end})")
+        }
         glyim_mir::ProjectionElem::Subslice { from, to, from_end } => {
-            format!("Subslice(from={}, to={}, from_end={})", from, to, from_end)
+            format!("Subslice(from={from}, to={to}, from_end={from_end})")
         }
     }
 }
@@ -428,22 +431,22 @@ fn format_operand(
 
 fn format_const(c: &glyim_mir::MirConst) -> String {
     match &c.kind {
-        glyim_mir::MirConstKind::Int(v) => format!("int({})", v),
-        glyim_mir::MirConstKind::Uint(v) => format!("uint({})", v),
-        glyim_mir::MirConstKind::FloatBits(bits) => format!("float_bits({})", bits),
-        glyim_mir::MirConstKind::Bool(v) => format!("bool({})", v),
+        glyim_mir::MirConstKind::Int(v) => format!("int({v})"),
+        glyim_mir::MirConstKind::Uint(v) => format!("uint({v})"),
+        glyim_mir::MirConstKind::FloatBits(bits) => format!("float_bits({bits})"),
+        glyim_mir::MirConstKind::Bool(v) => format!("bool({v})"),
         glyim_mir::MirConstKind::Char(v) => format!("char('{}')", v.escape_default()),
-        glyim_mir::MirConstKind::String(name) => format!("string({:?})", name),
+        glyim_mir::MirConstKind::String(name) => format!("string({name:?})"),
         glyim_mir::MirConstKind::Unit => "()".to_string(),
-        glyim_mir::MirConstKind::Fn(def_id, substs) => format!("fn({:?}, {:?})", def_id, substs),
+        glyim_mir::MirConstKind::Fn(def_id, substs) => format!("fn({def_id:?}, {substs:?})"),
         glyim_mir::MirConstKind::ConstRef(def_id, substs) => {
-            format!("const_ref({:?}, {:?})", def_id, substs)
+            format!("const_ref({def_id:?}, {substs:?})")
         }
         glyim_mir::MirConstKind::Aggregate(elems) => {
             let parts: Vec<String> = elems.iter().map(format_const).collect();
             format!("aggregate([{}])", parts.join(", "))
         }
-        glyim_mir::MirConstKind::SizeOf(t) => format!("size_of({:?})", t),
+        glyim_mir::MirConstKind::SizeOf(t) => format!("size_of({t:?})"),
         glyim_mir::MirConstKind::Variant {
             adt_id,
             variant_idx,
@@ -472,34 +475,27 @@ fn format_const(c: &glyim_mir::MirConst) -> String {
             trait_def_id,
             method_name,
             ..
-        } => format!("virtual_method({:?}::{:?})", trait_def_id, method_name),
+        } => format!("virtual_method({trait_def_id:?}::{method_name:?})"),
     }
 }
 
-/// format_def_map.
+/// `format_def_map`.
+#[must_use]
 pub fn format_def_map(def_map: &glyim_def_map::CrateDefMap) -> String {
     let mut out = String::new();
-    out.push_str(&format!(
-        "CrateDefMap (root: {:?}, krate: {:?})\n",
+    let _ = writeln!(
+        out,
+        "CrateDefMap (root: {:?}, krate: {:?})",
         def_map.root, def_map.krate
-    ));
+    );
     for (idx, module) in def_map.modules.iter_enumerated() {
-        out.push_str(&format!("  module {:?}:\n", idx));
-        out.push_str(&format!("    parent: {:?}\n", module.parent));
-        out.push_str(&format!(
-            "    origin: {}\n",
-            format_module_origin(&module.origin)
-        ));
-        out.push_str(&format!("    children: {}\n", module.children.len()));
-        out.push_str(&format!("    scope.types: {}\n", module.scope.types.len()));
-        out.push_str(&format!(
-            "    scope.values: {}\n",
-            module.scope.values.len()
-        ));
-        out.push_str(&format!(
-            "    scope.macros: {}\n",
-            module.scope.macros.len()
-        ));
+        let _ = writeln!(out, "  module {idx:?}:");
+        let _ = writeln!(out, "    parent: {:?}", module.parent);
+        let _ = writeln!(out, "    origin: {}", format_module_origin(&module.origin));
+        let _ = writeln!(out, "    children: {}", module.children.len());
+        let _ = writeln!(out, "    scope.types: {}", module.scope.types.len());
+        let _ = writeln!(out, "    scope.values: {}", module.scope.values.len());
+        let _ = writeln!(out, "    scope.macros: {}", module.scope.macros.len());
     }
     out
 }
@@ -507,7 +503,7 @@ pub fn format_def_map(def_map: &glyim_def_map::CrateDefMap) -> String {
 fn format_module_origin(origin: &glyim_def_map::ModuleOrigin) -> String {
     match origin {
         glyim_def_map::ModuleOrigin::CrateRoot => "CrateRoot".to_string(),
-        glyim_def_map::ModuleOrigin::File { file_id } => format!("File({:?})", file_id),
-        glyim_def_map::ModuleOrigin::Inline { span } => format!("Inline({:?})", span),
+        glyim_def_map::ModuleOrigin::File { file_id } => format!("File({file_id:?})"),
+        glyim_def_map::ModuleOrigin::Inline { span } => format!("Inline({span:?})"),
     }
 }

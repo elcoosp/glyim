@@ -21,3 +21,6 @@ tempfile = "3.27"
 serde_json = { workspace = true }
 [dev-dependencies]
 glyim-test = { workspace = true }
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true

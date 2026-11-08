@@ -17,3 +17,6 @@ glyim-diag = { workspace = true }
 glyim-diag = { workspace = true }
 glyim-frontend = { workspace = true }
 glyim-test = { workspace = true }
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true

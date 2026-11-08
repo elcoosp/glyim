@@ -2,7 +2,7 @@ use crate::mock::TestDbBuilder;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// AnalysisTester.
+/// `AnalysisTester`.
 pub struct AnalysisTester {
     source: String,
 }
@@ -14,7 +14,8 @@ impl AnalysisTester {
             source: source.into(),
         }
     }
-    /// run_def_map.
+    /// `run_def_map`.
+    #[must_use]
     pub fn run_def_map(self) -> super::CompilationTrace {
         let mut trace = super::CompilationTrace::default();
         let parse = glyim_frontend::parse_to_syntax(&self.source, glyim_span::FileId::from_raw(0));

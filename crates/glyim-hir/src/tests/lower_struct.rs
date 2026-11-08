@@ -25,7 +25,7 @@ fn test_struct_record() {
             assert_eq!(interner.resolve(s.fields[1].name), "y");
             assert!(s.generic_params.is_empty());
         }
-        other => panic!("Expected Struct item, got {:?}", other),
+        other => panic!("Expected Struct item, got {other:?}"),
     }
 }
 
@@ -46,6 +46,6 @@ fn test_struct_unit() {
             assert_eq!(s.kind, StructKind::Unit);
             assert!(s.fields.is_empty());
         }
-        other => panic!("Expected Struct item, got {:?}", other),
+        other => panic!("Expected Struct item, got {other:?}"),
     }
 }

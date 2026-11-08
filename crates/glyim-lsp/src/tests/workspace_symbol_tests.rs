@@ -23,7 +23,7 @@ fn analysis_with_symbols(names: &[&str]) -> (AnalysisDatabase, FileId) {
     };
     // A 1-line source long enough for the dummy spans below.
     let source = "fn placeholder() {}\n".to_string();
-    let sm = SourceMap::new(path.clone(), file_id, source.clone());
+    let sm = SourceMap::new(file_id, source.clone());
     analysis.source_maps.write().insert(file_id, sm);
 
     let span = Span::new(
@@ -54,8 +54,8 @@ fn workspace_symbols_fuzzy_search() {
         analysis_with_symbols(&["apple", "application", "banana", "ape", "grape"]);
     let params = WorkspaceSymbolParams {
         query: "app".to_string(),
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: WorkDoneProgressParams::default(),
+        partial_result_params: PartialResultParams::default(),
     };
     let results = workspace_symbols(&analysis, &params).unwrap();
     let result_names: Vec<_> = results.iter().map(|s| s.name.as_str()).collect();
@@ -74,8 +74,8 @@ fn workspace_symbols_fuzzy_matching_limit() {
     let (analysis, _fid) = analysis_with_symbols(&["alpha", "beta", "gamma", "delta", "epsilon"]);
     let params = WorkspaceSymbolParams {
         query: "a".to_string(),
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: WorkDoneProgressParams::default(),
+        partial_result_params: PartialResultParams::default(),
     };
     let results = workspace_symbols(&analysis, &params).unwrap();
     // Every symbol contains 'a', so all are subsequence matches; the limit of
@@ -106,15 +106,14 @@ fn workspace_symbols_subsequence_fuzzy() {
     ]);
     let params = WorkspaceSymbolParams {
         query: "gsrbt".to_string(),
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: WorkDoneProgressParams::default(),
+        partial_result_params: PartialResultParams::default(),
     };
     let results = workspace_symbols(&analysis, &params).unwrap();
     let result_names: Vec<_> = results.iter().map(|s| s.name.as_str()).collect();
     assert!(
         result_names.contains(&"get_something_related_by_type"),
-        "fuzzy subsequence gsrbt should surface get_something_related_by_type, got {:?}",
-        result_names
+        "fuzzy subsequence gsrbt should surface get_something_related_by_type, got {result_names:?}"
     );
     assert!(
         !result_names.contains(&"get_serialized_buffer"),

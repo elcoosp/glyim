@@ -1,7 +1,7 @@
 //! Probe: parse every embedded alloc `.g` module through the real glyim
 //! frontend and report which parse cleanly. Maps the production-readiness gap
 //! in the standard library (audit report §TIER-2 #6). alloc.g was fixed today
-//! (unsafe-fn parse blocker); this confirms boxed/rc/vec/string/raw_vec too.
+//! (unsafe-fn parse blocker); this confirms `boxed/rc/vec/string/raw_vec` too.
 
 use glyim_frontend::parse_to_syntax;
 use glyim_lang_alloc::{alloc_source, alloc_source_all};
@@ -41,6 +41,6 @@ fn probe_alloc_modules_parse() {
     } else {
         fail += 1;
     }
-    println!("ALLOC-PARSE-PROBE: {} pass, {} fail", pass, fail);
+    println!("ALLOC-PARSE-PROBE: {pass} pass, {fail} fail");
     assert!(pass > 0);
 }

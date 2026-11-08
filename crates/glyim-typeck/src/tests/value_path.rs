@@ -55,8 +55,7 @@ fn function_value_path_resolves_to_fnref() {
     register_fn(&mut ctx, fn_def_id);
 
     // Body: a single expression `foo` (a function reference).
-    let mut exprs = Vec::new();
-    exprs.push(Expr::Path(Path::from_single(foo)));
+    let exprs = vec![Expr::Path(Path::from_single(foo))];
     let (hir, body_id) = make_single_body_hir(exprs);
 
     let mut infer = glyim_solve::InferenceTable::new();
@@ -73,18 +72,17 @@ fn function_value_path_resolves_to_fnref() {
 
     assert!(
         diags.is_empty(),
-        "function value path should resolve with no diagnostics, got: {:?}",
-        diags
+        "function value path should resolve with no diagnostics, got: {diags:?}"
     );
 
     let stmt = &thir_body.stmts[0];
     let expr = match stmt {
         crate::thir::Stmt::Expr { expr, .. } => expr,
-        other => panic!("expected Expr statement, got {:?}", other),
+        other => panic!("expected Expr statement, got {other:?}"),
     };
     match &expr.kind {
         crate::thir::ExprKind::FnRef(id) => assert_eq!(*id, fn_def_id),
-        other => panic!("expected FnRef, got {:?}", other),
+        other => panic!("expected FnRef, got {other:?}"),
     }
     assert!(
         matches!(ctx.ty_kind(expr.ty), TyKind::FnDef(id, _) if *id == fn_def_id),
@@ -101,12 +99,13 @@ fn calling_function_value_path_yields_return_type() {
     register_fn(&mut ctx, fn_def_id);
 
     // Body: `foo()` — call the function reference.
-    let mut exprs = Vec::new();
-    exprs.push(Expr::Path(Path::from_single(foo)));
-    exprs.push(Expr::Call {
-        func: ExprId::from_raw(0),
-        args: vec![],
-    });
+    let exprs = vec![
+        Expr::Path(Path::from_single(foo)),
+        Expr::Call {
+            func: ExprId::from_raw(0),
+            args: vec![],
+        },
+    ];
     let (hir, body_id) = make_single_body_hir(exprs);
 
     let mut infer = glyim_solve::InferenceTable::new();
@@ -123,14 +122,13 @@ fn calling_function_value_path_yields_return_type() {
 
     assert!(
         diags.is_empty(),
-        "calling a resolved function should produce no diagnostics, got: {:?}",
-        diags
+        "calling a resolved function should produce no diagnostics, got: {diags:?}"
     );
 
     let call_stmt = &thir_body.stmts[1];
     let ty = match call_stmt {
         crate::thir::Stmt::Expr { expr, .. } => expr.ty,
-        other => panic!("expected Expr statement, got {:?}", other),
+        other => panic!("expected Expr statement, got {other:?}"),
     };
     assert_eq!(
         *ctx.ty_kind(ty),

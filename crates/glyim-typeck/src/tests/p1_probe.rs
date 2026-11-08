@@ -1,5 +1,5 @@
 //! Real-pipeline probes for remaining P1 gaps. Modeled on the proven-working
-//! `block_on<F: Future> -> F::Output` pattern in async_await.rs.
+//! `block_on<F: Future> -> F::Output` pattern in `async_await.rs`.
 use glyim_span::FileId;
 use glyim_test::assert_no_errors;
 use glyim_test::harness::compiler::{CompileOutput, PipelineCompiler, TestCompiler};
@@ -22,7 +22,7 @@ fn compile(src: &str) -> CompileOutput {
 fn p1a_concrete_impl_output_projection() {
     // Non-generic impl so the projection's self type is concrete (no inference
     // var). Confirms impl-param substitution normalizes `F::Output` to `i32`.
-    let src = r#"
+    let src = r"
         enum Poll<T> { Ready(T), Pending }
         trait Future {
             type Output;
@@ -45,7 +45,7 @@ fn p1a_concrete_impl_output_projection() {
             let r = ReadyInt { val: 7 };
             block_on(r)
         }
-    "#;
+    ";
     let output = compile(src);
     for d in &output.diagnostics {
         eprintln!("DIAG: {:?}", d.message);
@@ -62,7 +62,7 @@ fn p1a_generic_impl_concrete_arg_projection() {
     // Generic impl `impl<T> Future for ReadyT<T>` with a concrete `ReadyT<i32>`
     // argument. Requires impl-param substitution (T := i32) during projection
     // normalization.
-    let src = r#"
+    let src = r"
         enum Poll<T> { Ready(T), Pending }
         trait Future {
             type Output;
@@ -86,7 +86,7 @@ fn p1a_generic_impl_concrete_arg_projection() {
             let r = make();
             block_on(r)
         }
-    "#;
+    ";
     let output = compile(src);
     for d in &output.diagnostics {
         eprintln!("DIAG: {:?}", d.message);
@@ -104,7 +104,7 @@ fn p1d_deref_autoderef() {
     // A smart-pointer `Box<T>` that derefs to `T`; calling an inherent method on
     // the inner type through the wrapper must autoderef. Verifies Phase 5
     // (Deref autoderef for ADTs) end-to-end via the real pipeline.
-    let src = r#"
+    let src = r"
         struct Box<T> { ptr: T }
         impl<T> Deref for Box<T> {
             type Target = T;
@@ -117,7 +117,7 @@ fn p1d_deref_autoderef() {
             let b = Box { ptr: Inner { value: 9 } };
             b.get()
         }
-    "#;
+    ";
     let output = compile(src);
     for d in &output.diagnostics {
         eprintln!("DIAG: {:?}", d.message);

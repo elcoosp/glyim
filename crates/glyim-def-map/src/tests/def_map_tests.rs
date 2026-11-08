@@ -4,6 +4,7 @@ use glyim_core::path::{Path, PathKind, PathSegment};
 use glyim_core::primitives::Visibility;
 use glyim_frontend::parse_to_syntax;
 use glyim_span::FileId;
+use std::fmt::Write as _;
 
 fn build_map(source: &str) -> (CrateDefMap, Vec<GlyimDiagnostic>) {
     let file_id = FileId::from_raw(0);
@@ -21,16 +22,17 @@ fn root_scope(def_map: &CrateDefMap) -> &ItemScope {
 
 fn resolve_path(def_map: &CrateDefMap, path_str: &str) -> PerNs {
     let mut kind = PathKind::Plain;
-    let remaining = if path_str.starts_with("crate::") {
+    let remaining = if let Some(rest) = path_str.strip_prefix("crate::") {
         kind = PathKind::Crate;
-        &path_str[7..]
+        rest
     } else if path_str.starts_with("super::") {
         let depth = path_str.matches("super::").count() as u32;
         kind = PathKind::Super(depth);
-        &path_str[(7 * depth as usize)..]
-    } else if path_str.starts_with("self::") {
+        let rest = path_str.strip_prefix("super::").unwrap_or(path_str);
+        &rest[7 * (depth.saturating_sub(1) as usize)..]
+    } else if let Some(rest) = path_str.strip_prefix("self::") {
         kind = PathKind::SelfPath;
-        &path_str[6..]
+        rest
     } else {
         path_str
     };
@@ -80,7 +82,7 @@ fn t01_empty_file_creates_root_module() {
     let root = def_map.root;
     let data = &def_map.modules[root];
     assert!(data.parent.is_none());
-    assert!(data.children.is_empty());
+    assert_eq!(data.children, [] as [(glyim_core::Name, ModuleId); 0]);
     assert!(data.scope.types.is_empty());
     assert!(data.scope.values.is_empty());
     assert!(data.scope.macros.is_empty());
@@ -309,10 +311,7 @@ fn t14_visibility_inherited_stored_correctly() {
 fn t15_many_items() {
     let mut src = String::new();
     for i in 0..50 {
-        src.push_str(&format!(
-            "fn f{i}() {{}}
-"
-        ));
+        let _ = writeln!(src, "fn f{i}() {{}}");
     }
     let (def_map, diags) = build_map(&src);
     assert!(diags.is_empty());
@@ -426,7 +425,7 @@ fn t27_unique_local_def_ids() {
         ids.push(id.to_raw());
     }
     // All ids should be unique
-    let unique: std::collections::HashSet<u32> = ids.iter().cloned().collect();
+    let unique: std::collections::HashSet<u32> = ids.iter().copied().collect();
     assert_eq!(ids.len(), unique.len());
 }
 

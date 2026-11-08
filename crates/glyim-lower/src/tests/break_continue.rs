@@ -28,7 +28,7 @@ fn break_in_loop_does_not_panic() {
     );
     let body = b.into_body(vec![thir::Stmt::Expr { expr: loop_expr }], vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(3);
+    let _ = assert_mir(&ctx, &result.body).block_count(3);
 }
 
 #[test]

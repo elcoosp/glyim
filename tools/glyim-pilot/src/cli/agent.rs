@@ -6,6 +6,7 @@ use clap::Subcommand;
 use reqwest::Client;
 use serde_json;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,18 +14,18 @@ use tokio::time;
 use walkdir::WalkDir;
 
 #[derive(Subcommand)]
-/// AgentCommands.
+/// `AgentCommands`.
 pub enum AgentCommands {
     /// Run a single stream (e.g., S01)
     Run {
         #[arg(short, long)]
-        /// Struct.
+        /// `Struct`.
         stream: String,
         #[arg(short, long)]
-        /// Struct.
+        /// `Struct`.
         provider: Option<String>,
         #[arg(short, long, default_value_t = false)]
-        /// Struct.
+        /// `Struct`.
         wait: bool,
     },
     /// Run a wave (all streams in current wave)
@@ -36,12 +37,12 @@ pub enum AgentCommands {
     /// Manually mark a session's PR as merged (fallback for auto-detection)
     MarkMerged {
         #[arg(short, long)]
-        /// Struct.
+        /// `Struct`.
         stream: String,
     },
 }
 
-/// handle_agent_command.
+/// `handle_agent_command`.
 pub async fn handle_agent_command(
     cmd: AgentCommands,
     config: &Arc<PilotConfig>,
@@ -74,7 +75,7 @@ pub async fn handle_agent_command(
 
 /// Determine the repository root directory.
 /// If we are inside `tools/glyim-pilot`, the repo root is two levels up.
-/// Otherwise, use the given project_root.
+/// Otherwise, use the given `project_root`.
 fn find_repo_root(project_root: &Path) -> PathBuf {
     // Try to go up two levels from project_root (assuming we are in tools/glyim-pilot)
     let candidate = project_root.join("../../");
@@ -113,9 +114,9 @@ async fn run_stream(
 
     if !resp.status().is_success() {
         let text = resp.text().await?;
-        anyhow::bail!("Failed to start session: {}", text);
+        anyhow::bail!("Failed to start session: {text}");
     }
-    println!("Session started for stream {}", stream_id);
+    println!("Session started for stream {stream_id}");
 
     if wait {
         println!("Waiting for session to complete...");
@@ -125,9 +126,9 @@ async fn run_stream(
             Duration::from_secs(3600),
         )
         .await?;
-        println!("Session finished with status: {}", status);
+        println!("Session finished with status: {status}");
         if status != "committed" && status != "escalated" {
-            anyhow::bail!("Session did not complete successfully (status: {})", status);
+            anyhow::bail!("Session did not complete successfully (status: {status})");
         }
     }
     Ok(())
@@ -145,10 +146,7 @@ async fn wait_for_session(
     let mut unknown_start = None;
     loop {
         let resp = client
-            .get(format!(
-                "http://127.0.0.1:8421/session/{}/status",
-                session_id
-            ))
+            .get(format!("http://127.0.0.1:8421/session/{session_id}/status"))
             .send()
             .await?;
         if resp.status().is_success() {
@@ -194,18 +192,17 @@ async fn assemble_prompts(
 
     let system_prompt = format!(
         "You are a helpful assistant. Output only code inside ```glyim-ops blocks.\n\n\
-         ---\n{}\n---\n{}\n---\n{}",
-        master_ctx, contracts, test_instructions
+         ---\n{master_ctx}\n---\n{contracts}\n---\n{test_instructions}"
     );
 
-    let brief = tokio::fs::read_to_string(kit_dir.join(format!("briefs/{}.md", stream_id))).await?;
+    let brief = tokio::fs::read_to_string(kit_dir.join(format!("briefs/{stream_id}.md"))).await?;
 
     let streams_json = tokio::fs::read_to_string(kit_dir.join("streams.json")).await?;
     let streams: Vec<serde_json::Value> = serde_json::from_str(&streams_json)?;
     let stream_data = streams
         .iter()
         .find(|s| s["id"].as_str() == Some(stream_id))
-        .ok_or_else(|| anyhow::anyhow!("Stream {} not found in streams.json", stream_id))?;
+        .ok_or_else(|| anyhow::anyhow!("Stream {stream_id} not found in streams.json"))?;
     let owned_crates: Vec<String> = stream_data["owned_crates"]
         .as_array()
         .unwrap_or(&vec![])
@@ -215,7 +212,7 @@ async fn assemble_prompts(
 
     let exec_config = crate::config::types::ExecutionConfig::default();
     let worktree_base = Path::new(&exec_config.worktree_base);
-    let worktree_path = worktree_base.join(format!("stream-{}", stream_id));
+    let worktree_path = worktree_base.join(format!("stream-{stream_id}"));
     let source_root = if worktree_path.exists() {
         worktree_path
     } else {
@@ -241,20 +238,20 @@ async fn assemble_prompts(
                     continue;
                 }
                 let content = tokio::fs::read_to_string(path).await?;
-                source_context.push_str(&format!(
+                let _ = write!(
+                    source_context,
                     "\n### {}\n```rust\n{}\n```\n",
                     rel_path.display(),
                     content
-                ));
+                );
             }
         }
     }
 
     let user_prompt = format!(
-        "You are implementing Stream {} for the Glyim compiler.\n\n\
-         ## Your Stream Brief\n{}\n\n\
-         ## Source Code Context\n{}",
-        stream_id, brief, source_context
+        "You are implementing Stream {stream_id} for the Glyim compiler.\n\n\
+         ## Your Stream Brief\n{brief}\n\n\
+         ## Source Code Context\n{source_context}"
     );
 
     Ok((system_prompt, user_prompt))
@@ -296,7 +293,7 @@ async fn run_wave(
     }
 
     if next {
-        println!("Proceeding to wave {}", current_wave);
+        println!("Proceeding to wave {current_wave}");
         let wave_streams = &waves[current_wave];
         let mut provider_pool = ProviderPool::new(&config.providers);
         let assignments = dispatch_wave(
@@ -323,16 +320,15 @@ async fn run_wave(
             });
         }
         println!(
-            "Wave {} started. Use `cargo run -- agent wave --next` after all PRs are merged.",
-            current_wave
+            "Wave {current_wave} started. Use `cargo run -- agent wave --next` after all PRs are merged."
         );
     } else {
-        println!("Current wave: {}", current_wave);
+        println!("Current wave: {current_wave}");
         println!("Streams not yet merged:");
         for sid in &waves[current_wave] {
             let merged = persistence.get_pr_merged(sid).await.unwrap_or(false);
             if !merged {
-                println!("  - {}", sid);
+                println!("  - {sid}");
             }
         }
         println!("Run `cargo run -- agent wave --next` after merging all PRs in this wave.");
@@ -359,7 +355,7 @@ fn compute_waves(streams: &mut [serde_json::Value]) -> Result<Vec<Vec<String>>, 
     let mut changed = true;
     while changed {
         changed = false;
-        for (id, upstream) in id_to_upstream.iter() {
+        for (id, upstream) in &id_to_upstream {
             // T200-PATCHED [PILOT-18]: resolve each upstream id through
             // `.get()` and error clearly if it isn't in the map. The
             // previous `id_to_wave[u]` panicked with a HashMap index error
@@ -367,7 +363,7 @@ fn compute_waves(streams: &mut [serde_json::Value]) -> Result<Vec<Vec<String>>, 
             // misspelled upstream id, masking what was a trivial config
             // bug as a compiler-style crash.
             let mut max_upstream_wave = 0usize;
-            for u in upstream.iter() {
+            for u in upstream {
                 match id_to_wave.get(u) {
                     Some(&w) => {
                         if w > max_upstream_wave {
@@ -376,9 +372,7 @@ fn compute_waves(streams: &mut [serde_json::Value]) -> Result<Vec<Vec<String>>, 
                     }
                     None => {
                         return Err(anyhow::anyhow!(
-                            "stream {} references unknown upstream {}",
-                            id,
-                            u
+                            "stream {id} references unknown upstream {u}"
                         ));
                     }
                 }
@@ -393,7 +387,7 @@ fn compute_waves(streams: &mut [serde_json::Value]) -> Result<Vec<Vec<String>>, 
 
     let max_wave = *id_to_wave.values().max().unwrap_or(&0);
     let mut waves = vec![vec![]; max_wave + 1];
-    for (id, wave) in id_to_wave.iter() {
+    for (id, wave) in &id_to_wave {
         waves[*wave].push(id.clone());
     }
 
@@ -415,14 +409,14 @@ async fn mark_merged(
 ) -> Result<(), anyhow::Error> {
     let client = Client::new();
     let resp = client
-        .post(format!("http://127.0.0.1:8421/session/{}/merge", stream_id))
+        .post(format!("http://127.0.0.1:8421/session/{stream_id}/merge"))
         .send()
         .await?;
     if resp.status().is_success() {
-        println!("Stream {} marked as merged.", stream_id);
+        println!("Stream {stream_id} marked as merged.");
     } else {
         let text = resp.text().await?;
-        anyhow::bail!("Failed to mark merged: {}", text);
+        anyhow::bail!("Failed to mark merged: {text}");
     }
     Ok(())
 }

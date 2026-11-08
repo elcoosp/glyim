@@ -6,13 +6,14 @@ use crate::gates::types::GateContext;
 use crate::gates::{Gate, GateResult};
 use async_trait::async_trait;
 
-/// BannedPatternGate.
+/// `BannedPatternGate`.
 pub struct BannedPatternGate {
     patterns: Vec<BannedPattern>,
 }
 
 impl BannedPatternGate {
     /// new.
+    #[must_use]
     pub fn new(patterns: Vec<BannedPattern>) -> Self {
         Self {
             patterns: if patterns.is_empty() {
@@ -22,7 +23,8 @@ impl BannedPatternGate {
             },
         }
     }
-    /// with_defaults.
+    /// `with_defaults`.
+    #[must_use]
     pub fn with_defaults() -> Self {
         Self::new(default_banned_patterns())
     }
@@ -35,7 +37,7 @@ impl Default for BannedPatternGate {
 
 #[async_trait]
 impl Gate for BannedPatternGate {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "banned_patterns"
     }
 
@@ -50,7 +52,10 @@ impl Gate for BannedPatternGate {
 
             if use_diff {
                 for rel_path in &changed_files {
-                    if !rel_path.ends_with(".rs") {
+                    let is_rust = std::path::Path::new(rel_path)
+                        .extension()
+                        .is_some_and(|e| e.eq_ignore_ascii_case("rs"));
+                    if !is_rust {
                         continue;
                     }
                     if rel_path.contains("/tests/") || rel_path.contains("\\tests\\") {
@@ -316,7 +321,7 @@ mod tests {
         let patterns = default_banned_patterns();
         let mut violations = Vec::new();
         check_content_for_violations(content, "test.rs", &patterns, &mut violations);
-        assert!(violations.is_empty());
+        assert!(violations.is_empty(), "violations: {violations:?}");
     }
 
     #[test]
@@ -335,6 +340,6 @@ mod tests {
         let mut violations = Vec::new();
         let content = r#"let msg = "unwrap is not called";"#;
         check_content_for_violations(content, "test.rs", &patterns, &mut violations);
-        assert!(violations.is_empty());
+        assert!(violations.is_empty(), "violations: {violations:?}");
     }
 }

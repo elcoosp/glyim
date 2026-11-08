@@ -1,4 +1,4 @@
-//! S22-T05: Tests for unhandled PassMode arguments.
+//! S22-T05: Tests for unhandled `PassMode` arguments.
 
 use super::helpers::*;
 use crate::LlvmBackend;

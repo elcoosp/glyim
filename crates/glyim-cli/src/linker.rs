@@ -111,7 +111,6 @@ impl LinkerInvoker for MsvcLinker {
     }
 }
 
-/// P1-O3 (KNOWN_GAPS §7): probe whether `name` is a runnable program on
 /// the current `PATH`. Used only to pick a sensible default linker on
 /// Windows; a false negative just means the fallback name is used, which
 /// still surfaces a clean "linker not found" error if neither exists.
@@ -120,14 +119,12 @@ fn which_on_path(name: &str) -> bool {
         return Command::new("which")
             .arg(name)
             .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
+            .is_ok_and(|o| o.status.success());
     }
     Command::new("where")
         .arg(name)
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 /// Assemble the flat flag string from structured `LinkArgs` (plan §18.2):
@@ -139,7 +136,7 @@ fn build_link_flags(args: &LinkArgs) -> Option<String> {
         parts.push(format!("-L{}", path.display()));
     }
     for lib in &args.libs {
-        parts.push(format!("-l{}", lib));
+        parts.push(format!("-l{lib}"));
     }
     for obj in &args.objects {
         parts.push(obj.display().to_string());
@@ -152,7 +149,7 @@ fn build_link_flags(args: &LinkArgs) -> Option<String> {
     }
 }
 
-/// invoke_linker.
+/// `invoke_linker`.
 pub fn invoke_linker(
     obj_path: &Path,
     output_path: &Path,
@@ -164,7 +161,11 @@ pub fn invoke_linker(
     // share one flag-assembly/linker-selection path.
     let args = LinkArgs {
         user_flags: link_flags
-            .map(|s| s.split_whitespace().map(|f| f.to_string()).collect())
+            .map(|s| {
+                s.split_whitespace()
+                    .map(std::string::ToString::to_string)
+                    .collect()
+            })
             .unwrap_or_default(),
         ..Default::default()
     };
@@ -181,6 +182,7 @@ pub fn invoke_linker(
 /// 3. `../target/<profile>/libglyim_runtime.a` (cwd = a subdirectory).
 /// 4. Walking up from the current executable (handles `cargo run`, where the
 ///    process's cwd may not be the repo root).
+#[must_use]
 pub fn find_runtime_staticlib() -> Option<std::path::PathBuf> {
     if let Ok(p) = std::env::var("GLYIM_RUNTIME_LIB") {
         let path = std::path::PathBuf::from(p);
@@ -201,7 +203,7 @@ pub fn find_runtime_staticlib() -> Option<std::path::PathBuf> {
     // on Unix the `.lib` variants don't exist so this is a no-op.
     let names = ["libglyim_runtime.a", "glyim_runtime.lib"];
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
-    for name in names.iter() {
+    for name in &names {
         candidates.push(std::path::PathBuf::from("target").join(profile).join(name));
         candidates.push(
             std::path::PathBuf::from("..")
@@ -217,7 +219,7 @@ pub fn find_runtime_staticlib() -> Option<std::path::PathBuf> {
     }
     if let Ok(exe) = std::env::current_exe() {
         for ancestor in exe.ancestors() {
-            for name in names.iter() {
+            for name in &names {
                 let candidate = ancestor.join(name);
                 if candidate.exists() {
                     return Some(candidate);
@@ -236,7 +238,7 @@ pub fn find_runtime_staticlib() -> Option<std::path::PathBuf> {
 /// A link error mentioning one of these is most likely a stale
 /// `libglyim_runtime.a` — one built from older runtime source than the
 /// current compiler. P1-O8 exists to turn that confusing failure mode
-/// (`undefined reference to \`glyim_stdout_write\``) into an actionable
+/// ("undefined reference to `glyim_stdout_write`") into an actionable
 /// message.
 const RUNTIME_SYMBOLS: &[&str] = &[
     "glyim_alloc",
@@ -276,8 +278,10 @@ fn annotate_link_error_if_stale_runtime_with(
         .and_then(|m| m.modified())
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| format!("{}s since epoch", d.as_secs()))
-        .unwrap_or_else(|| "unknown".to_string());
+        .map_or_else(
+            || "unknown".to_string(),
+            |d| format!("{}s since epoch", d.as_secs()),
+        );
     format!(
         "{err}\n\n\
          Hint: the link step could not resolve `glyim_*` runtime symbols.\n\
@@ -295,6 +299,7 @@ fn annotate_link_error_if_stale_runtime_with(
 /// Public wrapper: consult [`find_runtime_staticlib`] and delegate to the
 /// pure annotator. Call at every `link_with_args` failure site so a stale
 /// runtime is diagnosed at the moment it fails.
+#[must_use]
 pub fn annotate_link_error_if_stale_runtime(err: String) -> String {
     let path = find_runtime_staticlib();
     annotate_link_error_if_stale_runtime_with(err, path.as_deref())
@@ -367,8 +372,7 @@ pub fn link_with_args(
     //     contradictory request.
     let eff_triple = target_triple
         .filter(|t| !t.is_empty())
-        .map(|t| t.to_string())
-        .unwrap_or_else(crate::host_target_triple);
+        .map_or_else(crate::host_target_triple, std::string::ToString::to_string);
     let is_driver_link = !cfg!(target_os = "windows")
         && (final_linker_name == "cc"
             || final_linker_name == "gcc"
@@ -422,7 +426,7 @@ pub fn link_with_args(
 ///   the host triple without flags; a genuine cross build needs either clang
 ///   or a matching `<arch>-<os>-gnu*` cross gcc.
 /// - GNU `ld` needs an explicit emulation via `-m <emulation>` (e.g.
-///   `-m aarch64linux` for an aarch64 Linux target from an x86_64 host).
+///   `-m aarch64linux` for an aarch64 Linux target from an `x86_64` host).
 pub(crate) fn linker_flags_for_target(triple: &str, linker: &str) -> Result<Vec<String>, String> {
     // The flags differ between a compiler *driver* (cc/clang/gcc) and a raw
     // GNU `ld`:
@@ -522,9 +526,8 @@ pub(crate) fn linker_flags_for_raw_ld(triple: &str) -> Result<Vec<String>, Strin
         "wasm32" => "elf32_wasm",
         _ => {
             return Err(format!(
-                "cross-compilation target '{}' is not in the supported linker-flag table; \
-                 supply explicit --target/--ld-emulation flags via the linker config",
-                triple
+                "cross-compilation target '{triple}' is not in the supported linker-flag table; \
+                 supply explicit --target/--ld-emulation flags via the linker config"
             ));
         }
     };
@@ -692,12 +695,11 @@ fn find_llvm_tool(name: &str) -> Result<std::path::PathBuf, String> {
     ))
 }
 
-/// Drive LLVM's ThinLTO thin-link over a set of per-CGU bitcode files with
+/// Drive LLVM's `ThinLTO` thin-link over a set of per-CGU bitcode files with
 /// embedded summaries, producing one optimized object per module, then hand
 /// the resulting objects to the existing native linker invocation.
 ///
 /// The preferred driver is `llvm-lto2 run` (ships with every LLVM distribution
-/// that has `llc`/`opt` and is the officially supported ThinLTO driver) — this
 /// sidesteps needing unstable FFI bindings for `LTOCodeGenerator`. `glyim-cli`
 /// emits each CGU's bitcode via `glyim_codegen_llvm::passes::emit_thinlto_bitcode`
 /// and passes the resulting `.bc` paths here.
@@ -778,7 +780,7 @@ pub fn thin_lto_link(
         .status()
         .map_err(|e| format!("failed to spawn {}: {}", llvm_lto2.display(), e))?;
     if !status.success() {
-        return Err(format!("llvm-lto2 thin-link failed with status {}", status));
+        return Err(format!("llvm-lto2 thin-link failed with status {status}"));
     }
     // llvm-lto2 in `run` mode does the thin-link AND the backend codegen
     // in one invocation, merging all modules into a single optimized
@@ -787,7 +789,7 @@ pub fn thin_lto_link(
     // only the objects that actually exist so the caller doesn't try to
     // link phantom `thinlto.1`, `thinlto.2`, ….
     let outs: Vec<std::path::PathBuf> = (0..bitcode_paths.len())
-        .map(|i| out_dir.join(format!("thinlto.{}", i)))
+        .map(|i| out_dir.join(format!("thinlto.{i}")))
         .filter(|p| p.exists())
         .collect();
     if outs.is_empty() {
@@ -836,8 +838,7 @@ mod tests {
         const CANDIDATES: &[&str] = &["cc", "clang", "gcc", "ld", "ld.lld", "ld.gold", "mold"];
         assert!(
             CANDIDATES.contains(&detected.as_str()),
-            "detected linker '{}' must be one of the probed candidates",
-            detected
+            "detected linker '{detected}' must be one of the probed candidates"
         );
     }
 
@@ -873,11 +874,13 @@ mod tests {
             .iter()
             .position(|p| p.starts_with("-Wl,") || p == &"-static")
             .unwrap();
-        assert!(
-            parts[..user_start]
-                .iter()
-                .all(|p| p.starts_with("-L") || p.starts_with("-l") || p.ends_with(".o"))
-        );
+        assert!(parts[..user_start].iter().all(|p| {
+            p.starts_with("-L")
+                || p.starts_with("-l")
+                || std::path::Path::new(p)
+                    .extension()
+                    .is_some_and(|e| e == "o")
+        }));
     }
 
     #[test]

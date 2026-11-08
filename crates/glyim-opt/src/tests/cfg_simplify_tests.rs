@@ -210,7 +210,7 @@ fn start_block_always_kept() {
     );
 }
 
-/// Test that SwitchInt targets are correct after optimization (no elimination, but remapping).
+/// Test that `SwitchInt` targets are correct after optimization (no elimination, but remapping).
 #[test]
 fn cfg_remap_after_elimination() {
     let (ctx, body) = with_fresh_ty_ctx(|ctx| {

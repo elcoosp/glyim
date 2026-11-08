@@ -1,27 +1,6 @@
 //! Crate root.
 // Stylistic clippy lints suppressed crate-wide (test-noise lints).
-#![allow(
-    clippy::cloned_ref_to_slice_refs,
-    clippy::vec_init_then_push,
-    clippy::assertions_on_constants,
-    clippy::type_complexity,
-    clippy::too_many_arguments,
-    clippy::manual_c_str_literals,
-    clippy::doc_lazy_continuation,
-    clippy::empty_line_after_doc_comments,
-    clippy::manual_strip,
-    clippy::needless_range_loop,
-    clippy::unnecessary_cast,
-    clippy::clone_on_copy,
-    clippy::mutable_key_type,
-    clippy::only_used_in_recursion,
-    clippy::let_unit_value,
-    clippy::unnecessary_literal_unwrap,
-    clippy::format_in_format_args,
-    clippy::permissions_set_readonly_false,
-    clippy::needless_lifetimes,
-    clippy::collapsible_if
-)]
+
 /// annotations.
 pub mod annotations;
 /// assertions.
@@ -65,17 +44,19 @@ use glyim_type::{TyCtx, TyCtxMut};
 #[cfg(test)]
 mod tests;
 
-/// test_ty_ctx.
+/// `test_ty_ctx`.
+#[must_use]
 pub fn test_ty_ctx() -> TyCtxMut {
     TyCtxBuilder::new().build_mut()
 }
 
-/// test_frozen_ty_ctx.
+/// `test_frozen_ty_ctx`.
+#[must_use]
 pub fn test_frozen_ty_ctx() -> TyCtx {
     test_ty_ctx().freeze()
 }
 
-/// with_fresh_ty_ctx.
+/// `with_fresh_ty_ctx`.
 pub fn with_fresh_ty_ctx<F, R>(f: F) -> (TyCtx, R)
 where
     F: FnOnce(&mut TyCtxMut) -> R,

@@ -12,7 +12,7 @@ fn get_fn_return_type_opt(source: &str) -> Option<TypeRef> {
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
     match &hir.items[ItemId::from_raw(0)].kind {
         ItemKind::Fn(fn_item) => fn_item.return_ty.clone(),
-        other => panic!("Expected Fn item, got {:?}", other),
+        other => panic!("Expected Fn item, got {other:?}"),
     }
 }
 
@@ -23,7 +23,7 @@ fn test_type_ref_path() {
         TypeRef::Path(path) => {
             assert!(!path.segments.is_empty());
         }
-        other => panic!("Expected Path type, got {:?}", other),
+        other => panic!("Expected Path type, got {other:?}"),
     }
 }
 
@@ -35,10 +35,10 @@ fn test_type_ref_ref() {
             assert_eq!(mutability, Mutability::Not);
             match *inner {
                 TypeRef::Path(_) => {}
-                other => panic!("Expected Path inside ref, got {:?}", other),
+                other => panic!("Expected Path inside ref, got {other:?}"),
             }
         }
-        other => panic!("Expected Ref type, got {:?}", other),
+        other => panic!("Expected Ref type, got {other:?}"),
     }
 }
 
@@ -58,6 +58,6 @@ fn test_type_ref_fn_ptr() {
         TypeRef::Path(_) => {
             eprintln!("Note: fn ptr type lowered as Path, not Fn (parser limitation)");
         }
-        other => panic!("Expected Fn or Path type, got {:?}", other),
+        other => panic!("Expected Fn or Path type, got {other:?}"),
     }
 }

@@ -1,4 +1,4 @@
-//! Tests for TyCtxMut and TyCtx API surface.
+//! Tests for `TyCtxMut` and `TyCtx` API surface.
 
 use glyim_core::primitives::{IntTy, Mutability};
 

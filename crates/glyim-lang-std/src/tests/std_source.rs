@@ -7,8 +7,7 @@ fn std_source_returns_all_modules() {
     for name in std_modules() {
         assert!(
             std_source(name).is_some(),
-            "std_source should return Some for module '{}'",
-            name
+            "std_source should return Some for module '{name}'"
         );
     }
 }
@@ -32,8 +31,7 @@ fn std_source_is_non_empty() {
         let src = std_source(name).unwrap();
         assert!(
             !src.is_empty(),
-            "std source for '{}' should not be empty",
-            name
+            "std source for '{name}' should not be empty"
         );
     }
 }
@@ -43,9 +41,8 @@ fn std_source_all_contains_all_modules() {
     let all = std_source_all();
     for name in std_modules() {
         assert!(
-            all.contains(&format!("// === module: {} ===", name)),
-            "std_source_all should contain module header for '{}'",
-            name
+            all.contains(&format!("// === module: {name} ===")),
+            "std_source_all should contain module header for '{name}'"
         );
     }
 }
@@ -62,8 +59,7 @@ fn std_source_has_doc_comments() {
         let src = std_source(name).unwrap();
         assert!(
             src.contains("//!"),
-            "std module '{}' should have module-level doc comments",
-            name
+            "std module '{name}' should have module-level doc comments"
         );
     }
 }
@@ -74,8 +70,7 @@ fn std_source_no_todo() {
         let src = std_source(name).unwrap();
         assert!(
             !src.contains("todo!"),
-            "std module '{}' should not contain todo!() macros",
-            name
+            "std module '{name}' should not contain todo!() macros"
         );
     }
 }

@@ -1,8 +1,8 @@
-//! Phase 5 (GLYIM_DESTUB_PLAN): population of `TyCtx::deref_registry` from
+//! Phase 5 (`GLYIM_DESTUB_PLAN)`: population of `TyCtx::deref_registry` from
 //! real `impl Deref for X { type Target = Y; }` items.
 //!
 //! `resolve_method_call` already loops `TyCtx::deref_ty` at each autoderef
-//! step (check_expr.rs ~L1250). For ADT receivers (`Box<T>`, `Rc<T>`, …) the
+//! step (`check_expr.rs` ~L1250). For ADT receivers (`Box<T>`, `Rc<T>`, …) the
 //! structural `&T`/`*T` arms do nothing, so unless the Deref registry is
 //! populated, a method defined only on the inner type (`Vec::push` reached via
 //! `Box<Vec<i32>>`) can never be found. This module builds the registry during
@@ -21,7 +21,7 @@ use glyim_type::{Ty, TyCtxMut, TyKind};
 
 use crate::{CrateDefMap, GlyimDiagnostic, InferenceTable};
 
-/// Phase 5 (GLYIM_DESTUB_PLAN): walk every `impl Deref for SelfTy { type
+/// Phase 5 (`GLYIM_DESTUB_PLAN)`: walk every `impl Deref for SelfTy { type
 /// Target = T; }` item and register `SelfTy -> Target` in the deref registry.
 pub fn populate_deref_registry(
     ctx: &mut TyCtxMut,
@@ -40,7 +40,11 @@ pub fn populate_deref_registry(
         };
 
         // Only `impl Deref for …` items.
-        let trait_name = match impl_item.trait_ref.as_ref().and_then(|p| p.as_name()) {
+        let trait_name = match impl_item
+            .trait_ref
+            .as_ref()
+            .and_then(glyim_hir::Path::as_name)
+        {
             Some(n) if n == deref_name => n,
             _ => continue,
         };

@@ -9,15 +9,15 @@ use std::sync::LazyLock;
 static MUTATION_PCT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"kill rate (\d+(?:\.\d+)?)%").unwrap());
 
-/// MutationGate.
+/// `MutationGate`.
 pub struct MutationGate {
-    /// Struct.
+    /// `Struct`.
     pub min_kill_rate: f64,
 }
 
 #[async_trait]
 impl Gate for MutationGate {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "mutation"
     }
 
@@ -89,7 +89,7 @@ impl Gate for MutationGate {
                     Ok(GateResult::fail_with_details(
                         "mutation",
                         "cargo mutants failed",
-                        format!("{}{}", stdout, stderr),
+                        format!("{stdout}{stderr}"),
                     ))
                 }
             }

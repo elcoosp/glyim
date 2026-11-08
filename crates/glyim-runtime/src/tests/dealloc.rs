@@ -1,6 +1,6 @@
-//! Tests for glyim_dealloc FFI function.
+//! Tests for `glyim_dealloc` FFI function.
 //!
-//! S06-T02: glyim_dealloc frees memory without crash.
+//! S06-T02: `glyim_dealloc` frees memory without crash.
 
 use crate::{glyim_alloc, glyim_dealloc};
 
@@ -26,7 +26,7 @@ fn test_alloc_dealloc_varying_sizes() {
         1, 2, 4, 7, 8, 13, 16, 31, 32, 63, 64, 127, 128, 255, 256, 512, 1024, 4096,
     ] {
         let ptr = glyim_alloc(size, 8);
-        assert!(!ptr.is_null(), "alloc of size {} failed", size);
+        assert!(!ptr.is_null(), "alloc of size {size} failed");
         unsafe {
             std::ptr::write_bytes(ptr, 0x42, size);
         }
@@ -80,8 +80,8 @@ fn dealloc_after_write_read_cycle() {
     assert!(!ptr.is_null());
     unsafe {
         let typed = ptr as *mut u64;
-        typed.write(0xCAFEBABEu64);
-        assert_eq!(*typed, 0xCAFEBABEu64);
+        typed.write(0xCAFE_BABEu64);
+        assert_eq!(*typed, 0xCAFE_BABEu64);
         glyim_dealloc(ptr, std::mem::size_of::<u64>(), std::mem::align_of::<u64>());
     }
 }

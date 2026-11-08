@@ -254,6 +254,7 @@ fn fallback_interner() -> &'static glyim_core::interner::Interner {
 
 impl<'a> ConstEvaluator<'a> {
     /// new.
+    #[must_use]
     pub fn new(body: &'a Body) -> Self {
         Self {
             body,
@@ -277,6 +278,7 @@ impl<'a> ConstEvaluator<'a> {
     /// `TyCtxMut`, which is required because `is_valid_cast` needs the
     /// type context while `evaluate` also needs the interner).
     /// Without it, casts are unchecked at the type level (pre-§13.2 behavior).
+    #[must_use]
     pub fn with_ty_ctx(
         mut self,
         ty_ctx: &'a TyCtxMut,
@@ -309,6 +311,7 @@ impl<'a> ConstEvaluator<'a> {
 
     /// Attach the interner used to resolve path-named `const fn` callees
     /// (plan §4.2). Required for `Expr::Call`/`Expr::MethodCall` evaluation.
+    #[must_use]
     pub fn with_interner(mut self, interner: &'a Interner) -> Self {
         self.interner = Some(interner);
         self
@@ -316,20 +319,24 @@ impl<'a> ConstEvaluator<'a> {
 
     /// Register a user-defined `const fn` (plan §4.2). Its parameter patterns
     /// and body must already live in the `Body` arena passed to `new`.
+    #[must_use]
     pub fn with_const_fn(mut self, name: Name, f: BodyFn) -> Self {
         self.const_fns.insert(name, f);
         self
     }
 
-    /// with_pointer_width.
+    /// `with_pointer_width`.
     /// Register a name -> `FnDefId` mapping so a bare path in a const
     /// initializer that names a top-level `fn` folds to
     /// `ConstValue::Fn`.
+    #[must_use]
     pub fn with_fn_def(mut self, name: Name, def_id: glyim_core::def_id::FnDefId) -> Self {
         self.fn_defs.insert(name, def_id);
         self
     }
 
+    #[must_use]
+    /// With Pointer Width.
     pub fn with_pointer_width(mut self, width: u32) -> Self {
         self.pointer_width = width;
         self
@@ -598,7 +605,7 @@ impl<'a> ConstEvaluator<'a> {
                 })?;
                 let name_str = interner.resolve(name);
                 let cf = ConstFn::from_name(name_str).ok_or_else(|| {
-                    ConstEvalError::new(format!("unknown const fn `{}`", name_str), span)
+                    ConstEvalError::new(format!("unknown const fn `{name_str}`"), span)
                 })?;
                 cf.apply(&arg_vals, span)
             }
@@ -621,7 +628,7 @@ impl<'a> ConstEvaluator<'a> {
                 })?;
                 let method_str = interner.resolve(*method);
                 let cf = ConstFn::from_name(method_str).ok_or_else(|| {
-                    ConstEvalError::new(format!("unknown const method `{}`", method_str), span)
+                    ConstEvalError::new(format!("unknown const method `{method_str}`"), span)
                 })?;
                 let mut arg_vals = Vec::with_capacity(args.len() + 1);
                 arg_vals.push(recv_val);
@@ -895,7 +902,7 @@ impl<'a> ConstEvaluator<'a> {
         match (lhs, rhs) {
             (ConstValue::Int(_, _), ConstValue::Int(0, _))
             | (ConstValue::Uint(_, _), ConstValue::Uint(0, _)) => Err(ConstEvalError::new(
-                format!("{} by zero in const evaluation", op_name),
+                format!("{op_name} by zero in const evaluation"),
                 span,
             )),
             _ => Ok(()),
@@ -1240,7 +1247,7 @@ impl<'a> ConstEvaluator<'a> {
                     if fields.len() != vals.len() {
                         return Ok(false);
                     }
-                    for (pat_field_name, pat_id) in fields.iter() {
+                    for (pat_field_name, pat_id) in fields {
                         let Some((_, val)) = vals.iter().find(|(name, _)| name == pat_field_name)
                         else {
                             return Ok(false);
@@ -1493,49 +1500,47 @@ impl<'a> ConstEvaluator<'a> {
                     match n {
                         "i8" => val
                             .as_i128()
-                            .map(|v| ConstValue::Int(v as i8 as i128, IntTy::I8))
+                            .map(|v| ConstValue::Int(i128::from(v as i8), IntTy::I8))
                             .ok_or_else(|| ConstEvalError::new("cannot cast to i8", span)),
                         "i16" => val
                             .as_i128()
-                            .map(|v| ConstValue::Int(v as i16 as i128, IntTy::I16))
+                            .map(|v| ConstValue::Int(i128::from(v as i16), IntTy::I16))
                             .ok_or_else(|| ConstEvalError::new("cannot cast to i16", span)),
                         "i32" => val
                             .as_i128()
-                            .map(|v| ConstValue::Int(v as i32 as i128, IntTy::I32))
+                            .map(|v| ConstValue::Int(i128::from(v as i32), IntTy::I32))
                             .ok_or_else(|| ConstEvalError::new("cannot cast to i32", span)),
                         "i64" => val
                             .as_i128()
-                            .map(|v| ConstValue::Int(v as i64 as i128, IntTy::I64))
+                            .map(|v| ConstValue::Int(i128::from(v as i64), IntTy::I64))
                             .ok_or_else(|| ConstEvalError::new("cannot cast to i64", span)),
                         "u8" => val
                             .as_u128()
-                            .map(|v| ConstValue::Uint(v as u8 as u128, UintTy::U8))
+                            .map(|v| ConstValue::Uint(u128::from(v as u8), UintTy::U8))
                             .ok_or_else(|| ConstEvalError::new("cannot cast to u8", span)),
                         "u16" => val
                             .as_u128()
-                            .map(|v| ConstValue::Uint(v as u16 as u128, UintTy::U16))
+                            .map(|v| ConstValue::Uint(u128::from(v as u16), UintTy::U16))
                             .ok_or_else(|| ConstEvalError::new("cannot cast to u16", span)),
                         "u32" => val
                             .as_u128()
-                            .map(|v| ConstValue::Uint(v as u32 as u128, UintTy::U32))
+                            .map(|v| ConstValue::Uint(u128::from(v as u32), UintTy::U32))
                             .ok_or_else(|| ConstEvalError::new("cannot cast to u32", span)),
                         "u64" => val
                             .as_u128()
-                            .map(|v| ConstValue::Uint(v as u64 as u128, UintTy::U64))
+                            .map(|v| ConstValue::Uint(u128::from(v as u64), UintTy::U64))
                             .ok_or_else(|| ConstEvalError::new("cannot cast to u64", span)),
                         "f32" => val
                             .as_f64()
                             .map(|v| {
-                                ConstValue::FloatBits((v as f32).to_bits() as u64, FloatTy::F32)
+                                ConstValue::FloatBits(u64::from((v as f32).to_bits()), FloatTy::F32)
                             })
                             .ok_or_else(|| ConstEvalError::new("cannot cast to f32", span)),
                         "f64" => val
                             .as_f64()
                             .map(|v| ConstValue::FloatBits(v.to_bits(), FloatTy::F64))
                             .ok_or_else(|| ConstEvalError::new("cannot cast to f64", span)),
-                        "bool" => Ok(ConstValue::Bool(
-                            val.as_i128().map(|v| v != 0).unwrap_or(false),
-                        )),
+                        "bool" => Ok(ConstValue::Bool(val.as_i128().is_some_and(|v| v != 0))),
                         _ => Err(ConstEvalError::new("unsupported cast target type", span)),
                     }
                 } else {
@@ -1563,8 +1568,8 @@ fn materialize_elements(
     match val {
         ConstValue::Range(start, end, inclusive) => {
             let (s, e) = match (
-                start.as_deref().and_then(|c| c.as_i128()),
-                end.as_deref().and_then(|c| c.as_i128()),
+                start.as_deref().and_then(super::value::ConstValue::as_i128),
+                end.as_deref().and_then(super::value::ConstValue::as_i128),
             ) {
                 (Some(s), Some(e)) => (s, e),
                 _ => {

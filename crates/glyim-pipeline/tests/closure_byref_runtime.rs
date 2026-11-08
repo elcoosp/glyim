@@ -18,7 +18,7 @@ fn compile_and_run(src: &str) -> Result<InterpValue, String> {
     let call_id = CALL_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let unique_tag = format!("{}_{}", std::process::id(), call_id);
     let dir = std::env::temp_dir();
-    let path = dir.join(format!("glyim_closure_byref_{}.g", unique_tag));
+    let path = dir.join(format!("glyim_closure_byref_{unique_tag}.g"));
     {
         let mut f = std::fs::File::create(&path).map_err(|e| e.to_string())?;
         f.write_all(src.as_bytes()).map_err(|e| e.to_string())?;
@@ -59,7 +59,7 @@ fn compile_and_run(src: &str) -> Result<InterpValue, String> {
     }
     interp
         .run_body(main_body)
-        .map_err(|e| format!("interpreter error: {}", e))?;
+        .map_err(|e| format!("interpreter error: {e}"))?;
     interp
         .get_return_value()
         .ok_or_else(|| "no return value".to_string())
@@ -68,7 +68,7 @@ fn compile_and_run(src: &str) -> Result<InterpValue, String> {
 #[test]
 fn byref_mut_capture_aliases_enclosing_local() {
     // c starts 0; two `f()` calls each `c = c + 1`; `c` must be 2.
-    let src = r#"
+    let src = r"
 fn main() -> i32 {
     let mut c = 0;
     let mut f = || { c = c + 1; };
@@ -76,7 +76,7 @@ fn main() -> i32 {
     f();
     c
 }
-"#;
+";
     let ret = compile_and_run(src).expect("program compiles and runs");
     assert_eq!(
         ret,
@@ -88,14 +88,14 @@ fn main() -> i32 {
 #[test]
 fn byref_shared_capture_reads_live_value() {
     // The closure reads `c` after `c` is mutated outside it.
-    let src = r#"
+    let src = r"
 fn main() -> i32 {
     let mut c = 5;
     let g = || { c };
     c = 42;
     g()
 }
-"#;
+";
     let ret = compile_and_run(src).expect("program compiles and runs");
     assert_eq!(
         ret,

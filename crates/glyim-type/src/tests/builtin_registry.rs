@@ -61,11 +61,10 @@ fn no_builtin_id_uses_a_sentinel_slot() {
         .collect();
     assert!(
         bad.is_empty(),
-        "builtin registry handed out sentinel FnDefId slot(s) {:?}. Those \
+        "builtin registry handed out sentinel FnDefId slot(s) {bad:?}. Those \
          are reserved for compiler-synthetic methods with no real FnDef and \
          are replaced by an Error constant during lowering — assigning one \
-         to a real builtin makes the call silently evaluate to poison.",
-        bad
+         to a real builtin makes the call silently evaluate to poison."
     );
 }
 
@@ -97,9 +96,8 @@ fn builtin_ids_are_in_the_synthetic_range() {
         .collect();
     assert!(
         bad.is_empty(),
-        "builtin registry handed out id(s) {:?} below the synthetic range \
-         (9_000); these collide with real FnDefIds",
-        bad
+        "builtin registry handed out id(s) {bad:?} below the synthetic range \
+         (9_000); these collide with real FnDefIds"
     );
 }
 

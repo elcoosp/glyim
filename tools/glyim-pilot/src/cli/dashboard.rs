@@ -1,7 +1,8 @@
 use crate::session::state::{SessionState, StreamStatus};
 use comfy_table::{presets::UTF8_FULL, Cell, Color, Table};
 
-/// render_status_table.
+/// `render_status_table`.
+#[must_use]
 pub fn render_status_table(sessions: &[SessionState]) -> String {
     if sessions.is_empty() {
         return "No active sessions.".to_string();
@@ -37,7 +38,8 @@ pub fn render_status_table(sessions: &[SessionState]) -> String {
     table.to_string()
 }
 
-/// render_wave_summary.
+/// `render_wave_summary`.
+#[must_use]
 pub fn render_wave_summary(sessions: &[SessionState]) -> String {
     if sessions.is_empty() {
         return "No sessions in wave.".to_string();

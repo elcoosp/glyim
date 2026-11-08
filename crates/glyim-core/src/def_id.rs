@@ -5,15 +5,15 @@ macro_rules! define_def_id {
     ($($name:ident),* $(,)?) => {
         $(
             #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-/// Struct.
+/// `Struct`.
             pub struct $name(u32);
 
             impl $name {
-/// from_raw.
+/// `from_raw`.
                 pub fn from_raw(raw: u32) -> Self { Self(raw) }
-/// to_raw.
+/// `to_raw`.
                 pub fn to_raw(self) -> u32 { self.0 }
-/// index.
+/// `index`.
                 pub fn index(self) -> usize { self.0 as usize }
             }
 
@@ -28,16 +28,17 @@ macro_rules! define_def_id {
 define_def_id!(CrateId, LocalDefId);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-/// DefId.
+/// `DefId`.
 pub struct DefId {
-    /// Struct.
+    /// `Struct`.
     pub krate: CrateId,
-    /// Struct.
+    /// `Struct`.
     pub local_id: LocalDefId,
 }
 
 impl DefId {
     /// new.
+    #[must_use]
     pub fn new(krate: CrateId, local_id: LocalDefId) -> Self {
         Self { krate, local_id }
     }

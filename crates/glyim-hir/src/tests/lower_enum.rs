@@ -23,6 +23,6 @@ fn test_enum_simple() {
             assert_eq!(interner.resolve(e.variants[1].name), "Green");
             assert_eq!(interner.resolve(e.variants[2].name), "Blue");
         }
-        other => panic!("Expected Enum item, got {:?}", other),
+        other => panic!("Expected Enum item, got {other:?}"),
     }
 }

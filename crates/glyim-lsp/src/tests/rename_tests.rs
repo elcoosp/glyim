@@ -5,7 +5,6 @@ use glyim_core::Interner;
 use glyim_frontend::parse_to_syntax;
 use glyim_hir::pipeline_api::lower_crate_for_pipeline;
 use lsp_types::{Position, RenameParams, TextDocumentIdentifier, TextDocumentPositionParams};
-use std::path::PathBuf;
 
 /// Build the reference graph for `source` into `db` so that graph-based
 /// rename (the authoritative Phase 8.2 path) is exercised. Mirrors what the
@@ -43,7 +42,7 @@ fn test_rename_symbol() {
             },
         },
         new_name: "z".to_string(),
-        work_done_progress_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
     };
     let edit = rename_symbol(&db, &file_map, &params);
     assert!(edit.is_some());
@@ -84,13 +83,13 @@ fn test_rename_graph_agrees_with_text_fallback() {
             },
         },
         new_name: "renamed".to_string(),
-        work_done_progress_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
     };
     let graph_edit = rename_symbol(&db, &file_map, &params).expect("graph rename must succeed");
     let graph_edits = graph_edit.changes.unwrap().get(&uri).unwrap().clone();
 
     // Text fallback on the same source.
-    let sm = SourceMap::new(PathBuf::from("/test/main.g"), file_id, source.to_string());
+    let sm = SourceMap::new(file_id, source.to_string());
     let text_edits = rename_text_fallback(&sm, file_id, "target", "renamed")
         .expect("text fallback must find occurrences");
 
@@ -157,7 +156,7 @@ fn test_rename_finds_variable_used_only_in_macro_arg() {
             },
         },
         new_name: "renamed".to_string(),
-        work_done_progress_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
     };
     let edit = rename_symbol(&db, &file_map, &params);
     assert!(
@@ -191,7 +190,7 @@ fn test_rename_let_binding_edits_only_the_identifier() {
             },
         },
         new_name: "z".to_string(),
-        work_done_progress_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
     };
     let edit = rename_symbol(&db, &file_map, &params).expect("rename must produce edits");
     let changes = edit.changes.unwrap();

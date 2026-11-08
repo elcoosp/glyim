@@ -63,9 +63,9 @@ fn nested_def_map(interner: &mut glyim_core::interner::Interner) -> CrateDefMap 
         modules,
         krate: CrateId::from_raw(0),
         interner: interner.clone(),
-        variant_map: Default::default(),
+        variant_map: std::collections::HashMap::default(),
         max_local_def_id: 0,
-        def_to_module: Default::default(),
+        def_to_module: std::collections::HashMap::default(),
     }
 }
 
@@ -125,9 +125,9 @@ fn single_segment_struct_pattern_still_resolves() {
         modules,
         krate: CrateId::from_raw(0),
         interner: interner.clone(),
-        variant_map: Default::default(),
+        variant_map: std::collections::HashMap::default(),
         max_local_def_id: 0,
-        def_to_module: Default::default(),
+        def_to_module: std::collections::HashMap::default(),
     };
     let ctx = TyCtxMut::new(interner.clone());
 

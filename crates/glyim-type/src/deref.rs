@@ -3,7 +3,7 @@ use crate::ty::Ty;
 use glyim_core::def_id::AdtId;
 use std::collections::HashMap;
 
-/// Phase 5 (GLYIM_DESTUB_PLAN): registry mapping a `Deref`-implementing type
+/// Phase 5 (`GLYIM_DESTUB_PLAN)`: registry mapping a `Deref`-implementing type
 /// to its `Deref::Target`, so `TyCtx::deref_ty` can perform autoderef for user
 /// `impl Deref` items (not just `&T`/`*T`).
 ///
@@ -20,6 +20,8 @@ pub struct DerefRegistry {
 }
 
 impl DerefRegistry {
+    #[must_use]
+    /// `New`.
     pub fn new() -> Self {
         DerefRegistry {
             targets: HashMap::new(),
@@ -44,11 +46,13 @@ impl DerefRegistry {
     }
 
     /// Exact `SelfTy -> Target` lookup.
+    #[must_use]
     pub fn exact_target(&self, self_ty: Ty) -> Option<Ty> {
         self.targets.get(&self_ty).copied()
     }
 
     /// Template `(self_params, target)` for a given ADT id.
+    #[must_use]
     pub fn template(&self, adt_id: AdtId) -> Option<&(Vec<GenericArg>, Ty)> {
         self.templates.get(&adt_id)
     }

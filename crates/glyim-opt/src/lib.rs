@@ -1,27 +1,5 @@
 //! MIR optimizations (constant propagation, dead code elimination, etc.)
 // Stylistic clippy lints suppressed crate-wide (test-noise lints).
-#![allow(
-    clippy::cloned_ref_to_slice_refs,
-    clippy::vec_init_then_push,
-    clippy::assertions_on_constants,
-    clippy::type_complexity,
-    clippy::too_many_arguments,
-    clippy::manual_c_str_literals,
-    clippy::doc_lazy_continuation,
-    clippy::empty_line_after_doc_comments,
-    clippy::manual_strip,
-    clippy::needless_range_loop,
-    clippy::unnecessary_cast,
-    clippy::clone_on_copy,
-    clippy::mutable_key_type,
-    clippy::only_used_in_recursion,
-    clippy::let_unit_value,
-    clippy::unnecessary_literal_unwrap,
-    clippy::format_in_format_args,
-    clippy::permissions_set_readonly_false,
-    clippy::needless_lifetimes,
-    clippy::collapsible_if
-)]
 
 use glyim_mir::Body;
 use glyim_type::{TyCtx, TyCtxMut};
@@ -35,13 +13,14 @@ mod unreachable_elim;
 mod validate;
 
 #[derive(Clone, Debug)]
-/// Optimized.
+/// `Optimized`.
 pub struct Optimized {
-    /// Struct.
+    /// `Struct`.
     pub body: Body,
 }
 
 /// optimize.
+#[must_use]
 pub fn optimize(ctx: &TyCtx, body: &Arc<Body>) -> Optimized {
     let mut body = (**body).clone();
     // Validate well-formedness up front (de-stubbing plan §8.8). Runs
@@ -49,7 +28,7 @@ pub fn optimize(ctx: &TyCtx, body: &Arc<Body>) -> Optimized {
     // produces an ill-formed body.
     {
         if let Err(e) = validate::validate_body(ctx, &body) {
-            panic!("MIR failed validation before optimization: {:?}", e);
+            panic!("MIR failed validation before optimization: {e:?}");
         }
     }
     // Runs first and unconditionally: every later pass, and codegen after
@@ -67,7 +46,7 @@ pub fn optimize(ctx: &TyCtx, body: &Arc<Body>) -> Optimized {
     // surviving `Subslice` as `unreachable!`, so a release build must not
     // silently skip this check and later panic opaquely.
     if let Err(e) = validate::validate_no_subslice(&body) {
-        panic!("MIR failed validation after slice_desugar: {:?}", e);
+        panic!("MIR failed validation after slice_desugar: {e:?}");
     }
     constant_prop::run(ctx, &mut body);
     dce::run(ctx, &mut body);

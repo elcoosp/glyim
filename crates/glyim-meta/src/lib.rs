@@ -2,28 +2,7 @@
 //!
 //! Uses `HygieneCtx` from `glyim-span` (the merged hygiene crate).
 // Stylistic clippy lints suppressed crate-wide (test-noise lints).
-#![allow(
-    clippy::cloned_ref_to_slice_refs,
-    clippy::vec_init_then_push,
-    clippy::assertions_on_constants,
-    clippy::type_complexity,
-    clippy::too_many_arguments,
-    clippy::manual_c_str_literals,
-    clippy::doc_lazy_continuation,
-    clippy::empty_line_after_doc_comments,
-    clippy::manual_strip,
-    clippy::needless_range_loop,
-    clippy::unnecessary_cast,
-    clippy::clone_on_copy,
-    clippy::mutable_key_type,
-    clippy::only_used_in_recursion,
-    clippy::let_unit_value,
-    clippy::unnecessary_literal_unwrap,
-    clippy::format_in_format_args,
-    clippy::permissions_set_readonly_false,
-    clippy::needless_lifetimes,
-    clippy::collapsible_if
-)]
+
 // Plan §3.1 (ratchet, not a hard ban): macro expansion consumes untrusted user
 // input (recursive macro definitions are a classic DoS vector), so
 // `unwrap`/`expect`/`panic!` on source-derived values must become
@@ -35,7 +14,6 @@
 // the production-code opt-in strict (warn) but allow the same lints
 // inside `#[cfg(test)]` modules so test helpers stay concise.
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
-
 use glyim_core::interner::{Interner, Name};
 use glyim_diag::GlyimDiagnostic;
 use glyim_span::{FileId, HygieneCtx, Span};
@@ -54,6 +32,7 @@ use glyim_vfs::Vfs;
 /// (whitespace is trivia), and it avoids spurious token merging. This is the
 /// bridge between the token-oriented expander and the text-oriented pipeline
 /// (Phase 9.2).
+#[must_use]
 pub fn join_tokens_with_spaces(token_stream: &SyntaxNode) -> String {
     let mut out = String::new();
     let mut prev_was_word = false;
@@ -75,19 +54,19 @@ pub fn join_tokens_with_spaces(token_stream: &SyntaxNode) -> String {
 mod expander;
 
 #[derive(Clone, Debug)]
-/// MacroKind.
+/// `MacroKind`.
 pub enum MacroKind {
-    /// Variant.
+    /// `Variant`.
     Declarative {
         /// name field.
         name: Name,
     },
-    /// Variant.
+    /// `Variant`.
     Proc {
         /// name field.
         name: Name,
     },
-    /// Variant.
+    /// `Variant`.
     Builtin {
         /// name field.
         name: Name,
@@ -97,29 +76,29 @@ pub enum MacroKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// BuiltinMacro.
+/// `BuiltinMacro`.
 pub enum BuiltinMacro {
-    /// Variant.
+    /// `Variant`.
     File,
-    /// Variant.
+    /// `Variant`.
     Line,
-    /// Variant.
+    /// `Variant`.
     Column,
-    /// Variant.
+    /// `Variant`.
     Include,
-    /// Variant.
+    /// `Variant`.
     IncludeStr,
-    /// Variant.
+    /// `Variant`.
     IncludeBytes,
-    /// Variant.
+    /// `Variant`.
     Env,
-    /// Variant.
+    /// `Variant`.
     OptionEnv,
-    /// Variant.
+    /// `Variant`.
     Concat,
-    /// Variant.
+    /// `Variant`.
     ConcatIdents,
-    /// Variant.
+    /// `Variant`.
     Stringify,
     /// `format!(fmt, args..)` — expands to a placeholder empty `String`
     /// literal. The probe only type-checks; real runtime interpolation is a
@@ -144,26 +123,26 @@ pub enum BuiltinMacro {
 }
 
 #[derive(Clone, Debug)]
-/// MacroDef.
+/// `MacroDef`.
 pub struct MacroDef {
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
-    /// Struct.
+    /// `Struct`.
     pub kind: MacroKind,
-    /// Struct.
+    /// `Struct`.
     pub span: Span,
 }
 
 #[derive(Clone, Debug)]
-/// ExpansionResult.
+/// `ExpansionResult`.
 pub struct ExpansionResult {
-    /// Struct.
+    /// `Struct`.
     pub expanded: Option<SyntaxNode>,
-    /// Struct.
+    /// `Struct`.
     pub diagnostics: Vec<GlyimDiagnostic>,
 }
 
-/// Expander.
+/// `Expander`.
 pub struct Expander<'a> {
     hygiene: &'a mut HygieneCtx,
     macros: Vec<MacroDef>,
@@ -216,7 +195,7 @@ impl<'a> Expander<'a> {
         self.vfs = Some(vfs);
     }
 
-    /// register_macro.
+    /// `register_macro`.
     pub fn register_macro(&mut self, def: MacroDef) {
         self.macros.push(def);
     }
@@ -225,6 +204,7 @@ impl<'a> Expander<'a> {
     ///
     /// Use this when creating `Name` values for `MacroDef` registration
     /// to ensure names match during expansion lookups.
+    #[must_use]
     pub fn interner(&self) -> &Interner {
         &self.interner
     }
@@ -252,7 +232,7 @@ impl<'a> Expander<'a> {
     }
 
     #[tracing::instrument(level = "info", skip(self, root))]
-    /// expand_crate.
+    /// `expand_crate`.
     pub fn expand_crate(&mut self, root: &SyntaxNode) -> (SyntaxNode, Vec<GlyimDiagnostic>) {
         let (green, diags) = expander::expand_crate(
             root,

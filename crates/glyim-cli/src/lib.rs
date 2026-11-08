@@ -11,31 +11,31 @@ pub mod linker;
 
 #[derive(Parser, Debug)]
 #[command(name = "glyim", version, about = "The Glyim compiler")]
-/// CliArgs.
+/// `CliArgs`.
 pub struct CliArgs {
     #[arg(value_name = "INPUT")]
-    /// Struct.
+    /// `Struct`.
     pub input: PathBuf,
     #[arg(short, long)]
-    /// Struct.
+    /// `Struct`.
     pub output: Option<PathBuf>,
     #[arg(long, value_name = "EMIT", default_value = "obj")]
-    /// Struct.
+    /// `Struct`.
     pub emit: String,
     #[arg(short = 'O', long = "opt-level", default_value = "0")]
-    /// Struct.
+    /// `Struct`.
     pub opt_level: u8,
     #[arg(long = "target")]
-    /// Struct.
+    /// `Struct`.
     pub target: Option<String>,
     #[arg(long = "backend", default_value = "llvm")]
-    /// Struct.
+    /// `Struct`.
     pub backend: String,
     #[arg(long = "linker")]
-    /// Struct.
+    /// `Struct`.
     pub linker: Option<String>,
     #[arg(long = "link-flags")]
-    /// Struct.
+    /// `Struct`.
     pub link_flags: Option<String>,
     /// Link-time optimization strategy: `off` (default), `fat` (in-compiler
     /// module merge + optimize), or `thin` (tracked gap — requires linker
@@ -112,6 +112,9 @@ pub fn inject_assembled_stdlib(
     Ok(())
 }
 
+/// CLI entry point: parses argv (honouring `-W help` before clap enforces
+/// the required `<INPUT>` argument), dispatches the requested emit mode,
+/// and maps compile failures onto the process exit code.
 pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
     // §3.5.30 framework: `-W help` must be answered before clap enforces
     // the required `<INPUT>` arg — otherwise `glyim -W help` errors out
@@ -121,7 +124,7 @@ pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
         for i in 0..argv.len() {
             let a = argv[i].as_str();
             let help_requested = match a {
-                "-W" | "--warn" => argv.get(i + 1).map(|s| s == "help").unwrap_or(false),
+                "-W" | "--warn" => argv.get(i + 1).is_some_and(|s| s == "help"),
                 _ => a == "-W=help" || a == "--warn=help",
             };
             if help_requested {
@@ -220,24 +223,20 @@ pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
                 .tempfile()
                 .ok()
                 .and_then(|f| f.keep().ok().map(|(_, p)| p));
-            let path_display = match &ice_path {
-                Some(p) => {
-                    let _ = std::fs::write(p, &report);
-                    p.display().to_string()
-                }
-                None => {
-                    // Fallback if tempfile fails — still try the old path.
-                    let p = std::env::temp_dir().join("glyim-ice.txt");
-                    let _ = std::fs::write(&p, &report);
-                    p.display().to_string()
-                }
+            let path_display = if let Some(p) = &ice_path {
+                let _ = std::fs::write(p, &report);
+                p.display().to_string()
+            } else {
+                // Fallback if tempfile fails — still try the old path.
+                let p = std::env::temp_dir().join("glyim-ice.txt");
+                let _ = std::fs::write(&p, &report);
+                p.display().to_string()
             };
             eprintln!(
-                "error: glyim panicked (ICE). Backtrace saved to {}:
+                "error: glyim panicked (ICE). Backtrace saved to {path_display}:
 
 please file a bug report at <https://github.com/elcoosp/glyim/issues> \
-with the input file and the backtrace.",
-                path_display
+with the input file and the backtrace."
             );
             // P1-O4: an ICE is a compiler bug, not a user error — exit 101
             // (Rust's conventional ICE code) so scripts can distinguish it
@@ -312,11 +311,11 @@ fn print_diagnostics(diags: &[glyim_diag::GlyimDiagnostic], format: &str) {
                 "message": d.message,
                 "spans": spans,
             });
-            println!("{}", obj);
+            println!("{obj}");
         }
     } else {
         for d in diags {
-            eprintln!("{}", d);
+            eprintln!("{d}");
         }
     }
 }
@@ -346,8 +345,7 @@ impl EmitKind {
             "asm" => Ok(EmitKind::Asm),
             "cdylib" => Ok(EmitKind::Cdylib),
             _ => Err(format!(
-                "invalid value for --emit: '{}' (expected one of: obj, exec, mir, llvm-ir, asm, cdylib, syntax)",
-                s
+                "invalid value for --emit: '{s}' (expected one of: obj, exec, mir, llvm-ir, asm, cdylib, syntax)"
             )),
         }
     }
@@ -456,10 +454,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
         other => {
             return Err(vec![glyim_diag::GlyimDiagnostic::parse_error(
                 glyim_diag::Span::DUMMY,
-                format!(
-                    "invalid value for --lto: '{}' (expected one of: off, fat, thin)",
-                    other
-                ),
+                format!("invalid value for --lto: '{other}' (expected one of: off, fat, thin)"),
             )]);
         }
     };
@@ -601,7 +596,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
         // (once implemented) do not serve cross-config objects.
         let mut extra_key_bytes: Vec<u8> = Vec::new();
         if let Some(list) = args.proc_macro_deps.as_deref() {
-            for p in list.split(',').map(|s| s.trim()) {
+            for p in list.split(',').map(str::trim) {
                 if p.is_empty() {
                     continue;
                 }
@@ -720,15 +715,13 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             .emit_thinlto_bitcode_files(&artifacts.mir_bodies, &bitcode_dir)
             .map_err(|e| {
                 vec![glyim_diag::GlyimDiagnostic::internal_error(format!(
-                    "ThinLTO per-CGU bitcode emission failed: {:?}",
-                    e
+                    "ThinLTO per-CGU bitcode emission failed: {e:?}"
                 ))]
             })?;
         let thin_objects = linker::thin_lto_link(&bitcode_paths, args.opt_level, &bitcode_dir)
             .map_err(|e| {
                 vec![glyim_diag::GlyimDiagnostic::internal_error(format!(
-                    "ThinLTO thin-link failed: {}",
-                    e
+                    "ThinLTO thin-link failed: {e}"
                 ))]
             })?;
         if thin_objects.is_empty() {
@@ -960,7 +953,7 @@ fn host_target_triple() -> String {
             // Best-effort fallback: lowercase arch + os.
             let a = arch.to_lowercase();
             let o = os.to_lowercase();
-            return format!("{}-{}", a, o);
+            return format!("{a}-{o}");
         }
     };
     let (arch_triple, os_triple, env_triple) = parts;

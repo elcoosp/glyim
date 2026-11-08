@@ -101,9 +101,9 @@ fn build_empty_def_map(krate: CrateId) -> CrateDefMap {
         modules,
         krate,
         interner: global_interner(),
-        variant_map: Default::default(),
+        variant_map: std::collections::HashMap::default(),
         max_local_def_id: 0,
-        def_to_module: Default::default(),
+        def_to_module: std::collections::HashMap::default(),
     }
 }
 
@@ -199,7 +199,7 @@ fn make_simple_hir_with_trait_and_impl(override_default: bool) -> (TyCtxMut, Cra
         items,
         bodies,
         body_owners,
-        interner: Default::default(),
+        interner: Interner::default(),
     };
 
     let ctx = TyCtxMut::new(interner);
@@ -348,7 +348,7 @@ fn v03_t03_default_method_calling_another_default_method() {
         items,
         bodies,
         body_owners,
-        interner: Default::default(),
+        interner: Interner::default(),
     };
 
     let ctx = TyCtxMut::new(interner);
@@ -474,7 +474,7 @@ fn v03_t04_default_method_with_generic_params() {
         items,
         bodies,
         body_owners,
-        interner: Default::default(),
+        interner: Interner::default(),
     };
 
     let ctx = TyCtxMut::new(interner.clone());
@@ -506,9 +506,9 @@ fn v03_t04_default_method_with_generic_params() {
         modules,
         krate: CrateId::from_raw(0),
         interner: interner.clone(),
-        variant_map: Default::default(),
+        variant_map: std::collections::HashMap::default(),
         max_local_def_id: 0,
-        def_to_module: Default::default(),
+        def_to_module: std::collections::HashMap::default(),
     };
 
     let mut solver = MockSolver::new().respond_for_any(SolverResult::Proven);
@@ -584,7 +584,7 @@ fn v03_t05_default_method_calls_missing_method_error() {
         items,
         bodies: IndexVec::new(),
         body_owners: IndexVec::new(),
-        interner: Default::default(),
+        interner: Interner::default(),
     };
 
     let ctx = TyCtxMut::new(interner);
@@ -707,7 +707,7 @@ fn v03_t06_ambiguous_method_in_multiple_impls() {
         items,
         bodies,
         body_owners,
-        interner: Default::default(),
+        interner: Interner::default(),
     };
 
     let ctx = TyCtxMut::new(interner);

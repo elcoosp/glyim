@@ -1,6 +1,6 @@
 use glyim_core::interner::Interner;
 use glyim_core::path::PathKind;
-use glyim_core::primitives::*;
+use glyim_core::primitives::Mutability;
 use glyim_syntax::{SyntaxKind, SyntaxNode};
 
 use crate::{ConstRef, Literal, Path as HirPath, PathSegment, TypeRef};

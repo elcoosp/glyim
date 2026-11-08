@@ -1,4 +1,4 @@
-//! S06-T03: Match lowering with decision trees (SwitchInt for literals, Discriminant for enums).
+//! S06-T03: Match lowering with decision trees (`SwitchInt` for literals, Discriminant for enums).
 
 use crate::lower::lower_body;
 use crate::tests::mock_lower_ctx::TestLowerCtx;
@@ -78,7 +78,7 @@ fn match_literal_to_switch_int() {
     }
 }
 
-/// Match with a single wildcard arm should not produce a SwitchInt
+/// Match with a single wildcard arm should not produce a `SwitchInt`
 /// (or produce a trivial one that immediately goes to otherwise).
 #[test]
 fn match_single_wildcard_no_switch() {
@@ -121,7 +121,7 @@ fn match_single_wildcard_no_switch() {
     );
 }
 
-/// Match on bool should produce SwitchInt with branches for true (1) and false (0).
+/// Match on bool should produce `SwitchInt` with branches for true (1) and false (0).
 #[test]
 fn match_bool_to_switch_int() {
     let ctx_mut = test_ty_ctx();
@@ -169,7 +169,7 @@ fn match_bool_to_switch_int() {
     assert!(has_switch, "expected SwitchInt for bool match");
 }
 
-/// Match on an enum ADT should use Discriminant rvalue + SwitchInt.
+/// Match on an enum ADT should use Discriminant rvalue + `SwitchInt`.
 #[test]
 fn match_enum_uses_discriminant_and_switch() {
     let mut ctx_mut = test_ty_ctx();

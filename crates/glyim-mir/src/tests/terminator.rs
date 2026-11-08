@@ -12,7 +12,7 @@ fn terminator_goto() {
     };
     match &term.kind {
         TerminatorKind::Goto { target: t } => assert_eq!(*t, target),
-        other => panic!("Expected Goto, got {:?}", other),
+        other => panic!("Expected Goto, got {other:?}"),
     }
 }
 
@@ -58,7 +58,7 @@ fn terminator_call_with_target() {
             cleanup: None,
             ..
         } => assert_eq!(*bb, BasicBlockIdx::from_raw(1)),
-        other => panic!("Expected Call, got {:?}", other),
+        other => panic!("Expected Call, got {other:?}"),
     }
 }
 
@@ -86,7 +86,7 @@ fn terminator_call_with_cleanup() {
             cleanup: Some(cleanup_bb),
             ..
         } => assert_eq!(*cleanup_bb, BasicBlockIdx::from_raw(2)),
-        other => panic!("Expected Call with cleanup, got {:?}", other),
+        other => panic!("Expected Call with cleanup, got {other:?}"),
     }
 }
 
@@ -118,7 +118,7 @@ fn terminator_assert() {
             assert_eq!(*target, BasicBlockIdx::from_raw(3));
             assert!(matches!(msg, AssertMessage::Overflow(BinOp::Add)));
         }
-        other => panic!("Expected Assert, got {:?}", other),
+        other => panic!("Expected Assert, got {other:?}"),
     }
 }
 
@@ -139,7 +139,7 @@ fn terminator_drop() {
             cleanup: None,
             ..
         } => assert_eq!(*target, BasicBlockIdx::from_raw(1)),
-        other => panic!("Expected Drop, got {:?}", other),
+        other => panic!("Expected Drop, got {other:?}"),
     }
 }
 
@@ -166,6 +166,6 @@ fn terminator_switch_int() {
             assert_eq!(*switch_ty, Ty::BOOL);
             assert_eq!(targets.otherwise(), BasicBlockIdx::from_raw(3));
         }
-        other => panic!("Expected SwitchInt, got {:?}", other),
+        other => panic!("Expected SwitchInt, got {other:?}"),
     }
 }

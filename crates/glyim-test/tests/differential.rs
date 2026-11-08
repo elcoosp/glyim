@@ -17,7 +17,6 @@
 //! `test-linux-runtime` CI job's contract.
 
 #![cfg(feature = "real-llvm")]
-
 use glyim_test::harness::TestRunner;
 use glyim_test::harness::compiler::{PipelineCompiler, TestCompiler};
 use glyim_test::harness::interpreter_runner::InterpRunner;
@@ -224,10 +223,10 @@ fn check_corpus_agreement(corpus: &str) {
         skipped.len()
     );
     for d in &interp_only {
-        eprintln!("  interp-only (no exec binary): {}", d);
+        eprintln!("  interp-only (no exec binary): {d}");
     }
     for d in &skipped {
-        eprintln!("  skipped: {}", d);
+        eprintln!("  skipped: {d}");
     }
 
     assert!(

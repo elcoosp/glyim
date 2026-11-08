@@ -3,7 +3,7 @@
 /// abi.
 pub mod abi;
 pub mod arena;
-/// def_id.
+/// `def_id`.
 pub mod def_id;
 /// interner.
 pub mod interner;

@@ -53,8 +53,8 @@ fn assembled_stdlib_compiles() {
                     };
                     let safe_start = mod_start.min(off);
                     let line_in_mod = src[safe_start..off].matches('\n').count() + 1;
-                    let line_start = src[..off].rfind('\n').map(|i| i + 1).unwrap_or(0);
-                    let line_end = src[off..].find('\n').map(|i| off + i).unwrap_or(src.len());
+                    let line_start = src[..off].rfind('\n').map_or(0, |i| i + 1);
+                    let line_end = src[off..].find('\n').map_or(src.len(), |i| off + i);
                     let line_no = src[..off].matches('\n').count() + 1;
                     eprintln!(
                         "DETAIL [{}:L{} (assembled L{})] {} | {}",
@@ -69,8 +69,7 @@ fn assembled_stdlib_compiles() {
                     .message
                     .split('`')
                     .nth(1)
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| d.message.clone());
+                    .map_or_else(|| d.message.clone(), std::string::ToString::to_string);
                 *counts.entry(key).or_insert(0) += 1;
             }
             let total = diags.len();

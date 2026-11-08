@@ -1,4 +1,4 @@
-//! VTable layout computation tests
+//! `VTable` layout computation tests
 
 use crate::vtable::*;
 use crate::*;
@@ -149,7 +149,6 @@ fn s15_vtable_unknown_trait_is_hard_error() {
     let result = computer.vtable_of(glyim_core::TraitDefId::from_raw(999), concrete_ty);
     assert!(
         matches!(result, Err(crate::LayoutError::UnknownTrait(_))),
-        "missing trait must be a hard error, got {:?}",
-        result
+        "missing trait must be a hard error, got {result:?}"
     );
 }

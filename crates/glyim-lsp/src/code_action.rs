@@ -3,6 +3,7 @@ use crate::database::FileMap;
 use glyim_diag::{GlyimDiagnostic, StructuredDiagnosticData};
 use lsp_types::*;
 use std::collections::HashSet;
+use std::fmt::Write as _;
 
 use url::Url;
 
@@ -72,9 +73,9 @@ fn variant_pattern(name: &str, shape: &glyim_diag::VariantShape) -> String {
     }
 }
 
-/// Extract the variant names listed in a `non-exhaustive match: missing
-/// variants \`A\`, \`B\`` diagnostic message. Used as a fallback when the
-/// diagnostic carries no structured payload (plan §5.2).
+/// Extract the variant names listed in a "non-exhaustive match: missing
+/// variants" diagnostic message. Used as a fallback when the diagnostic
+/// carries no structured payload (plan §5.2).
 fn parse_missing_variants(message: &str) -> Option<Vec<String>> {
     let prefix = "missing variants ";
     let idx = message.find(prefix)?;
@@ -123,7 +124,7 @@ fn find_match_closing_brace(source: &str, start: usize) -> Option<usize> {
     None
 }
 
-/// Parse `trait \`X\` is not implemented for \`Y\`` → `(X, Y)`.
+/// Parse a "trait X is not implemented for Y" message into (X, Y).
 fn parse_trait_not_implemented(message: &str) -> Option<(String, String)> {
     let tstart = message.find("trait `")?;
     let rest = &message[tstart + "trait `".len()..];
@@ -141,7 +142,7 @@ fn parse_trait_not_implemented(message: &str) -> Option<(String, String)> {
     }
 }
 
-/// provide_code_actions.
+/// `provide_code_actions`.
 pub fn provide_code_actions(
     db: &AnalysisDatabase,
     file_map: &FileMap,
@@ -169,11 +170,10 @@ pub fn provide_code_actions(
             new_text: String::new(),
         };
         let action = CodeAction {
-            title: format!("Remove unused import: {}", import_name),
+            title: format!("Remove unused import: {import_name}"),
             kind: Some(CodeActionKind::QUICKFIX),
             edit: Some(WorkspaceEdit {
                 changes: Some({
-                    #[allow(clippy::mutable_key_type)]
                     let mut map = std::collections::HashMap::new();
                     map.insert(uri.clone(), vec![edit]);
                     map
@@ -232,7 +232,7 @@ pub fn provide_code_actions(
                         let mut arms = String::new();
                         for (v, shape) in &shapes {
                             let pattern = variant_pattern(v, shape);
-                            arms.push_str(&format!("    {} => unimplemented!(),\n", pattern));
+                            let _ = writeln!(arms, "    {pattern} => unimplemented!(),");
                         }
                         let (ins_line, ins_col) =
                             crate::uri::offset_to_position(source, close).unwrap();
@@ -254,11 +254,10 @@ pub fn provide_code_actions(
                             .collect::<Vec<_>>()
                             .join(", ");
                         let action = CodeAction {
-                            title: format!("Add missing match arm(s): {}", title),
+                            title: format!("Add missing match arm(s): {title}"),
                             kind: Some(CodeActionKind::QUICKFIX),
                             edit: Some(WorkspaceEdit {
                                 changes: Some({
-                                    #[allow(clippy::mutable_key_type)]
                                     let mut map = std::collections::HashMap::new();
                                     map.insert(uri.clone(), vec![edit]);
                                     map
@@ -278,12 +277,12 @@ pub fn provide_code_actions(
                 if let Some((trait_name, type_name)) = parse_trait_not_implemented(&diag.message) {
                     let lines: Vec<&str> = source.lines().collect();
                     let last_line = lines.len().saturating_sub(1) as u32;
-                    let last_col = lines.last().map(|l| l.len()).unwrap_or(0) as u32;
+                    let last_col = lines.last().map_or(0, |l| l.len()) as u32;
                     let eof = Position {
                         line: last_line,
                         character: last_col,
                     };
-                    let new_text = format!("\nimpl {} for {} {{\n}}\n", trait_name, type_name);
+                    let new_text = format!("\nimpl {trait_name} for {type_name} {{\n}}\n");
                     let edit = TextEdit {
                         range: Range {
                             start: eof,
@@ -292,11 +291,10 @@ pub fn provide_code_actions(
                         new_text,
                     };
                     let action = CodeAction {
-                        title: format!("Generate impl: impl {} for {}", trait_name, type_name),
+                        title: format!("Generate impl: impl {trait_name} for {type_name}"),
                         kind: Some(CodeActionKind::QUICKFIX),
                         edit: Some(WorkspaceEdit {
                             changes: Some({
-                                #[allow(clippy::mutable_key_type)]
                                 let mut map = std::collections::HashMap::new();
                                 map.insert(uri.clone(), vec![edit]);
                                 map
@@ -324,7 +322,7 @@ mod tests {
     use std::collections::HashSet;
 
     fn names(set: &[&str]) -> HashSet<String> {
-        set.iter().map(|s| s.to_string()).collect()
+        set.iter().map(std::string::ToString::to_string).collect()
     }
 
     #[test]
@@ -347,8 +345,7 @@ mod tests {
         let unused = collect_unused_imports(src, &used);
         assert!(
             unused.is_empty(),
-            "import with a real reference must NOT be flagged, got {:?}",
-            unused
+            "import with a real reference must NOT be flagged, got {unused:?}"
         );
     }
 

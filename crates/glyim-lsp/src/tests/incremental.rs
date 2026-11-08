@@ -10,13 +10,12 @@ async fn test_function_signature_change_updates_symbol_index() {
         opt_level: 0,
     });
     let mut state = LspState::new(db);
-    let cache_dir = std::env::temp_dir().join("glyim-lsp-test");
-    state.start_driver(cache_dir);
+    state.start_driver();
 
     let path = PathBuf::from("/test/main.g");
-    let initial_content = r#"
+    let initial_content = r"
 fn add(a: i32, b: i32) -> i32 { a + b }
-"#;
+";
     state.did_open(path.clone(), initial_content.to_string(), 1);
     tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
 
@@ -28,9 +27,9 @@ fn add(a: i32, b: i32) -> i32 { a + b }
         assert_eq!(symbols.len(), 1);
     }
 
-    let updated_content = r#"
+    let updated_content = r"
 fn add(a: i64, b: i64) -> i64 { a + b }
-"#;
+";
     state.did_change(path.clone(), updated_content.to_string(), 2);
     tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
 
@@ -51,5 +50,5 @@ fn add(a: i64, b: i64) -> i64 { a + b }
 
 #[test]
 fn test_changing_file_recompiles_only_affected_files() {
-    let _ = ();
+    let () = ();
 }

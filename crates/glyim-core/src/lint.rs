@@ -39,6 +39,7 @@ impl LintId {
 
 impl LintId {
     /// Canonical name used in CLI flags and diagnostic text.
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             LintId::UnsafeFnCall => "unsafe_fn_call",
@@ -49,7 +50,7 @@ impl LintId {
     /// Parse a lint name from a CLI argument. Returns `None` for unknown names
     /// (callers log-and-ignore, matching rustc's lenient-but-warns policy;
     /// here the MVP silently ignores so unrelated tests aren't disrupted).
-    #[allow(clippy::should_implement_trait)]
+    #[must_use]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "unsafe_fn_call" | "unsafe" => Some(LintId::UnsafeFnCall),
@@ -149,8 +150,7 @@ mod tests {
             assert_eq!(
                 LintId::from_str(id.as_str()),
                 Some(*id),
-                "LintId::{:?} does not round-trip via as_str()/from_str()",
-                id,
+                "LintId::{id:?} does not round-trip via as_str()/from_str()",
             );
         }
     }

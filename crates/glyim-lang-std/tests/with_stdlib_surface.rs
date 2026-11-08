@@ -61,8 +61,7 @@ fn assembled_stdlib_declares_prelude_modules() {
         .collect();
     assert!(
         missing.is_empty(),
-        "assembled stdlib is missing pub-mod blocks for: {missing:?}; declared: {:?}",
-        declared
+        "assembled stdlib is missing pub-mod blocks for: {missing:?}; declared: {declared:?}"
     );
 }
 

@@ -33,3 +33,6 @@ glyim-codegen-llvm = { workspace = true }
 glyim-pipeline = { workspace = true }
 tempfile = "3"
 # glyim-const-eval = { workspace = true }
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true

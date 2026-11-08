@@ -1,3 +1,7 @@
+//! `glyim-pilot` CLI entry point: subcommand parsing and tokio runtime setup.
+
+//! `glyim-pilot` CLI entry point: subcommand parsing and tokio runtime setup.
+
 use clap::{Parser, Subcommand};
 use glyim_pilot::cli::agent::{handle_agent_command, AgentCommands};
 use glyim_pilot::cli::session::{handle_session_command, SessionCommands};
@@ -224,7 +228,7 @@ async fn session_merge_handler(
     )>,
 ) -> impl IntoResponse {
     match persistence.mark_pr_merged(&id).await {
-        Ok(_) => (StatusCode::OK, "Merged".to_string()).into_response(),
+        Ok(()) => (StatusCode::OK, "Merged".to_string()).into_response(),
         Err(e) => (StatusCode::NOT_FOUND, e.to_string()).into_response(),
     }
 }
@@ -290,7 +294,7 @@ async fn handle_extension_message(
                             tracing::error!(session_id, error = %e, "failed to create worktree");
                             let err_msg = CliMessage::FeedbackSend {
                                 session_id: session_id.clone(),
-                                message: format!("Worktree creation failed: {}", e),
+                                message: format!("Worktree creation failed: {e}"),
                                 turn: turn + 1,
                                 trace_id: Some(trace_id.clone()),
                                 v: PROTOCOL_VERSION,
@@ -429,7 +433,7 @@ async fn handle_extension_message(
             if recoverable {
                 let response = CliMessage::FeedbackSend {
                     session_id: session_id.clone(),
-                    message: format!("Provider error: {}", error_message),
+                    message: format!("Provider error: {error_message}"),
                     turn: 0,
                     trace_id,
                     v: PROTOCOL_VERSION,

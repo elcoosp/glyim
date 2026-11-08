@@ -82,7 +82,6 @@ fn two_phase_reservation_allows_shared_borrow() {
     let BorrowckResult { errors } = check_borrows(&test_ctx, &body);
     assert!(
         errors.is_empty(),
-        "Expected no error from shared borrow during two-phase reservation, got {:?}",
-        errors
+        "Expected no error from shared borrow during two-phase reservation, got {errors:?}"
     );
 }

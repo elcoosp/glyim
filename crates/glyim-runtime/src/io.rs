@@ -20,7 +20,6 @@
 use std::io::{Read, Write};
 
 /// Reconstruct a `&[u8]` from a raw `(ptr, len)` pair, rejecting the
-/// pathological shapes (null ptr with nonzero len, len > isize::MAX).
 #[inline]
 unsafe fn as_slice<'a>(ptr: *const u8, len: usize) -> Option<&'a [u8]> {
     if len > isize::MAX as usize {

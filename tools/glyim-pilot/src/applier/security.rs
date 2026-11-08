@@ -1,13 +1,12 @@
 use dunce::canonicalize;
 use std::path::{Path, PathBuf};
 
-/// validate_path.
+/// `validate_path`.
 pub fn validate_path(worktree_root: &Path, relative_path: &str) -> Result<PathBuf, String> {
     let relative = Path::new(relative_path);
     if relative.is_absolute() {
         return Err(format!(
-            "path '{}' is absolute; must be relative to worktree",
-            relative_path
+            "path '{relative_path}' is absolute; must be relative to worktree"
         ));
     }
 
@@ -25,8 +24,7 @@ pub fn validate_path(worktree_root: &Path, relative_path: &str) -> Result<PathBu
 
     if normalized == canonical_root {
         return Err(format!(
-            "path '{}' resolves to worktree root, not a file",
-            relative_path
+            "path '{relative_path}' resolves to worktree root, not a file"
         ));
     }
     if !normalized.starts_with(&canonical_root) {

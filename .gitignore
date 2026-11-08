@@ -5,3 +5,6 @@ mutants.out.old
 vst
 tools/glyim-worktrees
 dump.txt
+
+# local release script (delivery artifact, not repo content)
+/ship.sh

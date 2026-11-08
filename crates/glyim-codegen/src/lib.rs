@@ -1,27 +1,6 @@
 //! Crate root.
 // Stylistic clippy lints suppressed crate-wide (test-noise lints).
-#![allow(
-    clippy::cloned_ref_to_slice_refs,
-    clippy::vec_init_then_push,
-    clippy::assertions_on_constants,
-    clippy::type_complexity,
-    clippy::too_many_arguments,
-    clippy::manual_c_str_literals,
-    clippy::doc_lazy_continuation,
-    clippy::empty_line_after_doc_comments,
-    clippy::manual_strip,
-    clippy::needless_range_loop,
-    clippy::unnecessary_cast,
-    clippy::clone_on_copy,
-    clippy::mutable_key_type,
-    clippy::only_used_in_recursion,
-    clippy::let_unit_value,
-    clippy::unnecessary_literal_unwrap,
-    clippy::format_in_format_args,
-    clippy::permissions_set_readonly_false,
-    clippy::needless_lifetimes,
-    clippy::collapsible_if
-)]
+
 use glyim_core::primitives::{BinOp, UnOp};
 use glyim_core::{FnDefId, IndexVec, TargetInfo};
 use glyim_diag::{CompResult, GlyimDiagnostic};
@@ -33,23 +12,23 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::sync::Arc;
 
-/// CodegenBackend.
+/// `CodegenBackend`.
 pub trait CodegenBackend {
     /// name.
     fn name(&self) -> &'static str;
     /// generate.
     fn generate(&self, bodies: &[(String, Arc<Body>)], output: &Path) -> CompResult<()>;
-    /// generate_function.
+    /// `generate_function`.
     fn generate_function(&self, body: &Arc<Body>) -> CompResult<Vec<u8>>;
 }
 
 /// Layout provider for computing field offsets and sizes.
 pub trait LayoutProvider {
-    /// field_offset.
+    /// `field_offset`.
     fn field_offset(&self, ty: Ty, field_idx: FieldIdx) -> u64;
-    /// size_of.
+    /// `size_of`.
     fn size_of(&self, ty: Ty) -> u64;
-    /// variant_type.
+    /// `variant_type`.
     fn variant_type(&self, enum_ty: Ty, variant_idx: VariantIdx) -> Ty;
     /// Byte offset of a downcasted enum variant's data payload from the start
     /// of the enum value. For enums using a *direct* discriminant tag, the tag
@@ -106,7 +85,7 @@ impl LayoutProvider for GlyimLayoutProvider {
                     }
                 }
                 FieldsShape::Primitive => 0,
-                FieldsShape::Array { stride, count: _ } => (field_idx.to_raw() as u64) * stride.0,
+                FieldsShape::Array { stride, count: _ } => u64::from(field_idx.to_raw()) * stride.0,
             }
         } else {
             tracing::warn!("Layout computation failed for field offset");
@@ -180,7 +159,7 @@ pub enum OptLevel {
     O3,
 }
 
-/// BytecodeBackend.
+/// `BytecodeBackend`.
 pub struct BytecodeBackend {
     string_table: RefCell<Vec<String>>,
     /// T190-PATCHED [BC-7]: side index for `string_table`, avoiding the
@@ -225,6 +204,7 @@ impl BytecodeBackend {
     /// Construct with an owned `Arc<TyCtx>` (test convenience). The backend
     /// installs the context into a private handle internally, so `ty_ctx`
     /// reads behave identically to the `with_ty_ctx_handle` path.
+    #[must_use]
     pub fn with_ty_ctx(ctx: Arc<TyCtx>, target: TargetInfo) -> Self {
         let handle: TyCtxHandle = std::sync::Arc::new(std::sync::RwLock::new(Some(ctx)));
         Self::with_ty_ctx_handle(handle, target)
@@ -253,13 +233,15 @@ impl BytecodeBackend {
             .and_then(|h| h.read().ok().and_then(|g| g.clone()))
     }
 
-    /// with_opt_level.
+    /// `with_opt_level`.
+    #[must_use]
     pub fn with_opt_level(mut self, level: OptLevel) -> Self {
         self.opt_level = level;
         self
     }
 
-    /// with_layout_provider.
+    /// `with_layout_provider`.
+    #[must_use]
     pub fn with_layout_provider(mut self, provider: Box<dyn LayoutProvider>) -> Self {
         self.layout_provider = provider;
         self
@@ -281,16 +263,15 @@ impl BytecodeBackend {
         bc.extend_from_slice(&place.local.to_raw().to_le_bytes());
 
         let local_idx = place.local.to_raw() as usize;
-        if local_idx >= local_tys.len() {
-            panic!(
-                "local index out of bounds: {} (len={})",
-                local_idx,
-                local_tys.len()
-            );
-        }
+        assert!(
+            local_idx < local_tys.len(),
+            "local index out of bounds: {} (len={})",
+            local_idx,
+            local_tys.len()
+        );
         let mut current_ty = local_tys[place.local].ty;
 
-        for proj in place.projection.iter() {
+        for proj in &place.projection {
             match proj {
                 ProjectionElem::Deref => {
                     bc.push(OP_DEREF);
@@ -592,14 +573,14 @@ fn fold_int_binop(op: u8, a: i64, b: i64) -> Option<i64> {
         OP_MUL => a.wrapping_mul(b),
         OP_DIV => a.checked_div(b)?,
         OP_REM => a.rem(b),
-        OP_EQ => (a == b) as i64,
-        OP_NE => (a != b) as i64,
-        OP_LT => (a < b) as i64,
-        OP_GT => (a > b) as i64,
-        OP_LE => (a <= b) as i64,
-        OP_GE => (a >= b) as i64,
-        OP_AND => (a != 0 && b != 0) as i64,
-        OP_OR => (a != 0 || b != 0) as i64,
+        OP_EQ => i64::from(a == b),
+        OP_NE => i64::from(a != b),
+        OP_LT => i64::from(a < b),
+        OP_GT => i64::from(a > b),
+        OP_LE => i64::from(a <= b),
+        OP_GE => i64::from(a >= b),
+        OP_AND => i64::from(a != 0 && b != 0),
+        OP_OR => i64::from(a != 0 || b != 0),
         OP_BITAND => a.bitand(b),
         OP_BITOR => a.bitor(b),
         OP_BITXOR => a.bitxor(b),
@@ -637,12 +618,6 @@ impl CodegenBackend for BytecodeBackend {
 }
 
 impl BytecodeBackend {
-    /// Run the peephole optimization pass over the emitted bytecode stream.
-    ///
-    /// Currently implements two always-semantics-preserving rules:
-    /// 1. **Integer constant folding**: `OP_LOAD_CONST a; OP_LOAD_CONST b; OP_BINOP`
-    ///    where `a`/`b` are integer-typed constants and `OP_BINOP` is one of the
-    ///    arithmetic/logic ops, is collapsed to `OP_LOAD_CONST (a OP b)`.
     /// Run the peephole optimization pass over the emitted bytecode stream.
     ///
     /// Implemented on a width-aware decoded form (see [`decode_bytecode`]) so it
@@ -1013,7 +988,7 @@ impl BytecodeBackend {
                     }
                     MirConstKind::Bool(b) => {
                         bc.push(OP_LOAD_CONST);
-                        bc.extend_from_slice(&(if *b { 1i64 } else { 0i64 }).to_le_bytes());
+                        bc.extend_from_slice(&i64::from(*b).to_le_bytes());
                         self.const_is_int.borrow_mut().push(true);
                     }
                     MirConstKind::Char(c) => {
@@ -1037,13 +1012,13 @@ impl BytecodeBackend {
                         };
                         let idx = self.intern_string(&str_content);
                         bc.push(OP_LOAD_CONST);
-                        bc.extend_from_slice(&(idx as i64).to_le_bytes());
+                        bc.extend_from_slice(&i64::from(idx).to_le_bytes());
                         self.const_is_int.borrow_mut().push(false);
                     }
                     MirConstKind::Fn(def_id, substs) => {
                         bc.push(OP_LOAD_CONST);
                         let idx = self.intern_fn(*def_id, *substs);
-                        bc.extend_from_slice(&(idx as i64).to_le_bytes());
+                        bc.extend_from_slice(&i64::from(idx).to_le_bytes());
                         self.const_is_int.borrow_mut().push(false);
                     }
                     MirConstKind::ConstRef(def_id, _) => {
@@ -1076,7 +1051,7 @@ impl BytecodeBackend {
                                     &ctx,
                                     glyim_core::primitives::TargetInfo::x86_64(),
                                 );
-                                lc.layout_of(*ty).map(|l| l.size.0).unwrap_or(0)
+                                lc.layout_of(*ty).map_or(0, |l| l.size.0)
                             }
                             None => 0,
                         };
@@ -1175,8 +1150,7 @@ impl BytecodeBackend {
                     let true_target = targets
                         .iter()
                         .find(|(v, _)| *v == 1)
-                        .map(|(_, t)| t)
-                        .unwrap_or_else(|| targets.otherwise());
+                        .map_or_else(|| targets.otherwise(), |(_, t)| t);
                     let false_target = targets.otherwise();
                     bc.push(OP_JUMP_IF);
                     bc.extend_from_slice(&true_target.to_raw().to_le_bytes());
@@ -1248,7 +1222,7 @@ impl BytecodeBackend {
             } => {
                 self.emit_operand(bc, cond, local_tys)?;
                 bc.push(OP_ASSERT);
-                bc.push(if *expected { 1u8 } else { 0u8 });
+                bc.push(u8::from(*expected));
                 bc.extend_from_slice(&target.to_raw().to_le_bytes());
                 Ok(())
             }

@@ -44,7 +44,7 @@ fn place_ty_deref_then_field_on_tuple() {
         ]),
     };
     let ty = place.ty(&ctx, &body.locals);
-    assert_ty(&ctx, ty).is_int(glyim_core::primitives::IntTy::I32);
+    let _ = assert_ty(&ctx, ty).is_int(glyim_core::primitives::IntTy::I32);
 }
 
 #[test]
@@ -83,5 +83,5 @@ fn place_ty_field_on_tuple() {
         )]),
     };
     let ty = place.ty(&ctx, &body.locals);
-    assert_ty(&ctx, ty).is_bool();
+    let _ = assert_ty(&ctx, ty).is_bool();
 }

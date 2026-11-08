@@ -31,8 +31,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   warnings`), cargo-deny supply-chain job, runner caching, timeouts,
   concurrency cancellation.
 - MIT LICENSE file, declared MSRV (`rust-version = "1.85"`).
+- **M0.6 metrics ratchet**: new `tools/glyim-metrics` crate (TDD, 18 unit
+  tests + dependency-free scan bench) measures lexical repo health —
+  `.rs` files, code lines, public items, doc coverage, test functions,
+  and the inline-`allow` count the M0 zero-allow policy pins at zero.
+  The binary writes `metrics/baseline.json` (906 files / 226.5k lines /
+  4811 tests / 0 inline allows at M0) and CI's new `metrics-ratchet` job
+  fails on any regression while allowing improvements (gates never
+  weaken, C9).
+- **Workspace-wide pedantic lint rails** (M0 §2 C4, §7.4):
+  `[workspace.lints.clippy] pedantic` is wired into all 36 member crates
+  via `[lints] workspace = true`; every relaxation is a single
+  rationale-annotated entry in the root manifest, and the enforced gate
+  (`cargo clippy --workspace --all-targets --all-features -- -D warnings
+  -W clippy::pedantic` with manifest-derived re-asserts) passes with
+  **zero inline `#[allow]`/`#[expect]` attributes** in the tree.
+- `rust-toolchain.toml` pins local development to the `stable` toolchain
+  (MSRV 1.95.0 stays a separate CI job).
 
 ### Changed
+- **`regalloc2` dependency removed** from the workspace (unused).
+- Session documents `HANDOFF.md` and `FIXES.md` moved to `docs/archive/`
+  to keep the repo root navigation-focused.
+- Dead code deleted across the workspace: unused fields/methods/helpers
+  (`DoneDefaults` fields, `record_commit`/`set_provider_cooldown`,
+  `SourceMap::path`, `AnalysisDriver::cache_dir`, test-only helpers that
+  no test reached, …) — replaced with `#[cfg(test)]` where the consumers
+  are the test suites themselves.
+- ~160 `missing_docs` gaps closed; `push_str(&format!(..))` idioms
+  converted to `write!`/`writeln!`; format args inlined per
+  `uninlined_format_args`.
 - CI installs LLVM 23 consistently (`./llvm.sh 23` — previously mixed
   v22 script with v23 dev packages).
 - Release profile enables `overflow-checks` (compiler-internal arithmetic
@@ -59,6 +87,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LLVM codegen: recoverable type/ABI failures return diagnostics instead
   of panicking (`fn type lowering failed`, `Codegen error`, variant index).
 - README: correct repo URL, binary name, and LLVM-install guidance.
+- Legacy session instrumentation and stale doc-comment artifacts
+  (unbalanced backticks in doc comments, detached docs, duplicated
+  crate-level docs) cleaned up as part of the M0 doc pass.
 
 ## [0.1.0] — initial public state
 

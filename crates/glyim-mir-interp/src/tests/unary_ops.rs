@@ -59,8 +59,7 @@ fn w1_c03_t02_not_bool() {
     assert_eq!(
         ret,
         InterpValue::Bool(false),
-        "Expected !true = false, got {:?}",
-        ret
+        "Expected !true = false, got {ret:?}"
     );
 }
 
@@ -113,8 +112,7 @@ fn not_int() {
     assert_eq!(
         ret,
         InterpValue::Int(-1),
-        "Expected !0i32 = -1, got {:?}",
-        ret
+        "Expected !0i32 = -1, got {ret:?}"
     );
 }
 
@@ -164,5 +162,5 @@ fn neg_int() {
     let result = interp.run_body(&body);
     assert!(result.is_ok());
     let ret = interp.get_return_value().unwrap();
-    assert_eq!(ret, InterpValue::Int(-42), "Expected -42, got {:?}", ret);
+    assert_eq!(ret, InterpValue::Int(-42), "Expected -42, got {ret:?}");
 }

@@ -3,16 +3,16 @@ use crate::ty::Ty;
 use glyim_core::primitives::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// FnSig.
+/// `FnSig`.
 pub struct FnSig {
-    /// Struct.
+    /// `Struct`.
     pub inputs: Substitution,
-    /// Struct.
+    /// `Struct`.
     pub output: Ty,
-    /// Struct.
+    /// `Struct`.
     pub c_variadic: bool,
-    /// Struct.
+    /// `Struct`.
     pub unsafety: Safety,
-    /// Struct.
+    /// `Struct`.
     pub abi: Abi,
 }

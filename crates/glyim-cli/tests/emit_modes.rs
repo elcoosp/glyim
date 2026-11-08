@@ -5,7 +5,7 @@
 //! `--emit=exec` went through the one that ran monomorphization; `--emit=llvm-ir`
 //! and `--emit=asm` used partial copies that stopped before it, so generic
 //! stdlib definitions reached codegen with `TyKind::Param` still in their
-//! locals and `fn_abi_of` ICEd with `UnknownType`. The mode a user picked
+//! locals and `fn_abi_of` `ICEd` with `UnknownType`. The mode a user picked
 //! determined whether the program compiled at all.
 //!
 //! These tests pin the contract that **every** emit mode succeeds on the same
@@ -28,7 +28,7 @@ fn tempdir() -> std::path::PathBuf {
     // alone is not unique.
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let p = std::env::temp_dir().join(format!("glyim_emit_modes_{}_{}", std::process::id(), n,));
+    let p = std::env::temp_dir().join(format!("glyim_emit_modes_{}_{}", std::process::id(), n));
     std::fs::create_dir_all(&p).unwrap();
     p
 }
@@ -92,7 +92,7 @@ fn all_emit_modes_succeed_on_hello_world() {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr),
         );
-        assert!(out.exists(), "--emit={mode} must write {out:?}",);
+        assert!(out.exists(), "--emit={mode} must write {out:?}");
         assert!(
             std::fs::metadata(&out).unwrap().len() > 0,
             "--emit={mode} produced an empty file at {out:?}",

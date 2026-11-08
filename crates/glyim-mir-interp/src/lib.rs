@@ -1,27 +1,6 @@
 //! Crate root.
 // Stylistic clippy lints suppressed crate-wide (test-noise lints).
-#![allow(
-    clippy::cloned_ref_to_slice_refs,
-    clippy::vec_init_then_push,
-    clippy::assertions_on_constants,
-    clippy::type_complexity,
-    clippy::too_many_arguments,
-    clippy::manual_c_str_literals,
-    clippy::doc_lazy_continuation,
-    clippy::empty_line_after_doc_comments,
-    clippy::manual_strip,
-    clippy::needless_range_loop,
-    clippy::unnecessary_cast,
-    clippy::clone_on_copy,
-    clippy::mutable_key_type,
-    clippy::only_used_in_recursion,
-    clippy::let_unit_value,
-    clippy::unnecessary_literal_unwrap,
-    clippy::format_in_format_args,
-    clippy::permissions_set_readonly_false,
-    clippy::needless_lifetimes,
-    clippy::collapsible_if
-)]
+
 use glyim_core::{BinOp, CrateId, DefId, LocalDefId, UnOp, primitives::TargetInfo};
 use glyim_layout::{LayoutComputer, SimpleLayoutComputer};
 use glyim_mir::*;
@@ -34,7 +13,7 @@ mod interp_value;
 pub use interp_error::InterpError;
 pub use interp_value::InterpValue;
 
-/// Interpreter.
+/// `Interpreter`.
 pub struct Interpreter<'tcx> {
     tcx: &'tcx TyCtx,
     layout: SimpleLayoutComputer<'tcx>,
@@ -50,9 +29,9 @@ pub struct Interpreter<'tcx> {
     /// surfacing `InterpError::Unwind` at the top — it never resumes a caller's
     /// normal continuation for a propagating panic.
     pub panics_unwind: bool,
-    /// Struct.
+    /// `Struct`.
     pub step_limit: usize,
-    /// Struct.
+    /// `Struct`.
     pub recursion_limit: usize,
     step_count: usize,
     recursion_depth: usize,
@@ -95,7 +74,7 @@ pub struct Interpreter<'tcx> {
     globals:
         std::cell::RefCell<std::collections::HashMap<glyim_core::def_id::StaticDefId, InterpValue>>,
     /// Frames that were popped while their return value still held a
-    /// `Ref { frame: <this depth> }`. §3.9 (KNOWN_GAPS): the stdlib's
+    /// `Ref { frame: <this depth> }`. §3.9 (`KNOWN_GAPS)`: the stdlib's
     /// `impl Iterator for &[T]` binds the slice to a callee-local (`let cur:
     /// &[T] = *self;`) and returns `&cur[0]` — under LLVM the pointee is the
     /// caller's array and everything works; under the interpreter the
@@ -117,10 +96,6 @@ pub struct Interpreter<'tcx> {
 struct ArchivedFrame {
     /// Absolute depth the frame occupied when it was popped.
     depth: usize,
-    /// Generation stamped when the frame was pushed (informational; the
-    /// archive is keyed by depth, newest-first, mirroring slot reuse).
-    #[allow(dead_code)]
-    generation: u64,
     locals: Vec<Option<InterpValue>>,
     /// The frame's local declarations (types), so `decls_for_ref_frame` can
     /// resolve projection types for refs into archived frames.
@@ -146,8 +121,11 @@ fn value_references_frame(value: &InterpValue, depth: usize) -> bool {
 
 struct CallFrame {
     body: Body,
-    #[allow(dead_code)]
-    bb: BasicBlockIdx,
+
+    /// Monotonic generation assigned when this frame was pushed; used to
+    /// detect a `Ref` whose borrower frame was popped and whose slot was
+    /// later reused by an unrelated call.
+    generation: u64,
     locals: Vec<Option<InterpValue>>,
     return_place: Place,
     target_bb: BasicBlockIdx,
@@ -155,14 +133,11 @@ struct CallFrame {
     /// callee — where the caller should resume when this frame unwinds
     /// (plan §7.2). Mirrors MIR `TerminatorKind::Call::cleanup`.
     unwind_target: Option<BasicBlockIdx>,
-    /// Monotonic generation assigned when this frame was pushed. Used to
-    /// detect a `Ref` whose borrower frame was popped and whose slot was
-    /// later reused by an unrelated call (use-after-free style aliasing).
-    generation: u64,
 }
 
 impl<'tcx> Interpreter<'tcx> {
     /// new.
+    #[must_use]
     pub fn new(tcx: &'tcx TyCtx) -> Self {
         Interpreter {
             tcx,
@@ -191,7 +166,8 @@ impl<'tcx> Interpreter<'tcx> {
         }
     }
 
-    /// with_step_limit.
+    /// `with_step_limit`.
+    #[must_use]
     pub fn with_step_limit(mut self, limit: usize) -> Self {
         self.step_limit = limit;
         self
@@ -206,7 +182,8 @@ impl<'tcx> Interpreter<'tcx> {
         self.get_element_size(ty)
     }
 
-    /// with_recursion_limit.
+    /// `with_recursion_limit`.
+    #[must_use]
     pub fn with_recursion_limit(mut self, limit: usize) -> Self {
         self.recursion_limit = limit;
         self
@@ -231,32 +208,33 @@ impl<'tcx> Interpreter<'tcx> {
     /// (An earlier revision of this doc claimed the flag was a no-op and
     /// the behavior unimplemented; both were wrong — see the field doc on
     /// `panics_unwind` and `unwind_step`'s implementation.)
+    #[must_use]
     pub fn with_panics_unwind(mut self, yes: bool) -> Self {
         self.panics_unwind = yes;
         self
     }
 
-    /// add_function.
+    /// `add_function`.
     pub fn add_function(&mut self, def_id: DefId, body: Body) {
         self.function_table.insert(def_id, body);
     }
 
-    /// step_limit.
+    /// `step_limit`.
     pub fn step_limit(&self) -> usize {
         self.step_limit
     }
 
-    /// recursion_limit.
+    /// `recursion_limit`.
     pub fn recursion_limit(&self) -> usize {
         self.recursion_limit
     }
 
-    /// recursion_depth.
+    /// `recursion_depth`.
     pub fn recursion_depth(&self) -> usize {
         self.recursion_depth
     }
 
-    /// get_local_value.
+    /// `get_local_value`.
     pub fn get_local_value(&self, local: LocalIdx) -> Option<&InterpValue> {
         self.locals.get(local.index())?.as_ref()
     }
@@ -354,7 +332,7 @@ impl<'tcx> Interpreter<'tcx> {
             (1010, "is_none") => Ok(Some(InterpValue::Bool(
                 Self::enum_tag(&receiver) != Some(1),
             ))),
-            (1010, "unwrap") | (1010, "expect") => {
+            (1010, "unwrap" | "expect") => {
                 if Self::enum_tag(&receiver) == Some(1) {
                     Ok(Some(Self::enum_payload(&receiver)))
                 } else {
@@ -376,7 +354,7 @@ impl<'tcx> Interpreter<'tcx> {
             (1011, "is_err") => Ok(Some(InterpValue::Bool(
                 Self::enum_tag(&receiver) != Some(0),
             ))),
-            (1011, "unwrap") | (1011, "expect") => {
+            (1011, "unwrap" | "expect") => {
                 if Self::enum_tag(&receiver) == Some(0) {
                     Ok(Some(Self::enum_payload(&receiver)))
                 } else {
@@ -563,7 +541,7 @@ impl<'tcx> Interpreter<'tcx> {
                     InterpValue::Int(i) => (*i).max(0) as u128,
                     _ => return Ok(None),
                 };
-                Ok(Some(InterpValue::Uint(n.count_ones() as u128)))
+                Ok(Some(InterpValue::Uint(u128::from(n.count_ones()))))
             }
             (_, "count_zeros") => {
                 let v = self.builtin_deref(&receiver)?;
@@ -582,7 +560,7 @@ impl<'tcx> Interpreter<'tcx> {
                 let mask: u128 = (1u128 << width) - 1;
                 let trimmed = n & mask;
                 Ok(Some(InterpValue::Uint(
-                    (width as u128) - (trimmed.count_ones() as u128),
+                    u128::from(width) - u128::from(trimmed.count_ones()),
                 )))
             }
             (_, "leading_zeros") => {
@@ -602,9 +580,9 @@ impl<'tcx> Interpreter<'tcx> {
                 let mask: u128 = (1u128 << width) - 1;
                 let trimmed = n & mask;
                 let lz: u128 = if trimmed == 0 {
-                    width as u128
+                    u128::from(width)
                 } else {
-                    (width as u128) - (128u128 - (trimmed.leading_zeros() as u128))
+                    u128::from(width) - (128u128 - u128::from(trimmed.leading_zeros()))
                 };
                 Ok(Some(InterpValue::Uint(lz)))
             }
@@ -625,9 +603,9 @@ impl<'tcx> Interpreter<'tcx> {
                 let mask: u128 = (1u128 << width) - 1;
                 let trimmed = n & mask;
                 let tz: u128 = if trimmed == 0 {
-                    width as u128
+                    u128::from(width)
                 } else {
-                    trimmed.trailing_zeros() as u128
+                    u128::from(trimmed.trailing_zeros())
                 };
                 Ok(Some(InterpValue::Uint(tz)))
             }
@@ -676,9 +654,9 @@ impl<'tcx> Interpreter<'tcx> {
                 let trimmed = n & mask;
                 let inverted = (!trimmed) & mask;
                 let lo: u128 = if inverted == 0 {
-                    width as u128
+                    u128::from(width)
                 } else {
-                    (width as u128) - (128u128 - (inverted.leading_zeros() as u128))
+                    u128::from(width) - (128u128 - u128::from(inverted.leading_zeros()))
                 };
                 Ok(Some(InterpValue::Uint(lo)))
             }
@@ -695,23 +673,21 @@ impl<'tcx> Interpreter<'tcx> {
             // Each branch checks the exact condition that would push the
             // result out of `[0, max]` before computing, so the inner
             // arithmetic is guaranteed not to overflow u128.
-            (_, "checked_add") | (_, "checked_sub") | (_, "checked_mul") => {
+            (_, "checked_add" | "checked_sub" | "checked_mul") => {
                 let a = self.builtin_deref(&receiver)?;
                 let b = args.get(1).cloned().unwrap_or(InterpValue::Unit);
                 let width = self
                     .operand_bit_width(arg_operands.first())
                     .ok_or_else(|| {
                         InterpError::Panic(format!(
-                            "interp: {}: cannot determine receiver bit width",
-                            method
+                            "interp: {method}: cannot determine receiver bit width"
                         ))
                     })?;
                 let recv_ty = self.operand_ty(arg_operands.first().ok_or_else(|| {
-                    InterpError::Panic(format!("interp: {}: no receiver operand", method))
+                    InterpError::Panic(format!("interp: {method}: no receiver operand"))
                 })?);
                 let signed = recv_ty
-                    .map(|t| matches!(self.tcx.ty_kind(t), glyim_type::TyKind::Int(_)))
-                    .unwrap_or(false);
+                    .is_some_and(|t| matches!(self.tcx.ty_kind(t), glyim_type::TyKind::Int(_)));
                 if signed {
                     let a_s: i128 = match &a {
                         InterpValue::Int(i) => *i,
@@ -800,15 +776,14 @@ impl<'tcx> Interpreter<'tcx> {
             // receiver width would silently exceed the width's range.
             // For sub, u128 saturating_sub already clamps at 0, matching
             // the width-independent unsigned behavior.
-            (_, "saturating_add") | (_, "saturating_sub") | (_, "saturating_mul") => {
+            (_, "saturating_add" | "saturating_sub" | "saturating_mul") => {
                 let a = self.builtin_deref(&receiver)?;
                 let b = args.get(1).cloned().unwrap_or(InterpValue::Unit);
                 let width = self
                     .operand_bit_width(arg_operands.first())
                     .ok_or_else(|| {
                         InterpError::Panic(format!(
-                            "interp: {}: cannot determine receiver bit width",
-                            method
+                            "interp: {method}: cannot determine receiver bit width"
                         ))
                     })?;
 
@@ -820,11 +795,10 @@ impl<'tcx> Interpreter<'tcx> {
                 // [0, UINT_MAX]. Type dispatch mirrors the LLVM backend's
                 // place_ty(destination) decision.
                 let recv_ty = self.operand_ty(arg_operands.first().ok_or_else(|| {
-                    InterpError::Panic(format!("interp: {}: no receiver operand", method))
+                    InterpError::Panic(format!("interp: {method}: no receiver operand"))
                 })?);
                 let signed = recv_ty
-                    .map(|t| matches!(self.tcx.ty_kind(t), glyim_type::TyKind::Int(_)))
-                    .unwrap_or(false);
+                    .is_some_and(|t| matches!(self.tcx.ty_kind(t), glyim_type::TyKind::Int(_)));
 
                 if signed {
                     let a_s: i128 = match &a {
@@ -883,23 +857,21 @@ impl<'tcx> Interpreter<'tcx> {
             // the receiver's declared type, not the InterpValue variant
             // (some unsigned receivers arrive as Int after trunc_to_ty —
             // see §3.5.19 follow-up).
-            (_, "wrapping_add") | (_, "wrapping_sub") | (_, "wrapping_mul") => {
+            (_, "wrapping_add" | "wrapping_sub" | "wrapping_mul") => {
                 let a = self.builtin_deref(&receiver)?;
                 let b = args.get(1).cloned().unwrap_or(InterpValue::Unit);
                 let width = self
                     .operand_bit_width(arg_operands.first())
                     .ok_or_else(|| {
                         InterpError::Panic(format!(
-                            "interp: {}: cannot determine receiver bit width",
-                            method
+                            "interp: {method}: cannot determine receiver bit width"
                         ))
                     })?;
                 let recv_ty = self.operand_ty(arg_operands.first().ok_or_else(|| {
-                    InterpError::Panic(format!("interp: {}: no receiver operand", method))
+                    InterpError::Panic(format!("interp: {method}: no receiver operand"))
                 })?);
                 let signed = recv_ty
-                    .map(|t| matches!(self.tcx.ty_kind(t), glyim_type::TyKind::Int(_)))
-                    .unwrap_or(false);
+                    .is_some_and(|t| matches!(self.tcx.ty_kind(t), glyim_type::TyKind::Int(_)));
                 let mask: u128 = if width >= 128 {
                     u128::MAX
                 } else {
@@ -970,13 +942,13 @@ impl<'tcx> Interpreter<'tcx> {
                 let trimmed = n & mask;
                 let inverted = (!trimmed) & mask;
                 let to: u128 = if inverted == 0 {
-                    width as u128
+                    u128::from(width)
                 } else {
-                    inverted.trailing_zeros() as u128
+                    u128::from(inverted.trailing_zeros())
                 };
                 Ok(Some(InterpValue::Uint(to)))
             }
-            (1050, "clear") | (1061, "clear") => {
+            (1050 | 1061, "clear") => {
                 let v = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
                     *v = InterpValue::String(String::new());
                 })?;
@@ -1000,7 +972,7 @@ impl<'tcx> Interpreter<'tcx> {
                     Ok(Some(InterpValue::Aggregate(vec![InterpValue::Int(1), arg])))
                 }
             }
-            (1050, "from") | (1050, "from_utf8_lossy") => {
+            (1050, "from" | "from_utf8_lossy") => {
                 // `String::from(&str)`: the argument is the string view.
                 let s = args
                     .first()
@@ -1049,7 +1021,7 @@ impl<'tcx> Interpreter<'tcx> {
                     InterpValue::String(st) => st
                         .as_bytes()
                         .iter()
-                        .map(|b| InterpValue::Uint(*b as u128))
+                        .map(|b| InterpValue::Uint(u128::from(*b)))
                         .collect(),
                     InterpValue::Aggregate(f) => f.clone(),
                     _ => Vec::new(),
@@ -1066,7 +1038,7 @@ impl<'tcx> Interpreter<'tcx> {
                     InterpValue::String(st) => st
                         .as_bytes()
                         .iter()
-                        .map(|b| InterpValue::Uint(*b as u128))
+                        .map(|b| InterpValue::Uint(u128::from(*b)))
                         .collect(),
                     InterpValue::Aggregate(fields) => fields.clone(),
                     _ => Vec::new(),
@@ -1088,11 +1060,11 @@ impl<'tcx> Interpreter<'tcx> {
             // `load` reads the field; `store` and `fetch_*` write it back
             // through `mutate_receiver` so a `&self` receiver still reaches
             // the owning local.
-            (1016, "new") | (1017, "new") | (1018, "new") => {
+            (1016..=1018, "new") => {
                 let v = args.first().cloned().unwrap_or(InterpValue::Unit);
                 Ok(Some(InterpValue::Aggregate(vec![v])))
             }
-            (1016, "load") | (1017, "load") | (1018, "load") => {
+            (1016..=1018, "load") => {
                 let s = self.builtin_deref(&receiver)?;
                 let v = match &s {
                     InterpValue::Aggregate(fields) => {
@@ -1102,7 +1074,7 @@ impl<'tcx> Interpreter<'tcx> {
                 };
                 Ok(Some(v))
             }
-            (1016, "store") | (1017, "store") | (1018, "store") => {
+            (1016..=1018, "store") => {
                 let new_val = args.get(1).cloned().unwrap_or(InterpValue::Unit);
                 let _ = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
                     if let InterpValue::Aggregate(fields) = v {
@@ -1115,7 +1087,7 @@ impl<'tcx> Interpreter<'tcx> {
                 })?;
                 Ok(Some(InterpValue::Unit))
             }
-            (1016, "fetch_and") | (1016, "fetch_or") => {
+            (1016, "fetch_and" | "fetch_or") => {
                 let is_and = method.as_str() == "fetch_and";
                 let rhs = matches!(args.get(1), Some(InterpValue::Bool(true)));
                 let old = std::cell::Cell::new(false);
@@ -1131,7 +1103,7 @@ impl<'tcx> Interpreter<'tcx> {
                 })?;
                 Ok(Some(InterpValue::Bool(old.get())))
             }
-            (1017, "fetch_add") | (1017, "fetch_sub") => {
+            (1017, "fetch_add" | "fetch_sub") => {
                 let is_add = method.as_str() == "fetch_add";
                 let rhs = match args.get(1) {
                     Some(InterpValue::Uint(n)) => *n,
@@ -1166,7 +1138,7 @@ impl<'tcx> Interpreter<'tcx> {
             // payload is the *previous* value. Atomics are modelled as a
             // single-field `Aggregate([stored])`, so the current value is
             // `fields[0]`.
-            (1016, "compare_exchange") | (1017, "compare_exchange") => {
+            (1016 | 1017, "compare_exchange") => {
                 let expected = args.get(1).cloned().unwrap_or(InterpValue::Unit);
                 let new_val = args.get(2).cloned().unwrap_or(InterpValue::Unit);
                 let prev = std::cell::Cell::new(InterpValue::Unit);
@@ -1183,7 +1155,7 @@ impl<'tcx> Interpreter<'tcx> {
                     }
                 })?;
                 let prev = prev.into_inner();
-                let tag = if prev == expected { 0 } else { 1 };
+                let tag = i128::from(prev != expected);
                 Ok(Some(InterpValue::Aggregate(vec![
                     InterpValue::Int(tag),
                     prev,
@@ -1203,7 +1175,7 @@ impl<'tcx> Interpreter<'tcx> {
                 let s = self.builtin_deref(&receiver)?;
                 Ok(Some(s))
             }
-            (1050, "push_str") | (1061, "push_str") => {
+            (1050 | 1061, "push_str") => {
                 let add = args.get(1).cloned().unwrap_or(InterpValue::Unit);
                 let v = self.mutate_receiver(arg_operands.first(), args.first(), |v| {
                     Self::string_push_str(v, &add);
@@ -1222,7 +1194,7 @@ impl<'tcx> Interpreter<'tcx> {
             // are carried in `InterpValue::String` (byte-exact for the ASCII
             // fixtures; lossy for non-UTF-8, a documented limit of this
             // interpreter's reference model).
-            (1061, "as_bytes") | (1050, "as_bytes") => {
+            (1061 | 1050, "as_bytes") => {
                 let s = self.builtin_deref(&receiver)?;
                 Ok(Some(InterpValue::String(Self::byte_payload(&s))))
             }
@@ -1235,7 +1207,7 @@ impl<'tcx> Interpreter<'tcx> {
                 let s = self.builtin_deref(&receiver)?;
                 Ok(Some(InterpValue::String(Self::byte_payload(&s))))
             }
-            (1061, "to_string") | (1050, "to_string") | (1060, "to_string") => {
+            (1061 | 1050 | 1060, "to_string") => {
                 let s = self.builtin_deref(&receiver)?;
                 Ok(Some(InterpValue::String(Self::byte_payload(&s))))
             }
@@ -1278,7 +1250,7 @@ impl<'tcx> Interpreter<'tcx> {
                 let s = self.builtin_deref(&receiver)?;
                 Ok(Some(InterpValue::Bool(Self::byte_payload(&s).is_empty())))
             }
-            (1020, "as_ptr") | (1060, "as_ptr") | (1061, "as_ptr") => {
+            (1020 | 1060 | 1061, "as_ptr") => {
                 let s = self.builtin_deref(&receiver)?;
                 Ok(Some(InterpValue::String(Self::byte_payload(&s))))
             }
@@ -1289,7 +1261,7 @@ impl<'tcx> Interpreter<'tcx> {
             // `is_empty` / `cur[0]` / `cur[1..]` unchanged. For array
             // receivers, convert the element aggregate to that string;
             // for slice/Vec receivers, pass through.
-            (1060, "iter") | (1060, "iter_mut") => {
+            (1060, "iter" | "iter_mut") => {
                 let s = self.builtin_deref(&receiver)?;
                 match &s {
                     // Already a slice model — identity.
@@ -1325,7 +1297,7 @@ impl<'tcx> Interpreter<'tcx> {
                     _ => Ok(None),
                 }
             }
-            (1020, "as_slice") | (1020, "as_ref") => {
+            (1020, "as_slice" | "as_ref") => {
                 let s = self.builtin_deref(&receiver)?;
                 // VEC-AS-SLICE: a `Vec` is modelled as
                 // `Aggregate([Aggregate(elements), Uint(len)])`. The old
@@ -1449,12 +1421,12 @@ impl<'tcx> Interpreter<'tcx> {
                     val = match val {
                         InterpValue::String(s) => {
                             let bytes = s.as_bytes();
-                            InterpValue::Uint(*bytes.get(idx).ok_or_else(|| {
+                            InterpValue::Uint(u128::from(*bytes.get(idx).ok_or_else(|| {
                                 InterpError::Panic(format!(
                                     "index out of bounds: {idx} >= {}",
                                     bytes.len()
                                 ))
-                            })? as u128)
+                            })?))
                         }
                         InterpValue::Aggregate(elems) => {
                             let len = elems.len();
@@ -1499,7 +1471,7 @@ impl<'tcx> Interpreter<'tcx> {
                 // *whole* `_5` aggregate to the builtin (e.g.
                 // `w.v.len()` reading `W { v, i }` and returning
                 // `vec_len`'s `fields[1]` fallback = 1). See KNOWN_GAPS §8.
-                for proj in projection.iter() {
+                for proj in projection {
                     match proj {
                         glyim_mir::ProjectionElem::Field(fi) => {
                             let fi = fi.index();
@@ -1514,8 +1486,7 @@ impl<'tcx> Interpreter<'tcx> {
                                     })?,
                                 other => {
                                     return Err(InterpError::Panic(format!(
-                                        "builtin_deref: Field projection on non-aggregate value {:?}",
-                                        other
+                                        "builtin_deref: Field projection on non-aggregate value {other:?}"
                                     )));
                                 }
                             };
@@ -1964,9 +1935,9 @@ impl<'tcx> Interpreter<'tcx> {
         &self.stderr_buf
     }
 
-    /// get_return_value.
+    /// `get_return_value`.
     pub fn get_return_value(&self) -> Option<InterpValue> {
-        self.locals.first().and_then(|opt| opt.clone())
+        self.locals.first().and_then(std::clone::Clone::clone)
     }
 
     /// Resolve the locals vector owning a frame-aware `Ref { frame, local }`.
@@ -2021,7 +1992,7 @@ impl<'tcx> Interpreter<'tcx> {
     }
 
     /// Mutable counterpart of [`Self::locals_for_ref_frame`] for writes through
-    /// a `Ref` (e.g. `*r = v` or `*r.field = v).
+    /// a `Ref` (e.g. `*r = v` or `*r.field = v`).
     fn write_target_locals_mut(&mut self, frame: usize) -> Option<&mut Vec<Option<InterpValue>>> {
         if frame == self.frame_depth {
             Some(&mut self.locals)
@@ -2049,7 +2020,7 @@ impl<'tcx> Interpreter<'tcx> {
             .ok_or_else(|| InterpError::Panic("const-eval produced no return value".into()))
     }
 
-    /// run_body.
+    /// `run_body`.
     pub fn run_body(&mut self, body: &Body) -> InterpResult<()> {
         if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
             eprintln!("[TRACE-RUN-BODY] owner={:?}", body.owner);
@@ -2169,7 +2140,7 @@ impl<'tcx> Interpreter<'tcx> {
                     let val = self.eval_operand(&discr)?;
                     let discr_u128 = if switch_ty == glyim_type::Ty::BOOL {
                         if let Ok(b) = self.interp_value_to_bool(&val) {
-                            if b { 1u128 } else { 0u128 }
+                            u128::from(b)
                         } else {
                             self.interp_value_to_u128(&val)
                         }
@@ -2191,37 +2162,39 @@ impl<'tcx> Interpreter<'tcx> {
                             .locals
                             .first()
                             .and_then(|opt| opt.as_ref())
-                            .map(|v| match v {
-                                InterpValue::Ref {
-                                    frame,
-                                    local,
-                                    projection,
-                                } => format!(
-                                    "Ref(f={}, l={}, plen={})",
-                                    frame,
-                                    local,
-                                    projection.len()
-                                ),
-                                InterpValue::Aggregate(a) => {
-                                    let inner: Vec<_> = a
-                                        .iter()
-                                        .take(4)
-                                        .map(|v| match v {
-                                            InterpValue::Ref { frame, local, .. } => {
-                                                format!("Ref({},{})", frame, local)
-                                            }
-                                            InterpValue::Int(n) => format!("Int({})", n),
-                                            other => format!("{:?}", other),
-                                        })
-                                        .collect();
-                                    format!("Aggregate(len={}, head={:?})", a.len(), inner)
-                                }
-                                InterpValue::Int(v) => format!("Int({})", v),
-                                InterpValue::String(s) => format!("String(len={})", s.len()),
-                                InterpValue::Unit => "Unit".to_string(),
-                                other => format!("{:?}", other),
-                            })
-                            .unwrap_or_else(|| "Uninit".to_string());
+                            .map_or_else(
+                                || "Uninit".to_string(),
+                                |v| match v {
+                                    InterpValue::Ref {
+                                        frame,
+                                        local,
+                                        projection,
+                                    } => format!(
+                                        "Ref(f={}, l={}, plen={})",
+                                        frame,
+                                        local,
+                                        projection.len()
+                                    ),
+                                    InterpValue::Aggregate(a) => {
+                                        let inner: Vec<_> = a
+                                            .iter()
+                                            .take(4)
+                                            .map(|v| match v {
+                                                InterpValue::Ref { frame, local, .. } => {
+                                                    format!("Ref({frame},{local})")
+                                                }
+                                                InterpValue::Int(n) => format!("Int({n})"),
+                                                other => format!("{other:?}"),
+                                            })
+                                            .collect();
+                                        format!("Aggregate(len={}, head={:?})", a.len(), inner)
+                                    }
+                                    InterpValue::Int(v) => format!("Int({v})"),
+                                    InterpValue::String(s) => format!("String(len={})", s.len()),
+                                    InterpValue::Unit => "Unit".to_string(),
+                                    other => format!("{other:?}"),
+                                },
+                            );
                         eprintln!("[TRACE-RETURN] frame={} value={}", self.frame_depth, ret);
                     }
                     // A normal return cancels any in-flight unwind payload:
@@ -2252,7 +2225,7 @@ impl<'tcx> Interpreter<'tcx> {
                         let ret_val = self
                             .locals
                             .first()
-                            .and_then(|opt| opt.clone())
+                            .and_then(std::clone::Clone::clone)
                             .unwrap_or(InterpValue::Unit);
                         // §3.9: if the value escaping this frame still holds a
                         // `Ref` into it, archive the frame so the ref stays
@@ -2263,16 +2236,10 @@ impl<'tcx> Interpreter<'tcx> {
                         // frame" the moment the caller dereferenced it.
                         let callee_depth = self.frame_depth;
                         if value_references_frame(&ret_val, callee_depth) {
-                            let generation = self
-                                .frame_generations
-                                .get(callee_depth)
-                                .copied()
-                                .unwrap_or(0);
                             let locals = std::mem::take(&mut self.locals);
                             let decls = std::mem::take(&mut self.local_decls);
                             self.dead_frames.push_back(ArchivedFrame {
                                 depth: callee_depth,
-                                generation,
                                 locals,
                                 decls,
                             });
@@ -2294,11 +2261,10 @@ impl<'tcx> Interpreter<'tcx> {
                         }
                         body = caller_body;
                         continue;
-                    } else {
-                        self.current_body = Some(body);
-                        self.current_bb = bb_idx;
-                        return Ok(());
                     }
+                    self.current_body = Some(body);
+                    self.current_bb = bb_idx;
+                    return Ok(());
                 }
                 TerminatorKind::Unreachable => {
                     self.current_body = Some(body);
@@ -2400,7 +2366,7 @@ impl<'tcx> Interpreter<'tcx> {
                             .get(&callee_id)
                             .cloned()
                             .ok_or_else(|| {
-                                InterpError::Panic(format!("function not found: {:?}", callee_id))
+                                InterpError::Panic(format!("function not found: {callee_id:?}"))
                             })?;
 
                     self.recursion_depth += 1;
@@ -2437,13 +2403,13 @@ impl<'tcx> Interpreter<'tcx> {
 
                     let caller_frame = CallFrame {
                         body,
+                        generation: self.next_frame_gen,
                         // T108-PATCHED [INT-5]: `None` signals a diverging
                         // call; the sentinel index we insert is never used
                         // because the callee either loops forever or aborts,
                         // and if it *does* return, `handle_return` below
                         // raises a clear InterpError instead of silently
                         // jumping to an arbitrary block.
-                        bb: next_bb.unwrap_or(BasicBlockIdx::from_raw(u32::MAX)),
                         locals: std::mem::take(&mut self.locals),
                         return_place: destination,
                         // T108-PATCHED [INT-5]: same sentinel for the
@@ -2451,7 +2417,6 @@ impl<'tcx> Interpreter<'tcx> {
                         // `frame.bb` agree.
                         target_bb: next_bb.unwrap_or(BasicBlockIdx::from_raw(u32::MAX)),
                         unwind_target: cleanup,
-                        generation: self.next_frame_gen,
                     };
 
                     // Record the generation for this absolute depth so a
@@ -2481,20 +2446,19 @@ impl<'tcx> Interpreter<'tcx> {
                     msg,
                 } => {
                     let val = self.eval_operand(&cond)?;
-                    let is_true = match val {
-                        InterpValue::Bool(b) => b,
-                        _ => {
-                            self.current_body = Some(body);
-                            self.current_bb = bb_idx;
-                            return Err(InterpError::Panic(
-                                "assert condition must be bool".to_string(),
-                            ));
-                        }
+                    let is_true = if let InterpValue::Bool(b) = val {
+                        b
+                    } else {
+                        self.current_body = Some(body);
+                        self.current_bb = bb_idx;
+                        return Err(InterpError::Panic(
+                            "assert condition must be bool".to_string(),
+                        ));
                     };
                     if is_true == expected {
                         bb_idx = target;
                     } else {
-                        let payload = InterpError::Panic(format!("assert failed: {:?}", msg));
+                        let payload = InterpError::Panic(format!("assert failed: {msg:?}"));
                         self.unwind_step(payload, &mut body, &mut bb_idx, cleanup)?;
                     }
                 }
@@ -2521,9 +2485,10 @@ impl<'tcx> Interpreter<'tcx> {
                     let drop_ty = self
                         .local_decls
                         .get(place.local.index())
-                        .map(|d| d.ty)
-                        .unwrap_or(Ty::ERROR);
-                    let drop_body = if drop_ty != Ty::ERROR {
+                        .map_or(Ty::ERROR, |d| d.ty);
+                    let drop_body = if drop_ty == Ty::ERROR {
+                        None
+                    } else {
                         self.tcx.drop_method_for(drop_ty).and_then(|fn_def_id| {
                             let key = DefId::new(
                                 CrateId::from_raw(0),
@@ -2531,8 +2496,6 @@ impl<'tcx> Interpreter<'tcx> {
                             );
                             self.function_table.get(&key).cloned()
                         })
-                    } else {
-                        None
                     };
                     let Some(callee_body) = drop_body else {
                         bb_idx = target;
@@ -2565,14 +2528,13 @@ impl<'tcx> Interpreter<'tcx> {
 
                     let caller_frame = CallFrame {
                         body,
-                        bb: target,
+                        generation: self.next_frame_gen,
                         locals: std::mem::take(&mut self.locals),
                         // The destructor returns *to* `target`; there is no
                         // value to place (drop returns `()`).
                         return_place: Place::new(LocalIdx::from_raw(0)),
                         target_bb: target,
                         unwind_target: None,
-                        generation: self.next_frame_gen,
                     };
                     let depth = self.frame_depth;
                     if self.frame_generations.len() <= depth {
@@ -2630,33 +2592,29 @@ impl<'tcx> Interpreter<'tcx> {
             self.pending_unwind = Some(payload);
         }
         loop {
-            match self.call_stack.pop() {
-                Some(frame) => {
-                    self.recursion_depth = self.recursion_depth.saturating_sub(1);
-                    match frame.unwind_target {
-                        Some(resume) => {
-                            self.locals = frame.locals;
-                            self.local_decls = frame.body.locals.iter().cloned().collect();
-                            *body = frame.body;
-                            *bb_idx = resume;
-                            return Ok(());
-                        }
-                        // No cleanup for this frame's call: keep walking up
-                        // rather than resuming normal execution.
-                        None => continue,
+            if let Some(frame) = self.call_stack.pop() {
+                self.recursion_depth = self.recursion_depth.saturating_sub(1);
+                match frame.unwind_target {
+                    Some(resume) => {
+                        self.locals = frame.locals;
+                        self.local_decls = frame.body.locals.iter().cloned().collect();
+                        *body = frame.body;
+                        *bb_idx = resume;
+                        return Ok(());
                     }
-                }
-                None => {
-                    let top = self.pending_unwind.take().expect("set above");
-                    return Err(InterpError::Unwind(Box::new(top)));
+                    // No cleanup for this frame's call: keep walking up
+                    // rather than resuming normal execution.
+                    None => continue,
                 }
             }
+            let top = self.pending_unwind.take().expect("set above");
+            return Err(InterpError::Unwind(Box::new(top)));
         }
     }
 
     fn execute_statement(&mut self, stmt: &Statement) -> InterpResult<()> {
         if std::env::var("GLYIM_INTERP_TRACE_STMT").is_ok() {
-            let __s = format!("{:?}", stmt);
+            let __s = format!("{stmt:?}");
             let __s = if __s.len() > 200 {
                 __s.chars().take(200).collect::<String>()
             } else {
@@ -2715,24 +2673,31 @@ impl<'tcx> Interpreter<'tcx> {
                         .locals_for_ref_frame(self.frame_depth)
                         .and_then(|fl| fl.get(place.local.index()))
                         .and_then(|opt| opt.as_ref())
-                        .map(|v| match v {
-                            InterpValue::Ref {
-                                frame,
-                                local,
-                                projection,
-                            } => format!("Ref(f={},l={},plen={})", frame, local, projection.len()),
-                            InterpValue::String(s) => format!("String(len={})", s.len()),
-                            InterpValue::Aggregate(a) => format!("Aggregate(len={})", a.len()),
-                            InterpValue::Int(v) => format!("Int({})", v),
-                            InterpValue::Uint(v) => format!("Uint({})", v),
-                            InterpValue::Bool(_) => "Bool".to_string(),
-                            InterpValue::Unit => "Unit".to_string(),
-                            InterpValue::Float(_) => "Float".to_string(),
-                            InterpValue::Fn(_) => "Fn".to_string(),
-                            InterpValue::ConstRef(_) => "ConstRef".to_string(),
-                            InterpValue::StaticPtr { .. } => "StaticPtr".to_string(),
-                        })
-                        .unwrap_or_else(|| "Uninit".to_string());
+                        .map_or_else(
+                            || "Uninit".to_string(),
+                            |v| match v {
+                                InterpValue::Ref {
+                                    frame,
+                                    local,
+                                    projection,
+                                } => format!(
+                                    "Ref(f={},l={},plen={})",
+                                    frame,
+                                    local,
+                                    projection.len()
+                                ),
+                                InterpValue::String(s) => format!("String(len={})", s.len()),
+                                InterpValue::Aggregate(a) => format!("Aggregate(len={})", a.len()),
+                                InterpValue::Int(v) => format!("Int({v})"),
+                                InterpValue::Uint(v) => format!("Uint({v})"),
+                                InterpValue::Bool(_) => "Bool".to_string(),
+                                InterpValue::Unit => "Unit".to_string(),
+                                InterpValue::Float(_) => "Float".to_string(),
+                                InterpValue::Fn(_) => "Fn".to_string(),
+                                InterpValue::ConstRef(_) => "ConstRef".to_string(),
+                                InterpValue::StaticPtr { .. } => "StaticPtr".to_string(),
+                            },
+                        );
                     eprintln!(
                         "[TRACE-REF-CREATE] cur_frame={} local={} proj={:?} base_kind={}",
                         self.frame_depth,
@@ -2771,8 +2736,7 @@ impl<'tcx> Interpreter<'tcx> {
                         }) => {
                             if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
                                 eprintln!(
-                                    "[TRACE-REF-FLATTEN] ({}, {}) {:?} -> ({}, {}) {:?}",
-                                    frame, local, projection, f, l, p
+                                    "[TRACE-REF-FLATTEN] ({frame}, {local}) {projection:?} -> ({f}, {l}) {p:?}"
                                 );
                             }
                             frame = *f;
@@ -3040,8 +3004,8 @@ impl<'tcx> Interpreter<'tcx> {
                     self.tcx,
                     glyim_core::primitives::TargetInfo::x86_64(),
                 );
-                let size = lc.layout_of(*ty).map(|l| l.size.0).unwrap_or(0);
-                Ok(InterpValue::Uint(size as u128))
+                let size = lc.layout_of(*ty).map_or(0, |l| l.size.0);
+                Ok(InterpValue::Uint(u128::from(size)))
             }
             MirConstKind::StaticRef { def_id, init, .. } => {
                 // Initialize the global lazily. Subsequent
@@ -3077,15 +3041,15 @@ impl<'tcx> Interpreter<'tcx> {
     fn trunc_to_ty(&self, v: i128, ty: Ty) -> i128 {
         use glyim_core::primitives::{IntTy, UintTy};
         match self.tcx.ty_kind(ty) {
-            TyKind::Int(IntTy::I8) => v as i8 as i128,
-            TyKind::Int(IntTy::I16) => v as i16 as i128,
-            TyKind::Int(IntTy::I32) => v as i32 as i128,
-            TyKind::Int(IntTy::I64) => v as i64 as i128,
+            TyKind::Int(IntTy::I8) => i128::from(v as i8),
+            TyKind::Int(IntTy::I16) => i128::from(v as i16),
+            TyKind::Int(IntTy::I32) => i128::from(v as i32),
+            TyKind::Int(IntTy::I64) => i128::from(v as i64),
             TyKind::Int(IntTy::Isize) => v as isize as i128,
-            TyKind::Uint(UintTy::U8) => (v as u8) as i128,
-            TyKind::Uint(UintTy::U16) => (v as u16) as i128,
-            TyKind::Uint(UintTy::U32) => (v as u32) as i128,
-            TyKind::Uint(UintTy::U64) => (v as u64) as i128,
+            TyKind::Uint(UintTy::U8) => i128::from(v as u8),
+            TyKind::Uint(UintTy::U16) => i128::from(v as u16),
+            TyKind::Uint(UintTy::U32) => i128::from(v as u32),
+            TyKind::Uint(UintTy::U64) => i128::from(v as u64),
             TyKind::Uint(UintTy::Usize) => (v as usize) as i128,
             _ => v,
         }
@@ -3098,7 +3062,7 @@ impl<'tcx> Interpreter<'tcx> {
         right: &InterpValue,
         dest_ty: Ty,
     ) -> InterpResult<InterpValue> {
-        use InterpValue::*;
+        use InterpValue::{Bool, Float, Int, Ref, StaticPtr, String, Uint};
         match (left, right) {
             (Int(l), Int(r)) => {
                 let result = match op {
@@ -3155,8 +3119,7 @@ impl<'tcx> Interpreter<'tcx> {
                     BinOp::GtEq => return Ok(Bool(l >= r)),
                     _ => {
                         return Err(InterpError::Panic(format!(
-                            "unsupported integer binop: {:?}",
-                            op
+                            "unsupported integer binop: {op:?}"
                         )));
                     }
                 };
@@ -3196,8 +3159,7 @@ impl<'tcx> Interpreter<'tcx> {
                     BinOp::GtEq => return Ok(Bool(l >= r)),
                     _ => {
                         return Err(InterpError::Panic(format!(
-                            "unsupported unsigned binop: {:?}",
-                            op
+                            "unsupported unsigned binop: {op:?}"
                         )));
                     }
                 };
@@ -3209,8 +3171,7 @@ impl<'tcx> Interpreter<'tcx> {
                 BinOp::And => Ok(Bool(*l && *r)),
                 BinOp::Or => Ok(Bool(*l || *r)),
                 _ => Err(InterpError::Panic(format!(
-                    "unsupported bool binop: {:?}",
-                    op
+                    "unsupported bool binop: {op:?}"
                 ))),
             },
             (Float(l), Float(r)) => {
@@ -3236,8 +3197,7 @@ impl<'tcx> Interpreter<'tcx> {
                     BinOp::GtEq => return Ok(Bool(l >= r)),
                     _ => {
                         return Err(InterpError::Panic(format!(
-                            "unsupported float binop: {:?}",
-                            op
+                            "unsupported float binop: {op:?}"
                         )));
                     }
                 };
@@ -3308,7 +3268,7 @@ impl<'tcx> Interpreter<'tcx> {
                             ((*frame as u128) << 48) | (*local as u128)
                         }
                         InterpValue::StaticPtr { def_id } => {
-                            (1u128 << 127) | (def_id.to_raw() as u128)
+                            (1u128 << 127) | u128::from(def_id.to_raw())
                         }
                         _ => 0,
                     }
@@ -3322,7 +3282,9 @@ impl<'tcx> Interpreter<'tcx> {
                     InterpValue::Ref { frame, local, .. } => {
                         ((*frame as u128) << 48) | (*local as u128)
                     }
-                    InterpValue::StaticPtr { def_id } => (1u128 << 127) | (def_id.to_raw() as u128),
+                    InterpValue::StaticPtr { def_id } => {
+                        (1u128 << 127) | u128::from(def_id.to_raw())
+                    }
                     _ => 0,
                 };
                 self.eval_binary_op(op, &Uint(l), right, dest_ty)
@@ -3332,14 +3294,15 @@ impl<'tcx> Interpreter<'tcx> {
                     InterpValue::Ref { frame, local, .. } => {
                         ((*frame as u128) << 48) | (*local as u128)
                     }
-                    InterpValue::StaticPtr { def_id } => (1u128 << 127) | (def_id.to_raw() as u128),
+                    InterpValue::StaticPtr { def_id } => {
+                        (1u128 << 127) | u128::from(def_id.to_raw())
+                    }
                     _ => 0,
                 };
                 self.eval_binary_op(op, left, &Uint(r), dest_ty)
             }
             _ => Err(InterpError::Panic(format!(
-                "unsupported binop types: {:?} and {:?}",
-                left, right
+                "unsupported binop types: {left:?} and {right:?}"
             ))),
         }
     }
@@ -3358,7 +3321,7 @@ impl<'tcx> Interpreter<'tcx> {
             (UnOp::Deref, InterpValue::StaticPtr { def_id }) => {
                 // `*p` where `p = &STATIC`: read the global's current value.
                 self.globals.borrow().get(def_id).cloned().ok_or_else(|| {
-                    InterpError::Panic(format!("deref of uninitialized static {:?}", def_id))
+                    InterpError::Panic(format!("deref of uninitialized static {def_id:?}"))
                 })
             }
             (
@@ -3377,8 +3340,7 @@ impl<'tcx> Interpreter<'tcx> {
                 self.deref_ref_value(*frame, *local, projection)
             }
             _ => Err(InterpError::Panic(format!(
-                "unsupported unary op: {:?} on {:?}",
-                op, val
+                "unsupported unary op: {op:?} on {val:?}"
             ))),
         }
     }
@@ -3399,8 +3361,7 @@ impl<'tcx> Interpreter<'tcx> {
             .ok_or_else(|| {
                 let owner = self.current_body_owner;
                 InterpError::Panic(format!(
-                    "read from uninitialized local {} (owner={:?})",
-                    idx, owner
+                    "read from uninitialized local {idx} (owner={owner:?})"
                 ))
             })?;
 
@@ -3408,8 +3369,7 @@ impl<'tcx> Interpreter<'tcx> {
         let mut current_ty = self
             .local_decls
             .get(place.local.index())
-            .map(|d| d.ty)
-            .unwrap_or(Ty::ERROR);
+            .map_or(Ty::ERROR, |d| d.ty);
 
         // Walk the projection list. When a `Deref` resolves an
         // `InterpValue::Ref` that carries its *own* projection (see
@@ -3491,10 +3451,7 @@ impl<'tcx> Interpreter<'tcx> {
                         // initialized from the `StaticRef` init on first
                         // reference).
                         let v = self.globals.borrow().get(&def_id).cloned().ok_or_else(|| {
-                            InterpError::Panic(format!(
-                                "deref of uninitialized static {:?}",
-                                def_id
-                            ))
+                            InterpError::Panic(format!("deref of uninitialized static {def_id:?}"))
                         })?;
                         val = v;
                     }
@@ -3594,8 +3551,7 @@ impl<'tcx> Interpreter<'tcx> {
                                 if let TyKind::Adt(adt_id, _) = self.tcx.ty_kind(current_ty) {
                                     self.tcx
                                         .adt_def(*adt_id)
-                                        .map(|d| d.kind == AdtKind::Enum)
-                                        .unwrap_or(false)
+                                        .is_some_and(|d| d.kind == AdtKind::Enum)
                                 } else {
                                     false
                                 };
@@ -3660,7 +3616,7 @@ impl<'tcx> Interpreter<'tcx> {
                             let bytes = s.as_bytes();
                             val = bytes
                                 .get(idx_u)
-                                .map(|b| InterpValue::Uint(*b as u128))
+                                .map(|b| InterpValue::Uint(u128::from(*b)))
                                 .ok_or_else(|| {
                                     InterpError::Panic(format!(
                                         "index out of bounds: {idx_u} >= {}",
@@ -3732,8 +3688,7 @@ impl<'tcx> Interpreter<'tcx> {
                     let idx = if *from_end {
                         if len <= *offset as usize {
                             return Err(InterpError::Panic(format!(
-                                "constant index from end offset {} out of bounds (len {})",
-                                offset, len
+                                "constant index from end offset {offset} out of bounds (len {len})"
                             )));
                         }
                         len - *offset as usize
@@ -3774,16 +3729,14 @@ impl<'tcx> Interpreter<'tcx> {
                     let start = if *from_end {
                         if base_len < *to as usize {
                             return Err(InterpError::Panic(format!(
-                                "subslice from end to {} out of bounds (len {})",
-                                to, base_len
+                                "subslice from end to {to} out of bounds (len {base_len})"
                             )));
                         }
                         base_len - (*to as usize)
                     } else {
                         if base_len < *from as usize {
                             return Err(InterpError::Panic(format!(
-                                "subslice start {} out of bounds (len {})",
-                                from, base_len
+                                "subslice start {from} out of bounds (len {base_len})"
                             )));
                         }
                         (*from) as usize
@@ -3795,16 +3748,14 @@ impl<'tcx> Interpreter<'tcx> {
                         // in release). Check the operand actually used.
                         if base_len < *from as usize {
                             return Err(InterpError::Panic(format!(
-                                "subslice from end offset {} out of bounds (len {})",
-                                from, base_len
+                                "subslice from end offset {from} out of bounds (len {base_len})"
                             )));
                         }
                         base_len - (*from as usize)
                     } else {
                         if base_len < *to as usize {
                             return Err(InterpError::Panic(format!(
-                                "subslice end {} out of bounds (len {})",
-                                to, base_len
+                                "subslice end {to} out of bounds (len {base_len})"
                             )));
                         }
                         (*to) as usize
@@ -3871,15 +3822,13 @@ impl<'tcx> Interpreter<'tcx> {
         let base_ty = self
             .decls_for_ref_frame(frame)
             .and_then(|decls| decls.get(idx))
-            .map(|d| d.ty)
-            .unwrap_or(Ty::ERROR);
+            .map_or(Ty::ERROR, |d| d.ty);
         let frame_locals = self
             .write_target_locals_mut(frame)
             .ok_or_else(|| InterpError::Panic(format!("write to dead frame {frame}")))?;
         if idx >= frame_locals.len() {
             return Err(InterpError::Panic(format!(
-                "local index out of bounds: {}",
-                idx
+                "local index out of bounds: {idx}"
             )));
         }
         if place.projection.is_empty() {
@@ -3902,7 +3851,7 @@ impl<'tcx> Interpreter<'tcx> {
                 // the `frame_locals` mutable borrow of `self` ends before any
                 // arm touches `self.globals`. Used by the `StaticPtr` arm to
                 // resolve dynamic `Index` projections.
-                let frame_snapshot: Vec<Option<InterpValue>> = frame_locals.to_vec();
+                let frame_snapshot: Vec<Option<InterpValue>> = frame_locals.clone();
                 let target = match base_val {
                     InterpValue::Ref { frame, local, .. } => (frame, local),
                     InterpValue::StaticPtr { def_id } => {
@@ -3914,8 +3863,7 @@ impl<'tcx> Interpreter<'tcx> {
                         let mut cur =
                             self.globals.borrow().get(&def_id).cloned().ok_or_else(|| {
                                 InterpError::Panic(format!(
-                                    "write to uninitialized static {:?}",
-                                    def_id
+                                    "write to uninitialized static {def_id:?}"
                                 ))
                             })?;
                         write_projection_into_value(
@@ -3938,40 +3886,36 @@ impl<'tcx> Interpreter<'tcx> {
                     projection: place.projection[1..].to_vec().into_boxed_slice(),
                 };
                 return self.write_place_frame(target.0, &target_place, val);
-            } else {
-                let base_val = frame_locals
-                    .get(idx)
-                    .and_then(|opt| opt.as_ref())
-                    .cloned()
-                    .ok_or_else(|| {
-                        InterpError::Panic(format!("write to uninitialized local {idx}"))
-                    })?;
-                let target = match base_val {
-                    InterpValue::Ref { frame, local, .. } => (frame, local),
-                    InterpValue::StaticPtr { def_id } => {
-                        // Write to the whole `static mut` global.
-                        self.globals.borrow_mut().insert(def_id, val);
-                        return Ok(());
-                    }
-                    _ => {
-                        return Err(InterpError::Panic(
-                            "deref projection on non-reference value".into(),
-                        ));
-                    }
-                };
-                let target_frame_locals =
-                    self.write_target_locals_mut(target.0).ok_or_else(|| {
-                        InterpError::Panic(format!("write through ref to dead frame {}", target.0))
-                    })?;
-                if target.1 >= target_frame_locals.len() {
-                    return Err(InterpError::Panic(format!(
-                        "write through ref to invalid local {}",
-                        target.1
-                    )));
-                }
-                target_frame_locals[target.1] = Some(val);
-                return Ok(());
             }
+            let base_val = frame_locals
+                .get(idx)
+                .and_then(|opt| opt.as_ref())
+                .cloned()
+                .ok_or_else(|| InterpError::Panic(format!("write to uninitialized local {idx}")))?;
+            let target = match base_val {
+                InterpValue::Ref { frame, local, .. } => (frame, local),
+                InterpValue::StaticPtr { def_id } => {
+                    // Write to the whole `static mut` global.
+                    self.globals.borrow_mut().insert(def_id, val);
+                    return Ok(());
+                }
+                _ => {
+                    return Err(InterpError::Panic(
+                        "deref projection on non-reference value".into(),
+                    ));
+                }
+            };
+            let target_frame_locals = self.write_target_locals_mut(target.0).ok_or_else(|| {
+                InterpError::Panic(format!("write through ref to dead frame {}", target.0))
+            })?;
+            if target.1 >= target_frame_locals.len() {
+                return Err(InterpError::Panic(format!(
+                    "write through ref to invalid local {}",
+                    target.1
+                )));
+            }
+            target_frame_locals[target.1] = Some(val);
+            return Ok(());
         }
 
         let base_val = frame_locals
@@ -4010,8 +3954,7 @@ impl<'tcx> Interpreter<'tcx> {
                 let is_enum = if let TyKind::Adt(adt_id, _) = self.tcx.ty_kind(current_ty) {
                     self.tcx
                         .adt_def(*adt_id)
-                        .map(|d| d.kind == AdtKind::Enum)
-                        .unwrap_or(false)
+                        .is_some_and(|d| d.kind == AdtKind::Enum)
                 } else {
                     false
                 };
@@ -4216,8 +4159,7 @@ impl<'tcx> Interpreter<'tcx> {
                         }
                     }
                     Err(InterpError::Panic(format!(
-                        "could not devirtualize trait method {:?} on receiver {:?}",
-                        method_name, recv_ty
+                        "could not devirtualize trait method {method_name:?} on receiver {recv_ty:?}"
                     )))
                 }
                 _ => Err(InterpError::Panic(
@@ -4265,7 +4207,7 @@ impl<'tcx> Interpreter<'tcx> {
         match val {
             InterpValue::Int(i) => *i as u128,
             InterpValue::Uint(u) => *u,
-            InterpValue::Bool(b) => *b as u128,
+            InterpValue::Bool(b) => u128::from(*b),
             InterpValue::Unit => 0,
             InterpValue::Aggregate(fields) => {
                 if fields.is_empty() {
@@ -4278,10 +4220,10 @@ impl<'tcx> Interpreter<'tcx> {
                 let _ = frame;
                 *local as u128
             }
-            InterpValue::Float(f) => f.to_bits() as u128,
+            InterpValue::Float(f) => u128::from(f.to_bits()),
             InterpValue::String(s) => s.len() as u128,
             InterpValue::Fn(_) | InterpValue::ConstRef(_) => 0,
-            InterpValue::StaticPtr { def_id } => def_id.to_raw() as u128,
+            InterpValue::StaticPtr { def_id } => u128::from(def_id.to_raw()),
         }
     }
 
@@ -4306,24 +4248,9 @@ impl<'tcx> Interpreter<'tcx> {
         }
     }
 
-    #[allow(dead_code)]
-    fn array_length_from_ty(&self, ty: &glyim_type::Ty) -> InterpResult<usize> {
-        let kind = self.tcx.ty_kind(*ty);
-        match kind {
-            glyim_type::TyKind::Array(_, const_val) => match &const_val.kind {
-                glyim_type::ConstKind::Int(n) => Ok(*n as usize),
-                glyim_type::ConstKind::Uint(n) => Ok(*n as usize),
-                _ => Err(InterpError::Panic(
-                    "Len: unsupported array length kind (non-integer)".into(),
-                )),
-            },
-            _ => Err(InterpError::Panic("Len: expected array type".into())),
-        }
-    }
-
     fn slice_length_from_value(&self, val: &InterpValue) -> InterpResult<usize> {
         if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
-            eprintln!("[TRACE-SLICE-LEN-IN] val={:?}", val);
+            eprintln!("[TRACE-SLICE-LEN-IN] val={val:?}");
         }
         match val {
             InterpValue::Aggregate(fields) => {
@@ -4395,7 +4322,7 @@ impl<'tcx> Interpreter<'tcx> {
         }
     }
 
-    /// Helper to get element type of an aggregate (for updating current_ty).
+    /// Helper to get element type of an aggregate (for updating `current_ty`).
     fn get_element_type(&self, ty: Ty) -> Ty {
         match self.tcx.ty_kind(ty) {
             glyim_type::TyKind::Array(elem, _) | glyim_type::TyKind::Slice(elem) => *elem,
@@ -4471,7 +4398,7 @@ impl<'tcx> Interpreter<'tcx> {
     }
 }
 
-/// InterpResult.
+/// `InterpResult`.
 pub type InterpResult<T> = Result<T, InterpError>;
 
 #[cfg(test)]
@@ -4505,8 +4432,7 @@ fn write_projection_into_value(
                     write_projection_into_value(field, &projections[1..], val, frame_locals)
                 }
                 other => Err(InterpError::Panic(format!(
-                    "field projection on non-aggregate static value: {:?}",
-                    other
+                    "field projection on non-aggregate static value: {other:?}"
                 ))),
             }
         }
@@ -4532,8 +4458,7 @@ fn write_projection_into_value(
                 }
                 other => {
                     return Err(InterpError::Panic(format!(
-                        "constant-index projection on non-aggregate static value: {:?}",
-                        other
+                        "constant-index projection on non-aggregate static value: {other:?}"
                     )));
                 }
             };
@@ -4558,8 +4483,7 @@ fn write_projection_into_value(
                 InterpValue::Int(v) if *v >= 0 => *v as usize,
                 other => {
                     return Err(InterpError::Panic(format!(
-                        "non-integer index value in static deeper-write path: {:?}",
-                        other
+                        "non-integer index value in static deeper-write path: {other:?}"
                     )));
                 }
             };
@@ -4574,8 +4498,7 @@ fn write_projection_into_value(
                 }
                 other => {
                     return Err(InterpError::Panic(format!(
-                        "index projection on non-aggregate static value: {:?}",
-                        other
+                        "index projection on non-aggregate static value: {other:?}"
                     )));
                 }
             };

@@ -43,6 +43,6 @@ fn probe_core_modules_parse() {
     } else {
         fail += 1;
     }
-    println!("CORE-PARSE-PROBE: {} pass, {} fail", pass, fail);
+    println!("CORE-PARSE-PROBE: {pass} pass, {fail} fail");
     assert!(pass > 0);
 }

@@ -164,9 +164,9 @@ fn s08_t27_emit_thinlto_bitcode_files_writes_one_bc_per_cgu() {
     let paths = result.unwrap();
     assert_eq!(paths.len(), 3, "one bitcode file per CGU");
     for (i, p) in paths.iter().enumerate() {
-        assert!(p.exists(), "cgu_{}.bc should exist", i);
+        assert!(p.exists(), "cgu_{i}.bc should exist");
         let meta = std::fs::metadata(p).expect("stat cgu bitcode");
-        assert!(meta.len() > 0, "cgu_{}.bc should not be empty", i);
+        assert!(meta.len() > 0, "cgu_{i}.bc should not be empty");
     }
     for p in paths {
         std::fs::remove_file(p).ok();

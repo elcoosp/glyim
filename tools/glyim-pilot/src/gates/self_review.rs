@@ -1,7 +1,8 @@
-/// build_review_prompt.
+/// `build_review_prompt`.
+#[must_use]
 pub fn build_review_prompt(diff: &str, commit_log: &str) -> String {
     format!(
-        r#"## Self-Review Required
+        r"## Self-Review Required
 
 ### Commit History
 ```
@@ -24,6 +25,6 @@ pub fn build_review_prompt(diff: &str, commit_log: &str) -> String {
 8. Naming clear and consistent?
 
 Respond with your review, then either fix issues or emit `::APPROVED`.
-"#
+"
     )
 }

@@ -1,4 +1,4 @@
-//! Tests for TypeFlags propagation through all TyKind variants that delegate to children.
+//! Tests for `TypeFlags` propagation through all `TyKind` variants that delegate to children.
 
 use glyim_core::def_id::{AdtId, ClosureId, FnDefId, OpaqueTyId};
 use glyim_core::primitives::{Abi, IntTy, Mutability, Safety, UintTy};

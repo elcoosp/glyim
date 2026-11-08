@@ -20,8 +20,7 @@ fn test_fadd_f64() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store double 6"),
-        "Expected 'store double 6':\n{}",
-        ir
+        "Expected 'store double 6':\n{ir}"
     );
 }
 
@@ -42,8 +41,7 @@ fn test_fsub_f64() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store double 7"),
-        "Expected 'store double 7':\n{}",
-        ir
+        "Expected 'store double 7':\n{ir}"
     );
 }
 
@@ -64,8 +62,7 @@ fn test_fmul_f64() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store double 4.2"),
-        "Expected 'store double 4.2e+01' or similar:\n{}",
-        ir
+        "Expected 'store double 4.2e+01' or similar:\n{ir}"
     );
 }
 
@@ -86,8 +83,7 @@ fn test_fdiv_f64() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store double 5"),
-        "Expected 'store double 5':\n{}",
-        ir
+        "Expected 'store double 5':\n{ir}"
     );
 }
 
@@ -108,8 +104,7 @@ fn test_feq_f64_true() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i1 true"),
-        "Expected 'store i1 true':\n{}",
-        ir
+        "Expected 'store i1 true':\n{ir}"
     );
 }
 
@@ -130,8 +125,7 @@ fn test_feq_f64_false() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i1 false"),
-        "Expected 'store i1 false':\n{}",
-        ir
+        "Expected 'store i1 false':\n{ir}"
     );
 }
 
@@ -152,8 +146,7 @@ fn test_flt_f64() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i1 true"),
-        "Expected 'store i1 true':\n{}",
-        ir
+        "Expected 'store i1 true':\n{ir}"
     );
 }
 
@@ -174,7 +167,6 @@ fn test_fneg_unary() {
     // LLVM constant-folds fneg 42.0 -> -42.0
     assert!(
         ir.contains("store double -4.200000e+01") || ir.contains("fneg"),
-        "Expected 'store double -4.200000e+01' or 'fneg' in IR:\n{}",
-        ir
+        "Expected 'store double -4.200000e+01' or 'fneg' in IR:\n{ir}"
     );
 }

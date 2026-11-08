@@ -51,16 +51,6 @@ pub(crate) fn const_int(val: i128) -> Operand {
     })
 }
 
-#[allow(dead_code)]
-pub(crate) fn const_unit() -> Operand {
-    Operand::Constant(MirConst {
-        kind: MirConstKind::Unit,
-        ty: Ty::UNIT,
-        span: Span::DUMMY,
-    })
-}
-
-#[allow(dead_code)]
 pub(crate) fn const_bool(b: bool) -> Operand {
     Operand::Constant(MirConst {
         kind: MirConstKind::Bool(b),
@@ -78,7 +68,7 @@ pub(crate) fn place_with_proj(local: LocalIdx, proj: Vec<ProjectionElem>) -> Pla
 
 pub(crate) fn mk_array_ty(ctx: &mut TyCtxMut, elem_ty: Ty, len: u64) -> Ty {
     let len_const = Const {
-        kind: ConstKind::Int(len as i128),
+        kind: ConstKind::Int(i128::from(len)),
         ty: ctx.mk_ty(TyKind::Int(IntTy::I64)),
     };
     ctx.mk_ty(TyKind::Array(elem_ty, len_const))

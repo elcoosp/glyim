@@ -53,7 +53,7 @@ fn is_interior_mutable_adt_true_when_marked() {
     );
 }
 
-/// S04-T03b: `is_interior_mutable_adt` returns true on TyCtxMut.
+/// S04-T03b: `is_interior_mutable_adt` returns true on `TyCtxMut`.
 #[test]
 fn is_interior_mutable_adt_true_on_mut_ctx() {
     use super::helpers::test_ty_ctx;

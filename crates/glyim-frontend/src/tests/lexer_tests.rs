@@ -353,7 +353,7 @@ fn multiple_tokens_with_invalid_suffix() {
 }
 
 /// FE-1 regression: `%=` was lexed as `Percent` then `Eq`, and no
-/// `PercentEq` SyntaxKind existed, so `x %= 2` failed to parse.
+/// `PercentEq` `SyntaxKind` existed, so `x %= 2` failed to parse.
 #[test]
 fn lex_percent_eq_is_one_token() {
     let tokens = test_lex("x %= 2");

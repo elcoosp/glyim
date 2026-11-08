@@ -54,13 +54,13 @@ fn format_code(source: &str) -> String {
     }
     let trimmed: String = result
         .lines()
-        .map(|l| l.trim_end())
+        .map(str::trim_end)
         .collect::<Vec<&str>>()
         .join("\n");
     trimmed + "\n"
 }
 
-/// format_document.
+/// `format_document`.
 pub fn format_document(
     db: &AnalysisDatabase,
     params: &DocumentFormattingParams,

@@ -84,7 +84,10 @@ fn impl_item_to_header(
     ctx: &mut TyCtxMut,
     def_map: &CrateDefMap,
 ) -> ResolvedImplHeader {
-    let trait_name = impl_item.trait_ref.as_ref().and_then(|p| p.as_name());
+    let trait_name = impl_item
+        .trait_ref
+        .as_ref()
+        .and_then(glyim_hir::Path::as_name);
 
     let trait_def_id = if let Some(name) = trait_name {
         def_map.modules[def_map.root]
@@ -172,9 +175,9 @@ fn build_def_map(
         modules,
         krate,
         interner: interner.clone(),
-        variant_map: Default::default(),
+        variant_map: std::collections::HashMap::default(),
         max_local_def_id: 0,
-        def_to_module: Default::default(),
+        def_to_module: std::collections::HashMap::default(),
     }
 }
 

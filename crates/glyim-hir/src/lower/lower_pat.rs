@@ -1,7 +1,7 @@
 use glyim_core::arena::IndexVec;
 use glyim_core::interner::Interner;
 use glyim_core::path::PathKind;
-use glyim_core::primitives::*;
+use glyim_core::primitives::Mutability;
 use glyim_syntax::{SyntaxKind, SyntaxNode};
 
 use crate::{Pat, PatId, Path as HirPath, PathSegment};
@@ -24,7 +24,6 @@ fn push_pat(
     id
 }
 
-#[allow(unused_assignments)]
 /// HIR-12: whether a `PatIdent` binding is introduced by `mut`.
 ///
 /// The parser emits `mut` as a **sibling** of the `PatIdent` node inside the
@@ -167,7 +166,7 @@ pub(crate) fn lower_pat(
             // PatLit wraps a single literal token (simple literal pattern)
             let lit_token = node
                 .children_with_tokens()
-                .filter_map(|c| c.into_token())
+                .filter_map(rowan::NodeOrToken::into_token)
                 .find(|t| {
                     t.kind().is_literal()
                         || t.kind() == SyntaxKind::KwTrue
@@ -187,10 +186,10 @@ pub(crate) fn lower_pat(
                 match child {
                     glyim_syntax::SyntaxElement::Token(t) if t.kind().is_literal() => {
                         let lit = lower_literal(&t, interner);
-                        if !after_dot {
-                            start = Some(lit);
-                        } else {
+                        if after_dot {
                             end = Some(lit);
+                        } else {
+                            start = Some(lit);
                         }
                     }
                     glyim_syntax::SyntaxElement::Token(t) if t.kind() == SyntaxKind::DotDotEq => {
@@ -205,10 +204,10 @@ pub(crate) fn lower_pat(
                         if let Some(pat_id) = lower_pat(&n, interner, pats, pat_spans, diags)
                             && let Pat::Literal(lit) = &pats[pat_id]
                         {
-                            if !after_dot {
-                                start = Some(lit.clone());
-                            } else {
+                            if after_dot {
                                 end = Some(lit.clone());
+                            } else {
+                                start = Some(lit.clone());
                             }
                         }
                     }

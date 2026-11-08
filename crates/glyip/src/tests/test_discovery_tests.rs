@@ -1,4 +1,4 @@
-//! Tests for the test_discovery module — S23.
+//! Tests for the `test_discovery` module — S23.
 
 use crate::test_discovery::{DiscoveredTest, FileTestDiscovery};
 use tempfile::TempDir;

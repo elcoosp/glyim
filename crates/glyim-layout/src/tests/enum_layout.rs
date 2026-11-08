@@ -1,11 +1,11 @@
-//! S15-T02: layout_of computes niche encoding for enums
+//! S15-T02: `layout_of` computes niche encoding for enums
 
 use crate::*;
 use glyim_core::arena::IndexVec;
 use glyim_core::primitives::*;
 use glyim_test::with_fresh_ty_ctx;
 
-/// Helper: build an enum AdtDef with given variants, register it.
+/// Helper: build an enum `AdtDef` with given variants, register it.
 fn make_enum_ty(
     ctx: &mut glyim_type::TyCtxMut,
     adt_id: glyim_core::AdtId,
@@ -18,12 +18,12 @@ fn make_enum_ty(
             let mut fields: IndexVec<glyim_type::FieldIdx, glyim_type::FieldDef> = IndexVec::new();
             for (fi, ty) in field_tys.into_iter().enumerate() {
                 fields.push(glyim_type::FieldDef {
-                    name: ctx.resolver().intern(&format!("v{}_f{}", vi, fi)),
+                    name: ctx.resolver().intern(&format!("v{vi}_f{fi}")),
                     ty,
                 });
             }
             glyim_type::VariantDef {
-                name: ctx.resolver().intern(&format!("V{}", vi)),
+                name: ctx.resolver().intern(&format!("V{vi}")),
                 style: glyim_type::adt_def::VariantStyle::Unit,
                 fields,
             }
@@ -39,7 +39,7 @@ fn make_enum_ty(
     let mut top_fields: IndexVec<glyim_type::FieldIdx, glyim_type::FieldDef> = IndexVec::new();
     for (i, ty) in all_field_tys.into_iter().enumerate() {
         top_fields.push(glyim_type::FieldDef {
-            name: ctx.resolver().intern(&format!("f{}", i)),
+            name: ctx.resolver().intern(&format!("f{i}")),
             ty,
         });
     }
@@ -115,8 +115,7 @@ fn s15_t02_enum_with_data_variants() {
                         | glyim_type::TyKind::Uint(_)
                         | glyim_type::TyKind::Bool
                 ),
-                "tag should be an integer or bool type, got {:?}",
-                tag_kind
+                "tag should be an integer or bool type, got {tag_kind:?}"
             );
             assert_eq!(*tag_field, 0);
             let _ = tag_encoding;

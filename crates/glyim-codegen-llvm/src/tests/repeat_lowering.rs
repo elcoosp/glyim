@@ -99,12 +99,10 @@ fn u05_t04_repeat_rvalue_builds_array() {
 
     assert!(
         ir.contains("[4 x i32]"),
-        "IR should contain array type [4 x i32] from repeat, got:\n{}",
-        ir
+        "IR should contain array type [4 x i32] from repeat, got:\n{ir}"
     );
     assert!(
         ir.contains("insertvalue"),
-        "IR should contain insertvalue for repeat construction, got:\n{}",
-        ir
+        "IR should contain insertvalue for repeat construction, got:\n{ir}"
     );
 }

@@ -59,7 +59,7 @@ fn all_keywords_produce_correct_kind() {
             "keyword '{}' should be {:?}, got {:?}",
             text, expected_kind, tokens[0].kind
         );
-        assert_eq!(tokens[0].text, *text, "keyword '{}' text mismatch", text);
+        assert_eq!(tokens[0].text, *text, "keyword '{text}' text mismatch");
     }
 }
 

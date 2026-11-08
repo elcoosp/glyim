@@ -8,27 +8,30 @@ use glyim_type::adt_def::{AdtDef, AdtKind};
 use glyim_type::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-/// Size.
+/// `Size`.
 pub struct Size(pub u64);
 
 impl Size {
-    /// ZERO.
+    /// `ZERO`.
     pub const ZERO: Size = Size(0);
     /// bytes.
+    #[must_use]
     pub fn bytes(b: u64) -> Self {
         Size(b)
     }
     /// bits.
+    #[must_use]
     pub fn bits(&self) -> u64 {
         self.0.saturating_mul(8)
     }
-    /// align_to.
+    /// `align_to`.
+    #[must_use]
     pub fn align_to(&self, align: Align) -> Self {
         debug_assert!(align.0 > 0, "alignment must be non-zero");
         let mask = align.0 - 1;
         Size((self.0 + mask) & !mask)
     }
-    /// checked_mul.
+    /// `checked_mul`.
     pub fn checked_mul(self, rhs: u64) -> Option<Size> {
         self.0.checked_mul(rhs).map(Size)
     }
@@ -42,15 +45,16 @@ impl std::ops::Add for Size {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-/// Align.
+/// `Align`.
 pub struct Align(pub u64);
 
 impl Align {
-    /// ONE.
+    /// `ONE`.
     pub const ONE: Align = Align(1);
-    /// EIGHT.
+    /// `EIGHT`.
     pub const EIGHT: Align = Align(8);
-    /// from_bytes.
+    /// `from_bytes`.
+    #[must_use]
     pub fn from_bytes(bytes: u64) -> Self {
         debug_assert!(
             bytes.is_power_of_two(),
@@ -59,28 +63,30 @@ impl Align {
         Align(bytes)
     }
     /// max.
+    #[must_use]
     pub fn max(self, other: Self) -> Self {
         Align(self.0.max(other.0))
     }
 }
 
 #[derive(Clone, Debug)]
-/// Layout.
+/// `Layout`.
 pub struct Layout {
-    /// Struct.
+    /// `Struct`.
     pub size: Size,
-    /// Struct.
+    /// `Struct`.
     pub align: Align,
-    /// Struct.
+    /// `Struct`.
     pub fields: FieldsShape,
-    /// Struct.
+    /// `Struct`.
     pub variants: VariantsShape,
-    /// Struct.
+    /// `Struct`.
     pub is_unsized: bool,
 }
 
 impl Layout {
     /// scalar.
+    #[must_use]
     pub fn scalar(size: Size, align: Align) -> Self {
         Self {
             size,
@@ -91,6 +97,7 @@ impl Layout {
         }
     }
     /// unit.
+    #[must_use]
     pub fn unit() -> Self {
         Self {
             size: Size::ZERO,
@@ -105,18 +112,18 @@ impl Layout {
 }
 
 #[derive(Clone, Debug)]
-/// FieldsShape.
+/// `FieldsShape`.
 pub enum FieldsShape {
-    /// Variant.
+    /// `Variant`.
     Primitive,
-    /// Variant.
+    /// `Variant`.
     Array {
         /// stride field.
         stride: Size,
         /// count field.
         count: u64,
     },
-    /// Struct.
+    /// `Struct`.
     Arbitrary {
         /// offsets field.
         offsets: IndexVec<FieldIdx, Size>,
@@ -124,97 +131,97 @@ pub enum FieldsShape {
 }
 
 #[derive(Clone, Debug)]
-/// VariantsShape.
+/// `VariantsShape`.
 pub enum VariantsShape {
-    /// Variant.
+    /// `Variant`.
     Single {
-        /// Struct.
+        /// `Struct`.
         index: u32,
     },
-    /// Variant.
+    /// `Variant`.
     Multiple {
-        /// Struct.
+        /// `Struct`.
         tag: Ty,
-        /// Struct.
+        /// `Struct`.
         tag_field: u32,
-        /// Struct.
+        /// `Struct`.
         tag_encoding: TagEncoding,
-        /// Struct.
+        /// `Struct`.
         variants: Vec<Layout>,
-        /// Struct.
+        /// `Struct`.
         tag_size: Size, // ← ADDED
-        /// Struct.
+        /// `Struct`.
         tag_align: Align, // ← ADDED
     },
 }
 
 #[derive(Clone, Debug)]
-/// TagEncoding.
+/// `TagEncoding`.
 pub enum TagEncoding {
-    /// Variant.
+    /// `Variant`.
     Direct,
-    /// Variant.
+    /// `Variant`.
     Niche {
-        /// Struct.
+        /// `Struct`.
         untagged_variant: u32,
-        /// Struct.
+        /// `Struct`.
         niche_variants: std::ops::RangeInclusive<u32>,
-        /// Struct.
+        /// `Struct`.
         niche_start: u128,
     },
 }
 
 #[derive(Clone, Debug)]
-/// FnAbi.
+/// `FnAbi`.
 pub struct FnAbi {
-    /// Struct.
+    /// `Struct`.
     pub args: Vec<ArgAbi>,
-    /// Struct.
+    /// `Struct`.
     pub ret: ArgAbi,
-    /// Struct.
+    /// `Struct`.
     pub conv: CallConvention,
-    /// Struct.
+    /// `Struct`.
     pub c_variadic: bool,
 }
 
 #[derive(Clone, Debug)]
-/// ArgAbi.
+/// `ArgAbi`.
 pub struct ArgAbi {
-    /// Struct.
+    /// `Struct`.
     pub ty: Ty,
-    /// Struct.
+    /// `Struct`.
     pub layout: Layout,
-    /// Struct.
+    /// `Struct`.
     pub mode: PassMode,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-/// PassMode.
+/// `PassMode`.
 pub enum PassMode {
-    /// Variant.
+    /// `Variant`.
     Direct,
-    /// Variant.
+    /// `Variant`.
     Indirect {
-        /// meta_attrs field.
+        /// `meta_attrs` field.
         meta_attrs: bool,
     },
-    /// Variant.
+    /// `Variant`.
     Ignore,
-    /// Struct.
+    /// `Struct`.
     Cast {
         /// to field.
         to: Ty,
-        /// cast_int field.
+        /// `cast_int` field.
         cast_int: bool,
     },
-    /// Struct.
+    /// `Struct`.
     HomogeneousAggregate {
-        /// element_ty field.
+        /// `element_ty` field.
         element_ty: Ty,
         /// count field.
         count: u32,
     },
-    /// Variant.
+    /// `Variant`.
     Split {
         /// pieces field.
         pieces: Vec<PassMode>,
@@ -222,13 +229,13 @@ pub enum PassMode {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// CallConvention.
+/// `CallConvention`.
 pub enum CallConvention {
-    /// Variant.
+    /// `Variant`.
     Glyim,
-    /// Variant.
+    /// `Variant`.
     C,
-    /// Variant.
+    /// `Variant`.
     System,
 }
 
@@ -242,32 +249,32 @@ impl From<Abi> for CallConvention {
     }
 }
 
-/// LayoutComputer.
+/// `LayoutComputer`.
 pub trait LayoutComputer {
-    /// layout_of.
+    /// `layout_of`.
     fn layout_of(&self, ty: Ty) -> Result<Layout, LayoutError>;
-    /// fn_abi_of.
+    /// `fn_abi_of`.
     fn fn_abi_of(&self, sig: &FnSig) -> Result<FnAbi, LayoutError>;
-    /// ptr_size.
+    /// `ptr_size`.
     fn ptr_size(&self) -> Size;
-    /// ptr_align.
+    /// `ptr_align`.
     fn ptr_align(&self) -> Align;
-    /// target_info.
+    /// `target_info`.
     fn target_info(&self) -> &TargetInfo;
 }
 
 #[derive(Clone, Debug)]
-/// LayoutError.
+/// `LayoutError`.
 pub enum LayoutError {
-    #[allow(missing_docs)]
+    /// `UnknownType`.
     UnknownType(Ty),
-    #[allow(missing_docs)]
+    /// `SizeOverflow`.
     SizeOverflow(Ty),
-    #[allow(missing_docs)]
+    /// `Unsized`.
     Unsized(Ty),
-    #[allow(missing_docs)]
+    /// `Cycle`.
     Cycle(Ty),
-    /// Struct.
+    /// `Struct`.
     AlignmentExceedsRuntime {
         /// ty field.
         ty: Ty,
@@ -284,7 +291,7 @@ pub enum LayoutError {
     UnknownTrait(TraitDefId),
 }
 
-/// SimpleLayoutComputer.
+/// `SimpleLayoutComputer`.
 pub struct SimpleLayoutComputer<'a> {
     ctx: &'a TyCtx,
     target: TargetInfo,
@@ -301,6 +308,7 @@ pub struct SimpleLayoutComputer<'a> {
 
 impl<'a> SimpleLayoutComputer<'a> {
     /// new.
+    #[must_use]
     pub fn new(ctx: &'a TyCtx, target: TargetInfo) -> Self {
         const _: () = assert!(ALIGN_MAX >= 8, "ALIGN_MAX must be at least 8");
         Self {
@@ -528,7 +536,6 @@ impl<'a> SimpleLayoutComputer<'a> {
         Ok(None)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn build_niche_layout(
         &self,
         variant_layouts: &[Layout],
@@ -648,10 +655,10 @@ impl<'a> SimpleLayoutComputer<'a> {
                         let sv_end = *niche_variants.end();
                         if sv_start > 0 {
                             // Free contiguous block `[0, sv_start)`.
-                            (0, sv_start as u128)
+                            (0, u128::from(sv_start))
                         } else {
                             // Free contiguous block `[sv_end + 1, niche_start)`.
-                            let start = (sv_end as u128) + 1;
+                            let start = u128::from(sv_end) + 1;
                             let count = full.saturating_sub(start);
                             (start, count)
                         }
@@ -672,11 +679,11 @@ impl<'a> SimpleLayoutComputer<'a> {
         match self.ctx.ty_kind(tag_ty) {
             TyKind::Bool => Some(256),
             TyKind::Int(i) => {
-                let bw = i.bit_width(&self.target) as u128;
+                let bw = u128::from(i.bit_width(&self.target));
                 1u128.checked_shl(bw as u32)
             }
             TyKind::Uint(i) => {
-                let bw = i.bit_width(&self.target) as u128;
+                let bw = u128::from(i.bit_width(&self.target));
                 1u128.checked_shl(bw as u32)
             }
             _ => None,
@@ -808,31 +815,30 @@ impl<'a> SimpleLayoutComputer<'a> {
         substs: Substitution,
         outer_ty: Ty,
     ) -> Result<Layout, LayoutError> {
-        let adt_def = match self.ctx.adt_def(adt_id) {
-            Some(def) => def,
-            None => {
-                if let Some(repr) = self.ctx.adt_repr(adt_id) {
-                    let mut offsets = IndexVec::new();
-                    let mut struct_align = Align::ONE;
-                    let mut current_offset = Size::ZERO;
-                    for field_ty in &repr.field_tys {
-                        let field_layout = self.layout_of(*field_ty)?;
-                        struct_align = struct_align.max(field_layout.align);
-                        current_offset = current_offset.align_to(field_layout.align);
-                        offsets.push(current_offset);
-                        current_offset = current_offset + field_layout.size;
-                    }
-                    let size = current_offset.align_to(struct_align);
-                    return Ok(Layout {
-                        size,
-                        align: struct_align,
-                        fields: FieldsShape::Arbitrary { offsets },
-                        variants: VariantsShape::Single { index: 0 },
-                        is_unsized: false,
-                    });
+        let adt_def = if let Some(def) = self.ctx.adt_def(adt_id) {
+            def
+        } else {
+            if let Some(repr) = self.ctx.adt_repr(adt_id) {
+                let mut offsets = IndexVec::new();
+                let mut struct_align = Align::ONE;
+                let mut current_offset = Size::ZERO;
+                for field_ty in &repr.field_tys {
+                    let field_layout = self.layout_of(*field_ty)?;
+                    struct_align = struct_align.max(field_layout.align);
+                    current_offset = current_offset.align_to(field_layout.align);
+                    offsets.push(current_offset);
+                    current_offset = current_offset + field_layout.size;
                 }
-                return Err(LayoutError::UnknownType(outer_ty));
+                let size = current_offset.align_to(struct_align);
+                return Ok(Layout {
+                    size,
+                    align: struct_align,
+                    fields: FieldsShape::Arbitrary { offsets },
+                    variants: VariantsShape::Single { index: 0 },
+                    is_unsized: false,
+                });
             }
+            return Err(LayoutError::UnknownType(outer_ty));
         };
         let _args = self.ctx.substitution_args(substs);
         let args = _args;
@@ -904,7 +910,7 @@ impl LayoutComputer for SimpleLayoutComputer<'_> {
         // position for consumers of the SimpleLayoutComputer (bytecode
         // backend's provider paths, debug info).
         let mut arg_abis: Vec<ArgAbi> = Vec::with_capacity(args.len());
-        for arg in args.iter() {
+        for arg in args {
             if let GenericArg::Ty(t) = arg {
                 let layout = self.layout_of(*t)?;
                 let mode = self.pass_mode_for(*t, &layout, conv);
@@ -948,17 +954,17 @@ impl SimpleLayoutComputer<'_> {
             TyKind::Bool => Layout::scalar(Size::bytes(1), Align::ONE),
             TyKind::Int(i) => {
                 let bw = i.bit_width(&self.target);
-                let byte_width = bw as u64 / 8;
+                let byte_width = u64::from(bw) / 8;
                 Layout::scalar(Size::bytes(byte_width), Align::from_bytes(byte_width))
             }
             TyKind::Uint(u) => {
                 let bw = u.bit_width(&self.target);
-                let byte_width = bw as u64 / 8;
+                let byte_width = u64::from(bw) / 8;
                 Layout::scalar(Size::bytes(byte_width), Align::from_bytes(byte_width))
             }
             TyKind::Float(f) => {
                 let bw = f.bit_width();
-                let byte_width = bw as u64 / 8;
+                let byte_width = u64::from(bw) / 8;
                 Layout::scalar(Size::bytes(byte_width), Align::from_bytes(byte_width))
             }
             TyKind::Char => Layout::scalar(Size::bytes(4), Align::from_bytes(4)),

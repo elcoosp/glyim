@@ -1,5 +1,3 @@
-#![allow(deprecated)]
-
 use crate::AnalysisDatabase;
 use crate::database::FileMap;
 use lsp_types::Uri;
@@ -52,7 +50,7 @@ fn get_symbol_name_at_position(
     identifier_at_offset(source, offset)
 }
 
-/// goto_definition.
+/// `goto_definition`.
 pub fn goto_definition(
     db: &AnalysisDatabase,
     file_map: &FileMap,
@@ -90,7 +88,7 @@ pub fn goto_definition(
     }))
 }
 
-/// find_references.
+/// `find_references`.
 pub fn find_references(
     db: &AnalysisDatabase,
     file_map: &FileMap,
@@ -183,7 +181,7 @@ pub fn find_references(
     Some(locations)
 }
 
-/// document_symbols.
+/// `document_symbols`.
 pub fn document_symbols(
     db: &AnalysisDatabase,
     file_map: &FileMap,
@@ -238,11 +236,8 @@ pub fn document_symbols(
             },
             children: None,
             detail: sym.type_signature.as_ref().map(|ts| {
-                let params: Vec<String> = ts
-                    .params
-                    .iter()
-                    .map(|(n, t)| format!("{}: {}", n, t))
-                    .collect();
+                let params: Vec<String> =
+                    ts.params.iter().map(|(n, t)| format!("{n}: {t}")).collect();
                 format!("({})", params.join(", "))
             }),
             tags: None,
@@ -252,7 +247,7 @@ pub fn document_symbols(
     Some(DocumentSymbolResponse::Nested(results))
 }
 
-/// workspace_symbols.
+/// `workspace_symbols`.
 pub fn workspace_symbols(
     db: &AnalysisDatabase,
     params: &WorkspaceSymbolParams,

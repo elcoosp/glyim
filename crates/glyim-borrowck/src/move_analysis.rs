@@ -54,8 +54,6 @@ struct MovePath {
     /// The place this move path corresponds to.
     place: Place,
     /// Parent move path (e.g. the struct local for a field).
-    #[allow(dead_code)]
-    parent: Option<MovePathIdx>,
     /// Child move paths (e.g. fields of a struct).
     children: Vec<MovePathIdx>,
 }
@@ -63,7 +61,6 @@ struct MovePath {
 /// Arena of move paths for a single MIR body.
 ///
 /// Maintains a root index for O(1) lookup of a local's root move path.
-/// Child lookups traverse the children list of a parent, which is O(field_count)
 /// and fast in practice (structs rarely have more than ~16 fields).
 struct MovePathArena {
     paths: Vec<MovePath>,
@@ -106,7 +103,7 @@ impl MovePathArena {
         }
 
         let mut current_idx = root_idx?;
-        for proj_elem in place.projection.iter() {
+        for proj_elem in &place.projection {
             match proj_elem {
                 ProjectionElem::Index(_) => {
                     // For Index projections, we treat them as the same path (all indices share a path).
@@ -126,23 +123,21 @@ impl MovePathArena {
                             break;
                         }
                     }
-                    match found {
-                        Some(idx) => current_idx = idx,
-                        None => {
-                            let mut new_proj = self.get(current_idx).place.projection.to_vec();
-                            new_proj.push(ProjectionElem::Downcast(*variant_idx));
-                            let new_path = MovePath {
-                                place: Place {
-                                    local: place.local,
-                                    projection: new_proj.into_boxed_slice(),
-                                },
-                                parent: Some(current_idx),
-                                children: Vec::new(),
-                            };
-                            let new_idx = self.push(new_path);
-                            self.get_mut(current_idx).children.push(new_idx);
-                            current_idx = new_idx;
-                        }
+                    if let Some(idx) = found {
+                        current_idx = idx;
+                    } else {
+                        let mut new_proj = self.get(current_idx).place.projection.to_vec();
+                        new_proj.push(ProjectionElem::Downcast(*variant_idx));
+                        let new_path = MovePath {
+                            place: Place {
+                                local: place.local,
+                                projection: new_proj.into_boxed_slice(),
+                            },
+                            children: Vec::new(),
+                        };
+                        let new_idx = self.push(new_path);
+                        self.get_mut(current_idx).children.push(new_idx);
+                        current_idx = new_idx;
                     }
                 }
                 ProjectionElem::Field(_) => {
@@ -183,27 +178,25 @@ impl MovePathArena {
                             break;
                         }
                     }
-                    match found {
-                        Some(idx) => current_idx = idx,
-                        None => {
-                            let mut new_proj = self.get(current_idx).place.projection.to_vec();
-                            new_proj.push(ProjectionElem::ConstantIndex {
-                                offset: *offset,
-                                min_length: 0,
-                                from_end: false,
-                            });
-                            let new_path = MovePath {
-                                place: Place {
-                                    local: place.local,
-                                    projection: new_proj.into_boxed_slice(),
-                                },
-                                parent: Some(current_idx),
-                                children: Vec::new(),
-                            };
-                            let new_idx = self.push(new_path);
-                            self.get_mut(current_idx).children.push(new_idx);
-                            current_idx = new_idx;
-                        }
+                    if let Some(idx) = found {
+                        current_idx = idx;
+                    } else {
+                        let mut new_proj = self.get(current_idx).place.projection.to_vec();
+                        new_proj.push(ProjectionElem::ConstantIndex {
+                            offset: *offset,
+                            min_length: 0,
+                            from_end: false,
+                        });
+                        let new_path = MovePath {
+                            place: Place {
+                                local: place.local,
+                                projection: new_proj.into_boxed_slice(),
+                            },
+                            children: Vec::new(),
+                        };
+                        let new_idx = self.push(new_path);
+                        self.get_mut(current_idx).children.push(new_idx);
+                        current_idx = new_idx;
                     }
                 }
                 ProjectionElem::ConstantIndex { from_end: true, .. }
@@ -241,7 +234,6 @@ fn build_move_paths(body: &Body, ctx: &dyn BorrowckCtx) -> MovePathArena {
 
         let root_idx = arena.push(MovePath {
             place: Place::new(local_idx),
-            parent: None,
             children: Vec::new(),
         });
         arena.root_index[local_idx.to_raw() as usize] = Some(root_idx);
@@ -256,7 +248,6 @@ fn build_move_paths(body: &Body, ctx: &dyn BorrowckCtx) -> MovePathArena {
                 };
                 let child_idx = arena.push(MovePath {
                     place: child_place,
-                    parent: Some(root_idx),
                     children: Vec::new(),
                 });
                 arena.get_mut(root_idx).children.push(child_idx);
@@ -324,14 +315,7 @@ fn count_fields(ty: glyim_type::Ty, ctx: &TyCtx) -> Option<u32> {
 /// Result of the move dataflow analysis.
 struct MoveAnalysisResult {
     moved_in: Vec<BitSet>,
-    #[allow(dead_code)]
-    moved_out: Vec<BitSet>,
-    /// For each basic block, the set of move path indices that have been
-    /// StorageDead'd (storage deallocated). Unlike regular moves, using a
-    /// dead local is always an error, even for Copy types.
     dead_in: Vec<BitSet>,
-    #[allow(dead_code)]
-    dead_out: Vec<BitSet>,
     move_paths: MovePathArena,
 }
 
@@ -481,13 +465,11 @@ fn compute_move_dataflow(
 
     MoveAnalysisResult {
         moved_in,
-        moved_out,
         dead_in,
-        dead_out,
         move_paths,
     }
 }
-#[allow(clippy::too_many_arguments)]
+
 fn collect_stmt_move_effects(
     stmt: &glyim_mir::Statement,
     move_paths: &mut MovePathArena,
@@ -596,8 +578,8 @@ fn compute_stmt_moved(
 
     let mut moved = vec![BitSet::with_capacity(num_paths); num_stmts + 1];
     let mut dead = vec![BitSet::with_capacity(num_paths); num_stmts + 1];
-    moved[0] = moved_in.clone();
-    dead[0] = dead_in.clone();
+    moved[0].clone_from(moved_in);
+    dead[0].clone_from(dead_in);
 
     for i in 0..num_stmts {
         let mut current_moved = moved[i].clone();
@@ -709,7 +691,6 @@ enum UsedPlace<'a> {
     Inspect(&'a Place),
 }
 
-#[allow(clippy::too_many_arguments)]
 fn check_stmt_use_after_move(
     stmt: &glyim_mir::Statement,
     block_idx: glyim_mir::BasicBlockIdx,
@@ -791,7 +772,6 @@ fn collect_rvalue_used_places<'a>(rvalue: &'a Rvalue, places: &mut SmallVec<[Use
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn check_place_use_after_move(
     used_place: &UsedPlace<'_>,
     stmt: &glyim_mir::Statement,

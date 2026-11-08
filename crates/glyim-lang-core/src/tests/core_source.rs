@@ -7,8 +7,7 @@ fn core_source_returns_all_modules() {
     for name in core_modules() {
         assert!(
             core_source(name).is_some(),
-            "core_source should return Some for module '{}'",
-            name
+            "core_source should return Some for module '{name}'"
         );
     }
 }
@@ -24,8 +23,7 @@ fn core_source_is_non_empty() {
         let src = core_source(name).unwrap();
         assert!(
             !src.is_empty(),
-            "core source for '{}' should not be empty",
-            name
+            "core source for '{name}' should not be empty"
         );
     }
 }
@@ -35,9 +33,8 @@ fn core_source_all_contains_all_modules() {
     let all = core_source_all();
     for name in core_modules() {
         assert!(
-            all.contains(&format!("// === module: {} ===", name)),
-            "core_source_all should contain module header for '{}'",
-            name
+            all.contains(&format!("// === module: {name} ===")),
+            "core_source_all should contain module header for '{name}'"
         );
     }
 }

@@ -2,8 +2,10 @@ use crate::AnalysisDatabase;
 use crate::DefinitionLocation;
 use lsp_types::*;
 
+use std::fmt::Write as _;
+
 use url::Url;
-/// provide_hover.
+/// `provide_hover`.
 pub fn provide_hover(
     db: &AnalysisDatabase,
     file_map: &crate::database::FileMap,
@@ -20,22 +22,19 @@ pub fn provide_hover(
     let symbol = symbol_index.lookup_by_location(file_id, offset)?;
     let mut markdown = String::new();
     if let Some(ts) = &symbol.type_signature {
-        let params_str: Vec<String> = ts
-            .params
-            .iter()
-            .map(|(n, t)| format!("{}: {}", n, t))
-            .collect();
+        let params_str: Vec<String> = ts.params.iter().map(|(n, t)| format!("{n}: {t}")).collect();
         let ret_str = ts
             .return_type
             .as_ref()
-            .map(|t| format!(" -> {}", t))
+            .map(|t| format!(" -> {t}"))
             .unwrap_or_default();
-        markdown.push_str(&format!(
+        let _ = write!(
+            markdown,
             "```glyim\nfn {}({}){}\n```\n",
             symbol.name,
             params_str.join(", "),
             ret_str
-        ));
+        );
     }
     if let Some(doc) = &symbol.documentation {
         markdown.push_str(doc);

@@ -1,4 +1,3 @@
-#![allow(unused)]
 use crate::lower::lower_crate;
 use crate::{BodyId, Expr, ExprId, ItemId, ItemKind, Literal, Pat};
 use glyim_core::interner::Interner;
@@ -13,7 +12,7 @@ fn get_body_hir(source: &str) -> (crate::CrateHir, Interner, BodyId) {
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
     let body_id = match &hir.items[ItemId::from_raw(0)].kind {
         ItemKind::Fn(fn_item) => fn_item.body.expect("no body"),
-        other => panic!("expected Fn item, got {:?}", other),
+        other => panic!("expected Fn item, got {other:?}"),
     };
     (hir, interner, body_id)
 }
@@ -171,7 +170,7 @@ fn test_assign_expr() {
     let block_id = last_expr_id(body);
     match &body.exprs[block_id] {
         Expr::Block { stmts, .. } => {
-            assert!(!stmts.is_empty());
+            assert_ne!(stmts.as_slice(), []);
             assert!(matches!(&body.exprs[stmts[0]], Expr::Assign { .. }));
         }
         _ => panic!(),

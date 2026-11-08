@@ -125,6 +125,7 @@ impl FileTestDiscovery {
     }
 
     /// Number of discovered tests in this file.
+    #[must_use]
     pub fn count(&self) -> usize {
         self.tests.len()
     }

@@ -3,7 +3,7 @@
 //! They were lowered to an eager `BinaryOp(And/Or)` (→ `build_and`/`build_or`
 //! in LLVM), so the RHS ran unconditionally — `i < len && arr[i] == x` read
 //! `arr[i]` even when the bounds check failed. The fix desugars `&&`/`||` into
-//! control flow (SwitchInt + a destination local), mirroring the `If` arm.
+//! control flow (`SwitchInt` + a destination local), mirroring the `If` arm.
 
 use std::io::Write;
 use std::process::Command;
@@ -15,7 +15,7 @@ fn tempdir() -> std::path::PathBuf {
     // alone is not unique.
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let p = std::env::temp_dir().join(format!("glyim_shortcircuit_{}_{}", std::process::id(), n,));
+    let p = std::env::temp_dir().join(format!("glyim_shortcircuit_{}_{}", std::process::id(), n));
     std::fs::create_dir_all(&p).unwrap();
     p
 }
@@ -47,7 +47,7 @@ fn mir_of(dir: &std::path::Path, src_text: &str) -> String {
     std::fs::read_to_string(&out).unwrap()
 }
 
-/// `a && b` must lower to control flow (a SwitchInt on `a`), NOT an eager
+/// `a && b` must lower to control flow (a `SwitchInt` on `a`), NOT an eager
 /// `BinaryOp(And)`.
 #[test]
 fn logical_and_lowers_to_control_flow() {

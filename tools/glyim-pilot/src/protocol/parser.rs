@@ -1,7 +1,8 @@
 use crate::error::PilotError;
 use crate::protocol::types::{FileOp, ParsedOps};
 
-/// extract_ops_blocks.
+/// `extract_ops_blocks`.
+#[must_use]
 pub fn extract_ops_blocks(response: &str) -> Vec<String> {
     let mut blocks = Vec::new();
     let lines: Vec<&str> = response.lines().collect();
@@ -40,7 +41,7 @@ pub fn extract_ops_blocks(response: &str) -> Vec<String> {
     blocks
 }
 
-/// parse_ops_block.
+/// `parse_ops_block`.
 pub fn parse_ops_block(input: &str) -> Result<ParsedOps, PilotError> {
     let mut ops = Vec::new();
     let mut commit_message = None;

@@ -5,7 +5,7 @@ use lsp_types::*;
 use std::str::FromStr;
 use url::Url;
 
-/// goto_definition.
+/// `goto_definition`.
 pub fn goto_definition(
     db: &AnalysisDatabase,
     file_map: &FileMap,

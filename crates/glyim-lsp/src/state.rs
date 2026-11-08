@@ -7,9 +7,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// LspState.
+/// `LspState`.
 pub struct LspState {
-    /// Struct.
+    /// `Struct`.
     pub db: Database,
     open_files: HashMap<PathBuf, (FileId, i32)>,
     analysis: Arc<AnalysisDatabase>,
@@ -22,32 +22,27 @@ impl LspState {
         let analysis = Arc::new(AnalysisDatabase::new());
         Self {
             db,
-            open_files: Default::default(),
+            open_files: HashMap::new(),
             analysis,
             driver_tx: None,
         }
     }
 
-    /// start_driver.
-    pub fn start_driver(&mut self, cache_dir: PathBuf) {
+    /// `start_driver`.
+    pub fn start_driver(&mut self) {
         if self.driver_tx.is_some() {
             return;
         }
         let (tx, rx) = tokio::sync::mpsc::channel(16);
         // T130-PATCHED [LSP-6]: driver needs the sender to enqueue
         // dependent re-analysis.
-        let driver = crate::driver::AnalysisDriver::new(
-            self.analysis.clone(),
-            rx,
-            cache_dir,
-            tx.clone(),
-            None,
-        );
+        let driver =
+            crate::driver::AnalysisDriver::new(self.analysis.clone(), rx, tx.clone(), None);
         tokio::spawn(driver.run());
         self.driver_tx = Some(tx);
     }
 
-    /// did_open.
+    /// `did_open`.
     pub fn did_open(&mut self, path: PathBuf, content: String, version: i32) {
         let file_id = self
             .db
@@ -63,7 +58,7 @@ impl LspState {
         }
     }
 
-    /// did_change.
+    /// `did_change`.
     pub fn did_change(&mut self, path: PathBuf, content: String, version: i32) {
         if let Some(&(file_id, _)) = self.open_files.get(&path) {
             self.db
@@ -82,7 +77,7 @@ impl LspState {
         }
     }
 
-    /// did_close.
+    /// `did_close`.
     pub fn did_close(&mut self, path: &PathBuf) {
         if let Some(tx) = &self.driver_tx {
             let _ = tx.try_send(AnalysisMessage::FileClosed { path: path.clone() });
@@ -90,13 +85,13 @@ impl LspState {
         self.open_files.remove(path);
     }
 
-    /// file_content.
+    /// `file_content`.
     pub fn file_content(&self, path: &PathBuf) -> Option<String> {
         let &(file_id, _) = self.open_files.get(path)?;
         self.db.vfs().file_content(file_id).map(|s| s.to_string())
     }
 
-    /// diagnostics_for_file.
+    /// `diagnostics_for_file`.
     pub fn diagnostics_for_file(&self, path: &PathBuf) -> Vec<GlyimDiagnostic> {
         let file_id = self.file_id(path);
         if let Some(file_id) = file_id {
@@ -111,12 +106,13 @@ impl LspState {
         Vec::new()
     }
 
-    /// file_id.
+    /// `file_id`.
     pub fn file_id(&self, path: &PathBuf) -> Option<FileId> {
         self.open_files.get(path).map(|&(id, _)| id)
     }
 
-    #[allow(unused)]
+    /// Analysis database handle; only the test modules read it.
+    #[cfg(test)]
     pub(crate) fn analysis(&self) -> &Arc<AnalysisDatabase> {
         &self.analysis
     }

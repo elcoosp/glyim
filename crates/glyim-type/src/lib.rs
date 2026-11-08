@@ -1,6 +1,7 @@
 //! Core type system & Type Context.
+/// Algebraic data type definitions (structs, enums) and their layouts.
 pub mod adt_def;
-/// auto_trait.
+/// `auto_trait`.
 pub mod auto_trait;
 /// binder.
 pub mod binder;
@@ -10,13 +11,13 @@ pub mod cast;
 /// deref.
 pub mod deref;
 pub use cast::is_valid_cast;
-/// const_val.
+/// `const_val`.
 pub mod const_val;
 /// display.
 pub mod display;
 /// flags.
 pub mod flags;
-/// fn_sig.
+/// `fn_sig`.
 pub mod fn_sig;
 pub mod lang_items;
 /// predicate.
@@ -27,9 +28,9 @@ pub mod region;
 pub mod substitution;
 /// ty.
 pub mod ty;
-/// ty_ctx.
+/// `ty_ctx`.
 pub mod ty_ctx;
-/// ty_ctx_mut.
+/// `ty_ctx_mut`.
 pub mod ty_ctx_mut;
 /// type_arena: per-compilation canonical type interner (P0).
 pub mod type_arena;
@@ -59,9 +60,9 @@ mod tests;
 /// Definition of a trait for the type context.
 #[derive(Clone, Debug)]
 pub struct TraitDef {
-    /// Struct.
+    /// `Struct`.
     pub name: glyim_core::interner::Name,
-    /// Struct.
+    /// `Struct`.
     pub methods: Vec<MethodDef>,
     /// Associated-type names declared by the trait (e.g. `Output` in
     /// `trait Future { type Output; }`). Populated during HIR lowering
@@ -73,9 +74,9 @@ pub struct TraitDef {
 /// Definition of a method in a trait.
 #[derive(Clone, Debug)]
 pub struct MethodDef {
-    /// Struct.
+    /// `Struct`.
     pub name: glyim_core::interner::Name,
-    /// Struct.
+    /// `Struct`.
     pub sig: FnSig,
     /// The `FnDefId` of the (canonical, trait-level) method definition.
     /// When a vtable is generated for a concrete impl, this identifies the

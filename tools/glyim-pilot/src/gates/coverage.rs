@@ -9,15 +9,15 @@ use std::sync::LazyLock;
 static COVERAGE_PCT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(\d+\.?\d*)%\s*coverage").unwrap());
 
-/// CoverageGate.
+/// `CoverageGate`.
 pub struct CoverageGate {
-    /// Struct.
+    /// `Struct`.
     pub min_coverage: f64,
 }
 
 #[async_trait]
 impl Gate for CoverageGate {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "coverage"
     }
 
@@ -84,7 +84,7 @@ impl Gate for CoverageGate {
                     Ok(GateResult::fail_with_details(
                         "coverage",
                         "cargo llvm-cov failed",
-                        format!("{}{}", stdout, stderr),
+                        format!("{stdout}{stderr}"),
                     ))
                 }
             }

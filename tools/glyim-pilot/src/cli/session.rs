@@ -36,7 +36,7 @@ fn multiply(a: i32, b: i32) -> i32 {
 Do not output any text outside the code block. Use Rust unless the user asks for another language."#;
 
 #[derive(Subcommand)]
-/// SessionCommands.
+/// `SessionCommands`.
 pub enum SessionCommands {
     /// Start a new session with a provider
     Start {
@@ -56,7 +56,7 @@ pub enum SessionCommands {
     },
 }
 
-/// handle_session_command.
+/// `handle_session_command`.
 pub async fn handle_session_command(cmd: SessionCommands) -> Result<(), anyhow::Error> {
     match cmd {
         SessionCommands::Start {

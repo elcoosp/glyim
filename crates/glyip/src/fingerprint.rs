@@ -31,13 +31,13 @@ impl Fingerprint {
                 .modified()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_nanos())
-                .unwrap_or(0),
+                .map_or(0, |d| d.as_nanos()),
             size: metadata.len(),
         })
     }
 
     /// Compute a fingerprint from in-memory content.
+    #[must_use]
     pub fn from_content(content: &[u8]) -> Self {
         let mut hasher = Sha256::new();
         hasher.update(content);
@@ -50,6 +50,7 @@ impl Fingerprint {
     }
 
     /// Check whether this fingerprint matches another (by hash).
+    #[must_use]
     pub fn matches(&self, other: &Fingerprint) -> bool {
         self.hash == other.hash
     }
@@ -74,6 +75,7 @@ pub struct FingerprintStore {
 
 impl FingerprintStore {
     /// Create a new empty fingerprint store.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -86,16 +88,19 @@ impl FingerprintStore {
     }
 
     /// PUBLIC: compute the build-config fingerprint for `opts` (plan §4.2).
+    #[must_use]
     pub fn build_config_hash(opts: &crate::config::BuildOptions) -> String {
         hash_build_config(opts)
     }
 
     /// Recorded build-config fingerprint (from the last successful build).
+    #[must_use]
     pub fn recorded_config_hash(&self) -> Option<&str> {
         self.recorded_config_hash.as_deref()
     }
 
     /// Active build-config fingerprint for the build in progress, if set.
+    #[must_use]
     pub fn current_config_hash(&self) -> Option<&str> {
         self.current_config_hash.as_deref()
     }
@@ -103,6 +108,7 @@ impl FingerprintStore {
     /// Whether the recorded build config matches `current`. Returns `true` when
     /// no config has been recorded yet (nothing to invalidate against) or when
     /// the hashes are equal; `false` when they differ (a flag change).
+    #[must_use]
     pub fn config_matches(&self, current: &str) -> bool {
         match &self.recorded_config_hash {
             Some(recorded) => recorded == current,
@@ -248,11 +254,13 @@ impl FingerprintStore {
     }
 
     /// Number of stored fingerprints.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.fingerprints.len()
     }
 
     /// Whether the store is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.fingerprints.is_empty()
     }

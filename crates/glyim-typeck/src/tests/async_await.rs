@@ -14,11 +14,11 @@ fn s17_t05_async_fn_recognized_without_error() {
     // `async fn` is now a recognized declaration form (lowered to
     // `FnItem { is_async: true }` by `lower_fn_def`); it must not produce
     // lex/parse/def-map diagnostics at this phase.
-    let source = r#"
+    let source = r"
 async fn main() {
     let x = 42;
 }
-"#;
+";
     let result = AnalysisTester::new(source).run_def_map();
     let all_diags = [
         &result.lex_diagnostics[..],
@@ -28,8 +28,7 @@ async fn main() {
     .concat();
     assert!(
         all_diags.is_empty(),
-        "async fn should be recognized without diagnostics, got: {:?}",
-        all_diags
+        "async fn should be recognized without diagnostics, got: {all_diags:?}"
     );
 }
 
@@ -39,12 +38,12 @@ fn s17_t05_await_keyword_lexed_without_error() {
     // an "unknown identifier" lex error. (Parsing `.await` into a full await
     // expression is out of scope for plan §6.1 — only the keyword wiring is
     // implemented here.)
-    let source = r#"
+    let source = r"
 fn main() {
     let x = some_future;
     await;
 }
-"#;
+";
     let result = AnalysisTester::new(source).run_def_map();
     assert!(
         result.lex_diagnostics.is_empty(),
@@ -77,7 +76,7 @@ fn compile(src: &str) -> CompileOutput {
 /// same crate. It must compile with ZERO diagnostics.
 #[test]
 fn desugar_async_fn_compiles() {
-    let src = r#"
+    let src = r"
         enum Poll<T> { Ready(T), Pending }
         trait Future {
             type Output;
@@ -96,7 +95,7 @@ fn desugar_async_fn_compiles() {
             let f = add_one(41);
             block_on(f)
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
@@ -110,7 +109,7 @@ fn desugar_async_fn_compiles() {
 /// "mismatched types" diagnostics on non-matching `impl Future` candidates.
 #[test]
 fn nested_async_single_await_compiles() {
-    let src = r#"
+    let src = r"
         enum Poll<T> { Ready(T), Pending }
         trait Future {
             type Output;
@@ -130,7 +129,7 @@ fn nested_async_single_await_compiles() {
             let f = nested(5);
             block_on(f)
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
@@ -140,12 +139,12 @@ fn nested_async_single_await_compiles() {
 /// `two(a)` desugars into a `Start`/`S0`/`..`/`Done` enum plus a `poll` body
 /// that drives each suspended future and stores live locals + the in-flight
 /// future across `Poll::Pending`, so the future genuinely suspends and resumes.
-/// This is the M4 deliverable of GLYIM_DESTUB_PLAN Phase 3 — the shape that
+/// This is the M4 deliverable of `GLYIM_DESTUB_PLAN` Phase 3 — the shape that
 /// previously fell through to the `async-v2` (error 61) diagnostic now type-
 /// checks and lowers with ZERO diagnostics.
 #[test]
 fn multi_await_compiles_cleanly() {
-    let src = r#"
+    let src = r"
         enum Poll<T> { Ready(T), Pending }
         trait Future {
             type Output;
@@ -165,7 +164,7 @@ fn multi_await_compiles_cleanly() {
             let f = two(5);
             block_on(f)
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
@@ -179,7 +178,7 @@ fn multi_await_compiles_cleanly() {
 /// silent miscompile.
 #[test]
 fn multi_await_non_nameable_future_emits_async_v2() {
-    let src = r#"
+    let src = r"
         enum Poll<T> { Ready(T), Pending }
         trait Future {
             type Output;
@@ -201,7 +200,7 @@ fn multi_await_non_nameable_future_emits_async_v2() {
             let f = two(5);
             block_on(f)
         }
-    "#;
+    ";
     let output = compile(src);
     assert!(
         output.diagnostics.iter().any(|d| {

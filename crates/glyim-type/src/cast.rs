@@ -33,7 +33,7 @@ use glyim_core::def_id::AdtId;
 ///   * a fieldless (C-like) enum ↔ int/uint
 ///   * identical types are always allowed
 pub fn is_valid_cast(ctx: &dyn TypeLookup, from: Ty, to: Ty) -> bool {
-    use TyKind::*;
+    use TyKind::{Adt, Bool, Char, Float, Infer, Int, Param, RawPtr, Ref, Uint};
 
     // Script 97: int <-> raw-pointer casts. Both directions are legal in
     // standard Rust — `0 as *mut u8` (null_mut) and `ptr as usize` (addr).

@@ -20,8 +20,7 @@ fn test_and_bool() {
     // LLVM constant-folds true & false = false
     assert!(
         ir.contains("store i1 false"),
-        "Expected 'store i1 false':\n{}",
-        ir
+        "Expected 'store i1 false':\n{ir}"
     );
 }
 
@@ -42,7 +41,6 @@ fn test_or_bool() {
     // LLVM constant-folds true | false = true
     assert!(
         ir.contains("store i1 true"),
-        "Expected 'store i1 true':\n{}",
-        ir
+        "Expected 'store i1 true':\n{ir}"
     );
 }

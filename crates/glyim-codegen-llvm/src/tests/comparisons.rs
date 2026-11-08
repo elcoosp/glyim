@@ -20,8 +20,7 @@ fn test_eq_i32_true() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i1 true"),
-        "Expected 'store i1 true':\n{}",
-        ir
+        "Expected 'store i1 true':\n{ir}"
     );
 }
 
@@ -42,8 +41,7 @@ fn test_eq_i32_false() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i1 false"),
-        "Expected 'store i1 false':\n{}",
-        ir
+        "Expected 'store i1 false':\n{ir}"
     );
 }
 
@@ -64,8 +62,7 @@ fn test_ne_i32() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i1 true"),
-        "Expected 'store i1 true':\n{}",
-        ir
+        "Expected 'store i1 true':\n{ir}"
     );
 }
 
@@ -86,8 +83,7 @@ fn test_lt_i32() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i1 true"),
-        "Expected 'store i1 true':\n{}",
-        ir
+        "Expected 'store i1 true':\n{ir}"
     );
 }
 
@@ -108,8 +104,7 @@ fn test_gt_i32() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i1 true"),
-        "Expected 'store i1 true':\n{}",
-        ir
+        "Expected 'store i1 true':\n{ir}"
     );
 }
 
@@ -130,8 +125,7 @@ fn test_le_i32() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i1 true"),
-        "Expected 'store i1 true':\n{}",
-        ir
+        "Expected 'store i1 true':\n{ir}"
     );
 }
 
@@ -152,8 +146,7 @@ fn test_ge_i32() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i1 true"),
-        "Expected 'store i1 true':\n{}",
-        ir
+        "Expected 'store i1 true':\n{ir}"
     );
 }
 

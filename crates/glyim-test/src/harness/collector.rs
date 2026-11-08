@@ -4,27 +4,28 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 #[derive(Debug)]
-/// DiscoveredTest.
+/// `DiscoveredTest`.
 pub struct DiscoveredTest {
-    /// Struct.
+    /// `Struct`.
     pub path: PathBuf,
-    /// Struct.
+    /// `Struct`.
     pub name: String,
-    /// Struct.
+    /// `Struct`.
     pub config: TestConfig,
-    /// Struct.
+    /// `Struct`.
     pub source: Arc<str>,
-    /// Struct.
+    /// `Struct`.
     pub revisions: Vec<String>,
 }
 
-/// TestCollector.
+/// `TestCollector`.
 pub struct TestCollector<'a> {
     root: &'a Path,
 }
 
 impl<'a> TestCollector<'a> {
     /// new.
+    #[must_use]
     pub fn new(root: &'a Path) -> Self {
         Self { root }
     }
@@ -43,7 +44,7 @@ impl<'a> TestCollector<'a> {
 
         for entry in walkdir::WalkDir::new(self.root)
             .into_iter()
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
         {
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) != Some("g") {

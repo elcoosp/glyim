@@ -1,4 +1,4 @@
-//! Tests for AstNode can_cast and cast
+//! Tests for `AstNode` `can_cast` and cast
 
 use crate::{
     AstNode, BinaryExpr, Block, CallExpr, EnumDef, FnDef, GlyimLang, ImplDef, LitExpr, PathExpr,

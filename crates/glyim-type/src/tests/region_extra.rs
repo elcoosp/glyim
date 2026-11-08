@@ -1,4 +1,4 @@
-//! Additional region tests - DebruijnIndex, EarlyBound, LateBound, etc.
+//! Additional region tests - `DebruijnIndex`, `EarlyBound`, `LateBound`, etc.
 
 use super::helpers::{test_ty_ctx, with_fresh_ty_ctx};
 use crate::*;

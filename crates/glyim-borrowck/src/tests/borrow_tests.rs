@@ -533,13 +533,11 @@ fn t13_error_message_contains_borrow_kind_info() {
     let msg = &result.errors[0].message;
     assert!(
         msg.contains("mutable"),
-        "Error message should mention 'mutable': {}",
-        msg
+        "Error message should mention 'mutable': {msg}"
     );
     assert!(
         msg.contains("borrow"),
-        "Error message should mention 'borrow': {}",
-        msg
+        "Error message should mention 'borrow': {msg}"
     );
 }
 

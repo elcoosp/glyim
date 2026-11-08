@@ -1,15 +1,18 @@
-#![allow(dead_code)]
-use glyim_core::TargetInfo;
+#[cfg(test)]
+use glyim_core::primitives::TargetInfo;
+#[cfg(test)]
 use glyim_layout::{Layout, LayoutComputer, SimpleLayoutComputer};
-use glyim_mir::VarDebugInfo;
 use glyim_span::{FileId, HygieneCtx, Span};
-use glyim_type::TyCtx;
+#[cfg(test)]
 use inkwell::AddressSpace;
 use inkwell::context::Context;
+#[cfg(test)]
+use inkwell::debug_info::DIType;
 use inkwell::debug_info::{
-    AsDIScope, DIFile, DIFlags, DIFlagsConstants, DIScope, DISubprogram, DIType, DWARFEmissionKind,
+    AsDIScope, DIFile, DIFlags, DIFlagsConstants, DIScope, DISubprogram, DWARFEmissionKind,
     DWARFSourceLanguage, DebugInfoBuilder,
 };
+#[cfg(test)]
 use inkwell::values::AsValueRef;
 use inkwell::values::FunctionValue;
 use std::collections::HashMap;
@@ -39,8 +42,12 @@ pub(crate) struct DebugInfoCtx<'ctx> {
     source_map: HashMap<FileId, (String, String)>,
     pub(crate) enabled: bool,
     hygiene: Option<HygieneCtx>,
-    type_cache: HashMap<glyim_type::Ty, DIType<'ctx>>,
     line_tables: HashMap<FileId, Vec<usize>>, // line starts
+    /// Resolved `DIType` cache; only the (test-only) `debug_type_for_ty`
+    /// reads/writes it today, so it ships cfg(test) to stay out of the lib
+    /// build's dead-code gate.
+    #[cfg(test)]
+    type_cache: HashMap<glyim_type::Ty, DIType<'ctx>>,
 }
 
 impl<'ctx> DebugInfoCtx<'ctx> {
@@ -58,8 +65,7 @@ impl<'ctx> DebugInfoCtx<'ctx> {
         let cu_filename = source_map
             .values()
             .next()
-            .map(|(path, _content)| path.as_str())
-            .unwrap_or("test.g")
+            .map_or("test.g", |(path, _content)| path.as_str())
             .to_string();
         let (builder, compile_unit) = module.create_debug_info_builder(
             true,
@@ -113,8 +119,9 @@ impl<'ctx> DebugInfoCtx<'ctx> {
             source_map,
             enabled: enable,
             hygiene,
-            type_cache: HashMap::new(),
             line_tables,
+            #[cfg(test)]
+            type_cache: HashMap::new(),
         }
     }
 
@@ -171,12 +178,50 @@ impl<'ctx> DebugInfoCtx<'ctx> {
         )
     }
 
-    /// Get a debug type for a given Ty, creating it if necessary.
+    pub(crate) fn finalize(self) {
+        if self.enabled {
+            self.builder.finalize();
+        }
+    }
+
+    fn get_file(&self, file_id: FileId) -> DIFile<'ctx> {
+        self.files.get(&file_id).copied().unwrap_or_else(|| {
+            self.files
+                .values()
+                .next()
+                .copied()
+                .unwrap_or_else(|| self.builder.create_file("unknown.g", "."))
+        })
+    }
+
+    fn span_to_line_col(&self, span: &Span) -> Option<(u32, u32)> {
+        if span.is_dummy() {
+            return None;
+        }
+        let file_id = span.file;
+        let (_path, _source) = self.source_map.get(&file_id)?;
+        let offset: usize = span.lo.to_usize();
+
+        // Use the precomputed line table.
+        let starts = self.line_tables.get(&file_id)?;
+        // binary search for the line.
+        let line_idx = match starts.binary_search(&offset) {
+            Ok(idx) => idx,
+            Err(idx) => idx - 1,
+        };
+        if line_idx >= starts.len() {
+            return None;
+        }
+        let line = line_idx as u32 + 1;
+        let col = offset - starts[line_idx];
+        Some((line, col as u32 + 1))
+    }
+    #[cfg(test)]
     pub(crate) fn debug_type_for_ty(
         &mut self,
         context: &'ctx Context,
         ty: glyim_type::Ty,
-        ty_ctx: &TyCtx,
+        ty_ctx: &glyim_type::TyCtx,
     ) -> DIType<'ctx> {
         use glyim_type::{GenericArg, TyKind};
         let target = TargetInfo::default();
@@ -234,9 +279,9 @@ impl<'ctx> DebugInfoCtx<'ctx> {
             TyKind::Ref(region, inner, mutability) => {
                 let inner_di = self.debug_type_for_ty(context, *inner, ty_ctx);
                 let name = if mutability.is_mut() {
-                    format!("&mut {:?}", region)
+                    format!("&mut {region:?}")
                 } else {
-                    format!("&{:?}", region)
+                    format!("&{region:?}")
                 };
                 // A reference is a real DWARF pointer to its pointee type.
                 self.builder
@@ -246,9 +291,9 @@ impl<'ctx> DebugInfoCtx<'ctx> {
             TyKind::RawPtr(inner, mutability) => {
                 let inner_di = self.debug_type_for_ty(context, *inner, ty_ctx);
                 let name = if mutability.is_mut() {
-                    format!("*mut {:?}", inner_di)
+                    format!("*mut {inner_di:?}")
                 } else {
-                    format!("*const {:?}", inner_di)
+                    format!("*const {inner_di:?}")
                 };
                 // A raw pointer is a real DWARF pointer to its pointee type.
                 self.builder
@@ -271,7 +316,7 @@ impl<'ctx> DebugInfoCtx<'ctx> {
                 self.builder
                     .create_struct_type(
                         self.compile_unit_scope,
-                        &format!("[{:?}]", elem_di),
+                        &format!("[{elem_di:?}]"),
                         file,
                         0,
                         128,
@@ -422,7 +467,7 @@ impl<'ctx> DebugInfoCtx<'ctx> {
                             .builder
                             .create_union_type(
                                 self.compile_unit_scope,
-                                &format!("{}_variants", name),
+                                &format!("{name}_variants"),
                                 file,
                                 0,
                                 size_bits,
@@ -590,15 +635,15 @@ impl<'ctx> DebugInfoCtx<'ctx> {
         di_type
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     pub(crate) fn declare_local(
         &mut self,
         context: &'ctx Context,
         alloca: inkwell::values::PointerValue<'ctx>,
-        var_info: &VarDebugInfo,
+        var_info: &glyim_mir::VarDebugInfo,
         ty: glyim_type::Ty,
         span: glyim_span::Span,
-        ty_ctx: &TyCtx,
+        ty_ctx: &glyim_type::TyCtx,
         block: inkwell::basic_block::BasicBlock<'ctx>,
     ) {
         if !self.enabled || self.subprogram.is_none() {
@@ -650,44 +695,5 @@ impl<'ctx> DebugInfoCtx<'ctx> {
                 block.as_mut_ptr(),
             );
         }
-    }
-
-    pub(crate) fn finalize(self) {
-        if self.enabled {
-            self.builder.finalize();
-        }
-    }
-
-    fn get_file(&self, file_id: FileId) -> DIFile<'ctx> {
-        self.files.get(&file_id).copied().unwrap_or_else(|| {
-            self.files
-                .values()
-                .next()
-                .copied()
-                .unwrap_or_else(|| self.builder.create_file("unknown.g", "."))
-        })
-    }
-
-    fn span_to_line_col(&self, span: &Span) -> Option<(u32, u32)> {
-        if span.is_dummy() {
-            return None;
-        }
-        let file_id = span.file;
-        let (_path, _source) = self.source_map.get(&file_id)?;
-        let offset: usize = span.lo.to_usize();
-
-        // Use the precomputed line table.
-        let starts = self.line_tables.get(&file_id)?;
-        // binary search for the line.
-        let line_idx = match starts.binary_search(&offset) {
-            Ok(idx) => idx,
-            Err(idx) => idx - 1,
-        };
-        if line_idx >= starts.len() {
-            return None;
-        }
-        let line = line_idx as u32 + 1;
-        let col = offset - starts[line_idx];
-        Some((line, col as u32 + 1))
     }
 }

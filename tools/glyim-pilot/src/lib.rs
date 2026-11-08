@@ -1,5 +1,5 @@
 //! Crate root.
-#[allow(missing_docs)]
+/// Applier mod.
 pub mod applier;
 /// cli.
 pub mod cli;
@@ -16,7 +16,7 @@ pub mod domain_types;
 pub mod error;
 /// gates.
 pub mod gates;
-/// git_ops.
+/// `git_ops`.
 pub mod git_ops;
 /// metrics.
 pub mod metrics;

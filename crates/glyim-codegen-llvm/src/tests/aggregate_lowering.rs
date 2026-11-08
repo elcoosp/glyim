@@ -124,12 +124,10 @@ fn u05_t02_array_literal_lowered_to_llvm_array() {
 
     assert!(
         ir.contains("[3 x i32]"),
-        "IR should contain array type [3 x i32], got:\n{}",
-        ir
+        "IR should contain array type [3 x i32], got:\n{ir}"
     );
     assert!(
         ir.contains("insertvalue"),
-        "IR should contain insertvalue for array construction, got:\n{}",
-        ir
+        "IR should contain insertvalue for array construction, got:\n{ir}"
     );
 }

@@ -23,3 +23,6 @@ windows-sys = { version = "0.61", features = [
 
 [dev-dependencies]
 libc = "0.2"
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true

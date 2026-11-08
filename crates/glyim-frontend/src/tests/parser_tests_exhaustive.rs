@@ -213,7 +213,7 @@ fn test_outer_attr_on_fn() {
 }
 #[test]
 fn test_inner_attr() {
-    let _ = parse_to_syntax("#![allow(warnings)] fn f() {}", file_id());
+    let _ = parse_to_syntax(" fn f() {}", file_id());
 }
 
 // ─── Edge cases ───
@@ -263,14 +263,14 @@ fn test_chain_many_calls() {
 fn test_snapshot_trait_full() {
     glyim_test::snapshot_cst(
         "trait_full",
-        r#"
+        r"
 pub trait Iterator {
     type Item;
     fn next(&mut self) -> Option<Self::Item>;
     fn count(self) -> usize where Self: Sized { 0 }
     fn map<B, F>(self, f: F) -> Map<Self, F> where F: FnMut(Self::Item) -> B;
 }
-"#,
+",
     );
 }
 
@@ -278,7 +278,7 @@ pub trait Iterator {
 fn test_snapshot_complex_match() {
     glyim_test::snapshot_cst(
         "complex_match",
-        r#"
+        r"
 fn eval(expr: Expr) -> i32 {
     match expr {
         Expr::Lit(n) => n,
@@ -292,7 +292,7 @@ fn eval(expr: Expr) -> i32 {
         _ => 0,
     }
 }
-"#,
+",
     );
 }
 

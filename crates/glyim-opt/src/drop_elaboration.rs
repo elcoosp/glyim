@@ -1,5 +1,3 @@
-#![allow(clippy::needless_range_loop)]
-#![allow(clippy::unused_enumerate_index)]
 //! Drop elaboration: inserts drop flags and conditional branches around `Drop` terminators.
 //!
 //! Plan §15.2: array drops are replaced with a loop that drops each element.
@@ -56,13 +54,13 @@ impl MaybeInitialized {
         // Entry block: params (locals 0..=arg_count) are initialized;
         // every other local is not yet initialized on entry.
         for (i, slot) in entry[0].iter_mut().enumerate() {
-            *slot = i <= body.arg_count as usize;
+            *slot = i <= body.arg_count;
         }
         let mut queue = std::collections::VecDeque::new();
         let mut in_queue = vec![false; num_blocks];
-        for i in 0..num_blocks {
+        for (i, queued) in in_queue.iter_mut().enumerate() {
             queue.push_back(i);
-            in_queue[i] = true;
+            *queued = true;
         }
         while let Some(bb_idx) = queue.pop_front() {
             in_queue[bb_idx] = false;
@@ -176,7 +174,7 @@ impl DropFlags {
     }
 
     fn create_flags(&mut self, ctx: &mut TyCtxMut, body: &mut Body) {
-        for flag_opt in self.flag_for_local.iter_mut() {
+        for flag_opt in &mut self.flag_for_local {
             if flag_opt.is_some() {
                 let flag_local = body.locals.push(LocalDecl {
                     ty: ctx.bool_ty(),
@@ -409,7 +407,7 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
                     if len == 0 {
                         TerminatorKind::Goto { target: *target }
                     } else {
-                        let per_element = flags.per_element.get(&place.local).cloned();
+                        let per_element = flags.per_element.get(&place.local).copied();
                         let idx_local = body.locals.push(LocalDecl {
                             ty: count.ty,
                             mutability: Mutability::Mut,
@@ -434,40 +432,38 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
                 } else if place.projection.is_empty() {
                     let local = place.local;
                     let definitely_init = analysis.is_definitely_initialized(old_bb, local);
-                    if !definitely_init {
-                        if let Some(flag_local) = flags.get_flag(local) {
-                            let drop_block_idx = new_blocks.len();
-                            let drop_block = BasicBlockIdx::from_raw(drop_block_idx as u32);
-                            let clear_flag = DropFlags::set_flag_stmt(
-                                flag_local,
-                                false,
-                                terminator.source_info.span,
-                                &tc,
-                            );
-                            let drop_block_data = BasicBlockData {
-                                statements: vec![clear_flag],
-                                terminator: Terminator {
-                                    kind: TerminatorKind::Drop {
-                                        place: place.clone(),
-                                        target: *target,
-                                        cleanup: *cleanup,
-                                    },
-                                    source_info: terminator.source_info.clone(),
+                    if definitely_init {
+                        TerminatorKind::Drop {
+                            place: place.clone(),
+                            target: *target,
+                            cleanup: *cleanup,
+                        }
+                    } else if let Some(flag_local) = flags.get_flag(local) {
+                        let drop_block_idx = new_blocks.len();
+                        let drop_block = BasicBlockIdx::from_raw(drop_block_idx as u32);
+                        let clear_flag = DropFlags::set_flag_stmt(
+                            flag_local,
+                            false,
+                            terminator.source_info.span,
+                            &tc,
+                        );
+                        let drop_block_data = BasicBlockData {
+                            statements: vec![clear_flag],
+                            terminator: Terminator {
+                                kind: TerminatorKind::Drop {
+                                    place: place.clone(),
+                                    target: *target,
+                                    cleanup: *cleanup,
                                 },
-                                is_cleanup: old_block.is_cleanup,
-                            };
-                            new_blocks.push(drop_block_data);
-                            TerminatorKind::SwitchInt {
-                                discr: Operand::Copy(Place::new(flag_local)),
-                                switch_ty: tc.bool_ty(),
-                                targets: SwitchTargets::if_switch(drop_block, *target),
-                            }
-                        } else {
-                            TerminatorKind::Drop {
-                                place: place.clone(),
-                                target: *target,
-                                cleanup: *cleanup,
-                            }
+                                source_info: terminator.source_info.clone(),
+                            },
+                            is_cleanup: old_block.is_cleanup,
+                        };
+                        new_blocks.push(drop_block_data);
+                        TerminatorKind::SwitchInt {
+                            discr: Operand::Copy(Place::new(flag_local)),
+                            switch_ty: tc.bool_ty(),
+                            targets: SwitchTargets::if_switch(drop_block, *target),
                         }
                     } else {
                         TerminatorKind::Drop {

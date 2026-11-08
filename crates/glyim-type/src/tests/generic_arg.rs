@@ -1,4 +1,4 @@
-//! Tests for GenericArg, Region, and related types.
+//! Tests for `GenericArg`, Region, and related types.
 
 use glyim_core::primitives::UintTy;
 
@@ -50,8 +50,8 @@ fn generic_arg_clone() {
 #[test]
 fn generic_arg_debug() {
     let arg = GenericArg::Ty(Ty::BOOL);
-    let debug = format!("{:?}", arg);
-    assert!(debug.contains("Ty") || debug.contains("BOOL") || debug.contains("3"));
+    let debug = format!("{arg:?}");
+    assert!(debug.contains("Ty") || debug.contains("BOOL") || debug.contains('3'));
 }
 
 // --- Region ---
@@ -112,7 +112,7 @@ fn region_clone() {
 #[test]
 fn region_debug() {
     let r = Region::Static;
-    let debug = format!("{:?}", r);
+    let debug = format!("{r:?}");
     assert!(debug.contains("Static"));
 }
 

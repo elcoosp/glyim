@@ -46,3 +46,6 @@ pretty_assertions = "1"
 [features]
 default = []
 prometheus = ["dep:prometheus"]
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true

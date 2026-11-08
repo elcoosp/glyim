@@ -5,7 +5,7 @@
 //! MIR lower) and asserts:
 //!   1. **Zero compile diagnostics** — the generated suspend/resume state
 //!      machine type-checks and lowers cleanly (M4: real multi-await codegen,
-//!      the deliverable of GLYIM_DESTUB_PLAN Phase 3). Previously this shape
+//!      the deliverable of `GLYIM_DESTUB_PLAN` Phase 3). Previously this shape
 //!      fell through to the `async-v2` diagnostic (error 61) and never produced
 //!      a working state machine; now it is a genuine `Start`/`S0`/…/`Done`
 //!      machine with a `loop { match self.state { .. } }` `poll` body.
@@ -42,7 +42,7 @@ fn compile_async(src: &str) -> Result<Vec<Arc<Body>>, String> {
     let call_id = CALL_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let unique_tag = format!("{}_{}", std::process::id(), call_id);
     let dir = std::env::temp_dir();
-    let path = dir.join(format!("glyim_async_m5_{}.g", unique_tag));
+    let path = dir.join(format!("glyim_async_m5_{unique_tag}.g"));
 
     {
         let mut f = std::fs::File::create(&path).map_err(|e| e.to_string())?;
@@ -70,7 +70,7 @@ fn compile_async(src: &str) -> Result<Vec<Arc<Body>>, String> {
 /// Find the generated `poll` body by structure: it is the MIR body that is a
 /// suspend/resume state machine (contains a `SwitchInt` on the enum state, a
 /// loop back-edge, and constructs both `Poll::Pending` and `Poll::Ready`).
-/// `block_on`'s body also has a SwitchInt + back-edge, but it only *patterns*
+/// `block_on`'s body also has a `SwitchInt` + back-edge, but it only *patterns*
 /// `Poll::Pending`, never *constructs* it, so the Pending-construction
 /// requirement reliably selects the generated `poll`.
 fn find_poll_body(bodies: &[Arc<Body>]) -> Option<&Arc<Body>> {
@@ -152,7 +152,7 @@ fn successor_idxs(kind: &TerminatorKind) -> Vec<usize> {
 #[test]
 fn m5_two_step_multi_await_compiles_and_lowers_to_state_machine() {
     // `two_step(a, b)`: x = dep(a); y = dep(b); x + y  => two `.await`s.
-    let src = r#"
+    let src = r"
 enum Poll<T> { Ready(T), Pending }
 trait Future {
     type Output;
@@ -176,7 +176,7 @@ fn main() -> i32 {
     let f = two_step(1, 2);
     block_on(f)
 }
-"#;
+";
     let bodies = compile_async(src).expect("two_step must compile with zero diagnostics (M4)");
     let poll = find_poll_body(&bodies).expect("generated two poll body must exist");
     // The body named after the async fn is the *future's poll* once desugared;
@@ -188,7 +188,7 @@ fn main() -> i32 {
 fn m5_chain_multi_await_compiles_and_lowers_to_state_machine() {
     // Chained: `two(a)`: x = dep(a); y = dep(x); x + y — two `.await`s where
     // the second depends on the first's result (forcing state capture).
-    let src = r#"
+    let src = r"
 enum Poll<T> { Ready(T), Pending }
 trait Future {
     type Output;
@@ -208,7 +208,7 @@ fn main() -> i32 {
     let f = two(5);
     block_on(f)
 }
-"#;
+";
     let bodies = compile_async(src).expect("two must compile with zero diagnostics (M4)");
     let poll = find_poll_body(&bodies).expect("generated two poll body must exist");
     assert_is_state_machine(poll, "two poll");
@@ -225,7 +225,7 @@ fn m5_two_step_runtime_returns_3() {
     // receiver (the `VirtualMethod` const is devirtualized to a static
     // `Fn(two_poll)` during the mono pass). The interpreter then drives the
     // generated poll state machine to completion and returns 1+2 = 3.
-    let src = r#"
+    let src = r"
 enum Poll<T> { Ready(T), Pending }
 trait Future {
     type Output;
@@ -249,7 +249,7 @@ fn main() -> i32 {
     let f = two_step(1, 2);
     block_on(f)
 }
-"#;
+";
     let bodies = compile_async(src).expect("two_step must compile with zero diagnostics (M4)");
     // Structural guard: the generated poll body must still be a real machine.
     let poll = find_poll_body(&bodies).expect("generated two_step poll body must exist");
@@ -264,7 +264,7 @@ fn main() -> i32 {
     // by DefId, exactly as the codegen path does, so `block_on<F>` becomes
     // `block_on<TwoFuture>` with a static `two_poll` call.
     let mono_bodies = comp.monomorphize(main_fn_def_id);
-    std::fs::write("/tmp/mono_dump.txt", format!("{:#?}", mono_bodies)).unwrap();
+    std::fs::write("/tmp/mono_dump.txt", format!("{mono_bodies:#?}")).unwrap();
 
     let main_body = mono_bodies
         .iter()
@@ -296,7 +296,7 @@ fn compile_async_full(src: &str) -> Result<glyim_pipeline::MirCompilation, Strin
     let call_id = CALL_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let unique_tag = format!("{}_{}", std::process::id(), call_id);
     let dir = std::env::temp_dir();
-    let path = dir.join(format!("glyim_async_m5_run_{}.g", unique_tag));
+    let path = dir.join(format!("glyim_async_m5_run_{unique_tag}.g"));
 
     {
         let mut f = std::fs::File::create(&path).map_err(|e| e.to_string())?;
@@ -343,7 +343,7 @@ fn p2_1_await_inside_loop_suspends_and_resumes_runtime_returns_3() {
     // *executing* `block_on(countdown(3))` in the MIR interpreter: the future
     // must suspend on each iteration's `dep(i).await` and resume, accumulating
     // 0+1+2 = 3. A hang or a wrong value would mean a miscompile.
-    let src = r#"
+    let src = r"
 enum Poll<T> { Ready(T), Pending }
 trait Future {
     type Output;
@@ -372,7 +372,7 @@ fn main() -> i32 {
     let f = countdown(3);
     block_on(f)
 }
-"#;
+";
     let bodies = compile_async(src)
         .expect("countdown loop-await must compile with zero diagnostics (M4/M5)");
     // Structural guard: the generated poll body must be a real machine.
@@ -386,7 +386,7 @@ fn main() -> i32 {
     let main_fn_def_id = glyim_core::def_id::FnDefId::from_raw(main_def_id.local_id.to_raw());
 
     let mono_bodies = comp.monomorphize(main_fn_def_id);
-    std::fs::write("/tmp/mono_dump.txt", format!("{:#?}", mono_bodies)).unwrap();
+    std::fs::write("/tmp/mono_dump.txt", format!("{mono_bodies:#?}")).unwrap();
 
     let main_body = mono_bodies
         .iter()
@@ -416,7 +416,7 @@ fn hir11_statements_between_awaits_execute_runtime() {
     // HIR-11: a statement *between* two awaits must run on the first poll's
     // Ready path, and a statement *after* the last await must run before the
     // tail. Pre-fix both were dropped (`unresolved name mid` / `out`).
-    let src = r#"
+    let src = r"
 enum Poll<T> { Ready(T), Pending }
 trait Future {
     type Output;
@@ -442,7 +442,7 @@ fn main() -> i32 {
     let f = two_step(1, 2);
     block_on(f)
 }
-"#;
+";
     // Compile (pre-fix: `unresolved name mid` / `out`).
     let bodies = compile_async(src).expect("two_step with between-await stmts must compile");
     let poll = find_poll_body(&bodies).expect("generated poll body must exist");

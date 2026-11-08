@@ -112,7 +112,7 @@ fn compute_block_summaries(body: &Body) -> BlockSummary {
 /// Compute liveness of all locals using a worklist-driven backward dataflow
 /// analysis on the CFG.
 ///
-/// **Complexity:** O(|blocks| × |locals| / word_size) per reprocessing, but
+/// **Complexity:** O(|blocks| × |locals| / `word_size`) per reprocessing, but
 /// the worklist ensures each block is only reprocessed when its successors'
 /// `live_in` sets actually change.
 /// Compute the set of locals live on exit from each basic block.
@@ -209,7 +209,7 @@ pub(crate) fn compute_stmt_liveness(
     let capacity = local_capacity(body);
 
     let mut liveness = vec![BitSet::with_capacity(capacity); num_stmts + 1];
-    liveness[num_stmts] = live_out.clone();
+    liveness[num_stmts].clone_from(live_out);
 
     for i in (0..num_stmts).rev() {
         let mut current = liveness[i + 1].clone();

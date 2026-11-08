@@ -52,7 +52,7 @@ impl GsxCode {
 /// One GSX compile-time diagnostic with an optional fix-it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GsxDiagnostic {
-    /// Struct.
+    /// `Struct`.
     pub code: GsxCode,
     /// Human message (`error[G0201]: …`).
     pub message: String,
@@ -73,12 +73,14 @@ impl GsxDiagnostic {
     }
 
     /// Attach a byte range.
+    #[must_use]
     pub fn at(mut self, range: (usize, usize)) -> Self {
         self.range = Some(range);
         self
     }
 
     /// Attach a fix-it suggestion.
+    #[must_use]
     pub fn with_fixit(mut self, fixit: impl Into<String>) -> Self {
         self.fixit = Some(fixit.into());
         self

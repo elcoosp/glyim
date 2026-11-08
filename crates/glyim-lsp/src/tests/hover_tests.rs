@@ -28,7 +28,6 @@ fn hover_shows_type_signature_and_doc() {
         SyntaxContext::ROOT,
     );
     let source_map = crate::SourceMap::new(
-        path.clone(),
         file_id,
         "fn add(a: i32, b: i32) -> i32 { a + b }".to_string(),
     );
@@ -73,7 +72,7 @@ fn hover_shows_type_signature_and_doc() {
                 character: 4,
             },
         },
-        work_done_progress_params: Default::default(),
+        work_done_progress_params: WorkDoneProgressParams::default(),
     };
     let hover = provide_hover(&analysis, file_map, &params);
     assert!(hover.is_some());
@@ -107,7 +106,7 @@ fn hover_includes_definition_preview() {
         ByteIdx::from_raw(39),
         SyntaxContext::ROOT,
     );
-    let source_map = crate::SourceMap::new(path.clone(), file_id, source);
+    let source_map = crate::SourceMap::new(file_id, source);
     analysis.source_maps.write().insert(file_id, source_map);
 
     let sym = SymbolInfo {
@@ -149,7 +148,7 @@ fn hover_includes_definition_preview() {
                 character: 0,
             },
         },
-        work_done_progress_params: Default::default(),
+        work_done_progress_params: WorkDoneProgressParams::default(),
     };
     let hover = provide_hover(&analysis, file_map, &params);
     let markup = match hover.expect("hover should be present").contents {

@@ -20,7 +20,7 @@ use lsp_types::*;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-/// build_router.
+/// `build_router`.
 pub fn build_router(
     db: Arc<AnalysisDatabase>,
     _analysis_tx: mpsc::Sender<AnalysisMessage>,
@@ -32,7 +32,7 @@ pub fn build_router(
 
     // Initialize
     let db_init = db.clone();
-    router.request::<Initialize, _>(move |_, _params: InitializeParams| {
+    router.request::<Initialize, _>(move |(), _params: InitializeParams| {
         let _db = db_init.clone();
         async move {
             let capabilities = ServerCapabilities {
@@ -70,11 +70,11 @@ pub fn build_router(
     });
 
     // Shutdown
-    router.request::<Shutdown, _>(move |_, _: ()| async move { Ok(()) });
+    router.request::<Shutdown, _>(move |(), (): ()| async move { Ok(()) });
 
     // Completion
     let db_comp = db.clone();
-    router.request::<Completion, _>(move |_, params: CompletionParams| {
+    router.request::<Completion, _>(move |(), params: CompletionParams| {
         let db = db_comp.clone();
         async move {
             let guard = db.file_map.read();
@@ -84,7 +84,7 @@ pub fn build_router(
 
     // Hover
     let db_hover = db.clone();
-    router.request::<HoverRequest, _>(move |_, params: HoverParams| {
+    router.request::<HoverRequest, _>(move |(), params: HoverParams| {
         let db = db_hover.clone();
         async move {
             let guard = db.file_map.read();
@@ -94,7 +94,7 @@ pub fn build_router(
 
     // Goto Definition
     let db_def = db.clone();
-    router.request::<GotoDefinition, _>(move |_, params: GotoDefinitionParams| {
+    router.request::<GotoDefinition, _>(move |(), params: GotoDefinitionParams| {
         let db = db_def.clone();
         async move {
             let guard = db.file_map.read();
@@ -104,7 +104,7 @@ pub fn build_router(
 
     // Find References
     let db_ref = db.clone();
-    router.request::<References, _>(move |_, params: ReferenceParams| {
+    router.request::<References, _>(move |(), params: ReferenceParams| {
         let db = db_ref.clone();
         async move {
             let guard = db.file_map.read();
@@ -114,7 +114,7 @@ pub fn build_router(
 
     // Formatting
     let db_fmt = db.clone();
-    router.request::<Formatting, _>(move |_, params: DocumentFormattingParams| {
+    router.request::<Formatting, _>(move |(), params: DocumentFormattingParams| {
         let db = db_fmt.clone();
         async move {
             let _guard = db.file_map.read();
@@ -124,7 +124,7 @@ pub fn build_router(
 
     // Rename
     let db_rename = db.clone();
-    router.request::<Rename, _>(move |_, params: RenameParams| {
+    router.request::<Rename, _>(move |(), params: RenameParams| {
         let db = db_rename.clone();
         async move {
             let guard = db.file_map.read();
@@ -134,14 +134,14 @@ pub fn build_router(
 
     // FoldingRange - using FoldingRangeRequest
     let db_fold = db.clone();
-    router.request::<FoldingRangeRequest, _>(move |_, params: FoldingRangeParams| {
+    router.request::<FoldingRangeRequest, _>(move |(), params: FoldingRangeParams| {
         let db = db_fold.clone();
         async move { Ok(provide_folding_ranges(&db, &params)) }
     });
 
     // Code Action
     let db_action = db.clone();
-    router.request::<CodeActionRequest, _>(move |_, params: CodeActionParams| {
+    router.request::<CodeActionRequest, _>(move |(), params: CodeActionParams| {
         let db = db_action.clone();
         async move {
             let guard = db.file_map.read();
@@ -153,7 +153,7 @@ pub fn build_router(
     // routed nothing; the function and its tests existed but no client could
     // reach it).
     let db_ws = db.clone();
-    router.request::<WorkspaceSymbolRequest, _>(move |_, params: WorkspaceSymbolParams| {
+    router.request::<WorkspaceSymbolRequest, _>(move |(), params: WorkspaceSymbolParams| {
         let db = db_ws.clone();
         async move {
             Ok(Some(WorkspaceSymbolResponse::Flat(
@@ -164,7 +164,7 @@ pub fn build_router(
 
     // Document Symbols
     let db_doc = db.clone();
-    router.request::<DocumentSymbolRequest, _>(move |_, params: DocumentSymbolParams| {
+    router.request::<DocumentSymbolRequest, _>(move |(), params: DocumentSymbolParams| {
         let db = db_doc.clone();
         async move {
             let guard = db.file_map.read();
@@ -178,7 +178,7 @@ pub fn build_router(
     // full text (this server negotiates FULL sync) via `analysis_tx`.
     let db_open = db.clone();
     let tx_open = _analysis_tx.clone();
-    router.notification::<DidOpenTextDocument>(move |_, params: DidOpenTextDocumentParams| {
+    router.notification::<DidOpenTextDocument>(move |(), params: DidOpenTextDocumentParams| {
         let path = path_from_uri(&params.text_document.uri);
         let content = params.text_document.text;
         let version = params.text_document.version;
@@ -193,7 +193,7 @@ pub fn build_router(
 
     let db_change = db.clone();
     let tx_change = _analysis_tx.clone();
-    router.notification::<DidChangeTextDocument>(move |_, params: DidChangeTextDocumentParams| {
+    router.notification::<DidChangeTextDocument>(move |(), params: DidChangeTextDocumentParams| {
         // FULL sync: the last content change carries the whole document.
         let path = path_from_uri(&params.text_document.uri);
         let version = params.text_document.version;
@@ -210,9 +210,9 @@ pub fn build_router(
 
     let db_close = db.clone();
     let tx_close = _analysis_tx.clone();
-    router.notification::<DidCloseTextDocument>(move |_, params: DidCloseTextDocumentParams| {
+    router.notification::<DidCloseTextDocument>(move |(), params: DidCloseTextDocumentParams| {
         let path = path_from_uri(&params.text_document.uri);
-        let _ = db_close.file_map.write().remove(&path);
+        let () = db_close.file_map.write().remove(&path);
         let _ = tx_close.try_send(AnalysisMessage::FileClosed { path });
         ControlFlow::Continue(())
     });

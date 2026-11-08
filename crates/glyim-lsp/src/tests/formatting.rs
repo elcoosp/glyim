@@ -10,7 +10,7 @@ fn test_format_document() {
     let params = DocumentFormattingParams {
         text_document: TextDocumentIdentifier { uri: uri.clone() },
         options: FormattingOptions::default(),
-        work_done_progress_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
     };
     let edits = format_document(&db, &params);
     assert!(edits.is_some());

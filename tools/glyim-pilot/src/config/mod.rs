@@ -4,7 +4,7 @@ use crate::error::PilotError;
 use std::path::Path;
 pub use types::*;
 
-/// load_config.
+/// `load_config`.
 pub fn load_config(project_root: &Path) -> Result<PilotConfig, PilotError> {
     let config_path = project_root.join(".glyim-pilot.toml");
     let content = std::fs::read_to_string(&config_path)

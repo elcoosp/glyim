@@ -94,6 +94,7 @@ pub enum GitSpec {
 
 impl GitSpec {
     /// Human-readable label used for diagnostics and lockfile round-tripping.
+    #[must_use]
     pub fn label(&self) -> String {
         match self {
             GitSpec::Branch(b) => format!("branch {b}"),
@@ -139,6 +140,7 @@ pub struct DependencyDetail {
 
 impl Dependency {
     /// Return the version requirement, if any.
+    #[must_use]
     pub fn version(&self) -> Option<&str> {
         match self {
             Dependency::Simple(v) => Some(v),
@@ -147,6 +149,7 @@ impl Dependency {
     }
 
     /// Return the local path, if any.
+    #[must_use]
     pub fn path(&self) -> Option<&Path> {
         match self {
             Dependency::Simple(_) => None,
@@ -155,6 +158,7 @@ impl Dependency {
     }
 
     /// Return the git URL, if any.
+    #[must_use]
     pub fn git(&self) -> Option<&str> {
         match self {
             Dependency::Simple(_) => None,
@@ -166,6 +170,7 @@ impl Dependency {
     ///
     /// Plan §23.2: `rev` takes precedence over `tag` over `branch`; if none are
     /// set but a `git` URL is present, the default branch is used.
+    #[must_use]
     pub fn git_spec(&self) -> Option<GitSpec> {
         match self {
             Dependency::Simple(_) => None,
@@ -215,6 +220,7 @@ impl GlyipToml {
     }
 
     /// Get the project name.
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.package.name
     }

@@ -2,24 +2,24 @@ use crate::ty::{RegionVid, UniverseIndex};
 use glyim_core::interner::Name;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// Region.
+/// `Region`.
 pub enum Region {
-    /// Variant.
+    /// `Variant`.
     Static,
-    #[allow(missing_docs)]
+    /// `EarlyBound`.
     EarlyBound(EarlyBoundRegion),
-    #[allow(missing_docs)]
+    /// `LateBound`.
     LateBound(DebruijnIndex, u32, BoundRegionKind),
-    #[allow(missing_docs)]
+    /// `Var`.
     Var(RegionVid),
     /// A placeholder region created when instantiating higher-ranked trait bounds.
     /// For example, when checking `for<'a> T: Trait<'a>`, we replace the bound
     /// region `'a` with a `PlaceholderRegion` and verify the predicate holds
     /// for this arbitrary region.
     Placeholder(PlaceholderRegion),
-    /// Variant.
+    /// `Variant`.
     Erased,
-    /// Variant.
+    /// `Variant`.
     Error,
 }
 
@@ -37,26 +37,28 @@ pub struct PlaceholderRegion {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// EarlyBoundRegion.
+/// `EarlyBoundRegion`.
 pub struct EarlyBoundRegion {
-    /// Struct.
+    /// `Struct`.
     pub index: u32,
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// DebruijnIndex.
+/// `DebruijnIndex`.
 pub struct DebruijnIndex(pub u32);
 
 impl DebruijnIndex {
-    /// INNERMOST.
+    /// `INNERMOST`.
     pub const INNERMOST: DebruijnIndex = DebruijnIndex(0);
-    /// shifted_in.
+    /// `shifted_in`.
+    #[must_use]
     pub fn shifted_in(self) -> Self {
         DebruijnIndex(self.0 + 1)
     }
-    /// shifted_out.
+    /// `shifted_out`.
+    #[must_use]
     pub fn shifted_out(self) -> Option<Self> {
         if self.0 > 0 {
             Some(DebruijnIndex(self.0 - 1))
@@ -67,12 +69,12 @@ impl DebruijnIndex {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// BoundRegionKind.
+/// `BoundRegionKind`.
 pub enum BoundRegionKind {
-    #[allow(missing_docs)]
+    /// `BrAnon`.
     BrAnon(u32),
-    #[allow(missing_docs)]
+    /// `BrNamed`.
     BrNamed(Name),
-    /// Variant.
+    /// `Variant`.
     BrEnv,
 }

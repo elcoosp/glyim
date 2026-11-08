@@ -26,9 +26,9 @@ fn contains_param(ctx: &glyim_type::TyCtx, ty: Ty) -> bool {
     }
 }
 
-impl<'a> MirBuilder<'a> {
+impl MirBuilder<'_> {
     // ---- Statement lowering ----
-    /// lower_stmt.
+    /// `lower_stmt`.
     pub fn lower_stmt(&mut self, stmt: &thir::Stmt) {
         match stmt {
             thir::Stmt::Let {
@@ -99,7 +99,7 @@ impl<'a> MirBuilder<'a> {
     }
 
     // ---- Expression → Rvalue lowering ----
-    /// lower_expr_to_rvalue.
+    /// `lower_expr_to_rvalue`.
     pub fn lower_expr_to_rvalue(&mut self, expr: &thir::Expr) -> glyim_mir::Rvalue {
         match &expr.kind {
             thir::ExprKind::Literal(lit) => {
@@ -121,8 +121,8 @@ impl<'a> MirBuilder<'a> {
                 // The range type is resolved during type-checking to
                 // `Adt(1000|1001, [T])`; reuse its substitution so the element
                 // type lines up with the operand types.
-                let (substs, elem_ty) = match self.ctx.ty_ctx().ty_kind(expr.ty) {
-                    glyim_type::TyKind::Adt(_, s) => {
+                let (substs, elem_ty) =
+                    if let glyim_type::TyKind::Adt(_, s) = self.ctx.ty_ctx().ty_kind(expr.ty) {
                         let args = self.ctx.ty_ctx().substitution_args(*s);
                         let elem = args
                             .first()
@@ -132,8 +132,7 @@ impl<'a> MirBuilder<'a> {
                             })
                             .unwrap_or_else(|| self.ctx.ty_ctx().error_ty());
                         (*s, elem)
-                    }
-                    _ => {
+                    } else {
                         let elem = start
                             .as_ref()
                             .map(|e| e.ty)
@@ -142,8 +141,7 @@ impl<'a> MirBuilder<'a> {
                         // No resolved substitution available; emit an empty one
                         // and rely on the element type for operand shapes.
                         (glyim_type::Substitution::empty(), elem)
-                    }
-                };
+                    };
 
                 let start_op = match start {
                     Some(e) => self.lower_expr_to_operand(e),
@@ -182,9 +180,10 @@ impl<'a> MirBuilder<'a> {
                 glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(place))
             }
             thir::ExprKind::FnRef(_def_id) => {
-                let (fn_def_id, substs) = match self.ctx.ty_ctx().ty_kind(expr.ty) {
-                    TyKind::FnDef(id, sub) => (id, sub),
-                    _ => {
+                let (fn_def_id, substs) =
+                    if let TyKind::FnDef(id, sub) = self.ctx.ty_ctx().ty_kind(expr.ty) {
+                        (id, sub)
+                    } else {
                         // Typeck must have rejected a non-FnDef callee
                         // (E0609/E0425-style). Reaching this arm means a
                         // typeck diagnostic was suppressed — surface a loud
@@ -199,8 +198,7 @@ impl<'a> MirBuilder<'a> {
                                 span: expr.span,
                             },
                         ));
-                    }
-                };
+                    };
                 glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(glyim_mir::MirConst {
                     kind: glyim_mir::MirConstKind::Fn(*fn_def_id, *substs),
                     ty: expr.ty,
@@ -458,24 +456,23 @@ impl<'a> MirBuilder<'a> {
                             _ => None,
                         });
                     if let Some(t) = ty_arg {
-                        let value: i128 = match name {
-                            "needs_drop" => i128::from(self.ctx.ty_ctx().needs_drop(t)),
-                            _ => {
-                                let lc = glyim_layout::SimpleLayoutComputer::new(
-                                    self.ctx.ty_ctx(),
-                                    TargetInfo::x86_64(),
-                                );
-                                match lc.layout_of(t) {
-                                    Ok(l) => {
-                                        let n = if name == "align_of" {
-                                            l.align.0
-                                        } else {
-                                            l.size.0
-                                        };
-                                        n as i128
-                                    }
-                                    Err(_) => 0,
+                        let value: i128 = if name == "needs_drop" {
+                            i128::from(self.ctx.ty_ctx().needs_drop(t))
+                        } else {
+                            let lc = glyim_layout::SimpleLayoutComputer::new(
+                                self.ctx.ty_ctx(),
+                                TargetInfo::x86_64(),
+                            );
+                            match lc.layout_of(t) {
+                                Ok(l) => {
+                                    let n = if name == "align_of" {
+                                        l.align.0
+                                    } else {
+                                        l.size.0
+                                    };
+                                    i128::from(n)
                                 }
+                                Err(_) => 0,
                             }
                         };
                         let _ = args;
@@ -607,17 +604,13 @@ impl<'a> MirBuilder<'a> {
                         // impl Display)` the call expression's recorded type
                         // is the unresolved impl-Trait `Param(0)`, not `Never`.
                         // Consult the *registered* signature instead.
-                        let sig_returns_never = self
-                            .ctx
-                            .ty_ctx()
-                            .fn_sig(*def_id)
-                            .map(|sig| {
+                        let sig_returns_never =
+                            self.ctx.ty_ctx().fn_sig(*def_id).is_some_and(|sig| {
                                 matches!(
                                     self.ctx.ty_ctx().ty_kind(sig.output),
                                     glyim_type::TyKind::Never
                                 )
-                            })
-                            .unwrap_or(false);
+                            });
                         if sig_returns_never {
                             self.terminate(glyim_mir::TerminatorKind::Unreachable, expr.span);
                         }
@@ -753,8 +746,7 @@ impl<'a> MirBuilder<'a> {
                 let needs_scope_drops = self
                     .block_scopes
                     .last()
-                    .map(|frame| !frame.is_empty())
-                    .unwrap_or(false);
+                    .is_some_and(|frame| !frame.is_empty());
                 if !needs_scope_drops {
                     self.block_scopes.pop();
                     return match tail {
@@ -772,7 +764,7 @@ impl<'a> MirBuilder<'a> {
                 // Otherwise the tail value must be computed *before* the
                 // drops run (the drops end the block), so stage it into a
                 // temp and hand the caller a read of that temp.
-                let tail_ty = tail.as_ref().map(|t| t.ty).unwrap_or(Ty::UNIT);
+                let tail_ty = tail.as_ref().map_or(Ty::UNIT, |t| t.ty);
                 let tail_rvalue = match tail {
                     Some(t) => self.lower_expr_to_rvalue(t),
                     None => {
@@ -1309,167 +1301,159 @@ impl<'a> MirBuilder<'a> {
                         ref_iter_ty: n.ref_iter_ty,
                     })
                     .or_else(|| self.ctx.iterator_next_fn(iter_ty, elem_ty));
-                match iter_info {
-                    Some(iter_info) => {
-                        self.current_block = Some(header_bb);
-                        let ref_iter_local = self.alloc_local(
-                            iter_info.ref_iter_ty,
-                            glyim_core::primitives::Mutability::Mut,
-                            iterable.span,
-                        );
-                        self.push_stmt(
-                            glyim_mir::StatementKind::StorageLive(ref_iter_local),
-                            iterable.span,
-                        );
-                        self.push_stmt(
-                            glyim_mir::StatementKind::Assign(
-                                glyim_mir::Place::new(ref_iter_local),
-                                glyim_mir::Rvalue::Ref(
-                                    glyim_mir::Place::new(iter_local),
-                                    glyim_mir::BorrowKind::Mut {
-                                        // T121-PATCHED [BCK-1]: see above.
-                                        allow_two_phase_borrow: self.lowering_call_arg,
-                                    },
-                                ),
+                if let Some(iter_info) = iter_info {
+                    self.current_block = Some(header_bb);
+                    let ref_iter_local = self.alloc_local(
+                        iter_info.ref_iter_ty,
+                        glyim_core::primitives::Mutability::Mut,
+                        iterable.span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::StorageLive(ref_iter_local),
+                        iterable.span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::Assign(
+                            glyim_mir::Place::new(ref_iter_local),
+                            glyim_mir::Rvalue::Ref(
+                                glyim_mir::Place::new(iter_local),
+                                glyim_mir::BorrowKind::Mut {
+                                    // T121-PATCHED [BCK-1]: see above.
+                                    allow_two_phase_borrow: self.lowering_call_arg,
+                                },
                             ),
-                            iterable.span,
-                        );
-                        let next_fn_const = glyim_mir::MirConst {
-                            kind: glyim_mir::MirConstKind::Fn(
-                                iter_info.fn_def_id,
-                                iter_info.fn_substs,
-                            ),
-                            ty: iter_info.fn_ty,
-                            span: expr.span,
-                        };
-                        let next_fn_op = glyim_mir::Operand::Constant(next_fn_const);
-                        let ref_iter_op =
-                            glyim_mir::Operand::Copy(glyim_mir::Place::new(ref_iter_local));
-                        let option_local = self.alloc_local(
-                            iter_info.option_ty,
-                            glyim_core::primitives::Mutability::Mut,
-                            expr.span,
-                        );
-                        self.push_stmt(
-                            glyim_mir::StatementKind::StorageLive(option_local),
-                            expr.span,
-                        );
-                        let after_call_bb = self.new_block();
-                        self.terminate(
-                            glyim_mir::TerminatorKind::Call {
-                                func: next_fn_op,
-                                args: vec![ref_iter_op],
-                                destination: glyim_mir::Place::new(option_local),
-                                target: Some(after_call_bb),
-                                cleanup: None,
-                            },
-                            expr.span,
-                        );
-                        self.current_block = Some(after_call_bb);
-                        // `next()` yields an `Option<Item>` *aggregate*.
-                        // `SwitchInt` must switch on its discriminant, not the
-                        // whole struct; compute `Rvalue::Discriminant` into a
-                        // local of the declared discriminant type. (Switching
-                        // on the aggregate made codegen load a struct where an
-                        // `IntValue` was expected.)
-                        let discr_local = self.alloc_local(
-                            iter_info.discr_ty,
-                            glyim_core::primitives::Mutability::Not,
-                            expr.span,
-                        );
-                        self.push_stmt(
-                            glyim_mir::StatementKind::StorageLive(discr_local),
-                            expr.span,
-                        );
-                        self.push_stmt(
-                            glyim_mir::StatementKind::Assign(
-                                glyim_mir::Place::new(discr_local),
-                                glyim_mir::Rvalue::Discriminant(glyim_mir::Place::new(
-                                    option_local,
-                                )),
-                            ),
-                            expr.span,
-                        );
-                        let discr_op = glyim_mir::Operand::Copy(glyim_mir::Place::new(discr_local));
-                        let some_bb = self.new_block();
-                        let none_bb = exit_bb;
-                        let switch_targets =
-                            glyim_mir::SwitchTargets::new(Box::new([(1, some_bb)]), none_bb);
-                        self.terminate(
-                            glyim_mir::TerminatorKind::SwitchInt {
-                                discr: discr_op,
-                                switch_ty: iter_info.discr_ty,
-                                targets: switch_targets,
-                            },
-                            expr.span,
-                        );
-                        self.current_block = Some(some_bb);
-                        let payload_place = {
-                            let mut proj = vec![glyim_mir::ProjectionElem::Downcast(
-                                glyim_mir::VariantIdx::from_raw(1),
-                            )];
-                            proj.push(glyim_mir::ProjectionElem::Field(FieldIdx::from_raw(0)));
-                            glyim_mir::Place {
-                                local: option_local,
-                                projection: proj.into_boxed_slice(),
-                            }
-                        };
-                        let payload_local = self.alloc_local(
-                            elem_ty,
-                            glyim_core::primitives::Mutability::Not,
-                            expr.span,
-                        );
-                        self.push_stmt(
-                            glyim_mir::StatementKind::StorageLive(payload_local),
-                            expr.span,
-                        );
-                        self.push_stmt(
-                            glyim_mir::StatementKind::Assign(
-                                glyim_mir::Place::new(payload_local),
-                                glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(payload_place)),
-                            ),
-                            expr.span,
-                        );
-                        self.bind_pattern(
-                            pat,
-                            Some(glyim_mir::Place::new(payload_local)),
-                            Some(glyim_mir::Place::new(payload_local)),
-                            expr.span,
-                        );
-                        let _ = self.lower_expr_to_rvalue(body);
-                        if self.current_block.is_some() {
-                            self.terminate(
-                                glyim_mir::TerminatorKind::Goto { target: header_bb },
-                                body.span,
-                            );
+                        ),
+                        iterable.span,
+                    );
+                    let next_fn_const = glyim_mir::MirConst {
+                        kind: glyim_mir::MirConstKind::Fn(iter_info.fn_def_id, iter_info.fn_substs),
+                        ty: iter_info.fn_ty,
+                        span: expr.span,
+                    };
+                    let next_fn_op = glyim_mir::Operand::Constant(next_fn_const);
+                    let ref_iter_op =
+                        glyim_mir::Operand::Copy(glyim_mir::Place::new(ref_iter_local));
+                    let option_local = self.alloc_local(
+                        iter_info.option_ty,
+                        glyim_core::primitives::Mutability::Mut,
+                        expr.span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::StorageLive(option_local),
+                        expr.span,
+                    );
+                    let after_call_bb = self.new_block();
+                    self.terminate(
+                        glyim_mir::TerminatorKind::Call {
+                            func: next_fn_op,
+                            args: vec![ref_iter_op],
+                            destination: glyim_mir::Place::new(option_local),
+                            target: Some(after_call_bb),
+                            cleanup: None,
+                        },
+                        expr.span,
+                    );
+                    self.current_block = Some(after_call_bb);
+                    // `next()` yields an `Option<Item>` *aggregate*.
+                    // `SwitchInt` must switch on its discriminant, not the
+                    // whole struct; compute `Rvalue::Discriminant` into a
+                    // local of the declared discriminant type. (Switching
+                    // on the aggregate made codegen load a struct where an
+                    // `IntValue` was expected.)
+                    let discr_local = self.alloc_local(
+                        iter_info.discr_ty,
+                        glyim_core::primitives::Mutability::Not,
+                        expr.span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::StorageLive(discr_local),
+                        expr.span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::Assign(
+                            glyim_mir::Place::new(discr_local),
+                            glyim_mir::Rvalue::Discriminant(glyim_mir::Place::new(option_local)),
+                        ),
+                        expr.span,
+                    );
+                    let discr_op = glyim_mir::Operand::Copy(glyim_mir::Place::new(discr_local));
+                    let some_bb = self.new_block();
+                    let none_bb = exit_bb;
+                    let switch_targets =
+                        glyim_mir::SwitchTargets::new(Box::new([(1, some_bb)]), none_bb);
+                    self.terminate(
+                        glyim_mir::TerminatorKind::SwitchInt {
+                            discr: discr_op,
+                            switch_ty: iter_info.discr_ty,
+                            targets: switch_targets,
+                        },
+                        expr.span,
+                    );
+                    self.current_block = Some(some_bb);
+                    let payload_place = {
+                        let mut proj = vec![glyim_mir::ProjectionElem::Downcast(
+                            glyim_mir::VariantIdx::from_raw(1),
+                        )];
+                        proj.push(glyim_mir::ProjectionElem::Field(FieldIdx::from_raw(0)));
+                        glyim_mir::Place {
+                            local: option_local,
+                            projection: proj.into_boxed_slice(),
                         }
-                        self.loop_stack.pop();
-                        self.current_block = Some(exit_bb);
-                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(glyim_mir::MirConst {
-                            kind: glyim_mir::MirConstKind::Unit,
-                            ty: Ty::UNIT,
-                            span: expr.span,
-                        }))
-                    }
-                    None => {
-                        // Simplified fallback: execute the body once and break.
-                        // This is only used in tests where iterator protocol is not available.
-                        self.current_block = Some(header_bb);
-                        // Bind the pattern to a dummy value (the iterable itself).
-                        // We'll just execute the body without binding the pattern.
-                        let _ = self.lower_expr_to_rvalue(body);
-                        self.loop_stack.pop();
+                    };
+                    let payload_local = self.alloc_local(
+                        elem_ty,
+                        glyim_core::primitives::Mutability::Not,
+                        expr.span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::StorageLive(payload_local),
+                        expr.span,
+                    );
+                    self.push_stmt(
+                        glyim_mir::StatementKind::Assign(
+                            glyim_mir::Place::new(payload_local),
+                            glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(payload_place)),
+                        ),
+                        expr.span,
+                    );
+                    self.bind_pattern(
+                        pat,
+                        Some(glyim_mir::Place::new(payload_local)),
+                        Some(glyim_mir::Place::new(payload_local)),
+                        expr.span,
+                    );
+                    let _ = self.lower_expr_to_rvalue(body);
+                    if self.current_block.is_some() {
                         self.terminate(
-                            glyim_mir::TerminatorKind::Goto { target: exit_bb },
-                            expr.span,
+                            glyim_mir::TerminatorKind::Goto { target: header_bb },
+                            body.span,
                         );
-                        self.current_block = Some(exit_bb);
-                        glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(glyim_mir::MirConst {
-                            kind: glyim_mir::MirConstKind::Unit,
-                            ty: Ty::UNIT,
-                            span: expr.span,
-                        }))
                     }
+                    self.loop_stack.pop();
+                    self.current_block = Some(exit_bb);
+                    glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(glyim_mir::MirConst {
+                        kind: glyim_mir::MirConstKind::Unit,
+                        ty: Ty::UNIT,
+                        span: expr.span,
+                    }))
+                } else {
+                    // Simplified fallback: execute the body once and break.
+                    // This is only used in tests where iterator protocol is not available.
+                    self.current_block = Some(header_bb);
+                    // Bind the pattern to a dummy value (the iterable itself).
+                    // We'll just execute the body without binding the pattern.
+                    let _ = self.lower_expr_to_rvalue(body);
+                    self.loop_stack.pop();
+                    self.terminate(
+                        glyim_mir::TerminatorKind::Goto { target: exit_bb },
+                        expr.span,
+                    );
+                    self.current_block = Some(exit_bb);
+                    glyim_mir::Rvalue::Use(glyim_mir::Operand::Constant(glyim_mir::MirConst {
+                        kind: glyim_mir::MirConstKind::Unit,
+                        ty: Ty::UNIT,
+                        span: expr.span,
+                    }))
                 }
             }
             thir::ExprKind::Field {
@@ -1544,8 +1528,8 @@ impl<'a> MirBuilder<'a> {
                     let base_place = self.lower_expr_to_place(base);
                     self.lower_dynamic_range_slice(
                         base_place,
-                        start.as_ref().map(|e| e.as_ref()),
-                        end.as_ref().map(|e| e.as_ref()),
+                        start.as_ref().map(std::convert::AsRef::as_ref),
+                        end.as_ref().map(std::convert::AsRef::as_ref),
                         *inclusive,
                         expr.ty,
                         expr.span,
@@ -1578,36 +1562,31 @@ impl<'a> MirBuilder<'a> {
                 // `Uint(Usize) -> Uint(U64)` with `[X0000] PtrToPtr cast on
                 // non-pointer`, blocking `--emit=exec` for every program whose
                 // stdlib touches `usize as u64` (`io.g`'s `total += n as u64`).
-                let cast_kind =
-                    match (
-                        self.ctx.ty_ctx().ty_kind(inner_ty),
-                        self.ctx.ty_ctx().ty_kind(target_ty),
-                    ) {
-                        (TyKind::Int(_), TyKind::Int(_))
-                        | (TyKind::Uint(_), TyKind::Uint(_))
-                        | (TyKind::Int(_), TyKind::Uint(_))
-                        | (TyKind::Uint(_), TyKind::Int(_)) => CastKind::IntToInt,
-                        (TyKind::Float(_), TyKind::Int(_))
-                        | (TyKind::Float(_), TyKind::Uint(_)) => CastKind::FloatToInt,
-                        (TyKind::Int(_), TyKind::Float(_))
-                        | (TyKind::Uint(_), TyKind::Float(_)) => CastKind::IntToFloat,
-                        (TyKind::Float(_), TyKind::Float(_)) => CastKind::FloatToFloat,
-                        (TyKind::Ref(..), TyKind::RawPtr(..))
-                        | (TyKind::RawPtr(..), TyKind::RawPtr(..))
-                        | (TyKind::RawPtr(..), TyKind::Ref(..)) => CastKind::PtrToPtr,
-                        (TyKind::FnDef(..) | TyKind::FnPtr(..), TyKind::RawPtr(..)) => {
-                            CastKind::FnPtrToPtr
-                        }
-                        _ => {
-                            // Unknown pair: fall back to a plain `Use` instead of a
-                            // pointer cast that the LLVM backend will reject. This
-                            // is a conservative no-op that keeps `--emit=obj` /
-                            // `--emit=exec` resilient to casts the classifier does
-                            // not yet cover, at the cost of skipping the cast
-                            // semantics for that (currently unreachable) pair.
-                            return glyim_mir::Rvalue::Use(operand);
-                        }
-                    };
+                let cast_kind = match (
+                    self.ctx.ty_ctx().ty_kind(inner_ty),
+                    self.ctx.ty_ctx().ty_kind(target_ty),
+                ) {
+                    (TyKind::Int(_) | TyKind::Uint(_), TyKind::Int(_) | TyKind::Uint(_)) => {
+                        CastKind::IntToInt
+                    }
+                    (TyKind::Float(_), TyKind::Int(_) | TyKind::Uint(_)) => CastKind::FloatToInt,
+                    (TyKind::Int(_) | TyKind::Uint(_), TyKind::Float(_)) => CastKind::IntToFloat,
+                    (TyKind::Float(_), TyKind::Float(_)) => CastKind::FloatToFloat,
+                    (TyKind::Ref(..) | TyKind::RawPtr(..), TyKind::RawPtr(..))
+                    | (TyKind::RawPtr(..), TyKind::Ref(..)) => CastKind::PtrToPtr,
+                    (TyKind::FnDef(..) | TyKind::FnPtr(..), TyKind::RawPtr(..)) => {
+                        CastKind::FnPtrToPtr
+                    }
+                    _ => {
+                        // Unknown pair: fall back to a plain `Use` instead of a
+                        // pointer cast that the LLVM backend will reject. This
+                        // is a conservative no-op that keeps `--emit=obj` /
+                        // `--emit=exec` resilient to casts the classifier does
+                        // not yet cover, at the cost of skipping the cast
+                        // semantics for that (currently unreachable) pair.
+                        return glyim_mir::Rvalue::Use(operand);
+                    }
+                };
                 glyim_mir::Rvalue::Cast(cast_kind, operand, target_ty)
             }
             thir::ExprKind::Tuple(elements) => {
@@ -1679,8 +1658,7 @@ impl<'a> MirBuilder<'a> {
                         let idx = self
                             .ctx
                             .field_index_by_name(*adt_id, *variant_idx, *name)
-                            .map(|fidx| fidx.index())
-                            .unwrap_or(src_idx);
+                            .map_or(src_idx, glyim_type::FieldIdx::index);
                         (idx, operand)
                     })
                     .collect();
@@ -1719,8 +1697,7 @@ impl<'a> MirBuilder<'a> {
                     let def = self.ctx.adt_def(*adt_id);
                     def.variants
                         .get(*variant_idx as usize)
-                        .map(|v| v.fields.len())
-                        .unwrap_or(0)
+                        .map_or(0, |v| v.fields.len())
                 };
                 let total = explicit_max.max(declared_field_count);
                 let mut mir_operands: Vec<glyim_mir::Operand> = Vec::with_capacity(total);
@@ -1824,9 +1801,10 @@ impl<'a> MirBuilder<'a> {
                 captures,
                 is_move: _,
             } => {
-                let (closure_id, closure_substs) = match self.ctx.ty_ctx().ty_kind(expr.ty) {
-                    TyKind::Closure(id, substs) => (id, substs),
-                    _ => {
+                let (closure_id, closure_substs) =
+                    if let TyKind::Closure(id, substs) = self.ctx.ty_ctx().ty_kind(expr.ty) {
+                        (id, substs)
+                    } else {
                         self.diagnostics.push(GlyimDiagnostic::type_error(
                             expr.span,
                             "closure expression has non-closure type".to_string(),
@@ -1838,8 +1816,7 @@ impl<'a> MirBuilder<'a> {
                                 span: expr.span,
                             },
                         ));
-                    }
-                };
+                    };
                 // Build the closure's own MIR body so codegen can emit it as
                 // `__glyim_fn_{closure_id}`. The captures come first, followed
                 // by the closure's own parameters (see `lower_closure`).
@@ -2030,7 +2007,7 @@ impl<'a> MirBuilder<'a> {
                         discr: glyim_mir::Operand::Copy(glyim_mir::Place::new(discr_local)),
                         switch_ty: u8_ty,
                         targets: glyim_mir::SwitchTargets::new(
-                            Box::new([(success_variant as u128, ok_bb)]),
+                            Box::new([(u128::from(success_variant), ok_bb)]),
                             err_bb,
                         ),
                     },
@@ -2064,26 +2041,25 @@ impl<'a> MirBuilder<'a> {
                 // err_bb: build the return_ty's error/None variant and Return.
                 self.current_block = Some(err_bb);
                 let ret_ty = self.return_ty;
-                let (ret_adt_id, ret_substs) = match self.ctx.ty_ctx().ty_kind(ret_ty) {
-                    TyKind::Adt(id, substs) => (*id, *substs),
-                    _ => {
-                        // Defensive: typeck should have guaranteed Result/Option
-                        // here. Fall back to the operand's Adt info so the
-                        // aggregate has a valid shape (only the error slot is
-                        // touched, and typeck unifies error types, so this is
-                        // layout-compatible with the real return type).
-                        let (id, substs) = match self.ctx.ty_ctx().ty_kind(inner_ty) {
-                            TyKind::Adt(id, substs) => (*id, *substs),
-                            _ => {
-                                self.terminate(glyim_mir::TerminatorKind::Return, expr.span);
-                                self.current_block = Some(merge_bb);
-                                return glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(
-                                    dest_place,
-                                ));
-                            }
+                let (ret_adt_id, ret_substs) = if let TyKind::Adt(id, substs) =
+                    self.ctx.ty_ctx().ty_kind(ret_ty)
+                {
+                    (*id, *substs)
+                } else {
+                    // Defensive: typeck should have guaranteed Result/Option
+                    // here. Fall back to the operand's Adt info so the
+                    // aggregate has a valid shape (only the error slot is
+                    // touched, and typeck unifies error types, so this is
+                    // layout-compatible with the real return type).
+                    let (id, substs) =
+                        if let TyKind::Adt(id, substs) = self.ctx.ty_ctx().ty_kind(inner_ty) {
+                            (*id, *substs)
+                        } else {
+                            self.terminate(glyim_mir::TerminatorKind::Return, expr.span);
+                            self.current_block = Some(merge_bb);
+                            return glyim_mir::Rvalue::Use(glyim_mir::Operand::Copy(dest_place));
                         };
-                        (id, substs)
-                    }
+                    (id, substs)
                 };
                 // Err/None payload: Result carries the error value at field 0
                 // of variant 1; Option::None carries no payload.
@@ -2194,7 +2170,7 @@ impl<'a> MirBuilder<'a> {
     }
 
     // ---- Expression → Operand lowering ----
-    /// lower_expr_to_operand.
+    /// `lower_expr_to_operand`.
     /// Resolve a THIR `VarRef(LocalVarId)` to the MIR `LocalIdx` allocated
     /// for that binding. The type-checker's `LocalVarId` space is NOT aligned
     /// with the MIR local-index space (temporaries interleave user-variable
@@ -2211,6 +2187,10 @@ impl<'a> MirBuilder<'a> {
             LocalIdx::from_raw(var_id.to_raw())
         }
     }
+    /// Lowers `expr` to a MIR operand, specializing the literal,
+    /// function-reference, and variable-reference cases so simple
+    /// operands are produced directly instead of through an
+    /// intermediate temporary place.
     pub fn lower_expr_to_operand(&mut self, expr: &thir::Expr) -> glyim_mir::Operand {
         match &expr.kind {
             thir::ExprKind::Literal(_) | thir::ExprKind::FnRef(_) => {
@@ -2307,7 +2287,7 @@ impl<'a> MirBuilder<'a> {
     }
 
     // ---- Expression → Place lowering ----
-    /// lower_expr_to_place.
+    /// `lower_expr_to_place`.
     pub fn lower_expr_to_place(&mut self, expr: &thir::Expr) -> glyim_mir::Place {
         match &expr.kind {
             thir::ExprKind::VarRef(var_id) => {
@@ -2487,7 +2467,7 @@ impl<'a> MirBuilder<'a> {
     }
 
     // ---- Pattern binding ----
-    /// bind_pattern.
+    /// `bind_pattern`.
     ///
     /// `copy_place` is the place a by-value binding moves from (usually a
     /// temp copy of the matched value); `orig_place` is the *original*
@@ -2648,8 +2628,7 @@ impl<'a> MirBuilder<'a> {
                         let def = self.ctx.adt_def(*adt_id);
                         def.variants
                             .get(*variant_idx as usize)
-                            .map(|v| v.style == glyim_type::adt_def::VariantStyle::Tuple)
-                            .unwrap_or(false)
+                            .is_some_and(|v| v.style == glyim_type::adt_def::VariantStyle::Tuple)
                     };
                     // For an enum scrutinee, insert a `Downcast` before the
                     // `Field` projection. Without it, `Place::ty()` on the
@@ -3196,7 +3175,7 @@ impl<'a> MirBuilder<'a> {
                         span,
                     );
                     let idx_const = glyim_mir::MirConst {
-                        kind: glyim_mir::MirConstKind::Uint(*variant_idx as u128),
+                        kind: glyim_mir::MirConstKind::Uint(u128::from(*variant_idx)),
                         ty: u8_ty,
                         span,
                     };

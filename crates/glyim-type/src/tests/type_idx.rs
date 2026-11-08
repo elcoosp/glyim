@@ -1,4 +1,4 @@
-//! Tests for index types (TyVar, IntVar, FloatVar, RegionVid, etc.).
+//! Tests for index types (`TyVar`, `IntVar`, `FloatVar`, `RegionVid`, etc.).
 
 use crate::*;
 

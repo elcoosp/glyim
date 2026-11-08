@@ -61,7 +61,7 @@ fn range_exclusive_evaluates_bounds() {
             assert_eq!(e.as_ref(), &ConstValue::Int(10, IntTy::I32));
             assert!(!incl, "exclusive range must have inclusive=false");
         }
-        other => panic!("expected ConstValue::Range, got {:?}", other),
+        other => panic!("expected ConstValue::Range, got {other:?}"),
     }
 }
 
@@ -82,7 +82,7 @@ fn range_inclusive_sets_flag() {
     let val = eval_ok(&body, range);
     match val {
         ConstValue::Range(_, _, incl) => assert!(incl, "inclusive range must have inclusive=true"),
-        other => panic!("expected ConstValue::Range, got {:?}", other),
+        other => panic!("expected ConstValue::Range, got {other:?}"),
     }
 }
 
@@ -103,9 +103,6 @@ fn range_open_ended_has_no_bounds() {
     let val = eval_ok(&body, range);
     match val {
         ConstValue::Range(None, Some(_), false) => {}
-        other => panic!(
-            "expected open-ended range with only an end bound, got {:?}",
-            other
-        ),
+        other => panic!("expected open-ended range with only an end bound, got {other:?}"),
     }
 }

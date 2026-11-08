@@ -1,14 +1,15 @@
 #[derive(Debug, PartialEq)]
-/// InterpError.
+/// `InterpError`.
 pub enum InterpError {
-    /// Variant.
+    /// `Variant`.
     TimedOut,
-    /// Variant.
+    /// `Variant`.
     StackOverflow,
     /// Integer (or float) division / remainder by zero (de-stubbing plan §11.2).
     DivisionByZero,
+    /// Remainder by zero (de-stubbing plan §11.2).
     RemainderByZero,
-    #[allow(missing_docs)]
+    /// Explicit `panic!(msg)` from the program.
     Panic(String),
     /// Cross-frame unwind reached the top of the call stack
     /// (de-stubbing plan §7.2). Carries the original panic payload so callers
@@ -27,8 +28,8 @@ impl std::fmt::Display for InterpError {
                 f,
                 "attempt to calculate the remainder with a divisor of zero"
             ),
-            Self::Panic(msg) => write!(f, "{}", msg),
-            Self::Unwind(inner) => write!(f, "unwind: {}", inner),
+            Self::Panic(msg) => write!(f, "{msg}"),
+            Self::Unwind(inner) => write!(f, "unwind: {inner}"),
         }
     }
 }

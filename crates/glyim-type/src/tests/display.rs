@@ -1,4 +1,4 @@
-//! Tests for PrintTy display formatting.
+//! Tests for `PrintTy` display formatting.
 
 use glyim_core::primitives::{FloatTy, IntTy, Mutability, UintTy};
 
@@ -141,7 +141,7 @@ fn display_infer_float_var() {
 #[test]
 fn display_ty_debug() {
     let ty = Ty::BOOL;
-    let debug = format!("{:?}", ty);
+    let debug = format!("{ty:?}");
     assert_eq!(debug, "Ty(3)");
 }
 

@@ -90,42 +90,6 @@ impl BodyBuilder {
     }
 }
 
-#[allow(dead_code)]
-pub fn make_int_const(value: i128, ty: Ty) -> MirConst {
-    MirConst {
-        kind: MirConstKind::Int(value),
-        ty,
-        span: Span::DUMMY,
-    }
-}
-
-#[allow(dead_code)]
-pub fn make_uint_const(value: u128, ty: Ty) -> MirConst {
-    MirConst {
-        kind: MirConstKind::Uint(value),
-        ty,
-        span: Span::DUMMY,
-    }
-}
-
-#[allow(dead_code)]
-pub fn make_bool_const(value: bool) -> MirConst {
-    MirConst {
-        kind: MirConstKind::Bool(value),
-        ty: Ty::BOOL,
-        span: Span::DUMMY,
-    }
-}
-
-#[allow(dead_code)]
-pub fn make_unit_const() -> MirConst {
-    MirConst {
-        kind: MirConstKind::Unit,
-        ty: Ty::UNIT,
-        span: Span::DUMMY,
-    }
-}
-
 pub fn make_string_const(name: glyim_core::Name, ty: Ty) -> MirConst {
     MirConst {
         kind: MirConstKind::String(name),
@@ -177,7 +141,7 @@ pub fn const_operand_bool(value: bool) -> Operand {
     })
 }
 
-/// Box a pair of operands for BinaryOp.
+/// Box a pair of operands for `BinaryOp`.
 pub fn box_operands(lhs: Operand, rhs: Operand) -> Box<(Operand, Operand)> {
     Box::new((lhs, rhs))
 }

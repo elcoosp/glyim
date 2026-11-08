@@ -29,19 +29,19 @@ fn count_macro_calls(node: &glyim_syntax::SyntaxNode) -> usize {
 /// Test V19-T01: Simple macro without arguments expands to literal.
 #[test]
 fn simple_macro_expands() {
-    let src = r#"
+    let src = r"
 macro_rules! foo {
     () => { 42 };
 }
 fn main() {
     foo!();
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     let remaining_macros = count_macro_calls(&expanded);
     assert_eq!(remaining_macros, 0, "Expected all macros expanded");
 }
@@ -49,7 +49,7 @@ fn main() {
 /// Test V19-T02: Macro with repetition $(...)* expands.
 #[test]
 fn repetition_macro_expands() {
-    let src = r#"
+    let src = r"
 macro_rules! vec_like {
     ($($x:expr),* $(,)?) => {
         {
@@ -62,12 +62,12 @@ macro_rules! vec_like {
 fn main() {
     vec_like!(1, 2, 3);
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     let remaining_macros = count_macro_calls(&expanded);
     assert_eq!(remaining_macros, 0, "Expected all macros expanded");
 }
@@ -75,7 +75,7 @@ fn main() {
 /// Test V19-T03: Hygiene – macro-introduced variables don't leak.
 #[test]
 fn hygiene_variables_dont_leak() {
-    let src = r#"
+    let src = r"
 macro_rules! make_local {
     () => { let x = 5; };
 }
@@ -84,12 +84,12 @@ fn main() {
     make_local!();
     x
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     let remaining_macros = count_macro_calls(&expanded);
     assert_eq!(remaining_macros, 0);
 }
@@ -97,19 +97,19 @@ fn main() {
 /// Test V19-T04: $crate resolves to crate path.
 #[test]
 fn dollar_crate_resolves() {
-    let src = r#"
+    let src = r"
 macro_rules! call_from_crate {
     () => { $crate::some_func(); };
 }
 fn main() {
     call_from_crate!();
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     let remaining_macros = count_macro_calls(&expanded);
     assert_eq!(remaining_macros, 0);
 }
@@ -117,7 +117,7 @@ fn main() {
 /// Test V19-T05: Macro with multiple arms (pattern matching).
 #[test]
 fn multiple_arms() {
-    let src = r#"
+    let src = r"
 macro_rules! choose {
     (a) => { 1 };
     (b) => { 2 };
@@ -126,12 +126,12 @@ fn main() {
     let _x = choose!(a);
     let _y = choose!(b);
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     let remaining_macros = count_macro_calls(&expanded);
     assert_eq!(remaining_macros, 0);
 }
@@ -139,14 +139,14 @@ fn main() {
 /// Test V19-T06: Macro recursion limit.
 #[test]
 fn recursion_limit_hits() {
-    let src = r#"
+    let src = r"
 macro_rules! recurse {
     ($x:expr) => { recurse!($x) };
 }
 fn main() {
     recurse!(0);
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
@@ -158,19 +158,19 @@ fn main() {
 /// Test V19-T07: Empty macro expansion produces no tokens.
 #[test]
 fn empty_expansion() {
-    let src = r#"
+    let src = r"
 macro_rules! empty {
     () => {};
 }
 fn main() {
     empty!();
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     let remaining_macros = count_macro_calls(&expanded);
     assert_eq!(remaining_macros, 0);
 }
@@ -178,7 +178,7 @@ fn main() {
 /// Test V19-T08: Nested macro invocations expand recursively.
 #[test]
 fn nested_macros() {
-    let src = r#"
+    let src = r"
 macro_rules! inner {
     () => { 42 };
 }
@@ -188,12 +188,12 @@ macro_rules! outer {
 fn main() {
     outer!();
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     let remaining_macros = count_macro_calls(&expanded);
     assert_eq!(remaining_macros, 0);
 }
@@ -201,7 +201,7 @@ fn main() {
 /// Test V19-T09: Repetition with separator token.
 #[test]
 fn repetition_with_separator() {
-    let src = r#"
+    let src = r"
 macro_rules! joined {
     ($($x:expr),+ $(,)?) => {
         { $( let _ = $x; )+ }
@@ -210,12 +210,12 @@ macro_rules! joined {
 fn main() {
     joined!(1, 2, 3);
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     let remaining_macros = count_macro_calls(&expanded);
     assert_eq!(remaining_macros, 0);
 }
@@ -223,7 +223,7 @@ fn main() {
 /// Test V19-T10: Zero-or-one repetition with separator matches optional args.
 #[test]
 fn zero_or_one_repetition() {
-    let src = r#"
+    let src = r"
 macro_rules! maybe_add {
     ($base:expr $(, $extra:expr)?) => {
         $base $(+ $extra)?
@@ -233,12 +233,12 @@ fn main() {
     let _a = maybe_add!(1);
     let _b = maybe_add!(1, 2);
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     let remaining_macros = count_macro_calls(&expanded);
     assert_eq!(remaining_macros, 0);
 }
@@ -246,7 +246,7 @@ fn main() {
 /// Test V19-T11: Mixed literal tokens and metavariables.
 #[test]
 fn mixed_literal_and_metavar() {
-    let src = r#"
+    let src = r"
 macro_rules! pair {
     ($a:expr, $b:expr) => {
         ($a, $b)
@@ -255,12 +255,12 @@ macro_rules! pair {
 fn main() {
     let _x = pair!(1, 2);
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     let remaining_macros = count_macro_calls(&expanded);
     assert_eq!(remaining_macros, 0);
 }
@@ -268,7 +268,7 @@ fn main() {
 /// Test V19-T12: Multiple different metavariables in one pattern.
 #[test]
 fn multiple_metavars() {
-    let src = r#"
+    let src = r"
 macro_rules! swap {
     ($a:expr, $b:expr) => {
         ($b, $a)
@@ -277,12 +277,12 @@ macro_rules! swap {
 fn main() {
     let _x = swap!(10, 20);
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     let remaining_macros = count_macro_calls(&expanded);
     assert_eq!(remaining_macros, 0);
 }
@@ -290,19 +290,19 @@ fn main() {
 /// Test V19-T13: Macro invocation as expression statement with trailing semicolon.
 #[test]
 fn macro_call_with_semicolon() {
-    let src = r#"
+    let src = r"
 macro_rules! make_int {
     () => { 42 };
 }
 fn main() {
     make_int!();
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     let remaining_macros = count_macro_calls(&expanded);
     assert_eq!(remaining_macros, 0);
 }
@@ -310,14 +310,14 @@ fn main() {
 /// Test V19-T14: Deep recursion produces diagnostic.
 #[test]
 fn deep_recursion_emits_diagnostic() {
-    let src = r#"
+    let src = r"
 macro_rules! deep {
     () => { deep!() };
 }
 fn main() {
     deep!();
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
@@ -332,7 +332,7 @@ fn main() {
 /// V19-T15: Multiple separate repetitions in one pattern.
 #[test]
 fn multiple_repetitions() {
-    let src = r#"
+    let src = r"
 macro_rules! pairs {
     ($($a:expr),* ; $($b:expr),*) => {
         ($($a),*) + ($($b),*)
@@ -341,42 +341,42 @@ macro_rules! pairs {
 fn main() {
     let _x = pairs!(1, 2; 3, 4);
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     assert_eq!(count_macro_calls(&expanded), 0);
 }
 
 /// V19-T16: Macro defined but never used – should not cause errors.
 #[test]
 fn unused_macro_no_error() {
-    let src = r#"
+    let src = r"
 macro_rules! unused {
     () => { 1 };
 }
 fn main() {}
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (_, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
 }
 
 /// V19-T17: Extra tokens after macro arguments – no arm matches, produces error.
 #[test]
 fn extra_tokens_no_match() {
-    let src = r#"
+    let src = r"
 macro_rules! exact {
     (a) => { 1 };
 }
 fn main() {
     exact!(a b);
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
@@ -386,8 +386,7 @@ fn main() {
         diags
             .iter()
             .any(|d| d.message.contains("no matching macro arm")),
-        "Diagnostic should mention no matching arm, got: {:?}",
-        diags
+        "Diagnostic should mention no matching arm, got: {diags:?}"
     );
 }
 
@@ -396,7 +395,7 @@ fn main() {
 /// flattening.
 #[test]
 fn nested_groups_in_args() {
-    let src = r#"
+    let src = r"
 macro_rules! inner {
     ($x:expr) => { $x + 1 };
 }
@@ -406,19 +405,19 @@ macro_rules! apply {
 fn main() {
     let _x = apply!(inner!((1,2)));
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     assert_eq!(count_macro_calls(&expanded), 0);
 }
 
 /// V19-T19: Re‑expansion depth limit exact count (verify diagnostic appears).
 #[test]
 fn recursion_limit_exact() {
-    let src = r#"
+    let src = r"
 macro_rules! recurse {
     ($n:expr) => {
         recurse!($n)
@@ -427,7 +426,7 @@ macro_rules! recurse {
 fn main() {
     recurse!(1);
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
@@ -438,8 +437,7 @@ fn main() {
         diags
             .iter()
             .any(|d| d.message.contains("recursion") || d.message.contains("limit")),
-        "Diagnostics: {:?}",
-        diags
+        "Diagnostics: {diags:?}"
     );
 }
 
@@ -459,50 +457,47 @@ fn main() {
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     // The expansion should contain "first", not "second".
     let text = expanded.text().to_string();
     assert!(
         text.contains("first"),
-        "Expansion should use first arm, got: {}",
-        text
+        "Expansion should use first arm, got: {text}"
     );
     assert!(
         !text.contains("second"),
-        "Expansion incorrectly used second arm: {}",
-        text
+        "Expansion incorrectly used second arm: {text}"
     );
 }
 
 /// V19-T21: `$crate` substitution produces a `crate` token.
 #[test]
 fn dollar_crate_output() {
-    let src = r#"
+    let src = r"
 macro_rules! path {
     () => { $crate::some_func() };
 }
 fn main() {
     path!();
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     // The expanded code should contain the `crate` keyword.
     let text = expanded.text().to_string();
     assert!(
         text.contains("crate"),
-        "Expansion should contain `crate`, got: {}",
-        text
+        "Expansion should contain `crate`, got: {text}"
     );
 }
 
 /// V19-T22: Empty arms and empty expansion – multiple no‑op arms.
 #[test]
 fn empty_arm_sequence() {
-    let src = r#"
+    let src = r"
 macro_rules! nothing {
     () => {};
     (,) => {};
@@ -511,12 +506,12 @@ fn main() {
     nothing!();
     nothing!(,);
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags): (_, Vec<glyim_diag::GlyimDiagnostic>) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
     assert_eq!(count_macro_calls(&expanded), 0);
 }
 
@@ -545,24 +540,23 @@ fn proc_macro_invocation_dispatches_through_registry() {
     );
     assert!(registry.contains("double"));
 
-    let src = r#"
+    let src = r"
 fn main() {
     double!(seven);
 }
-"#;
+";
     let root = parse_source(src);
     let mut hygiene = HygieneCtx::new();
     let mut expander = Expander::new(&mut hygiene);
     expander.with_proc_registry(Some(&registry));
     let (expanded, diags) = expander.expand_crate(&root);
-    assert!(diags.is_empty(), "Diagnostics: {:?}", diags);
+    assert!(diags.is_empty(), "Diagnostics: {diags:?}");
 
     let text = expanded.text().to_string();
     // The expanded tokens (`seven seven`) must appear in the result.
     assert!(
         text.contains("seven") && count_occurrences(&text, "seven") >= 2,
-        "proc macro expansion must double `seven`, got: {}",
-        text
+        "proc macro expansion must double `seven`, got: {text}"
     );
 }
 

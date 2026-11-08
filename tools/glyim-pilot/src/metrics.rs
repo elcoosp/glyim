@@ -1,43 +1,43 @@
 /// names.
 pub mod names {
-    /// OPS_READY_RECEIVED.
+    /// `OPS_READY_RECEIVED`.
     pub const OPS_READY_RECEIVED: &str = "ops_ready_received";
-    /// OPS_APPLIED.
+    /// `OPS_APPLIED`.
     pub const OPS_APPLIED: &str = "ops_applied";
-    /// TURN_PROCESSED.
+    /// `TURN_PROCESSED`.
     pub const TURN_PROCESSED: &str = "turn_processed";
-    /// TURN_PANIC.
+    /// `TURN_PANIC`.
     pub const TURN_PANIC: &str = "turn_panic";
-    /// ORCHESTRATOR_ERROR.
+    /// `ORCHESTRATOR_ERROR`.
     pub const ORCHESTRATOR_ERROR: &str = "orchestrator_error";
-    /// STREAM_COMPLETE.
+    /// `STREAM_COMPLETE`.
     pub const STREAM_COMPLETE: &str = "stream_complete";
-    /// EXTENSION_ERROR.
+    /// `EXTENSION_ERROR`.
     pub const EXTENSION_ERROR: &str = "extension_error";
-    /// COMMIT_DECISION.
+    /// `COMMIT_DECISION`.
     pub const COMMIT_DECISION: &str = "commit_decision";
-    /// DONE_PIPELINE.
+    /// `DONE_PIPELINE`.
     pub const DONE_PIPELINE: &str = "done_pipeline";
-    /// PR_CREATED.
+    /// `PR_CREATED`.
     pub const PR_CREATED: &str = "pr_created";
 }
 
-/// Metrics.
+/// `Metrics`.
 pub trait Metrics: Send + Sync {
-    /// increment_counter.
+    /// `increment_counter`.
     fn increment_counter(&self, name: &str, labels: &[(&str, &str)]);
-    /// record_histogram.
+    /// `record_histogram`.
     fn record_histogram(&self, name: &str, value: f64, labels: &[(&str, &str)]);
 }
 
-/// NoOpMetrics.
+/// `NoOpMetrics`.
 pub struct NoOpMetrics;
 impl Metrics for NoOpMetrics {
     fn increment_counter(&self, _name: &str, _labels: &[(&str, &str)]) {}
     fn record_histogram(&self, _name: &str, _value: f64, _labels: &[(&str, &str)]) {}
 }
 
-/// LoggingMetrics.
+/// `LoggingMetrics`.
 pub struct LoggingMetrics;
 impl Metrics for LoggingMetrics {
     fn increment_counter(&self, name: &str, labels: &[(&str, &str)]) {
@@ -49,13 +49,14 @@ impl Metrics for LoggingMetrics {
 }
 
 #[cfg(feature = "prometheus")]
+/// Optional Prometheus exporter backend for the pilot metrics registry.
 pub mod prometheus_impl {
     use super::Metrics;
     use std::collections::HashMap;
     use std::sync::Mutex;
 
-    /// PrometheusMetrics caches all counters and histograms by name.
-    /// First call for a name: create, register, cache, increment.
+    /// `PrometheusMetrics` caches all counters and histograms by name.
+    /// First call for a `name`: create, register, cache, increment.
     /// Subsequent calls: cache hit, increment only. No allocation.
     pub struct PrometheusMetrics {
         counters: Mutex<HashMap<String, prometheus::IntCounter>>,
@@ -69,6 +70,7 @@ pub mod prometheus_impl {
     }
 
     impl PrometheusMetrics {
+        /// Creates an empty registry; counters register lazily on first use.
         pub fn new() -> Self {
             Self {
                 counters: Mutex::new(HashMap::new()),
@@ -156,7 +158,8 @@ pub mod prometheus_impl {
     }
 }
 
-/// production_metrics.
+/// `production_metrics`.
+#[must_use]
 pub fn production_metrics() -> Box<dyn Metrics> {
     #[cfg(feature = "prometheus")]
     {

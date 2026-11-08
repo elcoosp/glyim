@@ -1,7 +1,7 @@
 use super::Parser;
 use glyim_syntax::SyntaxKind;
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     pub(crate) fn parse_stmt(&mut self) {
         match self.current_kind() {
             SyntaxKind::KwLet => {
@@ -137,7 +137,7 @@ impl<'a> Parser<'a> {
                         | SyntaxKind::KwUnsafe
                 ) {
                     let found = self.current_kind();
-                    self.error(format!("unexpected token in statement: {:?}", found));
+                    self.error(format!("unexpected token in statement: {found:?}"));
                     if self.current().is_some() {
                         self.bump();
                     }

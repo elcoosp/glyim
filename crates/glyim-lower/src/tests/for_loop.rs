@@ -164,7 +164,7 @@ fn for_loop_fallback_when_no_iterator_info() {
     );
 }
 
-/// Phase 1 (GLYIM_DESTUB_PLAN): the resolved `Iterator::next` is threaded from
+/// Phase 1 (`GLYIM_DESTUB_PLAN)`: the resolved `Iterator::next` is threaded from
 /// typeck into the THIR `For` node (the production mechanism). This test proves
 /// that lowering takes the real multi-iteration path purely from `For.next`,
 /// with NO help from `MockLowerCtx::iterator_next_fn` (which is left at its

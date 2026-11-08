@@ -40,7 +40,7 @@ fn struct_literal_does_not_panic() {
     let body = b.into_body(vec![thir::Stmt::Expr { expr: struct_expr }], vec![]);
     let result = lower_body(&mock, &body);
     // Struct literal stubbed; should not panic
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn struct_literal_with_spread_does_not_panic() {
     );
     let body = b.into_body(vec![thir::Stmt::Expr { expr: struct_expr }], vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }
 
 /// T024-REGRESSION [LOW-2]: a struct literal whose fields appear out of

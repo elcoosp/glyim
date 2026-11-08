@@ -31,8 +31,7 @@ fn string_constant_creates_global_in_ir() {
     let ir = ir.unwrap();
     assert!(
         ir.contains("hello") || ir.contains("str") || ir.contains("constant"),
-        "Expected global string constant in IR, got:\n{}",
-        ir
+        "Expected global string constant in IR, got:\n{ir}"
     );
 }
 

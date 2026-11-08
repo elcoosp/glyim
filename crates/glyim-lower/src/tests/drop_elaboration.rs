@@ -88,7 +88,7 @@ fn copy_local_does_not_get_drop_terminator() {
 
     // No drops: single block ending directly in Return.
     assert_eq!(result.body.basic_blocks.len(), 1);
-    assert_mir(&ctx, &result.body).block_terminator(BasicBlockIdx::from_raw(0), "Return");
+    let _ = assert_mir(&ctx, &result.body).block_terminator(BasicBlockIdx::from_raw(0), "Return");
 }
 
 #[test]
@@ -107,10 +107,10 @@ fn return_place_is_never_dropped() {
 
     // No locals other than _0, so no drop chain: single Return block.
     assert_eq!(result.body.basic_blocks.len(), 1);
-    assert_mir(&ctx, &result.body).block_terminator(BasicBlockIdx::from_raw(0), "Return");
+    let _ = assert_mir(&ctx, &result.body).block_terminator(BasicBlockIdx::from_raw(0), "Return");
 }
 
-/// §1.8 / Phase 4 (GLYIM_DESTUB_PLAN): a non-`Copy` local's scope-exit `Drop`
+/// §1.8 / Phase 4 (`GLYIM_DESTUB_PLAN)`: a non-`Copy` local's scope-exit `Drop`
 /// must be *guarded* by a `SwitchInt` on its drop-flag (allocated for every
 /// droppable `let` via `register_drop_flag_init`), so a later partial move can
 /// suppress the parent's destructor. This locks that the guard wiring in

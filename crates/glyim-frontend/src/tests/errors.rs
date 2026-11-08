@@ -38,13 +38,11 @@ fn error_recovery_continues_lexing() {
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert!(
         kinds.contains(&SyntaxKind::IntLit),
-        "should still lex integers after error, got {:?}",
-        kinds
+        "should still lex integers after error, got {kinds:?}"
     );
     assert!(
         kinds.contains(&SyntaxKind::Error),
-        "should contain error token, got {:?}",
-        kinds
+        "should contain error token, got {kinds:?}"
     );
 }
 
@@ -55,7 +53,6 @@ fn unexpected_char_diagnostic_message() {
     let msg = &result.diagnostics[0].message;
     assert!(
         msg.contains("unexpected character"),
-        "diagnostic message should mention unexpected character, got: {}",
-        msg
+        "diagnostic message should mention unexpected character, got: {msg}"
     );
 }

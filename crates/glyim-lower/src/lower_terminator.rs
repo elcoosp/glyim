@@ -1,13 +1,13 @@
 use crate::builder::MirBuilder;
 use glyim_span::Span;
 
-/// Extension trait for MirBuilder to allow splitting impls across modules.
+/// Extension trait for `MirBuilder` to allow splitting impls across modules.
 pub trait TerminatorExt {
     /// terminate.
     fn terminate(&mut self, kind: glyim_mir::TerminatorKind, span: Span);
 }
 
-impl<'a> TerminatorExt for MirBuilder<'a> {
+impl TerminatorExt for MirBuilder<'_> {
     fn terminate(&mut self, kind: glyim_mir::TerminatorKind, span: Span) {
         if let Some(bb) = self.current_block {
             // A block that branches to itself is an infinite loop with no

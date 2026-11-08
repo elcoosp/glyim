@@ -22,28 +22,6 @@
 //!   `glyim_time_system_secs`, `glyim_time_system_nanos`
 //! - Memory cleanup: `glyim_free_cstr`
 // Stylistic clippy lints suppressed crate-wide (test-noise lints).
-#![allow(
-    clippy::cloned_ref_to_slice_refs,
-    clippy::vec_init_then_push,
-    clippy::assertions_on_constants,
-    clippy::type_complexity,
-    clippy::too_many_arguments,
-    clippy::manual_c_str_literals,
-    clippy::doc_lazy_continuation,
-    clippy::empty_line_after_doc_comments,
-    clippy::manual_strip,
-    clippy::needless_range_loop,
-    clippy::unnecessary_cast,
-    clippy::clone_on_copy,
-    clippy::mutable_key_type,
-    clippy::only_used_in_recursion,
-    clippy::let_unit_value,
-    clippy::unnecessary_literal_unwrap,
-    clippy::format_in_format_args,
-    clippy::permissions_set_readonly_false,
-    clippy::needless_lifetimes,
-    clippy::collapsible_if
-)]
 
 pub use glyim_core::abi::ALIGN_MAX;
 
@@ -179,7 +157,6 @@ fn lock_recover<T>(m: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// The message is written to stderr before exiting so a panicking program
 /// is not silent.
 #[unsafe(no_mangle)]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn glyim_panic(msg: *const u8, len: usize) -> ! {
     use std::io::Write as _;
     let payload: &[u8] = if msg.is_null() || len == 0 {
@@ -603,7 +580,7 @@ fn dirs_home_dir() -> Option<String> {
         let drive_str = drive.to_string_lossy();
         let path_str = path.to_string_lossy();
         if !drive_str.is_empty() && !path_str.is_empty() {
-            let home = format!("{}{}", drive_str, path_str);
+            let home = format!("{drive_str}{path_str}");
             if !home.is_empty() {
                 return Some(home);
             }
@@ -889,7 +866,7 @@ pub unsafe extern "C" fn glyim_process_wait_output(
 ///
 /// `GenerateConsoleCtrlEvent` is the graceful counterpart to `SIGTERM`. The
 /// Windows branch now branches on `signal`: `SIGTERM` (15) / `SIGINT` (2) send a
-/// `GenerateConsoleCtrlEvent` (CTRL_BREAK_EVENT / CTRL_C_EVENT) to the child's
+/// `GenerateConsoleCtrlEvent` (`CTRL_BREAK_EVENT` / `CTRL_C_EVENT`) to the child's
 /// process group (the child is spawned with `CREATE_NEW_PROCESS_GROUP` on
 /// Windows so it can receive the event), while `SIGKILL` (9) / out-of-range
 /// values perform a hard `TerminateProcess`. A graceful event that fails to
@@ -915,7 +892,7 @@ pub unsafe extern "C" fn glyim_process_kill(handle: usize, signal: i32) -> i32 {
         if let Some(child) = registry.children.get_mut(&handle) {
             let pid = child.id() as libc::pid_t;
             // Map the requested signal; invalid values fall back to SIGKILL.
-            let sig = if signal > 0 && signal <= libc::SIGKILL as i32 {
+            let sig = if signal > 0 && signal <= libc::SIGKILL {
                 signal as libc::c_int
             } else {
                 libc::SIGKILL
@@ -1143,7 +1120,9 @@ unsafe fn bytes_to_string(ptr: *const u8, len: usize) -> Option<String> {
         return None;
     }
     let slice = unsafe { crate::fs::slice_from_raw_parts(ptr, len) };
-    std::str::from_utf8(slice).ok().map(|s| s.to_string())
+    std::str::from_utf8(slice)
+        .ok()
+        .map(std::string::ToString::to_string)
 }
 
 // TCP functions
@@ -1155,7 +1134,7 @@ pub unsafe extern "C" fn glyim_net_tcp_connect(addr: *const u8, addr_len: usize,
         Some(s) => s,
         None => return -1,
     };
-    let full_addr = format!("{}:{}", addr_str, port);
+    let full_addr = format!("{addr_str}:{port}");
     let stream = match TcpStream::connect(&full_addr) {
         Ok(s) => s,
         Err(_) => return -1,
@@ -1173,7 +1152,7 @@ pub unsafe extern "C" fn glyim_net_tcp_bind(addr: *const u8, addr_len: usize, po
         Some(s) => s,
         None => return -1,
     };
-    let full_addr = format!("{}:{}", addr_str, port);
+    let full_addr = format!("{addr_str}:{port}");
     // Bind using standard TcpListener, then set SO_REUSEADDR via socket2 SockRef
     let listener = match std::net::TcpListener::bind(&full_addr) {
         Ok(l) => l,
@@ -1339,7 +1318,7 @@ pub unsafe extern "C" fn glyim_net_udp_bind(addr: *const u8, addr_len: usize, po
         Some(s) => s,
         None => return -1,
     };
-    let full_addr = format!("{}:{}", addr_str, port);
+    let full_addr = format!("{addr_str}:{port}");
     let socket = match UdpSocket::bind(&full_addr) {
         Ok(s) => s,
         Err(_) => return -1,
@@ -1368,7 +1347,7 @@ pub unsafe extern "C" fn glyim_net_udp_send_to(
         Some(s) => s,
         None => return -1,
     };
-    let target = match format!("{}:{}", addr_str, dest_port).to_socket_addrs() {
+    let target = match format!("{addr_str}:{dest_port}").to_socket_addrs() {
         Ok(mut addrs) => addrs.next(),
         Err(_) => None,
     };
@@ -1447,7 +1426,7 @@ pub unsafe extern "C" fn glyim_net_udp_connect(
         Some(s) => s,
         None => return -1,
     };
-    let target = match format!("{}:{}", addr_str, port).to_socket_addrs() {
+    let target = match format!("{addr_str}:{port}").to_socket_addrs() {
         Ok(mut addrs) => addrs.next(),
         Err(_) => None,
     };
@@ -1760,7 +1739,7 @@ pub unsafe extern "C" fn glyim_time_now_nanos() -> u64 {
 /// FFI entry point.
 pub unsafe extern "C" fn glyim_time_now() -> u64 {
     let elapsed = monotonic_base().elapsed();
-    elapsed.as_secs() * 1_000_000_000 + elapsed.subsec_nanos() as u64
+    elapsed.as_secs() * 1_000_000_000 + u64::from(elapsed.subsec_nanos())
 }
 
 #[unsafe(no_mangle)]
@@ -1779,7 +1758,7 @@ pub unsafe extern "C" fn glyim_time_system_secs() -> u64 {
 pub unsafe extern "C" fn glyim_time_system_nanos() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_nanos() as u64)
+        .map(|d| u64::from(d.subsec_nanos()))
         .unwrap_or(0)
 }
 
@@ -2138,8 +2117,8 @@ pub unsafe extern "C" fn glyim_string_from_bytes(src: *const u8, len: usize, out
     // (== len, since we never over-allocate), len at 16.
     unsafe {
         std::ptr::write_unaligned(out as *mut *mut u8, ptr);
-        std::ptr::write_unaligned((out as *mut u8).add(8) as *mut usize, len);
-        std::ptr::write_unaligned((out as *mut u8).add(16) as *mut usize, len);
+        std::ptr::write_unaligned(out.add(8) as *mut usize, len);
+        std::ptr::write_unaligned(out.add(16) as *mut usize, len);
     }
 }
 
@@ -2163,8 +2142,7 @@ pub unsafe extern "C" fn glyim_string_push_str(
     // `String` layout is `{ ptr, capacity, len }`; read/write len at offset
     // 16, not 8 (which is capacity — reading it as len gave a bogus value).
     let old_ptr = unsafe { std::ptr::read_unaligned(str_header as *const *mut u8) };
-    let old_len =
-        unsafe { std::ptr::read_unaligned((str_header as *const u8).add(16) as *const usize) };
+    let old_len = unsafe { std::ptr::read_unaligned(str_header.add(16) as *const usize) };
     let new_len = old_len + add_len;
     let new_ptr = glyim_alloc(new_len, 1);
     if old_len > 0 && !old_ptr.is_null() {
@@ -2173,8 +2151,8 @@ pub unsafe extern "C" fn glyim_string_push_str(
     unsafe { std::ptr::copy_nonoverlapping(add, new_ptr.add(old_len), add_len) };
     unsafe {
         std::ptr::write_unaligned(str_header as *mut *mut u8, new_ptr);
-        std::ptr::write_unaligned((str_header as *mut u8).add(8) as *mut usize, new_len);
-        std::ptr::write_unaligned((str_header as *mut u8).add(16) as *mut usize, new_len);
+        std::ptr::write_unaligned(str_header.add(8) as *mut usize, new_len);
+        std::ptr::write_unaligned(str_header.add(16) as *mut usize, new_len);
     }
 }
 
@@ -2199,9 +2177,8 @@ pub unsafe extern "C" fn glyim_vec_push(vec_header: *mut u8, elem: *const u8, el
         return;
     }
     let ptr = unsafe { std::ptr::read_unaligned(vec_header as *const *mut u8) };
-    let cap = unsafe { std::ptr::read_unaligned((vec_header as *const u8).add(8) as *const usize) };
-    let len =
-        unsafe { std::ptr::read_unaligned((vec_header as *const u8).add(16) as *const usize) };
+    let cap = unsafe { std::ptr::read_unaligned(vec_header.add(8) as *const usize) };
+    let len = unsafe { std::ptr::read_unaligned(vec_header.add(16) as *const usize) };
 
     // Grow if full. Element alignment is taken as 8 for the allocation, which
     // is conservative enough for every primitive element type this compiler
@@ -2225,7 +2202,7 @@ pub unsafe extern "C" fn glyim_vec_push(vec_header: *mut u8, elem: *const u8, el
         }
         unsafe {
             std::ptr::write_unaligned(vec_header as *mut *mut u8, new_buf);
-            std::ptr::write_unaligned((vec_header as *mut u8).add(8) as *mut usize, nc);
+            std::ptr::write_unaligned(vec_header.add(8) as *mut usize, nc);
         }
         nc
     };
@@ -2235,7 +2212,7 @@ pub unsafe extern "C" fn glyim_vec_push(vec_header: *mut u8, elem: *const u8, el
     let buf = unsafe { std::ptr::read_unaligned(vec_header as *const *mut u8) };
     unsafe {
         std::ptr::copy_nonoverlapping(elem, buf.add(len * elem_size), elem_size);
-        std::ptr::write_unaligned((vec_header as *mut u8).add(16) as *mut usize, len + 1);
+        std::ptr::write_unaligned(vec_header.add(16) as *mut usize, len + 1);
     }
 }
 
@@ -2261,8 +2238,7 @@ pub unsafe extern "C" fn glyim_vec_remove(
         return;
     }
     let ptr = unsafe { std::ptr::read_unaligned(vec_header as *const *mut u8) };
-    let len =
-        unsafe { std::ptr::read_unaligned((vec_header as *const u8).add(16) as *const usize) };
+    let len = unsafe { std::ptr::read_unaligned(vec_header.add(16) as *const usize) };
     if index >= len || ptr.is_null() {
         return;
     }
@@ -2280,7 +2256,7 @@ pub unsafe extern "C" fn glyim_vec_remove(
         }
     }
     unsafe {
-        std::ptr::write_unaligned((vec_header as *mut u8).add(16) as *mut usize, len - 1);
+        std::ptr::write_unaligned(vec_header.add(16) as *mut usize, len - 1);
     }
 }
 
@@ -2298,14 +2274,13 @@ pub unsafe extern "C" fn glyim_vec_pop(vec_header: *mut u8, elem_size: usize, ou
         return;
     }
     let ptr = unsafe { std::ptr::read_unaligned(vec_header as *const *mut u8) };
-    let len =
-        unsafe { std::ptr::read_unaligned((vec_header as *const u8).add(16) as *const usize) };
+    let len = unsafe { std::ptr::read_unaligned(vec_header.add(16) as *const usize) };
     if len == 0 || ptr.is_null() {
         return;
     }
     unsafe {
         std::ptr::copy_nonoverlapping(ptr.add((len - 1) * elem_size), out, elem_size);
-        std::ptr::write_unaligned((vec_header as *mut u8).add(16) as *mut usize, len - 1);
+        std::ptr::write_unaligned(vec_header.add(16) as *mut usize, len - 1);
     }
 }
 
@@ -2328,10 +2303,8 @@ pub unsafe extern "C" fn glyim_vec_insert(
         return;
     }
     let mut ptr = unsafe { std::ptr::read_unaligned(vec_header as *const *mut u8) };
-    let mut cap =
-        unsafe { std::ptr::read_unaligned((vec_header as *const u8).add(8) as *const usize) };
-    let len =
-        unsafe { std::ptr::read_unaligned((vec_header as *const u8).add(16) as *const usize) };
+    let mut cap = unsafe { std::ptr::read_unaligned(vec_header.add(8) as *const usize) };
+    let len = unsafe { std::ptr::read_unaligned(vec_header.add(16) as *const usize) };
     if index > len {
         return;
     }
@@ -2351,7 +2324,7 @@ pub unsafe extern "C" fn glyim_vec_insert(
         cap = nc;
         unsafe {
             std::ptr::write_unaligned(vec_header as *mut *mut u8, ptr);
-            std::ptr::write_unaligned((vec_header as *mut u8).add(8) as *mut usize, cap);
+            std::ptr::write_unaligned(vec_header.add(8) as *mut usize, cap);
         }
     }
     let tail = len - index;
@@ -2366,7 +2339,7 @@ pub unsafe extern "C" fn glyim_vec_insert(
     }
     unsafe {
         std::ptr::copy_nonoverlapping(elem, ptr.add(index * elem_size), elem_size);
-        std::ptr::write_unaligned((vec_header as *mut u8).add(16) as *mut usize, len + 1);
+        std::ptr::write_unaligned(vec_header.add(16) as *mut usize, len + 1);
     }
 }
 
@@ -2385,9 +2358,8 @@ pub unsafe extern "C" fn glyim_vec_reserve(
         return;
     }
     let ptr = unsafe { std::ptr::read_unaligned(vec_header as *const *mut u8) };
-    let cap = unsafe { std::ptr::read_unaligned((vec_header as *const u8).add(8) as *const usize) };
-    let len =
-        unsafe { std::ptr::read_unaligned((vec_header as *const u8).add(16) as *const usize) };
+    let cap = unsafe { std::ptr::read_unaligned(vec_header.add(8) as *const usize) };
+    let len = unsafe { std::ptr::read_unaligned(vec_header.add(16) as *const usize) };
     if cap >= required_cap {
         return;
     }
@@ -2404,7 +2376,7 @@ pub unsafe extern "C" fn glyim_vec_reserve(
     }
     unsafe {
         std::ptr::write_unaligned(vec_header as *mut *mut u8, new_buf);
-        std::ptr::write_unaligned((vec_header as *mut u8).add(8) as *mut usize, nc);
+        std::ptr::write_unaligned(vec_header.add(8) as *mut usize, nc);
     }
 }
 
@@ -2438,7 +2410,7 @@ pub unsafe extern "C" fn glyim_slice_to_vec(
     };
     unsafe {
         std::ptr::write_unaligned(out as *mut *mut u8, buf);
-        std::ptr::write_unaligned((out as *mut u8).add(8) as *mut usize, len);
-        std::ptr::write_unaligned((out as *mut u8).add(16) as *mut usize, len);
+        std::ptr::write_unaligned(out.add(8) as *mut usize, len);
+        std::ptr::write_unaligned(out.add(16) as *mut usize, len);
     }
 }

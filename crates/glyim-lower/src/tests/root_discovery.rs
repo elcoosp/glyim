@@ -26,7 +26,7 @@ fn make_hir(items: Vec<Item>) -> CrateHir {
         },
         bodies: IndexVec::new(),
         body_owners: IndexVec::new(),
-        interner: Default::default(),
+        interner: Interner::default(),
     }
 }
 

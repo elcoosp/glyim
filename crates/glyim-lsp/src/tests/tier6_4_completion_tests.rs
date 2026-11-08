@@ -43,8 +43,8 @@ fn completion_params(path: &PathBuf, line: u32, character: u32) -> CompletionPar
             text_document: TextDocumentIdentifier { uri: uri_for(path) },
             position: Position { line, character },
         },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
+        partial_result_params: lsp_types::PartialResultParams::default(),
         context: Some(CompletionContext {
             trigger_kind: CompletionTriggerKind::TRIGGER_CHARACTER,
             trigger_character: Some(".".to_string()),
@@ -75,10 +75,9 @@ fn s12_impl_methods_indexed_with_receiver_type() {
     let db = AnalysisDatabase::new();
     let path = PathBuf::from("/test/receiver.g");
     let file_id = db.file_map.write().get_or_create(&path);
-    db.source_maps.write().insert(
-        file_id,
-        SourceMap::new(path.clone(), file_id, source.to_string()),
-    );
+    db.source_maps
+        .write()
+        .insert(file_id, SourceMap::new(file_id, source.to_string()));
     let crate_id = glyim_core::CrateId::from_raw(0);
     let parse_result = glyim_frontend::parse_to_syntax(source, file_id);
     let mut interner = glyim_core::Interner::new();
@@ -136,10 +135,9 @@ fn main() {
     let db = AnalysisDatabase::new();
     let path = PathBuf::from("/test/receiver.g");
     let file_id = db.file_map.write().get_or_create(&path);
-    db.source_maps.write().insert(
-        file_id,
-        SourceMap::new(path.clone(), file_id, source.to_string()),
-    );
+    db.source_maps
+        .write()
+        .insert(file_id, SourceMap::new(file_id, source.to_string()));
 
     let interner = glyim_core::Interner::new();
     let i32_name = interner.intern("i32");
@@ -251,7 +249,7 @@ fn main() {
         items,
         bodies,
         body_owners,
-        interner: Default::default(),
+        interner: glyim_core::Interner::default(),
     };
     db.hirs.write().insert(file_id, hir.clone());
     db.symbol_index
@@ -295,23 +293,20 @@ fn main() {
     drop(file_map_guard);
     let items = match result {
         Some(CompletionResponse::List(list)) => list.items,
-        other => panic!("expected a completion list, got {:?}", other),
+        other => panic!("expected a completion list, got {other:?}"),
     };
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
     assert!(
         labels.contains(&"ping"),
-        "expected `ping` (receiver i32) in completions, got {:?}",
-        labels
+        "expected `ping` (receiver i32) in completions, got {labels:?}"
     );
     assert!(
         labels.contains(&"other"),
-        "expected `other` (receiver i32) in completions, got {:?}",
-        labels
+        "expected `other` (receiver i32) in completions, got {labels:?}"
     );
     assert!(
         !labels.contains(&"unrelated"),
-        "free function `unrelated` must be filtered out at a `.` call site, got {:?}",
-        labels
+        "free function `unrelated` must be filtered out at a `.` call site, got {labels:?}"
     );
 }
 
@@ -341,10 +336,9 @@ fn main() {
     let db = AnalysisDatabase::new();
     let path = PathBuf::from("/test/trait_impl.g");
     let file_id = db.file_map.write().get_or_create(&path);
-    db.source_maps.write().insert(
-        file_id,
-        SourceMap::new(path.clone(), file_id, source.to_string()),
-    );
+    db.source_maps
+        .write()
+        .insert(file_id, SourceMap::new(file_id, source.to_string()));
 
     let interner = glyim_core::Interner::new();
     let i32_name = interner.intern("i32");
@@ -437,7 +431,7 @@ fn main() {
         items,
         bodies,
         body_owners,
-        interner: Default::default(),
+        interner: glyim_core::Interner::default(),
     };
     db.hirs.write().insert(file_id, hir.clone());
     db.symbol_index
@@ -469,12 +463,11 @@ fn main() {
     drop(file_map_guard);
     let items = match result {
         Some(CompletionResponse::List(list)) => list.items,
-        other => panic!("expected a completion list, got {:?}", other),
+        other => panic!("expected a completion list, got {other:?}"),
     };
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
     assert!(
         labels.contains(&"show"),
-        "expected trait-impl method `show` (receiver i32) in completions, got {:?}",
-        labels
+        "expected trait-impl method `show` (receiver i32) in completions, got {labels:?}"
     );
 }

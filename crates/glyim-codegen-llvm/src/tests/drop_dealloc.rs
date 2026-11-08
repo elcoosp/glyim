@@ -2,22 +2,22 @@
 //!
 //! Core tests:
 //! V15-T01: Drop of Copy type at block end - no drop call emitted
-//! V15-T02: Drop of non-Copy type → drop_in_place call emitted
+//! V15-T02: Drop of non-Copy type → `drop_in_place` call emitted
 //! V15-T03: Drop in panic path (cleanup) with non-Copy type
 //! V15-T04: Drop order matches declaration order (sequential drops)
 //! V15-T05: Drop of mutable ref to non-Copy type → dealloc emitted
 //! V15-T06: Drop of &mut Copy type → no dealloc needed
 //!
 //! Extended tests:
-//! V15-T07: Drop of tuple of non-Copy types → drop_in_place emitted
+//! V15-T07: Drop of tuple of non-Copy types → `drop_in_place` emitted
 //! V15-T08: Drop of tuple of Copy types → no drop needed
-//! V15-T09: Drop of &String (shared ref) → drop_in_place but no dealloc
+//! V15-T09: Drop of &String (shared ref) → `drop_in_place` but no dealloc
 //! V15-T10: Drop of raw pointer to non-Copy type
 //! V15-T11: Drop of unit type → no drop needed
 //! V15-T12: Drop of bool → no drop needed
-//! V15-T13: Drop of nested ref &&mut String → drop_in_place emitted
+//! V15-T13: Drop of nested ref &&mut String → `drop_in_place` emitted
 //! V15-T14: Drop with cleanup target block specified
-//! V15-T15: Drop of array of non-Copy elements → drop_in_place emitted
+//! V15-T15: Drop of array of non-Copy elements → `drop_in_place` emitted
 
 use crate::LlvmBackend;
 use glyim_core::arena::IndexVec;
@@ -109,17 +109,14 @@ fn v15_t01_drop_copy_type_at_block_end() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for Copy type i32, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for Copy type i32, got:\n{ir}"
     );
     assert!(
         ir.contains("br label") || ir.contains("ret void"),
-        "IR should contain branch or return, got:\n{}",
-        ir
+        "IR should contain branch or return, got:\n{ir}"
     );
 }
 
-/// V15-T02: Drop of non-Copy type → drop_in_place call emitted.
 #[test]
 fn v15_t02_drop_non_copy_type_emits_drop_in_place() {
     Target::initialize_all(&InitializationConfig::default());
@@ -181,8 +178,7 @@ fn v15_t02_drop_non_copy_type_emits_drop_in_place() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("call void @glyim_drop_in_place"),
-        "IR should call glyim_drop_in_place for non-Copy String type, got:\n{}",
-        ir
+        "IR should call glyim_drop_in_place for non-Copy String type, got:\n{ir}"
     );
 }
 
@@ -282,9 +278,7 @@ fn v15_t03_drop_in_panic_cleanup_path() {
     let drop_count = count_drop_calls(&ir);
     assert!(
         drop_count >= 2,
-        "IR should have at least 2 drop_in_place calls (normal + cleanup), found {}, got:\n{}",
-        drop_count,
-        ir
+        "IR should have at least 2 drop_in_place calls (normal + cleanup), found {drop_count}, got:\n{ir}"
     );
 }
 
@@ -368,13 +362,10 @@ fn v15_t04_drop_order_matches_declaration_order() {
     let drop_count = count_drop_calls(&ir);
     assert!(
         drop_count >= 2,
-        "IR should have at least 2 drop_in_place calls for sequential drops, found {}, got:\n{}",
-        drop_count,
-        ir
+        "IR should have at least 2 drop_in_place calls for sequential drops, found {drop_count}, got:\n{ir}"
     );
 }
 
-/// V15-T05: Drop of mutable ref to non-Copy type → both drop_in_place and dealloc emitted.
 #[test]
 fn v15_t05_drop_mut_ref_non_copy_emits_dealloc() {
     Target::initialize_all(&InitializationConfig::default());
@@ -441,17 +432,14 @@ fn v15_t05_drop_mut_ref_non_copy_emits_dealloc() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("call void @glyim_drop_in_place"),
-        "IR should call glyim_drop_in_place for &mut String drop, got:\n{}",
-        ir
+        "IR should call glyim_drop_in_place for &mut String drop, got:\n{ir}"
     );
     assert!(
         ir.contains("call void @glyim_dealloc"),
-        "IR should call glyim_dealloc for &mut String deallocation, got:\n{}",
-        ir
+        "IR should call glyim_dealloc for &mut String deallocation, got:\n{ir}"
     );
 }
 
-/// V15-T06: Drop of &mut Copy type → no drop_in_place call, no dealloc call.
 #[test]
 fn v15_t06_drop_mut_ref_copy_type_no_dealloc() {
     Target::initialize_all(&InitializationConfig::default());
@@ -518,17 +506,14 @@ fn v15_t06_drop_mut_ref_copy_type_no_dealloc() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for &mut i32, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for &mut i32, got:\n{ir}"
     );
     assert!(
         !ir.contains("call void @glyim_dealloc"),
-        "IR should NOT call glyim_dealloc for &mut i32, got:\n{}",
-        ir
+        "IR should NOT call glyim_dealloc for &mut i32, got:\n{ir}"
     );
 }
 
-/// V15-T07: Drop of tuple of non-Copy types → drop_in_place emitted.
 ///
 /// A tuple containing String needs drop because String needs drop.
 #[test]
@@ -597,8 +582,7 @@ fn v15_t07_drop_tuple_of_non_copy_types() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("call void @glyim_drop_in_place"),
-        "IR should call glyim_drop_in_place for tuple of Strings, got:\n{}",
-        ir
+        "IR should call glyim_drop_in_place for tuple of Strings, got:\n{ir}"
     );
 }
 
@@ -671,16 +655,13 @@ fn v15_t08_drop_tuple_of_copy_types() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for tuple of Copy types, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for tuple of Copy types, got:\n{ir}"
     );
 }
 
-/// V15-T09: Drop of &String (shared/immutable ref) → drop_in_place but no dealloc.
 ///
 /// A shared reference (&T) does not own the data, so it should not
-/// call glyim_dealloc even if T is not Copy. But if T needs drop,
-/// drop_in_place is still called.
+/// `drop_in_place` is still called.
 #[test]
 fn v15_t09_drop_shared_ref_non_copy_no_dealloc() {
     Target::initialize_all(&InitializationConfig::default());
@@ -749,21 +730,18 @@ fn v15_t09_drop_shared_ref_non_copy_no_dealloc() {
     // no drop glue at all (neither drop_in_place nor dealloc).
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for &String (shared ref does not own), got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for &String (shared ref does not own), got:\n{ir}"
     );
     // Shared ref does not own, so no dealloc
     assert!(
         !ir.contains("call void @glyim_dealloc"),
-        "IR should NOT call glyim_dealloc for &String (shared ref), got:\n{}",
-        ir
+        "IR should NOT call glyim_dealloc for &String (shared ref), got:\n{ir}"
     );
 }
 
 /// V15-T10: Drop of raw pointer to non-Copy type.
 ///
-/// *mut String should trigger drop_in_place but since it's a raw pointer
-/// and Mutability::Mut, type_needs_dealloc returns true if inner is not Copy.
+/// *mut String should trigger `drop_in_place` but since it's a raw pointer
 #[test]
 fn v15_t10_drop_raw_ptr_non_copy_type() {
     Target::initialize_all(&InitializationConfig::default());
@@ -828,14 +806,12 @@ fn v15_t10_drop_raw_ptr_non_copy_type() {
     // with non-Copy inner), so drop_in_place is called on the pointee.
     assert!(
         ir.contains("call void @glyim_drop_in_place"),
-        "IR should call glyim_drop_in_place for *mut String (owning raw ptr), got:\n{}",
-        ir
+        "IR should call glyim_drop_in_place for *mut String (owning raw ptr), got:\n{ir}"
     );
     // *mut String: owning raw ptr to non-Copy, dealloc should be called
     assert!(
         ir.contains("call void @glyim_dealloc"),
-        "IR should call glyim_dealloc for *mut String (owning raw ptr), got:\n{}",
-        ir
+        "IR should call glyim_dealloc for *mut String (owning raw ptr), got:\n{ir}"
     );
 }
 
@@ -900,8 +876,7 @@ fn v15_t11_drop_unit_type() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for unit type, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for unit type, got:\n{ir}"
     );
 }
 
@@ -967,15 +942,12 @@ fn v15_t12_drop_bool_type() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for bool type, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for bool type, got:\n{ir}"
     );
 }
 
-/// V15-T13: Drop of nested ref &&mut String → drop_in_place emitted.
 ///
 /// Double indirection: the inner type (after peeling & refs) is String
-/// which needs drop, so drop_in_place should be called.
 #[test]
 fn v15_t13_drop_nested_ref() {
     Target::initialize_all(&InitializationConfig::default());
@@ -1049,14 +1021,12 @@ fn v15_t13_drop_nested_ref() {
     // glue at all (drop_in_place would wrongly try to drop through the reference).
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for &&mut String (refs do not own), got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for &&mut String (refs do not own), got:\n{ir}"
     );
     // Outer ref is immutable, so no dealloc
     assert!(
         !ir.contains("call void @glyim_dealloc"),
-        "IR should NOT call glyim_dealloc for &&mut String (outer is shared ref), got:\n{}",
-        ir
+        "IR should NOT call glyim_dealloc for &&mut String (outer is shared ref), got:\n{ir}"
     );
 }
 
@@ -1137,18 +1107,15 @@ fn v15_t14_drop_with_cleanup_target() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("@glyim_drop_in_place"),
-        "IR should invoke glyim_drop_in_place for String with cleanup target, got:\n{}",
-        ir
+        "IR should invoke glyim_drop_in_place for String with cleanup target, got:\n{ir}"
     );
     // Should have both target and cleanup blocks
     assert!(
         ir.contains("bb_1") && ir.contains("bb_2"),
-        "IR should have basic blocks for both target and cleanup paths, got:\n{}",
-        ir
+        "IR should have basic blocks for both target and cleanup paths, got:\n{ir}"
     );
 }
 
-/// V15-T15: Drop of array of non-Copy elements → drop_in_place emitted.
 ///
 /// An array of Strings needs drop because the element type needs drop.
 #[test]
@@ -1217,8 +1184,7 @@ fn v15_t15_drop_array_of_non_copy() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("call void @glyim_drop_in_place"),
-        "IR should call glyim_drop_in_place for array of Strings, got:\n{}",
-        ir
+        "IR should call glyim_drop_in_place for array of Strings, got:\n{ir}"
     );
 }
 /// V15-T16: Drop of u32 (unsigned Copy type) → no drop needed.
@@ -1283,8 +1249,7 @@ fn v15_t16_drop_u32_copy_type() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for u32, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for u32, got:\n{ir}"
     );
 }
 
@@ -1350,8 +1315,7 @@ fn v15_t17_drop_f64_copy_type() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for f64, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for f64, got:\n{ir}"
     );
 }
 
@@ -1417,8 +1381,7 @@ fn v15_t18_drop_char_type() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for char, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for char, got:\n{ir}"
     );
 }
 
@@ -1491,15 +1454,13 @@ fn v15_t19_drop_fn_ptr_type() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for fn pointer, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for fn pointer, got:\n{ir}"
     );
 }
 
 /// V15-T20: Mixed Copy and non-Copy drops in sequence.
 ///
 /// Drop a Copy type, then a non-Copy type, then another Copy type.
-/// Only the non-Copy type should generate a drop_in_place call.
 #[test]
 fn v15_t20_mixed_copy_non_copy_drops() {
     Target::initialize_all(&InitializationConfig::default());
@@ -1607,20 +1568,17 @@ fn v15_t20_mixed_copy_non_copy_drops() {
     // Only one drop_in_place call for the String (local_2)
     assert_eq!(
         drop_count, 1,
-        "IR should have exactly 1 drop_in_place call (for String only), found {}, got:\n{}",
-        drop_count, ir
+        "IR should have exactly 1 drop_in_place call (for String only), found {drop_count}, got:\n{ir}"
     );
     // No dealloc since String is not behind a &mut ref
     assert!(
         !ir.contains("call void @glyim_dealloc"),
-        "IR should NOT call glyim_dealloc for plain String drop, got:\n{}",
-        ir
+        "IR should NOT call glyim_dealloc for plain String drop, got:\n{ir}"
     );
     // All four basic blocks should exist
     assert!(
         ir.contains("bb_1") && ir.contains("bb_2") && ir.contains("bb_3"),
-        "IR should have bb_1, bb_2, and bb_3 for sequential drops, got:\n{}",
-        ir
+        "IR should have bb_1, bb_2, and bb_3 for sequential drops, got:\n{ir}"
     );
 }
 
@@ -1686,8 +1644,7 @@ fn v15_t21_drop_never_type() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for Never type, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for Never type, got:\n{ir}"
     );
 }
 
@@ -1761,14 +1718,12 @@ fn v15_t22_drop_mixed_tuple_copy_non_copy() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("call void @glyim_drop_in_place"),
-        "IR should call glyim_drop_in_place for mixed tuple (i32, String), got:\n{}",
-        ir
+        "IR should call glyim_drop_in_place for mixed tuple (i32, String), got:\n{ir}"
     );
 }
 
 /// V15-T23: Stress test - 10 sequential drops of non-Copy types.
 ///
-/// All 10 should generate drop_in_place calls.
 #[test]
 fn v15_t23_stress_many_sequential_drops() {
     Target::initialize_all(&InitializationConfig::default());
@@ -1844,8 +1799,7 @@ fn v15_t23_stress_many_sequential_drops() {
     let drop_count = count_drop_calls(&ir);
     assert_eq!(
         drop_count, 10,
-        "IR should have exactly 10 drop_in_place calls for 10 String drops, found {}, got:\n{}",
-        drop_count, ir
+        "IR should have exactly 10 drop_in_place calls for 10 String drops, found {drop_count}, got:\n{ir}"
     );
 }
 
@@ -1927,13 +1881,11 @@ fn v15_t24_drop_mut_ref_with_cleanup_dealloc() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("@glyim_drop_in_place"),
-        "IR should invoke glyim_drop_in_place for &mut String with cleanup, got:\n{}",
-        ir
+        "IR should invoke glyim_drop_in_place for &mut String with cleanup, got:\n{ir}"
     );
     assert!(
         ir.contains("call void @glyim_dealloc"),
-        "IR should call glyim_dealloc for &mut String with cleanup, got:\n{}",
-        ir
+        "IR should call glyim_dealloc for &mut String with cleanup, got:\n{ir}"
     );
 }
 
@@ -2000,8 +1952,7 @@ fn v15_t25_drop_error_type() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for Error type, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for Error type, got:\n{ir}"
     );
 }
 
@@ -2067,8 +2018,7 @@ fn v15_t26_drop_isize_copy_type() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for isize, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for isize, got:\n{ir}"
     );
 }
 
@@ -2134,15 +2084,13 @@ fn v15_t27_drop_usize_copy_type() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for usize, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for usize, got:\n{ir}"
     );
 }
 
 /// V15-T28: Drop of *const String (const raw ptr) → drop needed, no dealloc.
 ///
-/// *const T is Copy, so type_needs_dealloc returns false.
-/// But the inner type may need drop, so type_needs_drop recurses.
+/// *const T is Copy, so `type_needs_dealloc` returns false.
 #[test]
 fn v15_t28_drop_const_raw_ptr_non_copy() {
     Target::initialize_all(&InitializationConfig::default());
@@ -2207,14 +2155,12 @@ fn v15_t28_drop_const_raw_ptr_non_copy() {
     // drop glue at all (drop_in_place would wrongly drop through the pointer).
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for *const String (raw ptr does not own), got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for *const String (raw ptr does not own), got:\n{ir}"
     );
     // *const T is never deallocated (only *mut T can own)
     assert!(
         !ir.contains("call void @glyim_dealloc"),
-        "IR should NOT call glyim_dealloc for *const String, got:\n{}",
-        ir
+        "IR should NOT call glyim_dealloc for *const String, got:\n{ir}"
     );
 }
 
@@ -2281,14 +2227,12 @@ fn v15_t29_drop_empty_tuple() {
     let ir = module.print_to_string().to_string();
     assert!(
         !ir.contains("call void @glyim_drop_in_place"),
-        "IR should NOT call glyim_drop_in_place for empty tuple, got:\n{}",
-        ir
+        "IR should NOT call glyim_drop_in_place for empty tuple, got:\n{ir}"
     );
 }
 
-/// V15-T30: Verify drop_in_place IR structure - call uses pointer operand.
 ///
-/// Checks that the drop_in_place call in the LLVM IR receives a pointer
+/// Checks that the `drop_in_place` call in the LLVM IR receives a pointer
 /// argument (bitcast of the local's alloca to ptr).
 #[test]
 fn v15_t30_drop_in_place_receives_pointer_arg() {
@@ -2355,13 +2299,11 @@ fn v15_t30_drop_in_place_receives_pointer_arg() {
     // call now passes a null second operand.
     assert!(
         ir.contains("call void @glyim_drop_in_place(ptr"),
-        "IR should call glyim_drop_in_place with ptr argument, got:\n{}",
-        ir
+        "IR should call glyim_drop_in_place with ptr argument, got:\n{ir}"
     );
     // The declaration must match the runtime's real 2-argument form.
     assert!(
         ir.contains("declare void @glyim_drop_in_place(ptr, ptr)"),
-        "IR should declare glyim_drop_in_place(ptr, ptr), got:\n{}",
-        ir
+        "IR should declare glyim_drop_in_place(ptr, ptr), got:\n{ir}"
     );
 }

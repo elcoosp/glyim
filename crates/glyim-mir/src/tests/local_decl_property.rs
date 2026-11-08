@@ -1,4 +1,4 @@
-//! Property-based tests for LocalDecl
+//! Property-based tests for `LocalDecl`
 
 use crate::*;
 use glyim_core::arena::IndexVec;

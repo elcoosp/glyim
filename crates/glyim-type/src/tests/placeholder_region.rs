@@ -1,4 +1,4 @@
-//! Tests for PlaceholderRegion and Region::Placeholder
+//! Tests for `PlaceholderRegion` and `Region::Placeholder`
 
 use crate::{BoundRegionKind, PlaceholderRegion, Region, UniverseIndex};
 use glyim_core::interner::Interner;
@@ -137,11 +137,10 @@ fn placeholder_region_debug_format() {
         bound: BoundRegionKind::BrAnon(0),
         index: 3,
     };
-    let debug_str = format!("{:?}", placeholder);
+    let debug_str = format!("{placeholder:?}");
     assert!(
         debug_str.contains("PlaceholderRegion"),
-        "Debug output should contain PlaceholderRegion: {}",
-        debug_str
+        "Debug output should contain PlaceholderRegion: {debug_str}"
     );
 }
 
@@ -153,10 +152,9 @@ fn region_placeholder_debug_format() {
         index: 3,
     };
     let region = Region::Placeholder(placeholder);
-    let debug_str = format!("{:?}", region);
+    let debug_str = format!("{region:?}");
     assert!(
         debug_str.contains("Placeholder"),
-        "Debug output should contain Placeholder: {}",
-        debug_str
+        "Debug output should contain Placeholder: {debug_str}"
     );
 }

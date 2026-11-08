@@ -40,7 +40,7 @@ impl<'a> TestLowerCtx<'a> {
     }
 }
 
-impl<'a> LowerCtx for TestLowerCtx<'a> {
+impl LowerCtx for TestLowerCtx<'_> {
     fn ty_ctx(&self) -> &TyCtx {
         self.ty_ctx
     }

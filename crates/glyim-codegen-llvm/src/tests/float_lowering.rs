@@ -26,7 +26,7 @@ fn build_f32_body(ctx: &mut TyCtxMut) -> Body {
     });
 
     let const_f32_1 = MirConst {
-        kind: MirConstKind::FloatBits(f32::to_bits(1.0f32) as u64),
+        kind: MirConstKind::FloatBits(u64::from(f32::to_bits(1.0f32))),
         ty: f32_ty,
         span: Span::DUMMY,
     };
@@ -117,8 +117,7 @@ fn u05_t05_f32_type_uses_llvm_f32() {
 
     assert!(
         ir.contains("float"),
-        "IR should contain 'float' (LLVM f32), got:\n{}",
-        ir
+        "IR should contain 'float' (LLVM f32), got:\n{ir}"
     );
 }
 
@@ -135,7 +134,6 @@ fn u05_t05_f64_type_uses_llvm_f64() {
 
     assert!(
         ir.contains("double"),
-        "IR should contain 'double' (LLVM f64), got:\n{}",
-        ir
+        "IR should contain 'double' (LLVM f64), got:\n{ir}"
     );
 }

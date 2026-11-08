@@ -23,11 +23,8 @@ fn completions_include_function_name() {
         let mut file_map = analysis.file_map.write();
         file_map.get_or_create(&path)
     };
-    let source_map = crate::SourceMap::new(
-        path.clone(),
-        file_id,
-        "fn foo() {}\nfn main() { foo(); }".to_string(),
-    );
+    let source_map =
+        crate::SourceMap::new(file_id, "fn foo() {}\nfn main() { foo(); }".to_string());
     analysis.source_maps.write().insert(file_id, source_map);
 
     let span = Span::new(
@@ -75,8 +72,8 @@ fn completions_include_function_name() {
                     character: 12,
                 },
             },
-            work_done_progress_params: Default::default(),
-            partial_result_params: Default::default(),
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default(),
             context: None,
         },
     );

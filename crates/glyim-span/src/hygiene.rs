@@ -2,50 +2,50 @@ use crate::{ExpnId, HygieneKey, Span, SyntaxContext, Transparency};
 use glyim_core::interner::Name;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// Mark.
+/// `Mark`.
 pub struct Mark {
-    /// Struct.
+    /// `Struct`.
     pub expn_id: ExpnId,
-    /// Struct.
+    /// `Struct`.
     pub transparency: Transparency,
 }
 
 #[derive(Clone, Debug)]
-/// ExpnData.
+/// `ExpnData`.
 pub struct ExpnData {
-    /// Struct.
+    /// `Struct`.
     pub expn_id: ExpnId,
-    /// Struct.
+    /// `Struct`.
     pub parent: ExpnId,
-    /// Struct.
+    /// `Struct`.
     pub kind: ExpnKind,
-    /// Struct.
+    /// `Struct`.
     pub call_site: Span,
-    /// Struct.
+    /// `Struct`.
     pub def_site: Span,
-    /// Struct.
+    /// `Struct`.
     pub transparency: Transparency,
 }
 
 #[derive(Clone, Debug)]
-/// ExpnKind.
+/// `ExpnKind`.
 pub enum ExpnKind {
-    /// Variant.
+    /// `Variant`.
     MacroRules {
         /// name field.
         name: Name,
     },
-    /// Variant.
+    /// `Variant`.
     ProcMacro {
         /// name field.
         name: Name,
     },
-    /// Variant.
+    /// `Variant`.
     Builtin {
         /// name field.
         name: Name,
     },
-    /// Variant.
+    /// `Variant`.
     Root,
 }
 
@@ -57,7 +57,7 @@ struct SyntaxContextData {
 }
 
 #[derive(Clone)]
-/// HygieneCtx.
+/// `HygieneCtx`.
 pub struct HygieneCtx {
     expansions: Vec<ExpnData>,
     next_expn_id: u32,
@@ -68,6 +68,7 @@ pub struct HygieneCtx {
 
 impl HygieneCtx {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             expansions: vec![ExpnData {
@@ -85,7 +86,7 @@ impl HygieneCtx {
         }
     }
 
-    /// push_expansion.
+    /// `push_expansion`.
     pub fn push_expansion(&mut self, mut data: ExpnData) -> ExpnId {
         let raw_id = self.next_expn_id;
         self.next_expn_id += 1;
@@ -95,10 +96,10 @@ impl HygieneCtx {
         id
     }
 
-    /// apply_mark.
+    /// `apply_mark`.
     ///
     /// T197-DEFERRED [SPAN-2]: the plan calls for deduplicating identical
-    /// (parent_ctx, expn_id, transparency) marks, matching rustc. The
+    /// (`parent_ctx`, `expn_id`, transparency) marks, matching rustc. The
     /// existing `test_syntax_context_distinguishes_marked_spans` test
     /// *requires* the current behaviour — every `apply_mark` call must
     /// produce a distinct `SyntaxContext`, because two expansion sites of
@@ -117,7 +118,8 @@ impl HygieneCtx {
         Span::new(span.file, span.lo, span.hi, new_ctx)
     }
 
-    /// remove_mark.
+    /// `remove_mark`.
+    #[must_use]
     pub fn remove_mark(&self, span: Span) -> (Span, Option<Mark>) {
         if span.ctx.is_root() {
             return (span, None);
@@ -137,7 +139,8 @@ impl HygieneCtx {
         }
     }
 
-    /// expn_data.
+    /// `expn_data`.
+    #[must_use]
     pub fn expn_data(&self, id: ExpnId) -> Option<&ExpnData> {
         self.expansions.get(id.to_raw() as usize)
     }
@@ -146,6 +149,7 @@ impl HygieneCtx {
     /// resolver (`glyim-def-map`) can consult hygiene when two identifiers
     /// share text but differ in syntax context (a macro-introduced `let tmp`
     /// must not capture a use-site `tmp`). `SyntaxContext` *is* the id.
+    #[must_use]
     pub fn syntax_context(&self, span: Span) -> SyntaxContext {
         span.ctx
     }
@@ -156,6 +160,7 @@ impl HygieneCtx {
     /// wrong — it returned a valid-looking id that indexed an unrelated
     /// entry in the `expansions` table. Consumers must go through this
     /// method (or `remove_mark`).
+    #[must_use]
     pub fn expn_id_of(&self, ctx: SyntaxContext) -> ExpnId {
         if ctx.is_root() {
             return ExpnId::ROOT;
@@ -163,8 +168,7 @@ impl HygieneCtx {
         let idx = ctx.to_raw() as usize - 1;
         self.syntax_contexts
             .get(idx)
-            .map(|d| d.outer_expn)
-            .unwrap_or(ExpnId::ROOT)
+            .map_or(ExpnId::ROOT, |d| d.outer_expn)
     }
 
     /// adjust.

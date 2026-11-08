@@ -11,27 +11,27 @@ use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
 use tracing::debug;
 
-/// AnalysisMessage.
+/// `AnalysisMessage`.
 pub enum AnalysisMessage {
-    /// Variant.
+    /// `Variant`.
     FileChanged {
-        /// Struct.
+        /// `Struct`.
         path: PathBuf,
-        /// Struct.
+        /// `Struct`.
         content: String,
-        /// Struct.
+        /// `Struct`.
         version: i32,
     },
-    /// Variant.
+    /// `Variant`.
     FileClosed {
-        /// Struct.
+        /// `Struct`.
         path: PathBuf,
     },
-    /// Variant.
+    /// `Variant`.
     Shutdown,
 }
 
-/// AnalysisDriver.
+/// `AnalysisDriver`.
 pub struct AnalysisDriver {
     db: Arc<AnalysisDatabase>,
     rx: Receiver<AnalysisMessage>,
@@ -40,8 +40,6 @@ pub struct AnalysisDriver {
     /// cross-file hover/completions/references stay fresh after a
     /// signature change.
     analysis_tx: tokio::sync::mpsc::Sender<AnalysisMessage>,
-    #[allow(unused)]
-    cache_dir: PathBuf,
     dep_graph: Arc<parking_lot::RwLock<DependencyGraph>>,
     _watcher: Option<RecommendedWatcher>, // kept for drop
     /// P0-4 (production-readiness plan §5): client socket so `analyze_file`
@@ -57,7 +55,6 @@ impl AnalysisDriver {
     pub fn new(
         db: Arc<AnalysisDatabase>,
         rx: Receiver<AnalysisMessage>,
-        cache_dir: PathBuf,
         analysis_tx: tokio::sync::mpsc::Sender<AnalysisMessage>,
         client: Option<async_lsp::ClientSocket>,
     ) -> Self {
@@ -68,7 +65,6 @@ impl AnalysisDriver {
             db,
             rx,
             analysis_tx,
-            cache_dir,
             dep_graph: Arc::new(parking_lot::RwLock::new(DependencyGraph::new())),
             _watcher,
             client,
@@ -137,16 +133,16 @@ impl AnalysisDriver {
                 self.dep_graph.write().clear_deps(&path);
             }
             for (path, (content, version)) in latest_changes {
-                self.analyze_file(&path, &content, Some(version)).await;
+                self.analyze_file(&path, &content, Some(version));
             }
         }
     }
 
-    async fn analyze_file(&self, path: &PathBuf, content: &str, version: Option<i32>) {
+    fn analyze_file(&self, path: &PathBuf, content: &str, version: Option<i32>) {
         self.dep_graph.write().clear_deps(path);
 
         let file_id = { self.db.file_map.write().get_or_create(path) };
-        let sm = SourceMap::new(path.clone(), file_id, content.to_string());
+        let sm = SourceMap::new(file_id, content.to_string());
         self.db.source_maps.write().insert(file_id, sm.clone());
 
         let crate_id = CrateId::from_raw(0);

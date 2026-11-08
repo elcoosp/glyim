@@ -71,7 +71,7 @@ fn run_dual(src: &str) -> (i64, i64) {
     let interp_val = match interp.get_return_value() {
         Some(InterpValue::Int(n)) => n as i64,
         Some(InterpValue::Uint(n)) => n as i64,
-        Some(InterpValue::Bool(b)) => b as i64,
+        Some(InterpValue::Bool(b)) => i64::from(b),
         _ => 0,
     };
 

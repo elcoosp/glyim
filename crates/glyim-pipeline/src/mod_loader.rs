@@ -42,6 +42,7 @@
 use glyim_diag::{DiagSeverity, ErrorCategory, ErrorCode, GlyimDiagnostic, MultiSpan};
 use glyim_span::Span;
 use std::collections::HashSet;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 /// Flatten every bodyless `mod foo;` in `source` into an inline
@@ -51,6 +52,7 @@ use std::path::{Path, PathBuf};
 /// Returns the flattened source and any diagnostics produced (missing file,
 /// cycle). The flattened source parses and lowers exactly like a hand-written
 /// single-file crate with inline modules.
+#[must_use]
 pub fn flatten_modules(
     source: &str,
     source_path: &Path,
@@ -96,7 +98,7 @@ fn flatten(
     for m in &mods {
         // Copy everything before this `mod foo;`.
         out.push_str(&source[cursor..m.start]);
-        out.push_str(&format!("mod {} {{ ", m.name));
+        let _ = write!(out, "mod {} {{ ", m.name);
 
         // T125-PATCHED [PIPE-5]: for a bodyless `mod foo;` nested inside
         // an inline module `mod a { mod foo; }`, resolve `foo` against

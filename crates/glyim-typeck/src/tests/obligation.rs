@@ -4,25 +4,18 @@ use glyim_core::arena::IndexVec;
 use glyim_core::def_id::LocalDefId;
 use glyim_core::interner::Interner;
 use glyim_core::primitives::Visibility;
-use glyim_diag::GlyimDiagnostic;
 use glyim_hir::{Body, BodyId, CrateHir, Expr, ExprId, FnItem, Item, ItemId, ItemKind};
-use glyim_solve::{InferenceTable, SolverResult};
+use glyim_solve::SolverResult;
 use glyim_span::Span;
 use glyim_test::mock::MockSolver;
 use glyim_type::{Predicate, TraitPredicate, TraitRef, Ty};
 
 // Minimal definition of TypeckCtx to make the test compile.
-struct TypeckCtx<'a> {
-    #[allow(unused)]
-    ctx: &'a mut glyim_type::TyCtxMut,
-    #[allow(unused)]
-    infer: &'a mut InferenceTable,
-    #[allow(unused)]
-    diagnostics: &'a mut Vec<GlyimDiagnostic>,
+struct TypeckCtx {
     pending_obligations: Vec<glyim_solve::Obligation>,
 }
 
-impl TypeckCtx<'_> {
+impl TypeckCtx {
     fn require_trait_bound(&mut self, _ty: Ty, pred: TraitPredicate, _span: Span) {
         use glyim_solve::Obligation;
         let obligation = Obligation {
@@ -36,21 +29,12 @@ impl TypeckCtx<'_> {
     }
 }
 
-/// Obligation tests – disabled for now (requires full trait solver)
-#[allow(unused_imports, dead_code)]
-use super::common::*;
-
 #[test]
 fn obligation_collected() {
     let mut ctx = make_ty_ctx();
     // Create the substitution BEFORE borrowing ctx for TypeckCtx
     let substs = ctx.intern_substitution(vec![]);
-    let mut infer = InferenceTable::new();
-    let mut diagnostics: Vec<GlyimDiagnostic> = vec![];
     let mut typeck_ctx = TypeckCtx {
-        ctx: &mut ctx,
-        infer: &mut infer,
-        diagnostics: &mut diagnostics,
         pending_obligations: Vec::new(),
     };
 
@@ -124,7 +108,7 @@ fn obligation_fulfilled() {
         items,
         bodies,
         body_owners,
-        interner: Default::default(),
+        interner: Interner::default(),
     };
 
     let ctx = make_ty_ctx();

@@ -60,7 +60,7 @@ fn const_prop_assign_propagates_constant() {
     }
 }
 
-/// Test that a BinaryOp with two constant operands gets its operands propagated.
+/// Test that a `BinaryOp` with two constant operands gets its operands propagated.
 #[test]
 fn const_prop_binary_op_operands_replaced() {
     let (ctx, body) = with_fresh_ty_ctx(|ctx| {

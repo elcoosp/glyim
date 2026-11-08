@@ -134,5 +134,5 @@ fn call_with_multiple_args_has_call_ir() {
 
     let module = result.unwrap();
     let ir = module.print_to_string().to_string();
-    assert!(ir.contains("call"), "LLVM IR must contain 'call':\n{}", ir);
+    assert!(ir.contains("call"), "LLVM IR must contain 'call':\n{ir}");
 }

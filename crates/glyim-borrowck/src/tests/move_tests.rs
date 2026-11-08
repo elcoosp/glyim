@@ -71,7 +71,7 @@ fn make_body(statements: Vec<Statement>, locals: Vec<LocalDecl>) -> Body {
     body
 }
 
-/// Create a place with a field projection: local.field_idx
+/// Create a place with a field projection: `local.field_idx`
 fn field_place(local: LocalIdx, field_idx: u32) -> Place {
     Place {
         local,
@@ -90,7 +90,7 @@ fn assign_move(dest: LocalIdx, src: LocalIdx) -> Statement {
     }
 }
 
-/// Assign by moving a field: dest = move src.field_idx
+/// Assign by moving a field: dest = move `src.field_idx`
 fn assign_move_field(dest: LocalIdx, src: LocalIdx, field_idx: u32) -> Statement {
     Statement {
         kind: StatementKind::Assign(
@@ -112,7 +112,7 @@ fn assign_copy(dest: LocalIdx, src: LocalIdx) -> Statement {
     }
 }
 
-/// Assign by copying a field: dest = copy src.field_idx
+/// Assign by copying a field: dest = copy `src.field_idx`
 fn assign_copy_field(dest: LocalIdx, src: LocalIdx, field_idx: u32) -> Statement {
     Statement {
         kind: StatementKind::Assign(
@@ -128,30 +128,9 @@ fn use_local(dest: LocalIdx, src: LocalIdx) -> Statement {
     assign_copy(dest, src)
 }
 
-/// Use a field by copying it into a sink: dest = copy src.field_idx
+/// Use a field by copying it into a sink: dest = copy `src.field_idx`
 fn use_field(dest: LocalIdx, src: LocalIdx, field_idx: u32) -> Statement {
     assign_copy_field(dest, src, field_idx)
-}
-
-/// Reassign a whole local: dest = <some rvalue>
-#[allow(dead_code)]
-fn reassign_local(dest: LocalIdx, src: LocalIdx) -> Statement {
-    Statement {
-        kind: StatementKind::Assign(
-            Place::new(dest),
-            Rvalue::Use(Operand::Copy(Place::new(src))),
-        ),
-        source_info: SourceInfo::new(Span::DUMMY),
-    }
-}
-
-/// StorageLive statement
-#[allow(dead_code)]
-fn storage_live(local: LocalIdx) -> Statement {
-    Statement {
-        kind: StatementKind::StorageLive(local),
-        source_info: SourceInfo::new(Span::DUMMY),
-    }
 }
 
 // ==========================================================================

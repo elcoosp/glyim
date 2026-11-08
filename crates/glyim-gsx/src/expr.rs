@@ -52,12 +52,12 @@ pub enum Expr {
         lhs: Box<Expr>,
         /// Read once for `op = Some(op)`.
         op: Option<BinOp>,
-        /// Value.
+        /// `Value`.
         rhs: Box<Expr>,
     },
     /// `if cond { then } else { els }` — regions (§6.3) and handlers.
     If {
-        /// Condition.
+        /// `Condition`.
         cond: Box<Expr>,
         /// Then block.
         then: Box<Expr>,
@@ -66,7 +66,7 @@ pub enum Expr {
     },
     /// `match scrutinee { arms }` — regions (§6.3).
     Match {
-        /// Scrutinee.
+        /// `Scrutinee`.
         scrutinee: Box<Expr>,
         /// `(pattern-text, guard, body)` per arm.
         arms: Vec<(String, Option<Expr>, Expr)>,
@@ -94,7 +94,7 @@ pub enum Expr {
     Let {
         /// Pattern text (binding name).
         pat: String,
-        /// Initializer.
+        /// `Initializer`.
         value: Box<Expr>,
     },
     /// `break`/`continue`/`return` markers (opaque for analysis).
@@ -154,7 +154,7 @@ pub enum BinOp {
     Or,
 }
 
-/// Literals.
+/// `Literals`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Lit {
     /// Signed / unsuffixed integer.
@@ -165,7 +165,7 @@ pub enum Lit {
     Float(f64),
     /// String literal with escapes already resolved.
     Str(String),
-    /// Character.
+    /// `Character`.
     Char(char),
     /// `true`/`false`.
     Bool(bool),
@@ -602,7 +602,7 @@ pub fn expr_from_cst(node: &SyntaxNode) -> Expr {
     }
 }
 
-/// True when an ExprStmt carries a trailing `;` (statement) versus being the
+/// True when an `ExprStmt` carries a trailing `;` (statement) versus being the
 /// block's tail expression (§: the parser only bumps `;` inside the stmt).
 fn ends_with_semi(stmt: &SyntaxNode) -> bool {
     stmt.children_with_tokens()
@@ -801,7 +801,7 @@ mod tests {
 
     /// Parse a source expression and extract its model.
     fn model(src: &str) -> Expr {
-        let wrapped = format!("fn __g() {{ let _x = {}; }}", src);
+        let wrapped = format!("fn __g() {{ let _x = {src}; }}");
         let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
         let block = parsed
             .root

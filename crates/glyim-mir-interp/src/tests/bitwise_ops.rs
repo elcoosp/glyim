@@ -63,12 +63,7 @@ fn w1_c03_t01_left_shift() {
     let result = interp.run_body(&body);
     assert!(result.is_ok(), "Interpreter failed: {:?}", result.err());
     let ret = interp.get_return_value().unwrap();
-    assert_eq!(
-        ret,
-        InterpValue::Int(4),
-        "Expected 1 << 2 = 4, got {:?}",
-        ret
-    );
+    assert_eq!(ret, InterpValue::Int(4), "Expected 1 << 2 = 4, got {ret:?}");
 }
 
 #[test]
@@ -127,8 +122,7 @@ fn bitwise_and() {
     assert_eq!(
         ret,
         InterpValue::Int(0b1000),
-        "Expected 0b1100 & 0b1010 = 0b1000, got {:?}",
-        ret
+        "Expected 0b1100 & 0b1010 = 0b1000, got {ret:?}"
     );
 }
 
@@ -188,8 +182,7 @@ fn bitwise_or() {
     assert_eq!(
         ret,
         InterpValue::Int(0b1110),
-        "Expected 0b1100 | 0b1010 = 0b1110, got {:?}",
-        ret
+        "Expected 0b1100 | 0b1010 = 0b1110, got {ret:?}"
     );
 }
 
@@ -249,8 +242,7 @@ fn bitwise_xor() {
     assert_eq!(
         ret,
         InterpValue::Int(0b0110),
-        "Expected 0b1100 ^ 0b1010 = 0b0110, got {:?}",
-        ret
+        "Expected 0b1100 ^ 0b1010 = 0b0110, got {ret:?}"
     );
 }
 
@@ -310,7 +302,6 @@ fn right_shift() {
     assert_eq!(
         ret,
         InterpValue::Int(4),
-        "Expected 16 >> 2 = 4, got {:?}",
-        ret
+        "Expected 16 >> 2 = 4, got {ret:?}"
     );
 }

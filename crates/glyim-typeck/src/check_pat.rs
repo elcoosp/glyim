@@ -1,4 +1,4 @@
-//! Pattern checking logic for FnCtxt.
+//! Pattern checking logic for `FnCtxt`.
 
 use glyim_core::def_id::AdtId;
 use glyim_core::def_id::LocalDefId;
@@ -12,7 +12,7 @@ use glyim_type::{Ty, TyKind};
 use crate::check_body::FnCtxt;
 use crate::thir;
 
-impl<'a> FnCtxt<'a> {
+impl FnCtxt<'_> {
     /// Collect the names a HIR pattern binds (recursively). Used by the
     /// or-pattern binding-consistency check.
     fn collect_binding_names(
@@ -76,12 +76,12 @@ impl<'a> FnCtxt<'a> {
         &mut self,
         pat_id: PatId,
         ty: Ty,
-        mutability: Mutability,
+        _mutability: Mutability,
     ) -> thir::LocalVarId {
         let pat = &self.body.pats[pat_id];
         match pat {
             Pat::Binding { name, .. } => {
-                let id = self.env.add_binding(*name, ty, mutability);
+                let id = self.env.add_binding(*name, ty);
                 thir::LocalVarId::from_raw(id.to_raw())
             }
             Pat::RefBinding {
@@ -92,13 +92,11 @@ impl<'a> FnCtxt<'a> {
                 let ref_ty = self
                     .ctx
                     .mk_ref(glyim_type::Region::Erased, ty, *ref_mutability);
-                let id = self.env.add_binding(*name, ref_ty, mutability);
+                let id = self.env.add_binding(*name, ref_ty);
                 thir::LocalVarId::from_raw(id.to_raw())
             }
             _ => {
-                let id = self
-                    .env
-                    .add_binding(self.ctx.resolver().intern("_"), ty, mutability);
+                let id = self.env.add_binding(self.ctx.resolver().intern("_"), ty);
                 thir::LocalVarId::from_raw(id.to_raw())
             }
         }
@@ -128,17 +126,15 @@ impl<'a> FnCtxt<'a> {
         {
             return true;
         }
-        let pat_name = self
-            .ctx
-            .adt_name_for_id(adt_id)
-            .map(|n| self.ctx.name_str(n).to_string())
-            .unwrap_or_else(|| format!("{:?}", adt_id));
-        let found = format!("{:?}", base_kind);
+        let pat_name = self.ctx.adt_name_for_id(adt_id).map_or_else(
+            || format!("{adt_id:?}"),
+            |n| self.ctx.name_str(n).to_string(),
+        );
+        let found = format!("{base_kind:?}");
         self.diagnostics.push(GlyimDiagnostic::type_error(
             span,
             format!(
-                "mismatched types: pattern is a variant of `{}`, but scrutinee is `{}`",
-                pat_name, found
+                "mismatched types: pattern is a variant of `{pat_name}`, but scrutinee is `{found}`"
             ),
         ));
         false
@@ -179,7 +175,7 @@ impl<'a> FnCtxt<'a> {
                     self.ctx
                         .mk_ref(glyim_type::Region::Erased, expected_ty, *ref_mutability);
                 let ctx_name = self.remap_name(*name);
-                let id = self.env.add_binding(*name, ref_ty, *mutability);
+                let id = self.env.add_binding(*name, ref_ty);
                 if ctx_name != *name {
                     self.env.add_alias(ctx_name, id);
                 }
@@ -215,7 +211,7 @@ impl<'a> FnCtxt<'a> {
                 // name `x`" inside impl-method bodies, where the HIR and
                 // type-checker interners differ (plain `fn` bodies share one
                 // interner, so the bug was hidden there).
-                let id = self.env.add_binding(*name, expected_ty, *mutability);
+                let id = self.env.add_binding(*name, expected_ty);
                 if ctx_name != *name {
                     self.env.add_alias(ctx_name, id);
                 }
@@ -236,16 +232,86 @@ impl<'a> FnCtxt<'a> {
             Pat::Path(path) => {
                 // Unit enum-variant pattern, e.g. `None` or `Color::Red`.
                 let local = self.resolve_pat_path_local(path);
-                match local {
-                    Some(local) => {
-                        if let Some((enum_local, vidx)) = self.def_map.variant_map.get(&local) {
-                            // Script 139: canonicalize the enum's AdtId.
-                            let adt_id =
-                                crate::canonical_enum_adt_id(self.ctx, self.def_map, *enum_local);
+                if let Some(local) = local {
+                    if let Some((enum_local, vidx)) = self.def_map.variant_map.get(&local) {
+                        // Script 139: canonicalize the enum's AdtId.
+                        let adt_id =
+                            crate::canonical_enum_adt_id(self.ctx, self.def_map, *enum_local);
+                        if !self.check_adt_against_scrut(adt_id, expected_ty, span) {
+                            return thir::Pattern::err(span);
+                        }
+                        thir::Pattern {
+                            kind: thir::PatternKind::Struct {
+                                adt_id,
+                                variant_idx: vidx.index() as u32,
+                                fields: Vec::new(),
+                                rest: false,
+                            },
+                            ty: expected_ty,
+                            span,
+                        }
+                    } else {
+                        let label = if let Some(name) = path.as_name() {
+                            format!("unsupported path pattern `{}`", self.ctx.name_str(name))
+                        } else {
+                            "unsupported path pattern".to_string()
+                        };
+                        self.diagnostics
+                            .push(GlyimDiagnostic::type_error(span, label));
+                        thir::Pattern::err(span)
+                    }
+                } else {
+                    // Fallback: builtin enums (Option, Result, Poll, etc.) live
+                    // only in TyCtxMut, not in the def-map.
+                    //
+                    // IMPORTANT (glyim-v2 stdlib handoff, Issue 1): the
+                    // scope-correct path resolution runs FIRST. Only after it
+                    // fails do we fall back to the unscoped bare-name search,
+                    // and even that is restricted to the small set of names
+                    // the Rust prelude makes bare-accessible and that user
+                    // code essentially never redeclares
+                    // (`None`/`Some`/`Ok`/`Err`, `Ordering`'s
+                    // `Less`/`Equal`/`Greater`). `Poll`'s `Ready`/`Pending`
+                    // are deliberately EXCLUDED: `Poll` is not a prelude
+                    // item, gets redeclared by user code (see
+                    // `nested_async_single_await_compiles`), and
+                    // `variant_by_name` searches every registered ADT
+                    // (builtin AND user-declared) in unspecified hashmap
+                    // order — trying `Ready` there first resolved the bare
+                    // pattern against the wrong `Poll` depending on hashmap
+                    // iteration order. Qualified `Poll::Ready` still
+                    // resolves correctly below via scoped path resolution,
+                    // which is unambiguous.
+                    if let Some((adt_id, vidx)) =
+                        crate::tyconv::resolve_enum_variant_path(self.ctx, self.def_map, path)
+                    {
+                        if !self.check_adt_against_scrut(adt_id, expected_ty, span) {
+                            return thir::Pattern::err(span);
+                        }
+                        return thir::Pattern {
+                            kind: thir::PatternKind::Struct {
+                                adt_id,
+                                variant_idx: vidx,
+                                fields: Vec::new(),
+                                rest: false,
+                            },
+                            ty: expected_ty,
+                            span,
+                        };
+                    }
+                    // Restricted unscoped fallback for bare prelude variant
+                    // names like `None`, `Some`, `Ok`, `Err`.
+                    if let Some(name) = path.as_name() {
+                        let bare_name = self.ctx.name_str(name);
+                        let bare_safe = matches!(
+                            bare_name,
+                            "None" | "Some" | "Ok" | "Err" | "Less" | "Equal" | "Greater"
+                        );
+                        if bare_safe && let Some((adt_id, vidx)) = self.ctx.variant_by_name(name) {
                             if !self.check_adt_against_scrut(adt_id, expected_ty, span) {
                                 return thir::Pattern::err(span);
                             }
-                            thir::Pattern {
+                            return thir::Pattern {
                                 kind: thir::PatternKind::Struct {
                                     adt_id,
                                     variant_idx: vidx.index() as u32,
@@ -254,125 +320,50 @@ impl<'a> FnCtxt<'a> {
                                 },
                                 ty: expected_ty,
                                 span,
-                            }
-                        } else {
-                            let label = if let Some(name) = path.as_name() {
-                                format!("unsupported path pattern `{}`", self.ctx.name_str(name))
-                            } else {
-                                "unsupported path pattern".to_string()
                             };
-                            self.diagnostics
-                                .push(GlyimDiagnostic::type_error(span, label));
-                            thir::Pattern::err(span)
                         }
                     }
-                    None => {
-                        // Fallback: builtin enums (Option, Result, Poll, etc.) live
-                        // only in TyCtxMut, not in the def-map.
-                        //
-                        // IMPORTANT (glyim-v2 stdlib handoff, Issue 1): the
-                        // scope-correct path resolution runs FIRST. Only after it
-                        // fails do we fall back to the unscoped bare-name search,
-                        // and even that is restricted to the small set of names
-                        // the Rust prelude makes bare-accessible and that user
-                        // code essentially never redeclares
-                        // (`None`/`Some`/`Ok`/`Err`, `Ordering`'s
-                        // `Less`/`Equal`/`Greater`). `Poll`'s `Ready`/`Pending`
-                        // are deliberately EXCLUDED: `Poll` is not a prelude
-                        // item, gets redeclared by user code (see
-                        // `nested_async_single_await_compiles`), and
-                        // `variant_by_name` searches every registered ADT
-                        // (builtin AND user-declared) in unspecified hashmap
-                        // order — trying `Ready` there first resolved the bare
-                        // pattern against the wrong `Poll` depending on hashmap
-                        // iteration order. Qualified `Poll::Ready` still
-                        // resolves correctly below via scoped path resolution,
-                        // which is unambiguous.
-                        if let Some((adt_id, vidx)) =
-                            crate::tyconv::resolve_enum_variant_path(self.ctx, self.def_map, path)
-                        {
-                            if !self.check_adt_against_scrut(adt_id, expected_ty, span) {
-                                return thir::Pattern::err(span);
-                            }
-                            return thir::Pattern {
-                                kind: thir::PatternKind::Struct {
-                                    adt_id,
-                                    variant_idx: vidx,
-                                    fields: Vec::new(),
-                                    rest: false,
-                                },
-                                ty: expected_ty,
-                                span,
-                            };
+                    // T175-PATCHED-2 [HIRX-6]: a *single-segment*
+                    // unresolved path pattern is a legitimate binding
+                    // in Rust — e.g. `let Name = x;` or
+                    // `match v { A => 1, _ => 0 }` bind a variable,
+                    // not a variant/const. The HIR emits
+                    // `Pat::Path` for any uppercase-starting
+                    // identifier; typeck must not reject it just
+                    // because the name doesn't resolve to a real
+                    // variant. Fall back to a Binding when the path
+                    // is single-segment and Plain-kind.
+                    let is_single_segment_plain =
+                        matches!(path.kind, glyim_core::path::PathKind::Plain)
+                            && path.segments.len() == 1;
+                    if is_single_segment_plain && let Some(name) = path.as_name() {
+                        let ctx_name = self.remap_name(name);
+                        let id = self.env.add_binding(name, expected_ty);
+                        if ctx_name != name {
+                            self.env.add_alias(ctx_name, id);
                         }
-                        // Restricted unscoped fallback for bare prelude variant
-                        // names like `None`, `Some`, `Ok`, `Err`.
-                        if let Some(name) = path.as_name() {
-                            let bare_name = self.ctx.name_str(name);
-                            let bare_safe = matches!(
-                                bare_name,
-                                "None" | "Some" | "Ok" | "Err" | "Less" | "Equal" | "Greater"
-                            );
-                            if bare_safe
-                                && let Some((adt_id, vidx)) = self.ctx.variant_by_name(name)
-                            {
-                                if !self.check_adt_against_scrut(adt_id, expected_ty, span) {
-                                    return thir::Pattern::err(span);
-                                }
-                                return thir::Pattern {
-                                    kind: thir::PatternKind::Struct {
-                                        adt_id,
-                                        variant_idx: vidx.index() as u32,
-                                        fields: Vec::new(),
-                                        rest: false,
-                                    },
-                                    ty: expected_ty,
-                                    span,
-                                };
-                            }
-                        }
-                        // T175-PATCHED-2 [HIRX-6]: a *single-segment*
-                        // unresolved path pattern is a legitimate binding
-                        // in Rust — e.g. `let Name = x;` or
-                        // `match v { A => 1, _ => 0 }` bind a variable,
-                        // not a variant/const. The HIR emits
-                        // `Pat::Path` for any uppercase-starting
-                        // identifier; typeck must not reject it just
-                        // because the name doesn't resolve to a real
-                        // variant. Fall back to a Binding when the path
-                        // is single-segment and Plain-kind.
-                        let is_single_segment_plain =
-                            matches!(path.kind, glyim_core::path::PathKind::Plain)
-                                && path.segments.len() == 1;
-                        if is_single_segment_plain && let Some(name) = path.as_name() {
-                            let ctx_name = self.remap_name(name);
-                            let id = self.env.add_binding(name, expected_ty, Mutability::Not);
-                            if ctx_name != name {
-                                self.env.add_alias(ctx_name, id);
-                            }
-                            return thir::Pattern {
-                                kind: thir::PatternKind::Binding {
-                                    var_id: thir::LocalVarId::from_raw(id.to_raw()),
-                                    name: ctx_name,
-                                    mutability: Mutability::Not,
-                                    binding_ty: None,
-                                    subpattern: None,
-                                },
-                                ty: expected_ty,
-                                span,
-                            };
-                        }
-                        // Genuinely unresolved (multi-segment or qualified
-                        // path). Diagnose.
-                        let label = if let Some(name) = path.as_name() {
-                            format!("unresolved path pattern `{}`", self.ctx.name_str(name))
-                        } else {
-                            "unresolved path pattern".to_string()
+                        return thir::Pattern {
+                            kind: thir::PatternKind::Binding {
+                                var_id: thir::LocalVarId::from_raw(id.to_raw()),
+                                name: ctx_name,
+                                mutability: Mutability::Not,
+                                binding_ty: None,
+                                subpattern: None,
+                            },
+                            ty: expected_ty,
+                            span,
                         };
-                        self.diagnostics
-                            .push(GlyimDiagnostic::type_error(span, label));
-                        thir::Pattern::err(span)
                     }
+                    // Genuinely unresolved (multi-segment or qualified
+                    // path). Diagnose.
+                    let label = if let Some(name) = path.as_name() {
+                        format!("unresolved path pattern `{}`", self.ctx.name_str(name))
+                    } else {
+                        "unresolved path pattern".to_string()
+                    };
+                    self.diagnostics
+                        .push(GlyimDiagnostic::type_error(span, label));
+                    thir::Pattern::err(span)
                 }
             }
             Pat::Struct { path, fields, rest } => {
@@ -471,7 +462,7 @@ impl<'a> FnCtxt<'a> {
                             let n = field_names
                                 .get(i)
                                 .copied()
-                                .unwrap_or_else(|| self.ctx.resolver().intern(&format!("_{}", i)));
+                                .unwrap_or_else(|| self.ctx.resolver().intern(&format!("_{i}")));
                             (n, i)
                         };
                         // Plan unstub-5 P5: the formal field type (e.g. `T` for
@@ -581,7 +572,7 @@ impl<'a> FnCtxt<'a> {
                         } else {
                             expected_ty
                         };
-                        self.env.add_binding(*field_name, field_ty, Mutability::Not);
+                        self.env.add_binding(*field_name, field_ty);
                         let field_pat = self.check_pattern(*field_pat_id, field_ty, span);
                         field_pats.push(thir::FieldPat {
                             field: *field_name,

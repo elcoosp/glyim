@@ -151,17 +151,15 @@ pub(crate) fn places_conflict(a: &Place, b: &Place) -> bool {
             (ProjectionElem::Field(f1), ProjectionElem::Field(f2)) => {
                 if f1 == f2 {
                     continue; // same field — not yet disjoint
-                } else {
-                    return false; // different fields — disjoint
                 }
+                return false; // different fields — disjoint
             }
 
             (ProjectionElem::Downcast(v1), ProjectionElem::Downcast(v2)) => {
                 if v1 == v2 {
                     continue; // same variant
-                } else {
-                    return false; // different variants — disjoint
                 }
+                return false; // different variants — disjoint
             }
 
             // Index projections (MIR-21): two `Index` projections on the same
@@ -233,9 +231,8 @@ pub(crate) fn places_conflict(a: &Place, b: &Place) -> bool {
                 // Check if [f1, t1) and [f2, t2) overlap
                 if f1 < t2 && f2 < t1 {
                     continue; // Overlap, keep checking rest
-                } else {
-                    return false; // Disjoint
                 }
+                return false; // Disjoint
             }
 
             // Subslice vs ConstantIndex (both from_end: false)
@@ -265,9 +262,8 @@ pub(crate) fn places_conflict(a: &Place, b: &Place) -> bool {
             ) => {
                 if *offset >= *from && *offset < *to {
                     continue; // Index is inside subslice
-                } else {
-                    return false; // Disjoint
                 }
+                return false; // Disjoint
             }
 
             // Subslice with from_end: true or mixed, or other mixed projection types

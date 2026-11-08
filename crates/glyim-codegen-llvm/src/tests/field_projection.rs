@@ -33,8 +33,7 @@ fn field_projection_on_tuple_generates_gep() {
     let ir = ir.unwrap();
     assert!(
         ir.contains("getelementptr") || ir.contains("gep"),
-        "Expected GEP instruction for field projection in IR:\n{}",
-        ir
+        "Expected GEP instruction for field projection in IR:\n{ir}"
     );
 }
 
@@ -125,7 +124,6 @@ fn deref_on_ref_type_loads_pointer() {
     let ir = ir.unwrap();
     assert!(
         ir.contains("load"),
-        "Deref on reference should produce a load, got:\n{}",
-        ir
+        "Deref on reference should produce a load, got:\n{ir}"
     );
 }

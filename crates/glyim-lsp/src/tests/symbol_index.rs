@@ -82,7 +82,7 @@ fn test_query_prefix_returns_matching_symbols() {
     assert_eq!(matches.len(), 2);
     // Collect names and sort to avoid order dependency
     let mut names: Vec<&str> = matches.iter().map(|s| s.name.as_str()).collect();
-    names.sort();
+    names.sort_unstable();
     assert_eq!(names, vec!["foo", "foobar"]);
 
     let matches_limit = index.query("foo", 1);

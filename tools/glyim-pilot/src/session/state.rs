@@ -4,75 +4,76 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-/// StreamStatus.
+/// `StreamStatus`.
 pub enum StreamStatus {
-    /// Variant.
+    /// `Variant`.
     Init,
-    /// Variant.
+    /// `Variant`.
     Seeding,
-    /// Variant.
+    /// `Variant`.
     Waiting,
-    /// Variant.
+    /// `Variant`.
     Streaming,
-    /// Variant.
+    /// `Variant`.
     Executing,
-    /// Variant.
+    /// `Variant`.
     Feedback,
-    /// Variant.
+    /// `Variant`.
     Committing,
-    /// Variant.
+    /// `Variant`.
     Committed,
-    /// Variant.
+    /// `Variant`.
     Verifying,
-    /// Variant.
+    /// `Variant`.
     Reviewing,
-    /// Variant.
+    /// `Variant`.
     Complete,
-    /// Variant.
+    /// `Variant`.
     Error,
-    /// Variant.
+    /// `Variant`.
     Paused,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-/// SessionState.
+/// `SessionState`.
 pub struct SessionState {
-    /// Struct.
+    /// `Struct`.
     pub session_id: String,
-    /// Struct.
+    /// `Struct`.
     pub pr_url: Option<String>,
-    /// Struct.
+    /// `Struct`.
     pub pr_merged: bool,
-    /// Struct.
+    /// `Struct`.
     pub stream_id: String,
-    /// Struct.
+    /// `Struct`.
     pub provider_id: String,
-    /// Struct.
+    /// `Struct`.
     pub tab_id: Option<u64>,
-    /// Struct.
+    /// `Struct`.
     pub status: StreamStatus,
-    /// Struct.
+    /// `Struct`.
     pub turn: u32,
-    /// Struct.
+    /// `Struct`.
     pub fix_round: u32,
-    /// Struct.
+    /// `Struct`.
     pub commits: u32,
-    /// Struct.
+    /// `Struct`.
     pub worktree_path: String,
-    /// Struct.
+    /// `Struct`.
     pub created_at: DateTime<Utc>,
-    /// Struct.
+    /// `Struct`.
     pub updated_at: DateTime<Utc>,
-    /// Struct.
+    /// `Struct`.
     pub last_activity: DateTime<Utc>,
-    /// Struct.
+    /// `Struct`.
     pub error_message: Option<String>,
-    /// Struct.
+    /// `Struct`.
     pub provider_cooldown_until: Option<DateTime<Utc>>,
 }
 
 impl SessionState {
     /// new.
+    #[must_use]
     pub fn new(stream_id: String, provider_id: String, worktree_path: String) -> Self {
         let now = Utc::now();
         Self {
@@ -100,21 +101,14 @@ impl SessionState {
         self.updated_at = now;
         self.last_activity = now;
     }
-    #[allow(dead_code)]
-    pub(crate) fn record_commit(&mut self) {
-        self.commits += 1;
-        self.fix_round = 0;
-        self.last_activity = Utc::now();
-    }
+
     pub(crate) fn record_turn(&mut self) {
         self.turn += 1;
         self.last_activity = Utc::now();
     }
-    #[allow(dead_code)]
-    pub(crate) fn set_provider_cooldown(&mut self, until: DateTime<Utc>) {
-        self.provider_cooldown_until = Some(until);
-    }
-    /// is_provider_in_cooldown.
+
+    /// `is_provider_in_cooldown`.
+    #[must_use]
     pub fn is_provider_in_cooldown(&self) -> bool {
         self.provider_cooldown_until
             .is_some_and(|until| Utc::now() < until)
@@ -122,15 +116,16 @@ impl SessionState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-/// GlobalState.
+/// `GlobalState`.
 pub struct GlobalState {
-    /// Struct.
+    /// `Struct`.
     pub sessions: HashMap<String, SessionState>,
-    /// Struct.
+    /// `Struct`.
     pub version: String,
 }
 impl GlobalState {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             sessions: HashMap::new(),

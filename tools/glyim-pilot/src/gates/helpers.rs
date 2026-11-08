@@ -2,7 +2,7 @@ use crate::error::PilotError;
 use crate::process::run_timed_command;
 use std::path::Path;
 
-/// run_gate_command.
+/// `run_gate_command`.
 pub async fn run_gate_command(
     program: &str,
     args: &[&str],
@@ -18,12 +18,14 @@ pub async fn run_gate_command(
         })
 }
 
-/// strip_ansi.
+/// `strip_ansi`.
+#[must_use]
 pub fn strip_ansi(s: &str) -> String {
     strip_ansi_escapes::strip_str(s)
 }
 
-/// trim_errors_and_warnings.
+/// `trim_errors_and_warnings`.
+#[must_use]
 pub fn trim_errors_and_warnings(output: &str) -> String {
     let lines: Vec<&str> = output.lines().collect();
     if lines.len() <= 50 {
@@ -48,7 +50,8 @@ pub fn trim_errors_and_warnings(output: &str) -> String {
     }
 }
 
-/// is_command_not_found.
+/// `is_command_not_found`.
+#[must_use]
 pub fn is_command_not_found(stdout: &str, stderr: &str) -> bool {
     let combined = format!("{stdout}\n{stderr}").to_lowercase();
     combined.contains("command not found")
@@ -56,7 +59,8 @@ pub fn is_command_not_found(stdout: &str, stderr: &str) -> bool {
         || combined.contains("not found")
 }
 
-/// trim_test_failures.
+/// `trim_test_failures`.
+#[must_use]
 pub fn trim_test_failures(output: &str) -> String {
     let lines: Vec<&str> = output.lines().collect();
     if lines.len() <= 80 {

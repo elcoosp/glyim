@@ -19,7 +19,7 @@ fn test_provide_hover() {
     let file_id = file_map.get_or_create(&path);
 
     let content = "fn main() {}";
-    let sm = SourceMap::new(path.clone(), file_id, content.to_string());
+    let sm = SourceMap::new(file_id, content.to_string());
     db.source_maps.write().insert(file_id, sm);
 
     let mut index = db.symbol_index.write();
@@ -63,7 +63,7 @@ fn test_provide_hover() {
                 character: 0,
             },
         },
-        work_done_progress_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
     };
 
     let result = hover::provide_hover(&db, &file_map, &params);

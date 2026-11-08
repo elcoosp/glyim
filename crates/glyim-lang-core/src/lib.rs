@@ -4,7 +4,10 @@
 //! The actual library code is in `.g` files under `lib/`, written in Glyim syntax.
 //! This Rust crate provides access to those source files and testing infrastructure.
 
+use std::fmt::Write as _;
+
 /// Returns the source code of a core library module by name.
+#[must_use]
 pub fn core_source(name: &str) -> Option<&'static str> {
     match name {
         "option" => Some(include_str!("../lib/option.g")),
@@ -28,6 +31,7 @@ pub fn core_source(name: &str) -> Option<&'static str> {
 }
 
 /// Returns the names of all core library modules.
+#[must_use]
 pub fn core_modules() -> &'static [&'static str] {
     &[
         "option", "result", "iter", "slice", "str", "cell", "mem", "ptr", "ops", "cmp", "marker",
@@ -36,11 +40,12 @@ pub fn core_modules() -> &'static [&'static str] {
 }
 
 /// Returns the combined source of all core library modules.
+#[must_use]
 pub fn core_source_all() -> String {
     let mut out = String::new();
     for name in core_modules() {
         if let Some(src) = core_source(name) {
-            out.push_str(&format!("// === module: {} ===\n", name));
+            let _ = writeln!(out, "// === module: {name} ===");
             out.push_str(src);
             out.push('\n');
         }

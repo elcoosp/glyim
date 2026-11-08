@@ -1,4 +1,3 @@
-#![allow(unused_unsafe)]
 use std::ptr;
 
 #[test]
@@ -104,13 +103,11 @@ fn test_glyim_env_remove_var() {
 
 #[test]
 fn test_glyim_env_args_count() {
-    unsafe {
-        let count = crate::glyim_env_args_count();
-        assert!(
-            count >= 1,
-            "should have at least one argument (program name)"
-        );
-    }
+    let count = crate::glyim_env_args_count();
+    assert!(
+        count >= 1,
+        "should have at least one argument (program name)"
+    );
 }
 
 #[test]

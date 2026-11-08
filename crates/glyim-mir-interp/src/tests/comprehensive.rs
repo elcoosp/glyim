@@ -54,7 +54,7 @@ fn unary_neg_on_bool_returns_error() {
     }]);
     let res = run_single_assign(body, &tcx);
     assert!(res.is_err());
-    assert!(format!("{:?}", res).contains("unsupported unary op"));
+    assert!(format!("{res:?}").contains("unsupported unary op"));
 }
 
 #[test]
@@ -83,7 +83,7 @@ fn write_out_of_bounds_local_panics() {
     }]);
     let res = run_single_assign(body, &tcx);
     assert!(res.is_err());
-    assert!(format!("{:?}", res).contains("out of bounds"));
+    assert!(format!("{res:?}").contains("out of bounds"));
 }
 
 #[test]

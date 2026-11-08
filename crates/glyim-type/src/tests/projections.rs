@@ -127,7 +127,7 @@ fn projection_inside_ref() {
     assert!(!flags.contains(TypeFlags::HAS_ERROR));
 }
 
-/// Projection with a Param self type should propagate HAS_TY_PARAM.
+/// Projection with a Param self type should propagate `HAS_TY_PARAM`.
 #[test]
 fn projection_with_param_self() {
     let (ctx, proj_ty) = with_fresh_ty_ctx(|ctx| {
@@ -142,7 +142,7 @@ fn projection_with_param_self() {
     assert!(flags.contains(TypeFlags::HAS_TY_PARAM));
 }
 
-/// Projection with an Error self type should propagate HAS_ERROR.
+/// Projection with an Error self type should propagate `HAS_ERROR`.
 #[test]
 fn projection_with_error_self() {
     let (ctx, proj_ty) = with_fresh_ty_ctx(|ctx| {
@@ -247,7 +247,7 @@ fn projection_display_multi_subst() {
         ctx.mk_ty(TyKind::Projection(proj))
     });
     let display = format!("{}", PrintTy::new(proj_ty, &ctx));
-    assert!(display.contains("?"));
+    assert!(display.contains('?'));
     assert!(display.contains("Trait0"));
 }
 

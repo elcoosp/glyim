@@ -23,7 +23,6 @@ fn setup_test_db() -> (AnalysisDatabase, FileId, PathBuf) {
         sm.insert(
             file_id,
             SourceMap::new(
-                path.clone(),
                 file_id,
                 "struct Point { x: i32, y: i32 }\nfn main() { let p = Point { x: 10, y: 20 }; p. }"
                     .to_string(),
@@ -123,7 +122,6 @@ fn completion_generic_function_emits_snippet_with_type_params() {
         file_map.get_or_create(&path)
     };
     let source_map = SourceMap::new(
-        path.clone(),
         file_id,
         "fn id<T>(x: T) -> T { x }\nfn main() { id(); }".to_string(),
     );
@@ -185,8 +183,7 @@ fn completion_generic_function_emits_snippet_with_type_params() {
     let insert = item.insert_text.as_deref().expect("insert_text present");
     assert_eq!(
         insert, "id::<${1:T}>(${2:x})",
-        "generic function must emit a `::<..>` snippet, got {:?}",
-        insert
+        "generic function must emit a `::<..>` snippet, got {insert:?}"
     );
     assert_eq!(item.insert_text_format, Some(InsertTextFormat::SNIPPET));
 }

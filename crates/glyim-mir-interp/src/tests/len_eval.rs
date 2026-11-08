@@ -96,7 +96,7 @@ fn len_evaluates_array_length() {
     };
 
     let result = interp.run_body(&body);
-    assert!(result.is_ok(), "run_body failed: {:?}", result);
+    assert!(result.is_ok(), "run_body failed: {result:?}");
 
     let ret = interp.get_local_value(LocalIdx::from_raw(0));
     assert!(ret.is_some(), "return place not set");
@@ -194,7 +194,7 @@ fn len_on_aggregate_slice_returns_count() {
     };
 
     let result = interp.run_body(&body);
-    assert!(result.is_ok(), "run_body failed: {:?}", result);
+    assert!(result.is_ok(), "run_body failed: {result:?}");
 
     let ret = interp.get_local_value(LocalIdx::from_raw(0));
     assert!(ret.is_some(), "return place not set");

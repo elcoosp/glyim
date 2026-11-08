@@ -4,11 +4,11 @@ use crate::gates::types::GateContext;
 use crate::gates::{Gate, GateResult};
 use async_trait::async_trait;
 
-/// DeadCodeGate.
+/// `DeadCodeGate`.
 pub struct DeadCodeGate;
 #[async_trait]
 impl Gate for DeadCodeGate {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "dead_code"
     }
     async fn run(&self, ctx: &GateContext) -> Result<GateResult, PilotError> {

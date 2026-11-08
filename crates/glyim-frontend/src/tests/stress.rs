@@ -1,6 +1,7 @@
 use crate::lexer::lex;
 use glyim_span::FileId;
 use glyim_syntax::SyntaxKind;
+use std::fmt::Write as _;
 
 fn lex_tokens(source: &str) -> Vec<crate::lexer::Token> {
     lex(source, FileId::from_raw(0)).tokens
@@ -39,7 +40,7 @@ fn long_hex_integer() {
 #[test]
 fn long_string() {
     let inner = "a".repeat(1000);
-    let source = format!("\"{}\"", inner);
+    let source = format!("\"{inner}\"");
     let tokens = lex_tokens(&source);
     assert_eq!(tokens.len(), 1);
     assert_eq!(tokens[0].kind, SyntaxKind::StringLit);
@@ -47,7 +48,10 @@ fn long_string() {
 
 #[test]
 fn many_tokens() {
-    let source: String = (0..500).map(|i| format!("x{} ", i)).collect();
+    let mut source = String::with_capacity(500 * 6);
+    for i in 0..500 {
+        let _ = write!(source, "x{i} ");
+    }
     let result = lex_result(source.trim());
     assert_eq!(result.tokens.len(), 500);
     for token in &result.tokens {
@@ -57,7 +61,10 @@ fn many_tokens() {
 
 #[test]
 fn many_integers() {
-    let source: String = (0..200).map(|i| format!("{} ", i)).collect();
+    let mut source = String::with_capacity(200 * 7);
+    for i in 0..200 {
+        let _ = write!(source, "{i} ");
+    }
     let result = lex_result(source.trim());
     assert_eq!(result.tokens.len(), 200);
     for token in &result.tokens {
@@ -98,7 +105,7 @@ fn many_nested_comments() {
 fn many_line_comments() {
     let mut source = String::new();
     for i in 0..100 {
-        source.push_str(&format!("// comment {}\n", i));
+        let _ = writeln!(source, "// comment {i}");
     }
     source.push_str("42");
     let tokens = lex_tokens(&source);
@@ -108,7 +115,7 @@ fn many_line_comments() {
 
 #[test]
 fn large_source_no_diagnostics() {
-    let source = r#"
+    let source = r"
         fn main() -> i32 {
             let a = 1;
             let b = 2;
@@ -119,7 +126,7 @@ fn large_source_no_diagnostics() {
                 return 0;
             }
         }
-    "#
+    "
     .repeat(50);
     let result = lex_result(&source);
     assert!(
@@ -231,8 +238,7 @@ fn whitespace_variations() {
                 SyntaxKind::LBrace,
                 SyntaxKind::RBrace,
             ],
-            "whitespace variation failed for: {:?}",
-            source
+            "whitespace variation failed for: {source:?}"
         );
     }
 }
@@ -256,7 +262,7 @@ fn integer_boundary_values() {
     ];
     for v in values {
         let tokens = lex_tokens(v);
-        assert_eq!(tokens.len(), 1, "should lex {} as single token", v);
+        assert_eq!(tokens.len(), 1, "should lex {v} as single token");
         assert_eq!(tokens[0].kind, SyntaxKind::IntLit);
     }
 }
@@ -272,7 +278,7 @@ fn hex_various_cases() {
     ];
     for (source, expected_text) in &cases {
         let tokens = lex_tokens(source);
-        assert_eq!(tokens.len(), 1, "should lex {} as single token", source);
+        assert_eq!(tokens.len(), 1, "should lex {source} as single token");
         assert_eq!(tokens[0].kind, SyntaxKind::IntLit);
         assert_eq!(tokens[0].text, *expected_text);
     }
@@ -296,8 +302,8 @@ fn float_various_formats() {
     ];
     for (source, expected_kind) in &cases {
         let tokens = lex_tokens(source);
-        assert_eq!(tokens.len(), 1, "should lex {} as single token", source);
-        assert_eq!(tokens[0].kind, *expected_kind, "wrong kind for {}", source);
+        assert_eq!(tokens.len(), 1, "should lex {source} as single token");
+        assert_eq!(tokens[0].kind, *expected_kind, "wrong kind for {source}");
     }
 }
 
@@ -310,13 +316,9 @@ fn string_various_contents() {
     ];
     for (source, expected_text) in &cases {
         let tokens = lex_tokens(source);
-        assert_eq!(tokens.len(), 1, "should lex {} as single token", source);
+        assert_eq!(tokens.len(), 1, "should lex {source} as single token");
         assert_eq!(tokens[0].kind, SyntaxKind::StringLit);
-        assert_eq!(
-            tokens[0].text, *expected_text,
-            "text mismatch for {}",
-            source
-        );
+        assert_eq!(tokens[0].text, *expected_text, "text mismatch for {source}");
     }
 
     let escaped_cases: Vec<(&str, SyntaxKind)> = vec![
@@ -337,13 +339,9 @@ fn char_various_contents() {
     let cases: Vec<(&str, &str)> = vec![("'a'", "'a'"), ("'Z'", "'Z'"), ("'0'", "'0'")];
     for (source, expected_text) in &cases {
         let tokens = lex_tokens(source);
-        assert_eq!(tokens.len(), 1, "should lex {} as single token", source);
+        assert_eq!(tokens.len(), 1, "should lex {source} as single token");
         assert_eq!(tokens[0].kind, SyntaxKind::CharLit);
-        assert_eq!(
-            tokens[0].text, *expected_text,
-            "text mismatch for {}",
-            source
-        );
+        assert_eq!(tokens[0].text, *expected_text, "text mismatch for {source}");
     }
 
     let escaped_cases: Vec<(&str, SyntaxKind)> = vec![
@@ -362,7 +360,7 @@ fn char_various_contents() {
 
 #[test]
 fn real_glyim_program() {
-    let source = r#"
+    let source = r"
         fn fibonacci(n: i32) -> i32 {
             if n <= 1 {
                 return n;
@@ -374,7 +372,7 @@ fn real_glyim_program() {
             let result = fibonacci(10);
             return result;
         }
-    "#;
+    ";
     let result = lex_result(source);
     assert!(result.diagnostics.is_empty(), "should have no diagnostics");
     assert!(!result.tokens.is_empty());
@@ -388,7 +386,7 @@ fn real_glyim_program() {
 
 #[test]
 fn real_glyim_struct_and_impl() {
-    let source = r#"
+    let source = r"
         struct Point {
             x: f64,
             y: f64,
@@ -403,7 +401,7 @@ fn real_glyim_struct_and_impl() {
                 return (self.x * self.x + self.y * self.y);
             }
         }
-    "#;
+    ";
     let result = lex_result(source);
     assert!(result.diagnostics.is_empty(), "should have no diagnostics");
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
@@ -414,7 +412,7 @@ fn real_glyim_struct_and_impl() {
 
 #[test]
 fn real_glyim_enum_with_match() {
-    let source = r#"
+    let source = r"
         enum Option {
             Some,
             None,
@@ -426,7 +424,7 @@ fn real_glyim_enum_with_match() {
                 Option::None => 0,
             }
         }
-    "#;
+    ";
     let result = lex_result(source);
     assert!(result.diagnostics.is_empty(), "should have no diagnostics");
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
@@ -437,7 +435,7 @@ fn real_glyim_enum_with_match() {
 
 #[test]
 fn mixed_comments_and_code() {
-    let source = r#"
+    let source = r"
         // This is a function
         fn foo() -> i32 {
             /* multi
@@ -446,7 +444,7 @@ fn mixed_comments_and_code() {
             let x = 42; // inline comment
             /* nested /* inner */ outer */ return x;
         }
-    "#;
+    ";
     let result = lex_result(source);
     assert!(result.diagnostics.is_empty(), "should have no diagnostics");
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();

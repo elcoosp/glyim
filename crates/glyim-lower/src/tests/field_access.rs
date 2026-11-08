@@ -31,5 +31,5 @@ fn struct_field_access_does_not_panic() {
 
     let body = b.into_body(stmts, vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }

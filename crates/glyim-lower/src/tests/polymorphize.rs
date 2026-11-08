@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::mono::{MonoItem, MonoItemData};
 use crate::polymorphize::*;
 
-/// Helper: intern a Name from a string via the TyCtxMut resolver.
+/// Helper: intern a Name from a string via the `TyCtxMut` resolver.
 fn intern_name(ctx: &mut TyCtxMut, s: &str) -> Name {
     ctx.resolver().intern(s)
 }
@@ -592,7 +592,7 @@ fn param_used_via_fn_call_substitution() {
 
     let caller_substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(12);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs: caller_substs,
     };
@@ -708,7 +708,7 @@ fn param_used_in_ref_local() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(50);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
     };
@@ -737,7 +737,7 @@ fn param_used_in_raw_ptr_local() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(51);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
     };
@@ -766,7 +766,7 @@ fn param_used_in_slice_local() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(52);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
     };
@@ -799,7 +799,7 @@ fn param_used_in_array_local() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(53);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
     };
@@ -831,7 +831,7 @@ fn param_used_in_tuple_local() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(54);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
     };
@@ -862,7 +862,7 @@ fn param_used_in_adt_local() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(55);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
     };
@@ -899,7 +899,7 @@ fn param_used_in_fn_ptr_local() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(56);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
     };
@@ -965,8 +965,7 @@ fn all_params_unused() {
                 if let GenericArg::Ty(ty) = arg {
                     assert!(
                         matches!(ctx.ty_kind(*ty), TyKind::Unit),
-                        "param {} should be replaced with unit",
-                        i
+                        "param {i} should be replaced with unit"
                     );
                 }
             }
@@ -1086,7 +1085,7 @@ fn param_used_in_fn_def_local_type() {
 
     let caller_substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let caller_fn_id = FnDefId::from_raw(91);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: caller_fn_id,
         substs: caller_substs,
     };
@@ -1116,7 +1115,7 @@ fn param_used_in_return_type() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(92);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
     };
@@ -1197,7 +1196,7 @@ fn param_used_in_switch_int_switch_ty() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(93);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
     };
@@ -1245,7 +1244,7 @@ fn dedup_reduces_item_count() {
                 substs,
             },
             body: Arc::new(body_unused.clone()),
-            symbol: format!("unused_fn::<{}>", i),
+            symbol: format!("unused_fn::<{i}>"),
             source_module: 0,
         });
     }
@@ -1259,7 +1258,7 @@ fn dedup_reduces_item_count() {
                 substs,
             },
             body: Arc::new(body_used.clone()),
-            symbol: format!("used_fn::<{}>", i),
+            symbol: format!("used_fn::<{i}>"),
             source_module: 0,
         });
     }
@@ -1357,7 +1356,7 @@ fn deeply_nested_type_usage() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(120);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
     };
@@ -1438,7 +1437,7 @@ fn param_used_via_assert_condition() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(121);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
     };
@@ -1473,7 +1472,7 @@ fn param_used_in_opaque_type() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(122);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
     };
@@ -1637,7 +1636,7 @@ fn param_used_in_closure_type() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_id = FnDefId::from_raw(123);
-    let _item = MonoItem::Fn {
+    let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
     };

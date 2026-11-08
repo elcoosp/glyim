@@ -21,26 +21,26 @@ fn compile(src: &str) -> CompileOutput {
 
 #[test]
 fn trait_method_path_dispatch_resolves() {
-    let src = r#"
+    let src = r"
         trait Animal { fn speak(&self) -> i32; }
         struct Dog;
         struct Cat;
         impl Animal for Dog { fn speak(&self) -> i32 { 1 } }
         impl Animal for Cat { fn speak(&self) -> i32 { 2 } }
         fn main() -> i32 { let d = Dog; let c = Cat; Animal::speak(&d) + Animal::speak(&c) }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
 
 #[test]
 fn unit_struct_construction_resolves() {
-    let src = r#"
+    let src = r"
         struct Dog;
         struct Cat;
         fn id(x: Dog) -> Dog { x }
         fn main() -> i32 { let d = Dog; let _ = id(d); 0 }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
@@ -59,7 +59,7 @@ fn unit_struct_construction_resolves() {
 /// projection blocker (tracked in `KNOWN_GAPS.md` Phase 5) is resolved.
 #[test]
 fn async_desugar_target_compiles() {
-    let src = r#"
+    let src = r"
         enum Poll<T> { Ready(T), Pending }
         trait MyFuture {
             type Output;
@@ -79,7 +79,7 @@ fn async_desugar_target_compiles() {
             }
         }
         fn main() -> i32 { let f = AddOne { x: 41 }; block_on(f) }
-    "#;
+    ";
     let output = compile(src);
     eprintln!("PROBE-COUNT={}", output.diagnostics.len());
     for d in &output.diagnostics {
@@ -96,13 +96,13 @@ fn async_desugar_target_compiles() {
 
 #[test]
 fn closure_with_capture_compiles() {
-    let src = r#"
+    let src = r"
         fn main() -> i32 {
             let base = 10;
             let add_base = |n: i32| n + base;
             add_base(5)
         }
-    "#;
+    ";
     let output = compile(src);
     eprintln!("PROBE-COUNT={}", output.diagnostics.len());
     for d in &output.diagnostics {

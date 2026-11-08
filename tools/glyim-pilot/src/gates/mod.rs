@@ -6,31 +6,31 @@ pub mod banned_pattern;
 pub mod check;
 /// clippy.
 pub mod clippy;
-/// commit_pipeline.
+/// `commit_pipeline`.
 pub mod commit_pipeline;
 /// contracts.
 pub mod contracts;
 /// coverage.
 pub mod coverage;
-/// dead_code.
+/// `dead_code`.
 pub mod dead_code;
-/// done_pipeline.
+/// `done_pipeline`.
 pub mod done_pipeline;
-/// fmt_check.
+/// `fmt_check`.
 pub mod fmt_check;
-/// fmt_fix.
+/// `fmt_fix`.
 pub mod fmt_fix;
 /// helpers.
 pub mod helpers;
 /// mutation.
 pub mod mutation;
-/// self_review.
+/// `self_review`.
 pub mod self_review;
 /// test.
 pub mod test;
 /// types.
 pub mod types;
-/// workspace_check.
+/// `workspace_check`.
 pub mod workspace_check;
 
 use crate::error::PilotError;
@@ -40,7 +40,7 @@ use async_trait::async_trait;
 pub use types::{GateResult, GateSideEffect, PipelineResult};
 
 #[async_trait]
-/// Gate.
+/// `Gate`.
 pub trait Gate: Send + Sync {
     /// name.
     fn name(&self) -> &str;

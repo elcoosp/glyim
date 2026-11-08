@@ -20,14 +20,14 @@ use glyim_typeck::thir::{self, ExprKind, Literal};
 fn array_ty(ctx: &mut TyCtxMut, elem: Ty, len: u64) -> Ty {
     let usize_ty = ctx.mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::Usize));
     let len_const = glyim_type::Const {
-        kind: glyim_type::ConstKind::Int(len as i128),
+        kind: glyim_type::ConstKind::Int(i128::from(len)),
         ty: usize_ty,
     };
     ctx.mk_ty(TyKind::Array(elem, len_const))
 }
 
-fn int_bound(ctx: &ThirBuilder, n: i128) -> Box<thir::Expr> {
-    Box::new(ctx.expr(ExprKind::Literal(Literal::Int(n, None)), ctx.return_ty))
+fn int_bound(ctx: &ThirBuilder, n: i128) -> thir::Expr {
+    ctx.expr(ExprKind::Literal(Literal::Int(n, None)), ctx.return_ty)
 }
 
 /// A `base[index]` expression where `index` is a `Range` with optional bounds.
@@ -41,8 +41,8 @@ fn slice_expr(
 ) -> thir::Expr {
     let range = b.expr(
         ExprKind::Range {
-            start: start.map(|n| int_bound(b, n)),
-            end: end.map(|n| int_bound(b, n)),
+            start: start.map(|n| Box::new(int_bound(b, n))),
+            end: end.map(|n| Box::new(int_bound(b, n))),
             inclusive,
         },
         slice_ty,

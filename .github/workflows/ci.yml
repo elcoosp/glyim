@@ -247,6 +247,28 @@ jobs:
       - name: cargo deny check
         run: cargo deny check
 
+  # M0.6 metrics ratchet: `tools/glyim-metrics` measures cheap lexical
+  # properties of the tree (code lines, test count, doc coverage, and the
+  # inline-allow count that the M0 zero-allow policy pins at zero) and
+  # compares them against the committed `metrics/baseline.json`. Regressions
+  # (fewer lines/tests/docs, or ANY new inline allow) fail the job;
+  # improvements pass and are picked up by re-running with `--write` in the
+  # same PR (gates never weaken — C9).
+  metrics-ratchet:
+    name: Metrics ratchet (M0.6)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check tree against metrics/baseline.json
+        run: cargo run -p glyim-metrics -- . --check metrics/baseline.json
+      - name: Show drift summary (advisory)
+        run: |
+          cargo run -p glyim-metrics -- . --write /tmp/current.json
+          diff -u metrics/baseline.json /tmp/current.json || true
+
   dead-code-check:
     name: Dead-code burndown
     runs-on: ubuntu-latest

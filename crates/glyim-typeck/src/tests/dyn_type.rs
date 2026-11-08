@@ -45,9 +45,9 @@ fn def_map_with_trait(interner: &mut Interner, trait_name: &str) -> (CrateDefMap
         modules,
         krate: CrateId::from_raw(0),
         interner: interner.clone(),
-        variant_map: Default::default(),
+        variant_map: HashMap::default(),
         max_local_def_id: 0,
-        def_to_module: Default::default(),
+        def_to_module: HashMap::default(),
     };
     (def_map, TraitDefId::from_raw(0))
 }
@@ -105,8 +105,7 @@ fn dyn_trait_resolves_to_dynamic_type() {
     // No diagnostics: the trait is object-safe.
     assert!(
         diagnostics.is_empty(),
-        "expected no diagnostics, got: {:?}",
-        diagnostics
+        "expected no diagnostics, got: {diagnostics:?}"
     );
 
     match ctx.ty_kind(dyn_ty) {
@@ -124,10 +123,10 @@ fn dyn_trait_resolves_to_dynamic_type() {
                 }) => {
                     assert_eq!(*def_id, trait_def_id, "predicate must reference the trait");
                 }
-                other => panic!("expected Trait predicate, got {:?}", other),
+                other => panic!("expected Trait predicate, got {other:?}"),
             }
         }
-        other => panic!("dyn Trait must resolve to TyKind::Dynamic, got {:?}", other),
+        other => panic!("dyn Trait must resolve to TyKind::Dynamic, got {other:?}"),
     }
 }
 
@@ -160,9 +159,9 @@ fn dyn_trait_non_object_safe_reports_diagnostic() {
                 modules,
                 krate: CrateId::from_raw(0),
                 interner: inter.clone(),
-                variant_map: Default::default(),
+                variant_map: HashMap::default(),
                 max_local_def_id: 0,
-                def_to_module: Default::default(),
+                def_to_module: HashMap::default(),
             },
             TraitDefId::from_raw(0),
         )
@@ -300,9 +299,9 @@ fn def_map_with_nested_trait(
         modules,
         krate: CrateId::from_raw(0),
         interner: interner.clone(),
-        variant_map: Default::default(),
+        variant_map: HashMap::default(),
         max_local_def_id: 0,
-        def_to_module: Default::default(),
+        def_to_module: HashMap::default(),
     }
 }
 
@@ -371,8 +370,7 @@ fn dyn_trait_multi_segment_path_resolves() {
 
     assert!(
         diagnostics.is_empty(),
-        "expected no diagnostics for multi-segment object-safe trait, got: {:?}",
-        diagnostics
+        "expected no diagnostics for multi-segment object-safe trait, got: {diagnostics:?}"
     );
     match ctx.ty_kind(dyn_ty) {
         TyKind::Dynamic(binder, Region::Erased) => {
@@ -392,13 +390,10 @@ fn dyn_trait_multi_segment_path_resolves() {
                         "predicate must reference the nested trait"
                     );
                 }
-                other => panic!("expected Trait predicate, got {:?}", other),
+                other => panic!("expected Trait predicate, got {other:?}"),
             }
         }
-        other => panic!(
-            "multi-segment dyn Trait must resolve to TyKind::Dynamic, got {:?}",
-            other
-        ),
+        other => panic!("multi-segment dyn Trait must resolve to TyKind::Dynamic, got {other:?}"),
     }
 }
 
@@ -440,8 +435,7 @@ fn adt_multi_segment_path_resolves_to_adt() {
 
     assert!(
         diagnostics.is_empty(),
-        "expected no diagnostics for multi-segment ADT path, got: {:?}",
-        diagnostics
+        "expected no diagnostics for multi-segment ADT path, got: {diagnostics:?}"
     );
     match ctx.ty_kind(ty) {
         TyKind::Adt(adt_id, substs) => {
@@ -456,9 +450,6 @@ fn adt_multi_segment_path_resolves_to_adt() {
                 "ADT without generic args has empty substs"
             );
         }
-        other => panic!(
-            "multi-segment ADT path must resolve to TyKind::Adt, got {:?}",
-            other
-        ),
+        other => panic!("multi-segment ADT path must resolve to TyKind::Adt, got {other:?}"),
     }
 }

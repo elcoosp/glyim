@@ -88,7 +88,7 @@ fn len_of_non_array_panics() {
     let mut interp = Interpreter::new(&tcx);
     let res = interp.run_body(&body);
     assert!(res.is_err());
-    assert!(format!("{:?}", res).contains("expected array"));
+    assert!(format!("{res:?}").contains("expected array"));
 }
 
 // ============ Call with no target (fall through to next block) ============
@@ -142,7 +142,7 @@ fn call_with_no_target_falls_through() {
             terminator: Terminator {
                 kind: TerminatorKind::Call {
                     func: Operand::Constant(MirConst {
-                        kind: MirConstKind::Int(callee_id.local_id.to_raw() as i128),
+                        kind: MirConstKind::Int(i128::from(callee_id.local_id.to_raw())),
                         ty: i32_ty,
                         span: Span::DUMMY,
                     }),
@@ -205,7 +205,7 @@ fn call_with_no_target_diverges_cleanly_if_callee_returns() {
         terminator: Terminator {
             kind: TerminatorKind::Call {
                 func: Operand::Constant(MirConst {
-                    kind: MirConstKind::Int(callee_id.local_id.to_raw() as i128),
+                    kind: MirConstKind::Int(i128::from(callee_id.local_id.to_raw())),
                     ty: i32_ty,
                     span: Span::DUMMY,
                 }),
@@ -320,7 +320,7 @@ fn assert_non_bool_condition_panics() {
     let mut interp = Interpreter::new(&tcx);
     let res = interp.run_body(&body);
     assert!(res.is_err());
-    assert!(format!("{:?}", res).contains("bool"));
+    assert!(format!("{res:?}").contains("bool"));
 }
 
 // ============ Empty body (just Return) ============
@@ -458,7 +458,7 @@ fn recursion_limit_exactly_one_succeeds() {
                 terminator: Terminator {
                     kind: TerminatorKind::Call {
                         func: Operand::Constant(MirConst {
-                            kind: MirConstKind::Int(callee_id.local_id.to_raw() as i128),
+                            kind: MirConstKind::Int(i128::from(callee_id.local_id.to_raw())),
                             ty: Ty::UNIT,
                             span: Span::DUMMY,
                         }),
@@ -523,7 +523,7 @@ fn recursion_limit_exactly_one_less_fails() {
                 terminator: Terminator {
                     kind: TerminatorKind::Call {
                         func: Operand::Constant(MirConst {
-                            kind: MirConstKind::Int(callee_id.local_id.to_raw() as i128),
+                            kind: MirConstKind::Int(i128::from(callee_id.local_id.to_raw())),
                             ty: Ty::UNIT,
                             span: Span::DUMMY,
                         }),

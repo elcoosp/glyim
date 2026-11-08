@@ -121,8 +121,7 @@ impl ReservationAnalysis {
     pub fn is_reservation(&self, block: BasicBlockIdx, stmt_idx: usize) -> bool {
         self.per_block
             .get(block.to_raw() as usize)
-            .map(|bits| bits.contains(stmt_idx))
-            .unwrap_or(false)
+            .is_some_and(|bits| bits.contains(stmt_idx))
     }
 }
 

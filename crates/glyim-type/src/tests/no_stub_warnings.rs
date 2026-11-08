@@ -10,8 +10,8 @@ use crate::auto_trait::AutoTraitFlags;
 use crate::ty::{FieldIdx, TyKind};
 
 /// S04-T04: Computing auto traits for a registered ADT should NOT emit
-/// the "no AdtRepr registered" warning. When AdtDef is registered
-/// via register_adt, compute_auto_traits uses it and does not fall through
+/// the "no `AdtRepr` registered" warning. When `AdtDef` is registered
+/// via `register_adt`, `compute_auto_traits` uses it and does not fall through
 /// to the unregistered-adt warning path.
 #[test]
 fn no_stub_warning_when_adt_def_registered() {
@@ -57,7 +57,7 @@ fn no_stub_warning_when_adt_def_registered() {
     );
 }
 
-/// S04-T04b: When adt_reprs is used (but not adt_defs), no stub warning
+/// S04-T04b: When `adt_reprs` is used (but not `adt_defs`), no stub warning
 /// should be emitted either.
 #[test]
 fn no_stub_warning_when_adt_repr_registered() {

@@ -7,7 +7,7 @@ fn diagnostics_are_emitted_on_change() {
     let path = std::path::PathBuf::from("/test/diag.g");
     let file_id = db.file_map.write().get_or_create(&path);
 
-    let sm = SourceMap::new(path.clone(), file_id, "fn main() { @ }".to_string());
+    let sm = SourceMap::new(file_id, "fn main() { @ }".to_string());
     db.source_maps.write().insert(file_id, sm.clone());
 
     let lex_result = glyim_frontend::lex("fn main() { @ }", file_id);

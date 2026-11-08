@@ -93,8 +93,7 @@ fn slice_type_lowering() {
     let ir = backend.generate_ir(&body).expect("IR generation failed");
     assert!(
         ir.contains("{ i32*, i64 }") || ir.contains("{ ptr, i64 }"),
-        "Slice type not lowered to fat pointer, IR:\n{}",
-        ir
+        "Slice type not lowered to fat pointer, IR:\n{ir}"
     );
 }
 
@@ -181,12 +180,10 @@ fn slice_index_emits_gep_and_load() {
     let ir = backend.generate_ir(&body).expect("IR generation failed");
     assert!(
         ir.contains("getelementptr") && ir.contains("load"),
-        "Expected GEP and load instructions for slice indexing, IR:\n{}",
-        ir
+        "Expected GEP and load instructions for slice indexing, IR:\n{ir}"
     );
     assert!(
         ir.contains("load i32"),
-        "Expected load of i32, got different type, IR:\n{}",
-        ir
+        "Expected load of i32, got different type, IR:\n{ir}"
     );
 }

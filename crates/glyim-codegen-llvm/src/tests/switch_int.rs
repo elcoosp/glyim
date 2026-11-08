@@ -220,7 +220,7 @@ fn make_test_body_switch_large() -> (TyCtxMut, Body) {
     });
     basic_blocks.push(bb0);
 
-    for _ in 0..(num_cases + 1) {
+    for _ in 0..=num_cases {
         basic_blocks.push(BasicBlockData::new(Terminator {
             kind: TerminatorKind::Return,
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -256,18 +256,15 @@ fn v29_t01_switch_small_integer_range() {
     let ir = lower_and_get_ir_with_ctx(ctx, &body);
     assert!(
         ir.contains("switch") || ir.contains("icmp eq"),
-        "Expected LLVM switch or icmp eq in IR, got:\n{}",
-        ir
+        "Expected LLVM switch or icmp eq in IR, got:\n{ir}"
     );
     assert!(
         ir.contains("i32 1") || ir.contains("1,"),
-        "Expected case value 1 in IR, got:\n{}",
-        ir
+        "Expected case value 1 in IR, got:\n{ir}"
     );
     assert!(
         ir.contains("i32 2") || ir.contains("2,"),
-        "Expected case value 2 in IR, got:\n{}",
-        ir
+        "Expected case value 2 in IR, got:\n{ir}"
     );
 }
 
@@ -277,13 +274,11 @@ fn v29_t02_switch_with_default_branch() {
     let ir = lower_and_get_ir_with_ctx(ctx, &body);
     assert!(
         ir.contains("switch") || ir.contains("icmp eq"),
-        "Expected LLVM switch or icmp eq in IR, got:\n{}",
-        ir
+        "Expected LLVM switch or icmp eq in IR, got:\n{ir}"
     );
     assert!(
         ir.contains(", 10") || ir.contains("i32 10"),
-        "Expected case value 10 in IR, got:\n{}",
-        ir
+        "Expected case value 10 in IR, got:\n{ir}"
     );
 }
 
@@ -293,8 +288,7 @@ fn v29_t03_switch_on_bool_icmp_branch() {
     let ir = lower_and_get_ir_with_ctx(ctx, &body);
     assert!(
         ir.contains("switch i1"),
-        "Expected LLVM switch i1 for bool switch, got:\n{}",
-        ir
+        "Expected LLVM switch i1 for bool switch, got:\n{ir}"
     );
 }
 
@@ -304,14 +298,11 @@ fn v29_t04_large_switch_jump_table() {
     let ir = lower_and_get_ir_with_ctx(ctx, &body);
     assert!(
         ir.contains("switch"),
-        "Expected LLVM switch instruction for large switch, got:\n{}",
-        ir
+        "Expected LLVM switch instruction for large switch, got:\n{ir}"
     );
     let switch_count = ir.matches("switch").count();
     assert!(
         switch_count >= 1,
-        "Expected at least one switch instruction, got {} in:\n{}",
-        switch_count,
-        ir
+        "Expected at least one switch instruction, got {switch_count} in:\n{ir}"
     );
 }

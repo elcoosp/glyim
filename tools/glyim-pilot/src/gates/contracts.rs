@@ -4,12 +4,12 @@ use crate::gates::{Gate, GateResult};
 use crate::git_ops::diff_main;
 use async_trait::async_trait;
 
-/// ContractGate.
+/// `ContractGate`.
 pub struct ContractGate;
 
 #[async_trait]
 impl Gate for ContractGate {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "contracts"
     }
 
@@ -129,14 +129,14 @@ mod tests {
 
     #[test]
     fn test_extract_locked_names_from_markdown() {
-        let content = r#"
+        let content = r"
 ## Locked Contracts
 
 ```rust
 pub fn parse_input() -> Result<()>;
 pub struct Config { ... }
 ```
-"#;
+";
         let names = extract_locked_names(content);
         assert!(names.contains(&"parse_input".to_string()));
         assert!(names.contains(&"Config".to_string()));

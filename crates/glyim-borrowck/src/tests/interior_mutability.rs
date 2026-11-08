@@ -33,7 +33,7 @@ impl<'a> TestCtx<'a> {
     }
 }
 
-impl<'a> crate::BorrowckCtx for TestCtx<'a> {
+impl crate::BorrowckCtx for TestCtx<'_> {
     fn ty_ctx(&self) -> &TyCtx {
         self.ty_ctx
     }

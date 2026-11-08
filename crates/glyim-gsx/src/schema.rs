@@ -44,7 +44,7 @@ pub enum EscapeCtx {
     Url,
     /// Style attribute / style table.
     Style,
-    /// Script context — never escaped automatically; requires TrustedHtml.
+    /// Script context — never escaped automatically; requires `TrustedHtml`.
     Script,
 }
 
@@ -157,12 +157,7 @@ impl ElementSchema {
             )),
             ContentModel::Phrasing => match child {
                 ChildShape::Text
-                | ChildShape::Element("h1")
-                | ChildShape::Element("span")
-                | ChildShape::Element("p")
-                | ChildShape::Element("output")
-                | ChildShape::Element("input")
-                | ChildShape::Element("button") => None,
+                | ChildShape::Element("h1" | "span" | "p" | "output" | "input" | "button") => None,
                 ChildShape::Element(other) => Some(format!(
                     "`{other}` is not phrasing content inside `{}`",
                     self.tag

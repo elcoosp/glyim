@@ -542,6 +542,23 @@ The compiler's development is tracked against an internal de-stubbing plan. Nota
 
 ---
 
+## Repository Map & Gates
+
+- `docs/roadmaps/` — the milestone plans; the current one is
+  `glyim-master-plan.md` (M0 slice: lint rails + metrics baseline).
+- `docs/archive/` — historical session documents (`HANDOFF.md`,
+  `FIXES.md`) kept for provenance; the root stays navigation-focused.
+- `metrics/baseline.json` — the M0.6 repo-health baseline (file/line/test
+  counts, doc coverage, inline-allow count pinned at 0). CI's
+  `metrics-ratchet` job fails on regression and allows improvement; bump
+  it deliberately with
+  `cargo run -p glyim-metrics -- . --write metrics/baseline.json`.
+- `.github/workflows/ci.yml` — the enforced gates: fmt + pedantic clippy
+  (`-D warnings`, zero inline allows), the test matrix, supply-chain,
+  MSRV, and the metrics ratchet.
+
+---
+
 ## Acknowledgements
 
 Glyim stands on the shoulders of excellent open-source projects:

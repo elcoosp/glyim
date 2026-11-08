@@ -86,7 +86,6 @@ fn partial_move_allows_other_field_use() {
     let BorrowckResult { errors } = check_borrows(&test_ctx, &body);
     assert!(
         errors.is_empty(),
-        "Expected no error from partial move of disjoint fields, got {:?}",
-        errors
+        "Expected no error from partial move of disjoint fields, got {errors:?}"
     );
 }

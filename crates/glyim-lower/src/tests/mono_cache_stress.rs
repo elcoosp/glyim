@@ -15,7 +15,7 @@ fn dummy_body() -> Arc<Body> {
     )))
 }
 
-/// Many distinct fn items with different DefIds — all should be collected.
+/// Many distinct fn items with different `DefIds` — all should be collected.
 #[test]
 fn many_distinct_fn_items() {
     let mut ty_ctx = test_ty_ctx();
@@ -47,7 +47,7 @@ fn many_distinct_fn_items() {
     }
 }
 
-/// Many distinct substitutions for the same fn DefId.
+/// Many distinct substitutions for the same fn `DefId`.
 #[test]
 fn many_substitutions_same_fn() {
     let mut ty_ctx = test_ty_ctx();
