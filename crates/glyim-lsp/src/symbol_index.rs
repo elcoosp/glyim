@@ -4,58 +4,58 @@ use glyim_span::{FileId, Span};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
-/// SymbolInfo.
+/// `SymbolInfo`.
 pub struct SymbolInfo {
-    /// Struct.
+    /// `Struct`.
     pub name: String,
-    /// Struct.
+    /// `Struct`.
     pub kind: SymbolKind,
-    /// Struct.
+    /// `Struct`.
     pub definition: DefinitionLocation,
-    /// Struct.
+    /// `Struct`.
     pub type_signature: Option<TypeSignature>,
-    /// Struct.
+    /// `Struct`.
     pub is_pub: bool,
-    /// Struct.
+    /// `Struct`.
     pub documentation: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-/// SymbolKind.
+/// `SymbolKind`.
 pub enum SymbolKind {
-    /// Variant.
+    /// `Variant`.
     Function,
-    /// Variant.
+    /// `Variant`.
     Struct,
-    /// Variant.
+    /// `Variant`.
     Enum,
-    /// Variant.
+    /// `Variant`.
     EnumVariant,
-    /// Variant.
+    /// `Variant`.
     Field,
-    /// Variant.
+    /// `Variant`.
     TypeParameter,
-    /// Variant.
+    /// `Variant`.
     Local,
-    /// Variant.
+    /// `Variant`.
     Module,
 }
 
 #[derive(Debug, Clone)]
-/// DefinitionLocation.
+/// `DefinitionLocation`.
 pub struct DefinitionLocation {
-    /// Struct.
+    /// `Struct`.
     pub file_id: FileId,
-    /// Struct.
+    /// `Struct`.
     pub span: Span,
 }
 
 #[derive(Debug, Clone)]
-/// TypeSignature.
+/// `TypeSignature`.
 pub struct TypeSignature {
     #[doc = "field"]
     pub params: Vec<(String, String)>,
-    /// Struct.
+    /// `Struct`.
     pub return_type: Option<String>,
     /// For method symbols, the resolved receiver (`self`) type, e.g. `"Foo"`.
     /// `None` for free functions / item symbols. Used by Tier 6.4 completion
@@ -80,7 +80,7 @@ fn type_param_names(params: &[glyim_hir::GenericParam], interner: &Interner) -> 
         .collect()
 }
 
-/// SymbolIndex.
+/// `SymbolIndex`.
 pub struct SymbolIndex {
     by_name: HashMap<String, Vec<SymbolInfo>>,
     by_file: HashMap<FileId, Vec<SymbolInfo>>,
@@ -99,6 +99,7 @@ impl Default for SymbolIndex {
 
 impl SymbolIndex {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             by_name: HashMap::new(),
@@ -108,7 +109,7 @@ impl SymbolIndex {
         }
     }
 
-    /// build_from_hir.
+    /// `build_from_hir`.
     pub fn build_from_hir(&mut self, file_id: FileId, hir: &CrateHir, interner: &Interner) {
         self.clear_file(file_id);
 
@@ -148,10 +149,10 @@ impl SymbolIndex {
                         .params
                         .iter()
                         .map(|p| {
-                            let ty_str =
-                                p.ty.as_ref()
-                                    .map(|t| render_type_ref(t, interner))
-                                    .unwrap_or_else(|| "unknown".to_string());
+                            let ty_str = p.ty.as_ref().map_or_else(
+                                || "unknown".to_string(),
+                                |t| render_type_ref(t, interner),
+                            );
                             (interner.resolve(p.name).to_string(), ty_str)
                         })
                         .collect();
@@ -192,10 +193,10 @@ impl SymbolIndex {
                         .params
                         .iter()
                         .map(|p| {
-                            let ty_str =
-                                p.ty.as_ref()
-                                    .map(|t| render_type_ref(t, interner))
-                                    .unwrap_or_else(|| "unknown".to_string());
+                            let ty_str = p.ty.as_ref().map_or_else(
+                                || "unknown".to_string(),
+                                |t| render_type_ref(t, interner),
+                            );
                             (interner.resolve(p.name).to_string(), ty_str)
                         })
                         .collect();
@@ -280,7 +281,6 @@ impl SymbolIndex {
         }
     }
 
-    #[allow(clippy::only_used_in_recursion)]
     fn index_pattern(
         &mut self,
         file_id: FileId,
@@ -338,7 +338,8 @@ impl SymbolIndex {
             .insert((file_id.to_raw(), info.definition.span.lo.to_usize()), info);
     }
 
-    /// lookup_by_name.
+    /// `lookup_by_name`.
+    #[must_use]
     pub fn lookup_by_name(&self, name: &str) -> Vec<&SymbolInfo> {
         self.by_name
             .get(name)
@@ -346,7 +347,8 @@ impl SymbolIndex {
             .unwrap_or_default()
     }
 
-    /// lookup_by_location.
+    /// `lookup_by_location`.
+    #[must_use]
     pub fn lookup_by_location(&self, file_id: FileId, offset: usize) -> Option<&SymbolInfo> {
         // A hover/click position falls *somewhere inside* a symbol's definition
         // span, not necessarily on its start byte. Match by span containment
@@ -359,7 +361,8 @@ impl SymbolIndex {
         })
     }
 
-    /// symbols_in_file.
+    /// `symbols_in_file`.
+    #[must_use]
     pub fn symbols_in_file(&self, file_id: FileId) -> Vec<&SymbolInfo> {
         self.by_file
             .get(&file_id)
@@ -368,6 +371,7 @@ impl SymbolIndex {
     }
 
     /// query.
+    #[must_use]
     pub fn query(&self, prefix: &str, limit: usize) -> Vec<&SymbolInfo> {
         // Tiered matching (plan §22.3): exact > prefix > contains > fuzzy
         // subsequence. Exact/prefix/contains stay the fast paths; fuzzy is a
@@ -421,6 +425,7 @@ impl SymbolIndex {
 
     /// Plan §22.6 auto-import: return the fully-qualified import path recorded
     /// for `name` in `file_id` (e.g. `crate::foo::Bar`), if indexed.
+    #[must_use]
     pub fn import_path_for(&self, file_id: FileId, name: &str) -> Option<&String> {
         self.import_paths.get(&(file_id.to_raw(), name.to_string()))
     }
@@ -492,7 +497,7 @@ impl SymbolIndex {
         }
     }
 
-    /// clear_file.
+    /// `clear_file`.
     pub fn clear_file(&mut self, file_id: FileId) {
         if let Some(symbols) = self.by_file.remove(&file_id) {
             for sym in symbols {
@@ -529,13 +534,13 @@ impl SymbolIndex {
 /// Used to record an impl method's receiver type (`SymbolInfo::receiver_type`)
 /// in a form comparable with the resolved receiver type produced by
 /// `AnalysisDatabase::type_at_offset` (which renders a `Ty` via `PrintTy`).
+#[must_use]
 pub fn render_type_ref(ty: &glyim_hir::TypeRef, interner: &glyim_core::Interner) -> String {
     match ty {
-        glyim_hir::TypeRef::Path(path) => path
-            .segments
-            .last()
-            .map(|s| interner.resolve(s.name).to_string())
-            .unwrap_or_else(|| "unknown".to_string()),
+        glyim_hir::TypeRef::Path(path) => path.segments.last().map_or_else(
+            || "unknown".to_string(),
+            |s| interner.resolve(s.name).to_string(),
+        ),
         glyim_hir::TypeRef::Ref { inner, mutability } => {
             let prefix = if matches!(mutability, glyim_core::primitives::Mutability::Mut) {
                 "&mut "
