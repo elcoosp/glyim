@@ -24,7 +24,7 @@ pub(crate) fn is_pattern(kind: SyntaxKind) -> bool {
 
 use crate::{
     Body, Expr, ExprId, GsxAttrHIR, GsxAttrValue, GsxChildHIR, GsxExpr, GsxTag, Literal, MatchArm,
-    Pat, PatId, Path as HirPath, PathSegment, Span,
+    Pat, Path as HirPath, PathSegment, Span,
 };
 
 use super::{
@@ -229,38 +229,6 @@ pub(crate) fn lower_block_to_expr(
 
 /// Convert a pattern into an expression (for LHS of assignment). Kept for the
 /// planned assignment-desugaring tier; not yet wired into lowering.
-#[allow(dead_code)]
-fn pat_to_expr(
-    pat_id: PatId,
-    body: &mut Body,
-    _interner: &mut Interner,
-    span: Span,
-) -> Option<ExprId> {
-    match &body.pats[pat_id] {
-        Pat::Wild => None,
-        Pat::Binding { name, .. } | Pat::RefBinding { name, .. } => {
-            let path = HirPath::from_single(*name);
-            let expr = Expr::Path(path);
-            Some(body.alloc_expr(expr, span))
-        }
-        Pat::Path(path) => {
-            let expr = Expr::Path(path.clone());
-            Some(body.alloc_expr(expr, span))
-        }
-        Pat::Struct { path, .. } => {
-            let expr = Expr::Path(path.clone());
-            Some(body.alloc_expr(expr, span))
-        }
-        Pat::Tuple(_)
-        | Pat::Slice(_)
-        | Pat::Or(_)
-        | Pat::Literal(_)
-        | Pat::Range { .. }
-        | Pat::Err => None,
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
 fn lower_field_or_method_with_receiver(
     node: &SyntaxNode,
     receiver_id: ExprId,
@@ -758,7 +726,7 @@ fn lower_struct_expr(
         struct_field_map,
         &mut fields,
         &mut spread,
-        path.as_ref().and_then(|p| p.as_name()),
+        path.as_ref().and_then(super::super::Path::as_name),
     );
 
     // Remove any field that matches the struct name (shorthand for the struct itself)
@@ -812,8 +780,7 @@ fn lower_struct_expr(
                 .collect();
             let span = node_span(node);
             let resolved = struct_name
-                .map(|n| interner.resolve(n).to_string())
-                .unwrap_or_else(|| "<none>".to_string());
+                .map_or_else(|| "<none>".to_string(), |n| interner.resolve(n).to_string());
             diags.push(GlyimDiagnostic::type_error(
                 span,
                 format!(
@@ -843,7 +810,7 @@ fn lower_binary_expr(
 ) -> Option<ExprId> {
     let op_token = node
         .children_with_tokens()
-        .filter_map(|el| el.into_token())
+        .filter_map(rowan::NodeOrToken::into_token)
         .find(|t| !t.kind().is_trivia() && is_bin_op_kind(t.kind()));
     if let Some(op_token) = op_token {
         let lhs_node = node
@@ -1185,7 +1152,7 @@ fn lower_lit_expr(
 ) -> Option<ExprId> {
     let lit_token = node
         .children_with_tokens()
-        .filter_map(|c| c.into_token())
+        .filter_map(rowan::NodeOrToken::into_token)
         .find(|t| {
             t.kind().is_literal()
                 || t.kind() == SyntaxKind::KwTrue
@@ -1285,7 +1252,7 @@ pub(crate) fn lower_literal_with_diags(
                 ""
             };
             match parse_char_literal(inner) {
-                Some(c) if (c as u32) <= u8::MAX as u32 => {
+                Some(c) if u8::try_from(c as u32).is_ok() => {
                     Literal::Uint(c as u128, Some(UintTy::U8))
                 }
                 _ => {
@@ -1370,7 +1337,10 @@ fn split_int_literal(s: &str) -> (String, Option<String>) {
     }
     let num_part = &s[..i];
     let suffix = if i < s.len() { Some(&s[i..]) } else { None };
-    (num_part.replace('_', ""), suffix.map(|s| s.to_string()))
+    (
+        num_part.replace('_', ""),
+        suffix.map(std::string::ToString::to_string),
+    )
 }
 
 /// Span of a single token (rowan `text_range`), mirroring `node_span`.
@@ -1411,15 +1381,14 @@ fn parse_int_with_prefix(
             .ok()
             .and_then(|u| i128::try_from(u).ok())
     });
-    match parsed {
-        Some(v) => (v, unsigned),
-        None => {
-            diags.push(GlyimDiagnostic::type_error(
-                span,
-                format!("integer literal is too large: `{original}`"),
-            ));
-            (0, false)
-        }
+    if let Some(v) = parsed {
+        (v, unsigned)
+    } else {
+        diags.push(GlyimDiagnostic::type_error(
+            span,
+            format!("integer literal is too large: `{original}`"),
+        ));
+        (0, false)
     }
 }
 
@@ -1437,7 +1406,10 @@ fn split_float_literal(s: &str) -> (String, Option<String>) {
     } else {
         None
     };
-    (num_part.to_string(), suffix.map(|s| s.to_string()))
+    (
+        num_part.to_string(),
+        suffix.map(std::string::ToString::to_string),
+    )
 }
 
 fn parse_char_literal(s: &str) -> Option<char> {
@@ -1619,7 +1591,7 @@ fn lower_method_call_expr(
     for el in node.children_with_tokens() {
         match el {
             glyim_syntax::SyntaxElement::Token(ref t) if t.kind() == SyntaxKind::Dot => {
-                found_dot = true
+                found_dot = true;
             }
             glyim_syntax::SyntaxElement::Token(ref t)
                 if found_dot && t.kind() == SyntaxKind::Ident =>
@@ -1694,7 +1666,7 @@ fn lower_unary_expr(
 ) -> Option<ExprId> {
     let op_token = node
         .children_with_tokens()
-        .filter_map(|el| el.into_token())
+        .filter_map(rowan::NodeOrToken::into_token)
         .find(|t| {
             matches!(
                 t.kind(),
@@ -1795,7 +1767,7 @@ fn lower_match_expr(
                     | SyntaxKind::PatOr
                     | SyntaxKind::PatSlice
                     | SyntaxKind::UsePath => {
-                        pat_id = lower_pat(&part, interner, &mut body.pats, &mut body.pat_spans, diags)
+                        pat_id = lower_pat(&part, interner, &mut body.pats, &mut body.pat_spans, diags);
                     }
                     _ if is_expr_node(&part) => {
                         // In a match arm, the structure is:
@@ -2064,7 +2036,7 @@ fn lower_assign_expr(
     // op for the RHS.
     let op_token = node
         .children_with_tokens()
-        .filter_map(|el| el.into_token())
+        .filter_map(rowan::NodeOrToken::into_token)
         .find(|t| {
             matches!(
                 t.kind(),
@@ -2188,7 +2160,7 @@ fn lower_field_expr(
     for el in node.children_with_tokens() {
         match el {
             glyim_syntax::SyntaxElement::Token(ref t) if t.kind() == SyntaxKind::Dot => {
-                found_dot = true
+                found_dot = true;
             }
             glyim_syntax::SyntaxElement::Token(ref t)
                 if found_dot && t.kind() == SyntaxKind::Ident =>
@@ -2278,14 +2250,14 @@ fn lower_array_expr(
         let count_text = exprs[1]
             .descendants_with_tokens()
             .find(|e| e.kind() == SyntaxKind::IntLit)
-            .and_then(|e| e.into_token())
+            .and_then(rowan::NodeOrToken::into_token)
             .map(|t| t.text().to_string());
         let count = count_text.and_then(|s| {
             let numeric: String = s
                 .trim()
                 .replace('_', "")
                 .chars()
-                .take_while(|c| c.is_ascii_digit())
+                .take_while(char::is_ascii_digit)
                 .collect();
             numeric.parse::<u32>().ok()
         });
@@ -2522,7 +2494,7 @@ fn lower_gsx_attr(
     let mut hyphen_parts: Vec<String> = Vec::new();
     let tokens = node
         .children_with_tokens()
-        .filter_map(|c| c.into_token())
+        .filter_map(rowan::NodeOrToken::into_token)
         .filter(|t| !t.kind().is_trivia());
     let mut value_kind = None;
     for t in tokens {
