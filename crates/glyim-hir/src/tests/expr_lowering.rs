@@ -1,8 +1,6 @@
 //! Tests for expression lowering.
 
-#![allow(unused_imports, dead_code)]
-
-use crate::{Body, Expr, ExprId, Pat, TypeRef};
+use crate::{Body, Expr, Pat, TypeRef};
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::LocalDefId;
 use glyim_core::interner::Interner;
@@ -10,13 +8,13 @@ use glyim_span::Span;
 use glyim_syntax::{SyntaxKind, SyntaxNode};
 use std::collections::HashMap;
 
+use crate::lower::is_expr_node;
 use crate::lower::lower_expr::lower_expr as lower_expr_fn;
-use crate::lower::{is_expr_node, lower_expr};
 use glyim_frontend::parse_to_syntax;
 use glyim_span::FileId;
 
 fn parse_expr(src: &str) -> SyntaxNode {
-    let full_src = format!("fn main() {{ {} }}", src);
+    let full_src = format!("fn main() {{ {src} }}");
     let parse = parse_to_syntax(&full_src, FileId::from_raw(1));
     let fn_def = parse
         .root
@@ -79,7 +77,7 @@ fn test_lower_closure_expr() {
                 Pat::Binding { name, .. } => assert_eq!(interner.resolve(*name), "x"),
                 Pat::Path(path) => assert_eq!(path.as_name(), Some(interner.intern("x"))),
                 Pat::Wild => {}
-                _ => panic!("unexpected pattern {:?}", pat),
+                _ => panic!("unexpected pattern {pat:?}"),
             }
         }
         _ => panic!("expected Closure expr"),
@@ -195,7 +193,7 @@ fn test_string_unescape_backslash_before_n() {
                 "escaped-backslash + n must stay `\\n`, not become a newline"
             );
         }
-        other => panic!("expected String literal, got {:?}", other),
+        other => panic!("expected String literal, got {other:?}"),
     }
 }
 
@@ -217,6 +215,6 @@ fn test_string_unescape_newline() {
         Expr::Literal(crate::Literal::String(name)) => {
             assert_eq!(interner.resolve(*name), "a\nb");
         }
-        other => panic!("expected String literal, got {:?}", other),
+        other => panic!("expected String literal, got {other:?}"),
     }
 }
