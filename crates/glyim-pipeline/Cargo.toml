@@ -34,3 +34,6 @@ glyim-test = { workspace = true }
 glyim-mir-interp = { workspace = true }
 glyim-core = { workspace = true }
 glyim-lang-std = { workspace = true }
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true
