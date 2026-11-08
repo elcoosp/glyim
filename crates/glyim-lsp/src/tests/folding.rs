@@ -16,7 +16,7 @@ fn setup_analysis(content: &str) -> (AnalysisDatabase, Uri) {
     )
     .unwrap();
     let file_id = db.file_map.write().get_or_create(&path);
-    let source_map = SourceMap::new(path, file_id, content.to_string());
+    let source_map = SourceMap::new(file_id, content.to_string());
     db.source_maps.write().insert(file_id, source_map);
     (db, uri)
 }
