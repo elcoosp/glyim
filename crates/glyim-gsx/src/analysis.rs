@@ -67,6 +67,7 @@ impl Place {
     }
 
     /// Extend with a field step.
+    #[must_use]
     pub fn field(&self, name: &str) -> Place {
         let mut steps = self.steps.clone();
         steps.push(PlaceStep::Field(name.to_string()));
@@ -78,6 +79,7 @@ impl Place {
     }
 
     /// Extend with an index step.
+    #[must_use]
     pub fn index(&self) -> Place {
         let mut steps = self.steps.clone();
         steps.push(PlaceStep::Index);
