@@ -49,7 +49,6 @@ pub(crate) struct Pattern {
 }
 
 #[derive(Clone, Debug)]
-#[allow(clippy::enum_variant_names)]
 /// Captured metavariables are stored **depth-aware** (HIR-2): each metavar maps
 /// to one `Vec<TokenTree>` *per matched iteration* of the repetition that binds
 /// it, not to one flat token list. A metavariable outside any repetition has
@@ -171,8 +170,7 @@ fn parse_pattern_pieces(trees: &[TokenTree], pos: usize) -> Option<(Vec<PatternP
 
 fn parse_fragment_spec(tree: &TokenTree) -> Option<FragmentSpec> {
     match tree {
-        TokenTree::Token(SyntaxKind::Ident, text)
-        | TokenTree::Token(SyntaxKind::Lifetime, text) => match text.as_str() {
+        TokenTree::Token(SyntaxKind::Ident | SyntaxKind::Lifetime, text) => match text.as_str() {
             "expr" => Some(FragmentSpec::Expr),
             "ty" => Some(FragmentSpec::Ty),
             "ident" => Some(FragmentSpec::Ident),
@@ -514,7 +512,7 @@ fn match_pieces(
                                 }
                             }
                         }
-                        Err(_) => break,
+                        Err(()) => break,
                     }
                 }
                 let count = repetitions.len();
@@ -694,8 +692,7 @@ mod tests {
             let result = match_pattern(&pattern, &input);
             assert!(
                 matches!(result, MatchResult::NoMatch),
-                "expr must reject separator token {:?}",
-                sep
+                "expr must reject separator token {sep:?}"
             );
         }
     }
@@ -758,7 +755,7 @@ mod tests {
                     "Stage B: :expr must capture the whole `a + b * c` expression"
                 );
             }
-            other => panic!("expected FullMatch, got {:?}", other),
+            other => panic!("expected FullMatch, got {other:?}"),
         }
     }
 
@@ -805,7 +802,7 @@ mod tests {
                     ":ty must capture `Vec<i32>` as two trees"
                 );
             }
-            other => panic!("expected FullMatch, got {:?}", other),
+            other => panic!("expected FullMatch, got {other:?}"),
         }
     }
 
@@ -897,7 +894,7 @@ mod tests {
                 assert_eq!(bindings[&SmolStr::from("rhs")].len(), 1);
                 assert_eq!(bindings[&SmolStr::from("rhs")][0].len(), 3);
             }
-            other => panic!("expected FullMatch, got {:?}", other),
+            other => panic!("expected FullMatch, got {other:?}"),
         }
     }
 }
