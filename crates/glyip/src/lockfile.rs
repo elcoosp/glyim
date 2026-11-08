@@ -14,7 +14,7 @@ const LOCKFILE_NAME: &str = "Glyip.lock";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LockConflict {
     /// A manifest dependency is missing entirely from the lockfile.
-    /// Struct.
+    /// `Struct`.
     Missing {
         /// name field.
         name: String,
@@ -23,11 +23,11 @@ pub enum LockConflict {
     },
     /// A manifest dependency's pinned version does not match the locked one.
     VersionMismatch {
-        /// Struct.
+        /// `Struct`.
         name: String,
-        /// Struct.
+        /// `Struct`.
         manifest_version: String,
-        /// Struct.
+        /// `Struct`.
         locked_version: String,
     },
 }
@@ -55,27 +55,27 @@ impl std::fmt::Display for LockConflict {
 #[serde(tag = "source")]
 pub enum CrateSource {
     /// A local filesystem path.
-    /// Struct.
+    /// `Struct`.
     Path {
         /// path field.
         path: String,
     },
     /// A git repository at a specific revision.
     Git {
-        /// Struct.
+        /// `Struct`.
         url: String,
         #[serde(skip_serializing_if = "Option::is_none")]
-        /// Struct.
+        /// `Struct`.
         rev: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        /// Struct.
+        /// `Struct`.
         branch: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        /// Struct.
+        /// `Struct`.
         tag: Option<String>,
     },
     /// A registry (index) entry.
-    /// Struct.
+    /// `Struct`.
     Registry {
         /// url field.
         url: String,
@@ -110,6 +110,7 @@ pub struct Lockfile {
 
 impl Lockfile {
     /// Create a new empty lockfile (format version 1).
+    #[must_use]
     pub fn new() -> Self {
         Self {
             version: 1,
@@ -148,8 +149,9 @@ impl Lockfile {
     }
 
     /// Look up a locked crate by name and version.
+    #[must_use]
     pub fn get_crate(&self, name: &str, version: &str) -> Option<&LockedCrate> {
-        let key = format!("{}-{}", name, version);
+        let key = format!("{name}-{version}");
         self.crates.get(&key)
     }
 
@@ -159,11 +161,13 @@ impl Lockfile {
     }
 
     /// Number of locked crates.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.crates.len()
     }
 
     /// Whether the lockfile contains no crates.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.crates.is_empty()
     }
@@ -173,6 +177,7 @@ impl Lockfile {
     /// entry whose version matches the manifest's pinned version (when the
     /// manifest pins an exact version; otherwise presence alone is required).
     /// Returns the list of conflicts — empty means the lockfile is consistent.
+    #[must_use]
     pub fn validate_against_manifest(
         &self,
         manifest: &crate::config::GlyipToml,
@@ -181,28 +186,26 @@ impl Lockfile {
         for (name, dep) in manifest.all_dependencies() {
             match dep.version() {
                 Some(manifest_version) => {
-                    match self.get_crate(name, manifest_version) {
-                        Some(_) => {}
-                        None => {
-                            // Either missing entirely, or a different version is locked.
-                            let locked = self
-                                .crates
-                                .values()
-                                .find(|c| c.name == *name)
-                                .map(|c| c.version.clone());
-                            match locked {
-                                Some(locked_version) => {
-                                    conflicts.push(LockConflict::VersionMismatch {
-                                        name: name.clone(),
-                                        manifest_version: manifest_version.to_string(),
-                                        locked_version,
-                                    })
-                                }
-                                None => conflicts.push(LockConflict::Missing {
+                    if self.get_crate(name, manifest_version).is_some() {
+                    } else {
+                        // Either missing entirely, or a different version is locked.
+                        let locked = self
+                            .crates
+                            .values()
+                            .find(|c| c.name == *name)
+                            .map(|c| c.version.clone());
+                        match locked {
+                            Some(locked_version) => {
+                                conflicts.push(LockConflict::VersionMismatch {
                                     name: name.clone(),
-                                    version: manifest_version.to_string(),
-                                }),
+                                    manifest_version: manifest_version.to_string(),
+                                    locked_version,
+                                });
                             }
+                            None => conflicts.push(LockConflict::Missing {
+                                name: name.clone(),
+                                version: manifest_version.to_string(),
+                            }),
                         }
                     }
                 }
