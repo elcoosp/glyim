@@ -1,4 +1,3 @@
-#![allow(clippy::single_match)]
 //! Mono item caching for the pipeline.
 
 use glyim_core::Mutability;
@@ -31,16 +30,6 @@ impl PipelineMonoCache {
 
     pub(crate) fn symbols(&self) -> &[String] {
         &self.symbols
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn len(&self) -> usize {
-        self.symbols.len()
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn is_empty(&self) -> bool {
-        self.symbols.is_empty()
     }
 }
 
@@ -220,31 +209,30 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                 let item_name_str = frozen.name_str(proj.item_name).to_string();
                 let resolved =
                     frozen.resolve_associated_type_by_self_ty_name(concrete_self, &item_name_str);
-                match resolved {
-                    Some(resolved) => resolved,
-                    None => {
-                        // Could not resolve (no matching impl); fall back to a
-                        // structurally-substituted projection so we don't drop
-                        // information, but this will still surface as a layout
-                        // error if truly unresolvable.
-                        let new_subst_args: Vec<GenericArg> = proj_subst_args
-                            .iter()
-                            .map(|a| match a {
-                                GenericArg::Ty(t) => {
-                                    GenericArg::Ty(substitute_ty(*t, substs, ctx, frozen))
-                                }
-                                other => other.clone(),
-                            })
-                            .collect();
-                        let new_sub = ctx.intern_substitution(new_subst_args);
-                        ctx.mk_ty(TyKind::Projection(glyim_type::ProjectionTy {
-                            trait_ref: glyim_type::TraitRef {
-                                def_id: proj.trait_ref.def_id,
-                                substs: new_sub,
-                            },
-                            item_name: proj.item_name,
-                        }))
-                    }
+                if let Some(resolved) = resolved {
+                    resolved
+                } else {
+                    // Could not resolve (no matching impl); fall back to a
+                    // structurally-substituted projection so we don't drop
+                    // information, but this will still surface as a layout
+                    // error if truly unresolvable.
+                    let new_subst_args: Vec<GenericArg> = proj_subst_args
+                        .iter()
+                        .map(|a| match a {
+                            GenericArg::Ty(t) => {
+                                GenericArg::Ty(substitute_ty(*t, substs, ctx, frozen))
+                            }
+                            other => other.clone(),
+                        })
+                        .collect();
+                    let new_sub = ctx.intern_substitution(new_subst_args);
+                    ctx.mk_ty(TyKind::Projection(glyim_type::ProjectionTy {
+                        trait_ref: glyim_type::TraitRef {
+                            def_id: proj.trait_ref.def_id,
+                            substs: new_sub,
+                        },
+                        item_name: proj.item_name,
+                    }))
                 }
             }
             _ => ty,
@@ -414,10 +402,8 @@ pub(crate) fn make_mir_body_provider<'a>(
                 Arc::new(substituted)
             }
         } else {
-            let diag = GlyimDiagnostic::internal_error(format!(
-                "MIR body not found for DefId {:?}",
-                def_id
-            ));
+            let diag =
+                GlyimDiagnostic::internal_error(format!("MIR body not found for DefId {def_id:?}"));
             sink.borrow_mut().emit(diag);
             Arc::new(Body::dummy(DefId::new(
                 CrateId::from_raw(0),
@@ -757,11 +743,10 @@ fn generate_array_drop_glue(
             // leaked memory without any observable failure. Panic instead so
             // the regression test catches it immediately.
             panic!(
-                "internal error: array drop glue requested for `[T; {:?}]` with a \
+                "internal error: array drop glue requested for `[T; {len:?}]` with a \
                  non-monomorphic length after monomorphization — this means \
                  TyCtx::subst_ty or polymorphize's param-usage tracking has a bug. \
-                 len = {:?}",
-                len, len
+                 len = {len:?}"
             );
         }
     };
@@ -987,8 +972,6 @@ fn element_place(base: &Place, idx_local: LocalIdx) -> Place {
 }
 
 pub(crate) fn compute_max_cgus() -> usize {
-    let cores = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(1);
+    let cores = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
     cores.clamp(1, 16)
 }
