@@ -103,7 +103,7 @@ fn lockfile_multiple_crates_iteration_order() {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             source: CrateSource::Path {
-                path: format!("/{}", name),
+                path: format!("/{name}"),
             },
             dependencies: BTreeMap::new(),
         });
