@@ -3,14 +3,14 @@
 //! These tests verify that the LLVM codegen backend properly handles:
 //! - Enum layout with discriminant tags
 //! - String constants as fat pointers
-//! - ConstRef initialization
+//! - `ConstRef` initialization
 //! - Slice projection (not null)
 //! - Enum aggregate discriminant writing
 //! - Direct function calls
 //! - Pointer casts
 //! - Drop dealloc with real sizes
 //! - Pass pipeline without debug output
-//! - Debug info declare_local
+//! - Debug info `declare_local`
 
 use std::collections::HashMap;
 
@@ -142,8 +142,7 @@ fn test_string_const_produces_fat_pointer() {
     let ir = lower_to_ir(&body, &ctx);
     assert!(
         ir.contains("i64") && ir.contains("@__glyim_str_"),
-        "String constant should produce fat pointer struct with ptr and i64 len.\nIR:\n{}",
-        ir
+        "String constant should produce fat pointer struct with ptr and i64 len.\nIR:\n{ir}"
     );
 }
 
@@ -203,8 +202,7 @@ fn test_ptr_cast_emits_bitcast() {
     let ir = lower_to_ir(&body, &ctx);
     assert!(
         !ir.is_empty(),
-        "PtrToPtr cast should produce valid IR.\nIR:\n{}",
-        ir
+        "PtrToPtr cast should produce valid IR.\nIR:\n{ir}"
     );
 }
 
@@ -262,8 +260,7 @@ fn test_fnptr_cast_emits_bitcast() {
     let ir = lower_to_ir(&body, &ctx);
     assert!(
         !ir.is_empty(),
-        "FnPtrToPtr cast should produce valid IR.\nIR:\n{}",
-        ir
+        "FnPtrToPtr cast should produce valid IR.\nIR:\n{ir}"
     );
 }
 
@@ -311,8 +308,7 @@ fn test_debug_declare_local_emits_intrinsic() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("llvm.dbg.declare") || ir.contains("DILocalVariable"),
-        "declare_local should emit debug declare or variable info.\nIR:\n{}",
-        ir
+        "declare_local should emit debug declare or variable info.\nIR:\n{ir}"
     );
 }
 
