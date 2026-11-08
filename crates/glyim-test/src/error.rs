@@ -1,31 +1,31 @@
 use std::path::PathBuf;
 
 #[derive(Debug)]
-/// TestDiscoveryError.
+/// `TestDiscoveryError`.
 pub enum TestDiscoveryError {
-    #[allow(missing_docs)]
+    /// The fixture root directory does not exist on disk.
     RootNotFound(PathBuf),
-    /// Variant.
+    /// `Variant`.
     ReadFailed {
-        /// Struct.
+        /// `Struct`.
         path: PathBuf,
-        /// Struct.
+        /// `Struct`.
         source: std::io::Error,
     },
-    /// Variant.
+    /// `Variant`.
     InvalidConfig {
-        /// Struct.
+        /// `Struct`.
         path: PathBuf,
-        /// Struct.
+        /// `Struct`.
         message: String,
     },
-    /// Variant.
+    /// `Variant`.
     InvalidAnnotation {
-        /// Struct.
+        /// `Struct`.
         path: PathBuf,
-        /// Struct.
+        /// `Struct`.
         line: usize,
-        /// Struct.
+        /// `Struct`.
         message: String,
     },
 }
@@ -33,10 +33,10 @@ pub enum TestDiscoveryError {
 impl std::fmt::Display for TestDiscoveryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::RootNotFound(p) => write!(f, "test directory does not exist: {:?}", p),
-            Self::ReadFailed { path, source } => write!(f, "read {:?}: {}", path, source),
+            Self::RootNotFound(p) => write!(f, "test directory does not exist: {}", p.display()),
+            Self::ReadFailed { path, source } => write!(f, "read {}: {source}", path.display()),
             Self::InvalidConfig { path, message } => {
-                write!(f, "invalid config in {:?}: {}", path, message)
+                write!(f, "invalid config in {}: {message}", path.display())
             }
             Self::InvalidAnnotation {
                 path,
@@ -45,8 +45,8 @@ impl std::fmt::Display for TestDiscoveryError {
             } => {
                 write!(
                     f,
-                    "invalid annotation in {:?} line {}: {}",
-                    path, line, message
+                    "invalid annotation in {} line {line}: {message}",
+                    path.display()
                 )
             }
         }
@@ -63,56 +63,56 @@ impl std::error::Error for TestDiscoveryError {
 }
 
 #[derive(Clone, Debug)]
-/// FailureReason.
+/// `FailureReason`.
 pub enum FailureReason {
-    /// Variant.
+    /// `Variant`.
     CompilePassUnexpectedErrors {
-        /// Struct.
+        /// `Struct`.
         errors: Vec<String>,
     },
-    /// Variant.
+    /// `Variant`.
     AnnotationParseError {
-        /// Struct.
+        /// `Struct`.
         line: usize,
-        /// Struct.
+        /// `Struct`.
         message: String,
     },
-    /// Variant.
+    /// `Variant`.
     DiagnosticMismatch {
-        /// Struct.
+        /// `Struct`.
         missing_count: usize,
-        /// Struct.
+        /// `Struct`.
         unexpected_count: usize,
-        /// Struct.
+        /// `Struct`.
         wrong_severity_count: usize,
-        /// Struct.
+        /// `Struct`.
         details: String,
     },
-    /// Variant.
+    /// `Variant`.
     ErrorPatternNotFound {
-        /// Struct.
+        /// `Struct`.
         pattern: String,
     },
-    /// Variant.
+    /// `Variant`.
     UiOutputDiffers {
-        /// Struct.
+        /// `Struct`.
         diff: String,
     },
-    /// Variant.
+    /// `Variant`.
     UiNoExpectedFile {
-        /// Struct.
+        /// `Struct`.
         path: PathBuf,
     },
-    /// Variant.
+    /// `Variant`.
     TimeoutExceeded {
-        /// Struct.
+        /// `Struct`.
         timeout_secs: u64,
     },
-    /// Variant.
+    /// `Variant`.
     CompilationFailed {
-        /// Struct.
+        /// `Struct`.
         phase: String,
-        /// Struct.
+        /// `Struct`.
         message: String,
     },
     /// TEST-3: a fixture declared an unmet need (`needs-llvm`,
@@ -132,30 +132,30 @@ pub enum FailureReason {
         /// available.
         detail: String,
     },
-    /// Variant.
+    /// `Variant`.
     RunFailed {
-        /// Struct.
+        /// `Struct`.
         exit_code: Option<i32>,
-        /// Struct.
+        /// `Struct`.
         expected_exit_code: Option<i32>,
     },
-    /// Variant.
+    /// `Variant`.
     StdoutMismatch {
-        /// Struct.
+        /// `Struct`.
         expected: String,
-        /// Struct.
+        /// `Struct`.
         actual: String,
     },
-    /// Variant.
+    /// `Variant`.
     StderrMismatch {
-        /// Struct.
+        /// `Struct`.
         expected: String,
-        /// Struct.
+        /// `Struct`.
         actual: String,
     },
-    /// Variant.
+    /// `Variant`.
     RunTimeout {
-        /// Struct.
+        /// `Struct`.
         timeout_secs: u64,
     },
 }
@@ -172,7 +172,7 @@ impl std::fmt::Display for FailureReason {
                 )
             }
             Self::AnnotationParseError { line, message } => {
-                write!(f, "annotation parse error at line {}: {}", line, message)
+                write!(f, "annotation parse error at line {line}: {message}")
             }
             Self::DiagnosticMismatch {
                 missing_count,
@@ -182,20 +182,19 @@ impl std::fmt::Display for FailureReason {
             } => {
                 write!(
                     f,
-                    "diagnostic mismatch ({} missing, {} unexpected, {} wrong severity):\n  {}",
-                    missing_count, unexpected_count, wrong_severity_count, details
+                    "diagnostic mismatch ({missing_count} missing, {unexpected_count} unexpected, {wrong_severity_count} wrong severity):\n  {details}"
                 )
             }
             Self::ErrorPatternNotFound { pattern } => {
-                write!(f, "error-pattern '{}' not found", pattern)
+                write!(f, "error-pattern '{pattern}' not found")
             }
-            Self::UiOutputDiffers { diff } => write!(f, "output differs:\n{}", diff),
-            Self::UiNoExpectedFile { path } => write!(f, "no expected file: {:?}", path),
+            Self::UiOutputDiffers { diff } => write!(f, "output differs:\n{diff}"),
+            Self::UiNoExpectedFile { path } => write!(f, "no expected file: {}", path.display()),
             Self::TimeoutExceeded { timeout_secs } => {
-                write!(f, "exceeded {}s timeout", timeout_secs)
+                write!(f, "exceeded {timeout_secs}s timeout")
             }
             Self::CompilationFailed { phase, message } => {
-                write!(f, "compilation failed at {}: {}", phase, message)
+                write!(f, "compilation failed at {phase}: {message}")
             }
             Self::RunFailed {
                 exit_code,
@@ -203,32 +202,28 @@ impl std::fmt::Display for FailureReason {
             } => {
                 write!(
                     f,
-                    "run failed: exit code {:?}, expected {:?}",
-                    exit_code, expected_exit_code
+                    "run failed: exit code {exit_code:?}, expected {expected_exit_code:?}"
                 )
             }
             Self::StdoutMismatch { expected, actual } => {
                 write!(
                     f,
-                    "stdout mismatch:\n  expected: {:?}\n  actual:   {:?}",
-                    expected, actual
+                    "stdout mismatch:\n  expected: {expected:?}\n  actual:   {actual:?}"
                 )
             }
             Self::StderrMismatch { expected, actual } => {
                 write!(
                     f,
-                    "stderr mismatch:\n  expected: {:?}\n  actual:   {:?}",
-                    expected, actual
+                    "stderr mismatch:\n  expected: {expected:?}\n  actual:   {actual:?}"
                 )
             }
             Self::RunTimeout { timeout_secs } => {
-                write!(f, "run exceeded {}s timeout", timeout_secs)
+                write!(f, "run exceeded {timeout_secs}s timeout")
             }
             Self::NeedUnsatisfiable { need, detail } => {
                 write!(
                     f,
-                    "required {} not satisfied: {} (GLYIM_TEST_NO_SKIP=1 makes this a hard failure)",
-                    need, detail
+                    "required {need} not satisfied: {detail} (GLYIM_TEST_NO_SKIP=1 makes this a hard failure)"
                 )
             }
         }
@@ -236,9 +231,9 @@ impl std::fmt::Display for FailureReason {
 }
 
 #[derive(Clone, Debug)]
-/// TimeoutError.
+/// `TimeoutError`.
 pub struct TimeoutError {
-    /// Struct.
+    /// `Struct`.
     pub timeout_secs: u64,
 }
 
@@ -250,13 +245,13 @@ impl std::fmt::Display for TimeoutError {
 impl std::error::Error for TimeoutError {}
 
 #[derive(Clone, Debug)]
-/// AssertionFailure.
+/// `AssertionFailure`.
 pub struct AssertionFailure {
-    /// Struct.
+    /// `Struct`.
     pub expected: String,
-    /// Struct.
+    /// `Struct`.
     pub actual: String,
-    /// Struct.
+    /// `Struct`.
     pub ty_description: String,
 }
 
