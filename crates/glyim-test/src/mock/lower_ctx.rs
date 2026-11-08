@@ -1,4 +1,4 @@
-//! Mock implementation of LowerCtx for testing.
+//! Mock implementation of `LowerCtx` for testing.
 use glyim_core::def_id::{AdtId, ConstDefId, FnDefId};
 use glyim_core::interner::Name;
 use glyim_lower::{AdtDef, AdtKind, IteratorNextInfo, LowerCtx};
@@ -8,21 +8,21 @@ use glyim_type::{FieldIdx, FnSig, Substitution, Ty, TyCtx};
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-/// Key for field index lookups: (AdtId raw, variant_idx, Name)
+/// Key for field index lookups: (`AdtId` raw, `variant_idx`, Name)
 type FieldKey = (u32, u32, Name);
 
-/// Key for variant index lookups: (AdtId raw, Name)
+/// Key for variant index lookups: (`AdtId` raw, Name)
 type VariantKey = (u32, Name);
 
-/// MockLowerCtx.
+/// `MockLowerCtx`.
 pub struct MockLowerCtx<'a> {
     ty_ctx: &'a TyCtx,
     span_stack: RefCell<Vec<Span>>,
-    /// Map from (AdtId raw, variant_idx, field_name) to field index
+    /// Map from (`AdtId` raw, `variant_idx`, `field_name`) to field index
     field_indices: HashMap<FieldKey, FieldIdx>,
-    /// Map from (AdtId raw, variant_name) to variant index
+    /// Map from (`AdtId` raw, `variant_name`) to variant index
     variant_indices: HashMap<VariantKey, u32>,
-    /// ADT definitions keyed by AdtId raw
+    /// ADT definitions keyed by `AdtId` raw
     adt_defs: HashMap<u32, AdtDef>,
     /// Explicitly-registered function signatures. `LowerCtx::fn_sig` is a
     /// *registry query*, not a "guaranteed answer" — the production ctx
@@ -43,20 +43,21 @@ pub struct MockLowerCtx<'a> {
     /// a value that would never appear in real compilation.
     registered_const_values: HashMap<ConstDefId, glyim_mir::MirConst>,
     /// Optional override for `iterator_next_fn` so tests can simulate
-    /// "solver resolved Iterator::next" vs "solver didn't" in isolation.
+    /// "solver resolved `Iterator::next`" vs "solver didn't" in isolation.
     iterator_next_override: Option<Box<dyn Fn(Ty, Ty) -> Option<IteratorNextInfo> + 'a>>,
 }
 
 /// Operations for span testing.
 pub enum SpanOp {
-    #[allow(missing_docs)]
+    /// Pushes `span` onto the mock span stack.
     Push(Span),
-    /// Variant.
+    /// Pops the most recently pushed span off the mock stack.
     Pop,
 }
 
 impl<'a> MockLowerCtx<'a> {
     /// new.
+    #[must_use]
     pub fn new(ty_ctx: &'a TyCtx) -> Self {
         Self {
             ty_ctx,
@@ -107,8 +108,9 @@ impl<'a> MockLowerCtx<'a> {
 
     /// Convenience: attach an iterator‑next resolver. When set, this closure is
     /// consulted by the `LowerCtx::iterator_next_fn` implementation, letting a
-    /// test simulate "Iterator::next resolved" (return `Some(info)`) versus
+    /// test simulate "`Iterator::next` resolved" (return `Some(info)`) versus
     /// "solver didn't find it" (return `None`) without a full pipeline.
+    #[must_use]
     pub fn with_iterator_next<F>(mut self, f: F) -> Self
     where
         F: Fn(glyim_type::Ty, glyim_type::Ty) -> Option<glyim_lower::IteratorNextInfo> + 'a,
@@ -118,7 +120,7 @@ impl<'a> MockLowerCtx<'a> {
     }
 }
 
-impl<'a> LowerCtx for MockLowerCtx<'a> {
+impl LowerCtx for MockLowerCtx<'_> {
     fn ty_ctx(&self) -> &TyCtx {
         self.ty_ctx
     }
@@ -167,10 +169,9 @@ impl<'a> LowerCtx for MockLowerCtx<'a> {
                 .cloned()
                 .unwrap_or_else(|| {
                     panic!(
-                        "MockLowerCtx::fn_sig({:?}) called with no registered signature. \
+                        "MockLowerCtx::fn_sig({def_id:?}) called with no registered signature. \
                  Call `add_fn_sig(def_id, sig)` in the test setup first \
-                 (P2-A2: mocks must not answer with dummies).",
-                        def_id
+                 (P2-A2: mocks must not answer with dummies)."
                     )
                 }),
         )
@@ -188,10 +189,9 @@ impl<'a> LowerCtx for MockLowerCtx<'a> {
                 .cloned()
                 .unwrap_or_else(|| {
                     panic!(
-                        "MockLowerCtx::const_value({:?}) called with no registered value. \
+                        "MockLowerCtx::const_value({def_id:?}) called with no registered value. \
                          Call `add_const_value(def_id, value)` in the test setup first \
-                         (P2-A2: mocks must not answer with dummies).",
-                        def_id
+                         (P2-A2: mocks must not answer with dummies)."
                     )
                 }),
         )
