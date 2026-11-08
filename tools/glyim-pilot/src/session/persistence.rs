@@ -61,13 +61,13 @@ impl Inner {
     }
 }
 
-/// StatePersistence.
+/// `StatePersistence`.
 pub struct StatePersistence {
     inner: Mutex<Inner>,
 }
 
 impl StatePersistence {
-    /// get_session_status.
+    /// `get_session_status`.
     pub async fn get_session_status(&self, session_id: &str) -> Option<String> {
         let p = self.inner.lock().await;
         p.state.sessions.get(session_id).map(|s| {
@@ -90,7 +90,7 @@ impl StatePersistence {
         })
     }
 
-    /// set_pr_url.
+    /// `set_pr_url`.
     pub async fn set_pr_url(&self, stream_id: &str, pr_url: String) -> Result<(), PilotError> {
         let mut p = self.inner.lock().await;
         if let Some(session) = p.state.sessions.get_mut(stream_id) {
@@ -98,13 +98,12 @@ impl StatePersistence {
             p.save().await
         } else {
             Err(PilotError::Session(format!(
-                "Session {} not found",
-                stream_id
+                "Session {stream_id} not found"
             )))
         }
     }
 
-    /// mark_pr_merged.
+    /// `mark_pr_merged`.
     pub async fn mark_pr_merged(&self, stream_id: &str) -> Result<(), PilotError> {
         let mut p = self.inner.lock().await;
         if let Some(session) = p.state.sessions.get_mut(stream_id) {
@@ -112,13 +111,12 @@ impl StatePersistence {
             p.save().await
         } else {
             Err(PilotError::Session(format!(
-                "Session {} not found",
-                stream_id
+                "Session {stream_id} not found"
             )))
         }
     }
 
-    /// get_pr_merged.
+    /// `get_pr_merged`.
     pub async fn get_pr_merged(&self, stream_id: &str) -> Result<bool, PilotError> {
         let p = self.inner.lock().await;
         if let Some(session) = p.state.sessions.get(stream_id) {
@@ -134,7 +132,7 @@ impl StatePersistence {
             inner: Mutex::new(inner),
         })
     }
-    /// add_session.
+    /// `add_session`.
     pub async fn add_session(&self, session: SessionState) -> Result<(), PilotError> {
         let mut p = self.inner.lock().await;
         // T156-CAP-PATCHED [PILOT-14]: cap the session map at 200 entries.
@@ -164,7 +162,7 @@ impl StatePersistence {
         }
         p.save().await
     }
-    /// try_update_session.
+    /// `try_update_session`.
     pub async fn try_update_session<F>(&self, stream_id: &str, f: F) -> Result<(), PilotError>
     where
         F: FnOnce(&mut SessionState) -> Result<(), PilotError>,
@@ -182,7 +180,7 @@ impl StatePersistence {
         }
         p.save().await
     }
-    /// get_worktree_path.
+    /// `get_worktree_path`.
     pub async fn get_worktree_path(&self, stream_id: &str) -> Option<String> {
         self.inner
             .lock()
@@ -192,7 +190,7 @@ impl StatePersistence {
             .get(stream_id)
             .map(|s| s.worktree_path.clone())
     }
-    /// get_stream_id.
+    /// `get_stream_id`.
     pub async fn get_stream_id(&self, session_id: &str) -> Option<String> {
         let p = self.inner.lock().await;
         p.state
@@ -201,7 +199,7 @@ impl StatePersistence {
             .find(|s| s.session_id == session_id)
             .map(|s| s.stream_id.clone())
     }
-    /// get_fix_round.
+    /// `get_fix_round`.
     pub async fn get_fix_round(&self, stream_id: &str) -> u32 {
         self.inner
             .lock()
@@ -209,10 +207,9 @@ impl StatePersistence {
             .state
             .sessions
             .get(stream_id)
-            .map(|s| s.fix_round)
-            .unwrap_or(0)
+            .map_or(0, |s| s.fix_round)
     }
-    /// all_sessions.
+    /// `all_sessions`.
     pub async fn all_sessions(&self) -> Vec<SessionState> {
         self.inner
             .lock()
