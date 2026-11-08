@@ -91,7 +91,7 @@ fn unsafe_fn_sets_is_unsafe() {
             "unsafe fn must set is_unsafe = true; parser emits KwUnsafe as a \
              sibling of FnDef, and the fix walks prev_sibling_or_token"
         ),
-        other => panic!("expected Fn item, got {:?}", other),
+        other => panic!("expected Fn item, got {other:?}"),
     }
 }
 
@@ -111,6 +111,6 @@ fn plain_fn_is_not_unsafe() {
     let item = &hir.items[crate::ItemId::from_raw(0)];
     match &item.kind {
         ItemKind::Fn(f) => assert!(!f.is_unsafe, "plain fn must not set is_unsafe"),
-        other => panic!("expected Fn item, got {:?}", other),
+        other => panic!("expected Fn item, got {other:?}"),
     }
 }
