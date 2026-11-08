@@ -33,6 +33,7 @@ impl ConstEvalError {
     }
 
     /// Convert this error into a diagnostic.
+    #[must_use]
     pub fn into_diagnostic(self) -> glyim_diag::GlyimDiagnostic {
         use glyim_diag::{DiagSeverity, ErrorCategory, ErrorCode};
         glyim_diag::GlyimDiagnostic::new(
