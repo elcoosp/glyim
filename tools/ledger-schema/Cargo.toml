@@ -1,0 +1,26 @@
+[package]
+name = "ledger-schema"
+version = "0.1.0"
+edition = "2024"
+description = "M1.1 Readiness Ledger registry schema: strict TOML feature/gap entries, load, validate, JSON-Schema export"
+publish = false
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "1.2.1"
+
+[dev-dependencies]
+tempfile = "3.27"
+
+[lib]
+name = "ledger_schema"
+path = "src/lib.rs"
+
+[[bench]]
+name = "load_registry"
+harness = false
+path = "load_registry.rs"
+
+[lints]
+workspace = true
