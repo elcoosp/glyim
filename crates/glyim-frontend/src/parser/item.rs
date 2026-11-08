@@ -2,7 +2,7 @@ use super::Parser;
 use glyim_syntax::{GlyimLang, SyntaxKind};
 use rowan::Language; // Required for kind_to_raw
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     pub(crate) fn parse_item(&mut self) {
         // §3.5.30 attribute resolution, layer 1: parse `#[...]` attributes
         // as `Attribute` sibling nodes before the item they decorate.
@@ -235,7 +235,7 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let found = self.current_kind();
-                self.error(format!("expected item, found {:?}", found));
+                self.error(format!("expected item, found {found:?}"));
                 while self.current().is_some()
                     && !matches!(
                         self.current_kind(),
@@ -275,9 +275,6 @@ impl<'a> Parser<'a> {
     ///   - `#[ident]`
     ///   - `#[ident(a, b, c)]`
     ///   - `#[ident(a = "x", b = 1)]`
-    /// Argument tokens are consumed verbatim into `AttrList`; nested
-    /// attributes (`#[cfg_attr(...)]` inside) are not re-parsed at this
-    /// layer.
     fn parse_attribute(&mut self) {
         self.start_node(SyntaxKind::Attribute);
         self.bump_expected(SyntaxKind::Hash);
@@ -476,17 +473,15 @@ impl<'a> Parser<'a> {
                             self.bump();
                         }
                         self.finish_node(); // TokenTree for dollar
+                    } else if matches!(
+                        self.current_kind(),
+                        SyntaxKind::LParen | SyntaxKind::LBrace | SyntaxKind::LBracket
+                    ) {
+                        self.parse_token_tree();
                     } else {
-                        if matches!(
-                            self.current_kind(),
-                            SyntaxKind::LParen | SyntaxKind::LBrace | SyntaxKind::LBracket
-                        ) {
-                            self.parse_token_tree();
-                        } else {
-                            self.start_node(SyntaxKind::TokenTree);
-                            self.bump();
-                            self.finish_node();
-                        }
+                        self.start_node(SyntaxKind::TokenTree);
+                        self.bump();
+                        self.finish_node();
                     }
                     if self.current_kind() == SyntaxKind::Comma {
                         self.bump();
@@ -837,7 +832,7 @@ impl<'a> Parser<'a> {
                 SyntaxKind::KwUnsafe => self.parse_item(),
                 _ => {
                     let found = self.current_kind();
-                    self.error(format!("expected trait item, found {:?}", found));
+                    self.error(format!("expected trait item, found {found:?}"));
                     self.bump();
                 }
             }
@@ -928,7 +923,7 @@ impl<'a> Parser<'a> {
                 SyntaxKind::KwUnsafe => self.parse_item(),
                 _ => {
                     let found = self.current_kind();
-                    self.error(format!("expected impl item, found {:?}", found));
+                    self.error(format!("expected impl item, found {found:?}"));
                     self.bump();
                 }
             }
