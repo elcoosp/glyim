@@ -16,7 +16,6 @@ use std::str::FromStr;
 /// reference graph is authoritative for ordinary expressions. It is retained
 /// as a production safety net for symbols the graph misses (e.g. variables
 /// used only inside a macro call, which `lower_expr` currently drops — tracked
-/// gap in KNOWN_GAPS.md), and is also exercised as a consistency check in
 /// tests.
 pub(crate) fn rename_text_fallback(
     sm: &SourceMap,
@@ -51,7 +50,7 @@ pub(crate) fn rename_text_fallback(
     if edits.is_empty() { None } else { Some(edits) }
 }
 
-/// rename_symbol.
+/// `rename_symbol`.
 pub fn rename_symbol(
     db: &AnalysisDatabase,
     file_map: &FileMap,
