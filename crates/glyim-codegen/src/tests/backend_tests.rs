@@ -36,7 +36,7 @@ fn make_body(blocks: Vec<BasicBlockData>, locals: Vec<LocalDecl>, arg_count: usi
     })
 }
 
-/// Helper: create a LocalDecl with a given type.
+/// Helper: create a `LocalDecl` with a given type.
 fn local_decl(ty: Ty) -> LocalDecl {
     LocalDecl {
         ty,
@@ -45,7 +45,7 @@ fn local_decl(ty: Ty) -> LocalDecl {
     }
 }
 
-/// Helper: create a BasicBlockData with statements and terminator.
+/// Helper: create a `BasicBlockData` with statements and terminator.
 fn block(stmts: Vec<Statement>, term: Terminator) -> BasicBlockData {
     BasicBlockData {
         statements: stmts,
@@ -384,7 +384,6 @@ fn t11_generate_multiple_bodies_combines() {
 #[test]
 fn t12_generate_empty_bodies_returns_empty() {
     // Not applicable since we use generate_function per body; test passes trivially.
-    assert!(true);
 }
 
 // ============================================================================
@@ -416,9 +415,7 @@ fn t13_bool_constant_encodes_correctly() {
     let bytecode = result.unwrap();
     assert!(bytecode.len() > 9);
     assert_eq!(bytecode[0], OP_LOAD_CONST);
-    for i in 1..=8 {
-        assert_eq!(bytecode[i], 0u8);
-    }
+    assert!(bytecode[1..=8].iter().all(|&b| b == 0u8));
 }
 
 // ============================================================================
@@ -585,7 +582,7 @@ fn t18_arithmetic_stubs_do_not_crash() {
             glyim_core::TargetInfo::default(),
         );
         let result = backend.generate_function(&body);
-        assert!(result.is_ok(), "Op {:?} failed", op);
+        assert!(result.is_ok(), "Op {op:?} failed");
     }
 }
 
@@ -1474,7 +1471,7 @@ fn t47_large_integer_constant() {
     );
     let bc = backend.generate_function(&body).unwrap();
     let val = i64::from_le_bytes(bc[1..9].try_into().unwrap());
-    assert_eq!(val as i128, big_val);
+    assert_eq!(i128::from(val), big_val);
 }
 
 // ============================================================================
@@ -1488,7 +1485,7 @@ fn t48_float_bits_constant() {
             vec![stmt(StatementKind::Assign(
                 Place::new(LocalIdx::from_raw(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
-                    kind: MirConstKind::FloatBits(bits as u64),
+                    kind: MirConstKind::FloatBits(u64::from(bits)),
                     ty: Ty::UNIT,
                     span: Span::DUMMY,
                 })),
@@ -1504,7 +1501,7 @@ fn t48_float_bits_constant() {
     );
     let bc = backend.generate_function(&body).unwrap();
     let val = i64::from_le_bytes(bc[1..9].try_into().unwrap());
-    assert_eq!(val as u64, bits as u64);
+    assert_eq!(val as u64, u64::from(bits));
 }
 
 // ============================================================================
@@ -1609,7 +1606,7 @@ fn t52_negative_integer_constant() {
 // ============================================================================
 #[test]
 fn t53_minimum_i64_constant() {
-    let min_val: i128 = i64::MIN as i128;
+    let min_val: i128 = i128::from(i64::MIN);
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
@@ -1639,7 +1636,7 @@ fn t53_minimum_i64_constant() {
 // ============================================================================
 #[test]
 fn t54_maximum_i64_constant() {
-    let max_val: i128 = i64::MAX as i128;
+    let max_val: i128 = i128::from(i64::MAX);
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
@@ -2032,7 +2029,7 @@ fn t66_uint_max_value() {
             vec![stmt(StatementKind::Assign(
                 Place::new(LocalIdx::from_raw(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
-                    kind: MirConstKind::Uint(u64::MAX as u128),
+                    kind: MirConstKind::Uint(u128::from(u64::MAX)),
                     ty: Ty::UNIT,
                     span: Span::DUMMY,
                 })),
@@ -2215,7 +2212,7 @@ fn t71_comparison_ops_do_not_crash() {
             glyim_core::TargetInfo::default(),
         );
         let result = backend.generate_function(&body);
-        assert!(result.is_ok(), "Op {:?} failed", op);
+        assert!(result.is_ok(), "Op {op:?} failed");
     }
 }
 
@@ -2277,7 +2274,7 @@ fn t72_bitwise_shift_ops_do_not_crash() {
             glyim_core::TargetInfo::default(),
         );
         let result = backend.generate_function(&body);
-        assert!(result.is_ok(), "Op {:?} failed", op);
+        assert!(result.is_ok(), "Op {op:?} failed");
     }
 }
 
@@ -2563,7 +2560,7 @@ fn t79_no_errors_for_any_supported_terminator() {
             glyim_core::TargetInfo::default(),
         );
         let result = backend.generate_function(&body);
-        assert!(result.is_ok(), "Terminator {:?} caused error", term_kind);
+        assert!(result.is_ok(), "Terminator {term_kind:?} caused error");
     }
 }
 
