@@ -1,16 +1,16 @@
-use crate::binder::*;
-use crate::const_val::*;
-use crate::fn_sig::*;
-use crate::predicate::*;
-use crate::region::*;
-use crate::substitution::*;
+use crate::binder::Binder;
+use crate::const_val::Const;
+use crate::fn_sig::FnSig;
+use crate::predicate::Predicate;
+use crate::region::Region;
+use crate::substitution::Substitution;
 use glyim_core::def_id::*;
 use glyim_core::interner::Name;
 use glyim_core::primitives::*;
 use std::fmt;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-/// Ty.
+/// `Ty`.
 pub struct Ty {
     raw: u32,
 }
@@ -21,45 +21,47 @@ impl Ty {
         Self { raw }
     }
     #[inline]
-    /// to_raw.
+    /// `to_raw`.
+    #[must_use]
     pub fn to_raw(self) -> u32 {
         self.raw
     }
     #[inline]
     /// index.
+    #[must_use]
     pub fn index(self) -> usize {
         self.raw as usize
     }
 
-    /// ERROR.
+    /// `ERROR`.
     pub const ERROR: Ty = Ty::from_raw(0);
-    /// NEVER.
+    /// `NEVER`.
     pub const NEVER: Ty = Ty::from_raw(1);
-    /// UNIT.
+    /// `UNIT`.
     pub const UNIT: Ty = Ty::from_raw(2);
-    /// BOOL.
+    /// `BOOL`.
     pub const BOOL: Ty = Ty::from_raw(3);
-    /// U8.
+    /// `U8`.
     pub const U8: Ty = Ty::from_raw(4);
-    /// U16.
+    /// `U16`.
     pub const U16: Ty = Ty::from_raw(5);
-    /// U32.
+    /// `U32`.
     pub const U32: Ty = Ty::from_raw(6);
-    /// U64.
+    /// `U64`.
     pub const U64: Ty = Ty::from_raw(7);
-    /// USIZE.
+    /// `USIZE`.
     pub const USIZE: Ty = Ty::from_raw(8);
-    /// I8.
+    /// `I8`.
     pub const I8: Ty = Ty::from_raw(9);
-    /// I16.
+    /// `I16`.
     pub const I16: Ty = Ty::from_raw(10);
-    /// I32.
+    /// `I32`.
     pub const I32: Ty = Ty::from_raw(11);
-    /// I64.
+    /// `I64`.
     pub const I64: Ty = Ty::from_raw(12);
-    /// ISIZE.
+    /// `ISIZE`.
     pub const ISIZE: Ty = Ty::from_raw(13);
-    /// F32.
+    /// `F32`.
     ///
     /// Script 452: the primitive float types now have concrete `Ty`
     /// constants. Previously only ints did, and `Infer(Float)` fallback
@@ -68,7 +70,7 @@ impl Ty {
     /// the other primitives (they are seeded by `TyCtxMut::new` right
     /// after `ISIZE`).
     pub const F32: Ty = Ty::from_raw(14);
-    /// F64.
+    /// `F64`.
     pub const F64: Ty = Ty::from_raw(15);
 }
 
@@ -86,105 +88,105 @@ glyim_core::define_idx!(ConstVar);
 glyim_core::define_idx!(FieldIdx);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-/// UniverseIndex.
+/// `UniverseIndex`.
 pub struct UniverseIndex(pub u32);
 
 /// Represents a projection type like `<T as Iterator>::Item`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ProjectionTy {
-    /// Struct.
+    /// `Struct`.
     pub trait_ref: crate::predicate::TraitRef,
-    /// Struct.
+    /// `Struct`.
     pub item_name: Name,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// TyKind.
+/// `TyKind`.
 pub enum TyKind {
-    /// Variant.
+    /// `Variant`.
     Never,
-    /// Variant.
+    /// `Variant`.
     Unit,
-    /// Variant.
+    /// `Variant`.
     Bool,
-    #[allow(missing_docs)]
+    /// `Int`.
     Int(IntTy),
-    #[allow(missing_docs)]
+    /// `Uint`.
     Uint(UintTy),
-    #[allow(missing_docs)]
+    /// `Float`.
     Float(FloatTy),
-    /// Variant.
+    /// `Variant`.
     Char,
-    /// Variant.
+    /// `Variant`.
     String,
-    #[allow(missing_docs)]
+    /// `Infer`.
     Infer(InferVar),
-    #[allow(missing_docs)]
+    /// `Adt`.
     Adt(AdtId, Substitution),
-    #[allow(missing_docs)]
+    /// `FnDef`.
     FnDef(FnDefId, Substitution),
-    #[allow(missing_docs)]
+    /// `Closure`.
     Closure(ClosureId, Substitution),
-    #[allow(missing_docs)]
+    /// `FnPtr`.
     FnPtr(FnSig),
-    #[allow(missing_docs)]
+    /// `Ref`.
     Ref(Region, Ty, Mutability),
-    #[allow(missing_docs)]
+    /// `RawPtr`.
     RawPtr(Ty, Mutability),
-    #[allow(missing_docs)]
+    /// `Slice`.
     Slice(Ty),
-    #[allow(missing_docs)]
+    /// `Array`.
     Array(Ty, Const),
-    #[allow(missing_docs)]
+    /// `Tuple`.
     Tuple(Substitution),
-    #[allow(missing_docs)]
+    /// `Dynamic`.
     Dynamic(Binder<Box<[Predicate]>>, Region),
-    #[allow(missing_docs)]
+    /// `Opaque`.
     Opaque(OpaqueTyId, Substitution),
-    #[allow(missing_docs)]
+    /// `Projection`.
     Projection(ProjectionTy),
-    #[allow(missing_docs)]
+    /// `Param`.
     Param(ParamTy),
-    #[allow(missing_docs)]
+    /// `Bound`.
     Bound(u32, BoundTy),
-    /// Variant.
+    /// `Variant`.
     Error,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// InferVar.
+/// `InferVar`.
 pub enum InferVar {
-    #[allow(missing_docs)]
+    /// `Ty`.
     Ty(TyVar),
-    #[allow(missing_docs)]
+    /// `Int`.
     Int(IntVar),
-    #[allow(missing_docs)]
+    /// `Float`.
     Float(FloatVar),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// ParamTy.
+/// `ParamTy`.
 pub struct ParamTy {
-    /// Struct.
+    /// `Struct`.
     pub index: u32,
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// BoundTy.
+/// `BoundTy`.
 pub struct BoundTy {
-    /// Struct.
+    /// `Struct`.
     pub var: u32,
-    /// Struct.
+    /// `Struct`.
     pub kind: BoundTyKind,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// BoundTyKind.
+/// `BoundTyKind`.
 pub enum BoundTyKind {
-    /// Variant.
+    /// `Variant`.
     Anon,
-    #[allow(missing_docs)]
+    /// `Param`.
     Param(Name),
 }
