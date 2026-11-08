@@ -107,14 +107,12 @@ fn m5_two_step_multi_await_compiles_cleanly() {
                     glyim_test::error::FailureReason::CompilationFailed { .. }
                 ),
                 "without the real LLVM backend the only tolerated failure is the known \
-                 codegen gap (CompilationFailed / no executable); got {:?}",
-                reason
+                 codegen gap (CompilationFailed / no executable); got {reason:?}"
             );
         }
         other => panic!(
             "m5/two_step.g must Pass on the Linux runner (real codegen + link + run); \
-             got {:?} — this is a genuine regression, not a tolerated gap",
-            other
+             got {other:?} — this is a genuine regression, not a tolerated gap"
         ),
     }
 }
@@ -152,14 +150,12 @@ fn m5_one_step_single_await_must_not_miscompile() {
                     glyim_test::error::FailureReason::CompilationFailed { .. }
                 ),
                 "without the real LLVM backend the only tolerated failure is the known \
-                 codegen gap (CompilationFailed / no executable); got {:?}",
-                reason
+                 codegen gap (CompilationFailed / no executable); got {reason:?}"
             );
         }
         other => panic!(
             "m5/one_step.g must Pass on the Linux runner (real codegen + link + run); \
-             got {:?} — this is a genuine regression, not a tolerated gap",
-            other
+             got {other:?} — this is a genuine regression, not a tolerated gap"
         ),
     }
 }
@@ -174,13 +170,11 @@ fn m5_fixtures_present_and_moded_correctly() {
 
     assert!(
         names.iter().any(|n| n.contains("one_step")),
-        "missing m5/one_step.g fixture; have: {:?}",
-        names
+        "missing m5/one_step.g fixture; have: {names:?}"
     );
     assert!(
         names.iter().any(|n| n.contains("two_step")),
-        "missing m5/two_step.g fixture; have: {:?}",
-        names
+        "missing m5/two_step.g fixture; have: {names:?}"
     );
 
     let one = plan
