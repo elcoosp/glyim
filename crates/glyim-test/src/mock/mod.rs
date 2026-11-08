@@ -1,4 +1,4 @@
-/// borrowck_ctx.
+/// `borrowck_ctx`.
 pub mod borrowck_ctx;
 /// codegen.
 pub mod codegen;
