@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 static NEXT_FE_ID: AtomicU32 = AtomicU32::new(2000);
 
-/// FrontendTester.
+/// `FrontendTester`.
 pub struct FrontendTester {
     source: String,
     file_id: FileId,
@@ -18,7 +18,8 @@ impl FrontendTester {
             file_id,
         }
     }
-    /// with_file_id.
+    /// `with_file_id`.
+    #[must_use]
     pub fn with_file_id(mut self, id: FileId) -> Self {
         self.file_id = id;
         self
@@ -30,10 +31,14 @@ impl FrontendTester {
 
         // Phase 1: Parse
         let result = glyim_frontend::parse_to_syntax(&self.source, self.file_id);
-        trace.parse_diagnostics = result.diagnostics.clone();
+        trace.parse_diagnostics.clone_from(&result.diagnostics);
         trace.parse_tree = Some(result.root.clone());
 
-        if trace.parse_diagnostics.iter().any(|d| d.is_error()) {
+        if trace
+            .parse_diagnostics
+            .iter()
+            .any(glyim_diag::GlyimDiagnostic::is_error)
+        {
             return trace;
         }
 
@@ -45,10 +50,14 @@ impl FrontendTester {
             glyim_core::def_id::CrateId::from_raw(0),
             interner.clone(),
         );
-        trace.def_map_diagnostics = def_diags.clone();
+        trace.def_map_diagnostics.clone_from(&def_diags);
         trace.def_map = Some(def_map.clone());
 
-        if trace.def_map_diagnostics.iter().any(|d| d.is_error()) {
+        if trace
+            .def_map_diagnostics
+            .iter()
+            .any(glyim_diag::GlyimDiagnostic::is_error)
+        {
             return trace;
         }
 
@@ -57,7 +66,11 @@ impl FrontendTester {
             glyim_hir::pipeline_api::lower_crate_for_pipeline(&result.root, &mut interner);
         trace.typeck_diagnostics.extend(hir_diags.clone());
 
-        if trace.typeck_diagnostics.iter().any(|d| d.is_error()) {
+        if trace
+            .typeck_diagnostics
+            .iter()
+            .any(glyim_diag::GlyimDiagnostic::is_error)
+        {
             return trace;
         }
 
@@ -75,7 +88,8 @@ impl FrontendTester {
 
         trace
     }
-    /// parse_only.
+    /// `parse_only`.
+    #[must_use]
     pub fn parse_only(self) -> glyim_frontend::ParseResult {
         glyim_frontend::parse_to_syntax(&self.source, self.file_id)
     }
