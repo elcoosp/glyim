@@ -15,7 +15,7 @@ fn udp_bind_and_send_recv() {
     // Send data
     let msg = b"hello glyim";
     let sent = sender
-        .send_to(msg, format!("127.0.0.1:{}", port))
+        .send_to(msg, format!("127.0.0.1:{port}"))
         .expect("Failed to send");
     assert_eq!(sent, msg.len());
 
