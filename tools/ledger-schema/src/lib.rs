@@ -155,6 +155,11 @@ pub enum Backend {
     /// Cranelift backend (planned).
     #[serde(rename = "cranelift")]
     Cranelift,
+    /// Stack-machine bytecode backend (`glyim-codegen` + `glyim-bytecode-vm`);
+    /// used for testing and embedded execution. Slated for removal by
+    /// ADR-004 — the entry goes when the backend does.
+    #[serde(rename = "bytecode")]
+    Bytecode,
 }
 
 impl Backend {
@@ -165,6 +170,7 @@ impl Backend {
             Backend::Gam => "gam",
             Backend::Llvm => "llvm",
             Backend::Cranelift => "cranelift",
+            Backend::Bytecode => "bytecode",
         }
     }
 }
@@ -249,6 +255,198 @@ impl GapStatus {
 impl fmt::Display for GapStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Feature taxonomy (plan M1.2; the master plan's "Appendix C")
+// ---------------------------------------------------------------------------
+
+/// One classification rule of the M1.2 feature taxonomy.
+///
+/// The master plan (§6, M1.2) delegates its feature taxonomy to an
+/// "Appendix C" that was never checked into the plan document — the
+/// reference is dead (docs drift found during the M1.2 deep dive). This
+/// table *is* that appendix, landed in-repo where `ledger check` can
+/// enforce it mechanically: every feature entry must name a known area
+/// and carry the ID prefix the area prescribes, so ~300 curated entries
+/// cannot silently diverge into ad-hoc vocabularies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AreaRule {
+    /// Dot-separated registry area, e.g. `"lang.control-flow"`.
+    pub area: &'static str,
+    /// Required `feature.id` prefix including the trailing dash.
+    pub id_prefix: &'static str,
+}
+
+/// The feature taxonomy: area → required ID prefix.
+///
+/// Sorted by `area` (enforced by test); six namespaces, one prefix each:
+/// `lang.*` (language surface), `compiler.*` (analysis and translation),
+/// `codegen.*` (backends), `tooling.*` (driver, build tool, LSP, harness,
+/// and the ledger/metrics tooling itself), `std.*` (library modules),
+/// `runtime.*` (FFI surface).
+pub const TAXONOMY: &[AreaRule] = &[
+    AreaRule {
+        area: "codegen.bytecode",
+        id_prefix: "CODEGEN-",
+    },
+    AreaRule {
+        area: "codegen.llvm",
+        id_prefix: "CODEGEN-",
+    },
+    AreaRule {
+        area: "compiler.borrowck",
+        id_prefix: "COMPILER-",
+    },
+    AreaRule {
+        area: "compiler.frontend",
+        id_prefix: "COMPILER-",
+    },
+    AreaRule {
+        area: "compiler.incremental",
+        id_prefix: "COMPILER-",
+    },
+    AreaRule {
+        area: "compiler.interp",
+        id_prefix: "COMPILER-",
+    },
+    AreaRule {
+        area: "compiler.layout",
+        id_prefix: "COMPILER-",
+    },
+    AreaRule {
+        area: "compiler.mir-opt",
+        id_prefix: "COMPILER-",
+    },
+    AreaRule {
+        area: "compiler.monomorphization",
+        id_prefix: "COMPILER-",
+    },
+    AreaRule {
+        area: "compiler.proc-macro",
+        id_prefix: "COMPILER-",
+    },
+    AreaRule {
+        area: "compiler.trait-solving",
+        id_prefix: "COMPILER-",
+    },
+    AreaRule {
+        area: "compiler.type-inference",
+        id_prefix: "COMPILER-",
+    },
+    AreaRule {
+        area: "lang.async",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "lang.builtins",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "lang.closures",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "lang.control-flow",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "lang.errors",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "lang.generics",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "lang.macros",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "lang.panics",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "lang.pattern-matching",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "lang.scopes",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "lang.syntax",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "lang.traits",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "lang.types",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "lang.views",
+        id_prefix: "LANG-",
+    },
+    AreaRule {
+        area: "runtime.ffi",
+        id_prefix: "RUNTIME-",
+    },
+    AreaRule {
+        area: "std.alloc",
+        id_prefix: "STD-",
+    },
+    AreaRule {
+        area: "std.core",
+        id_prefix: "STD-",
+    },
+    AreaRule {
+        area: "std.std",
+        id_prefix: "STD-",
+    },
+    AreaRule {
+        area: "tooling.cli",
+        id_prefix: "TOOL-",
+    },
+    AreaRule {
+        area: "tooling.glyip",
+        id_prefix: "TOOL-",
+    },
+    AreaRule {
+        area: "tooling.ledger",
+        id_prefix: "TOOL-",
+    },
+    AreaRule {
+        area: "tooling.lsp",
+        id_prefix: "TOOL-",
+    },
+    AreaRule {
+        area: "tooling.test-harness",
+        id_prefix: "TOOL-",
+    },
+];
+
+/// Look up the taxonomy rule for `area`, if it is a known area.
+#[must_use]
+pub fn area_rule(area: &str) -> Option<&'static AreaRule> {
+    TAXONOMY.iter().find(|rule| rule.area == area)
+}
+
+/// Minimum `target_level` a feature of `tier` may promise.
+///
+/// Encodes release gate RG-09 ("All `core` and `std` features ≥ L4;
+/// `core` ≥ L5") at declaration time: a registry entry that promises less
+/// than its tier's floor is a registry bug, not a status fact. Tooling and
+/// experimental entries have no floor — their honest target may be low.
+#[must_use]
+pub fn min_target_level(tier: Tier) -> Level {
+    match tier {
+        Tier::Core => Level::L5,
+        Tier::Std => Level::L4,
+        Tier::Tooling | Tier::Experimental => Level::L0,
     }
 }
 
@@ -422,6 +620,18 @@ pub const CODE_WITNESS_DEBT: &str = "LEDGER-WITNESS-DEBT";
 pub const CODE_AFFECTS_EMPTY: &str = "LEDGER-AFFECTS-EMPTY";
 /// A feature lists no backends.
 pub const CODE_BACKENDS_EMPTY: &str = "LEDGER-BACKENDS-EMPTY";
+/// A feature names an area outside [`TAXONOMY`] (plan M1.2).
+pub const CODE_AREA_UNKNOWN: &str = "LEDGER-AREA-UNKNOWN";
+/// A feature `id` does not carry the prefix its `area` prescribes
+/// (plan M1.2).
+pub const CODE_ID_AREA_MISMATCH: &str = "LEDGER-ID-AREA-MISMATCH";
+/// A feature `target_level` is below the floor its `tier` implies via
+/// [`min_target_level`] (release gate RG-09, plan M1.2).
+pub const CODE_TIER_TARGET: &str = "LEDGER-TIER-TARGET";
+/// A feature `spec` reference does not resolve to a repo-relative file
+/// under the registry root (plan M1.2: curated entries point at real
+/// documentation; dead pointers are a check failure).
+pub const CODE_SPEC_MISSING: &str = "LEDGER-SPEC-MISSING";
 
 /// Marker a witness fixture must carry (plan §3.3).
 pub const KNOWN_GAP_MARKER: &str = "//@ known-gap:";
@@ -477,7 +687,8 @@ impl HasId for GapEntry {
 }
 
 /// The loaded registry: everything `ledger/features/**` and
-/// `ledger/gaps/**` declare, plus the root it was loaded from.
+/// `ledger/gaps/**` declare, plus the project root that repo-relative
+/// references (`spec` paths, gap `witness` fixtures) resolve against.
 #[derive(Debug, Clone)]
 pub struct Registry {
     root: PathBuf,
@@ -487,7 +698,8 @@ pub struct Registry {
 }
 
 impl Registry {
-    /// Directory the registry was loaded from.
+    /// Project root the registry belongs to: the anchor for repo-relative
+    /// references such as `spec` paths and gap `witness` fixtures.
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
@@ -545,11 +757,37 @@ pub struct LoadedRegistry {
 /// Load the registry rooted at `root` (the directory that contains
 /// `features/` and `gaps/`).
 ///
+/// The loaded [`Registry`] anchors repo-relative references (`spec` paths,
+/// gap `witness` fixtures — plan §3.3/§3.8 use repo-relative paths such as
+/// `docs/specs/control-flow.md#for-loops`) at `root` itself. Fixture and
+/// test callers hand the project-shaped directory directly; production
+/// callers use [`load_project_registry`], which anchors at the *project*
+/// root and walks `project_root/ledger`.
+///
 /// Deterministic: directory walks are sorted, diagnostics are sorted by
 /// `(code, message)` and de-duplicated. Parse failures do not abort the
 /// walk — CI wants the complete diagnostic list in one run.
 #[must_use]
 pub fn load_registry(root: &Path) -> LoadedRegistry {
+    load_registry_anchored(root, root)
+}
+
+/// Load the registry of the project at `project_root` (the directory that
+/// contains `ledger/`, `docs/`, `crates/`, ...).
+///
+/// This is the production entry point (`glyim-ledger check <ROOT>` walks
+/// `ROOT/ledger`): repo-relative references in registry entries resolve
+/// against `project_root`, exactly as the plan's examples spell them
+/// (`docs/specs/...`, `crates/glyim-test/tests/gaps/...`).
+#[must_use]
+pub fn load_project_registry(project_root: &Path) -> LoadedRegistry {
+    load_registry_anchored(&project_root.join("ledger"), project_root)
+}
+
+/// Walk the ledger directory `ledger_dir`, anchoring repo-relative
+/// references at `anchor`.
+fn load_registry_anchored(ledger_dir: &Path, anchor: &Path) -> LoadedRegistry {
+    let root = ledger_dir;
     let features_dir = root.join("features");
     let gaps_dir = root.join("gaps");
     let mut diagnostics = Vec::new();
@@ -609,7 +847,7 @@ pub fn load_registry(root: &Path) -> LoadedRegistry {
     }
 
     let registry = Registry {
-        root: root.to_path_buf(),
+        root: anchor.to_path_buf(),
         features,
         gaps,
         files,
@@ -797,6 +1035,7 @@ impl Registry {
                     ),
                 });
             }
+            self.check_feature_taxonomy(sourced, &mut diagnostics);
             for required in &feature.requires {
                 if !feature_ids.contains(required.as_str()) {
                     diagnostics.push(Diagnostic {
@@ -885,6 +1124,95 @@ impl Registry {
                     gap.id,
                     path.display(),
                     gap.id
+                ),
+            });
+        }
+    }
+
+    /// Enforce the M1.2 feature taxonomy on one entry: a known `area`
+    /// ([`TAXONOMY`]), an `id` carrying the area's prescribed prefix, a
+    /// `target_level` at or above the `tier`'s floor ([`min_target_level`],
+    /// release gate RG-09), and a `spec` reference that resolves to a
+    /// repo-relative file under the registry root.
+    fn check_feature_taxonomy(
+        &self,
+        sourced: &Sourced<FeatureEntry>,
+        diagnostics: &mut Vec<Diagnostic>,
+    ) {
+        let feature = &sourced.entry;
+        match area_rule(&feature.area) {
+            None => diagnostics.push(Diagnostic {
+                code: CODE_AREA_UNKNOWN,
+                severity: Severity::Error,
+                message: format!(
+                    "feature {} uses unknown area `{}` (declared in {}); known areas: {}",
+                    feature.id,
+                    feature.area,
+                    sourced.path.display(),
+                    TAXONOMY
+                        .iter()
+                        .map(|rule| rule.area)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                ),
+            }),
+            Some(rule) => {
+                if !feature.id.starts_with(rule.id_prefix) {
+                    diagnostics.push(Diagnostic {
+                        code: CODE_ID_AREA_MISMATCH,
+                        severity: Severity::Error,
+                        message: format!(
+                            "feature {} id prefix does not match area `{}` (expects `{}`; \
+                             declared in {})",
+                            feature.id,
+                            feature.area,
+                            rule.id_prefix,
+                            sourced.path.display(),
+                        ),
+                    });
+                }
+            }
+        }
+        let floor = min_target_level(feature.tier);
+        if feature.target_level < floor {
+            diagnostics.push(Diagnostic {
+                code: CODE_TIER_TARGET,
+                severity: Severity::Error,
+                message: format!(
+                    "feature {} has tier `{}` which requires target_level >= {floor}, got {} \
+                     (declared in {})",
+                    feature.id,
+                    feature.tier,
+                    feature.target_level,
+                    sourced.path.display(),
+                ),
+            });
+        }
+        let spec = Path::new(&feature.spec);
+        if spec.is_absolute() {
+            diagnostics.push(Diagnostic {
+                code: CODE_SPEC_MISSING,
+                severity: Severity::Error,
+                message: format!(
+                    "feature {} spec path must be relative to the registry root, got `{}` \
+                     (declared in {})",
+                    feature.id,
+                    feature.spec,
+                    sourced.path.display(),
+                ),
+            });
+            return;
+        }
+        let spec_path = self.root.join(spec);
+        if !spec_path.is_file() {
+            diagnostics.push(Diagnostic {
+                code: CODE_SPEC_MISSING,
+                severity: Severity::Error,
+                message: format!(
+                    "feature {} spec path not found: {} (declared in {})",
+                    feature.id,
+                    spec_path.display(),
+                    sourced.path.display(),
                 ),
             });
         }
@@ -1012,7 +1340,7 @@ pub fn feature_schema() -> serde_json::Value {
             "backends": {
                 "type": "array",
                 "minItems": 1,
-                "items": { "enum": ["gam", "llvm", "cranelift"] }
+                "items": { "enum": ["gam", "llvm", "cranelift", "bytecode"] }
             },
             "requires": { "type": "array", "items": { "type": "string" } },
             "errors": { "type": "array", "items": { "type": "string" } },
@@ -1078,7 +1406,11 @@ mod tests {
     // -- helpers -----------------------------------------------------------
 
     fn temp_ledger() -> tempfile::TempDir {
-        tempfile::tempdir().expect("tempdir")
+        let dir = tempfile::tempdir().expect("tempdir");
+        // M1.2 spec-path validation: every fixture registry resolves feature
+        // `spec` references, so the canonical spec file must exist on disk.
+        write_file(dir.path(), SPEC_TEST_FILE, "# spec fixture\n");
+        dir
     }
 
     fn write_file(root: &Path, rel: &str, contents: &str) -> PathBuf {
@@ -1088,12 +1420,16 @@ mod tests {
         path
     }
 
+    /// Spec path every fixture feature resolves against (written by
+    /// [`temp_ledger`]).
+    const SPEC_TEST_FILE: &str = "docs/specs/v0.1.0.md";
+
     fn feature_toml(id: &str) -> String {
         format!(
             "[[feature]]\n\
              id = \"{id}\"\n\
              title = \"test feature {id}\"\n\
-             area = \"lang.test\"\n\
+             area = \"lang.control-flow\"\n\
              tier = \"core\"\n\
              spec = \"docs/specs/v0.1.0.md\"\n\
              target_level = \"L5\"\n\
@@ -1594,6 +1930,267 @@ mod tests {
         assert_eq!(first, sorted, "diagnostics are returned already sorted");
     }
 
+    // -- M1.2: taxonomy, tier policy, spec paths ------------------------------
+
+    #[test]
+    fn unknown_area_is_an_error() {
+        let root = temp_ledger();
+        let raw = feature_toml("LANG-A")
+            .replace("area = \"lang.control-flow\"", "area = \"lang.not-real\"");
+        write_file(root.path(), "features/lang/a.toml", &raw);
+        let loaded = load_ok(root.path());
+        let diags = loaded.registry.validate();
+        let errs = errors(&diags);
+        assert_eq!(codes(&errs), vec![CODE_AREA_UNKNOWN]);
+        assert!(
+            errs[0].message.contains("lang.control-flow"),
+            "message must list a known area as a hint: {}",
+            errs[0].message
+        );
+    }
+
+    #[test]
+    fn feature_id_prefix_must_match_area() {
+        let root = temp_ledger();
+        // `STD-` prefix with a `lang.*` area is a taxonomy violation.
+        write_file(root.path(), "features/lang/a.toml", &feature_toml("STD-A"));
+        let loaded = load_ok(root.path());
+        let diags = loaded.registry.validate();
+        let errs = errors(&diags);
+        assert_eq!(codes(&errs), vec![CODE_ID_AREA_MISMATCH]);
+        assert!(
+            errs[0].message.contains("LANG-"),
+            "message must name the expected prefix: {}",
+            errs[0].message
+        );
+    }
+
+    #[test]
+    fn matching_id_prefix_and_area_pass() {
+        let root = temp_ledger();
+        write_file(root.path(), "features/lang/a.toml", &feature_toml("LANG-A"));
+        let std_entry = feature_toml("STD-B")
+            .replace("area = \"lang.control-flow\"", "area = \"std.core\"")
+            .replace("tier = \"core\"", "tier = \"std\"")
+            .replace("target_level = \"L5\"", "target_level = \"L4\"");
+        write_file(root.path(), "features/std/b.toml", &std_entry);
+        let loaded = load_ok(root.path());
+        assert!(
+            errors(&loaded.registry.validate()).is_empty(),
+            "prefix/area agreement must pass: {:?}",
+            errors(&loaded.registry.validate())
+        );
+    }
+
+    #[test]
+    fn core_tier_must_target_l5() {
+        let root = temp_ledger();
+        let raw = feature_toml("LANG-A").replace("target_level = \"L5\"", "target_level = \"L3\"");
+        write_file(root.path(), "features/lang/a.toml", &raw);
+        let loaded = load_ok(root.path());
+        let diags = loaded.registry.validate();
+        let errs = errors(&diags);
+        assert_eq!(codes(&errs), vec![CODE_TIER_TARGET]);
+        assert!(
+            errs[0].message.contains("L5"),
+            "message must state the floor: {}",
+            errs[0].message
+        );
+    }
+
+    #[test]
+    fn std_tier_must_target_l4_or_higher() {
+        let root = temp_ledger();
+        let raw = feature_toml("STD-A")
+            .replace("area = \"lang.control-flow\"", "area = \"std.core\"")
+            .replace("tier = \"core\"", "tier = \"std\"")
+            .replace("target_level = \"L5\"", "target_level = \"L2\"");
+        write_file(root.path(), "features/std/a.toml", &raw);
+        let loaded = load_ok(root.path());
+        assert_eq!(
+            codes(&errors(&loaded.registry.validate())),
+            vec![CODE_TIER_TARGET]
+        );
+    }
+
+    #[test]
+    fn tooling_and_experimental_tiers_have_no_target_floor() {
+        let root = temp_ledger();
+        let tool = feature_toml("TOOL-A")
+            .replace("area = \"lang.control-flow\"", "area = \"tooling.cli\"")
+            .replace("tier = \"core\"", "tier = \"tooling\"")
+            .replace("target_level = \"L5\"", "target_level = \"L2\"");
+        let exp = feature_toml("LANG-B")
+            .replace("area = \"lang.control-flow\"", "area = \"lang.views\"")
+            .replace("tier = \"core\"", "tier = \"experimental\"")
+            .replace("target_level = \"L5\"", "target_level = \"L2\"");
+        write_file(root.path(), "features/tool/a.toml", &tool);
+        write_file(root.path(), "features/lang/b.toml", &exp);
+        let loaded = load_ok(root.path());
+        assert!(
+            errors(&loaded.registry.validate()).is_empty(),
+            "tooling/experimental tiers may target below L4: {:?}",
+            errors(&loaded.registry.validate())
+        );
+    }
+
+    #[test]
+    fn missing_spec_file_is_an_error() {
+        // Deliberately no `docs/specs/missing.md` under this registry root.
+        let bare = tempfile::tempdir().expect("tempdir");
+        let raw = feature_toml("LANG-A").replace(
+            "spec = \"docs/specs/v0.1.0.md\"",
+            "spec = \"docs/specs/missing.md\"",
+        );
+        write_file(bare.path(), "features/lang/a.toml", &raw);
+        write_file(bare.path(), "docs/specs/v0.1.0.md", "# spec\n");
+        let loaded = load_ok(bare.path());
+        let diags = loaded.registry.validate();
+        let errs = errors(&diags);
+        assert_eq!(codes(&errs), vec![CODE_SPEC_MISSING]);
+        assert!(
+            errs[0].message.contains("docs/specs/missing.md"),
+            "message must name the dead path: {}",
+            errs[0].message
+        );
+    }
+
+    #[test]
+    fn spec_path_that_is_a_directory_is_an_error() {
+        let root = temp_ledger();
+        let raw = feature_toml("LANG-A")
+            .replace("spec = \"docs/specs/v0.1.0.md\"", "spec = \"docs/specs\"");
+        write_file(root.path(), "features/lang/a.toml", &raw);
+        let loaded = load_ok(root.path());
+        assert_eq!(
+            codes(&errors(&loaded.registry.validate())),
+            vec![CODE_SPEC_MISSING]
+        );
+    }
+
+    #[test]
+    fn absolute_spec_path_is_an_error() {
+        let root = temp_ledger();
+        let raw = feature_toml("LANG-A")
+            .replace("spec = \"docs/specs/v0.1.0.md\"", "spec = \"/etc/passwd\"");
+        write_file(root.path(), "features/lang/a.toml", &raw);
+        let loaded = load_ok(root.path());
+        let diags = loaded.registry.validate();
+        let errs = errors(&diags);
+        assert_eq!(codes(&errs), vec![CODE_SPEC_MISSING]);
+        assert!(
+            errs[0].message.contains("relative"),
+            "message must demand repo-relative specs: {}",
+            errs[0].message
+        );
+    }
+
+    #[test]
+    fn existing_spec_file_passes() {
+        let root = temp_ledger();
+        write_file(root.path(), "features/lang/a.toml", &feature_toml("LANG-A"));
+        let loaded = load_ok(root.path());
+        assert!(errors(&loaded.registry.validate()).is_empty());
+    }
+
+    #[test]
+    fn taxonomy_is_sorted_and_unique() {
+        let areas: Vec<&str> = TAXONOMY.iter().map(|rule| rule.area).collect();
+        let mut sorted = areas.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(areas, sorted, "taxonomy areas must be sorted and unique");
+        for rule in TAXONOMY {
+            assert!(
+                rule.id_prefix
+                    .chars()
+                    .all(|c| c.is_ascii_uppercase() || c == '-'),
+                "prefix must be ASCII upper: {}",
+                rule.id_prefix
+            );
+            assert!(rule.id_prefix.ends_with('-'), "prefix ends with dash");
+        }
+    }
+
+    #[test]
+    fn taxonomy_covers_the_seed_areas() {
+        let expected = [
+            // the six M1.1 seed areas
+            "lang.control-flow",
+            "lang.pattern-matching",
+            "lang.generics",
+            "lang.async",
+            "lang.views",
+            "lang.panics",
+            // the M1.2 taxonomy
+            "lang.syntax",
+            "lang.types",
+            "lang.traits",
+            "lang.closures",
+            "lang.macros",
+            "lang.builtins",
+            "lang.errors",
+            "lang.scopes",
+            "compiler.frontend",
+            "compiler.borrowck",
+            "compiler.type-inference",
+            "compiler.trait-solving",
+            "compiler.monomorphization",
+            "compiler.mir-opt",
+            "compiler.layout",
+            "compiler.interp",
+            "compiler.incremental",
+            "compiler.proc-macro",
+            "codegen.llvm",
+            "codegen.bytecode",
+            "tooling.cli",
+            "tooling.glyip",
+            "tooling.lsp",
+            "tooling.test-harness",
+            "tooling.ledger",
+            "std.alloc",
+            "std.core",
+            "std.std",
+            "runtime.ffi",
+        ];
+        for area in expected {
+            assert!(
+                area_rule(area).is_some(),
+                "{area} must be a known taxonomy area"
+            );
+        }
+        assert!(area_rule("lang.not-real").is_none());
+    }
+
+    #[test]
+    fn taxonomy_prefixes_are_consistent_per_namespace() {
+        for rule in TAXONOMY {
+            let namespace = rule.area.split('.').next().expect("namespace");
+            let want = match namespace {
+                "lang" => "LANG-",
+                "compiler" => "COMPILER-",
+                "codegen" => "CODEGEN-",
+                "tooling" => "TOOL-",
+                "std" => "STD-",
+                "runtime" => "RUNTIME-",
+                other => panic!("unexpected taxonomy namespace {other}"),
+            };
+            assert_eq!(
+                rule.id_prefix, want,
+                "area {} must use the {want} prefix",
+                rule.area
+            );
+        }
+    }
+
+    #[test]
+    fn min_target_level_encodes_rg09() {
+        assert_eq!(min_target_level(Tier::Core), Level::L5);
+        assert_eq!(min_target_level(Tier::Std), Level::L4);
+        assert_eq!(min_target_level(Tier::Tooling), Level::L0);
+        assert_eq!(min_target_level(Tier::Experimental), Level::L0);
+    }
+
     // -- JSON-Schema export --------------------------------------------------
 
     #[test]
@@ -1627,7 +2224,7 @@ mod tests {
         );
         assert_eq!(
             schema["properties"]["backends"]["items"]["enum"],
-            serde_json::json!(["gam", "llvm", "cranelift"])
+            serde_json::json!(["gam", "llvm", "cranelift", "bytecode"])
         );
         assert_eq!(
             schema["properties"]["owner_lane"]["enum"],
