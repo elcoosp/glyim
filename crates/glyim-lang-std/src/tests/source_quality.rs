@@ -8,8 +8,7 @@ fn std_source_no_stub_macros() {
         let src = std_source(name).unwrap();
         assert!(
             !src.contains("stub!"),
-            "std module '{}' should not contain stub!() macros",
-            name
+            "std module '{name}' should not contain stub!() macros"
         );
     }
 }
@@ -27,8 +26,7 @@ fn std_source_has_keyword_definitions() {
             || src.contains("macro ");
         assert!(
             has_definition,
-            "std module '{}' should contain at least one definition (fn/struct/enum/trait/impl/type/macro)",
-            name
+            "std module '{name}' should contain at least one definition (fn/struct/enum/trait/impl/type/macro)"
         );
     }
 }
@@ -43,12 +41,11 @@ fn std_source_all_is_non_empty() {
 fn std_source_all_modules_appear_exactly_once() {
     let all = std_source_all();
     for name in std_modules() {
-        let header = format!("// === module: {} ===", name);
+        let header = format!("// === module: {name} ===");
         let count = all.matches(&header).count();
         assert_eq!(
             count, 1,
-            "std_source_all should contain exactly one header for '{}', found {}",
-            name, count
+            "std_source_all should contain exactly one header for '{name}', found {count}"
         );
     }
 }
@@ -59,8 +56,7 @@ fn std_source_each_module_starts_with_doc_comment() {
         let src = std_source(name).unwrap();
         assert!(
             src.starts_with("//!"),
-            "std module '{}' should start with a module-level doc comment (//!)",
-            name
+            "std module '{name}' should start with a module-level doc comment (//!)"
         );
     }
 }
