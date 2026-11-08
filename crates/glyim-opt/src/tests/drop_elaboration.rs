@@ -299,7 +299,7 @@ fn loop_built_array_uses_per_element_flags() {
 /// `Goto` must target the loop's *init* block, NOT block 0 (a self-loop that
 /// hangs the interpreter and drops nothing). The old code remapped the
 /// appended loop blocks through a map with no entries for them, so every edge
-/// into an appended block (index >= old_count) hit the `None -> 0` fallback.
+/// into an appended block (index >= `old_count`) hit the `None -> 0` fallback.
 #[test]
 fn array_drop_init_edge_is_not_a_self_loop() {
     use glyim_core::AdtId;
