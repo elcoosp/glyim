@@ -2,7 +2,8 @@ use crate::orchestrator::OrchestratorAction;
 use crate::protocol::types::PROTOCOL_VERSION;
 use crate::server::messages::CliMessage;
 
-/// map_action_to_cli_message.
+/// `map_action_to_cli_message`.
+#[must_use]
 pub fn map_action_to_cli_message(action: OrchestratorAction, turn: u32) -> Option<CliMessage> {
     match action {
         OrchestratorAction::Feedback {
@@ -44,7 +45,7 @@ pub fn map_action_to_cli_message(action: OrchestratorAction, turn: u32) -> Optio
             trace_id,
         } => Some(CliMessage::FeedbackSend {
             session_id,
-            message: format!("Stream complete! PR: {}", pr_url),
+            message: format!("Stream complete! PR: {pr_url}"),
             turn: turn + 1,
             trace_id,
             v: PROTOCOL_VERSION,
@@ -55,7 +56,7 @@ pub fn map_action_to_cli_message(action: OrchestratorAction, turn: u32) -> Optio
             trace_id,
         } => Some(CliMessage::FeedbackSend {
             session_id,
-            message: format!("ESCALATION: {}", reason),
+            message: format!("ESCALATION: {reason}"),
             turn: turn + 1,
             trace_id,
             v: PROTOCOL_VERSION,
