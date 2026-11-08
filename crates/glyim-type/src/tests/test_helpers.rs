@@ -10,13 +10,7 @@ pub fn test_ty_ctx() -> TyCtxMut {
     TyCtxMut::new(Interner::default())
 }
 
-/// Create a frozen type context for testing.
-#[allow(dead_code)]
-pub fn test_frozen_ty_ctx() -> TyCtx {
-    test_ty_ctx().freeze()
-}
-
-/// Run a closure with a fresh TyCtxMut, then freeze and return both.
+/// Run a closure with a fresh `TyCtxMut`, then freeze and return both.
 pub fn with_fresh_ty_ctx<F, R>(f: F) -> (TyCtx, R)
 where
     F: FnOnce(&mut TyCtxMut) -> R,
