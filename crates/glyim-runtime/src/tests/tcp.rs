@@ -30,7 +30,7 @@ fn tcp_echo_server_client_works() {
     thread::sleep(Duration::from_millis(50));
 
     let test_msg = b"Hello, TCP!";
-    let mut client = std::net::TcpStream::connect(format!("127.0.0.1:{}", port))
+    let mut client = std::net::TcpStream::connect(format!("127.0.0.1:{port}"))
         .expect("Failed to connect client");
     client
         .write_all(test_msg)
