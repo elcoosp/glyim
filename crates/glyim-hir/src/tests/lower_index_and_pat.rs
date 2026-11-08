@@ -13,7 +13,7 @@ use glyim_span::FileId;
 
 use crate::{BodyId, CrateHir, Expr, Literal, Pat};
 
-/// Parse source code and lower it to HIR, returning the CrateHir and any
+/// Parse source code and lower it to HIR, returning the `CrateHir` and any
 /// diagnostics collected during lowering.
 fn parse_and_lower(source: &str) -> (CrateHir, Vec<glyim_diag::GlyimDiagnostic>) {
     let result = parse_to_syntax(source, FileId::from_raw(1));
@@ -23,9 +23,10 @@ fn parse_and_lower(source: &str) -> (CrateHir, Vec<glyim_diag::GlyimDiagnostic>)
 
 /// Return the first body in the HIR, or panic if none exists.
 fn first_body(hir: &CrateHir) -> &crate::Body {
-    if hir.bodies.is_empty() {
-        panic!("expected at least one body in HIR, found none");
-    }
+    assert!(
+        !hir.bodies.is_empty(),
+        "expected at least one body in HIR, found none"
+    );
     &hir.bodies[BodyId::from_raw(0)]
 }
 
@@ -36,7 +37,7 @@ fn first_body(hir: &CrateHir) -> &crate::Body {
 /// `let`/`await`). Covered by the `is_expr_node` fix in `lower/mod.rs`.
 ///
 /// Note: `lower_crate_for_pipeline` also runs `desugar_async`, which emits the
-/// async-v1 "multi-await not yet implemented" diagnostic (GLYIM_DESTUB_PLAN
+/// async-v1 "multi-await not yet implemented" diagnostic (`GLYIM_DESTUB_PLAN`
 /// §Phase 3 safety guard) for a 2-await body. That diagnostic is expected and
 /// correct; this test therefore asserts the *lowering* produced the Await/Let
 /// nodes and that no OTHER (lowering) diagnostic was emitted.
@@ -51,8 +52,7 @@ fn async_body_let_await_lowers_to_let_and_await() {
         diags
             .iter()
             .all(|d| d.code.number == 61 && d.code.category == glyim_diag::ErrorCategory::Type),
-        "only the expected async-v1 multi-await diagnostic is allowed, got: {:?}",
-        diags
+        "only the expected async-v1 multi-await diagnostic is allowed, got: {diags:?}"
     );
     let body = first_body(&hir);
     let await_count = body
@@ -67,13 +67,11 @@ fn async_body_let_await_lowers_to_let_and_await() {
         .count();
     assert!(
         await_count >= 2,
-        "async body must contain >=2 Expr::Await nodes (got {})",
-        await_count
+        "async body must contain >=2 Expr::Await nodes (got {await_count})"
     );
     assert!(
         let_count >= 2,
-        "async body must contain >=2 Expr::Let nodes (got {})",
-        let_count
+        "async body must contain >=2 Expr::Let nodes (got {let_count})"
     );
 }
 
