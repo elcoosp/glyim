@@ -65,7 +65,7 @@ mod tests {
         };
         let result = run_with_args(args);
         assert!(result.is_ok(), "emit_mir failed: {:?}", result.err());
-        assert!(output.exists(), "MIR file was not written to {:?}", output);
+        assert!(output.exists(), "MIR file was not written to {output:?}");
         std::fs::remove_file(&output).ok();
     }
 
@@ -100,8 +100,7 @@ mod tests {
         assert!(result.is_ok(), "emit_llvm_ir failed: {:?}", result.err());
         assert!(
             output.exists(),
-            "LLVM IR file was not written to {:?}",
-            output
+            "LLVM IR file was not written to {output:?}"
         );
         std::fs::remove_file(&output).ok();
     }
