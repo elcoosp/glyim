@@ -20,11 +20,8 @@ fn test_binop_i32(op: BinOp, lhs_val: i64, rhs_val: i64, expected_store_val: i32
         .expect("lowering");
     let ir = module.print_to_string().to_string();
     assert!(
-        ir.contains(&format!("store i32 {}", expected_store_val)),
-        "Expected 'store i32 {}' for op {:?}, got IR:\n{}",
-        expected_store_val,
-        op,
-        ir
+        ir.contains(&format!("store i32 {expected_store_val}")),
+        "Expected 'store i32 {expected_store_val}' for op {op:?}, got IR:\n{ir}"
     );
 }
 
@@ -45,11 +42,8 @@ fn test_binop_u32(op: BinOp, lhs_val: u64, rhs_val: u64, expected_store_val: u32
         .expect("lowering");
     let ir = module.print_to_string().to_string();
     assert!(
-        ir.contains(&format!("store i32 {}", expected_store_val)),
-        "Expected 'store i32 {}' for op {:?}, got IR:\n{}",
-        expected_store_val,
-        op,
-        ir
+        ir.contains(&format!("store i32 {expected_store_val}")),
+        "Expected 'store i32 {expected_store_val}' for op {op:?}, got IR:\n{ir}"
     );
 }
 
