@@ -7,8 +7,7 @@ fn alloc_source_returns_all_modules() {
     for name in alloc_modules() {
         assert!(
             alloc_source(name).is_some(),
-            "alloc_source should return Some for module '{}'",
-            name
+            "alloc_source should return Some for module '{name}'"
         );
     }
 }
@@ -24,8 +23,7 @@ fn alloc_source_is_non_empty() {
         let src = alloc_source(name).unwrap();
         assert!(
             !src.is_empty(),
-            "alloc source for '{}' should not be empty",
-            name
+            "alloc source for '{name}' should not be empty"
         );
     }
 }
@@ -35,10 +33,8 @@ fn alloc_source_all_contains_all_modules() {
     let all = alloc_source_all();
     for name in alloc_modules() {
         assert!(
-            all.as_str()
-                .contains(&format!("// === module: {} ===", name)),
-            "alloc_source_all should contain module header for '{}'",
-            name
+            all.as_str().contains(&format!("// === module: {name} ===")),
+            "alloc_source_all should contain module header for '{name}'"
         );
     }
 }
