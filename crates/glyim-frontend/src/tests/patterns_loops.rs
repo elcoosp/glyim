@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 use crate::parser::parse_to_syntax;
 use glyim_span::FileId;
 use glyim_syntax::SyntaxKind;
@@ -56,7 +55,6 @@ fn parse_loop_with_label_and_break() {
     let _children: Vec<_> = break_nodes[0].children().collect();
     // The break with label is parsed as break expr with a label token? Current parser may just consume 'outer as an ident?
     // For now, ensure no error.
-    assert!(true);
 }
 
 #[test]
