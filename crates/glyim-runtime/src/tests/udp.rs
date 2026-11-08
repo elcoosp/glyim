@@ -10,7 +10,7 @@ fn udp_send_recv() {
     let server_port = server.local_addr().unwrap().port();
 
     // Create client socket
-    let client_fd = unsafe { glyim_net_udp_bind(b"127.0.0.1\0".as_ptr(), 9, 0) };
+    let client_fd = unsafe { glyim_net_udp_bind(c"127.0.0.1".as_ptr().cast::<u8>(), 9, 0) };
     assert!(client_fd >= 0);
 
     let msg = b"ping";
@@ -60,11 +60,17 @@ fn udp_connect_send_recv() {
     let server = UdpSocket::bind("127.0.0.1:0").unwrap();
     let server_port = server.local_addr().unwrap().port();
 
-    let client_fd = unsafe { glyim_net_udp_bind(b"127.0.0.1\0".as_ptr(), 9, 0) };
+    let client_fd = unsafe { glyim_net_udp_bind(c"127.0.0.1".as_ptr().cast::<u8>(), 9, 0) };
     assert!(client_fd >= 0);
 
-    let connect_result =
-        unsafe { glyim_net_udp_connect(client_fd, b"127.0.0.1\0".as_ptr(), 9, server_port) };
+    let connect_result = unsafe {
+        glyim_net_udp_connect(
+            client_fd,
+            c"127.0.0.1".as_ptr().cast::<u8>(),
+            9,
+            server_port,
+        )
+    };
     assert_eq!(connect_result, 0);
 
     let msg = b"hello";
