@@ -12,3 +12,6 @@ glyim-core = { path = "../glyim-core" }
 glyim-mir = { path = "../glyim-mir" }
 glyim-type = { path = "../glyim-type" }
 glyim-span = { path = "../glyim-span" }
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true
