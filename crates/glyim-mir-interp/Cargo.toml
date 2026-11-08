@@ -15,3 +15,6 @@ tracing = { workspace = true }
 glyim-test = { workspace = true }
 
 glyim-span = { workspace = true }
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true
