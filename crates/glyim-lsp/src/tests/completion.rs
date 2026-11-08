@@ -60,8 +60,8 @@ fn test_provide_completions() {
                 character: 0,
             },
         },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
+        partial_result_params: lsp_types::PartialResultParams::default(),
         context: None,
     };
 
@@ -69,7 +69,7 @@ fn test_provide_completions() {
 
     assert!(result.is_some());
     if let lsp_types::CompletionResponse::List(list) = result.unwrap() {
-        assert!(!list.items.is_empty());
+        assert_ne!(list.items, [] as [lsp_types::CompletionItem; 0]);
         let item = &list.items[0];
         assert_eq!(item.label, "my_func");
         assert_eq!(item.kind, Some(CompletionItemKind::FUNCTION));
@@ -99,10 +99,9 @@ fn test_auto_import_offers_symbol_from_other_file() {
     let path_a = PathBuf::from("/test/main.g");
     let file_id_a = file_map.get_or_create(&path_a);
     let source_a = "fn main() { Wid }";
-    db.source_maps.write().insert(
-        file_id_a,
-        SourceMap::new(path_a.clone(), file_id_a, source_a.to_string()),
-    );
+    db.source_maps
+        .write()
+        .insert(file_id_a, SourceMap::new(file_id_a, source_a.to_string()));
 
     // Other file B: declares `Widget` with a known import path.
     let path_b = PathBuf::from("/test/widgets.g");
@@ -146,8 +145,8 @@ fn test_auto_import_offers_symbol_from_other_file() {
                 character: 14,
             },
         },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
+        partial_result_params: lsp_types::PartialResultParams::default(),
         context: None,
     };
 
