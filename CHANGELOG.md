@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Readiness Ledger v1 foundation (M1.1)**: new `tools/ledger-schema`
+  and `tools/glyim-ledger` crates implementing the registry schema half
+  of the master plan's Workstream A (§3).
+  - `ledger-schema`: strict TOML entry types (`[[feature]]`, `[[gap]]`)
+    with `deny_unknown_fields` — typos are load errors, never silently
+    ignored keys; the maturity-level/gap-class/backend/lane vocabulary
+    from the plan (§3.2, §3.3, §3.6, §3.8); `load_registry` walking
+    `ledger/features/**` and `ledger/gaps/**` deterministically (sorted
+    walks, sorted diagnostics); `Registry::validate` — the `ledger check`
+    engine (unique IDs, `affects`/`requires` reference resolution,
+    `requires` cycle detection, and the strict-xfail witness contract
+    with `//@ known-gap:` headers and ratcheted witness debt); and a
+    dependency-free JSON-Schema (draft-07) export for both entry types.
+  - `glyim-ledger`: `ledger check [ROOT]` registry gate (exit 1 on any
+    error, witness debt reported as warnings) and `ledger schema [OUT]`
+    JSON-Schema export. Hand-rolled argument parsing, matching the
+    `glyim-metrics` no-clap convention. 49 tests total, written
+    test-first, plus a load+validate throughput bench.
+  - Seed registry `ledger/`: 6 real feature entries (control flow,
+    pattern matching, generics, async, GSX views, unwind cleanup) and 2
+    real gap entries migrated from `KNOWN_GAPS.md` (GAP-0001 await-in-loop
+    class a, GAP-0002 SEH cleanup unreachable class b), both declared
+    `unwitnessed` until the M1.6/M1.7 witness fixtures land.
+  - CI: new `ledger-check` job runs the gate on every PR (pure Rust, no
+    LLVM dependency).
 - **GSX view syntax** (docs/design/GSX-in-Glyim.md): first-class, typed,
   host-agnostic view syntax with a dedicated compiler stage.
   - Frontend: `Gsx*` CST nodes and `parse_gsx_element` (elements, fragments,
