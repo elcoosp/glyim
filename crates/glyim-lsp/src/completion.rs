@@ -16,15 +16,11 @@ fn completion_item(sym: &SymbolInfo) -> CompletionItem {
         _ => CompletionItemKind::TEXT,
     };
     let detail = sym.type_signature.as_ref().map(|ts| {
-        let params: Vec<String> = ts
-            .params
-            .iter()
-            .map(|(n, t)| format!("{}: {}", n, t))
-            .collect();
+        let params: Vec<String> = ts.params.iter().map(|(n, t)| format!("{n}: {t}")).collect();
         let ret = ts
             .return_type
             .as_ref()
-            .map(|t| format!(" -> {}", t))
+            .map(|t| format!(" -> {t}"))
             .unwrap_or_default();
         format!("({}){}", params.join(", "), ret)
     });
@@ -116,7 +112,7 @@ fn receiver_type_at_cursor(
     Some(format!("{}", PrintTy::new(ty, ty_ctx.as_ref())))
 }
 
-/// provide_completions.
+/// `provide_completions`.
 pub fn provide_completions(
     db: &AnalysisDatabase,
     file_map: &crate::database::FileMap,
@@ -144,7 +140,7 @@ pub fn provide_completions(
                     .and_then(|ts| ts.receiver_type.as_deref())
                     == Some(rt.as_str())
             })
-            .cloned()
+            .copied()
             .collect();
         if methods.is_empty() { symbols } else { methods }
     } else {
@@ -194,7 +190,7 @@ pub fn provide_completions(
                         new_text: text,
                     };
                     item.additional_text_edits = Some(vec![edit]);
-                    item.detail = Some(format!("(auto-import) {}", import_path));
+                    item.detail = Some(format!("(auto-import) {import_path}"));
                     // Avoid duplicate suggestions for the same symbol+import.
                     if !items
                         .iter()
