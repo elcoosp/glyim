@@ -1,9 +1,9 @@
-//! Tests for TypeFlags HAS_DEPTH_OVERFLOW.
+//! Tests for `TypeFlags` `HAS_DEPTH_OVERFLOW`.
 //!
-//! Note: The current compute_flags implementation uses pre-computed flags
-//! (ctx.ty_flags()) for inner types rather than recursing into compute_flags.
-//! This means the depth parameter in compute_flags only applies to the top-level
-//! call, and deep nesting does NOT trigger HAS_DEPTH_OVERFLOW. The depth
+//! Note: The current `compute_flags` implementation uses pre-computed flags
+//! (`ctx.ty_flags()`) for inner types rather than recursing into `compute_flags`.
+//! This means the depth parameter in `compute_flags` only applies to the top-level
+//! call, and deep nesting does NOT trigger `HAS_DEPTH_OVERFLOW`. The depth
 //! parameter exists for potential future recursive use. These tests verify
 //! the actual behavior.
 
