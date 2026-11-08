@@ -15,7 +15,7 @@ fn tempdir() -> std::path::PathBuf {
     // alone is not unique.
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let p = std::env::temp_dir().join(format!("glyim_compound_{}_{}", std::process::id(), n,));
+    let p = std::env::temp_dir().join(format!("glyim_compound_{}_{}", std::process::id(), n));
     std::fs::create_dir_all(&p).unwrap();
     p
 }
@@ -71,7 +71,6 @@ fn star_assign_lowers_to_mul() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Plain `=` must remain a plain assignment (no spurious BinaryOp).
 #[test]
 fn plain_assign_is_not_a_binary_op() {
     let dir = tempdir();
