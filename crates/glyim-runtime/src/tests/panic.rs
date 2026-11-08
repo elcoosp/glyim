@@ -1,4 +1,4 @@
-//! Tests for glyim_panic FFI function.
+//! Tests for `glyim_panic` FFI function.
 //!
 //! `glyim_panic` exits the process with status 101 — the same exit code a
 //! Rust panic produces, and the same code `glyim-mir-interp` reports for an
@@ -24,14 +24,14 @@ fn panic_exits_101_with_message() {
 
     // Parent process: spawn child and check its exit status.
     let exe = std::env::current_exe().unwrap_or_else(|e| {
-        panic!("failed to get current executable: {}", e);
+        panic!("failed to get current executable: {e}");
     });
 
     let output = std::process::Command::new(&exe)
         .env("__GLYIM_PANIC_CHILD", "1")
         .output()
         .unwrap_or_else(|e| {
-            panic!("failed to spawn child process: {}", e);
+            panic!("failed to spawn child process: {e}");
         });
 
     assert_eq!(
