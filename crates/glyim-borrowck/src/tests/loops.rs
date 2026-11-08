@@ -13,8 +13,8 @@ use super::mir_builder::{
 /// Shared borrow inside loop body, re-borrowed each iteration → no error.
 ///
 ///   BB0: goto BB1
-///   BB1: switch local_2 -> [true: BB2, false: BB3]
-///   BB2: local_4 = &shared local_1; local_5 = copy local_4; goto BB1
+///   BB1: switch `local_2` -> [true: BB2, false: BB3]
+///   BB2: `local_4` = &shared `local_1`; `local_5` = copy `local_4`; goto BB1
 ///   BB3: return
 #[test]
 fn shared_borrow_inside_loop_no_error() {
@@ -49,13 +49,11 @@ fn shared_borrow_inside_loop_no_error() {
 /// Mutable borrow inside loop that conflicts with post-loop access → error.
 ///
 ///   BB0: goto BB1
-///   BB1: switch local_2 -> [true: BB2, false: BB3]
-///   BB2: local_4 = &mut local_1; local_5 = copy local_4; goto BB1
-///   BB3: local_6 = copy local_1; return
+///   BB1: switch `local_2` -> [true: BB2, false: BB3]
+///   BB2: `local_4` = &mut `local_1`; `local_5` = copy `local_4`; goto BB1
+///   BB3: `local_6` = copy `local_1`; return
 ///
-/// local_4 is a fresh mut borrow each iteration, but it dies at the end of BB2.
-/// After the loop, local_1 is accessed directly. This should be OK because
-/// the mut borrow's dest (local_4) is not live after BB2.
+/// `local_4` is a fresh mut borrow each iteration, but it dies at the end of BB2.
 #[test]
 fn mut_borrow_inside_loop_then_access_after_ok() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -100,10 +98,10 @@ fn mut_borrow_inside_loop_then_access_after_ok() {
 /// Mut borrow before loop, accessed inside AND after loop → no error.
 /// This tests that the borrow stays live across loop back-edges.
 ///
-///   BB0: local_2 = &mut local_1; goto BB1
-///   BB1: switch local_3 -> [true: BB2, false: BB3]
-///   BB2: local_4 = copy local_2; goto BB1
-///   BB3: local_5 = copy local_2; return
+///   BB0: `local_2` = &mut `local_1`; goto BB1
+///   BB1: switch `local_3` -> [true: BB2, false: BB3]
+///   BB2: `local_4` = copy `local_2`; goto BB1
+///   BB3: `local_5` = copy `local_2`; return
 #[test]
 fn mut_borrow_before_loop_used_throughout_no_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -147,11 +145,11 @@ fn mut_borrow_before_loop_used_throughout_no_error() {
 
 /// Mut borrow before loop, conflicting access inside loop → error.
 ///
-///   BB0: local_2 = &mut local_1; goto BB1
-///   BB1: switch local_3 -> [true: BB2, false: BB4]
-///   BB2: local_4 = copy local_1; goto BB3    (direct read while mut borrowed!)
-///   BB3: local_5 = copy local_2; goto BB1
-///   BB4: local_6 = copy local_2; return
+///   BB0: `local_2` = &mut `local_1`; goto BB1
+///   BB1: switch `local_3` -> [true: BB2, false: BB4]
+///   BB2: `local_4` = copy `local_1`; goto BB3    (direct read while mut borrowed!)
+///   BB3: `local_5` = copy `local_2`; goto BB1
+///   BB4: `local_6` = copy `local_2`; return
 #[test]
 fn mut_borrow_before_loop_conflicting_access_in_loop_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -201,10 +199,10 @@ fn mut_borrow_before_loop_conflicting_access_in_loop_error() {
 
 /// Double loop (nested): shared borrow in outer, used in inner → no error.
 ///
-///   BB0: local_2 = &shared local_1; goto BB1
-///   BB1: switch local_3 -> [true: BB2, false: BB5]   (outer loop header)
-///   BB2: switch local_4 -> [true: BB3, false: BB4]   (inner loop header)
-///   BB3: local_5 = copy local_2; goto BB2                  (inner loop body)
+///   BB0: `local_2` = &shared `local_1`; goto BB1
+///   BB1: switch `local_3` -> [true: BB2, false: BB5]   (outer loop header)
+///   BB2: switch `local_4` -> [true: BB3, false: BB4]   (inner loop header)
+///   BB3: `local_5` = copy `local_2`; goto BB2                  (inner loop body)
 ///   BB4: goto BB1                                 (inner loop exit, back to outer)
 ///   BB5: return
 #[test]
