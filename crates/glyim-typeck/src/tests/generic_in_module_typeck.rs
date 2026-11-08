@@ -28,7 +28,7 @@ fn compile(src: &str) -> CompileOutput {
 #[test]
 fn module_wrapped_generic_struct_typechecks() {
     // The specific bug: struct with `<T>` inside `pub mod m`.
-    let src = r#"
+    let src = r"
         pub mod m {
             pub struct Foo<T> { x: T }
         }
@@ -36,7 +36,7 @@ fn module_wrapped_generic_struct_typechecks() {
             let f = m::Foo { x: 42 };
             let _ = f.x;
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
@@ -45,7 +45,7 @@ fn module_wrapped_generic_struct_typechecks() {
 fn module_wrapped_generic_fn_returns_wrapped_struct() {
     // Closer to Once/Repeat: a generic fn in a module returns a
     // module-scoped generic struct.
-    let src = r#"
+    let src = r"
         pub mod m {
             pub struct Foo<T> { x: T }
             pub fn make<T>(v: T) -> Foo<T> { Foo { x: v } }
@@ -54,7 +54,7 @@ fn module_wrapped_generic_fn_returns_wrapped_struct() {
             let f = m::make(42);
             let _ = f.x;
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
@@ -62,13 +62,13 @@ fn module_wrapped_generic_fn_returns_wrapped_struct() {
 #[test]
 fn crate_root_generic_struct_still_works() {
     // Sanity: this has always worked; ensure we didn't regress.
-    let src = r#"
+    let src = r"
         struct Foo<T> { x: T }
         fn main() {
             let f = Foo { x: 42 };
             let _ = f.x;
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
