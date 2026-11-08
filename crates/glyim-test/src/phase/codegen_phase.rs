@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-/// CodegenTester.
+/// `CodegenTester`.
 pub struct CodegenTester;
 
 impl CodegenTester {
@@ -15,7 +15,7 @@ impl CodegenTester {
     ) -> glyim_diag::CompResult<()> {
         backend.generate(bodies, output)
     }
-    /// generate_function.
+    /// `generate_function`.
     pub fn generate_function(
         backend: &dyn glyim_codegen::CodegenBackend,
         body: &Arc<glyim_mir::Body>,
