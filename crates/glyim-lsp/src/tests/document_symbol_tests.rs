@@ -21,11 +21,8 @@ fn document_symbols_returns_hierarchy() {
         let mut file_map = analysis.file_map.write();
         file_map.get_or_create(&path)
     };
-    let source_map = crate::SourceMap::new(
-        path.clone(),
-        file_id,
-        "fn foo() {}\nstruct Bar { x: i32 }".to_string(),
-    );
+    let source_map =
+        crate::SourceMap::new(file_id, "fn foo() {}\nstruct Bar { x: i32 }".to_string());
     analysis.source_maps.write().insert(file_id, source_map);
 
     let span_foo = Span::new(
@@ -85,8 +82,8 @@ fn document_symbols_returns_hierarchy() {
             )
             .unwrap(),
         },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: WorkDoneProgressParams::default(),
+        partial_result_params: PartialResultParams::default(),
     };
 
     let response = document_symbols(&analysis, file_map, &params);
