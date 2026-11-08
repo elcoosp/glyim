@@ -4,7 +4,6 @@ use glyim_core::arena::IndexVec;
 use glyim_core::def_id::{ConstDefId, CrateId, DefId, FnDefId, LocalDefId, StaticDefId};
 
 /// Script 589: the reserved id range for compiler-synthesized builtin
-/// methods (see `TyCtxMut::next_builtin_fn_id`, seeded at 9_000). These
 /// have no HIR body — codegen lowers them as intrinsics — so mono
 /// collection must not enqueue them.
 fn is_builtin_fn_id(def_id: FnDefId) -> bool {
@@ -17,48 +16,48 @@ use std::sync::Arc;
 glyim_core::define_idx!(MonoItemId);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// MonoItem.
+/// `MonoItem`.
 pub enum MonoItem {
-    /// Variant.
+    /// `Variant`.
     Fn {
-        /// Struct.
+        /// `Struct`.
         def_id: FnDefId,
-        /// Struct.
+        /// `Struct`.
         substs: Substitution,
     },
-    /// Variant.
+    /// `Variant`.
     Const {
-        /// Struct.
+        /// `Struct`.
         def_id: ConstDefId,
-        /// Struct.
+        /// `Struct`.
         substs: Substitution,
     },
-    /// Variant.
+    /// `Variant`.
     Static {
-        /// Struct.
+        /// `Struct`.
         def_id: StaticDefId,
     },
-    /// Variant.
+    /// `Variant`.
     DropGlue {
-        /// Struct.
+        /// `Struct`.
         ty: Ty,
     },
 }
 
 #[derive(Clone, Debug)]
-/// MonoItemData.
+/// `MonoItemData`.
 pub struct MonoItemData {
-    /// Struct.
+    /// `Struct`.
     pub item: MonoItem,
-    /// Struct.
+    /// `Struct`.
     pub body: Arc<glyim_mir::Body>,
-    /// Struct.
+    /// `Struct`.
     pub symbol: String,
-    /// Struct.
+    /// `Struct`.
     pub source_module: u32,
 }
 
-/// MonoCtx.
+/// `MonoCtx`.
 pub struct MonoCtx<'a> {
     items: IndexVec<MonoItemId, MonoItemData>,
     queue: std::collections::VecDeque<MonoItem>,
@@ -91,6 +90,7 @@ pub struct MonoCtx<'a> {
 
 impl<'a> MonoCtx<'a> {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             items: IndexVec::new(),
@@ -217,7 +217,7 @@ impl<'a> MonoCtx<'a> {
             // symbols and no longer collide on the plain `__glyim_fn_<id>`.
             let symbol = match &item {
                 MonoItem::Fn { def_id, substs } => mangle_fn_symbol(def_id.to_raw(), *substs),
-                _ => format!("{:?}", item),
+                _ => format!("{item:?}"),
             };
             let id = self.items.push(MonoItemData {
                 item: item.clone(),
@@ -561,7 +561,7 @@ impl<'a> MonoCtx<'a> {
                     && let Some(local_decl) = body.locals.get(place.local)
                 {
                     let mut ty = local_decl.ty;
-                    for proj in place.projection.iter() {
+                    for proj in &place.projection {
                         match proj {
                             glyim_mir::ProjectionElem::Field(idx) => {
                                 if let glyim_type::TyKind::Adt(adt_id, _) = ty_ctx.ty_kind(ty)
@@ -570,8 +570,7 @@ impl<'a> MonoCtx<'a> {
                                     ty = def
                                         .fields
                                         .get(glyim_type::FieldIdx::from_raw(idx.index() as u32))
-                                        .map(|f| f.ty)
-                                        .unwrap_or(ty);
+                                        .map_or(ty, |f| f.ty);
                                 }
                             }
                             glyim_mir::ProjectionElem::Deref => {
@@ -599,21 +598,25 @@ impl<'a> MonoCtx<'a> {
     }
 
     /// items.
+    #[must_use]
     pub fn items(&self) -> &[MonoItemData] {
         self.items.as_slice()
     }
 
-    /// item_count.
+    /// `item_count`.
+    #[must_use]
     pub fn item_count(&self) -> usize {
         self.items.len()
     }
 
-    /// cache_len.
+    /// `cache_len`.
+    #[must_use]
     pub fn cache_len(&self) -> usize {
         self.cache.len()
     }
 
     /// lookup.
+    #[must_use]
     pub fn lookup(&self, item: &MonoItem) -> Option<MonoItemId> {
         self.cache.get(item).copied()
     }
@@ -648,7 +651,7 @@ impl<'a> MonoCtx<'a> {
     }
 }
 
-impl<'a> Default for MonoCtx<'a> {
+impl Default for MonoCtx<'_> {
     fn default() -> Self {
         Self::new()
     }
