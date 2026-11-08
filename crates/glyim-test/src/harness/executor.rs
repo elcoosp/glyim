@@ -16,43 +16,40 @@ fn next_file_id() -> FileId {
 }
 
 #[derive(Clone, Debug)]
-/// TestOutcome.
+/// `TestOutcome`.
 pub enum TestOutcome {
-    /// Variant.
+    /// `Variant`.
     Passed,
-    /// Variant.
+    /// `Variant`.
     Failed {
         /// reason field.
         reason: FailureReason,
     },
-    /// Variant.
+    /// `Variant`.
     Ignored,
 }
 
 #[derive(Clone, Debug)]
-/// TestResult.
+/// `TestResult`.
 pub struct TestResult {
-    /// Struct.
+    /// `Struct`.
     pub test: Arc<DiscoveredTest>,
-    /// Struct.
+    /// `Struct`.
     pub revision: String,
-    /// Struct.
+    /// `Struct`.
     pub outcome: TestOutcome,
-    /// Struct.
+    /// `Struct`.
     pub duration: Duration,
-    /// Struct.
+    /// `Struct`.
     pub diagnostics: Vec<GlyimDiagnostic>,
 }
 
-#[allow(dead_code)]
-/// TestExecutor.
+/// `TestExecutor`.
 pub struct TestExecutor {
-    default_timeout: Duration,
     bless: bool,
     /// TEST-3: unmet fixture needs become hard failures instead of
     /// silent `Ignored`. Set by `TestPlan.no_skip`.
     no_skip: bool,
-    verbose: bool,
     max_concurrent: usize,
     target_triple: String,
     compiler: Arc<dyn TestCompiler>,
@@ -60,14 +57,8 @@ pub struct TestExecutor {
 
 impl TestExecutor {
     /// new.
-    pub fn new(
-        default_timeout: Duration,
-        bless: bool,
-        no_skip: bool,
-        verbose: bool,
-        max_concurrent: usize,
-        use_pipeline: bool,
-    ) -> Self {
+    #[must_use]
+    pub fn new(bless: bool, no_skip: bool, max_concurrent: usize, use_pipeline: bool) -> Self {
         let compiler: Arc<dyn TestCompiler> = if use_pipeline {
             // The `runtime` integration test enables `real_llvm` via the
             // `GLYIM_TEST_REAL_LLVM` env var (set only on the Linux CI runner),
@@ -84,10 +75,8 @@ impl TestExecutor {
         };
 
         Self {
-            default_timeout,
             bless,
             no_skip,
-            verbose,
             max_concurrent,
             // Default to the *host* triple, not a hardcoded Linux one. Fixtures
             // carry `// only-target: <triple>` to declare the triple their
@@ -105,19 +94,22 @@ impl TestExecutor {
         }
     }
 
-    /// with_target_triple.
+    /// `with_target_triple`.
+    #[must_use]
     pub fn with_target_triple(mut self, triple: impl Into<String>) -> Self {
         self.target_triple = triple.into();
         self
     }
 
-    /// with_compiler.
+    /// `with_compiler`.
+    #[must_use]
     pub fn with_compiler(mut self, compiler: Arc<dyn TestCompiler>) -> Self {
         self.compiler = compiler;
         self
     }
 
-    /// run_sequential.
+    /// `run_sequential`.
+    #[must_use]
     pub fn run_sequential(&self, tests: &[Arc<DiscoveredTest>]) -> Vec<TestResult> {
         tests
             .iter()
@@ -137,7 +129,8 @@ impl TestExecutor {
             .collect()
     }
 
-    /// run_parallel.
+    /// `run_parallel`.
+    #[must_use]
     pub fn run_parallel(&self, tests: &[Arc<DiscoveredTest>]) -> Vec<TestResult> {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(self.max_concurrent)
@@ -171,8 +164,7 @@ impl TestExecutor {
                     TestOutcome::Ignored => ignored += 1,
                 }
                 eprintln!(
-                    "[{}/{}] passed={} failed={} ignored={} :: {}",
-                    done, total, passed, failed, ignored, name
+                    "[{done}/{total}] passed={passed} failed={failed} ignored={ignored} :: {name}"
                 );
                 if done >= total {
                     break;
@@ -403,6 +395,6 @@ fn host_target_triple() -> String {
         ("aarch64", "linux") => "aarch64-unknown-linux-gnu".to_string(),
         ("x86_64", "windows") => "x86_64-pc-windows-msvc".to_string(),
         ("aarch64", "windows") => "aarch64-pc-windows-msvc".to_string(),
-        _ => format!("{}-{}", arch, os),
+        _ => format!("{arch}-{os}"),
     }
 }
