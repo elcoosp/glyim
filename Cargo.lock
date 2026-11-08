@@ -1209,6 +1209,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "glyim-metrics"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "glyim-mir"
 version = "0.1.0"
 dependencies = [
