@@ -33,21 +33,25 @@ impl Cache {
     }
 
     /// Return the target directory path.
+    #[must_use]
     pub fn target_dir(&self) -> &Path {
         &self.target_dir
     }
 
     /// Return the debug output directory.
+    #[must_use]
     pub fn debug_dir(&self) -> PathBuf {
         self.target_dir.join("debug")
     }
 
     /// Return the release output directory.
+    #[must_use]
     pub fn release_dir(&self) -> PathBuf {
         self.target_dir.join("release")
     }
 
     /// Return the output directory for the given profile.
+    #[must_use]
     pub fn output_dir(&self, release: bool) -> PathBuf {
         if release {
             self.release_dir()
@@ -57,6 +61,7 @@ impl Cache {
     }
 
     /// Return the dependency cache directory.
+    #[must_use]
     pub fn dep_dir(&self) -> PathBuf {
         self.target_dir.join("debug").join("dep")
     }
@@ -68,6 +73,7 @@ impl Cache {
     /// (registry downloads, shared fingerprints). Callers that *write* here
     /// should call [`Cache::ensure_global_cache_dir`] first; this getter is
     /// side-effect-free so it stays cheap to call from read paths.
+    #[must_use]
     pub fn global_cache_dir() -> PathBuf {
         home_dir().join(".glyip").join("cache")
     }
@@ -129,6 +135,7 @@ impl Cache {
     }
 
     /// Return the expected path of the output binary.
+    #[must_use]
     pub fn output_binary(&self, name: &str, release: bool) -> PathBuf {
         self.output_dir(release).join(name)
     }
@@ -137,14 +144,14 @@ impl Cache {
     pub fn store_artifact(&self, key: &str, data: &[u8]) -> GlyipResult<PathBuf> {
         let cache_dir = self.dep_dir();
         fs::create_dir_all(&cache_dir)?;
-        let path = cache_dir.join(format!("{}.gbc", key));
+        let path = cache_dir.join(format!("{key}.gbc"));
         fs::write(&path, data)?;
         Ok(path)
     }
 
     /// Retrieve a compiled artifact from the dependency cache.
     pub fn get_artifact(&self, key: &str) -> GlyipResult<Option<Vec<u8>>> {
-        let path = self.dep_dir().join(format!("{}.gbc", key));
+        let path = self.dep_dir().join(format!("{key}.gbc"));
         if path.exists() {
             Ok(Some(fs::read(&path)?))
         } else {
@@ -156,6 +163,7 @@ impl Cache {
     ///
     /// Debug builds use `target/debug/deps`, release builds use
     /// `target/release/deps`.
+    #[must_use]
     pub fn profile_dep_dir(&self, release: bool) -> PathBuf {
         self.output_dir(release).join("dep")
     }
@@ -165,6 +173,7 @@ impl Cache {
     ///
     /// When a target triple is specified, the output is placed under
     /// `target/<triple>/<profile>`, mirroring Cargo's layout.
+    #[must_use]
     pub fn output_dir_for_target(&self, release: bool, target: Option<&str>) -> PathBuf {
         let profile = if release { "release" } else { "debug" };
         if let Some(triple) = target {
@@ -176,6 +185,7 @@ impl Cache {
 
     /// Return the expected path of the output binary for a given profile and
     /// optional target triple.
+    #[must_use]
     pub fn output_binary_for_target(
         &self,
         name: &str,
@@ -197,7 +207,7 @@ impl Cache {
     ) -> GlyipResult<PathBuf> {
         let cache_dir = self.profile_dep_dir(release);
         fs::create_dir_all(&cache_dir)?;
-        let path = cache_dir.join(format!("{}.gbc", key));
+        let path = cache_dir.join(format!("{key}.gbc"));
         fs::write(&path, data)?;
         Ok(path)
     }
@@ -208,7 +218,7 @@ impl Cache {
         key: &str,
         release: bool,
     ) -> GlyipResult<Option<Vec<u8>>> {
-        let path = self.profile_dep_dir(release).join(format!("{}.gbc", key));
+        let path = self.profile_dep_dir(release).join(format!("{key}.gbc"));
         if path.exists() {
             Ok(Some(fs::read(&path)?))
         } else {
@@ -221,6 +231,5 @@ impl Cache {
 fn home_dir() -> PathBuf {
     std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
+        .map_or_else(|_| PathBuf::from("."), PathBuf::from)
 }
