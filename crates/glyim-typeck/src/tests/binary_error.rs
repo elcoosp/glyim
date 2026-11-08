@@ -65,7 +65,7 @@ fn binary_i32_add_bool_error() {
         items,
         bodies,
         body_owners,
-        interner: Default::default(),
+        interner: glyim_core::Interner::default(),
     };
 
     let ctx = make_ty_ctx();
