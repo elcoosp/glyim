@@ -1,4 +1,4 @@
-//! Tests for HAS_RE_PLACEHOLDER and HAS_TY_PLACEHOLDER flags
+//! Tests for `HAS_RE_PLACEHOLDER` and `HAS_TY_PLACEHOLDER` flags
 
 use crate::display::TypeLookup;
 use crate::*;
@@ -9,12 +9,12 @@ use crate::{
 use glyim_core::interner::Interner;
 use glyim_core::primitives::{IntTy, Mutability};
 
-/// A minimal TypeLookup implementation for testing compute_flags.
+/// A minimal `TypeLookup` implementation for testing `compute_flags`.
 struct TestLookup<'a> {
     ctx: &'a TyCtxMut,
 }
 
-impl<'a> TypeLookup for TestLookup<'a> {
+impl TypeLookup for TestLookup<'_> {
     fn ty_kind(&self, ty: crate::Ty) -> &TyKind {
         self.ctx.ty_kind(ty)
     }
