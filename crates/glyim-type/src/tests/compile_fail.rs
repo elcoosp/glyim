@@ -5,7 +5,7 @@
 use super::helpers::with_fresh_ty_ctx;
 use crate::*;
 
-/// This test documents that TyCtxMut is !Send. The following would NOT compile:
+/// This test documents that `TyCtxMut` is !Send. The following would NOT compile:
 /// ```compile_fail
 /// fn require_send<T: Send>(_: &T) {}
 /// fn main() {
@@ -19,7 +19,7 @@ fn ty_ctx_mut_is_not_send_documented() {
     // See traits.rs for positive proof that TyCtx IS Send+Sync.
 }
 
-/// Documents that Ty::from_raw is pub(crate) and cannot be called from outside.
+/// Documents that `Ty::from_raw` is pub(crate) and cannot be called from outside.
 #[test]
 fn ty_from_raw_is_pub_crate() {
     assert_eq!(Ty::ERROR.to_raw(), 0);
@@ -28,7 +28,7 @@ fn ty_from_raw_is_pub_crate() {
     assert_eq!(Ty::BOOL.to_raw(), 3);
 }
 
-/// Documents that Substitution::from_raw is pub(crate).
+/// Documents that `Substitution::from_raw` is pub(crate).
 #[test]
 fn substitution_from_raw_is_pub_crate() {
     let (ctx, sub) =
