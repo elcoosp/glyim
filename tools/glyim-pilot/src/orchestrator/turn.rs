@@ -14,88 +14,88 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[derive(Clone)]
-/// OrchestratorAction.
+/// `OrchestratorAction`.
 pub enum OrchestratorAction {
-    /// Variant.
+    /// `Variant`.
     Feedback {
-        /// Struct.
+        /// `Struct`.
         session_id: String,
-        /// Struct.
+        /// `Struct`.
         message: String,
-        /// Struct.
+        /// `Struct`.
         trace_id: Option<String>,
     },
-    /// Variant.
+    /// `Variant`.
     Continue {
-        /// Struct.
+        /// `Struct`.
         session_id: String,
-        /// Struct.
+        /// `Struct`.
         trace_id: Option<String>,
     },
-    /// Variant.
+    /// `Variant`.
     SelfReview {
-        /// Struct.
+        /// `Struct`.
         session_id: String,
-        /// Struct.
+        /// `Struct`.
         prompt: String,
-        /// Struct.
+        /// `Struct`.
         trace_id: Option<String>,
     },
-    /// Variant.
+    /// `Variant`.
     StreamComplete {
-        /// Struct.
+        /// `Struct`.
         session_id: String,
-        /// Struct.
+        /// `Struct`.
         pr_url: String,
-        /// Struct.
+        /// `Struct`.
         trace_id: Option<String>,
     },
-    /// Variant.
+    /// `Variant`.
     Escalate {
-        /// Struct.
+        /// `Struct`.
         session_id: String,
-        /// Struct.
+        /// `Struct`.
         reason: String,
-        /// Struct.
+        /// `Struct`.
         trace_id: Option<String>,
     },
-    /// Variant.
+    /// `Variant`.
     WaitForResponse {
-        /// Struct.
+        /// `Struct`.
         session_id: String,
-        /// Struct.
+        /// `Struct`.
         trace_id: Option<String>,
     },
 }
 
 #[derive(Clone)]
-/// TurnContext.
+/// `TurnContext`.
 pub struct TurnContext {
-    /// Struct.
+    /// `Struct`.
     pub ops_block: String,
-    /// Struct.
+    /// `Struct`.
     pub session_id: String,
-    /// Struct.
+    /// `Struct`.
     pub stream_id: String,
-    /// Struct.
+    /// `Struct`.
     pub worktree_dir: PathBuf,
-    /// Struct.
+    /// `Struct`.
     pub project_root: PathBuf,
-    /// Struct.
+    /// `Struct`.
     pub config: Arc<PilotConfig>,
-    /// Struct.
+    /// `Struct`.
     pub persistence: Arc<StatePersistence>,
-    /// Struct.
+    /// `Struct`.
     pub processing: Arc<Mutex<HashSet<String>>>,
-    /// Struct.
+    /// `Struct`.
     pub turn: u32,
-    /// Struct.
+    /// `Struct`.
     pub trace_id: String,
-    /// Struct.
+    /// `Struct`.
     pub metrics: Arc<dyn Metrics>,
 }
 
-/// process_turn_dispatch.
+/// `process_turn_dispatch`.
 pub async fn process_turn_dispatch(ctx: TurnContext) -> Result<OrchestratorAction, PilotError> {
     let span = tracing::info_span!("process_turn", stream_id = %ctx.stream_id, turn = ctx.turn, trace_id = %ctx.trace_id);
     let _enter = span.enter();
@@ -107,16 +107,16 @@ pub async fn process_turn_dispatch(ctx: TurnContext) -> Result<OrchestratorActio
     let trace_id_clone = ctx.trace_id.clone();
     {
         let lock_future = processing.lock();
-        let guard = match tokio::time::timeout(std::time::Duration::from_secs(5), lock_future).await
+        let guard = if let Ok(g) =
+            tokio::time::timeout(std::time::Duration::from_secs(5), lock_future).await
         {
-            Ok(g) => g,
-            Err(_) => {
-                tracing::warn!("processing lock acquisition timed out, skipping turn");
-                return Ok(OrchestratorAction::WaitForResponse {
-                    session_id: session_id_clone,
-                    trace_id: Some(trace_id_clone),
-                });
-            }
+            g
+        } else {
+            tracing::warn!("processing lock acquisition timed out, skipping turn");
+            return Ok(OrchestratorAction::WaitForResponse {
+                session_id: session_id_clone,
+                trace_id: Some(trace_id_clone),
+            });
         };
         let mut guard = guard;
         if !guard.insert(stream_id.clone()) {
@@ -132,15 +132,15 @@ pub async fn process_turn_dispatch(ctx: TurnContext) -> Result<OrchestratorActio
 
     {
         let lock_future = processing.lock();
-        let guard = match tokio::time::timeout(std::time::Duration::from_secs(5), lock_future).await
+        let guard = if let Ok(g) =
+            tokio::time::timeout(std::time::Duration::from_secs(5), lock_future).await
         {
-            Ok(g) => g,
-            Err(_) => {
-                tracing::warn!("processing lock acquisition timed out, skipping turn");
-                // We still need to return something, but the lock couldn't be released.
-                // Just return the result without removing from set? This is a race, but fine.
-                return result;
-            }
+            g
+        } else {
+            tracing::warn!("processing lock acquisition timed out, skipping turn");
+            // We still need to return something, but the lock couldn't be released.
+            // Just return the result without removing from set? This is a race, but fine.
+            return result;
         };
         let mut guard = guard;
         guard.remove(&stream_id);
@@ -205,7 +205,7 @@ async fn process_turn_inner(ctx: TurnContext) -> Result<OrchestratorAction, Pilo
         .await
         .unwrap_or_default()
         .lines()
-        .map(|l| l.to_string())
+        .map(std::string::ToString::to_string)
         .filter(|l| !l.is_empty())
         .collect();
         let gate_ctx = crate::gates::types::GateContext::new(
@@ -262,7 +262,7 @@ async fn process_turn_inner(ctx: TurnContext) -> Result<OrchestratorAction, Pilo
         .await
         .unwrap_or_default()
         .lines()
-        .map(|l| l.to_string())
+        .map(std::string::ToString::to_string)
         .filter(|l| !l.is_empty())
         .collect();
         let engine = CommitEngine::new(
@@ -286,17 +286,17 @@ async fn process_turn_inner(ctx: TurnContext) -> Result<OrchestratorAction, Pilo
         match decision {
             CommitDecision::Committed { message, .. } => Ok(OrchestratorAction::Feedback {
                 session_id: ctx.session_id.clone(),
-                message: format!("✅ Committed: {}", message),
+                message: format!("✅ Committed: {message}"),
                 trace_id: trace_id_some,
             }),
             CommitDecision::GateFailed { feedback, .. } => Ok(OrchestratorAction::Feedback {
                 session_id: ctx.session_id.clone(),
-                message: format!("❌ Commit gate failed:\n\n{}", feedback),
+                message: format!("❌ Commit gate failed:\n\n{feedback}"),
                 trace_id: trace_id_some,
             }),
             CommitDecision::Escalated { feedback, .. } => Ok(OrchestratorAction::Escalate {
                 session_id: ctx.session_id.clone(),
-                reason: format!("Fix rounds exceeded.\n\n{}", feedback),
+                reason: format!("Fix rounds exceeded.\n\n{feedback}"),
                 trace_id: trace_id_some,
             }),
         }
