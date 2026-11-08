@@ -17,27 +17,41 @@
 pub enum BuiltinAdt {
     // Range types — the compiler treats these specially (slicing, `for`,
     // range patterns all lower through `lang_items::Range*`).
+    /// `Range`.
     Range,
+    /// `RangeInclusive`.
     RangeInclusive,
+    /// `RangeFrom`.
     RangeFrom,
+    /// `RangeTo`.
     RangeTo,
+    /// `RangeToInclusive`.
     RangeToInclusive,
 
     // Interior mutability — the borrow checker consults `Cell`/`RefCell`/
     // `UnsafeCell` to relax aliasing rules.
+    /// `UnsafeCell`.
     UnsafeCell,
 
     // Fundamental library types that the standard library ALSO declares in
     // `.g` source. User-declared `enum Option<T>` must resolve to the same
     // `AdtId` as the builtin placeholder, or the same logical type splits
     // into two incompatible AdtIds.
+    /// `Option`.
     Option,
+    /// `Result`.
     Result,
+    /// `Ordering`.
     Ordering,
+    /// `ExitStatus`.
     ExitStatus,
+    /// `Vec`.
     Vec,
+    /// `PhantomData`.
     PhantomData,
+    /// `Box`.
     Box,
+    /// `String`.
     String,
     // io.g types declared by name in the assembled stdlib. Canonicalizing
     // them through `BuiltinAdt` gives `adt_id_for_item`,
@@ -45,9 +59,13 @@ pub enum BuiltinAdt {
     // order-independent answer. Ids 1070..1073 are disjoint from every other
     // reservation (1000..1050 builtin ADTs, 1060/1061 slice/str synthetic
     // ids, 2001+ trait ids, 0x4000_0000+ impl-method ids).
+    /// `Error`.
     Error,
+    /// `ErrorKind`.
     ErrorKind,
+    /// `BufReader`.
     BufReader,
+    /// `BufWriter`.
     BufWriter,
 }
 
@@ -75,6 +93,7 @@ impl BuiltinAdt {
     ];
 
     /// The reserved `AdtId` (as a raw u32) for this builtin.
+    #[must_use]
     pub fn adt_id(self) -> u32 {
         match self {
             Self::Range => 1000,
@@ -100,6 +119,7 @@ impl BuiltinAdt {
 
     /// The source-level name this builtin is registered under. Must match
     /// the identifier a `.g` source uses when it re-declares the type.
+    #[must_use]
     pub fn name(self) -> &'static str {
         match self {
             Self::Range => "Range",
@@ -126,6 +146,7 @@ impl BuiltinAdt {
     /// Look up a variant by its source-level name.
     ///
     /// `Err(name)` — nothing in `BuiltinAdt` has that name.
+    #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
         Self::ALL.iter().copied().find(|b| b.name() == name)
     }
@@ -146,7 +167,7 @@ mod tests {
                 "{} has AdtId {id} outside the reserved 1000..2000 range",
                 b.name(),
             );
-            assert!(seen.insert(id), "duplicate AdtId {id} (from {})", b.name(),);
+            assert!(seen.insert(id), "duplicate AdtId {id} (from {})", b.name());
         }
     }
 
