@@ -55,85 +55,85 @@ impl Value {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Opcode {
-    /// Variant.
+    /// `Variant`.
     LoadConst = 0x01,
-    /// Variant.
+    /// `Variant`.
     Add = 0x02,
-    /// Variant.
+    /// `Variant`.
     Sub = 0x03,
-    /// Variant.
+    /// `Variant`.
     Mul = 0x04,
-    /// Variant.
+    /// `Variant`.
     Div = 0x05,
-    /// Variant.
+    /// `Variant`.
     Rem = 0x06,
-    /// Variant.
+    /// `Variant`.
     Eq = 0x07,
-    /// Variant.
+    /// `Variant`.
     Ne = 0x08,
-    /// Variant.
+    /// `Variant`.
     Lt = 0x09,
-    /// Variant.
+    /// `Variant`.
     Gt = 0x0A,
-    /// Variant.
+    /// `Variant`.
     Le = 0x0B,
-    /// Variant.
+    /// `Variant`.
     Ge = 0x0C,
-    /// Variant.
+    /// `Variant`.
     And = 0x0D,
-    /// Variant.
+    /// `Variant`.
     Or = 0x0E,
-    /// Variant.
+    /// `Variant`.
     Not = 0x0F,
-    /// Variant.
+    /// `Variant`.
     Neg = 0x10,
-    /// Variant.
+    /// `Variant`.
     BitAnd = 0x11,
-    /// Variant.
+    /// `Variant`.
     BitOr = 0x12,
-    /// Variant.
+    /// `Variant`.
     BitXor = 0x13,
-    /// Variant.
+    /// `Variant`.
     Shl = 0x14,
-    /// Variant.
+    /// `Variant`.
     Shr = 0x15,
-    /// Variant.
+    /// `Variant`.
     LoadLocal = 0x16,
-    /// Variant.
+    /// `Variant`.
     StoreLocal = 0x17,
-    /// Variant.
+    /// `Variant`.
     Return = 0x18,
-    /// Variant.
+    /// `Variant`.
     JumpIf = 0x19,
-    /// Variant.
+    /// `Variant`.
     Jump = 0x1A,
-    /// Variant.
+    /// `Variant`.
     Call = 0x1B,
-    /// Variant.
+    /// `Variant`.
     Cast = 0x1C,
-    /// Variant.
+    /// `Variant`.
     Aggregate = 0x1D,
-    /// Variant.
+    /// `Variant`.
     Discriminant = 0x1E,
-    /// Variant.
+    /// `Variant`.
     Len = 0x1F,
-    /// Variant.
+    /// `Variant`.
     SwitchInt = 0x20,
-    /// Variant.
+    /// `Variant`.
     Assert = 0x21,
-    /// Variant.
+    /// `Variant`.
     CallIndirect = 0x22,
-    /// Variant.
+    /// `Variant`.
     LoadLocalAddr = 0x29,
-    /// Variant.
+    /// `Variant`.
     StoreField = 0x2A,
-    /// Variant.
+    /// `Variant`.
     Deref = 0x2B,
-    /// Variant.
+    /// `Variant`.
     Drop = 0x2C,
-    /// Variant.
+    /// `Variant`.
     Repeat = 0x2D,
-    /// Variant.
+    /// `Variant`.
     Trap = 0xFF,
 }
 
@@ -205,6 +205,7 @@ pub struct Function {
 
 impl Function {
     /// new.
+    #[must_use]
     pub fn new(code: Vec<u8>, n_locals: usize, arg_count: usize) -> Function {
         Function {
             code,
@@ -215,6 +216,7 @@ impl Function {
     }
 
     /// Build a function with an explicit basic-block offset table.
+    #[must_use]
     pub fn with_blocks(
         code: Vec<u8>,
         n_locals: usize,
@@ -238,13 +240,13 @@ impl Function {
         // `block_offsets[u32::MAX]` panicked the host process. Return a
         // sentinel and let `drive` translate it to
         // `VmError::AbnormalTermination`.
-        if !self.block_offsets.is_empty() {
+        if self.block_offsets.is_empty() {
+            target as usize
+        } else {
             self.block_offsets
                 .get(target as usize)
                 .copied()
                 .unwrap_or(usize::MAX)
-        } else {
-            target as usize
         }
     }
 }
@@ -263,6 +265,7 @@ pub struct Module {
 
 impl Module {
     /// new.
+    #[must_use]
     pub fn new(functions: Vec<Function>, entry: usize) -> Module {
         Module { functions, entry }
     }
@@ -333,6 +336,7 @@ pub struct Vm {
 
 impl Vm {
     /// Create an empty VM (no frames).
+    #[must_use]
     pub fn new() -> Vm {
         Vm::default()
     }
@@ -349,6 +353,7 @@ impl Vm {
     }
 
     /// Inspect a local slot of the top call frame (test/debug helper).
+    #[must_use]
     pub fn local(&self, idx: usize) -> Option<Value> {
         self.frames.last().and_then(|f| f.locals.get(idx).cloned())
     }
@@ -486,7 +491,8 @@ impl Vm {
                     self.stack.push(Value::Int(r));
                 }
                 Opcode::Cast => {
-                    let _kind = code[self.frames[frame_idx].pc];
+                    // Bounds-check the kind byte; the Cast kind is unused by this backend.
+                    let _ = code[self.frames[frame_idx].pc];
                     self.frames[frame_idx].pc += 1;
                 }
                 Opcode::Jump => {
@@ -537,7 +543,7 @@ impl Vm {
                     let v = self.local_ref(idx)?.clone();
                     let len = match &v {
                         Value::Tuple(elems) => elems.len() as i64,
-                        _ => 0,
+                        Value::Int(_) => 0,
                     };
                     self.stack.push(Value::Int(len));
                 }
@@ -640,14 +646,14 @@ impl Vm {
             // cases.
             Opcode::Div => a.checked_div(b).ok_or(VmError::AbnormalTermination)?,
             Opcode::Rem => a.checked_rem(b).ok_or(VmError::AbnormalTermination)?,
-            Opcode::Eq => (a == b) as i64,
-            Opcode::Ne => (a != b) as i64,
-            Opcode::Lt => (a < b) as i64,
-            Opcode::Gt => (a > b) as i64,
-            Opcode::Le => (a <= b) as i64,
-            Opcode::Ge => (a >= b) as i64,
-            Opcode::And => ((a != 0) && (b != 0)) as i64,
-            Opcode::Or => ((a != 0) || (b != 0)) as i64,
+            Opcode::Eq => i64::from(a == b),
+            Opcode::Ne => i64::from(a != b),
+            Opcode::Lt => i64::from(a < b),
+            Opcode::Gt => i64::from(a > b),
+            Opcode::Le => i64::from(a <= b),
+            Opcode::Ge => i64::from(a >= b),
+            Opcode::And => i64::from((a != 0) && (b != 0)),
+            Opcode::Or => i64::from((a != 0) || (b != 0)),
             Opcode::BitAnd => a & b,
             Opcode::BitOr => a | b,
             Opcode::BitXor => a ^ b,
@@ -659,7 +665,7 @@ impl Vm {
 
     fn unop(&self, op: Opcode, a: i64) -> i64 {
         match op {
-            Opcode::Not => (a == 0) as i64,
+            Opcode::Not => i64::from(a == 0),
             Opcode::Neg => a.wrapping_neg(),
             _ => unreachable!("unop called on non-unary op"),
         }
@@ -754,6 +760,7 @@ pub struct Chunk {
 
 impl Chunk {
     /// new.
+    #[must_use]
     pub fn new(code: Vec<u8>) -> Chunk {
         Chunk {
             code,
@@ -763,6 +770,7 @@ impl Chunk {
     }
 
     /// Build a chunk with an explicit local count.
+    #[must_use]
     pub fn with_locals(code: Vec<u8>, n_locals: usize) -> Chunk {
         Chunk {
             code,
