@@ -18,7 +18,7 @@ fn s08_t36_concurrent_generate_independent_backends() {
         .map(|i| {
             thread::spawn(move || {
                 let backend = LlvmBackend::new();
-                let output_path = tpath(&format!("glyim_concurrent_{}.o", i));
+                let output_path = tpath(&format!("glyim_concurrent_{i}.o"));
                 let output = Path::new(&output_path);
                 let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
                     glyim_core::CrateId::from_raw(0),
@@ -26,7 +26,7 @@ fn s08_t36_concurrent_generate_independent_backends() {
                 )));
                 let bodies = vec![body];
                 let result = backend.generate(&crate::tests::to_pairs(&bodies), &output_path);
-                assert!(result.is_ok(), "concurrent generate in thread {} failed", i);
+                assert!(result.is_ok(), "concurrent generate in thread {i} failed");
                 // Clean up
                 std::fs::remove_file(output).ok();
             })
@@ -51,11 +51,10 @@ fn s08_t37_concurrent_generate_function_independent() {
                 let result = backend.generate_function(&body);
                 assert!(
                     result.is_ok(),
-                    "concurrent generate_function in thread {} failed",
-                    i
+                    "concurrent generate_function in thread {i} failed"
                 );
                 let bytes = result.unwrap();
-                assert!(!bytes.is_empty());
+                assert_ne!(bytes, [] as [u8; 0]);
             })
         })
         .collect();
