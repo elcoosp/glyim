@@ -4,15 +4,15 @@ use lsp_types::{FoldingRangeParams, TextDocumentIdentifier};
 
 #[test]
 fn test_folding_ranges_for_braces() {
-    let source = r#"fn main() {
+    let source = r"fn main() {
     let x = 1;
 }
-"#;
+";
     let (db, _file_map, uri, _file_id) = setup_test_db(source, "/test/main.g");
     let params = FoldingRangeParams {
         text_document: TextDocumentIdentifier { uri },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
+        partial_result_params: lsp_types::PartialResultParams::default(),
     };
     let ranges = provide_folding_ranges(&db, &params);
     assert!(ranges.is_some());
