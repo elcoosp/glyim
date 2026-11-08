@@ -72,7 +72,7 @@ fn inference_param_type() {
         items,
         bodies,
         body_owners,
-        interner: Default::default(),
+        interner: glyim_core::Interner::default(),
     };
 
     let ctx = make_ty_ctx();
