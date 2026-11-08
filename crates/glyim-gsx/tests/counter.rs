@@ -70,7 +70,7 @@ fn counter_state() -> Value {
 }
 
 fn compile_counter() -> ViewRuntime {
-    let wrapped = format!("fn CounterView(s: &Counter) -> View {{ {} }}", COUNTER_VIEW);
+    let wrapped = format!("fn CounterView(s: &Counter) -> View {{ {COUNTER_VIEW} }}");
     let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
     assert!(
         parsed.diagnostics.is_empty(),
@@ -245,7 +245,7 @@ fn counter_history_region_reconciles() {
 /// G17: the stream flavor compiles NO patch machinery at all.
 #[test]
 fn counter_stream_flavor_has_no_patches() {
-    let wrapped = format!("fn CounterView(s: &Counter) -> View {{ {} }}", COUNTER_VIEW);
+    let wrapped = format!("fn CounterView(s: &Counter) -> View {{ {COUNTER_VIEW} }}");
     let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
     let g = ast::gsx_from_parse(&parsed);
     let schemas = SchemaRegistry::standard();
