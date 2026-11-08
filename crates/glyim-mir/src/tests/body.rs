@@ -27,7 +27,7 @@ fn dummy_has_unreachable_terminator() {
     let bb0 = BasicBlockIdx::from_raw(0);
     match &body.basic_blocks[bb0].terminator.kind {
         TerminatorKind::Unreachable => {}
-        other => panic!("Expected Unreachable, got {:?}", other),
+        other => panic!("Expected Unreachable, got {other:?}"),
     }
 }
 
@@ -87,7 +87,7 @@ fn body_basic_blocks_mutable() {
     assert_eq!(body.basic_blocks.len(), 2);
     match &body.basic_blocks[bb1].terminator.kind {
         TerminatorKind::Return => {}
-        other => panic!("Expected Return, got {:?}", other),
+        other => panic!("Expected Return, got {other:?}"),
     }
 }
 
