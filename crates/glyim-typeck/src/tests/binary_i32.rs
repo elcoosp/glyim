@@ -65,7 +65,7 @@ fn binary_i32_add_ok() {
         items,
         bodies,
         body_owners,
-        interner: Default::default(),
+        interner: glyim_core::Interner::default(),
     };
 
     let ctx = make_ty_ctx();
@@ -77,7 +77,7 @@ fn binary_i32_add_ok() {
 
 /// Tier 6.4: `TypeckResult::expr_ty` must return the real, resolved type of a
 /// checked expression (not `None`, and not the old `#[cfg(test)]`-only
-/// hardcoded `I32`). The binary-add expression (ExprId 2 in this fixture)
+/// hardcoded `I32`). The binary-add expression (`ExprId` 2 in this fixture)
 /// type-checks as `i32`.
 #[test]
 fn expr_ty_returns_resolved_type() {
@@ -135,7 +135,7 @@ fn expr_ty_returns_resolved_type() {
         items,
         bodies,
         body_owners,
-        interner: Default::default(),
+        interner: glyim_core::Interner::default(),
     };
 
     let ctx = make_ty_ctx();
