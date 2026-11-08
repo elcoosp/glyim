@@ -330,8 +330,7 @@ fn test_program_runner_kills_child_on_timeout() {
     // child would otherwise sleep. Allow generous slack for CI slowness.
     assert!(
         elapsed < std::time::Duration::from_secs(10),
-        "child was not killed on timeout (elapsed {:?})",
-        elapsed
+        "child was not killed on timeout (elapsed {elapsed:?})",
     );
 }
 
@@ -384,8 +383,7 @@ fn test_pipeline_compiler_surfaces_mir_artifacts() {
     let out = &calls[0].output_path;
     assert!(
         out.to_string_lossy().contains("777.o"),
-        "expected per-file temp path, got {:?}",
-        out
+        "expected per-file temp path, got {out:?}",
     );
 }
 
@@ -427,8 +425,7 @@ fn test_run_pass_strategy_executes_provided_executable() {
     );
     assert!(
         matches!(outcome, crate::harness::executor::TestOutcome::Passed),
-        "run-pass with /bin/echo should pass, got {:?}",
-        outcome
+        "run-pass with /bin/echo should pass, got {outcome:?}",
     );
 }
 
@@ -467,8 +464,7 @@ fn test_run_pass_strategy_no_executable_fails() {
                 reason: crate::FailureReason::CompilationFailed { .. }
             }
         ),
-        "run-pass with no exe must fail, got {:?}",
-        outcome
+        "run-pass with no exe must fail, got {outcome:?}",
     );
 }
 
@@ -525,12 +521,9 @@ fn test_run_parallel_collects_results_with_progress_reporting() {
     let tests = vec![mk("alpha"), mk("beta"), mk("gamma")];
 
     let executor = TestExecutor::new(
-        std::time::Duration::from_secs(30),
         false, // bless
         false, // no_skip
-        false, // verbose
-        4,
-        false, // frontend-only compiler (no LLVM needed)
+        4, false, // frontend-only compiler (no LLVM needed)
     );
 
     let results = executor.run_parallel(&tests);
