@@ -37,38 +37,62 @@ use std::rc::Rc;
 pub enum PatchOp {
     /// `host.set_text(node, fmt(expr))`.
     SetText {
+        /// `Slot`.
         slot: usize,
+        /// `Expr`.
         expr: crate::expr::Expr,
+        /// `Node`.
         node: NodeId,
     },
     /// `host.set_prop(node, prop, v)` with the compile-time escaper (G6).
     SetProp {
+        /// `Slot`.
         slot: usize,
+        /// `Expr`.
         expr: crate::expr::Expr,
+        /// `Node`.
         node: NodeId,
+        /// `Prop`.
         prop: String,
+        /// `Escape`.
         escape: EscapeCtx,
         /// §7.9: bind patches suppress the echo into the same input.
         suppress_echo: bool,
     },
     /// class toggle: add/remove the class bit.
     ToggleClass {
+        /// `Slot`.
         slot: usize,
+        /// `Expr`.
         expr: crate::expr::Expr,
+        /// `Node`.
         node: NodeId,
+        /// `Class`.
         class: String,
     },
-    /// style: set_prop + invalidate(Layout) (G5).
+    /// style: `set_prop` + `invalidate(Layout)` (G5).
     SetStyle {
+        /// `Slot`.
         slot: usize,
+        /// `Expr`.
         expr: crate::expr::Expr,
+        /// `Node`.
         node: NodeId,
+        /// `Prop`.
         prop: String,
     },
     /// Structural update of a region (§6.3): keyed reconcile / arm switch.
-    RegionPatch { region: usize, node: NodeId },
+    RegionPatch {
+        /// Region.
+        region: usize,
+        /// Node.
+        node: NodeId,
+    },
     /// The single terminal `host.invalidate(max class)` (G5).
-    Invalidate { class: Invalidation },
+    Invalidate {
+        /// Class.
+        class: Invalidation,
+    },
 }
 
 /// One mutation-specialized patch function (§7.5).
@@ -269,7 +293,7 @@ pub fn build_msps(vir: &Vir, enc: &Encoded) -> Msp {
                 // G5: one terminal invalidate(max class).
                 ops.push(PatchOp::Invalidate { class: max_class });
                 patches.push(PatchFn {
-                    name: format!("patch_W{}", idx),
+                    name: format!("patch_W{idx}"),
                     write_set: ws.clone(),
                     ops,
                     mask_bit: idx as u32,
@@ -335,7 +359,7 @@ pub struct ViewRuntime {
     pub vir: Vir,
     /// Encoded skeleton.
     pub enc: Encoded,
-    /// MSPs.
+    /// `MSPs`.
     pub msp: Msp,
     /// The parent node the view mounts into.
     pub parent: NodeId,
@@ -1025,7 +1049,7 @@ mod tests {
         );
     }
 
-    /// §7.5: dispatch = handler(&mut s, e); patch_W(...) — exactly one
+    /// §7.5: dispatch = `handler(&mut s, e)`; `patch_W(...)` — exactly one
     /// host call per updated slot, straight-line, no diffing.
     #[test]
     fn dispatch_updates_only_intersecting_slots() {
@@ -1067,7 +1091,7 @@ mod tests {
         let _ = &mut state;
     }
 
-    /// §7.5 fallback: batched events OR their masks and use patch_mask.
+    /// §7.5 fallback: batched events OR their masks and use `patch_mask`.
     #[test]
     fn batched_events_use_masks() {
         let mut rt = compile(concat!(
@@ -1119,7 +1143,7 @@ mod tests {
         );
         match &state {
             Value::Obj(f) => {
-                assert_eq!(f.borrow().get("name").cloned().unwrap().display(), "typed")
+                assert_eq!(f.borrow().get("name").cloned().unwrap().display(), "typed");
             }
             _ => panic!(),
         }
@@ -1190,7 +1214,7 @@ mod tests {
             matches!(
                 last,
                 PatchOp::Invalidate {
-                    class: Invalidation::Layout
+                    class: Invalidation::Layout,
                 }
             ),
             "style writes invalidate Layout (G5), got {last:?}"
