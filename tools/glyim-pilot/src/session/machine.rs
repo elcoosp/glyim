@@ -31,7 +31,7 @@ const VALID_TRANSITIONS: &[(StreamStatus, StreamStatus)] = &[
     (StreamStatus::Paused, StreamStatus::Seeding),
 ];
 
-/// TransitionValidator.
+/// `TransitionValidator`.
 pub struct TransitionValidator;
 
 impl TransitionValidator {
