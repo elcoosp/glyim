@@ -23,14 +23,14 @@ fn compile(src: &str) -> CompileOutput {
 
 #[test]
 fn generic_fn_typechecks_and_lowers() {
-    let src = r#"
+    let src = r"
         fn id<T>(x: T) -> T { x }
         fn main() -> i32 {
             let a = id(40);
             let b = id(2);
             a + b
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
@@ -40,13 +40,13 @@ fn generic_struct_resolves_with_args() {
     // `struct Pair<T, U>` carries generic params; instantiating `Pair { .. }`
     // must produce a well-formed ADT type (plan unstub-5 P1.4). The element
     // types are inferred from the struct literal fields.
-    let src = r#"
+    let src = r"
         struct Pair<T, U> { first: T, second: U }
         fn main() -> i32 {
             let p = Pair { first: 1, second: true };
             p.first
         }
-    "#;
+    ";
     let output = compile(src);
     assert_no_errors(&output.diagnostics);
 }
@@ -59,13 +59,13 @@ fn generic_param_bounds_are_captured() {
     // lowering / typeck and that the crate still compiles end-to-end. Solving
     // the bound (projection of `F::Output`, dispatch on `F: MyFuture`) is the
     // tracked P5 gap; see `KNOWN_GAPS.md` Phase 5.
-    let src = r#"
+    let src = r"
         trait MyFuture { type Output; fn poll(&mut self) -> i32; }
         struct AddOne { x: i32 }
         impl MyFuture for AddOne { type Output = i32; fn poll(&mut self) -> i32 { self.x } }
         fn block_on<F: MyFuture>(mut f: F) -> i32 { f.poll() }
         fn main() -> i32 { let f = AddOne { x: 7 }; block_on(f) }
-    "#;
+    ";
     let output = compile(src);
     // Expect the P5 blocker diagnostics (the bound is captured but not yet
     // solved); assert the crate lowered without a hard internal error.
@@ -73,7 +73,7 @@ fn generic_param_bounds_are_captured() {
         !output
             .diagnostics
             .iter()
-            .any(|d| format!("{}", d).contains("internal error")),
+            .any(|d| format!("{d}").contains("internal error")),
         "generic bound lowered without internal error"
     );
 }
@@ -88,19 +88,19 @@ fn concrete_associated_type_projection_resolves() {
     // before a fn that names `AddOne::Output`); that ordering lives in the
     // item-pass restructure tracked in KNOWN_GAPS. Here we assert the crate
     // lowers without a hard internal error.
-    let src = r#"
+    let src = r"
         trait MyFuture { type Output; fn poll(&mut self) -> i32; }
         struct AddOne { x: i32 }
         impl MyFuture for AddOne { type Output = i32; fn poll(&mut self) -> i32 { self.x } }
         fn take_output(x: AddOne::Output) -> AddOne::Output { x }
         fn main() -> i32 { 7 }
-    "#;
+    ";
     let output = compile(src);
     assert!(
         !output
             .diagnostics
             .iter()
-            .any(|d| format!("{}", d).contains("internal error")),
+            .any(|d| format!("{d}").contains("internal error")),
         "concrete assoc-type projection lowered without internal error"
     );
 }
