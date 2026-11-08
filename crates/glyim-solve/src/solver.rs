@@ -10,40 +10,40 @@ use glyim_type::*;
 /// generics with `T: Copy` / `T: Sized` / `T: Send` / `T: Sync` barely work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BuiltinTrait {
-    /// Variant.
+    /// `Variant`.
     Copy,
-    /// Variant.
+    /// `Variant`.
     Sized,
-    /// Variant.
+    /// `Variant`.
     Send,
-    /// Variant.
+    /// `Variant`.
     Sync,
-    /// Variant.
+    /// `Variant`.
     Unpin,
 }
 
 /// Information returned by the trait solver for `Iterator::next`.
 #[derive(Clone, Debug)]
 pub struct SolverIteratorNextInfo {
-    /// Struct.
+    /// `Struct`.
     pub fn_def_id: glyim_core::def_id::FnDefId,
-    /// Struct.
+    /// `Struct`.
     pub fn_substs: glyim_type::Substitution,
-    /// Struct.
+    /// `Struct`.
     pub fn_ty: glyim_type::Ty,
-    /// Struct.
+    /// `Struct`.
     pub option_ty: glyim_type::Ty,
-    /// Struct.
+    /// `Struct`.
     pub discr_ty: glyim_type::Ty,
-    /// Struct.
+    /// `Struct`.
     pub ref_iter_ty: glyim_type::Ty,
 }
 
-/// TraitSolver.
+/// `TraitSolver`.
 pub trait TraitSolver {
-    /// can_prove.
+    /// `can_prove`.
     fn can_prove(&mut self, ctx: &TyCtx, predicate: &TraitPredicate) -> SolverResult;
-    /// evaluate_predicate.
+    /// `evaluate_predicate`.
     fn evaluate_predicate(&mut self, ctx: &TyCtx, predicate: &Predicate) -> SolverResult;
     /// Get the `Iterator::next` method info for a given iterator type.
     fn iterator_next_info(
@@ -55,17 +55,17 @@ pub trait TraitSolver {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-/// SolverResult.
+/// `SolverResult`.
 pub enum SolverResult {
-    /// Variant.
+    /// `Variant`.
     Proven,
-    /// Variant.
+    /// `Variant`.
     Ambiguous,
-    /// Variant.
+    /// `Variant`.
     DefiniteNo,
 }
 
-/// TraitContext.
+/// `TraitContext`.
 pub struct TraitContext {
     trait_defs: Vec<TraitDef>,
     impl_defs: Vec<ImplDef>,
@@ -74,32 +74,32 @@ pub struct TraitContext {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-/// TraitDef.
+/// `TraitDef`.
 pub struct TraitDef {
-    /// Struct.
+    /// `Struct`.
     pub def_id: TraitDefId,
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
-    /// Struct.
+    /// `Struct`.
     pub associated_types: Vec<Name>,
-    /// Struct.
+    /// `Struct`.
     pub predicates: Vec<Predicate>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-/// ImplDef.
+/// `ImplDef`.
 pub struct ImplDef {
-    /// Struct.
+    /// `Struct`.
     pub def_id: ImplDefId,
-    /// Struct.
+    /// `Struct`.
     pub trait_ref: TraitRef,
-    /// Struct.
+    /// `Struct`.
     pub predicates: Vec<Predicate>,
 }
 
-#[allow(dead_code)]
 impl TraitContext {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             trait_defs: Vec::new(),
@@ -108,11 +108,11 @@ impl TraitContext {
             builtin_next_fn_id: None,
         }
     }
-    /// register_trait.
+    /// `register_trait`.
     pub fn register_trait(&mut self, def: TraitDef) {
         self.trait_defs.push(def);
     }
-    /// register_impl.
+    /// `register_impl`.
     pub fn register_impl(&mut self, def: ImplDef) {
         self.impl_defs.push(def);
     }
@@ -125,10 +125,11 @@ impl TraitContext {
     }
 
     /// If `def_id` names a builtin/lang trait, return its kind.
+    #[must_use]
     pub fn builtin_trait_kind(&self, def_id: TraitDefId) -> Option<BuiltinTrait> {
         self.lang_traits.get(&def_id).copied()
     }
-    /// impls_of_trait.
+    /// `impls_of_trait`.
     pub fn impls_of_trait(&self, trait_id: TraitDefId) -> impl Iterator<Item = &ImplDef> {
         self.impl_defs
             .iter()
@@ -145,6 +146,7 @@ impl TraitContext {
 
     /// Resolve a trait `DefId` back to its registered name (used by the solver
     /// to recognize builtin/lang traits such as `Copy`/`Send`/`Sync`/`Sized`).
+    #[must_use]
     pub fn trait_name(&self, def_id: TraitDefId) -> Option<Name> {
         self.trait_defs
             .iter()
@@ -195,7 +197,7 @@ impl TraitContext {
         // A full check would require deep unification with TyCtx, which is not available here.
         a.substs == b.substs
     }
-    /// Set the FnDefId of the `Iterator::next` method for built-in support.
+    /// Set the `FnDefId` of the `Iterator::next` method for built-in support.
     pub fn set_builtin_iterator_next(&mut self, fn_def_id: glyim_core::def_id::FnDefId) {
         self.builtin_next_fn_id = Some(fn_def_id);
     }
@@ -206,18 +208,19 @@ impl Default for TraitContext {
     }
 }
 
-/// SimpleTraitSolver.
+/// `SimpleTraitSolver`.
 pub struct SimpleTraitSolver<'a> {
     trait_ctx: &'a TraitContext,
 }
 
 impl<'a> SimpleTraitSolver<'a> {
     /// new.
+    #[must_use]
     pub fn new(trait_ctx: &'a TraitContext) -> Self {
         Self { trait_ctx }
     }
 
-    /// Attempt to match the predicate's TraitRef against an impl's TraitRef.
+    /// Attempt to match the predicate's `TraitRef` against an impl's `TraitRef`.
     fn matches_trait_ref(
         &self,
         ctx: &TyCtx,
@@ -543,8 +546,7 @@ pub(crate) fn can_coerce(ctx: &TyCtx, a: Ty, b: Ty) -> bool {
                 .closure_adt(*closure_id)
                 .and_then(|adt_id| ctx.adt_def(adt_id))
                 .and_then(|adt| adt.variants.first())
-                .map(|v| v.fields.len())
-                .unwrap_or(0);
+                .map_or(0, |v| v.fields.len());
             if capture_count != 0 {
                 return false;
             }
