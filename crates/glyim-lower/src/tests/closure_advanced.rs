@@ -152,8 +152,7 @@ fn closure_with_by_ref_capture() {
     assert_eq!(
         closure_agg,
         Some(2),
-        "expected closure Aggregate with Fn + 1 capture, got {:?}",
-        closure_agg
+        "expected closure Aggregate with Fn + 1 capture, got {closure_agg:?}"
     );
 }
 
@@ -229,8 +228,7 @@ fn closure_with_by_value_capture() {
     assert_eq!(
         closure_agg,
         Some(2),
-        "expected closure Aggregate with Fn + 1 by-value capture, got {:?}",
-        closure_agg
+        "expected closure Aggregate with Fn + 1 by-value capture, got {closure_agg:?}"
     );
 }
 
@@ -324,8 +322,7 @@ fn closure_with_multiple_captures() {
     assert_eq!(
         closure_agg,
         Some(3),
-        "expected closure Aggregate with Fn + 2 captures, got {:?}",
-        closure_agg
+        "expected closure Aggregate with Fn + 2 captures, got {closure_agg:?}"
     );
 }
 
