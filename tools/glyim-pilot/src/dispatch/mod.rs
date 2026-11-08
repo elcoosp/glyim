@@ -1,6 +1,6 @@
-/// provider_pool.
+/// `provider_pool`.
 pub mod provider_pool;
-/// rate_limit.
+/// `rate_limit`.
 pub mod rate_limit;
 /// wave.
 pub mod wave;
