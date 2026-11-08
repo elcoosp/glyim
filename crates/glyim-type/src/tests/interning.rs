@@ -49,7 +49,7 @@ fn mk_ref_creates_ref_roundtrip() {
             assert_eq!(*inner, Ty::BOOL);
             assert_eq!(*mutability, Mutability::Mut);
         }
-        other => panic!("expected Ref, got {:?}", other),
+        other => panic!("expected Ref, got {other:?}"),
     }
 }
 
@@ -67,7 +67,7 @@ fn mk_ref_with_not_mutability() {
             assert_eq!(*inner, Ty::UNIT);
             assert_eq!(*mutability, Mutability::Not);
         }
-        other => panic!("expected Ref, got {:?}", other),
+        other => panic!("expected Ref, got {other:?}"),
     }
 }
 
@@ -85,7 +85,7 @@ fn mk_adt_with_empty_substitution() {
             assert_eq!(adt_id.to_raw(), 42);
             assert!(substs.is_empty());
         }
-        other => panic!("expected Adt, got {:?}", other),
+        other => panic!("expected Adt, got {other:?}"),
     }
 }
 
@@ -112,7 +112,7 @@ fn mk_adt_with_substitution_containing_ty_args() {
                 panic!("expected Ty arg at index 1");
             }
         }
-        other => panic!("expected Adt, got {:?}", other),
+        other => panic!("expected Adt, got {other:?}"),
     }
 }
 
@@ -135,7 +135,7 @@ fn mk_tuple_with_multiple_tys() {
             let args = ctx.substitution_args(*substs);
             assert!(matches!(&args[0], GenericArg::Ty(t) if *t == Ty::BOOL));
         }
-        other => panic!("expected Tuple, got {:?}", other),
+        other => panic!("expected Tuple, got {other:?}"),
     }
 }
 
@@ -165,7 +165,7 @@ fn mk_fn_ptr_with_fn_sig() {
             assert_eq!(input_args.len(), 1);
             assert!(matches!(&input_args[0], GenericArg::Ty(t) if *t == Ty::BOOL));
         }
-        other => panic!("expected FnPtr, got {:?}", other),
+        other => panic!("expected FnPtr, got {other:?}"),
     }
 }
 
@@ -224,7 +224,7 @@ fn mk_slice_ty() {
     });
     match ctx.ty_kind(slice_ty) {
         TyKind::Slice(inner) => assert_eq!(*inner, Ty::BOOL),
-        other => panic!("expected Slice, got {:?}", other),
+        other => panic!("expected Slice, got {other:?}"),
     }
 }
 
@@ -239,6 +239,6 @@ fn mk_raw_ptr_ty() {
             assert_eq!(*inner, Ty::BOOL);
             assert_eq!(*mutability, Mutability::Not);
         }
-        other => panic!("expected RawPtr, got {:?}", other),
+        other => panic!("expected RawPtr, got {other:?}"),
     }
 }
