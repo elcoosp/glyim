@@ -4,11 +4,12 @@ use glyim_hir::*;
 
 #[test]
 fn return_expression() {
-    let mut exprs = Vec::new();
-    exprs.push(Expr::Literal(Literal::Int(42, None)));
-    exprs.push(Expr::Return {
-        value: Some(ExprId::from_raw(0)),
-    });
+    let exprs = vec![
+        Expr::Literal(Literal::Int(42, None)),
+        Expr::Return {
+            value: Some(ExprId::from_raw(0)),
+        },
+    ];
 
     let (hir, body_id) = make_single_body_hir(exprs);
     let thir_body = typeck_single_body(&hir, body_id);
