@@ -21,36 +21,70 @@ pub type NodeId = u32;
 #[derive(Debug, Clone, PartialEq)]
 pub enum HostOp {
     /// `create(tag)` → node.
-    Create { node: NodeId, tag: u32 },
+    Create {
+        /// Node.
+        node: NodeId,
+        /// Tag.
+        tag: u32,
+    },
     /// `set_text(node, s)`.
-    SetText { node: NodeId, text: String },
+    SetText {
+        /// Node.
+        node: NodeId,
+        /// Text.
+        text: String,
+    },
     /// `set_prop(node, prop, value)` — `skip` marks echo suppression (§7.9).
     SetProp {
+        /// `Node`.
         node: NodeId,
+        /// `Prop`.
         prop: String,
+        /// `Value`.
         value: String,
+        /// Skip If Same.
         skip_if_same: bool,
     },
     /// `insert(parent, child)` — tree assembly.
-    Insert { parent: NodeId, child: NodeId },
+    Insert {
+        /// Parent.
+        parent: NodeId,
+        /// Child.
+        child: NodeId,
+    },
     /// `remove(node)`.
-    Remove { node: NodeId },
+    Remove {
+        /// Node.
+        node: NodeId,
+    },
     /// `move_before(parent, child, before)` — keyed reorder (G11).
     MoveBefore {
+        /// `Parent`.
         parent: NodeId,
+        /// `Child`.
         child: NodeId,
+        /// `Before`.
         before: Option<NodeId>,
     },
     /// `listen(node, ev, handler_id)` — one-time at mount (§6.1 Event slot).
     Listen {
+        /// `Node`.
         node: NodeId,
+        /// `Event`.
         event: String,
+        /// Handler Id.
         handler_id: u32,
     },
     /// `invalidate(class)` — one per patch, max class (G5).
-    Invalidate { class: crate::schema::Invalidation },
+    Invalidate {
+        /// Class.
+        class: crate::schema::Invalidation,
+    },
     /// `instantiate(&BLUEPRINT)` — the bulk fast path (G1).
-    Instantiate { ops: usize },
+    Instantiate {
+        /// Ops.
+        ops: usize,
+    },
 }
 
 /// The host abstraction (§5.4). Node/Event are plain ids for v0 (finding
@@ -305,7 +339,7 @@ mod tests {
     }
 
     /// §7.9: echo suppression — a bind patch that writes the value the host
-    /// already holds records NO set_prop (no cursor-jump bug class).
+    /// already holds records NO `set_prop` (no cursor-jump bug class).
     #[test]
     fn echo_suppression() {
         let mut h = HeadlessHost::new();
@@ -362,7 +396,7 @@ mod tests {
     }
 
     /// §8.1: static subtree update cost is 0 — nothing visits it. The
-    /// HeadlessHost is the assertion point: after a patch dispatch, only the
+    /// `HeadlessHost` is the assertion point: after a patch dispatch, only the
     /// patched slots appear in the op log.
     #[test]
     fn static_subtree_never_visited() {
