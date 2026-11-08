@@ -9,7 +9,7 @@ fn parse_no_errors(source: &str) {
         .iter()
         .filter(|d| d.is_error() || d.message.contains("STUB"))
         .collect();
-    assert!(errors.is_empty(), "unexpected diagnostics: {:?}", errors);
+    assert!(errors.is_empty(), "unexpected diagnostics: {errors:?}");
 }
 
 #[test]
@@ -81,8 +81,7 @@ fn labeled_loop_parses_with_expected_errors() {
     let errors: Vec<_> = result.diagnostics.iter().filter(|d| d.is_error()).collect();
     assert!(
         errors.is_empty(),
-        "labeled loop must parse cleanly, got: {:?}",
-        errors
+        "labeled loop must parse cleanly, got: {errors:?}"
     );
 }
 
@@ -129,7 +128,7 @@ fn parse_and_collect(source: &str) -> glyim_syntax::SyntaxNode {
     let result = parse_to_syntax(source, file_id);
     // No errors expected for these tests
     let errors: Vec<_> = result.diagnostics.iter().filter(|d| d.is_error()).collect();
-    assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+    assert!(errors.is_empty(), "unexpected errors: {errors:?}");
     result.root
 }
 
