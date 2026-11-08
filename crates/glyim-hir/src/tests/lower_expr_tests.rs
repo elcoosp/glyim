@@ -13,11 +13,7 @@ fn lower_source(source: &str) -> TestContext {
     let root = trace.parse_tree.unwrap();
     let mut interner = Interner::new();
     let (hir, diags) = lower_crate_for_pipeline(&root, &mut interner);
-    assert!(
-        diags.is_empty(),
-        "Lowering produced diagnostics: {:?}",
-        diags
-    );
+    assert!(diags.is_empty(), "Lowering produced diagnostics: {diags:?}");
     TestContext { hir, interner }
 }
 
@@ -95,10 +91,10 @@ fn test_range_expression_lowering() {
 
 #[test]
 fn test_struct_expr_lowering() {
-    let source = r#"
+    let source = r"
         struct Point { x: i32, y: i32 }
         fn test() { let p = Point { x: 10, y: 20 }; }
-    "#;
+    ";
     let ctx = lower_source(source);
     let body_id = find_fn_body(&ctx, "test").expect("Function test not found");
     let struct_expr_id = find_expr_in_body(&ctx.hir, body_id, |e| matches!(e, Expr::Struct { .. }));
@@ -146,60 +142,55 @@ fn has_missing_field_error(diags: &[GlyimDiagnostic]) -> bool {
 
 #[test]
 fn missing_field_without_spread_is_error() {
-    let source = r#"
+    let source = r"
         struct Point { x: i32, y: i32 }
         fn test() { let p = Point { x: 10 }; }
-    "#;
+    ";
     let (_hir, _interner, diags) = lower_source_diags(source);
     assert!(
         has_missing_field_error(&diags),
-        "omitting field `y` without `..base` must be a hard error; diags={:?}",
-        diags
+        "omitting field `y` without `..base` must be a hard error; diags={diags:?}"
     );
     // The diagnostic must name the missing field(s).
     assert!(
-        diags.iter().any(|d| d.message.contains("y")),
-        "diagnostic should name the missing field `y`; diags={:?}",
-        diags
+        diags.iter().any(|d| d.message.contains('y')),
+        "diagnostic should name the missing field `y`; diags={diags:?}"
     );
 }
 
 #[test]
 fn missing_field_with_spread_compiles() {
-    let source = r#"
+    let source = r"
         struct Point { x: i32, y: i32 }
         fn test() {
             let base = Point { x: 1, y: 2 };
             let p = Point { x: 10, ..base };
         }
-    "#;
+    ";
     let (_hir, _interner, diags) = lower_source_diags(source);
     assert!(
         !has_missing_field_error(&diags),
-        "missing field with `..base` must NOT be an error; diags={:?}",
-        diags
+        "missing field with `..base` must NOT be an error; diags={diags:?}"
     );
 }
 
 #[test]
 fn missing_field_lists_all_missing_at_once() {
-    let source = r#"
+    let source = r"
         struct Triple { a: i32, b: i32, c: i32 }
         fn test() { let p = Triple { a: 1 }; }
-    "#;
+    ";
     let (_hir, _interner, diags) = lower_source_diags(source);
     assert!(
         has_missing_field_error(&diags),
-        "omitting `b` and `c` must be an error; diags={:?}",
-        diags
+        "omitting `b` and `c` must be an error; diags={diags:?}"
     );
     // Both missing fields must be reported in a single diagnostic.
     assert!(
         diags
             .iter()
-            .any(|d| d.message.contains("b") && d.message.contains("c")),
-        "diagnostic should list ALL missing fields (b, c); diags={:?}",
-        diags
+            .any(|d| d.message.contains('b') && d.message.contains('c')),
+        "diagnostic should list ALL missing fields (b, c); diags={diags:?}"
     );
 }
 
@@ -277,7 +268,7 @@ fn byte_literal_inside_cast_lowers_the_let_statement() {
 /// lowering legitimately changes (e.g. adds a desugaring pass).
 #[test]
 fn kitchen_sink_body_lowers_all_statements() {
-    let source = r#"
+    let source = r"
         fn clamp(x: i32, hi: i32) -> i32 {
             if x > hi { hi } else { x }
         }
@@ -296,7 +287,7 @@ fn kitchen_sink_body_lowers_all_statements() {
             }
             clamp(value, 100)
         }
-    "#;
+    ";
     let ctx = lower_source(source);
     let body_id = find_fn_body(&ctx, "test").expect("Function test not found");
     let body = &ctx.hir.bodies[body_id];
