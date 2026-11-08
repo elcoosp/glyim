@@ -12,8 +12,7 @@ fn t01_alloc_returns_non_null_aligned() {
     assert_eq!(
         addr % align,
         0,
-        "Pointer should be aligned to {} bytes",
-        align
+        "Pointer should be aligned to {align} bytes"
     );
     unsafe { glyim_dealloc(ptr, size, align) };
 }
