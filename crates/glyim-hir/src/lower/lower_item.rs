@@ -7,8 +7,8 @@ use glyim_span::Span;
 use glyim_syntax::{SyntaxKind, SyntaxNode};
 
 /// §3.5.30: detect whether a `fn` node was declared `unsafe`. The parser
-/// emits `KwUnsafe` as a *sibling* of the `FnDef` node (parse_item bumps
-/// the keyword before start_node), so we walk `prev_sibling_or_token`,
+/// emits `KwUnsafe` as a *sibling* of the `FnDef` node (`parse_item` bumps
+/// the keyword before `start_node`), so we walk `prev_sibling_or_token`,
 /// skipping trivia, and stop at the first non-trivia token. Same technique
 /// as the free-fn `is_unsafe` detection in the `ItemKind::Fn` lowering.
 pub(crate) fn detect_kw_unsafe_sibling(node: &SyntaxNode) -> bool {
@@ -243,7 +243,6 @@ pub(crate) fn collect_struct_fields(
     Some((name, fields))
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn lower_fn_def(
     node: &SyntaxNode,
     interner: &mut Interner,
@@ -552,7 +551,9 @@ pub(crate) fn lower_struct_def(
         }
         i += 1;
     }
-    if !has_fields {
+    if has_fields {
+        kind = StructKind::Record;
+    } else {
         let mut tuple_types = Vec::new();
         for child in node.children() {
             if child.kind() == SyntaxKind::TupleType {
@@ -563,7 +564,9 @@ pub(crate) fn lower_struct_def(
                 }
             }
         }
-        if !tuple_types.is_empty() {
+        if tuple_types.is_empty() {
+            kind = StructKind::Unit;
+        } else {
             for fty in tuple_types {
                 fields.push(Field {
                     name: interner.intern(""),
@@ -572,11 +575,7 @@ pub(crate) fn lower_struct_def(
                 });
             }
             kind = StructKind::Tuple;
-        } else {
-            kind = StructKind::Unit;
         }
-    } else {
-        kind = StructKind::Record;
     }
     let id = ItemId::from_raw(*item_id_counter);
     *item_id_counter += 1;
@@ -836,8 +835,7 @@ pub(crate) fn lower_impl_def(
         TypeRef::Path(p) => p
             .segments
             .last()
-            .map(|s| s.name)
-            .unwrap_or_else(|| interner.intern("impl")),
+            .map_or_else(|| interner.intern("impl"), |s| s.name),
         _ => interner.intern("impl"),
     };
 
@@ -884,9 +882,9 @@ pub(crate) fn lower_impl_def(
                         .join("::"),
                     _ => "?".into(),
                 };
-                format!("[{}]", i)
+                format!("[{i}]")
             }
-            other => format!("{:?}", other),
+            other => format!("{other:?}"),
         };
         eprintln!(
             "DBG_IMPL_SPAN: name={} self_ty_str=`{}` lo={} hi={}",
