@@ -83,7 +83,7 @@ fn operand_to_const(op: &Operand, locals: &BlockMap) -> Option<MirConst> {
         Operand::Constant(c) => Some(c.clone()),
         Operand::Copy(place) | Operand::Move(place) => {
             if place.projection.is_empty() {
-                locals.get(&place.local).and_then(|opt| opt.clone())
+                locals.get(&place.local).and_then(std::clone::Clone::clone)
             } else {
                 None
             }
@@ -165,10 +165,10 @@ fn evaluate_rvalue_to_const(
                         glyim_core::primitives::BinOp::Sub => lf - rf,
                         glyim_core::primitives::BinOp::Mul => lf * rf,
                         glyim_core::primitives::BinOp::Div => {
-                            if rf != 0.0 {
-                                lf / rf
-                            } else {
+                            if rf == 0.0 {
                                 0.0
+                            } else {
+                                lf / rf
                             }
                         }
                         glyim_core::primitives::BinOp::Eq => {
@@ -179,10 +179,10 @@ fn evaluate_rvalue_to_const(
                             }
                         }
                         glyim_core::primitives::BinOp::Ne => {
-                            if lf != rf {
-                                1.0
-                            } else {
+                            if lf == rf {
                                 0.0
+                            } else {
+                                1.0
                             }
                         }
                         glyim_core::primitives::BinOp::Lt => {
@@ -483,8 +483,8 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
     // second borrow of `body` alongside the mutable `basic_blocks` borrow.
     let local_tys: Vec<Ty> = body.locals.iter().map(|l| l.ty).collect();
 
-    for bb_idx in 0..num_blocks {
-        let Some(entry) = entry_maps[bb_idx].clone() else {
+    for (bb_idx, entry_map) in entry_maps.iter().enumerate() {
+        let Some(entry) = entry_map.clone() else {
             continue;
         };
         let block = &mut body.basic_blocks[BasicBlockIdx::from_raw(bb_idx as u32)];
@@ -570,7 +570,7 @@ mod tests {
                 assert!(matches!(elems[0].kind, MirConstKind::Int(1)));
                 assert!(matches!(elems[1].kind, MirConstKind::Int(2)));
             }
-            other => panic!("expected Aggregate, got {:?}", other),
+            other => panic!("expected Aggregate, got {other:?}"),
         }
     }
 
