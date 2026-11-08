@@ -21,7 +21,6 @@ use token_tree::{TokenTree, flatten_token_tree};
 static RECURSION_LIMIT: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
 
 /// Set the recursion limit for macro expansion.
-
 /// Get the current recursion limit, or the default 128.
 fn get_recursion_limit() -> u32 {
     *RECURSION_LIMIT.get().unwrap_or(&128)
@@ -265,14 +264,13 @@ impl<'a> ExpanderImpl<'a> {
                 // level) must be reparsed as items, or the wrapper's `fn`
                 // scaffolding swallows the result and the spliced items
                 // never appear.
-                let in_item_position = node
-                    .parent()
-                    .map(|p| matches!(p.kind(), SyntaxKind::SourceFile | SyntaxKind::Module))
-                    .unwrap_or(false);
+                let in_item_position = node.parent().is_some_and(|p| {
+                    matches!(p.kind(), SyntaxKind::SourceFile | SyntaxKind::Module)
+                });
                 let wrapped = if in_item_position {
                     token_text
                 } else {
-                    format!("fn __glyim_expanded() {{ {} }}", token_text)
+                    format!("fn __glyim_expanded() {{ {token_text} }}")
                 };
                 let parse_result = glyim_frontend::parse_to_syntax(&wrapped, FileId::BOGUS);
                 let reparsed_root = parse_result.root;
@@ -402,7 +400,7 @@ impl<'a> ExpanderImpl<'a> {
         builder.finish_node();
     }
 
-    /// Find the macro name in a MacroCall node.
+    /// Find the macro name in a `MacroCall` node.
     /// The macro name is the Ident token immediately before the `!` token.
     fn find_macro_name(node: &SyntaxNode) -> Option<String> {
         let mut last_ident: Option<String> = None;
@@ -544,9 +542,8 @@ impl<'a> ExpanderImpl<'a> {
                                 vec![GlyimDiagnostic::macro_error(
                                     call_site,
                                     format!(
-                                        "unbound metavariable `${}` in macro '{}' expansion; \
-                                         it is not captured by any matcher fragment",
-                                        unbound, name_str
+                                        "unbound metavariable `${unbound}` in macro '{name_str}' expansion; \
+                                         it is not captured by any matcher fragment"
                                     ),
                                 )],
                             );
@@ -562,7 +559,7 @@ impl<'a> ExpanderImpl<'a> {
             None,
             vec![GlyimDiagnostic::type_error(
                 call_site,
-                format!("no matching macro arm for macro '{}'", name_str),
+                format!("no matching macro arm for macro '{name_str}'"),
             )],
         )
     }
@@ -663,9 +660,10 @@ impl<'a> ExpanderImpl<'a> {
                 // file!() expands to the path of the source file (relative to
                 // the VFS path when available, else the file id).
                 let name = if let Some(vfs) = self.vfs {
-                    vfs.file_path(call_site.file)
-                        .map(|p| p.to_string_lossy().into_owned())
-                        .unwrap_or_else(|| format!("file_{}", call_site.file.to_raw()))
+                    vfs.file_path(call_site.file).map_or_else(
+                        || format!("file_{}", call_site.file.to_raw()),
+                        |p| p.to_string_lossy().into_owned(),
+                    )
                 } else if call_site.file.to_raw() == u32::MAX {
                     String::from("<bogus>")
                 } else {
@@ -677,7 +675,7 @@ impl<'a> ExpanderImpl<'a> {
                 // break the produced string literal (`"a"b"` → reparse
                 // garbage).
                 let escaped = name.replace('\\', "\\\\").replace('"', "\\\"");
-                let text = SmolStr::from(format!("\"{}\"", escaped));
+                let text = SmolStr::from(format!("\"{escaped}\""));
                 vec![TokenTree::Token(SyntaxKind::StringLit, text)]
             }
             BuiltinMacro::Line => {
@@ -707,7 +705,7 @@ impl<'a> ExpanderImpl<'a> {
                             // backslashes so an env value like `a"b` or
                             // `a\\b` doesn't corrupt the produced literal.
                             let escaped = val.replace('\\', "\\\\").replace('"', "\\\"");
-                            let lit = SmolStr::from(format!("\"{}\"", escaped));
+                            let lit = SmolStr::from(format!("\"{escaped}\""));
                             vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
                         }
                         Err(_) => {
@@ -715,7 +713,7 @@ impl<'a> ExpanderImpl<'a> {
                                 None,
                                 vec![GlyimDiagnostic::type_error(
                                     call_site,
-                                    format!("environment variable '{}' not found", var_name),
+                                    format!("environment variable '{var_name}' not found"),
                                 )],
                             );
                         }
@@ -742,7 +740,7 @@ impl<'a> ExpanderImpl<'a> {
                             Ok(val) => {
                                 // T170-PATCHED [MAC-7]: same escaping as env!.
                                 let escaped = val.replace('\\', "\\\\").replace('"', "\\\"");
-                                SmolStr::from(format!("Some(\"{}\")", escaped))
+                                SmolStr::from(format!("Some(\"{escaped}\")"))
                             }
                             Err(_) => SmolStr::from("None"),
                         };
@@ -771,10 +769,10 @@ impl<'a> ExpanderImpl<'a> {
                             path.to_path_buf()
                         } else if let Some(vfs) = self.vfs {
                             match vfs.file_path(call_site.file) {
-                                Some(calling) => calling
-                                    .parent()
-                                    .map(|dir| dir.join(path_str))
-                                    .unwrap_or_else(|| PathBuf::from(path_str)),
+                                Some(calling) => calling.parent().map_or_else(
+                                    || PathBuf::from(path_str),
+                                    |dir| dir.join(path_str),
+                                ),
                                 None => PathBuf::from(path_str),
                             }
                         } else {
@@ -783,7 +781,7 @@ impl<'a> ExpanderImpl<'a> {
                         match fs::read_to_string(&resolved) {
                             Ok(content) => {
                                 let escaped = content.replace('\\', "\\\\").replace('"', "\\\"");
-                                let lit = SmolStr::from(format!("\"{}\"", escaped));
+                                let lit = SmolStr::from(format!("\"{escaped}\""));
                                 vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
                             }
                             Err(e) => {
@@ -824,10 +822,10 @@ impl<'a> ExpanderImpl<'a> {
                             path.to_path_buf()
                         } else if let Some(vfs) = self.vfs {
                             match vfs.file_path(call_site.file) {
-                                Some(calling) => calling
-                                    .parent()
-                                    .map(|dir| dir.join(path_str))
-                                    .unwrap_or_else(|| PathBuf::from(path_str)),
+                                Some(calling) => calling.parent().map_or_else(
+                                    || PathBuf::from(path_str),
+                                    |dir| dir.join(path_str),
+                                ),
                                 None => PathBuf::from(path_str),
                             }
                         } else {
@@ -1003,7 +1001,7 @@ impl<'a> ExpanderImpl<'a> {
                         }
                     }
                 }
-                let lit = SmolStr::from(format!("\"{}\"", result));
+                let lit = SmolStr::from(format!("\"{result}\""));
                 vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
             }
             BuiltinMacro::ConcatIdents => {
@@ -1097,7 +1095,7 @@ impl<'a> ExpanderImpl<'a> {
                 let stringified = stringify_token_trees(inner);
                 // Escape backslashes and quotes for string literal representation
                 let escaped = stringified.replace('\\', "\\\\").replace('"', "\\\"");
-                let lit = SmolStr::from(format!("\"{}\"", escaped));
+                let lit = SmolStr::from(format!("\"{escaped}\""));
                 vec![TokenTree::Token(SyntaxKind::StringLit, lit)]
             }
             BuiltinMacro::Format => {
@@ -1152,8 +1150,7 @@ impl<'a> ExpanderImpl<'a> {
                     }
                     let mut fmt_remaining: String = fmt;
                     let mut rest_vec: Vec<TokenTree> = rest.to_vec();
-                    let mut out: Vec<TokenTree> = Vec::new();
-                    out.push(tt_tok(SyntaxKind::LBrace, "{"));
+                    let mut out: Vec<TokenTree> = vec![tt_tok(SyntaxKind::LBrace, "{")];
                     out.push(tt_tok(SyntaxKind::KwLet, "let"));
                     out.push(tt_tok(SyntaxKind::KwMut, "mut"));
                     out.push(tt_tok(SyntaxKind::Ident, "__glyim_fmt"));
@@ -1172,7 +1169,7 @@ impl<'a> ExpanderImpl<'a> {
                         if !before.is_empty() {
                             emit_push_str(
                                 &mut out,
-                                vec![tt_tok(SyntaxKind::StringLit, &format!("\"{}\"", before))],
+                                vec![tt_tok(SyntaxKind::StringLit, &format!("\"{before}\""))],
                             );
                         }
                         if matches!(
@@ -1222,7 +1219,7 @@ impl<'a> ExpanderImpl<'a> {
                             &mut out,
                             vec![tt_tok(
                                 SyntaxKind::StringLit,
-                                &format!("\"{}\"", fmt_remaining),
+                                &format!("\"{fmt_remaining}\""),
                             )],
                         );
                     }
