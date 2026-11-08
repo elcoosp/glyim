@@ -90,7 +90,7 @@ fn discriminant_returns_variant_index() {
     };
 
     let result = interp.run_body(&body);
-    assert!(result.is_ok(), "run_body failed: {:?}", result);
+    assert!(result.is_ok(), "run_body failed: {result:?}");
 
     let ret = interp.get_local_value(LocalIdx::from_raw(0));
     assert!(ret.is_some(), "return place not set");
@@ -162,7 +162,7 @@ fn discriminant_empty_aggregate_returns_zero() {
     };
 
     let result = interp.run_body(&body);
-    assert!(result.is_ok(), "run_body failed: {:?}", result);
+    assert!(result.is_ok(), "run_body failed: {result:?}");
 
     let ret = interp.get_local_value(LocalIdx::from_raw(0));
     assert!(ret.is_some(), "return place not set");
@@ -244,8 +244,8 @@ fn discriminant_non_aggregate_errors() {
     );
     match result.unwrap_err() {
         InterpError::Panic(msg) => {
-            assert!(msg.contains("non-aggregate"), "unexpected panic: {}", msg)
+            assert!(msg.contains("non-aggregate"), "unexpected panic: {msg}");
         }
-        other => panic!("expected Panic error, got: {:?}", other),
+        other => panic!("expected Panic error, got: {other:?}"),
     }
 }
