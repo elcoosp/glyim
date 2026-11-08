@@ -44,8 +44,7 @@ pub struct PmStr {
 
 impl PmStr {
     /// Borrow a Rust `str` as a [`PmStr`] (no copy; caller must keep alive).
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    #[allow(clippy::should_implement_trait)]
+    #[must_use]
     pub fn from_str(s: &str) -> PmStr {
         PmStr {
             ptr: s.as_ptr(),
@@ -57,6 +56,7 @@ impl PmStr {
     ///
     /// # Safety
     /// `ptr` must point to `len` valid UTF-8 bytes for the duration of the read.
+    #[must_use]
     pub unsafe fn to_string(&self) -> String {
         if self.ptr.is_null() || self.len == 0 {
             return String::new();
@@ -132,7 +132,6 @@ pub extern "C" fn pm_ts_alloc() -> PmTokenStream {
 /// host owns), and `token.text.ptr`/`token.text.len` must describe valid
 /// memory for the duration of the push.
 #[unsafe(no_mangle)]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn pm_ts_push(stream: *mut PmTokenStream, token: PmToken) {
     unsafe {
         let s = &mut *stream;
@@ -140,10 +139,11 @@ pub extern "C" fn pm_ts_push(stream: *mut PmTokenStream, token: PmToken) {
             let new_cap = (s.cap as usize).max(8) * 2;
             let new_layout = std::alloc::Layout::array::<PmToken>(new_cap).unwrap();
             let new_ptr = if s.ptr.is_null() {
-                std::alloc::alloc(new_layout) as *mut PmToken
+                std::alloc::alloc(new_layout).cast::<PmToken>()
             } else {
                 let old_layout = std::alloc::Layout::array::<PmToken>(s.cap as usize).unwrap();
-                std::alloc::realloc(s.ptr as *mut u8, old_layout, new_layout.size()) as *mut PmToken
+                std::alloc::realloc(s.ptr.cast::<u8>(), old_layout, new_layout.size())
+                    .cast::<PmToken>()
             };
             if new_ptr.is_null() {
                 std::alloc::handle_alloc_error(new_layout);
@@ -162,7 +162,6 @@ pub extern "C" fn pm_ts_push(stream: *mut PmTokenStream, token: PmToken) {
 /// `stream` must be a stream the host owns (returned by [`pm_ts_alloc`] and not
 /// yet freed).
 #[unsafe(no_mangle)]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn pm_ts_free(stream: *mut PmTokenStream) {
     unsafe {
         let s = &mut *stream;
@@ -170,7 +169,7 @@ pub extern "C" fn pm_ts_free(stream: *mut PmTokenStream) {
             && s.cap > 0
             && let Ok(layout) = std::alloc::Layout::array::<PmToken>(s.cap as usize)
         {
-            std::alloc::dealloc(s.ptr as *mut u8, layout);
+            std::alloc::dealloc(s.ptr.cast::<u8>(), layout);
         }
         s.ptr = ptr::null_mut();
         s.len = 0;
@@ -186,6 +185,7 @@ pub extern "C" fn pm_ts_free(stream: *mut PmTokenStream) {
 ///
 /// Only `kind` and `text` cross the boundary; span/mark are deliberately
 /// dropped (the expanded tokens get fresh spans at splice time).
+#[must_use]
 pub fn token_to_pm(kind: SyntaxKind, text: &str) -> PmToken {
     PmToken {
         kind: kind as u16,
@@ -198,6 +198,7 @@ pub fn token_to_pm(kind: SyntaxKind, text: &str) -> PmToken {
 /// # Safety
 /// `ts` must be a valid stream (either the host's own or one received from a
 /// dylib that the host owns).
+#[must_use]
 pub unsafe fn pm_to_tokens(ts: &PmTokenStream) -> Vec<(SyntaxKind, String)> {
     let mut out = Vec::with_capacity(ts.len as usize);
     if ts.ptr.is_null() {
@@ -239,6 +240,7 @@ pub struct Registry {
 
 impl Registry {
     /// Create an empty registry.
+    #[must_use]
     pub fn new() -> Registry {
         Registry::default()
     }
@@ -258,6 +260,7 @@ impl Registry {
     }
 
     /// True if `name` resolves to a registered proc macro.
+    #[must_use]
     pub fn contains(&self, name: &str) -> bool {
         self.macros.contains_key(name)
     }
@@ -266,6 +269,7 @@ impl Registry {
     ///
     /// Returns `None` if no such macro is registered (caller should fall back
     /// to declarative expansion or raise an "unresolved macro" diagnostic).
+    #[must_use]
     pub fn expand(
         &self,
         name: &str,
@@ -275,11 +279,13 @@ impl Registry {
     }
 
     /// Number of registered macros.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.macros.len()
     }
 
     /// Whether the registry is empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.macros.is_empty()
     }
@@ -384,12 +390,12 @@ pub fn load_cdylib(path: &str) -> Result<LoadedCrate, String> {
                         }
                     };
                     let pm_text = PmStr {
-                        ptr: ctext.as_ptr() as *const u8,
+                        ptr: ctext.as_ptr().cast::<u8>(),
                         len: real_len as u32,
                     };
                     owned.push(ctext);
                     pm_ts_push(
-                        &mut in_ts,
+                        &raw mut in_ts,
                         PmToken {
                             kind: *kind as u16,
                             text: pm_text,
@@ -397,10 +403,10 @@ pub fn load_cdylib(path: &str) -> Result<LoadedCrate, String> {
                     );
                 }
                 let mut out_ts = pm_ts_alloc();
-                (entry)(&mut in_ts, &mut out_ts);
+                (entry)(&raw mut in_ts, &raw mut out_ts);
                 let result = pm_to_tokens(&out_ts);
-                pm_ts_free(&mut in_ts);
-                pm_ts_free(&mut out_ts);
+                pm_ts_free(&raw mut in_ts);
+                pm_ts_free(&raw mut out_ts);
                 // `owned` is dropped here — after the dylib call has
                 // returned and `result` has been cloned into Rust-owned
                 // `String`s. No leak, no use-after-free.
@@ -412,7 +418,7 @@ pub fn load_cdylib(path: &str) -> Result<LoadedCrate, String> {
     }
 
     let mut holder = RegistryHolder(registry);
-    main_fn(&mut holder as *mut RegistryHolder, register_cb);
+    main_fn(&raw mut holder, register_cb);
     registry = holder.0;
 
     Ok(LoadedCrate {
@@ -454,7 +460,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(unused_unsafe)]
     fn abi_alloc_push_free_roundtrip() {
         let mut ts = pm_ts_alloc();
         let ctext = CString::new("example").unwrap();
@@ -462,15 +467,13 @@ mod tests {
             ptr: ctext.as_ptr() as *const u8,
             len: 7,
         };
-        unsafe {
-            pm_ts_push(
-                &mut ts,
-                PmToken {
-                    kind: SyntaxKind::Ident as u16,
-                    text: pm_text,
-                },
-            );
-        }
+        pm_ts_push(
+            &mut ts,
+            PmToken {
+                kind: SyntaxKind::Ident as u16,
+                text: pm_text,
+            },
+        );
         assert_eq!(ts.len, 1);
         unsafe {
             let tokens = pm_to_tokens(&ts);
