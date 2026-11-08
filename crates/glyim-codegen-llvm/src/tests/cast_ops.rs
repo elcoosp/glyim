@@ -21,8 +21,7 @@ fn test_int_to_int_trunc() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i32 305419896"),
-        "Expected 'store i32 305419896' in IR:\n{}",
-        ir
+        "Expected 'store i32 305419896' in IR:\n{ir}"
     );
 }
 
@@ -43,8 +42,7 @@ fn test_int_to_int_extend() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i64 42"),
-        "Expected 'store i64 42' in IR:\n{}",
-        ir
+        "Expected 'store i64 42' in IR:\n{ir}"
     );
 }
 
@@ -65,8 +63,7 @@ fn test_int_to_float() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store double") || ir.contains("sitofp"),
-        "Expected float store or sitofp in IR:\n{}",
-        ir
+        "Expected float store or sitofp in IR:\n{ir}"
     );
 }
 
@@ -100,8 +97,7 @@ fn test_float_to_int() {
     assert!(
         ir.contains("llvm.fptosi.sat.i32.f64"),
         "Expected saturating fptosi intrinsic in IR:
-{}",
-        ir
+{ir}"
     );
     // The store must target an i32 slot (result width); do not pin the
     // *source* of the stored value, since it can be either a folded
@@ -109,7 +105,6 @@ fn test_float_to_int() {
     assert!(
         ir.contains("store i32"),
         "Expected a 32-bit store in IR:
-{}",
-        ir
+{ir}"
     );
 }
