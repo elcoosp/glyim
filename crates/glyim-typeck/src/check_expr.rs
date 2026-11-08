@@ -1,4 +1,4 @@
-//! Expression checking logic for FnCtxt.
+//! Expression checking logic for `FnCtxt`.
 
 use std::collections::{HashMap, HashSet};
 
@@ -168,7 +168,7 @@ fn align_impl_param_subst(
     }
 }
 
-impl<'a> FnCtxt<'a> {
+impl FnCtxt<'_> {
     pub fn check_expr(&mut self, expr_id: ExprId) -> (thir::Expr, Ty) {
         if let Some(cached) = self.expr_cache.get(&expr_id) {
             return (cached.0.clone(), cached.1);
@@ -208,9 +208,9 @@ impl<'a> FnCtxt<'a> {
                             self.ctx.ty_kind(inner_ty),
                             TyKind::Int(_)
                                 | TyKind::Float(_)
-                                | TyKind::Infer(InferVar::Int(_))
-                                | TyKind::Infer(InferVar::Float(_))
-                                | TyKind::Infer(InferVar::Ty(_))
+                                | TyKind::Infer(
+                                    InferVar::Int(_) | InferVar::Float(_) | InferVar::Ty(_)
+                                )
                         ) {
                             inner_ty
                         } else {
@@ -234,8 +234,7 @@ impl<'a> FnCtxt<'a> {
                             TyKind::Bool
                                 | TyKind::Int(_)
                                 | TyKind::Uint(_)
-                                | TyKind::Infer(InferVar::Int(_))
-                                | TyKind::Infer(InferVar::Ty(_))
+                                | TyKind::Infer(InferVar::Int(_) | InferVar::Ty(_))
                         ) {
                             inner_ty
                         } else {
@@ -254,15 +253,14 @@ impl<'a> FnCtxt<'a> {
                         // dereference non-pointer type" even though Box's
                         // `Deref` is registered — the same registry `deref_ty`
                         // already consults for method autoref.
-                        match self.ctx.deref_ty(inner_ty) {
-                            Some(pointee) => pointee,
-                            None => {
-                                self.diagnostics.push(GlyimDiagnostic::type_error(
-                                    span,
-                                    "cannot dereference non-pointer type",
-                                ));
-                                Ty::ERROR
-                            }
+                        if let Some(pointee) = self.ctx.deref_ty(inner_ty) {
+                            pointee
+                        } else {
+                            self.diagnostics.push(GlyimDiagnostic::type_error(
+                                span,
+                                "cannot dereference non-pointer type",
+                            ));
+                            Ty::ERROR
                         }
                     }
                 };
@@ -497,8 +495,7 @@ impl<'a> FnCtxt<'a> {
                             let raw_out = self
                                 .ctx
                                 .fn_sig(fn_def_id)
-                                .map(|s| s.output)
-                                .unwrap_or_else(|| self.ctx.error_ty());
+                                .map_or_else(|| self.ctx.error_ty(), |s| s.output);
                             // The impl's stored output is
                             // `VecIntoIter<Param(0, T)>` (raw); substitute
                             // the Vec's concrete elem for Param(0).
@@ -528,10 +525,7 @@ impl<'a> FnCtxt<'a> {
                 };
                 // The `next` scan uses the into_iter output when present;
                 // otherwise it uses the iterable type as-is.
-                let effective_iter_ty = into_iter_info
-                    .as_ref()
-                    .map(|i| i.output_ty)
-                    .unwrap_or(iter_ty);
+                let effective_iter_ty = into_iter_info.as_ref().map_or(iter_ty, |i| i.output_ty);
                 // Phase 1 (GLYIM_DESTUB_PLAN): resolve the `Iterator::next`
                 // method for the iterable's concrete type here (where we hold a
                 // `&mut TyCtxMut` and the resolved `FnDefId` + signatures), and
@@ -569,8 +563,7 @@ impl<'a> FnCtxt<'a> {
                                 let raw_opt = self
                                     .ctx
                                     .fn_sig(fn_def_id)
-                                    .map(|s| s.output)
-                                    .unwrap_or_else(|| self.ctx.error_ty());
+                                    .map_or_else(|| self.ctx.error_ty(), |s| s.output);
                                 // For Vec-by-value, the raw output is
                                 // `Option<Param(0, T)>` (the impl's template);
                                 // substitute the Vec's concrete elem so the
@@ -1005,9 +998,7 @@ impl<'a> FnCtxt<'a> {
                             if !has_wildcard {
                                 let missing: Vec<String> = (0..adt.variants.len())
                                     .filter(|i| !covered.contains(&(*i as u32)))
-                                    .map(|i| {
-                                        self.ctx.name_str(adt.variants[i as usize].name).to_string()
-                                    })
+                                    .map(|i| self.ctx.name_str(adt.variants[i].name).to_string())
                                     .collect();
                                 if !missing.is_empty() {
                                     // Plan §5.1 / §5.2: carry each missing variant's
@@ -1021,18 +1012,18 @@ impl<'a> FnCtxt<'a> {
                                                 .filter(|i| !covered.contains(&(*i as u32))),
                                         )
                                         .map(|(name, vi)| {
-                                            let shape = match adt.variants[vi as usize].style {
+                                            let shape = match adt.variants[vi].style {
                                                 glyim_type::adt_def::VariantStyle::Unit => {
                                                     glyim_diag::VariantShape::Unit
                                                 }
                                                 glyim_type::adt_def::VariantStyle::Tuple => {
                                                     glyim_diag::VariantShape::Tuple(
-                                                        adt.variants[vi as usize].fields.len(),
+                                                        adt.variants[vi].fields.len(),
                                                     )
                                                 }
                                                 glyim_type::adt_def::VariantStyle::Struct => {
                                                     glyim_diag::VariantShape::Struct(
-                                                        adt.variants[vi as usize]
+                                                        adt.variants[vi]
                                                             .fields
                                                             .iter()
                                                             .map(|f| {
@@ -1095,8 +1086,7 @@ impl<'a> FnCtxt<'a> {
                             // §3.5.30 framework: honor the user-chosen lint
                             // level from `-A/-W/-D unsafe_fn_call`.
                             let msg = format!(
-                                "call to unsafe function `{}` outside of an `unsafe` block",
-                                display,
+                                "call to unsafe function `{display}` outside of an `unsafe` block",
                             );
                             match self.effective_lint_level(glyim_core::lint::LintId::UnsafeFnCall)
                             {
@@ -1272,7 +1262,7 @@ impl<'a> FnCtxt<'a> {
                 }
 
                 if let Some((trait_def_id, method_name)) = trait_call {
-                    let recv_ty = arg_exprs.first().map(|e| e.ty).unwrap_or(Ty::ERROR);
+                    let recv_ty = arg_exprs.first().map_or(Ty::ERROR, |e| e.ty);
                     if let Some((fn_def_id, substs)) =
                         self.resolve_trait_method_fn(recv_ty, trait_def_id, method_name, span)
                     {
@@ -1298,16 +1288,15 @@ impl<'a> FnCtxt<'a> {
                             },
                             ret_ty,
                         );
-                    } else {
-                        self.diagnostics.push(GlyimDiagnostic::type_error(
-                            span,
-                            format!(
-                                "no impl of trait method `{}` found for receiver type",
-                                self.ctx.name_str(method_name)
-                            ),
-                        ));
-                        return (thir::Expr::err(span), Ty::ERROR);
                     }
+                    self.diagnostics.push(GlyimDiagnostic::type_error(
+                        span,
+                        format!(
+                            "no impl of trait method `{}` found for receiver type",
+                            self.ctx.name_str(method_name)
+                        ),
+                    ));
+                    return (thir::Expr::err(span), Ty::ERROR);
                 }
 
                 let (is_fn_def, def_id, is_error) = match self.ctx.ty_kind(func_ty) {
@@ -1383,8 +1372,7 @@ impl<'a> FnCtxt<'a> {
                                 .closure_adt(*closure_id)
                                 .and_then(|adt_id| self.ctx.adt_def(adt_id))
                                 .and_then(|adt| adt.variants.first())
-                                .map(|v| v.fields.len())
-                                .unwrap_or(0);
+                                .map_or(0, |v| v.fields.len());
                             let param_count = inputs.len() - capture_count;
                             if args.len() != param_count {
                                 self.diagnostics.push(GlyimDiagnostic::type_error(
@@ -1473,8 +1461,7 @@ impl<'a> FnCtxt<'a> {
                                     // arguments and generic-self ADTs).
                                     if matches!(
                                         self.ctx.ty_kind(arg_expr.ty),
-                                        TyKind::Infer(InferVar::Int(_))
-                                            | TyKind::Infer(InferVar::Float(_))
+                                        TyKind::Infer(InferVar::Int(_) | InferVar::Float(_))
                                     ) && *param_ty != Ty::ERROR
                                     {
                                         self.unify(arg_expr.ty, *param_ty, span);
@@ -1573,14 +1560,9 @@ impl<'a> FnCtxt<'a> {
                             }
                             _ => Vec::new(),
                         };
-                        let arity = base_substs.len().max(
-                            subst
-                                .keys()
-                                .copied()
-                                .max()
-                                .map(|k| k as usize + 1)
-                                .unwrap_or(0),
-                        );
+                        let arity = base_substs
+                            .len()
+                            .max(subst.keys().copied().max().map_or(0, |k| k as usize + 1));
                         let new_substs = self.ctx.intern_substitution(
                             (0..arity)
                                 .map(|i| {
@@ -1719,8 +1701,7 @@ impl<'a> FnCtxt<'a> {
                             _ => "Other",
                         };
                         eprintln!(
-                            "[DISP3] method={} kind={} recv_ty={} expr_kind={}",
-                            mn, kind, rk, expr_kind,
+                            "[DISP3] method={mn} kind={kind} recv_ty={rk} expr_kind={expr_kind}",
                         );
                     }
                 }
@@ -1773,28 +1754,26 @@ impl<'a> FnCtxt<'a> {
                             // expected a thin `ptr`, producing a SIGBUS on
                             // arm64. Fix: wrap unless the pointee already
                             // matches.
-                            let pass_through = formal_first
-                                .map(|f| {
-                                    if f == recv_expr.ty {
-                                        return true;
-                                    }
-                                    match (self.ctx.ty_kind(f), self.ctx.ty_kind(recv_expr.ty)) {
-                                        (
-                                            TyKind::Ref(
-                                                _,
-                                                formal_inner,
-                                                glyim_core::primitives::Mutability::Not,
-                                            ),
-                                            TyKind::Ref(
-                                                _,
-                                                recv_inner,
-                                                glyim_core::primitives::Mutability::Mut,
-                                            ),
-                                        ) => formal_inner == recv_inner,
-                                        _ => false,
-                                    }
-                                })
-                                .unwrap_or(false);
+                            let pass_through = formal_first.is_some_and(|f| {
+                                if f == recv_expr.ty {
+                                    return true;
+                                }
+                                match (self.ctx.ty_kind(f), self.ctx.ty_kind(recv_expr.ty)) {
+                                    (
+                                        TyKind::Ref(
+                                            _,
+                                            formal_inner,
+                                            glyim_core::primitives::Mutability::Not,
+                                        ),
+                                        TyKind::Ref(
+                                            _,
+                                            recv_inner,
+                                            glyim_core::primitives::Mutability::Mut,
+                                        ),
+                                    ) => formal_inner == recv_inner,
+                                    _ => false,
+                                }
+                            });
                             match formal_ref_mutability {
                                 Some(mutab) if !pass_through => {
                                     let ref_ty = self.ctx.mk_ref(
@@ -1917,7 +1896,7 @@ impl<'a> FnCtxt<'a> {
                                 })
                                 .collect()
                         } else {
-                            method_own_generics.to_vec()
+                            method_own_generics.clone()
                         };
                         // Bind the method's own *fresh inference vars* (from
                         // `resolve_method_call`'s `method_own_generics`) to
@@ -2068,9 +2047,7 @@ impl<'a> FnCtxt<'a> {
                         // `fut: F`) are left untouched — autoref there breaks
                         // the async desugar's interpreter path.
                         let is_field_recv = matches!(recv_expr.kind, thir::ExprKind::Field { .. });
-                        let recv_for_call = if !is_field_recv {
-                            recv_expr.clone()
-                        } else {
+                        let recv_for_call = if is_field_recv {
                             let self_kind = {
                                 let target_local = trait_def_id.to_raw();
                                 let mut found: Option<glyim_hir::TypeRef> = None;
@@ -2100,7 +2077,7 @@ impl<'a> FnCtxt<'a> {
                                         if m.name == *method
                                             && let Some(first) = m.params.first()
                                         {
-                                            found = first.ty.clone();
+                                            found.clone_from(&first.ty);
                                             break 'outer;
                                         }
                                     }
@@ -2140,6 +2117,8 @@ impl<'a> FnCtxt<'a> {
                                 }
                                 None => recv_expr.clone(),
                             }
+                        } else {
+                            recv_expr.clone()
                         };
                         let mut dyn_args = Vec::with_capacity(arg_exprs.len() + 1);
                         dyn_args.push(recv_for_call.clone());
@@ -2412,35 +2391,31 @@ impl<'a> FnCtxt<'a> {
                             _ => break,
                         }
                     }
-                    match resolved {
-                        Some(t) => t,
-                        None => {
-                            // Diagnose against the *original* receiver type.
-                            match self.ctx.ty_kind(adj_recv_ty) {
-                                TyKind::Adt(_, _) => {
-                                    self.diagnostics.push(GlyimDiagnostic::type_error(
-                                        span,
-                                        format!("no field `{}` on type", self.ctx.name_str(*field)),
-                                    ));
-                                }
-                                TyKind::Tuple(_) => {
-                                    self.diagnostics.push(GlyimDiagnostic::type_error(
-                                        span,
-                                        format!(
-                                            "no field `{}` on tuple",
-                                            self.ctx.name_str(*field)
-                                        ),
-                                    ));
-                                }
-                                _ => {
-                                    self.diagnostics.push(GlyimDiagnostic::type_error(
-                                        span,
-                                        "field access on non-ADT, non-tuple type",
-                                    ));
-                                }
+                    if let Some(t) = resolved {
+                        t
+                    } else {
+                        // Diagnose against the *original* receiver type.
+                        match self.ctx.ty_kind(adj_recv_ty) {
+                            TyKind::Adt(_, _) => {
+                                self.diagnostics.push(GlyimDiagnostic::type_error(
+                                    span,
+                                    format!("no field `{}` on type", self.ctx.name_str(*field)),
+                                ));
                             }
-                            Ty::ERROR
+                            TyKind::Tuple(_) => {
+                                self.diagnostics.push(GlyimDiagnostic::type_error(
+                                    span,
+                                    format!("no field `{}` on tuple", self.ctx.name_str(*field)),
+                                ));
+                            }
+                            _ => {
+                                self.diagnostics.push(GlyimDiagnostic::type_error(
+                                    span,
+                                    "field access on non-ADT, non-tuple type",
+                                ));
+                            }
                         }
+                        Ty::ERROR
                     }
                 };
 
@@ -2680,24 +2655,22 @@ impl<'a> FnCtxt<'a> {
                     // Collect the variant's field infos into owned values FIRST
                     // so the immutable `self.ctx.adt_def` borrow is released
                     // before we mutably borrow `self.ctx` below.
-                    let field_infos: Vec<(Name, Ty)> = match self.ctx.adt_def(adt_id) {
-                        Some(def) => match def.variants.get(variant_idx as usize) {
-                            Some(v) => v.fields.iter().map(|f| (f.name, f.ty)).collect(),
-                            None => {
-                                self.diagnostics.push(GlyimDiagnostic::type_error(
-                                    span,
-                                    "unknown variant in variant constructor",
-                                ));
-                                return (thir::Expr::err(span), Ty::ERROR);
-                            }
-                        },
-                        None => {
+                    let field_infos: Vec<(Name, Ty)> = if let Some(def) = self.ctx.adt_def(adt_id) {
+                        if let Some(v) = def.variants.get(variant_idx as usize) {
+                            v.fields.iter().map(|f| (f.name, f.ty)).collect()
+                        } else {
                             self.diagnostics.push(GlyimDiagnostic::type_error(
                                 span,
-                                "unknown ADT in variant constructor",
+                                "unknown variant in variant constructor",
                             ));
                             return (thir::Expr::err(span), Ty::ERROR);
                         }
+                    } else {
+                        self.diagnostics.push(GlyimDiagnostic::type_error(
+                            span,
+                            "unknown ADT in variant constructor",
+                        ));
+                        return (thir::Expr::err(span), Ty::ERROR);
                     };
 
                     let substs = self.ctx.intern_substitution(vec![]);
@@ -2769,26 +2742,25 @@ impl<'a> FnCtxt<'a> {
                     return (thir::Expr::err(span), Ty::ERROR);
                 }
 
-                let (adt_id, substs) = match self.ctx.ty_kind(struct_ty) {
-                    TyKind::Adt(adt_id, substs) => (*adt_id, *substs),
-                    _ => {
+                let (adt_id, substs) =
+                    if let TyKind::Adt(adt_id, substs) = self.ctx.ty_kind(struct_ty) {
+                        (*adt_id, *substs)
+                    } else {
                         self.diagnostics.push(GlyimDiagnostic::type_error(
                             span,
                             "struct literal requires ADT type",
                         ));
                         return (thir::Expr::err(span), Ty::ERROR);
-                    }
-                };
+                    };
 
-                let adt_def = match self.ctx.adt_def(adt_id) {
-                    Some(def) => def,
-                    None => {
-                        self.diagnostics.push(GlyimDiagnostic::type_error(
-                            span,
-                            "unknown ADT in struct literal",
-                        ));
-                        return (thir::Expr::err(span), Ty::ERROR);
-                    }
+                let adt_def = if let Some(def) = self.ctx.adt_def(adt_id) {
+                    def
+                } else {
+                    self.diagnostics.push(GlyimDiagnostic::type_error(
+                        span,
+                        "unknown ADT in struct literal",
+                    ));
+                    return (thir::Expr::err(span), Ty::ERROR);
                 };
 
                 let field_infos: Vec<(Name, Ty)> =
@@ -3367,7 +3339,7 @@ impl<'a> FnCtxt<'a> {
                 // §3.5.30 blanket group: `warnings` (and `all`) name
                 // the group of every warning-emitting lint, so their
                 // level applies regardless of which lint `id` is. This
-                // mirrors rustc's `#[allow(warnings)]` short form.
+                // mirrors rustc's `` short form.
                 if arg == target
                     || glyim_core::lint::LintId::from_str(arg) == Some(id)
                     || arg == "warnings"
@@ -3474,15 +3446,12 @@ impl<'a> FnCtxt<'a> {
             // "expected integer type, found ()" — exactly the shape
             // of `let digit: u32 = if .. { .. } else { return ..; };`
             // in net.g's `parse_u16_hex` / `parse_u16_dec`.
-            let diverges = stmts
-                .last()
-                .map(|&sid| {
-                    matches!(
-                        &self.body.exprs[sid],
-                        Expr::Return { .. } | Expr::Break { .. }
-                    )
-                })
-                .unwrap_or(false);
+            let diverges = stmts.last().is_some_and(|&sid| {
+                matches!(
+                    &self.body.exprs[sid],
+                    Expr::Return { .. } | Expr::Break { .. }
+                )
+            });
             let ty = if diverges { Ty::NEVER } else { Ty::UNIT };
             let unit_expr = thir::Expr {
                 kind: thir::ExprKind::Block {
@@ -3598,8 +3567,7 @@ impl<'a> FnCtxt<'a> {
             TyKind::Adt(id, _) => self
                 .ctx
                 .adt_def(*id)
-                .map(|def| matches!(def.kind, glyim_type::adt_def::AdtKind::Enum))
-                .unwrap_or(false),
+                .is_some_and(|def| matches!(def.kind, glyim_type::adt_def::AdtKind::Enum)),
             // **Arrays and tuples — defer the ICE, do not gate.**
             //
             // Codegen has always hit `Err("eq: mismatched types")` on these
@@ -3923,53 +3891,52 @@ impl<'a> FnCtxt<'a> {
         // stdlib's Result AdtId and misses the builtin table. Fall back to a
         // name-based lookup: if the receiver ADT's name matches a builtin
         // type, retry with the canonical builtin AdtId.
-        let (fn_id, sig) = match self.ctx.lookup_builtin_method(adt_id, method_name) {
-            Some(hit) => hit,
-            None => {
-                let adt_name = self.ctx.adt_def(adt_id).map(|_| ()).and({
-                    // The name isn't stored on AdtDef; recover it via
-                    // a reverse lookup in `adt_by_name`. Walk the whole
-                    // map (small) to find the AdtId we want.
-                    None::<()>
-                });
-                let _ = adt_name;
-                // Cheaper: try the canonical builtin AdtIds for common names.
-                // T093-PATCHED [TCK-27]: consult the receiver ADT's real
-                // name before accepting a builtin fallback. The previous
-                // code matched any `Adt(_)` receiver against a small
-                // candidate list, so `my_struct.unwrap()` type-checked and
-                // dispatched to `Option::unwrap`'s intrinsic — silent
-                // wrong dispatch.
-                let receiver_adt_id = match self.ctx.ty_kind(step_ty) {
+        let (fn_id, sig) = if let Some(hit) = self.ctx.lookup_builtin_method(adt_id, method_name) {
+            hit
+        } else {
+            let adt_name = self.ctx.adt_def(adt_id).map(|_| ()).and({
+                // The name isn't stored on AdtDef; recover it via
+                // a reverse lookup in `adt_by_name`. Walk the whole
+                // map (small) to find the AdtId we want.
+                None::<()>
+            });
+            let _ = adt_name;
+            // Cheaper: try the canonical builtin AdtIds for common names.
+            // T093-PATCHED [TCK-27]: consult the receiver ADT's real
+            // name before accepting a builtin fallback. The previous
+            // code matched any `Adt(_)` receiver against a small
+            // candidate list, so `my_struct.unwrap()` type-checked and
+            // dispatched to `Option::unwrap`'s intrinsic — silent
+            // wrong dispatch.
+            let receiver_adt_id = match self.ctx.ty_kind(step_ty) {
+                TyKind::Adt(id, _) => Some(*id),
+                TyKind::Ref(_, inner, _) => match self.ctx.ty_kind(*inner) {
                     TyKind::Adt(id, _) => Some(*id),
-                    TyKind::Ref(_, inner, _) => match self.ctx.ty_kind(*inner) {
-                        TyKind::Adt(id, _) => Some(*id),
-                        _ => None,
-                    },
                     _ => None,
-                };
-                let receiver_name: Option<String> = receiver_adt_id
-                    .and_then(|id| self.ctx.adt_name_for_id(id))
-                    .map(|n| self.ctx.name_str(n).to_string());
-                let candidate_pairs: &[(&str, u32)] = &[
-                    ("Option", 1010),
-                    ("Result", 1011),
-                    ("Iterator", 1006),
-                    ("IntoIterator", 1007),
-                ];
-                let mut found = None;
-                for (expected_name, cand) in candidate_pairs {
-                    if receiver_name.as_deref() == Some(*expected_name)
-                        && let Some(hit) = self
-                            .ctx
-                            .lookup_builtin_method(AdtId::from_raw(*cand), method_name)
-                    {
-                        found = Some(hit);
-                        break;
-                    }
+                },
+                _ => None,
+            };
+            let receiver_name: Option<String> = receiver_adt_id
+                .and_then(|id| self.ctx.adt_name_for_id(id))
+                .map(|n| self.ctx.name_str(n).to_string());
+            let candidate_pairs: &[(&str, u32)] = &[
+                ("Option", 1010),
+                ("Result", 1011),
+                ("Iterator", 1006),
+                ("IntoIterator", 1007),
+            ];
+            let mut found = None;
+            for (expected_name, cand) in candidate_pairs {
+                if receiver_name.as_deref() == Some(*expected_name)
+                    && let Some(hit) = self
+                        .ctx
+                        .lookup_builtin_method(AdtId::from_raw(*cand), method_name)
+                {
+                    found = Some(hit);
+                    break;
                 }
-                found?
             }
+            found?
         };
 
         // Build the substitution for the method's `Param(i)` placeholders:
@@ -4376,8 +4343,7 @@ impl<'a> FnCtxt<'a> {
                                             format!("{:?}", this.ctx.ty_kind(impl_self_ty));
                                         let hir_kind = format!("{:?}", impl_item.self_ty);
                                         eprintln!(
-                                            "[CAND] method={} step_ty={} hir_self={} resolved={}",
-                                            mn, step_kind, hir_kind, self_kind
+                                            "[CAND] method={mn} step_ty={step_kind} hir_self={hir_kind} resolved={self_kind}"
                                         );
                                     }
                                 }
@@ -4394,16 +4360,12 @@ impl<'a> FnCtxt<'a> {
                                 //     `UnknownType` on the closure's ABI.
                                 let formal_tys: Vec<Ty> = if need_formals {
                                     let self_name = this.ctx.resolver().intern("self");
-                                    let skip = if method
-                                        .params
-                                        .first()
-                                        .map(|pp| pp.name == self_name)
-                                        .unwrap_or(false)
-                                    {
-                                        1
-                                    } else {
-                                        0
-                                    };
+                                    let skip = usize::from(
+                                        method
+                                            .params
+                                            .first()
+                                            .is_some_and(|pp| pp.name == self_name),
+                                    );
                                     // Resolve each `method_pm` value through the
                                     // inference table before building formals.
                                     // The impl's `T` is bound (by the candidate
@@ -4428,8 +4390,8 @@ impl<'a> FnCtxt<'a> {
                                         .params
                                         .iter()
                                         .skip(skip)
-                                        .map(|pp| match &pp.ty {
-                                            Some(tr) => {
+                                        .map(|pp| {
+                                            if let Some(tr) = &pp.ty {
                                                 let t = crate::tyconv::resolve_type_ref(
                                                     this.ctx,
                                                     this.infer,
@@ -4445,8 +4407,7 @@ impl<'a> FnCtxt<'a> {
                                                 } else {
                                                     t
                                                 }
-                                            }
-                                            None => {
+                                            } else {
                                                 let v = this.infer.new_ty_var(this.ctx);
                                                 this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)))
                                             }
@@ -4462,8 +4423,7 @@ impl<'a> FnCtxt<'a> {
                                         method_pm
                                             .get(&gp.name)
                                             .copied()
-                                            .map(GenericArg::Ty)
-                                            .unwrap_or(GenericArg::Ty(Ty::ERROR))
+                                            .map_or(GenericArg::Ty(Ty::ERROR), GenericArg::Ty)
                                     })
                                     .collect();
                                 found.push((
@@ -4805,7 +4765,10 @@ impl<'a> FnCtxt<'a> {
                 _ => None,
             };
             if let Some(param) = recv_param {
-                let traits = self.ctx.param_bounds_for(param.name).map(|t| t.to_vec());
+                let traits = self
+                    .ctx
+                    .param_bounds_for(param.name)
+                    .map(<[(glyim_core::Name, glyim_core::TraitDefId)]>::to_vec);
                 if let Some(traits) = traits {
                     let self_name = self.ctx.resolver().intern("Self");
                     let mut pm: HashMap<Name, Ty> = HashMap::new();
@@ -4966,7 +4929,6 @@ impl<'a> FnCtxt<'a> {
     /// `resolve_trait_method_fn` walks `Vec<T> -> [T] -> &[T]` and matches
     /// `impl IntoIterator for &[T]` (Item = &T) *before* the correct
     /// `impl IntoIterator for Vec<T>` (Item = T), yielding a slice iterator
-    /// stored in a `VecIntoIter<i32>` slot. See KNOWN_GAPS §3.4.
     fn resolve_into_iter_exact(
         &mut self,
         recv_ty: Ty,
@@ -4992,7 +4954,7 @@ impl<'a> FnCtxt<'a> {
                 continue;
             }
             let mut param_map: HashMap<Name, Ty> = HashMap::new();
-            for gp in impl_item.generic_params.iter() {
+            for gp in &impl_item.generic_params {
                 let var = self.infer.new_ty_var(self.ctx);
                 param_map.insert(gp.name, self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var))));
             }
@@ -5103,7 +5065,7 @@ impl<'a> FnCtxt<'a> {
                         continue;
                     }
                     let mut param_map: HashMap<Name, Ty> = HashMap::new();
-                    for gp in impl_item.generic_params.iter() {
+                    for gp in &impl_item.generic_params {
                         let var = self.infer.new_ty_var(self.ctx);
                         let ty = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
                         param_map.insert(gp.name, ty);
@@ -5208,15 +5170,14 @@ impl<'a> FnCtxt<'a> {
         span: Span,
         substs: glyim_type::Substitution,
     ) -> Ty {
-        let adt_def = match self.ctx.adt_def(adt_id) {
-            Some(def) => def,
-            None => {
-                self.diagnostics.push(GlyimDiagnostic::type_error(
-                    span,
-                    "unknown ADT in field lookup",
-                ));
-                return Ty::ERROR;
-            }
+        let adt_def = if let Some(def) = self.ctx.adt_def(adt_id) {
+            def
+        } else {
+            self.diagnostics.push(GlyimDiagnostic::type_error(
+                span,
+                "unknown ADT in field lookup",
+            ));
+            return Ty::ERROR;
         };
         // Clone the field type so the `adt_def` borrow ends before the
         // `&mut self` call to `substitute_type`.
@@ -5237,7 +5198,7 @@ impl<'a> FnCtxt<'a> {
     }
 }
 
-impl<'a> FnCtxt<'a> {
+impl FnCtxt<'_> {
     /// §4.1 `check_gsx`: validate a GSX element against its dialect schema.
     ///
     /// - intrinsics resolve through the active dialect's Schema registry
