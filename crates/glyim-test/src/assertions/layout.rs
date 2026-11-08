@@ -3,12 +3,12 @@ use glyim_layout::LayoutComputer;
 use glyim_layout::SimpleLayoutComputer;
 use glyim_type::{Ty, TyCtx};
 
-/// assert_layout.
+/// `assert_layout`.
 pub fn assert_layout(ctx: &TyCtx, ty: Ty, expected_size: u64, expected_align: u64) {
     let computer = SimpleLayoutComputer::new(ctx, TargetInfo::x86_64());
     let layout = computer
         .layout_of(ty)
-        .unwrap_or_else(|e| panic!("layout computation failed: {:?}", e));
+        .unwrap_or_else(|e| panic!("layout computation failed: {e:?}"));
     assert_eq!(
         layout.size.0, expected_size,
         "layout size mismatch: expected {}, got {}",
