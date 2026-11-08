@@ -33,5 +33,5 @@ fn array_literal_lowers_to_aggregate() {
     );
     let body = b.into_body(vec![thir::Stmt::Expr { expr: arr_expr }], vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }
