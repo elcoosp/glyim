@@ -16,14 +16,14 @@ pub enum GlyipError {
     DependencyCycle(Vec<String>),
     /// Dependency not found.
     DependencyNotFound {
-        /// Struct.
+        /// `Struct`.
         name: String,
-        /// Struct.
+        /// `Struct`.
         version: Option<String>,
     },
     /// Version requirements for a dependency are mutually unsatisfiable.
     DependencyConflict {
-        /// Struct.
+        /// `Struct`.
         name: String,
         /// All version requirements gathered for this dependency across the graph.
         requirements: Vec<String>,
@@ -56,17 +56,17 @@ pub enum GlyipError {
 impl fmt::Display for GlyipError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Io(e) => write!(f, "I/O error: {}", e),
-            Self::ConfigParse(msg) => write!(f, "config parse error: {}", msg),
-            Self::ConfigValidation(msg) => write!(f, "config validation error: {}", msg),
+            Self::Io(e) => write!(f, "I/O error: {e}"),
+            Self::ConfigParse(msg) => write!(f, "config parse error: {msg}"),
+            Self::ConfigValidation(msg) => write!(f, "config validation error: {msg}"),
             Self::DependencyCycle(cycle) => {
                 write!(f, "dependency cycle detected: {}", cycle.join(" -> "))
             }
             Self::DependencyNotFound { name, version } => {
                 if let Some(v) = version {
-                    write!(f, "dependency not found: {} v{}", name, v)
+                    write!(f, "dependency not found: {name} v{v}")
                 } else {
-                    write!(f, "dependency not found: {}", name)
+                    write!(f, "dependency not found: {name}")
                 }
             }
             Self::DependencyConflict {
@@ -77,8 +77,7 @@ impl fmt::Display for GlyipError {
             } => {
                 write!(
                     f,
-                    "dependency version conflict for `{}`: requirements {:?} cannot be satisfied",
-                    name, requirements
+                    "dependency version conflict for `{name}`: requirements {requirements:?} cannot be satisfied"
                 )?;
                 if !requesters.is_empty() {
                     let edges: Vec<String> = requesters
@@ -99,19 +98,19 @@ impl fmt::Display for GlyipError {
                 }
                 Ok(())
             }
-            Self::CacheCorrupted(msg) => write!(f, "cache corrupted: {}", msg),
+            Self::CacheCorrupted(msg) => write!(f, "cache corrupted: {msg}"),
             Self::ProjectNotFound(path) => {
                 write!(f, "project not found at {}", path.display())
             }
             Self::ProjectAlreadyExists(path) => {
                 write!(f, "project already exists at {}", path.display())
             }
-            Self::RegistryError(msg) => write!(f, "registry error: {}", msg),
-            Self::LockfileConflict(msg) => write!(f, "lockfile conflict: {}", msg),
+            Self::RegistryError(msg) => write!(f, "registry error: {msg}"),
+            Self::LockfileConflict(msg) => write!(f, "lockfile conflict: {msg}"),
             Self::NoEntryPoint(dir) => {
                 write!(f, "no entry point found in {}", dir.display())
             }
-            Self::Other(msg) => write!(f, "{}", msg),
+            Self::Other(msg) => write!(f, "{msg}"),
         }
     }
 }
