@@ -1,0 +1,107 @@
+# M1.2 feature registry seed — `tooling/test-harness.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "TOOL-TEST-COMPILE-PASS"
+title         = "compile-pass fixture mode"
+area          = "tooling.test-harness"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "Q"
+
+[[feature]]
+id            = "TOOL-TEST-COMPILE-FAIL"
+title         = "compile-fail fixture mode"
+area          = "tooling.test-harness"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "Q"
+
+[[feature]]
+id            = "TOOL-TEST-UI"
+title         = "UI fixture mode with `//~ ERROR` inline annotations"
+area          = "tooling.test-harness"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "Q"
+
+[[feature]]
+id            = "TOOL-TEST-RUN-PASS"
+title         = "run-pass fixture mode with exit/stdout expectations"
+area          = "tooling.test-harness"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "Q"
+
+[[feature]]
+id            = "TOOL-TEST-RUN-FAIL"
+title         = "run-fail fixture mode"
+area          = "tooling.test-harness"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "Q"
+
+[[feature]]
+id            = "TOOL-TEST-SNAPSHOT"
+title         = "snapshot testing for CST, def-map and MIR dumps"
+area          = "tooling.test-harness"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "Q"
+
+[[feature]]
+id            = "TOOL-TEST-MOCKS"
+title         = "mocking utilities for every compiler phase"
+area          = "tooling.test-harness"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "Q"
+
+[[feature]]
+id            = "TOOL-TEST-PROP"
+title         = "property-based type generation"
+area          = "tooling.test-harness"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "Q"
+
+[[feature]]
+id            = "TOOL-TEST-DIFFERENTIAL"
+title         = "LLVM-native vs MIR-interpreter differential gate (exit + stdout must agree)"
+area          = "tooling.test-harness"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+requires      = ["CODEGEN-LLVM-OBJ", "COMPILER-INTERP-TEST-EXEC"]
+owner_lane    = "Q"
+
+[[feature]]
+id            = "TOOL-TEST-NO-ICE"
+title         = "no-ICE corpus: the compiler must diagnose, never crash, on hostile inputs"
+area          = "tooling.test-harness"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "Q"
