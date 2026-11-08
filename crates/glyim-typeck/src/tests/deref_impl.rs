@@ -1,4 +1,4 @@
-//! Phase 5 (GLYIM_DESTUB_PLAN): integration test that a real
+//! Phase 5 (`GLYIM_DESTUB_PLAN)`: integration test that a real
 //! `impl Deref for X { type Target = Y; }` HIR item is picked up by
 //! `populate_deref_registry` during `typeck_crate` and lands in the frozen
 //! `TyCtx::deref_registry`, so `deref_ty` (consulted by method autoderef)
@@ -52,9 +52,9 @@ fn build_def_map(interner: &mut Interner, krate: CrateId, type_names: &[&str]) -
         modules,
         krate,
         interner: interner.clone(),
-        variant_map: Default::default(),
+        variant_map: std::collections::HashMap::default(),
         max_local_def_id: 0,
-        def_to_module: Default::default(),
+        def_to_module: std::collections::HashMap::default(),
     }
 }
 
@@ -99,7 +99,7 @@ fn impl_deref_for_adt_populates_registry() {
         items,
         bodies: IndexVec::new(),
         body_owners: IndexVec::new(),
-        interner: Default::default(),
+        interner: Interner::default(),
     };
 
     // `Wrapper` must resolve to a registered ADT self type (def-map local id 0).
@@ -126,11 +126,10 @@ fn impl_deref_for_adt_populates_registry() {
     // trait may still surface an unrelated "unresolved trait" diagnostic from
     // the coherence pass; that is outside the scope of this feature test.)
     for d in &result.diagnostics {
-        let text = format!("{:?}", d);
+        let text = format!("{d:?}");
         assert!(
             !text.contains("deref registry") && !text.contains("populate_deref"),
-            "unexpected Deref-registry diagnostic: {:?}",
-            d
+            "unexpected Deref-registry diagnostic: {d:?}"
         );
     }
 }
