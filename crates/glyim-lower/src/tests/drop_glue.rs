@@ -118,8 +118,8 @@ fn drop_terminator_enqueues_drop_glue() {
     );
 }
 
-/// Verify that the Drop terminator's scan_terminator no longer emits a STUB warning.
-/// We can't easily check tracing output, but we verify that scan_terminator
+/// Verify that the Drop terminator's `scan_terminator` no longer emits a STUB warning.
+/// We can't easily check tracing output, but we verify that `scan_terminator`
 /// handles Drop by enqueuing the appropriate mono item.
 #[test]
 fn drop_terminator_scan_no_stub() {
