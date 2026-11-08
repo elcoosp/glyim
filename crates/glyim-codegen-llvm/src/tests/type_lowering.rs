@@ -1,4 +1,4 @@
-//! S22-T01: Tests for LLVM type lowering (llvm_type_for_ty).
+//! S22-T01: Tests for LLVM type lowering (`llvm_type_for_ty`).
 
 use glyim_core::primitives::*;
 use glyim_test::{test_frozen_ty_ctx, with_fresh_ty_ctx};
