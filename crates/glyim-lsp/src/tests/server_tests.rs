@@ -1,6 +1,5 @@
 use crate::LspState;
 use glyim_db::{CrateConfig, Database};
-use std::path::PathBuf;
 use tokio::runtime::Runtime;
 
 #[test]
@@ -16,8 +15,7 @@ fn run_server_wires_router() {
         };
         let db = Database::new(config);
         let mut state = LspState::new(db);
-        state.start_driver(PathBuf::from("/tmp/cache"));
+        state.start_driver();
         // If we get here without panic, the router is wired enough.
-        assert!(true);
     });
 }
