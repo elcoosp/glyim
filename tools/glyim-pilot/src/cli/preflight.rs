@@ -1,7 +1,7 @@
 use crate::config::PilotConfig;
 use std::sync::Arc;
 
-/// run_preflight.
+/// `run_preflight`.
 pub async fn run_preflight(config: &Arc<PilotConfig>) {
     println!("Running preflight checks...");
     match tokio::process::Command::new("git")
@@ -10,7 +10,7 @@ pub async fn run_preflight(config: &Arc<PilotConfig>) {
         .await
     {
         Ok(o) if o.status.success() => {
-            println!("✅ git: {}", String::from_utf8_lossy(&o.stdout).trim())
+            println!("✅ git: {}", String::from_utf8_lossy(&o.stdout).trim());
         }
         _ => println!("❌ git: not found"),
     }
@@ -20,7 +20,7 @@ pub async fn run_preflight(config: &Arc<PilotConfig>) {
         .await
     {
         Ok(o) if o.status.success() => {
-            println!("✅ cargo: {}", String::from_utf8_lossy(&o.stdout).trim())
+            println!("✅ cargo: {}", String::from_utf8_lossy(&o.stdout).trim());
         }
         _ => println!("❌ cargo: not found"),
     }
