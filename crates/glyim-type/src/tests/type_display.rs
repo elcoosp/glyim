@@ -1,4 +1,4 @@
-//! Comprehensive tests for TypeDisplay and compute_flags behavior.
+//! Comprehensive tests for `TypeDisplay` and `compute_flags` behavior.
 use super::helpers::with_fresh_ty_ctx;
 use crate::display::PrintTy;
 use crate::*;
@@ -33,7 +33,7 @@ fn display_all_scalar_types() {
     });
     for (expected, ty) in results {
         let printed = PrintTy::new(ty, &ctx).to_string();
-        assert_eq!(printed, expected, "Mismatch for {}", expected);
+        assert_eq!(printed, expected, "Mismatch for {expected}");
     }
 }
 
@@ -282,15 +282,14 @@ fn display_depth_limit_enforced() {
     // because MAX_DISPLAY_DEPTH is 10; the 11th level triggers truncation.
     assert!(
         printed.ends_with("…"),
-        "Expected truncation '…', got: {}",
-        printed
+        "Expected truncation '…', got: {printed}"
     );
     assert!(
         !printed.starts_with("…"),
         "Truncation should be at the innermost level"
     );
     // Verify depth limiting kicked in: should be shorter than full 15 "&i32"
-    assert!(printed.len() < 20, "Truncated output too long: {}", printed);
+    assert!(printed.len() < 20, "Truncated output too long: {printed}");
 }
 
 // --- Flags correctness tests ---
@@ -364,8 +363,7 @@ fn flags_propagate_through_wrappers() {
         let flags = ctx.ty_flags(ty);
         assert!(
             flags.contains(TypeFlags::HAS_TY_INFER),
-            "{} should have HAS_TY_INFER",
-            name
+            "{name} should have HAS_TY_INFER"
         );
     }
 }
@@ -399,8 +397,7 @@ fn flags_propagate_through_substitution_types() {
         let flags = ctx.ty_flags(ty);
         assert!(
             flags.contains(TypeFlags::HAS_TY_INFER),
-            "{} should propagate HAS_TY_INFER",
-            name
+            "{name} should propagate HAS_TY_INFER"
         );
     }
 }
