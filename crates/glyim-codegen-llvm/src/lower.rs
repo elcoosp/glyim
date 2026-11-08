@@ -4,7 +4,7 @@ use crate::types::llvm_type_for_ty;
 use glyim_core::TargetInfo;
 use glyim_core::arena::IndexVec;
 use glyim_core::primitives::*;
-use glyim_core::primitives::{Abi, Safety};
+use glyim_core::primitives::{BinOp, TargetAbi, UintTy, UnOp};
 use glyim_diag::{CompResult, GlyimDiagnostic};
 use glyim_layout::{FieldsShape, LayoutComputer, PassMode, Size, TagEncoding, VariantsShape};
 use glyim_mir::VariantIdx;
@@ -62,7 +62,6 @@ pub fn select_personality(target: &TargetInfo, has_cleanup: bool) -> Personality
     }
 }
 
-#[allow(unused_imports)]
 fn local_ty(body: &Body, local: LocalIdx) -> Ty {
     body.locals[local].ty
 }
@@ -100,7 +99,7 @@ struct LoweringCtx<'ctx, 'a> {
     /// the callee stores its return value there instead of returning it.
     is_sret: bool,
 }
-impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
+impl<'ctx> LoweringCtx<'ctx, '_> {
     /// Emit a call to `glyim_process_abort_with_msg`, which exits 101
     /// after writing `thread 'main' panicked: <msg>` + newline to stderr.
     /// Appends an `unreachable` terminator afterwards.
@@ -205,8 +204,7 @@ fn llvm_fn_type_from_sig_inner<'ctx>(
         Ok(a) => a,
         Err(e) => {
             return Err(vec![GlyimDiagnostic::internal_error(format!(
-                "fn_abi_of failed: {:?}",
-                e
+                "fn_abi_of failed: {e:?}"
             ))]);
         }
     };
@@ -249,7 +247,7 @@ fn llvm_fn_type_from_sig_inner<'ctx>(
     }
 }
 
-impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
+impl<'ctx> LoweringCtx<'ctx, '_> {
     fn llvm_type_for_ty(&self, ty: Ty) -> CompResult<inkwell::types::BasicTypeEnum<'ctx>> {
         match llvm_type_for_ty(self.ty_ctx, &self.target_info, self.context, ty) {
             Ok(t) => Ok(t),
@@ -349,10 +347,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 let int_ty = ty.into_int_type();
                 Ok(int_ty.const_int(*v as u64, false).into())
             }
-            MirConstKind::Bool(b) => Ok(self
-                .llvm_int_type(1)
-                .const_int(if *b { 1 } else { 0 }, false)
-                .into()),
+            MirConstKind::Bool(b) => {
+                Ok(self.llvm_int_type(1).const_int(u64::from(*b), false).into())
+            }
             MirConstKind::FloatBits(bits) => {
                 let ty = self.llvm_type_for_ty(c.ty)?;
                 let float_ty = ty.into_float_type();
@@ -373,7 +370,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 let mut hasher = DefaultHasher::new();
                 str_content.hash(&mut hasher);
                 let hash = hasher.finish();
-                let global_name = format!("__glyim_str_{:016x}", hash);
+                let global_name = format!("__glyim_str_{hash:016x}");
                 let global = if let Some(existing) = module.get_global(&global_name) {
                     existing
                 } else {
@@ -447,50 +444,49 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     None => glyim_type::mangle_fn_symbol(fn_def_id.to_raw(), *substs),
                 };
                 let module = self.module;
-                let callee = match module.get_function(&fn_name) {
-                    Some(f) => f,
-                    None => {
-                        // A closure's `FnDefId` is a re-typed `ClosureId`
-                        // (see `check_expr`'s closure arm: `ClosureId::
-                        // from_raw(closure_adt.to_raw())` and the same value
-                        // is used as the `MirConstKind::Fn`'s `FnDefId`).
-                        // Closure signatures live in `closure_sigs`, not
-                        // `fn_sigs`, so the plain `fn_sig` lookup below
-                        // misses and would otherwise declare the closure
-                        // with a *void* type — which `lower_body` then
-                        // reuses (`module.get_function(&fn_name)`) when it
-                        // emits the actual body, silently giving every
-                        // closure a `void` signature and making the caller
-                        // see `unexpected call return kind` (the call
-                        // returns void while the ABI expected an int/struct).
-                        // Fall back to the closure sig for that case.
-                        let sig_opt = self.ty_ctx.fn_sig(*fn_def_id).cloned().or_else(|| {
-                            let cid = glyim_core::def_id::ClosureId::from_raw(fn_def_id.to_raw());
-                            self.ty_ctx.closure_sig(cid).cloned()
-                        });
-                        // Session 14 fix: the registered `fn_sig` for a
-                        // *generic* fn carries `Param(i)` in its inputs/output.
-                        // The `substs` field on this `MirConstKind::Fn` is the
-                        // instantiation (`[i32]` for `id::<i32>`), so apply it
-                        // via `concretize_fn_sig` before building the LLVM
-                        // type. Without this, codegen's `fn_abi_of` -> layout
-                        // ICEs with `UnknownType(Param(0))` (surfacing as
-                        // `fn type lowering failed: fn_abi_of failed:
-                        // UnknownType(Ty(16))`). Non-generic fns have empty
-                        // substs and concretize is a no-op.
-                        let fn_type = if let Some(sig) = sig_opt.as_ref() {
-                            let param_map = self.ty_ctx.substitution_args(*substs).to_vec();
-                            let concrete_sig = if param_map.is_empty() {
-                                sig.clone()
-                            } else {
-                                Self::concretize_fn_sig(sig, &param_map, self.ty_ctx)
-                            };
-                            self.llvm_fn_type_from_sig(&concrete_sig)?
+                let callee = if let Some(f) = module.get_function(&fn_name) {
+                    f
+                } else {
+                    // A closure's `FnDefId` is a re-typed `ClosureId`
+                    // (see `check_expr`'s closure arm: `ClosureId::
+                    // from_raw(closure_adt.to_raw())` and the same value
+                    // is used as the `MirConstKind::Fn`'s `FnDefId`).
+                    // Closure signatures live in `closure_sigs`, not
+                    // `fn_sigs`, so the plain `fn_sig` lookup below
+                    // misses and would otherwise declare the closure
+                    // with a *void* type — which `lower_body` then
+                    // reuses (`module.get_function(&fn_name)`) when it
+                    // emits the actual body, silently giving every
+                    // closure a `void` signature and making the caller
+                    // see `unexpected call return kind` (the call
+                    // returns void while the ABI expected an int/struct).
+                    // Fall back to the closure sig for that case.
+                    let sig_opt = self.ty_ctx.fn_sig(*fn_def_id).cloned().or_else(|| {
+                        let cid = glyim_core::def_id::ClosureId::from_raw(fn_def_id.to_raw());
+                        self.ty_ctx.closure_sig(cid).cloned()
+                    });
+                    // Session 14 fix: the registered `fn_sig` for a
+                    // *generic* fn carries `Param(i)` in its inputs/output.
+                    // The `substs` field on this `MirConstKind::Fn` is the
+                    // instantiation (`[i32]` for `id::<i32>`), so apply it
+                    // via `concretize_fn_sig` before building the LLVM
+                    // type. Without this, codegen's `fn_abi_of` -> layout
+                    // ICEs with `UnknownType(Param(0))` (surfacing as
+                    // `fn type lowering failed: fn_abi_of failed:
+                    // UnknownType(Ty(16))`). Non-generic fns have empty
+                    // substs and concretize is a no-op.
+                    let fn_type = if let Some(sig) = sig_opt.as_ref() {
+                        let param_map = self.ty_ctx.substitution_args(*substs).to_vec();
+                        let concrete_sig = if param_map.is_empty() {
+                            sig.clone()
                         } else {
-                            self.context.void_type().fn_type(&[], false)
+                            Self::concretize_fn_sig(sig, &param_map, self.ty_ctx)
                         };
-                        module.add_function(&fn_name, fn_type, None)
-                    }
+                        self.llvm_fn_type_from_sig(&concrete_sig)?
+                    } else {
+                        self.context.void_type().fn_type(&[], false)
+                    };
+                    module.add_function(&fn_name, fn_type, None)
                 };
                 Ok(callee
                     .as_global_value()
@@ -569,8 +565,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 let lc = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
                 let layout = lc.layout_of(c.ty).map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
-                        "constant enum layout failed: {:?}",
-                        e
+                        "constant enum layout failed: {e:?}"
                     ))]
                 })?;
                 let llvm_ty = self.llvm_type_for_ty(c.ty)?;
@@ -603,7 +598,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         } else {
                             let start = *niche_variants.start();
                             (
-                                *niche_start + (variant_idx.index() as u128 - start as u128),
+                                *niche_start + (variant_idx.index() as u128 - u128::from(start)),
                                 true,
                             )
                         }
@@ -659,8 +654,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_insert_value(cur, val, i as u32, "agg_elem")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "aggregate constant insert failed: {:?}",
-                                e
+                                "aggregate constant insert failed: {e:?}"
                             ))]
                         })?;
                 }
@@ -671,7 +665,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             MirConstKind::SizeOf(ty) => {
                 let lc = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
-                let size = lc.layout_of(*ty).map(|l| l.size.0).unwrap_or(0);
+                let size = lc.layout_of(*ty).map_or(0, |l| l.size.0);
                 let int_ty = self.llvm_type_for_ty(c.ty)?.into_int_type();
                 Ok(int_ty.const_int(size, false).into())
             }
@@ -714,7 +708,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         let mut ptr = base;
         let mut current_ty = local_ty(self.body, place.local);
         let mut downcast_variant: Option<VariantIdx> = None;
-        for elem in place.projection.iter() {
+        for elem in &place.projection {
             match elem {
                 ProjectionElem::Deref => {
                     // `Deref` on `Vec<T>` (AdtId 1020) is a *trait* deref,
@@ -880,8 +874,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         TyKind::Ref(_, inner, _) | TyKind::RawPtr(inner, _) => *inner,
                         _ => {
                             return Err(vec![GlyimDiagnostic::internal_error(format!(
-                                "internal compiler error: Deref on non-pointer type {:?} – MIR is invalid",
-                                current_ty
+                                "internal compiler error: Deref on non-pointer type {current_ty:?} – MIR is invalid"
                             ))]);
                         }
                     };
@@ -947,7 +940,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                         // niche-tagged layout). The slice
                                         // `get` returns `None` cleanly.
                                         FieldsShape::Arbitrary { offsets } => {
-                                            offsets.as_slice().get(1).map(|s| s.0).unwrap_or(0)
+                                            offsets.as_slice().get(1).map_or(0, |s| s.0)
                                         }
                                         _ => 0,
                                     }
@@ -961,8 +954,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 // `Field(n)` with `n` beyond the selected
                                 // variant's field list must fall through
                                 // to a variant that has it.
-                                let start =
-                                    downcast_variant.map(|v| v.to_raw() as usize).unwrap_or(0);
+                                let start = downcast_variant.map_or(0, |v| v.to_raw() as usize);
                                 let ordered: Vec<usize> = std::iter::once(start)
                                     .chain((0..variants.len()).filter(|i| *i != start))
                                     .collect();
@@ -1023,7 +1015,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 .expect("field offset GEP failed")
                         }
                     } else {
-                        let field_idx = idx.to_raw() as u64;
+                        let field_idx = u64::from(idx.to_raw());
                         let i32_type = self.llvm_int_type(32);
                         let zero = i32_type.const_zero();
                         let field_index = i32_type.const_int(field_idx, false);
@@ -1124,8 +1116,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                                 .fields
                                                 .as_slice()
                                                 .get(capture_idx)
-                                                .map(|f| f.ty)
-                                                .unwrap_or(Ty::ERROR),
+                                                .map_or(Ty::ERROR, |f| f.ty),
                                             None => Ty::ERROR,
                                         },
                                         None => Ty::ERROR,
@@ -1295,8 +1286,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .mk_ty(TyKind::Uint(glyim_core::primitives::UintTy::U8)),
                         _ => {
                             return Err(vec![GlyimDiagnostic::internal_error(format!(
-                                "internal compiler error: Index projection on non-array/slice type {:?}",
-                                current_ty
+                                "internal compiler error: Index projection on non-array/slice type {current_ty:?}"
                             ))]);
                         }
                     };
@@ -1454,8 +1444,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             }
                             _ => {
                                 return Err(vec![GlyimDiagnostic::internal_error(format!(
-                                    "internal compiler error: ConstantIndex on non-array/slice type {:?}",
-                                    current_ty
+                                    "internal compiler error: ConstantIndex on non-array/slice type {current_ty:?}"
                                 ))]);
                             }
                         };
@@ -1488,8 +1477,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         TyKind::Array(elem, _) | TyKind::Slice(elem) => *elem,
                         _ => {
                             return Err(vec![GlyimDiagnostic::internal_error(format!(
-                                "internal compiler error: ConstantIndex on non-array/slice type {:?}",
-                                current_ty
+                                "internal compiler error: ConstantIndex on non-array/slice type {current_ty:?}"
                             ))]);
                         }
                     };
@@ -1565,8 +1553,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         }
                         other => {
                             return Err(vec![GlyimDiagnostic::internal_error(format!(
-                                "internal compiler error: Subslice projection on non-array/slice type {:?}",
-                                other
+                                "internal compiler error: Subslice projection on non-array/slice type {other:?}"
                             ))]);
                         }
                     };
@@ -1702,8 +1689,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_load(llvm_pointee_ty, ptr, "fat_ref_load")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "load fat reference failed: {:?}",
-                                e
+                                "load fat reference failed: {e:?}"
                             ))]
                         })?;
                     return Ok(val);
@@ -1805,7 +1791,9 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 // destination type's width before returning.
                 let val = self.lower_discriminant(place)?;
                 let dest_llvm_ty = self.llvm_type_for_ty(expected_ty)?;
-                if val.get_type() != dest_llvm_ty {
+                if val.get_type() == dest_llvm_ty {
+                    Ok(val)
+                } else {
                     let src_int = val.into_int_value();
                     let dest_int = dest_llvm_ty.into_int_type();
                     let src_bits = src_int.get_type().get_bit_width();
@@ -1815,8 +1803,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_int_truncate(src_int, dest_int, "discr_trunc")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "trunc discr failed: {:?}",
-                                    e
+                                    "trunc discr failed: {e:?}"
                                 ))]
                             })?
                     } else {
@@ -1824,14 +1811,11 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_int_z_extend(src_int, dest_int, "discr_zext_dest")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "zext discr failed: {:?}",
-                                    e
+                                    "zext discr failed: {e:?}"
                                 ))]
                             })?
                     };
                     Ok(cast.as_basic_value_enum())
-                } else {
-                    Ok(val)
                 }
             }
             Rvalue::Len(place) => {
@@ -1876,8 +1860,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     }
                     other => {
                         return Err(vec![GlyimDiagnostic::internal_error(format!(
-                            "Len on non-array/slice/str type: {:?}",
-                            other
+                            "Len on non-array/slice/str type: {other:?}"
                         ))]);
                     }
                 };
@@ -1939,15 +1922,13 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
         let layout = layout_computer.layout_of(agg_ty).map_err(|e| {
             vec![GlyimDiagnostic::internal_error(format!(
-                "layout error building aggregate: {:?}",
-                e
+                "layout error building aggregate: {e:?}"
             ))]
         })?;
         let llvm_ty = self.llvm_type_for_ty(agg_ty)?;
         let tmp = self.builder.build_alloca(llvm_ty, "agg_tmp").map_err(|e| {
             vec![GlyimDiagnostic::internal_error(format!(
-                "alloca failed: {:?}",
-                e
+                "alloca failed: {e:?}"
             ))]
         })?;
         let i8_ptr_ty = self.context.ptr_type(AddressSpace::default());
@@ -1956,8 +1937,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             .build_bit_cast(tmp, i8_ptr_ty, "agg_base_i8")
             .map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
-                    "bitcast failed: {:?}",
-                    e
+                    "bitcast failed: {e:?}"
                 ))]
             })?
             .into_pointer_value();
@@ -1974,7 +1954,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 tag_align,
                 ..
             } => {
-                let vidx = variant.map(|v| v.to_raw() as usize).unwrap_or(0);
+                let vidx = variant.map_or(0, |v| v.to_raw() as usize);
                 let variant_layout = variants.get(vidx).ok_or_else(|| {
                     vec![GlyimDiagnostic::internal_error(
                         "variant index out of bounds building aggregate",
@@ -1997,8 +1977,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         }
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "GEP failed: {:?}",
-                                e
+                                "GEP failed: {e:?}"
                             ))]
                         })?;
                         let discr_value = tag_llvm_ty.const_int(vidx as u64, false);
@@ -2006,8 +1985,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_store(tag_ptr_raw, discr_value)
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "store tag failed: {:?}",
-                                    e
+                                    "store tag failed: {e:?}"
                                 ))]
                             })?;
                         let data_start = Size(tag_size.0)
@@ -2029,14 +2007,13 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             // glyim-layout) sets to the untagged variant's
                             // field offsets directly -- there is no separate
                             // tag prefix for niche encoding.
-                            let rel = vidx as u128 - *niche_variants.start() as u128;
+                            let rel = vidx as u128 - u128::from(*niche_variants.start());
                             let niche_value = niche_start.wrapping_add(rel);
                             let tag_offset = match &layout.fields {
                                 FieldsShape::Arbitrary { offsets } => offsets
                                     .as_slice()
                                     .get(*tag_field as usize)
-                                    .map(|s| s.0)
-                                    .unwrap_or(0),
+                                    .map_or(0, |s| s.0),
                                 _ => 0,
                             };
                             let tag_bits = (tag_size.0 * 8).max(8) as u32;
@@ -2051,8 +2028,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             }
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "GEP failed: {:?}",
-                                    e
+                                    "GEP failed: {e:?}"
                                 ))]
                             })?;
                             // `niche_value`/`niche_start` are u128 so that
@@ -2065,8 +2041,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 .build_store(tag_ptr_raw, discr_value)
                                 .map_err(|e| {
                                     vec![GlyimDiagnostic::internal_error(format!(
-                                        "store niche failed: {:?}",
-                                        e
+                                        "store niche failed: {e:?}"
                                     ))]
                                 })?;
                         }
@@ -2096,8 +2071,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
             .map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
-                    "GEP failed: {:?}",
-                    e
+                    "GEP failed: {e:?}"
                 ))]
             })?;
             let field_ptr = self
@@ -2109,15 +2083,13 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 )
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
-                        "bitcast failed: {:?}",
-                        e
+                        "bitcast failed: {e:?}"
                     ))]
                 })?
                 .into_pointer_value();
             self.builder.build_store(field_ptr, *val).map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
-                    "store field failed: {:?}",
-                    e
+                    "store field failed: {e:?}"
                 ))]
             })?;
         }
@@ -2125,8 +2097,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             .build_load(llvm_ty, tmp, "agg_load")
             .map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
-                    "load failed: {:?}",
-                    e
+                    "load failed: {e:?}"
                 ))]
             })
     }
@@ -2146,15 +2117,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
         let layout = layout_computer.layout_of(ty).map_err(|e| {
             vec![GlyimDiagnostic::internal_error(format!(
-                "layout error for discriminant: {:?}",
-                e
+                "layout error for discriminant: {e:?}"
             ))]
         })?;
         let i64_ty = self.llvm_int_type(64);
         match &layout.variants {
-            VariantsShape::Single { index } => {
-                Ok(i64_ty.const_int(*index as u64, false).as_basic_value_enum())
-            }
+            VariantsShape::Single { index } => Ok(i64_ty
+                .const_int(u64::from(*index), false)
+                .as_basic_value_enum()),
             VariantsShape::Multiple {
                 tag_field,
                 tag_encoding,
@@ -2165,8 +2135,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     FieldsShape::Arbitrary { offsets } => offsets
                         .as_slice()
                         .get(*tag_field as usize)
-                        .map(|s| s.0)
-                        .unwrap_or(0),
+                        .map_or(0, |s| s.0),
                     _ => 0,
                 };
                 let i8_ptr_ty = self.context.ptr_type(AddressSpace::default());
@@ -2175,8 +2144,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_bit_cast(ptr, i8_ptr_ty, "discr_base_i8")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "bitcast failed: {:?}",
-                            e
+                            "bitcast failed: {e:?}"
                         ))]
                     })?
                     .into_pointer_value();
@@ -2191,8 +2159,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 }
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
-                        "GEP failed: {:?}",
-                        e
+                        "GEP failed: {e:?}"
                     ))]
                 })?;
                 let tag_bits = (tag_size.0 * 8).max(8) as u32;
@@ -2202,8 +2169,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_load(tag_llvm_ty, tag_ptr, "discr_tag_load")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "load failed: {:?}",
-                            e
+                            "load failed: {e:?}"
                         ))]
                     })?
                     .into_int_value();
@@ -2212,8 +2178,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_int_z_extend(tag_val, i64_ty, "discr_zext")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "zext failed: {:?}",
-                                e
+                                "zext failed: {e:?}"
                             ))]
                         })?
                 } else {
@@ -2230,8 +2195,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         // ordinal:
                         //   in [niche_start, niche_start + niche_len) -> that variant
                         //   otherwise                                 -> untagged_variant
-                        let niche_len = (*niche_variants.end() as u128
-                            - *niche_variants.start() as u128
+                        let niche_len = (u128::from(*niche_variants.end())
+                            - u128::from(*niche_variants.start())
                             + 1) as u64;
                         let start_lo = (*niche_start & u128::from(u64::MAX)) as u64;
                         let start_val = i64_ty.const_int(start_lo, false);
@@ -2246,8 +2211,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             )
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "cmp failed: {:?}",
-                                    e
+                                    "cmp failed: {e:?}"
                                 ))]
                             })?;
                         let lt_end = self
@@ -2260,8 +2224,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             )
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "cmp failed: {:?}",
-                                    e
+                                    "cmp failed: {e:?}"
                                 ))]
                             })?;
                         let in_range = self
@@ -2269,8 +2232,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_and(ge_start, lt_end, "niche_in_range")
                             .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "and failed: {:?}",
-                                e
+                                "and failed: {e:?}"
                             ))]
                         })?;
                         let rel = self
@@ -2278,24 +2240,22 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_int_sub(tag64, start_val, "niche_rel")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "sub failed: {:?}",
-                                    e
+                                    "sub failed: {e:?}"
                                 ))]
                             })?;
                         let variant_from_niche = self
                             .builder
                             .build_int_add(
                                 rel,
-                                i64_ty.const_int(*niche_variants.start() as u64, false),
+                                i64_ty.const_int(u64::from(*niche_variants.start()), false),
                                 "niche_variant",
                             )
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "add failed: {:?}",
-                                    e
+                                    "add failed: {e:?}"
                                 ))]
                             })?;
-                        let untagged_val = i64_ty.const_int(*untagged_variant as u64, false);
+                        let untagged_val = i64_ty.const_int(u64::from(*untagged_variant), false);
                         let result = self
                             .builder
                             .build_select(
@@ -2306,8 +2266,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             )
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "select failed: {:?}",
-                                    e
+                                    "select failed: {e:?}"
                                 ))]
                             })?;
                         Ok(result)
@@ -2523,7 +2482,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
     ) -> CompResult<BasicValueEnum<'ctx>> {
         let i8_ptr = self.context.ptr_type(inkwell::AddressSpace::default());
         let ptr_width = self.target_info.pointer_width();
-        let len_ty = self.llvm_int_type(ptr_width as u32);
+        let len_ty = self.llvm_int_type(ptr_width);
         let (l_ptr, l_len) = self.string_ptr_len_typed(l, l_ty)?;
         let (r_ptr, r_len) = self.string_ptr_len_typed(r, r_ty)?;
         // The runtime signature: `(i8*, usize, i8*, usize) -> i32`.
@@ -2590,8 +2549,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "add failed: {:?}",
-                                e
+                                "add failed: {e:?}"
                             ))]
                         })
                 } else if l.is_float_value() && r.is_float_value() {
@@ -2600,8 +2558,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "add failed: {:?}",
-                                e
+                                "add failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -2617,8 +2574,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "sub failed: {:?}",
-                                e
+                                "sub failed: {e:?}"
                             ))]
                         })
                 } else if l.is_float_value() && r.is_float_value() {
@@ -2627,8 +2583,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "sub failed: {:?}",
-                                e
+                                "sub failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -2644,8 +2599,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "mul failed: {:?}",
-                                e
+                                "mul failed: {e:?}"
                             ))]
                         })
                 } else if l.is_float_value() && r.is_float_value() {
@@ -2654,8 +2608,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "mul failed: {:?}",
-                                e
+                                "mul failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -2684,8 +2637,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_int_compare(IntPredicate::EQ, ri, zero, "div_by_zero")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "div zero cmp: {:?}",
-                                e
+                                "div zero cmp: {e:?}"
                             ))]
                         })?;
                     if is_signed {
@@ -2697,8 +2649,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_int_compare(IntPredicate::EQ, ri, minus_one, "div_neg_one")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "div -1 cmp: {:?}",
-                                    e
+                                    "div -1 cmp: {e:?}"
                                 ))]
                             })?;
                         let is_min = self
@@ -2706,8 +2657,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_int_compare(IntPredicate::EQ, li, int_min, "div_int_min")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "div min cmp: {:?}",
-                                    e
+                                    "div min cmp: {e:?}"
                                 ))]
                             })?;
                         let overflow = self
@@ -2715,15 +2665,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_and(is_neg_one, is_min, "div_overflow")
                             .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "div overflow and: {:?}",
-                                e
+                                "div overflow and: {e:?}"
                             ))]
                         })?;
                         should_panic = self
                             .builder
                             .build_or(should_panic, overflow, "div_should_panic")
                             .map_err(|e| {
-                                vec![GlyimDiagnostic::internal_error(format!("div or: {:?}", e))]
+                                vec![GlyimDiagnostic::internal_error(format!("div or: {e:?}"))]
                             })?;
                     }
                     let panic_bb = self.context.append_basic_block(self.function, "div_panic");
@@ -2732,8 +2681,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_conditional_branch(should_panic, panic_bb, cont_bb)
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "div branch: {:?}",
-                                e
+                                "div branch: {e:?}"
                             ))]
                         })?;
                     self.builder.position_at_end(panic_bb);
@@ -2746,8 +2694,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     };
                     result.map(|v| v.as_basic_value_enum()).map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "div failed: {:?}",
-                            e
+                            "div failed: {e:?}"
                         ))]
                     })
                 } else if l.is_float_value() && r.is_float_value() {
@@ -2756,8 +2703,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "div failed: {:?}",
-                                e
+                                "div failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -2780,8 +2726,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_int_compare(IntPredicate::EQ, ri, zero, "rem_by_zero")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "rem zero cmp: {:?}",
-                                e
+                                "rem zero cmp: {e:?}"
                             ))]
                         })?;
                     if is_signed {
@@ -2793,8 +2738,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_int_compare(IntPredicate::EQ, ri, minus_one, "rem_neg_one")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "rem -1 cmp: {:?}",
-                                    e
+                                    "rem -1 cmp: {e:?}"
                                 ))]
                             })?;
                         let is_min = self
@@ -2802,8 +2746,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_int_compare(IntPredicate::EQ, li, int_min, "rem_int_min")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "rem min cmp: {:?}",
-                                    e
+                                    "rem min cmp: {e:?}"
                                 ))]
                             })?;
                         let overflow = self
@@ -2811,15 +2754,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_and(is_neg_one, is_min, "rem_overflow")
                             .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "rem overflow and: {:?}",
-                                e
+                                "rem overflow and: {e:?}"
                             ))]
                         })?;
                         should_panic = self
                             .builder
                             .build_or(should_panic, overflow, "rem_should_panic")
                             .map_err(|e| {
-                                vec![GlyimDiagnostic::internal_error(format!("rem or: {:?}", e))]
+                                vec![GlyimDiagnostic::internal_error(format!("rem or: {e:?}"))]
                             })?;
                     }
                     let panic_bb = self.context.append_basic_block(self.function, "rem_panic");
@@ -2828,8 +2770,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_conditional_branch(should_panic, panic_bb, cont_bb)
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "rem branch: {:?}",
-                                e
+                                "rem branch: {e:?}"
                             ))]
                         })?;
                     self.builder.position_at_end(panic_bb);
@@ -2844,8 +2785,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     };
                     result.map(|v| v.as_basic_value_enum()).map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "rem failed: {:?}",
-                            e
+                            "rem failed: {e:?}"
                         ))]
                     })
                 } else if l.is_float_value() && r.is_float_value() {
@@ -2854,8 +2794,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "rem failed: {:?}",
-                                e
+                                "rem failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -2875,10 +2814,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         )
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "eq failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("eq failed: {e:?}"))]
                         })
                 } else if l.is_float_value() && r.is_float_value() {
                     self.builder
@@ -2890,10 +2826,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         )
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "eq failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("eq failed: {e:?}"))]
                         })
                 } else if self.is_string_shaped(l, r, operand_ty, r_ty) {
                     self.lower_string_eq(l, r, operand_ty, r_ty, false)
@@ -2912,8 +2845,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_ptr_to_int(l.into_pointer_value(), int_ty, "eq_l")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "eq ptr cast failed: {:?}",
-                                e
+                                "eq ptr cast failed: {e:?}"
                             ))]
                         })?;
                     let r_int = self
@@ -2921,18 +2853,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_ptr_to_int(r.into_pointer_value(), int_ty, "eq_r")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "eq ptr cast failed: {:?}",
-                                e
+                                "eq ptr cast failed: {e:?}"
                             ))]
                         })?;
                     self.builder
                         .build_int_compare(IntPredicate::EQ, l_int, r_int, "eq")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "eq failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("eq failed: {e:?}"))]
                         })
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
@@ -2951,10 +2879,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         )
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "ne failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("ne failed: {e:?}"))]
                         })
                 } else if l.is_float_value() && r.is_float_value() {
                     self.builder
@@ -2966,10 +2891,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         )
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "ne failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("ne failed: {e:?}"))]
                         })
                 } else if self.is_string_shaped(l, r, operand_ty, r_ty) {
                     self.lower_string_eq(l, r, operand_ty, r_ty, true)
@@ -2988,8 +2910,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_ptr_to_int(l.into_pointer_value(), int_ty, "eq_l")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "ne ptr cast failed: {:?}",
-                                e
+                                "ne ptr cast failed: {e:?}"
                             ))]
                         })?;
                     let r_int = self
@@ -2997,18 +2918,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_ptr_to_int(r.into_pointer_value(), int_ty, "eq_r")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "ne ptr cast failed: {:?}",
-                                e
+                                "ne ptr cast failed: {e:?}"
                             ))]
                         })?;
                     self.builder
                         .build_int_compare(IntPredicate::NE, l_int, r_int, "ne")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "ne failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("ne failed: {e:?}"))]
                         })
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
@@ -3030,10 +2947,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_int_compare(cmp_pred, l.into_int_value(), r.into_int_value(), "lt")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "lt failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("lt failed: {e:?}"))]
                         })
                 } else if l.is_float_value() && r.is_float_value() {
                     self.builder
@@ -3045,10 +2959,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         )
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "lt failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("lt failed: {e:?}"))]
                         })
                 } else if l.is_pointer_value() && r.is_pointer_value() {
                     // Raw-pointer / reference comparison: cast both to
@@ -3065,8 +2976,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_ptr_to_int(l.into_pointer_value(), int_ty, "eq_l")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "lt ptr cast failed: {:?}",
-                                e
+                                "lt ptr cast failed: {e:?}"
                             ))]
                         })?;
                     let r_int = self
@@ -3074,18 +2984,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_ptr_to_int(r.into_pointer_value(), int_ty, "eq_r")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "lt ptr cast failed: {:?}",
-                                e
+                                "lt ptr cast failed: {e:?}"
                             ))]
                         })?;
                     self.builder
                         .build_int_compare(IntPredicate::SLT, l_int, r_int, "lt")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "lt failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("lt failed: {e:?}"))]
                         })
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
@@ -3107,10 +3013,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_int_compare(cmp_pred, l.into_int_value(), r.into_int_value(), "gt")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "gt failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("gt failed: {e:?}"))]
                         })
                 } else if l.is_float_value() && r.is_float_value() {
                     self.builder
@@ -3122,10 +3025,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         )
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "gt failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("gt failed: {e:?}"))]
                         })
                 } else if l.is_pointer_value() && r.is_pointer_value() {
                     // Raw-pointer / reference comparison: cast both to
@@ -3142,8 +3042,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_ptr_to_int(l.into_pointer_value(), int_ty, "eq_l")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "gt ptr cast failed: {:?}",
-                                e
+                                "gt ptr cast failed: {e:?}"
                             ))]
                         })?;
                     let r_int = self
@@ -3151,18 +3050,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_ptr_to_int(r.into_pointer_value(), int_ty, "eq_r")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "gt ptr cast failed: {:?}",
-                                e
+                                "gt ptr cast failed: {e:?}"
                             ))]
                         })?;
                     self.builder
                         .build_int_compare(IntPredicate::SGT, l_int, r_int, "gt")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "gt failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("gt failed: {e:?}"))]
                         })
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
@@ -3184,10 +3079,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_int_compare(cmp_pred, l.into_int_value(), r.into_int_value(), "le")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "le failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("le failed: {e:?}"))]
                         })
                 } else if l.is_float_value() && r.is_float_value() {
                     self.builder
@@ -3199,10 +3091,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         )
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "le failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("le failed: {e:?}"))]
                         })
                 } else if l.is_pointer_value() && r.is_pointer_value() {
                     // Raw-pointer / reference comparison: cast both to
@@ -3219,8 +3108,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_ptr_to_int(l.into_pointer_value(), int_ty, "eq_l")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "le ptr cast failed: {:?}",
-                                e
+                                "le ptr cast failed: {e:?}"
                             ))]
                         })?;
                     let r_int = self
@@ -3228,18 +3116,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_ptr_to_int(r.into_pointer_value(), int_ty, "eq_r")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "le ptr cast failed: {:?}",
-                                e
+                                "le ptr cast failed: {e:?}"
                             ))]
                         })?;
                     self.builder
                         .build_int_compare(IntPredicate::SLE, l_int, r_int, "le")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "le failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("le failed: {e:?}"))]
                         })
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
@@ -3261,10 +3145,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_int_compare(cmp_pred, l.into_int_value(), r.into_int_value(), "ge")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "ge failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("ge failed: {e:?}"))]
                         })
                 } else if l.is_float_value() && r.is_float_value() {
                     self.builder
@@ -3276,10 +3157,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         )
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "ge failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("ge failed: {e:?}"))]
                         })
                 } else if l.is_pointer_value() && r.is_pointer_value() {
                     // Raw-pointer / reference comparison: cast both to
@@ -3296,8 +3174,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_ptr_to_int(l.into_pointer_value(), int_ty, "eq_l")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "ge ptr cast failed: {:?}",
-                                e
+                                "ge ptr cast failed: {e:?}"
                             ))]
                         })?;
                     let r_int = self
@@ -3305,18 +3182,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_ptr_to_int(r.into_pointer_value(), int_ty, "eq_r")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "ge ptr cast failed: {:?}",
-                                e
+                                "ge ptr cast failed: {e:?}"
                             ))]
                         })?;
                     self.builder
                         .build_int_compare(IntPredicate::SGE, l_int, r_int, "ge")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "ge failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("ge failed: {e:?}"))]
                         })
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
@@ -3331,8 +3204,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "and failed: {:?}",
-                                e
+                                "and failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -3347,10 +3219,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_or(l.into_int_value(), r.into_int_value(), "or")
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "or failed: {:?}",
-                                e
-                            ))]
+                            vec![GlyimDiagnostic::internal_error(format!("or failed: {e:?}"))]
                         })
                 } else {
                     Err(vec![GlyimDiagnostic::internal_error(
@@ -3365,8 +3234,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "bitand failed: {:?}",
-                                e
+                                "bitand failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -3382,8 +3250,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "bitor failed: {:?}",
-                                e
+                                "bitor failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -3399,8 +3266,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "bitxor failed: {:?}",
-                                e
+                                "bitxor failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -3421,11 +3287,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     // produce different results (x86 masks by accident,
                     // AArch64 yields 0). The `and` mask matches the VM.
                     let bits = lv.get_type().get_bit_width();
-                    let mask = rv.get_type().const_int((bits - 1) as u64, false);
+                    let mask = rv.get_type().const_int(u64::from(bits - 1), false);
                     let masked = self.builder.build_and(rv, mask, "shl_mask").map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "shl mask failed: {:?}",
-                            e
+                            "shl mask failed: {e:?}"
                         ))]
                     })?;
                     self.builder
@@ -3433,8 +3298,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "shl failed: {:?}",
-                                e
+                                "shl failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -3450,11 +3314,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     let rv = r.into_int_value();
                     // T113-PATCHED [LL-18]: same masking as Shl above.
                     let bits = lv.get_type().get_bit_width();
-                    let mask = rv.get_type().const_int((bits - 1) as u64, false);
+                    let mask = rv.get_type().const_int(u64::from(bits - 1), false);
                     let masked = self.builder.build_and(rv, mask, "shr_mask").map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "shr mask failed: {:?}",
-                            e
+                            "shr mask failed: {e:?}"
                         ))]
                     })?;
                     self.builder
@@ -3462,8 +3325,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "shr failed: {:?}",
-                                e
+                                "shr failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -3488,8 +3350,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "not failed: {:?}",
-                                e
+                                "not failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -3505,8 +3366,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "neg failed: {:?}",
-                                e
+                                "neg failed: {e:?}"
                             ))]
                         })
                 } else if val.is_float_value() {
@@ -3515,8 +3375,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "neg failed: {:?}",
-                                e
+                                "neg failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -3537,8 +3396,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_load(llvm_ty, val.into_pointer_value(), "deref_load")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "deref load failed: {:?}",
-                                e
+                                "deref load failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -3585,8 +3443,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "zext failed: {:?}",
-                                e
+                                "zext failed: {e:?}"
                             ))]
                         })
                     } else {
@@ -3595,8 +3452,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .map(|v| v.as_basic_value_enum())
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "trunc failed: {:?}",
-                                    e
+                                    "trunc failed: {e:?}"
                                 ))]
                             })
                     }
@@ -3659,8 +3515,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_call(decl, &[float_val.as_basic_value_enum().into()], "sat_cast")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "saturating fptosi call failed: {:?}",
-                                e
+                                "saturating fptosi call failed: {e:?}"
                             ))]
                         })?
                         .try_as_basic_value()
@@ -3698,8 +3553,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .map(|v| v.as_basic_value_enum())
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "sitofp failed: {:?}",
-                            e
+                            "sitofp failed: {e:?}"
                         ))]
                     })
                 } else {
@@ -3722,8 +3576,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .map(|v| v.as_basic_value_enum())
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "fpext failed: {:?}",
-                                    e
+                                    "fpext failed: {e:?}"
                                 ))]
                             })
                     } else {
@@ -3732,8 +3585,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .map(|v| v.as_basic_value_enum())
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "fptrunc failed: {:?}",
-                                    e
+                                    "fptrunc failed: {e:?}"
                                 ))]
                             })
                     }
@@ -3750,8 +3602,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "bitcast failed: {:?}",
-                                e
+                                "bitcast failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -3768,8 +3619,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "ptrtoint failed: {:?}",
-                                e
+                                "ptrtoint failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -3786,8 +3636,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .map(|v| v.as_basic_value_enum())
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "inttoptr failed: {:?}",
-                                e
+                                "inttoptr failed: {e:?}"
                             ))]
                         })
                 } else {
@@ -3824,8 +3673,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_unconditional_branch(otherwise)
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "branch failed: {:?}",
-                                e
+                                "branch failed: {e:?}"
                             ))]
                         })?;
                 } else {
@@ -3839,8 +3687,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_switch(discr_int, otherwise, &branches)
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "switch failed: {:?}",
-                                e
+                                "switch failed: {e:?}"
                             ))]
                         })?;
                 }
@@ -3887,8 +3734,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 if let Some(lp) = self.current_landingpad {
                     self.builder.build_resume(lp).map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "resume failed: {:?}",
-                            e
+                            "resume failed: {e:?}"
                         ))]
                     })?;
                 } else if let Some(pad) = self.current_seh_pad {
@@ -3933,9 +3779,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 msg,
             } => {
                 let cond_int = self.lower_operand(cond)?.into_int_value();
-                let expected_val = self
-                    .llvm_int_type(1)
-                    .const_int(if *expected { 1 } else { 0 }, false);
+                let expected_val = self.llvm_int_type(1).const_int(u64::from(*expected), false);
                 let cmp = self
                     .builder
                     .build_int_compare(
@@ -3972,13 +3816,13 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .fn_type(&[i8_ptr_ty.into(), i64_ty.into()], false);
                     module.add_function("glyim_panic", fn_ty, None)
                 });
-                let msg_str = format!("assertion failed: {:?}", msg);
+                let msg_str = format!("assertion failed: {msg:?}");
                 use std::collections::hash_map::DefaultHasher;
                 use std::hash::{Hash, Hasher};
                 let mut hasher = DefaultHasher::new();
                 msg_str.hash(&mut hasher);
                 let hash = hasher.finish();
-                let global_name = format!("__glyim_assert_{:016x}", hash);
+                let global_name = format!("__glyim_assert_{hash:016x}");
                 let msg_global = module.get_global(&global_name).unwrap_or_else(|| {
                     let const_str = self.context.const_string(msg_str.as_bytes(), true);
                     let i8_type = self.context.i8_type();
@@ -4019,15 +3863,13 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         )
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "invoke failed: {:?}",
-                                e
+                                "invoke failed: {e:?}"
                             ))]
                         })?;
                     self.builder.position_at_end(unreachable_cont);
                     self.builder.build_unreachable().map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "unreachable failed: {:?}",
-                            e
+                            "unreachable failed: {e:?}"
                         ))]
                     })?;
                 } else {
@@ -4035,14 +3877,12 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_call(panic_fn, &panic_args, "panic_call")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "call failed: {:?}",
-                                e
+                                "call failed: {e:?}"
                             ))]
                         })?;
                     self.builder.build_unreachable().map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "unreachable failed: {:?}",
-                            e
+                            "unreachable failed: {e:?}"
                         ))]
                     })?;
                 }
@@ -4066,8 +3906,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_unconditional_branch(target_bb)
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "branch failed: {:?}",
-                                e
+                                "branch failed: {e:?}"
                             ))]
                         })?;
                     return Ok(());
@@ -4078,8 +3917,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_unconditional_branch(target_bb)
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "branch failed: {:?}",
-                                e
+                                "branch failed: {e:?}"
                             ))]
                         })?;
                     return Ok(());
@@ -4127,8 +3965,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 .build_extract_value(val.into_struct_value(), 0, "fat_drop_ptr")
                                 .map_err(|e| {
                                     vec![GlyimDiagnostic::internal_error(format!(
-                                        "fat-pointer data extract for drop failed: {:?}",
-                                        e
+                                        "fat-pointer data extract for drop failed: {e:?}"
                                     ))]
                                 })?
                                 .into_pointer_value()
@@ -4183,8 +4020,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             self.target_info.clone(),
                         )
                         .layout_of(ty)
-                        .map(|l| l.size.0)
-                        .unwrap_or(1);
+                        .map_or(1, |l| l.size.0);
                         if size == 0 {
                             self.builder
                                 .build_int_to_ptr(
@@ -4194,8 +4030,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 )
                                 .map_err(|e| {
                                     vec![GlyimDiagnostic::internal_error(format!(
-                                        "zst drop ptr: {:?}",
-                                        e
+                                        "zst drop ptr: {e:?}"
                                     ))]
                                 })?
                                 .as_basic_value_enum()
@@ -4212,8 +4047,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_invoke(drop_fn, &args_vals, normal_bb, cleanup_bb, "drop_call")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "invoke failed: {:?}",
-                                    e
+                                    "invoke failed: {e:?}"
                                 ))]
                             })?;
 
@@ -4246,8 +4080,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                     )
                                     .map_err(|e| {
                                         vec![GlyimDiagnostic::internal_error(format!(
-                                            "fat-pointer data extract for dealloc failed: {:?}",
-                                            e
+                                            "fat-pointer data extract for dealloc failed: {e:?}"
                                         ))]
                                     })?
                                     .into_pointer_value()
@@ -4271,8 +4104,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                     .build_call(dealloc_fn, &dealloc_args, "dealloc_call")
                                     .map_err(|e| {
                                         vec![GlyimDiagnostic::internal_error(format!(
-                                            "dealloc call failed: {:?}",
-                                            e
+                                            "dealloc call failed: {e:?}"
                                         ))]
                                     })?;
                             }
@@ -4281,8 +4113,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_unconditional_branch(target_bb)
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "branch failed: {:?}",
-                                    e
+                                    "branch failed: {e:?}"
                                 ))]
                             })?;
                     } else {
@@ -4292,8 +4123,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_call(drop_fn, &args_meta, "drop_call")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "call failed: {:?}",
-                                    e
+                                    "call failed: {e:?}"
                                 ))]
                             })?;
 
@@ -4325,8 +4155,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                     )
                                     .map_err(|e| {
                                         vec![GlyimDiagnostic::internal_error(format!(
-                                            "fat-pointer data extract for dealloc failed: {:?}",
-                                            e
+                                            "fat-pointer data extract for dealloc failed: {e:?}"
                                         ))]
                                     })?
                                     .into_pointer_value()
@@ -4350,8 +4179,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                     .build_call(dealloc_fn, &dealloc_args, "dealloc_call")
                                     .map_err(|e| {
                                         vec![GlyimDiagnostic::internal_error(format!(
-                                            "dealloc call failed: {:?}",
-                                            e
+                                            "dealloc call failed: {e:?}"
                                         ))]
                                     })?;
                             }
@@ -4360,8 +4188,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_unconditional_branch(target_bb)
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "branch failed: {:?}",
-                                    e
+                                    "branch failed: {e:?}"
                                 ))]
                             })?;
                     }
@@ -4370,8 +4197,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_unconditional_branch(target_bb)
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "branch failed: {:?}",
-                                e
+                                "branch failed: {e:?}"
                             ))]
                         })?;
                 }
@@ -4413,10 +4239,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 TyKind::Adt(id, sub) => {
                     let args = frozen.substitution_args(sub);
                     let mut new_args: Vec<GenericArg> = Vec::new();
-                    for a in args.iter() {
+                    for a in args {
                         match a {
                             GenericArg::Ty(t) => {
-                                new_args.push(GenericArg::Ty(subst(*t, map, ctx, frozen)))
+                                new_args.push(GenericArg::Ty(subst(*t, map, ctx, frozen)));
                             }
                             other => new_args.push(other.clone()),
                         }
@@ -4431,10 +4257,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 TyKind::Tuple(sub) => {
                     let args = frozen.substitution_args(sub);
                     let mut new_args: Vec<GenericArg> = Vec::new();
-                    for a in args.iter() {
+                    for a in args {
                         match a {
                             GenericArg::Ty(t) => {
-                                new_args.push(GenericArg::Ty(subst(*t, map, ctx, frozen)))
+                                new_args.push(GenericArg::Ty(subst(*t, map, ctx, frozen)));
                             }
                             other => new_args.push(other.clone()),
                         }
@@ -4488,28 +4314,27 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             // impl exists. Retry by self-type + assoc-name alone,
                             // which ignores the trait id (correct for the common
                             // single-impl `Future::Output` case).
-                            match frozen
-                                .resolve_associated_type_by_self_ty(bare_self, proj.item_name)
+                            if let Some(resolved) =
+                                frozen.resolve_associated_type_by_self_ty(bare_self, proj.item_name)
                             {
-                                Some(resolved) => resolved,
-                                None => {
-                                    let mut new_subst_args: Vec<GenericArg> = Vec::new();
-                                    for a in proj_subst_args.iter() {
-                                        match a {
-                                            GenericArg::Ty(t) => new_subst_args
-                                                .push(GenericArg::Ty(subst(*t, map, ctx, frozen))),
-                                            other => new_subst_args.push(other.clone()),
-                                        }
+                                resolved
+                            } else {
+                                let mut new_subst_args: Vec<GenericArg> = Vec::new();
+                                for a in proj_subst_args {
+                                    match a {
+                                        GenericArg::Ty(t) => new_subst_args
+                                            .push(GenericArg::Ty(subst(*t, map, ctx, frozen))),
+                                        other => new_subst_args.push(other.clone()),
                                     }
-                                    let new_sub = ctx.intern_substitution(new_subst_args);
-                                    ctx.mk_ty(TyKind::Projection(ProjectionTy {
-                                        trait_ref: TraitRef {
-                                            def_id: proj.trait_ref.def_id,
-                                            substs: new_sub,
-                                        },
-                                        item_name: proj.item_name,
-                                    }))
                                 }
+                                let new_sub = ctx.intern_substitution(new_subst_args);
+                                ctx.mk_ty(TyKind::Projection(ProjectionTy {
+                                    trait_ref: TraitRef {
+                                        def_id: proj.trait_ref.def_id,
+                                        substs: new_sub,
+                                    },
+                                    item_name: proj.item_name,
+                                }))
                             }
                         }
                     }
@@ -4518,10 +4343,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             }
         }
         let mut input_args: Vec<GenericArg> = Vec::new();
-        for a in ty_ctx.substitution_args(sig.inputs).iter() {
+        for a in ty_ctx.substitution_args(sig.inputs) {
             match a {
                 GenericArg::Ty(t) => {
-                    input_args.push(GenericArg::Ty(subst(*t, param_map, &mut ctx, ty_ctx)))
+                    input_args.push(GenericArg::Ty(subst(*t, param_map, &mut ctx, ty_ctx)));
                 }
                 other => input_args.push(other.clone()),
             }
@@ -5206,8 +5031,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 .body
                 .locals
                 .get(destination.local)
-                .map(|d| d.ty)
-                .unwrap_or(glyim_type::Ty::UNIT);
+                .map_or(glyim_type::Ty::UNIT, |d| d.ty);
             let dest_llvm_ty0 = self.llvm_type_for_ty(dest_ty0)?;
             let dp = self.place_ptr(destination)?;
             self.builder
@@ -5230,8 +5054,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             .body
             .locals
             .get(destination.local)
-            .map(|d| d.ty)
-            .unwrap_or(glyim_type::Ty::UNIT);
+            .map_or(glyim_type::Ty::UNIT, |d| d.ty);
         let dest_llvm_ty = self.llvm_type_for_ty(dest_ty)?;
 
         // BC-STR-ARMS: `as_str` is identity (`String` and `&str` are both
@@ -5425,8 +5248,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 .map(|l| l.size.0)
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
-                        "vec push: layout_of element failed: {:?}",
-                        e
+                        "vec push: layout_of element failed: {e:?}"
                     ))]
                 })?;
             let helper = self.declare_void_helper(
@@ -5607,22 +5429,20 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 .build_call(fv, &[lhs_iv.into(), rhs_iv.into()], "checked_call")
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
-                        "{} call: {e:?}",
-                        method
+                        "{method} call: {e:?}"
                     ))]
                 })?;
             let struct_val = call
                 .try_as_basic_value()
                 .basic()
-                .ok_or_else(|| vec![GlyimDiagnostic::internal_error(format!("{} void", method))])?
+                .ok_or_else(|| vec![GlyimDiagnostic::internal_error(format!("{method} void"))])?
                 .into_struct_value();
             let wrapped = self
                 .builder
                 .build_extract_value(struct_val, 0, "checked_wrapped")
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
-                        "{} extract wrapped: {e:?}",
-                        method
+                        "{method} extract wrapped: {e:?}"
                     ))]
                 })?
                 .into_int_value();
@@ -5631,8 +5451,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 .build_extract_value(struct_val, 1, "checked_overflow")
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
-                        "{} extract overflow: {e:?}",
-                        method
+                        "{method} extract overflow: {e:?}"
                     ))]
                 })?
                 .into_int_value();
@@ -5652,24 +5471,21 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 .build_select(overflow, none_val, some_val, "checked_result")
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
-                        "{} select: {e:?}",
-                        method
+                        "{method} select: {e:?}"
                     ))]
                 })?;
 
             let dp = self.place_ptr(destination)?;
             self.builder.build_store(dp, result).map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
-                    "{} store: {e:?}",
-                    method
+                    "{method} store: {e:?}"
                 ))]
             })?;
             if let Some(target_bb) = target {
                 let tb = *self.bb_map.get(target_bb).expect("checked target");
                 self.builder.build_unconditional_branch(tb).map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
-                        "{} branch: {e:?}",
-                        method
+                        "{method} branch: {e:?}"
                     ))]
                 })?;
             }
@@ -5952,16 +5768,14 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             let dp = self.place_ptr(destination)?;
             self.builder.build_store(dp, result_iv).map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
-                    "{} store: {e:?}",
-                    method
+                    "{method} store: {e:?}"
                 ))]
             })?;
             if let Some(target_bb) = target {
                 let tb = *self.bb_map.get(target_bb).expect("saturating target");
                 self.builder.build_unconditional_branch(tb).map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
-                        "{} branch: {e:?}",
-                        method
+                        "{method} branch: {e:?}"
                     ))]
                 })?;
             }
@@ -6005,25 +5819,18 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 "wrapping_mul" => self.builder.build_int_mul(lhs_iv, rhs_iv, "wmul"),
                 _ => unreachable!(),
             }
-            .map_err(|e| {
-                vec![GlyimDiagnostic::internal_error(format!(
-                    "{}: {e:?}",
-                    method
-                ))]
-            })?;
+            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("{method}: {e:?}"))])?;
             let dp = self.place_ptr(destination)?;
             self.builder.build_store(dp, result).map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
-                    "{} store: {e:?}",
-                    method
+                    "{method} store: {e:?}"
                 ))]
             })?;
             if let Some(target_bb) = target {
                 let tb = *self.bb_map.get(target_bb).expect("wrapping target");
                 self.builder.build_unconditional_branch(tb).map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
-                        "{} branch: {e:?}",
-                        method
+                        "{method} branch: {e:?}"
                     ))]
                 })?;
             }
@@ -6062,7 +5869,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             let iv = recv_v.into_int_value();
             let int_ty = iv.get_type();
             let width = int_ty.get_bit_width();
-            let width_iv = int_ty.const_int(width as u64, false);
+            let width_iv = int_ty.const_int(u64::from(width), false);
             let one_iv = int_ty.const_int(1, false);
             let bool_ty = self.context.bool_type();
             let false_flag: inkwell::values::BasicMetadataValueEnum<'ctx> =
@@ -6279,8 +6086,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_int_truncate(result_iv, dest_int_ty, "bint_trunc")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "{} trunc: {e:?}",
-                            method
+                            "{method} trunc: {e:?}"
                         ))]
                     })?
             } else {
@@ -6288,24 +6094,21 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_int_z_extend(result_iv, dest_int_ty, "bint_zext")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "{} zext: {e:?}",
-                            method
+                            "{method} zext: {e:?}"
                         ))]
                     })?
             };
             let dp = self.place_ptr(destination)?;
             self.builder.build_store(dp, stored).map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
-                    "{} store: {e:?}",
-                    method
+                    "{method} store: {e:?}"
                 ))]
             })?;
             if let Some(target_bb) = target {
                 let tb = *self.bb_map.get(target_bb).expect("bit intrinsic target");
                 self.builder.build_unconditional_branch(tb).map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
-                        "{} branch: {e:?}",
-                        method
+                        "{method} branch: {e:?}"
                     ))]
                 })?;
             }
@@ -7700,7 +7503,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     "fu_isok",
                 )
                 .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("fu cmp: {e:?}"))])?;
-            let Some(current_fn) = self.builder.get_insert_block().and_then(|b| b.get_parent())
+            let Some(current_fn) = self
+                .builder
+                .get_insert_block()
+                .and_then(inkwell::basic_block::BasicBlock::get_parent)
             else {
                 return Err(vec![GlyimDiagnostic::internal_error("fu: no fn")]);
             };
@@ -8239,7 +8045,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 _ => 0,
             };
             let stored: BasicValueEnum = if method == "is_empty" {
-                let is_empty = self.llvm_int_type(1).const_int((n == 0) as u64, false);
+                let is_empty = self.llvm_int_type(1).const_int(u64::from(n == 0), false);
                 if dest_llvm_ty.is_int_type() && dest_llvm_ty.into_int_type().get_bit_width() == 1 {
                     is_empty.into()
                 } else if dest_llvm_ty.is_int_type() {
@@ -8336,8 +8142,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     )
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "len pointer receiver load failed: {:?}",
-                            e
+                            "len pointer receiver load failed: {e:?}"
                         ))]
                     })?
             } else {
@@ -8358,8 +8163,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_extract_value(sv, 1, "fat_len")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "fat-pointer len extract failed: {:?}",
-                            e
+                            "fat-pointer len extract failed: {e:?}"
                         ))]
                     })?
             } else {
@@ -8368,8 +8172,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_extract_value(sv, 0, "str_len_arr")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "string len array extract failed: {:?}",
-                            e
+                            "string len array extract failed: {e:?}"
                         ))]
                     })?
                     .into_array_value();
@@ -8377,8 +8180,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_extract_value(arr, 2, "str_len_word")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "string len extract failed: {:?}",
-                            e
+                            "string len extract failed: {e:?}"
                         ))]
                     })?
             };
@@ -8394,12 +8196,13 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     )
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "is_empty compare failed: {:?}",
-                            e
+                            "is_empty compare failed: {e:?}"
                         ))]
                     })?
                     .as_basic_value_enum();
-                if is_empty.get_type() != dest_llvm_ty {
+                if is_empty.get_type() == dest_llvm_ty {
+                    is_empty
+                } else {
                     self.builder
                         .build_int_z_extend(
                             is_empty.into_int_value(),
@@ -8408,18 +8211,17 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         )
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "is_empty extend failed: {:?}",
-                                e
+                                "is_empty extend failed: {e:?}"
                             ))]
                         })?
                         .as_basic_value_enum()
-                } else {
-                    is_empty
                 }
             } else {
                 // `len` returns `usize` (64-bit here); truncate if the dest is
                 // narrower for robustness.
-                if len_val.get_type() != dest_llvm_ty {
+                if len_val.get_type() == dest_llvm_ty {
+                    len_val
+                } else {
                     self.builder
                         .build_int_truncate(
                             len_val.into_int_value(),
@@ -8428,13 +8230,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         )
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "len truncate failed: {:?}",
-                                e
+                                "len truncate failed: {e:?}"
                             ))]
                         })?
                         .as_basic_value_enum()
-                } else {
-                    len_val
                 }
             };
             self.builder
@@ -8487,8 +8286,8 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             let is_option = _recv_adt.to_raw() == 1010;
             // The tag value that means "the payload we want is present":
             //   Some = 1 for `Option`; Ok = 0 for `Result`.
-            let present_tag: u64 = if is_option { 1 } else { 0 };
-            let err_tag: u64 = if is_option { 0 } else { 1 };
+            let present_tag: u64 = u64::from(is_option);
+            let err_tag: u64 = u64::from(!is_option);
 
             let tag_i64 = {
                 let tag = self.lower_discriminant(recv_place)?.into_int_value();
@@ -8578,7 +8377,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 return Ok(false);
             };
             let target_bb = *self.bb_map.get(target_idx).expect("payload target");
-            let Some(current_fn) = self.builder.get_insert_block().and_then(|b| b.get_parent())
+            let Some(current_fn) = self
+                .builder
+                .get_insert_block()
+                .and_then(inkwell::basic_block::BasicBlock::get_parent)
             else {
                 return Err(vec![GlyimDiagnostic::internal_error(
                     "payload: no current function",
@@ -8728,8 +8530,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_extract_value(sv, 0, "as_bytes_arr")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "as_bytes array extract failed: {:?}",
-                            e
+                            "as_bytes array extract failed: {e:?}"
                         ))]
                     })?
                     .into_array_value();
@@ -8738,8 +8539,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_extract_value(arr, 0, "as_bytes_pi")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "as_bytes ptr extract failed: {:?}",
-                            e
+                            "as_bytes ptr extract failed: {e:?}"
                         ))]
                     })?
                     .into_int_value();
@@ -8748,8 +8548,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_extract_value(arr, 2, "as_bytes_li")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "as_bytes len extract failed: {:?}",
-                            e
+                            "as_bytes len extract failed: {e:?}"
                         ))]
                     })?;
                 let ptr_ty = self.context.ptr_type(inkwell::AddressSpace::default());
@@ -8758,8 +8557,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_int_to_ptr(p_i, ptr_ty, "as_bytes_p")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "as_bytes inttoptr failed: {:?}",
-                            e
+                            "as_bytes inttoptr failed: {e:?}"
                         ))]
                     })?;
                 let dst_sty = dest_llvm_ty.into_struct_type();
@@ -8769,8 +8567,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_insert_value(agg, p, 0, "as_bytes_i0")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "as_bytes insert 0 failed: {:?}",
-                            e
+                            "as_bytes insert 0 failed: {e:?}"
                         ))]
                     })?
                     .into_struct_value();
@@ -8779,8 +8576,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_insert_value(agg, l, 1, "as_bytes_i1")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "as_bytes insert 1 failed: {:?}",
-                            e
+                            "as_bytes insert 1 failed: {e:?}"
                         ))]
                     })?
                     .into_struct_value();
@@ -8795,8 +8591,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_extract_value(val.into_struct_value(), 0, "fat_data_ptr")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "fat-ptr extract failed: {:?}",
-                            e
+                            "fat-ptr extract failed: {e:?}"
                         ))]
                     })?;
             }
@@ -8807,8 +8602,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_bit_cast(val, dest_llvm_ty, "intrinsic_cast")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "intrinsic bitcast failed: {:?}",
-                                e
+                                "intrinsic bitcast failed: {e:?}"
                             ))]
                         })?
                         .as_basic_value_enum();
@@ -8872,11 +8666,10 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             // primitive methods (`u32::count_ones` etc.) — it is not a real
             // ADT id and must not be shown as `Adt0`. Print just the method
             // name plus the synthetic FnDefId when available.
-            let method_desc = self
-                .ty_ctx
-                .builtin_fn_id(*fn_id)
-                .map(|(_, name)| format!("`{}`", self.ty_ctx.name_str(name)))
-                .unwrap_or_else(|| format!("FnDefId({})", fn_id.to_raw()));
+            let method_desc = self.ty_ctx.builtin_fn_id(*fn_id).map_or_else(
+                || format!("FnDefId({})", fn_id.to_raw()),
+                |(_, name)| format!("`{}`", self.ty_ctx.name_str(name)),
+            );
             return Err(vec![GlyimDiagnostic::internal_error(format!(
                 "builtin method {method_desc} is resolved by the type checker but \
                  not implemented by the LLVM backend. This is a compiler gap \
@@ -8910,8 +8703,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     Some(s) => s.clone(),
                     None => {
                         return Err(vec![GlyimDiagnostic::internal_error(format!(
-                            "no signature registered for function {:?}",
-                            def_id
+                            "no signature registered for function {def_id:?}"
                         ))]);
                     }
                 };
@@ -9040,14 +8832,13 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                 TyKind::Infer(glyim_type::InferVar::Ty(v)) => map
                                     .iter()
                                     .find(|(k, _)| *k == v.to_raw())
-                                    .map(|(_, c)| *c)
-                                    .unwrap_or(ty),
+                                    .map_or(ty, |(_, c)| *c),
                                 TyKind::Infer(_) => ty,
                                 TyKind::Adt(id, sub) => {
                                     let args = frozen.substitution_args(sub);
                                     let mut new_args: Vec<GenericArg> = Vec::new();
                                     let mut changed = false;
-                                    for a in args.iter() {
+                                    for a in args {
                                         match a {
                                             GenericArg::Ty(t) => {
                                                 let nt = subst_infer(*t, map, ctx, frozen);
@@ -9086,7 +8877,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                                     let args = frozen.substitution_args(sub);
                                     let mut new_args: Vec<GenericArg> = Vec::new();
                                     let mut changed = false;
-                                    for a in args.iter() {
+                                    for a in args {
                                         match a {
                                             GenericArg::Ty(t) => {
                                                 let nt = subst_infer(*t, map, ctx, frozen);
@@ -9110,7 +8901,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         }
                         let mut ctx = TyCtxMut::from_ty_ctx(self.ty_ctx);
                         let mut new_inputs: Vec<GenericArg> = Vec::new();
-                        for g in gen_inputs.iter() {
+                        for g in &gen_inputs {
                             match g {
                                 GenericArg::Ty(t) => {
                                     new_inputs.push(GenericArg::Ty(subst_infer(
@@ -9158,7 +8949,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             }
                         }
                     }
-                    if pmap.iter().any(|x| x.is_some()) {
+                    if pmap.iter().any(std::option::Option::is_some) {
                         let map_args: Vec<GenericArg> = pmap
                             .into_iter()
                             .map(|x| match x {
@@ -9178,17 +8969,16 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     Some(ext) => ext.to_string(),
                     None => glyim_type::mangle_fn_symbol(def_id.to_raw(), substs),
                 };
-                let fn_val = match self.module.get_function(&fn_name) {
-                    Some(v) => v,
-                    None => {
-                        // Forward-declare the callee so the call can target it;
-                        // `lower_body` will later `add_function` the same symbol
-                        // (inkwell reuses the existing declaration) and define
-                        // its body. This mirrors the `FnPtr` arm's tolerance
-                        // for call-site-before-definition ordering.
-                        let fn_type = self.llvm_fn_type_from_sig(&sig)?;
-                        self.module.add_function(&fn_name, fn_type, None)
-                    }
+                let fn_val = if let Some(v) = self.module.get_function(&fn_name) {
+                    v
+                } else {
+                    // Forward-declare the callee so the call can target it;
+                    // `lower_body` will later `add_function` the same symbol
+                    // (inkwell reuses the existing declaration) and define
+                    // its body. This mirrors the `FnPtr` arm's tolerance
+                    // for call-site-before-definition ordering.
+                    let fn_type = self.llvm_fn_type_from_sig(&sig)?;
+                    self.module.add_function(&fn_name, fn_type, None)
                 };
                 (sig, Some(fn_val), None)
             }
@@ -9248,17 +9038,16 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 // link time. Without this, the call arm saw `None` and
                 // bailed with "closure body function was not emitted
                 // before the call site".
-                let direct_fn_val = match self.module.get_function(&fn_name) {
-                    Some(f) => Some(f),
-                    None => {
-                        // Build the LLVM fn type from the closure's
-                        // registered `FnSig`. `llvm_fn_type_from_sig`
-                        // consults `fn_abi_of`, which correctly classifies
-                        // the capture + explicit-param + sret shape (the
-                        // closure body lowering calls the same helper).
-                        let fn_type = self.llvm_fn_type_from_sig(&fn_sig)?;
-                        Some(self.module.add_function(&fn_name, fn_type, None))
-                    }
+                let direct_fn_val = if let Some(f) = self.module.get_function(&fn_name) {
+                    Some(f)
+                } else {
+                    // Build the LLVM fn type from the closure's
+                    // registered `FnSig`. `llvm_fn_type_from_sig`
+                    // consults `fn_abi_of`, which correctly classifies
+                    // the capture + explicit-param + sret shape (the
+                    // closure body lowering calls the same helper).
+                    let fn_type = self.llvm_fn_type_from_sig(&fn_sig)?;
+                    Some(self.module.add_function(&fn_name, fn_type, None))
                 };
                 // The closure value is `{ fn_ptr, captures... }` — field 0 is
                 // the code pointer, fields 1..N the captures (see
@@ -9300,8 +9089,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
         let fn_abi = layout_computer.fn_abi_of(&fn_sig).map_err(|e| {
             vec![GlyimDiagnostic::internal_error(format!(
-                "Layout error: {:?}",
-                e
+                "Layout error: {e:?}"
             ))]
         })?;
         let is_sret = matches!(fn_abi.ret.mode, PassMode::Indirect { .. });
@@ -9330,7 +9118,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 arg_idx += 1;
                 continue;
             }
-            if arg_idx >= args.len() + closure_captures.as_ref().map(|c| c.len()).unwrap_or(0) {
+            if arg_idx >= args.len() + closure_captures.as_ref().map_or(0, std::vec::Vec::len) {
                 return Err(vec![GlyimDiagnostic::internal_error(
                     "argument count mismatch",
                 )]);
@@ -9364,8 +9152,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 PassMode::Cast { .. } => {
                     let layout = layout_computer.layout_of(arg_abi.ty).map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "Layout error in Cast: {:?}",
-                            e
+                            "Layout error in Cast: {e:?}"
                         ))]
                     })?;
                     let size_bits = layout.size.0 * 8;
@@ -9375,14 +9162,12 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_alloca(cast_ty, "arg_cast")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "alloca failed: {:?}",
-                                e
+                                "alloca failed: {e:?}"
                             ))]
                         })?;
                     self.builder.build_store(cast_ptr, arg_val).map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "store failed: {:?}",
-                            e
+                            "store failed: {e:?}"
                         ))]
                     })?;
                     let casted_val = self
@@ -9390,8 +9175,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                         .build_load(cast_ty, cast_ptr, "arg_casted")
                         .map_err(|e| {
                             vec![GlyimDiagnostic::internal_error(format!(
-                                "load failed: {:?}",
-                                e
+                                "load failed: {e:?}"
                             ))]
                         })?;
                     llvm_args.push(casted_val);
@@ -9405,8 +9189,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                             .build_extract_value(struct_val, i, "agg_field")
                             .map_err(|e| {
                                 vec![GlyimDiagnostic::internal_error(format!(
-                                    "extract failed: {:?}",
-                                    e
+                                    "extract failed: {e:?}"
                                 ))]
                             })?;
                         llvm_args.push(field_val);
@@ -9441,8 +9224,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_invoke(fn_val, &llvm_args, normal_bb, cleanup_bb, "call")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "invoke failed: {:?}",
-                            e
+                            "invoke failed: {e:?}"
                         ))]
                     })?
             } else {
@@ -9450,8 +9232,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .build_call(fn_val, &metadata_args, "call")
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "call failed: {:?}",
-                            e
+                            "call failed: {e:?}"
                         ))]
                     })?
             }
@@ -9486,8 +9267,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     )
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "invoke failed: {:?}",
-                            e
+                            "invoke failed: {e:?}"
                         ))]
                     })?
             } else {
@@ -9515,8 +9295,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                     .inspect(|call_site| call_site.set_call_convention(call_conv))
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
-                            "call failed: {:?}",
-                            e
+                            "call failed: {e:?}"
                         ))]
                     })?
             }
@@ -9598,8 +9377,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
                 AnyValueEnum::ScalableVectorValue(v) => BasicValueEnum::ScalableVectorValue(v),
                 other => {
                     return Err(vec![GlyimDiagnostic::internal_error(format!(
-                        "unexpected call return kind: {:?}",
-                        other
+                        "unexpected call return kind: {other:?}"
                     ))]);
                 }
             };
@@ -9717,8 +9495,7 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
             .build_landing_pad(landingpad_ty, personality_fn, &[], true, "lpad")
             .map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
-                    "landingpad failed: {:?}",
-                    e
+                    "landingpad failed: {e:?}"
                 ))]
             })?;
 
@@ -9734,58 +9511,6 @@ impl<'ctx, 'a> LoweringCtx<'ctx, 'a> {
         // reported `false` here and its destructor never ran. `glyim-lower`
         // and `glyim-opt` already delegate.
         self.ty_ctx.needs_drop(ty)
-    }
-
-    #[allow(dead_code)]
-    fn type_needs_drop_fields_only(&self, ty: Ty) -> bool {
-        match self.ty_ctx.ty_kind(ty) {
-            TyKind::Ref(_, _, _) | TyKind::RawPtr(_, _) => false,
-            TyKind::Array(inner, _) => self.type_needs_drop(*inner),
-            TyKind::Tuple(substs) => self.ty_ctx.substitution_args(*substs).iter().any(|arg| {
-                if let glyim_type::GenericArg::Ty(t) = arg {
-                    self.type_needs_drop(*t)
-                } else {
-                    false
-                }
-            }),
-            TyKind::Adt(adt_id, _) => {
-                if let Some(adt_def) = self.ty_ctx.adt_def(*adt_id) {
-                    adt_def
-                        .variants
-                        .iter()
-                        .any(|v| v.fields.iter().any(|f| self.type_needs_drop(f.ty)))
-                } else {
-                    false
-                }
-            }
-            TyKind::Closure(_, substs) => {
-                self.ty_ctx.substitution_args(*substs).iter().any(|arg| {
-                    if let glyim_type::GenericArg::Ty(t) = arg {
-                        self.type_needs_drop(*t)
-                    } else {
-                        false
-                    }
-                })
-            }
-            TyKind::String => true,
-            TyKind::Bool
-            | TyKind::Int(_)
-            | TyKind::Uint(_)
-            | TyKind::Float(_)
-            | TyKind::Char
-            | TyKind::Never
-            | TyKind::Unit
-            | TyKind::FnDef(_, _)
-            | TyKind::FnPtr(_) => false,
-            // Unreachable after TASK-P1-6, but conservative fallback is true.
-            TyKind::Dynamic(..)
-            | TyKind::Opaque(..)
-            | TyKind::Projection(_)
-            | TyKind::Param(_)
-            | TyKind::Bound(_, _)
-            | TyKind::Infer(_) => true,
-            _ => false,
-        }
     }
 
     fn type_is_owning_pointer(&self, ty: Ty) -> bool {
@@ -9828,7 +9553,6 @@ fn lower_unsized_to_fat_ptr(ty_ctx: &TyCtx, ty: Ty) -> Ty {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn lower_body<'ctx>(
     context: &'ctx Context,
     module: &Module<'ctx>,
@@ -9877,10 +9601,7 @@ pub(crate) fn lower_body<'ctx>(
             }
         }
         let inputs = ty_ctx.intern_substitution(input_args);
-        let abi = ty_ctx
-            .fn_sig(fn_def_id)
-            .map(|s| s.abi)
-            .unwrap_or(Abi::Glyim);
+        let abi = ty_ctx.fn_sig(fn_def_id).map_or(Abi::Glyim, |s| s.abi);
         let param_map: Vec<GenericArg> = body
             .locals
             .iter()
@@ -9912,8 +9633,7 @@ pub(crate) fn lower_body<'ctx>(
         llvm_fn_type_from_sig_inner(ty_ctx, &target_info, context, &layout_computer, &fn_sig)
             .map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
-                    "fn type lowering failed: {:?}",
-                    e
+                    "fn type lowering failed: {e:?}"
                 ))]
             })?;
     let function = module
@@ -10096,7 +9816,7 @@ pub(crate) fn lower_body<'ctx>(
     let params = function.get_params();
     // Offset of the first non-hidden LLVM parameter. sret prepends a
     // pointer to the return slot.
-    let llvm_param_offset: u32 = if lowering_ctx.is_sret { 1 } else { 0 };
+    let llvm_param_offset: u32 = u32::from(lowering_ctx.is_sret);
     // Walk the ABI arg list, tracking the LLVM param index as we go and
     // skipping `Ignore` entries (which contribute no LLVM param).
     let mut next_llvm_param: u32 = llvm_param_offset;
@@ -10119,25 +9839,22 @@ pub(crate) fn lower_body<'ctx>(
         if let Some(param_val) = params.get(param_idx as usize) {
             let local_ptr = lowering_ctx.get_local_ptr(local_idx);
             let arg_mode = matches!(arg_abi.mode, glyim_layout::PassMode::Indirect { .. });
-            match arg_mode {
-                true => {
-                    let llvm_ty = lowering_ctx
-                        .llvm_type_for_ty(body.locals.get(local_idx).map(|l| l.ty).unwrap())?;
-                    let loaded = lowering_ctx
-                        .builder
-                        .build_load(llvm_ty, param_val.into_pointer_value(), "param_load")
-                        .expect("failed to load byval param");
-                    lowering_ctx
-                        .builder
-                        .build_store(local_ptr, loaded)
-                        .expect("failed to store param into local");
-                }
-                false => {
-                    lowering_ctx
-                        .builder
-                        .build_store(local_ptr, *param_val)
-                        .expect("failed to store param into local");
-                }
+            if arg_mode {
+                let llvm_ty = lowering_ctx
+                    .llvm_type_for_ty(body.locals.get(local_idx).map(|l| l.ty).unwrap())?;
+                let loaded = lowering_ctx
+                    .builder
+                    .build_load(llvm_ty, param_val.into_pointer_value(), "param_load")
+                    .expect("failed to load byval param");
+                lowering_ctx
+                    .builder
+                    .build_store(local_ptr, loaded)
+                    .expect("failed to store param into local");
+            } else {
+                lowering_ctx
+                    .builder
+                    .build_store(local_ptr, *param_val)
+                    .expect("failed to store param into local");
             }
         }
     }
@@ -10337,13 +10054,11 @@ mod tests {
         let ir = module.print_to_string().to_string();
         assert!(
             ir.contains("cleanuppad") && ir.contains("cleanupret"),
-            "SEH target must emit cleanuppad + cleanupret funclet IR: {}",
-            ir
+            "SEH target must emit cleanuppad + cleanupret funclet IR: {ir}"
         );
         assert!(
             ir.contains("__CxxFrameHandler3"),
-            "SEH target must declare the __CxxFrameHandler3 personality: {}",
-            ir
+            "SEH target must declare the __CxxFrameHandler3 personality: {ir}"
         );
     }
 }
