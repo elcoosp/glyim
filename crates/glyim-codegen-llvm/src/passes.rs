@@ -15,11 +15,11 @@ use std::path::Path;
 /// hand control to the linker driver.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LtoKind {
-    /// Variant.
+    /// `Variant`.
     None,
-    /// Variant.
+    /// `Variant`.
     Thin,
-    /// Variant.
+    /// `Variant`.
     Fat,
 }
 
@@ -29,7 +29,7 @@ pub enum LtoKind {
 /// the module that will subsequently be passed to `run_llvm_passes`). `others`
 /// are the remaining per-crate / per-CGU modules to merge into `primary` for
 /// `Fat` LTO. For `None`, nothing is done. For `Thin`, the merge is intentionally
-/// *not* performed here (it would defeat ThinLTO's incremental design); callers
+/// *not* performed here (it would defeat `ThinLTO`'s incremental design); callers
 /// must instead drive the thin-link via the linker and only pass `-flto=thin`
 /// flags. Returns an error describing the gap if `Thin` is requested, so the
 /// limitation is explicit rather than silent.
@@ -56,7 +56,7 @@ pub(crate) fn run_lto<'ctx>(
                 let cloned = other.clone();
                 primary
                     .link_in_module(cloned)
-                    .map_err(|e| format!("Fat LTO module merge failed: {}", e))?;
+                    .map_err(|e| format!("Fat LTO module merge failed: {e}"))?;
             }
             // Run the optimization pipeline once over the merged module so
             // cross-module optimizations (inlining, etc.) actually fire.
@@ -65,10 +65,9 @@ pub(crate) fn run_lto<'ctx>(
     }
 }
 
-/// Emit this module's bitcode, suitable for `glyim-cli`'s ThinLTO thin-link
 /// step.
 ///
-/// Real ThinLTO writes each CGU's bitcode to disk and lets the thin-link
+/// Real `ThinLTO` writes each CGU's bitcode to disk and lets the thin-link
 /// driver (`llvm-lto2`) combine the per-module summaries — parallel,
 /// incremental per-module optimization instead of one giant merged module
 /// (which is what `Fat` LTO does). `write_bitcode_to_path` produces exactly
@@ -78,13 +77,13 @@ pub(crate) fn run_lto<'ctx>(
 /// `llvm-sys` FFI (`LLVMAddModuleFlag`) — inkwell 0.10 does not wrap the
 /// module-flag API. This embeds a `ThinLTO` module flag (behavior `Error`, so
 /// conflicting summaries are rejected at thin-link time) marking the bitcode
-/// as valid ThinLTO input that carries a module summary; without it the
+/// as valid `ThinLTO` input that carries a module summary; without it the
 /// thin-link would treat the module as a regular (non-summary) input. The
-/// bitcode written here is valid ThinLTO input regardless; embedding the
+/// bitcode written here is valid `ThinLTO` input regardless; embedding the
 /// summary flag is what lets the thin-link actually perform cross-module
 /// inlining rather than silently downgrading to a single-module pass.
-pub fn emit_thinlto_bitcode<'ctx>(
-    module: &Module<'ctx>,
+pub fn emit_thinlto_bitcode(
+    module: &Module<'_>,
     _target_machine: &TargetMachine,
     out_path: &Path,
 ) -> Result<(), String> {
@@ -98,10 +97,9 @@ pub fn emit_thinlto_bitcode<'ctx>(
     unsafe {
         use llvm_sys::LLVMModuleFlagBehavior::LLVMModuleFlagBehaviorError;
         use llvm_sys::core::{LLVMAddModuleFlag, LLVMGetModuleContext, LLVMMDStringInContext2};
-        use std::os::raw::c_char;
         let ctx = LLVMGetModuleContext(module.as_mut_ptr());
-        let value = LLVMMDStringInContext2(ctx, b"1\0".as_ptr() as *const c_char, 1);
-        let name = b"ThinLTO\0".as_ptr() as *const c_char;
+        let value = LLVMMDStringInContext2(ctx, c"1".as_ptr(), 1);
+        let name = c"ThinLTO".as_ptr();
         LLVMAddModuleFlag(
             module.as_mut_ptr(),
             LLVMModuleFlagBehaviorError,
@@ -135,7 +133,6 @@ pub fn emit_thinlto_bitcode<'ctx>(
 /// - 4+: Same as O3 (default)
 ///
 /// When `opt_for_size` is true, size optimizations (Os/Oz) are used instead of speed.
-
 /// Check that the linked LLVM version is supported.
 /// Panics with a clear error message if the version is unsupported.
 pub(crate) fn check_llvm_version_and_passes() {
@@ -143,12 +140,13 @@ pub(crate) fn check_llvm_version_and_passes() {
     // version is (major, minor, patch)
     let major = version.0;
     // We support LLVM 18, 19, 20, 21, 22 (and later)
-    if major < 18 {
-        panic!(
-            "Unsupported LLVM version: {}.{}.{}. Glyim requires LLVM 18 or later.",
-            version.0, version.1, version.2
-        );
-    }
+    assert!(
+        major >= 18,
+        "Unsupported LLVM version: {}.{}.{}. Glyim requires LLVM 18 or later.",
+        version.0,
+        version.1,
+        version.2
+    );
     tracing::info!(
         "Using LLVM version: {}.{}.{}",
         version.0,
@@ -157,8 +155,8 @@ pub(crate) fn check_llvm_version_and_passes() {
     );
 }
 
-pub(crate) fn run_llvm_passes<'ctx>(
-    module: &Module<'ctx>,
+pub(crate) fn run_llvm_passes(
+    module: &Module<'_>,
     target_machine: &TargetMachine,
     opt_level: u8,
     opt_for_size: bool,
@@ -170,8 +168,8 @@ pub(crate) fn run_llvm_passes<'ctx>(
 /// (e.g. `"instcombine,simplifycfg"`) to override the built-in `default<Ox>`
 /// selection (plan §19.4). When `custom` is `None`, behaviour is identical to
 /// `run_llvm_passes`.
-pub(crate) fn run_llvm_passes_with<'ctx>(
-    module: &Module<'ctx>,
+pub(crate) fn run_llvm_passes_with(
+    module: &Module<'_>,
     target_machine: &TargetMachine,
     opt_level: u8,
     opt_for_size: bool,
@@ -213,14 +211,14 @@ pub(crate) fn run_llvm_passes_with<'ctx>(
     let opts = PassBuilderOptions::create();
     module
         .run_passes(pass_str, target_machine, opts)
-        .map_err(|e| format!("Failed to run LLVM passes: {}", e))
+        .map_err(|e| format!("Failed to run LLVM passes: {e}"))
 }
 
 /// Tag every function in `module` with the named enum function attribute
 /// (`optsize` or `minsize`). LLVM 23 dropped the `Os`/`Oz` pipeline presets
 /// and expects callers to use `O2` together with one of these attributes to
 /// request size-oriented optimization.
-fn apply_size_attribute<'ctx>(module: &Module<'ctx>, attr_name: &str) {
+fn apply_size_attribute(module: &Module<'_>, attr_name: &str) {
     use inkwell::attributes::{Attribute, AttributeLoc};
     let context = module.get_context();
     let kind_id = Attribute::get_named_enum_kind_id(attr_name);
