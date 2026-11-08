@@ -56,8 +56,8 @@ fn single_block_borrow_no_error() {
 /// Borrow that is never used — dest local is dead → no conflict even with
 /// a second borrow of the same place.
 ///
-///   BB0: local_2 = &mut local_1; goto BB1    (local_2 is never read)
-///   BB1: local_3 = &shared local_1; local_4 = copy local_3; return
+///   BB0: `local_2` = &mut `local_1`; goto BB1    (`local_2` is never read)
+///   BB1: `local_3` = &shared `local_1`; `local_4` = copy `local_3`; return
 #[test]
 fn dead_borrow_no_conflict() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -112,8 +112,8 @@ fn empty_body_no_error() {
 
 /// Borrow of different places — should not conflict.
 ///
-///   BB0: local_2 = &mut local_1; local_4 = &shared local_3; goto BB1
-///   BB1: local_5 = copy local_2; local_6 = copy local_4; return
+///   BB0: `local_2` = &mut `local_1`; `local_4` = &shared `local_3`; goto BB1
+///   BB1: `local_5` = copy `local_2`; `local_6` = copy `local_4`; return
 #[test]
 fn borrows_of_different_places_no_conflict() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -156,9 +156,9 @@ fn borrows_of_different_places_no_conflict() {
 
 /// Multiple shared borrows of the same place across different blocks → no error.
 ///
-///   BB0: local_2 = &shared local_1; goto BB1
-///   BB1: local_3 = &shared local_1; goto BB2
-///   BB2: local_4 = copy local_2; local_5 = copy local_3; return
+///   BB0: `local_2` = &shared `local_1`; goto BB1
+///   BB1: `local_3` = &shared `local_1`; goto BB2
+///   BB2: `local_4` = copy `local_2`; `local_5` = copy `local_3`; return
 #[test]
 fn multiple_shared_borrows_across_blocks_no_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -192,7 +192,7 @@ fn multiple_shared_borrows_across_blocks_no_error() {
 
 /// Body with StorageLive/StorageDead statements — should be ignored.
 ///
-///   BB0: StorageLive(local_1); local_2 = &shared local_1; local_3 = copy local_2; StorageDead(local_1); return
+///   BB0: `StorageLive(local_1)`; `local_2` = &shared `local_1`; `local_3` = copy `local_2`; `StorageDead(local_1)`; return
 #[test]
 fn storage_live_dead_ignored_no_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -220,8 +220,8 @@ fn storage_live_dead_ignored_no_error() {
 
 /// Unique borrow conflicts with shared borrow on same place → error.
 ///
-///   BB0: local_2 = &unique local_1; goto BB1
-///   BB1: local_3 = &shared local_1; local_4 = copy local_2; return
+///   BB0: `local_2` = &unique `local_1`; goto BB1
+///   BB1: `local_3` = &shared `local_1`; `local_4` = copy `local_2`; return
 #[test]
 fn unique_and_shared_conflict_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
@@ -252,8 +252,8 @@ fn unique_and_shared_conflict_error() {
 
 /// Unique borrow expires, then shared borrow of same place → no error.
 ///
-///   BB0: local_2 = &unique local_1; local_3 = copy local_2; goto BB1   (last use of local_2)
-///   BB1: local_4 = &shared local_1; local_5 = copy local_4; return
+///   BB0: `local_2` = &unique `local_1`; `local_3` = copy `local_2`; goto BB1   (last use of `local_2`)
+///   BB1: `local_4` = &shared `local_1`; `local_5` = copy `local_4`; return
 #[test]
 fn unique_expires_then_shared_no_error() {
     let (ty_ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
