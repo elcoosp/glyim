@@ -1,15 +1,16 @@
 #[derive(Clone, Debug)]
-/// TargetInfo.
+/// `TargetInfo`.
 pub struct TargetInfo {
     pointer_width: u32,
-    /// Struct.
+    /// `Struct`.
     pub triple: String,
-    /// Struct.
+    /// `Struct`.
     pub abi: TargetAbi,
 }
 
 impl TargetInfo {
-    /// from_triple.
+    /// `from_triple`.
+    #[must_use]
     pub fn from_triple(triple: &str) -> Self {
         let parts: Vec<&str> = triple.split('-').collect();
         let arch = parts.first().copied().unwrap_or("");
@@ -25,9 +26,9 @@ impl TargetInfo {
         };
 
         let abi = match (arch, os) {
-            ("x86_64", "windows") | ("x86_64", "win32") => TargetAbi::X86_64Windows,
-            ("aarch64", "windows") | ("arm64", "windows") => TargetAbi::AArch64Windows,
-            ("aarch64", _) | ("arm64", _) => TargetAbi::AArch64AAPCS,
+            ("x86_64", "windows" | "win32") => TargetAbi::X86_64Windows,
+            ("aarch64" | "arm64", "windows") => TargetAbi::AArch64Windows,
+            ("aarch64" | "arm64", _) => TargetAbi::AArch64AAPCS,
             ("wasm32", _) => TargetAbi::Wasm32,
             _ => TargetAbi::X86_64SystemV,
         };
@@ -40,43 +41,48 @@ impl TargetInfo {
     }
 
     /// aarch64.
+    #[must_use]
     pub fn aarch64() -> Self {
         Self::from_triple("aarch64-unknown-linux-gnu")
     }
 
-    /// x86_64.
+    /// `x86_64`.
+    #[must_use]
     pub fn x86_64() -> Self {
         Self::from_triple("x86_64-unknown-linux-gnu")
     }
 
-    /// pointer_width.
+    /// `pointer_width`.
+    #[must_use]
     pub fn pointer_width(&self) -> u32 {
         self.pointer_width
     }
 
-    /// pointer_size.
+    /// `pointer_size`.
+    #[must_use]
     pub fn pointer_size(&self) -> u64 {
-        self.pointer_width as u64 / 8
+        u64::from(self.pointer_width) / 8
     }
 
-    /// pointer_align.
+    /// `pointer_align`.
+    #[must_use]
     pub fn pointer_align(&self) -> u64 {
         self.pointer_size()
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// TargetAbi.
+/// `TargetAbi`.
 pub enum TargetAbi {
-    /// Variant.
+    /// `Variant`.
     X86_64SystemV,
-    /// Variant.
+    /// `Variant`.
     X86_64Windows,
-    /// Variant.
+    /// `Variant`.
     AArch64AAPCS,
-    /// Variant.
+    /// `Variant`.
     AArch64Windows,
-    /// Variant.
+    /// `Variant`.
     Wasm32,
 }
 
@@ -91,22 +97,23 @@ impl Default for TargetInfo {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// IntTy.
+/// `IntTy`.
 pub enum IntTy {
-    /// Variant.
+    /// `Variant`.
     I8,
-    /// Variant.
+    /// `Variant`.
     I16,
-    /// Variant.
+    /// `Variant`.
     I32,
-    /// Variant.
+    /// `Variant`.
     I64,
-    /// Variant.
+    /// `Variant`.
     Isize,
 }
 
 impl IntTy {
-    /// bit_width.
+    /// `bit_width`.
+    #[must_use]
     pub fn bit_width(self, target: &TargetInfo) -> u32 {
         match self {
             Self::I8 => 8,
@@ -117,6 +124,7 @@ impl IntTy {
         }
     }
     /// name.
+    #[must_use]
     pub fn name(self) -> &'static str {
         match self {
             Self::I8 => "i8",
@@ -129,22 +137,23 @@ impl IntTy {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// UintTy.
+/// `UintTy`.
 pub enum UintTy {
-    /// Variant.
+    /// `Variant`.
     U8,
-    /// Variant.
+    /// `Variant`.
     U16,
-    /// Variant.
+    /// `Variant`.
     U32,
-    /// Variant.
+    /// `Variant`.
     U64,
-    /// Variant.
+    /// `Variant`.
     Usize,
 }
 
 impl UintTy {
-    /// bit_width.
+    /// `bit_width`.
+    #[must_use]
     pub fn bit_width(self, target: &TargetInfo) -> u32 {
         match self {
             Self::U8 => 8,
@@ -155,6 +164,7 @@ impl UintTy {
         }
     }
     /// name.
+    #[must_use]
     pub fn name(self) -> &'static str {
         match self {
             Self::U8 => "u8",
@@ -167,16 +177,17 @@ impl UintTy {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// FloatTy.
+/// `FloatTy`.
 pub enum FloatTy {
-    /// Variant.
+    /// `Variant`.
     F32,
-    /// Variant.
+    /// `Variant`.
     F64,
 }
 
 impl FloatTy {
-    /// bit_width.
+    /// `bit_width`.
+    #[must_use]
     pub fn bit_width(self) -> u32 {
         match self {
             Self::F32 => 32,
@@ -184,6 +195,7 @@ impl FloatTy {
         }
     }
     /// name.
+    #[must_use]
     pub fn name(self) -> &'static str {
         match self {
             Self::F32 => "f32",
@@ -193,47 +205,50 @@ impl FloatTy {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// Mutability.
+/// `Mutability`.
 pub enum Mutability {
-    /// Variant.
+    /// `Variant`.
     Not,
-    /// Variant.
+    /// `Variant`.
     Mut,
 }
 
 impl Mutability {
-    /// is_mut.
+    /// `is_mut`.
+    #[must_use]
     pub fn is_mut(self) -> bool {
         matches!(self, Self::Mut)
     }
-    /// prefix_str.
+    /// `prefix_str`.
+    #[must_use]
     pub fn prefix_str(self) -> &'static str {
         if self.is_mut() { "mut " } else { "" }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// Safety.
+/// `Safety`.
 pub enum Safety {
-    /// Variant.
+    /// `Variant`.
     Safe,
-    /// Variant.
+    /// `Variant`.
     Unsafe,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// Abi.
+/// `Abi`.
 pub enum Abi {
-    /// Variant.
+    /// `Variant`.
     C,
-    /// Variant.
+    /// `Variant`.
     Glyim,
-    /// Variant.
+    /// `Variant`.
     System,
 }
 
 impl Abi {
     /// name.
+    #[must_use]
     pub fn name(self) -> &'static str {
         match self {
             Self::C => "C",
@@ -244,48 +259,49 @@ impl Abi {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// BinOp.
+/// `BinOp`.
 pub enum BinOp {
-    /// Variant.
+    /// `Variant`.
     Add,
-    /// Variant.
+    /// `Variant`.
     Sub,
-    /// Variant.
+    /// `Variant`.
     Mul,
-    /// Variant.
+    /// `Variant`.
     Div,
-    /// Variant.
+    /// `Variant`.
     Rem,
-    /// Variant.
+    /// `Variant`.
     Eq,
-    /// Variant.
+    /// `Variant`.
     Ne,
-    /// Variant.
+    /// `Variant`.
     Lt,
-    /// Variant.
+    /// `Variant`.
     Gt,
-    /// Variant.
+    /// `Variant`.
     LtEq,
-    /// Variant.
+    /// `Variant`.
     GtEq,
-    /// Variant.
+    /// `Variant`.
     And,
-    /// Variant.
+    /// `Variant`.
     Or,
-    /// Variant.
+    /// `Variant`.
     BitAnd,
-    /// Variant.
+    /// `Variant`.
     BitOr,
-    /// Variant.
+    /// `Variant`.
     BitXor,
-    /// Variant.
+    /// `Variant`.
     Shl,
-    /// Variant.
+    /// `Variant`.
     Shr,
 }
 
 impl BinOp {
-    /// is_comparison.
+    /// `is_comparison`.
+    #[must_use]
     pub fn is_comparison(self) -> bool {
         matches!(
             self,
@@ -295,40 +311,40 @@ impl BinOp {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// UnOp.
+/// `UnOp`.
 pub enum UnOp {
-    /// Variant.
+    /// `Variant`.
     Not,
-    /// Variant.
+    /// `Variant`.
     Neg,
-    /// Variant.
+    /// `Variant`.
     Deref,
 }
 
 use crate::interner::Name;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// Visibility.
+/// `Visibility`.
 pub enum Visibility {
-    /// Variant.
+    /// `Variant`.
     Public,
-    /// Variant.
+    /// `Variant`.
     PubCrate,
-    /// Variant.
+    /// `Variant`.
     PubSuper,
-    #[allow(missing_docs)]
+    /// A `pub(in path)` visibility restricted to `path`.
     PubIn(Vec<Name>),
-    /// Variant.
+    /// `Variant`.
     Inherited,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// StructKind.
+/// `StructKind`.
 pub enum StructKind {
-    /// Variant.
+    /// `Variant`.
     Unit,
-    /// Variant.
+    /// `Variant`.
     Tuple,
-    /// Variant.
+    /// `Variant`.
     Record,
 }
