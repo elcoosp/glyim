@@ -101,7 +101,7 @@ fn direct_access_while_mutably_borrowed_across_blocks_error() {
 /// MIR:
 ///   BB0: switch local3 -> [true: BB1, false: BB2]
 ///   BB1: local2 = &mut local1; local4 = copy local2; goto BB3
-///   BB2: local_5 = &shared local1; local_6 = copy local_5; goto BB3
+///   BB2: `local_5` = &shared local1; `local_6` = copy `local_5`; goto BB3
 ///   BB3: return
 #[test]
 fn path_sensitive_borrows_on_different_branches_no_error() {
