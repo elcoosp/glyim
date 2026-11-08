@@ -21,10 +21,10 @@ fn compile(src: &str) -> CompileOutput {
 
 #[test]
 fn const_at_crate_root_resolves() {
-    let src = r#"
+    let src = r"
         const X: i32 = 42;
         fn main() -> i32 { X }
-    "#;
+    ";
     let out = compile(src);
     assert_no_errors(&out.diagnostics);
 }
@@ -33,12 +33,12 @@ fn const_at_crate_root_resolves() {
 fn const_inside_module_resolves() {
     // The bug: `m::X` fails because X's type is registered at the
     // wrong ConstDefId (or not at all).
-    let src = r#"
+    let src = r"
         mod m {
             const X: i32 = 42;
         }
         fn main() -> i32 { m::X }
-    "#;
+    ";
     let out = compile(src);
     assert_no_errors(&out.diagnostics);
 }
@@ -46,13 +46,13 @@ fn const_inside_module_resolves() {
 #[test]
 fn const_struct_value_inside_module_resolves() {
     // Closest to GLOBAL: a const of a user struct type inside a module.
-    let src = r#"
+    let src = r"
         mod m {
             pub struct S;
             pub const GLOBAL: S = S;
         }
         fn main() { let _g = m::GLOBAL; }
-    "#;
+    ";
     let out = compile(src);
     assert_no_errors(&out.diagnostics);
 }
