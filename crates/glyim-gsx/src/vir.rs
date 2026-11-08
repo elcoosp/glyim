@@ -1,7 +1,7 @@
 //! The View IR — static skeleton + slots + regions (design doc §6).
 //!
-//! §2 principle 1: **structure is never erased early.** `<div class="a">{x}
-//! </div>` stays a tree through the pipeline; only this dedicated pass lowers
+//! §2 principle 1: **structure is never erased early.** A mixed `` `<div …>{x}</div>` `` tree
+//! stays a tree through the pipeline; only this dedicated pass lowers
 //! it. Every view splits into (§6.1):
 //!
 //! - a **Blueprint**: the static skeleton (see [`crate::blueprint`]),
@@ -31,9 +31,9 @@ use std::rc::Rc;
 /// kind (§6.1 slot table).
 #[derive(Debug, Clone)]
 pub struct Slot {
-    /// Slot index in tree order (= SlotMarker payload).
+    /// Slot index in tree order (= `SlotMarker` payload).
     pub id: usize,
-    /// Kind.
+    /// `Kind`.
     pub kind: SlotKind,
     /// Blueprint node this slot patches.
     pub node: u32,
@@ -51,27 +51,55 @@ pub enum SlotKind {
     /// `"Count: {s.count}"` hole → `host.set_text`.
     Text,
     /// `value={s.name}` → `host.set_prop`.
-    Prop { prop: String, expr: Expr },
+    Prop {
+        /// Prop.
+        prop: String,
+        /// Expr.
+        expr: Expr,
+    },
     /// `class:warn={s.count<0}` → add/remove class bit.
-    ClassToggle { class: String, expr: Expr },
+    ClassToggle {
+        /// Class.
+        class: String,
+        /// Expr.
+        expr: Expr,
+    },
     /// `style:width={px}` → `set_prop` + `invalidate(Layout)` (G5).
-    Style { prop: String, expr: Expr },
+    Style {
+        /// Prop.
+        prop: String,
+        /// Expr.
+        expr: Expr,
+    },
     /// `on:click={…}` → one-time `listen` at mount (static handler id).
     Event {
+        /// `Event`.
         event: String,
+        /// `Handler`.
         handler: Rc<HandlerSpec>,
     },
     /// `if / match / for / <Child/>` — structural (§6.3).
-    Region { region: usize },
+    Region {
+        /// Region.
+        region: usize,
+    },
 }
 
 /// A handler: state transformer, not a capturing closure (§7.3).
 #[derive(Debug, Clone)]
 pub enum HandlerSpec {
     /// `|s, e| body` — params bind state + event.
-    Closure { params: Vec<String>, body: Expr },
+    Closure {
+        /// Params.
+        params: Vec<String>,
+        /// Body.
+        body: Expr,
+    },
     /// Synthesized by `bind:` (§7.9): `|s, e| place = e.value()`.
-    SynthBind { place: Expr },
+    SynthBind {
+        /// Place.
+        place: Expr,
+    },
 }
 
 impl HandlerSpec {
@@ -169,7 +197,7 @@ pub enum VirNode {
         /// Slots anchored to this element, in anchor order (props, toggles,
         /// styles, events).
         slot_ids: Vec<usize>,
-        /// Children.
+        /// `Children`.
         children: Vec<VirNode>,
     },
     /// Static + hole text: static runs become `Text` ops; holes become Text
@@ -188,7 +216,7 @@ pub enum VirNode {
     },
     /// A fragment: children inline in the parent's blueprint (no host node).
     Fragment {
-        /// Children.
+        /// `Children`.
         children: Vec<VirNode>,
     },
 }
@@ -197,7 +225,7 @@ pub enum VirNode {
 /// emitter needs the name too.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StaticProp {
-    /// Hashed prop id (§6.1 StaticProp op payload).
+    /// Hashed prop id (§6.1 `StaticProp` op payload).
     pub id: u32,
     /// Prop/schema name (`class`, `aria-label`, …).
     pub name: String,
@@ -302,7 +330,7 @@ impl std::fmt::Debug for ComponentDef {
         f.debug_struct("ComponentDef")
             .field("inline_never", &self.inline_never)
             .field("inline_always", &self.inline_always)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -851,13 +879,11 @@ impl<'a> VirBuilder<'a> {
                     let shape = match itag {
                         ast::TagName::Intrinsic(t) => ChildName::Intrinsic(t.clone()),
                         ast::TagName::Dialect(_, t) => ChildName::Intrinsic(t.clone()),
-                        ast::TagName::Component(segs) => {
-                            ChildName::Component(segs.first().cloned().unwrap_or_default())
-                        }
+                        ast::TagName::Component(_) => ChildName::Component,
                     };
                     let shape_str: &'static str = match &shape {
                         ChildName::Intrinsic(t) => leak_tag(t),
-                        ChildName::Component(_) => "component",
+                        ChildName::Component => "component",
                     };
                     if let Some(v) =
                         schema.child_violation(&crate::schema::ChildShape::Element(shape_str))
@@ -972,9 +998,9 @@ impl<'a> VirBuilder<'a> {
 
 enum ChildName {
     Intrinsic(String),
-    /// Component children: the head segment is used for content-model
+    /// Component children: the head segment is reserved for content-model
     /// checks once component schemas land (§4.2 lang-ui).
-    Component(#[allow(dead_code)] String),
+    Component,
 }
 
 fn leak_tag(t: &str) -> &'static str {
@@ -1059,7 +1085,7 @@ fn choose_list_strategy(key: Option<&Expr>) -> ListStrategy {
     match key {
         None => ListStrategy::AppendOnly,
         Some(Expr::Lit(_)) => ListStrategy::Fixed,
-        Some(Expr::Field(..)) | Some(Expr::Index(..)) | Some(Expr::Var(_)) => ListStrategy::Keyed,
+        Some(Expr::Field(..) | Expr::Index(..) | Expr::Var(_)) => ListStrategy::Keyed,
         Some(_) => ListStrategy::Index,
     }
 }
@@ -1125,7 +1151,7 @@ mod tests {
         assert_eq!(v.node_count(), 3); // section, h1, text
     }
 
-    /// §6.1 slot table: Text / Prop / ClassToggle / Style / Event / Region
+    /// §6.1 slot table: `Text` / `Prop` / `ClassToggle` / `Style` / `Event` / `Region`
     /// all materialize as slots with the right kinds.
     #[test]
     fn slot_kinds_match_table() {
@@ -1368,8 +1394,8 @@ mod tests {
         );
     }
 
-    /// §6.2: mount is instantiate + initial slot fills — a static subtree
-    /// produces a blueprint with no SlotMarkers.
+    /// §6.2: mount is `instantiate` + initial slot fills — a static subtree
+    /// produces a blueprint with no `SlotMarker`s.
     #[test]
     fn blueprint_of_static_view_has_no_markers() {
         let v = build("<section class=\"a\"><h1>\"Hi\"</h1></section>");
