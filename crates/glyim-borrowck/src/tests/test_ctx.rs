@@ -1,4 +1,4 @@
-//! Shared test context implementing BorrowckCtx for testing.
+//! Shared test context implementing `BorrowckCtx` for testing.
 
 use crate::BorrowckCtx;
 use glyim_mir::{Body, LocalDecl, LocalIdx};
@@ -15,7 +15,7 @@ impl<'a> TestBorrowckCtx<'a> {
     }
 }
 
-impl<'a> BorrowckCtx for TestBorrowckCtx<'a> {
+impl BorrowckCtx for TestBorrowckCtx<'_> {
     fn ty_ctx(&self) -> &TyCtx {
         self.ctx
     }
