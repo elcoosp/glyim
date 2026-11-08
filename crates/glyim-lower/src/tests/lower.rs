@@ -11,7 +11,7 @@ impl<'a> LocalMockLowerCtx<'a> {
     }
 }
 
-impl<'a> crate::LowerCtx for LocalMockLowerCtx<'a> {
+impl crate::LowerCtx for LocalMockLowerCtx<'_> {
     fn ty_ctx(&self) -> &glyim_type::TyCtx {
         self.ctx
     }
@@ -50,7 +50,7 @@ fn s15_t01_lower_empty_function() {
     let lower_ctx = LocalMockLowerCtx::new(&ctx);
     let result = lower_body(&lower_ctx, &dummy_thir());
 
-    assert_mir(&ctx, &result.body)
+    let _ = assert_mir(&ctx, &result.body)
         .block_count(1)
         .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "Return");
 }
@@ -73,7 +73,7 @@ fn s15_t02_lower_params() {
     });
 
     let result = lower_body(&lower_ctx, &thir);
-    assert_mir(&ctx, &result.body).local_count(2);
+    let _ = assert_mir(&ctx, &result.body).local_count(2);
 }
 
 #[test]
@@ -101,7 +101,7 @@ fn s15_t03_lower_let_binding() {
     });
 
     let result = lower_body(&lower_ctx, &thir);
-    assert_mir(&ctx, &result.body)
+    let _ = assert_mir(&ctx, &result.body)
         .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "Return");
 }
 
@@ -123,7 +123,7 @@ fn s15_t04_lower_return() {
     });
 
     let result = lower_body(&lower_ctx, &thir);
-    assert_mir(&ctx, &result.body)
+    let _ = assert_mir(&ctx, &result.body)
         .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "Return");
 }
 
@@ -157,7 +157,7 @@ fn s15_t05_lower_binary_op() {
     thir.stmts.push(thir::Stmt::Expr { expr: bin_expr });
 
     let result = lower_body(&lower_ctx, &thir);
-    assert_mir(&ctx, &result.body)
+    let _ = assert_mir(&ctx, &result.body)
         .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "Return");
 }
 
@@ -191,7 +191,7 @@ fn s15_t06_lower_if_else() {
     thir.stmts.push(thir::Stmt::Expr { expr: if_expr });
 
     let result = lower_body(&lower_ctx, &thir);
-    assert_mir(&ctx, &result.body)
+    let _ = assert_mir(&ctx, &result.body)
         .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "SwitchInt");
 }
 
@@ -219,7 +219,8 @@ fn s15_t07_lower_function_call() {
     thir.stmts.push(thir::Stmt::Expr { expr: call_expr });
 
     let result = lower_body(&lower_ctx, &thir);
-    assert_mir(&ctx, &result.body).block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "Call");
+    let _ = assert_mir(&ctx, &result.body)
+        .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "Call");
 }
 
 #[test]
@@ -246,7 +247,7 @@ fn s15_t08_lower_reference() {
     thir.stmts.push(thir::Stmt::Expr { expr: ref_expr });
 
     let result = lower_body(&lower_ctx, &thir);
-    assert_mir(&ctx, &result.body);
+    let _ = assert_mir(&ctx, &result.body);
 }
 
 #[test]
@@ -273,7 +274,7 @@ fn s15_t09_lower_assign() {
     });
 
     let result = lower_body(&lower_ctx, &thir);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 
     let block = &result.body.basic_blocks[glyim_mir::BasicBlockIdx::from_raw(0)];
     assert_eq!(block.statements.len(), 1);
@@ -307,5 +308,5 @@ fn s15_t10_lower_unary_op() {
     thir.stmts.push(thir::Stmt::Expr { expr: unary_expr });
 
     let result = lower_body(&lower_ctx, &thir);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }
