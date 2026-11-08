@@ -49,7 +49,7 @@ impl RegistryClient for MockRegistryClient {
         dest: &Path,
     ) -> crate::error::GlyipResult<PathBuf> {
         let _ = expected_checksum;
-        let extract_dir = dest.join(format!("{}-{}", name, version));
+        let extract_dir = dest.join(format!("{name}-{version}"));
         let src_dir = extract_dir.join("src");
         std::fs::create_dir_all(&src_dir)?;
         std::fs::write(src_dir.join("lib.g"), "// mock crate\n")?;
@@ -133,7 +133,7 @@ fn resolve_transitive_dependencies() {
     });
 
     index.insert(IndexEntry {
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         name: "b".to_string(),
         versions: vec!["0.5.0".to_string()],
         checksums: HashMap::new(),
@@ -162,7 +162,7 @@ fn resolve_transitive_dependencies() {
 fn resolve_from_local_index() {
     let mut index = CrateIndex::new();
     index.insert(IndexEntry {
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         name: "foo".to_string(),
         versions: vec!["1.0.0".to_string(), "0.9.0".to_string()],
         checksums: {
@@ -191,7 +191,7 @@ fn resolve_from_registry_fetch() {
     // S12-T01: glyip build fetches dependency from registry.
     let mut mock = MockRegistryClient::new();
     mock.add_entry(IndexEntry {
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         name: "bar".to_string(),
         versions: vec!["2.1.0".to_string()],
         checksums: {
@@ -219,7 +219,7 @@ fn resolve_from_registry_fetch() {
 fn registry_fallback_on_missing_index_entry() {
     let mut index = CrateIndex::new();
     index.insert(IndexEntry {
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         name: "foo".to_string(),
         versions: vec!["1.0.0".to_string()],
         checksums: HashMap::new(),
@@ -227,7 +227,7 @@ fn registry_fallback_on_missing_index_entry() {
 
     let mut mock = MockRegistryClient::new();
     mock.add_entry(IndexEntry {
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         name: "bar".to_string(),
         versions: vec!["3.0.0".to_string()],
         checksums: HashMap::new(),
@@ -318,7 +318,7 @@ fn detect_dependency_cycle() {
         crate::error::GlyipError::DependencyCycle(cycle) => {
             assert!(cycle.contains(&"a".to_string()) || cycle.contains(&"b".to_string()));
         }
-        other => panic!("expected DependencyCycle, got {:?}", other),
+        other => panic!("expected DependencyCycle, got {other:?}"),
     }
 }
 
@@ -326,7 +326,7 @@ fn detect_dependency_cycle() {
 fn download_crate_with_registry() {
     let mut mock = MockRegistryClient::new();
     mock.add_entry(IndexEntry {
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         name: "qux".to_string(),
         versions: vec!["1.0.0".to_string()],
         checksums: HashMap::new(),
@@ -381,7 +381,7 @@ fn dependency_not_found_without_registry() {
         crate::error::GlyipError::DependencyNotFound { name, .. } => {
             assert_eq!(name, "nonexistent");
         }
-        other => panic!("expected DependencyNotFound, got {:?}", other),
+        other => panic!("expected DependencyNotFound, got {other:?}"),
     }
 }
 
@@ -389,7 +389,7 @@ fn dependency_not_found_without_registry() {
 fn mock_registry_download_count() {
     let mut mock = MockRegistryClient::new();
     mock.add_entry(IndexEntry {
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         name: "counted".to_string(),
         versions: vec!["0.1.0".to_string()],
         checksums: HashMap::new(),
@@ -497,7 +497,7 @@ fn custom_registry_url_recorded_in_lockfile() {
     index.insert(IndexEntry {
         name: "widget".to_string(),
         versions: vec!["1.0.0".to_string()],
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         checksums: HashMap::new(),
     });
 
