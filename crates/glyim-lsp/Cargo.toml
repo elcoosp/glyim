@@ -37,3 +37,6 @@ lsp-types = "0.97.0"
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }
 glyim-test = { workspace = true }
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true
