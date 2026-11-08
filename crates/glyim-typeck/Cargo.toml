@@ -20,4 +20,6 @@ tracing = { workspace = true }
 once_cell = "1.21"
 glyim-test = { workspace = true }
 glyim-mir = { workspace = true }
-
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true
