@@ -269,6 +269,24 @@ jobs:
           cargo run -p glyim-metrics -- . --write /tmp/current.json
           diff -u metrics/baseline.json /tmp/current.json || true
 
+  # M1.1 ledger check: registry consistency gate for the Readiness Ledger
+  # (docs/roadmaps/glyim-master-plan.md §3). Loads `ledger/features/**` and
+  # `ledger/gaps/**` with a deny_unknown_fields schema, then validates
+  # unique IDs, cross-references, `requires` acyclicity, and the
+  # strict-xfail witness contract. Pure Rust — no LLVM needed.
+  ledger-check:
+    name: Ledger check (M1.1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: ledger check
+        run: cargo run -p glyim-ledger -- check .
+      - name: Export JSON schemas (determinism smoke)
+        run: cargo run -p glyim-ledger -- schema /tmp/ledger-schema.json
+
   dead-code-check:
     name: Dead-code burndown
     runs-on: ubuntu-latest
