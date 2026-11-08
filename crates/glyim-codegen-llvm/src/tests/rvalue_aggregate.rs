@@ -124,8 +124,7 @@ fn v13_t01_struct_literal_aggregate() {
     let result = CodegenBackend::generate_function(&backend, &Arc::new(body));
     assert!(
         result.is_ok(),
-        "struct/tuple aggregate should lower successfully: {:?}",
-        result
+        "struct/tuple aggregate should lower successfully: {result:?}"
     );
 }
 
@@ -156,8 +155,7 @@ fn v13_t02_array_literal_aggregate() {
     let result = CodegenBackend::generate_function(&backend, &Arc::new(body));
     assert!(
         result.is_ok(),
-        "array aggregate should lower successfully: {:?}",
-        result
+        "array aggregate should lower successfully: {result:?}"
     );
 }
 
@@ -169,8 +167,7 @@ fn v13_t03_ref_local_alloca() {
     let result = CodegenBackend::generate_function(&backend, &Arc::new(body));
     assert!(
         result.is_ok(),
-        "ref local should lower successfully: {:?}",
-        result
+        "ref local should lower successfully: {result:?}"
     );
 }
 
@@ -226,8 +223,7 @@ fn v13_t04_discriminant_enum() {
     let result = CodegenBackend::generate_function(&backend, &Arc::new(body));
     assert!(
         result.is_ok(),
-        "discriminant should lower successfully: {:?}",
-        result
+        "discriminant should lower successfully: {result:?}"
     );
 }
 
@@ -317,9 +313,5 @@ fn v13_t05_len_array() {
     let backend = LlvmBackend::new().with_ty_ctx(ctx);
 
     let result = CodegenBackend::generate_function(&backend, &Arc::new(body));
-    assert!(
-        result.is_ok(),
-        "len should lower successfully: {:?}",
-        result
-    );
+    assert!(result.is_ok(), "len should lower successfully: {result:?}");
 }
