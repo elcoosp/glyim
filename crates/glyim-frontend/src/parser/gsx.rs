@@ -18,17 +18,14 @@ use super::Parser;
 /// pathological `<a><a><a>…` source cannot overflow the stack.
 const MAX_GSX_DEPTH: u32 = 128;
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     /// True when the next non-trivia token after the current one can start a
     /// GSX element/fragment name (`<div`, `<Counter`, `<web:canvas`, `<>`).
     pub(crate) fn at_gsx_start(&mut self) -> bool {
         if self.current_kind() != SyntaxKind::Lt {
             return false;
         }
-        matches!(
-            self.peek_kind(),
-            Some(SyntaxKind::Ident) | Some(SyntaxKind::Gt)
-        )
+        matches!(self.peek_kind(), Some(SyntaxKind::Ident | SyntaxKind::Gt))
     }
 
     /// Entry point from `parse_primary_expr`: `current_kind() == Lt`.
@@ -85,8 +82,7 @@ impl<'a> Parser<'a> {
             }
             found => {
                 self.error(format!(
-                    "expected `>` or `/>` to close the tag, found {:?}",
-                    found
+                    "expected `>` or `/>` to close the tag, found {found:?}"
                 ));
                 self.start_node_at(cp, SyntaxKind::GsxSelfClosing);
                 self.finish_node();
@@ -190,8 +186,7 @@ impl<'a> Parser<'a> {
                 }
                 found => {
                     self.error(format!(
-                        "expected string literal or `{{expr}}`, found {:?}",
-                        found
+                        "expected string literal or `{{expr}}`, found {found:?}"
                     ));
                 }
             }
@@ -242,7 +237,7 @@ impl<'a> Parser<'a> {
                 }
                 tok => {
                     // Recovery: absorb one unexpected token per diagnostic.
-                    self.error(format!("unexpected token in element children: {:?}", tok));
+                    self.error(format!("unexpected token in element children: {tok:?}"));
                     if self.current().is_some() {
                         self.bump();
                     } else {
@@ -278,8 +273,7 @@ impl<'a> Parser<'a> {
         if let (Some(open), false) = (open_name, name.is_empty()) {
             if open != name {
                 self.error(format!(
-                    "mismatched closing tag: expected `</{}>`, found `</{}>`",
-                    open, name
+                    "mismatched closing tag: expected `</{open}>`, found `</{name}>`"
                 ));
             }
         }
@@ -297,7 +291,7 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
             }
             found => {
-                self.error(format!("expected `>`, found {:?}", found));
+                self.error(format!("expected `>`, found {found:?}"));
             }
         }
     }
@@ -305,10 +299,7 @@ impl<'a> Parser<'a> {
     /// Text of the current token (for contextual keywords like `by`).
     pub(crate) fn current_text(&mut self) -> &str {
         self.flush_trivia();
-        self.tokens
-            .get(self.pos)
-            .map(|t| t.text.as_str())
-            .unwrap_or("")
+        self.tokens.get(self.pos).map_or("", |t| t.text.as_str())
     }
 }
 
