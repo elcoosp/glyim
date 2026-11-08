@@ -4,19 +4,19 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Clone, Default)]
-/// CompileOutput.
+/// `CompileOutput`.
 pub struct CompileOutput {
-    /// Struct.
+    /// `Struct`.
     pub diagnostics: Vec<GlyimDiagnostic>,
-    /// Struct.
+    /// `Struct`.
     pub syntax_tree: Option<glyim_syntax::SyntaxNode>,
-    /// Struct.
+    /// `Struct`.
     pub def_map: Option<glyim_def_map::CrateDefMap>,
-    /// Struct.
+    /// `Struct`.
     pub typeck_result: Option<glyim_typeck::TypeckResult>,
-    /// Struct.
+    /// `Struct`.
     pub mir_bodies: Vec<Arc<glyim_mir::Body>>,
-    /// Struct.
+    /// `Struct`.
     pub ty_ctx: Option<Arc<glyim_type::TyCtx>>,
     /// Path to a linked executable, populated only when compilation succeeded
     /// AND the produced object file was successfully linked (Tier 7.2). `None`
@@ -61,7 +61,7 @@ impl std::fmt::Debug for CompileOutput {
     }
 }
 
-/// TestCompiler.
+/// `TestCompiler`.
 pub trait TestCompiler: Send + Sync {
     /// compile.
     ///
@@ -78,7 +78,7 @@ pub trait TestCompiler: Send + Sync {
     ) -> CompileOutput;
 }
 
-/// FrontendOnlyCompiler.
+/// `FrontendOnlyCompiler`.
 pub struct FrontendOnlyCompiler;
 
 impl TestCompiler for FrontendOnlyCompiler {
@@ -105,7 +105,7 @@ impl TestCompiler for FrontendOnlyCompiler {
     }
 }
 
-/// PipelineCompiler.
+/// `PipelineCompiler`.
 pub struct PipelineCompiler {
     backend: Arc<dyn glyim_codegen::CodegenBackend + Send + Sync>,
     /// When true (and the `real-llvm` feature is compiled in), the compiler
@@ -141,6 +141,7 @@ impl PipelineCompiler {
     /// `block_on<F>`/`poll` types), so enabling this on the M5 async fixtures
     /// surfaces a genuine failure rather than a green run. That is the intended
     /// strict behavior: the CI job must not pass by tolerating a codegen gap.
+    #[must_use]
     pub fn with_real_llvm(mut self) -> Self {
         self.real_llvm = true;
         self
@@ -149,6 +150,7 @@ impl PipelineCompiler {
     /// Like [`with_real_llvm`](Self::with_real_llvm) but only flips the flag
     /// when `enabled` is true — convenient for env-var gating without
     /// branching at every call site.
+    #[must_use]
     pub fn with_real_llvm_if(mut self, enabled: bool) -> Self {
         self.real_llvm = enabled;
         self
@@ -158,6 +160,7 @@ impl PipelineCompiler {
     /// proc-macro calls are expanded during compilation (Phase 9.2
     /// two-stage host compile: the registry is populated either in-process for
     /// tests or by `load_cdylib` from a compiled proc-macro crate).
+    #[must_use]
     pub fn with_proc_registry(mut self, registry: Option<Arc<glyim_proc_macro::Registry>>) -> Self {
         self.proc_registry = registry;
         self
@@ -516,6 +519,6 @@ fn host_target_triple() -> String {
         ("aarch64", "linux") => "aarch64-unknown-linux-gnu".to_string(),
         ("x86_64", "windows") => "x86_64-pc-windows-msvc".to_string(),
         ("aarch64", "windows") => "aarch64-pc-windows-msvc".to_string(),
-        _ => format!("{}-{}", arch, os),
+        _ => format!("{arch}-{os}"),
     }
 }
