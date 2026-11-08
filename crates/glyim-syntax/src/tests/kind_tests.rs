@@ -1,4 +1,4 @@
-//! Tests for SyntaxKind try_from_raw mapping
+//! Tests for `SyntaxKind` `try_from_raw` mapping
 
 use crate::SyntaxKind;
 
@@ -8,13 +8,9 @@ fn try_from_raw_roundtrip_all_variants() {
     let max_raw = SyntaxKind::Error as u16;
     for raw in 0..=max_raw {
         let kind = SyntaxKind::try_from_raw(raw);
-        assert!(
-            kind.is_some(),
-            "Raw value {} should map to a SyntaxKind",
-            raw
-        );
+        assert!(kind.is_some(), "Raw value {raw} should map to a SyntaxKind");
         let kind = kind.unwrap();
-        assert_eq!(kind as u16, raw, "Roundtrip failed for raw {}", raw);
+        assert_eq!(kind as u16, raw, "Roundtrip failed for raw {raw}");
     }
 }
 
@@ -82,7 +78,7 @@ fn is_keyword_works() {
         SyntaxKind::Lifetime,
     ];
     for kw in keyword_variants {
-        assert!(kw.is_keyword(), "{:?} should be a keyword", kw);
+        assert!(kw.is_keyword(), "{kw:?} should be a keyword");
     }
     assert!(!SyntaxKind::Ident.is_keyword());
 }
@@ -98,7 +94,7 @@ fn is_literal_works() {
         SyntaxKind::ByteLit,
     ];
     for lit in literal_variants {
-        assert!(lit.is_literal(), "{:?} should be a literal", lit);
+        assert!(lit.is_literal(), "{lit:?} should be a literal");
     }
     // FE-7: `true`/`false` lex as keywords and ARE literals.
     assert!(SyntaxKind::KwTrue.is_literal());
@@ -195,7 +191,7 @@ fn is_node_works() {
         SyntaxKind::MetaVarCrate,
     ];
     for node in node_variants {
-        assert!(node.is_node(), "{:?} should be a node", node);
+        assert!(node.is_node(), "{node:?} should be a node");
     }
     assert!(!SyntaxKind::Ident.is_node());
     assert!(!SyntaxKind::Error.is_node());
