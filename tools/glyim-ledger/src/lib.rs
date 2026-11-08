@@ -14,7 +14,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ledger_schema::{Diagnostic, Severity, load_registry, registry_schema};
+use ledger_schema::{Diagnostic, Severity, load_project_registry, registry_schema};
 
 /// Parsed command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,11 +121,12 @@ impl CheckOutcome {
     }
 }
 
-/// Load + validate the registry under `root` (the directory that contains
-/// `ledger/`).
+/// Load + validate the registry under `root` (the project directory that
+/// contains `ledger/`). Repo-relative references inside the registry
+/// (`spec` paths, witness fixtures) resolve against `root`.
 #[must_use]
 pub fn run_check(root: &Path) -> CheckOutcome {
-    let loaded = load_registry(&root.join("ledger"));
+    let loaded = load_project_registry(root);
     let mut diagnostics = loaded.diagnostics;
     diagnostics.extend(loaded.registry.validate());
     diagnostics.sort_by(|a, b| a.code.cmp(b.code).then(a.message.cmp(&b.message)));
@@ -274,13 +275,19 @@ mod tests {
             "[[feature]]\n\
              id = \"{id}\"\n\
              title = \"t {id}\"\n\
-             area = \"lang.test\"\n\
+             area = \"lang.control-flow\"\n\
              tier = \"core\"\n\
              spec = \"docs/specs/v0.1.0.md\"\n\
              target_level = \"L5\"\n\
              backends = [\"gam\", \"llvm\"]\n\
              owner_lane = \"M\"\n"
         )
+    }
+
+    /// Write the canonical spec file feature `spec` fields resolve against
+    /// (M1.2 spec-path validation).
+    fn write_spec(root: &Path) {
+        write_file(&root.join("docs/specs"), "v0.1.0.md", "# spec fixture\n");
     }
 
     fn gap_toml(id: &str, affects: &str) -> String {
@@ -300,6 +307,7 @@ mod tests {
     fn check_passes_on_a_valid_registry_with_witness_debt() {
         let dir = tempfile::tempdir().expect("tmp");
         let ledger = dir.path().join("ledger");
+        write_spec(dir.path());
         write_file(&ledger, "features/lang/a.toml", &feature_toml("LANG-A"));
         write_file(&ledger, "gaps/x.toml", &gap_toml("GAP-1", "LANG-A"));
         let outcome = run_check(dir.path());
@@ -318,6 +326,7 @@ mod tests {
     fn check_fails_on_duplicate_feature_ids() {
         let dir = tempfile::tempdir().expect("tmp");
         let ledger = dir.path().join("ledger");
+        write_spec(dir.path());
         write_file(&ledger, "features/lang/a.toml", &feature_toml("LANG-DUP"));
         write_file(&ledger, "features/lang/b.toml", &feature_toml("LANG-DUP"));
         let outcome = run_check(dir.path());
@@ -331,6 +340,43 @@ mod tests {
         let outcome = run_check(dir.path());
         assert!(!outcome.is_ok(), "missing registry must fail");
         assert_eq!(outcome.files, 0);
+    }
+
+    #[test]
+    fn check_reports_missing_spec_paths() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let ledger = dir.path().join("ledger");
+        // No spec file under this root: the feature's `spec` reference
+        // cannot resolve, which must surface as an error diagnostic.
+        write_file(&ledger, "features/lang/a.toml", &feature_toml("LANG-A"));
+        let outcome = run_check(dir.path());
+        assert!(!outcome.is_ok(), "missing spec must fail the check");
+        assert!(
+            outcome
+                .diagnostics
+                .iter()
+                .any(|d| d.code == ledger_schema::CODE_SPEC_MISSING)
+        );
+    }
+
+    #[test]
+    fn check_reports_unknown_taxonomy_areas() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let ledger = dir.path().join("ledger");
+        write_spec(dir.path());
+        write_file(
+            &ledger,
+            "features/lang/a.toml",
+            &feature_toml("LANG-A").replace("area = \"lang.control-flow\"", "area = \"lang.wat\""),
+        );
+        let outcome = run_check(dir.path());
+        assert!(!outcome.is_ok(), "unknown area must fail the check");
+        assert!(
+            outcome
+                .diagnostics
+                .iter()
+                .any(|d| d.code == ledger_schema::CODE_AREA_UNKNOWN)
+        );
     }
 
     // -- rendering -----------------------------------------------------------

@@ -1,0 +1,56 @@
+# M1.2 feature registry seed — `compiler/frontend.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "COMPILER-FRONT-LEX"
+title         = "lexer producing token stream with valid spans"
+area          = "compiler.frontend"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "COMPILER-FRONT-PARSE"
+title         = "parser producing a full CST from the token stream"
+area          = "compiler.frontend"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "COMPILER-FRONT-CST-ROUNDTRIP"
+title         = "CST round-trip losslessness (`print(parse(x)) == x`)"
+area          = "compiler.frontend"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "COMPILER-FRONT-DEFTABLE"
+title         = "name resolution and def-map construction across modules"
+area          = "compiler.frontend"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "COMPILER-FRONT-HIR"
+title         = "HIR lowering from the def-map and CST"
+area          = "compiler.frontend"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"

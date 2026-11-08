@@ -18,17 +18,20 @@ use std::hint::black_box;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use ledger_schema::load_registry;
+use ledger_schema::load_project_registry;
 
-const FEATURES: usize = 200;
-const GAPS: usize = 40;
+/// Mirrors the M1.2 registry scale (216 curated features over 32 files,
+/// 2 gaps) with headroom, so CI logs track the `ledger-check` job's
+/// headroom at the size the seed actually is.
+const FEATURES: usize = 300;
+const GAPS: usize = 50;
 
 fn feature_toml(id: &str) -> String {
     format!(
         "[[feature]]\n\
          id = \"{id}\"\n\
          title = \"synthetic feature {id}\"\n\
-         area = \"lang.synthetic\"\n\
+         area = \"lang.control-flow\"\n\
          tier = \"core\"\n\
          spec = \"docs/specs/v0.1.0.md\"\n\
          target_level = \"L5\"\n\
@@ -58,6 +61,10 @@ fn write(root: &Path, rel: &str, contents: &str) {
 
 fn build_registry(root: &Path) {
     let ledger = root.join("ledger");
+    // The canonical spec file features resolve against (M1.2 spec-path
+    // validation) — without it every synthetic feature would report
+    // LEDGER-SPEC-MISSING and the diagnostic count would be noise.
+    write(root, "docs/specs/v0.1.0.md", "# synthetic spec\n");
     for i in 0..FEATURES {
         let id = format!("LANG-SYNTH-{i:04}");
         write(
@@ -91,8 +98,11 @@ fn main() {
     build_registry(&scratch);
     let ledger = scratch.join("ledger");
 
-    // Warmup (also caches the files in the page cache).
-    let warm = load_registry(black_box(&ledger));
+    // Warmup (also caches the files in the page cache). Measures the
+    // production entry point: `load_project_registry` walks
+    // `<project>/ledger` and anchors repo-relative references at the
+    // project root.
+    let warm = load_project_registry(black_box(&scratch));
     let entries = warm.registry.feature_count() + warm.registry.gap_count();
     println!(
         "root: {} ({} files, {entries} entries, {} schema diagnostics)",
@@ -104,7 +114,7 @@ fn main() {
     let mut elapsed_ns: Vec<u128> = Vec::with_capacity(RUNS);
     for i in 0..RUNS {
         let start = Instant::now();
-        let loaded = load_registry(black_box(&ledger));
+        let loaded = load_project_registry(black_box(&scratch));
         let diags = loaded.registry.validate();
         black_box(diags.len());
         let d = start.elapsed();

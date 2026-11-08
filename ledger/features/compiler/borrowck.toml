@@ -1,0 +1,56 @@
+# M1.2 feature registry seed — `compiler/borrowck.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "COMPILER-BCK-NLL"
+title         = "NLL borrow checking with Polonius-style region inference"
+area          = "compiler.borrowck"
+tier          = "core"
+spec          = "docs/design/borrowck.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "COMPILER-BCK-LIVENESS"
+title         = "cross-block liveness analysis for regions"
+area          = "compiler.borrowck"
+tier          = "core"
+spec          = "docs/design/borrowck.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "COMPILER-BCK-TWO-PHASE"
+title         = "two-phase borrow support for interleaved calls"
+area          = "compiler.borrowck"
+tier          = "core"
+spec          = "docs/design/borrowck.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "COMPILER-BCK-MOVE-ANALYSIS"
+title         = "move analysis with partial-move tracking"
+area          = "compiler.borrowck"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "COMPILER-BCK-DROP-FLAGS"
+title         = "drop-flag elaboration for conditional drops"
+area          = "compiler.borrowck"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"

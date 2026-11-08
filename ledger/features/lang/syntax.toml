@@ -1,0 +1,246 @@
+# M1.2 feature registry seed — `lang/syntax.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "LANG-SYN-FN-DEF"
+title         = "top-level `fn` definitions with parameters, return types and bodies"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-NESTED-FN"
+title         = "nested `fn` items declared inside function bodies"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-LET"
+title         = "`let` bindings with optional type ascription and initializer"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-MUT"
+title         = "`mut` bindings and writes to mutable places"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-STRUCT"
+title         = "`struct` declarations with named fields and field init"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-STRUCT-UPDATE"
+title         = "struct update syntax (`..spread`) in field init"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-TUPLE-STRUCT"
+title         = "tuple structs and unit structs with constructor call syntax"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-ENUM"
+title         = "`enum` declarations with unit, tuple and struct payload variants"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-IMPL"
+title         = "inherent `impl` blocks with methods and associated functions"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-SELF"
+title         = "`self` receivers and `Self` in impl scope"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-IF"
+title         = "`if`/`else` conditionals usable as expressions"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-IF-LET"
+title         = "`if let` scrutinee binding for Option/Result and enum patterns"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-WHILE"
+title         = "`while` loops with condition"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-LOOP-BREAK"
+title         = "`loop` with `break` value and labeled `continue`"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-RETURN"
+title         = "`return` with and without value, early return"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-OPERATORS"
+title         = "arithmetic, comparison and logical operators with precedence"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-COMPOUND-ASSIGN"
+title         = "compound assignment operators (`+=`, `-=`, `*=`)"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-INDEX"
+title         = "index expressions on arrays, slices, `Vec` and `str`"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-FIELD-ACCESS"
+title         = "field access and method call syntax on places"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-ARRAY-LITERAL"
+title         = "array literals `[a, b, c]` and repeat syntax `[v; N]`"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-TUPLE-EXPR"
+title         = "tuple expressions and tuple types"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-CONST-ITEM"
+title         = "`const` items evaluated at compile time via the MIR interpreter"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-SYN-UNSAFE-BLOCK"
+title         = "`unsafe` blocks and `unsafe fn` declarations gating FFI calls"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SYN-EXTERN-BLOCK"
+title         = "`extern \"C\"` block declarations of foreign functions"
+area          = "lang.syntax"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"

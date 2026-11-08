@@ -1,6 +1,6 @@
 [workspace.package]
 edition = "2024"
-version = "0.4.0"
+version = "0.5.0"
 license = "MIT"
 # Bumped 1.85 -> 1.95 with the dependency-update pass: parking_lot 0.13 (the
 # strictest updated dependency) requires 1.95, and the 2024-edition let-chains

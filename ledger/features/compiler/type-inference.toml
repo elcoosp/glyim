@@ -1,0 +1,36 @@
+# M1.2 feature registry seed — `compiler/type-inference.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "COMPILER-TI-UNIFICATION"
+title         = "unification variables (general, integer, float)"
+area          = "compiler.type-inference"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "COMPILER-TI-OCCURS"
+title         = "occurs check preventing infinite types"
+area          = "compiler.type-inference"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "COMPILER-TI-BIDI"
+title         = "bidirectional type checking"
+area          = "compiler.type-inference"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"

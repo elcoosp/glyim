@@ -1,0 +1,66 @@
+# M1.2 feature registry seed — `tooling/ledger.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "TOOL-LEDGER-CHECK"
+title         = "`ledger check` registry-consistency gate wired into CI"
+area          = "tooling.ledger"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+owner_lane    = "L"
+
+[[feature]]
+id            = "TOOL-LEDGER-SCHEMA"
+title         = "strict `deny_unknown_fields` registry schema with JSON-Schema export"
+area          = "tooling.ledger"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+owner_lane    = "L"
+
+[[feature]]
+id            = "TOOL-LEDGER-TAXONOMY"
+title         = "M1.2 taxonomy enforcement: known areas, ID-prefix agreement, tier target floors"
+area          = "tooling.ledger"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+owner_lane    = "L"
+
+[[feature]]
+id            = "TOOL-LEDGER-REGISTRY"
+title         = "curated feature registry seed covering README/specs/design/stdlib/FFI inventories"
+area          = "tooling.ledger"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+owner_lane    = "L"
+
+[[feature]]
+id            = "TOOL-METRICS-RATCHET"
+title         = "M0.6 lexical metrics ratchet (LOC/tests/docs/inline-allows) enforced in CI"
+area          = "tooling.ledger"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+owner_lane    = "L"
+
+[[feature]]
+id            = "TOOL-BENCH-HARNESS"
+title         = "dependency-free bench harnesses for ledger load and metrics scan"
+area          = "tooling.ledger"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+owner_lane    = "L"

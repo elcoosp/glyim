@@ -1,0 +1,66 @@
+# M1.2 feature registry seed — `std/alloc.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "STD-ALLOC-GLOBALALLOC"
+title         = "`alloc` module: `GlobalAlloc`, `Layout`, `Global` (11 fns)"
+area          = "std.alloc"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "STD-ALLOC-BOX"
+title         = "`boxed` module: `Box<T>` (6 fns)"
+area          = "std.alloc"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "STD-ALLOC-RAWVEC"
+title         = "`raw_vec` module: `RawVec` growth backbone (7 fns)"
+area          = "std.alloc"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "STD-ALLOC-VEC"
+title         = "`vec` module: `Vec<T>` and `VecIntoIter` (14 fns)"
+area          = "std.alloc"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "STD-ALLOC-STRING"
+title         = "`string` module: `String` (6 fns)"
+area          = "std.alloc"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "STD-ALLOC-RC"
+title         = "`rc` module: single-threaded `Rc` (5 fns)"
+area          = "std.alloc"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"

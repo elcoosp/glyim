@@ -1,0 +1,77 @@
+# M1.2 feature registry seed — `tooling/cli.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "TOOL-CLI-EMIT-FLAGS"
+title         = "`--emit=obj|exec|mir|llvm-ir|asm|cdylib` selection"
+area          = "tooling.cli"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+requires      = ["CODEGEN-LLVM-OBJ"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-CLI-BACKEND-FLAG"
+title         = "`--backend` selection between LLVM and bytecode"
+area          = "tooling.cli"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-CLI-OPT-LEVEL"
+title         = "`--opt-level` flags threading into the optimizer"
+area          = "tooling.cli"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-CLI-TARGET"
+title         = "`--target` triple flag for cross-compilation"
+area          = "tooling.cli"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-CLI-LTO"
+title         = "`--lto` strategy flag (fat/thin)"
+area          = "tooling.cli"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-CLI-CGU"
+title         = "`--codegen-units` flag"
+area          = "tooling.cli"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-CLI-DIAG-JSON"
+title         = "JSON diagnostics output for editors/LSP"
+area          = "tooling.cli"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"

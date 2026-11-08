@@ -1,0 +1,56 @@
+# M1.2 feature registry seed — `lang/scopes.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "LANG-SCOPE-SHADOWING"
+title         = "variable shadowing across nested scopes"
+area          = "lang.scopes"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SCOPE-MOD-DECL"
+title         = "`mod` declarations with single-file and directory module layout"
+area          = "lang.scopes"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SCOPE-VIS-PUB"
+title         = "`pub` visibility on items and fields"
+area          = "lang.scopes"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SCOPE-STATIC-ITEM"
+title         = "`static` items including `static mut` with stable addresses"
+area          = "lang.scopes"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-SCOPE-ATTR-ALLOW"
+title         = "item attributes `#[allow(...)]` suppressing named lints"
+area          = "lang.scopes"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"

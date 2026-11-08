@@ -1,0 +1,106 @@
+# M1.2 feature registry seed — `tooling/glyip.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "TOOL-GLYIP-NEW"
+title         = "`glyip new` project scaffolding"
+area          = "tooling.glyip"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-GLYIP-BUILD"
+title         = "`glyip build` driving the compiler over a manifest"
+area          = "tooling.glyip"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-GLYIP-TEST"
+title         = "`glyip test` running the harness over a project"
+area          = "tooling.glyip"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-GLYIP-RUN"
+title         = "`glyip run` build + execute"
+area          = "tooling.glyip"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-GLYIP-MANIFEST"
+title         = "`Glyip.toml` manifest parsing and validation"
+area          = "tooling.glyip"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-GLYIP-DEP-SEMVER"
+title         = "SemVer 2.0 dependency matching"
+area          = "tooling.glyip"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-GLYIP-DEP-PATH"
+title         = "path dependencies"
+area          = "tooling.glyip"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-GLYIP-DEP-GIT"
+title         = "git dependencies (branch/tag/rev)"
+area          = "tooling.glyip"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-GLYIP-LOCKFILE"
+title         = "lockfile generation and reproducible resolution"
+area          = "tooling.glyip"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-GLYIP-REGISTRY"
+title         = "registry client for dependency download"
+area          = "tooling.glyip"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"

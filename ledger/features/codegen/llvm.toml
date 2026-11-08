@@ -1,0 +1,118 @@
+# M1.2 feature registry seed — `codegen/llvm.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "CODEGEN-LLVM-OBJ"
+title         = "LLVM object-file emission with real ABI lowering"
+area          = "codegen.llvm"
+tier          = "core"
+spec          = "README.md"
+target_level  = "L5"
+backends      = ["llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "CODEGEN-LLVM-EXEC"
+title         = "native executable linking from object files"
+area          = "codegen.llvm"
+tier          = "core"
+spec          = "README.md"
+target_level  = "L5"
+backends      = ["llvm"]
+requires      = ["CODEGEN-LLVM-OBJ"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "CODEGEN-LLVM-ASM"
+title         = "assembly text emission (`--emit=asm`)"
+area          = "codegen.llvm"
+tier          = "core"
+spec          = "README.md"
+target_level  = "L5"
+backends      = ["llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "CODEGEN-LLVM-IR"
+title         = "LLVM IR text emission (`--emit=llvm-ir`)"
+area          = "codegen.llvm"
+tier          = "core"
+spec          = "README.md"
+target_level  = "L5"
+backends      = ["llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "CODEGEN-LLVM-CDYLIB"
+title         = "cdylib emission for proc-macro crates"
+area          = "codegen.llvm"
+tier          = "core"
+spec          = "README.md"
+target_level  = "L5"
+backends      = ["llvm"]
+requires      = ["CODEGEN-LLVM-OBJ"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "CODEGEN-LLVM-EH-ITANIUM"
+title         = "Itanium exception-handling tables and landing pads"
+area          = "codegen.llvm"
+tier          = "core"
+spec          = "README.md"
+target_level  = "L5"
+backends      = ["llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "CODEGEN-LLVM-EH-SEH"
+title         = "Windows SEH unwinding support"
+area          = "codegen.llvm"
+tier          = "core"
+spec          = "README.md"
+target_level  = "L5"
+backends      = ["llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "CODEGEN-LLVM-LTO"
+title         = "link-time optimization (`fat`/`thin`, clean error when unsupported)"
+area          = "codegen.llvm"
+tier          = "core"
+spec          = "README.md"
+target_level  = "L5"
+backends      = ["llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "CODEGEN-LLVM-DEBUGINFO"
+title         = "DWARF debug info emission"
+area          = "codegen.llvm"
+tier          = "core"
+spec          = "README.md"
+target_level  = "L5"
+backends      = ["llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "CODEGEN-LLVM-CROSS-AARCH64"
+title         = "cross-compilation to AArch64 Linux targets"
+area          = "codegen.llvm"
+tier          = "core"
+spec          = "README.md"
+target_level  = "L5"
+backends      = ["llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "CODEGEN-LLVM-VTABLES"
+title         = "vtable generation and `dyn Trait` dispatch through LLVM"
+area          = "codegen.llvm"
+tier          = "core"
+spec          = "README.md"
+target_level  = "L5"
+backends      = ["llvm"]
+owner_lane    = "B"
