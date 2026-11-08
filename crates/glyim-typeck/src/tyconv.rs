@@ -12,7 +12,7 @@ use glyim_type::*;
 
 use crate::coherence::ResolvedImplHeader;
 
-/// resolve_type_ref.
+/// `resolve_type_ref`.
 pub fn resolve_type_ref(
     ctx: &mut TyCtxMut,
     infer: &mut InferenceTable,
@@ -142,32 +142,30 @@ pub fn resolve_type_ref(
         // `dyn Trait` — an unsized trait object.
         glyim_hir::TypeRef::Dyn(inner) => {
             // The inner type reference must name a trait.
-            let trait_path = match &**inner {
-                glyim_hir::TypeRef::Path(p) => p,
-                _ => {
-                    diagnostics.push(GlyimDiagnostic::type_error(
-                        span,
-                        "the inner type of a `dyn` trait object must be a trait path".to_string(),
-                    ));
-                    return Ty::ERROR;
-                }
+            let trait_path = if let glyim_hir::TypeRef::Path(p) = &**inner {
+                p
+            } else {
+                diagnostics.push(GlyimDiagnostic::type_error(
+                    span,
+                    "the inner type of a `dyn` trait object must be a trait path".to_string(),
+                ));
+                return Ty::ERROR;
             };
             let trait_def_id = resolve_path_to_trait_def_id(def_map, ctx, trait_path, span);
-            let trait_def_id = match trait_def_id {
-                Some(id) => id,
-                None => {
-                    let path_str = trait_path
-                        .segments
-                        .iter()
-                        .map(|seg| ctx.name_str(seg.name))
-                        .collect::<Vec<_>>()
-                        .join("::");
-                    diagnostics.push(GlyimDiagnostic::type_error(
-                        span,
-                        format!("cannot find trait `{}` in this scope", path_str),
-                    ));
-                    return Ty::ERROR;
-                }
+            let trait_def_id = if let Some(id) = trait_def_id {
+                id
+            } else {
+                let path_str = trait_path
+                    .segments
+                    .iter()
+                    .map(|seg| ctx.name_str(seg.name))
+                    .collect::<Vec<_>>()
+                    .join("::");
+                diagnostics.push(GlyimDiagnostic::type_error(
+                    span,
+                    format!("cannot find trait `{path_str}` in this scope"),
+                ));
+                return Ty::ERROR;
             };
 
             // Enforce object safety for the resolved trait when its definition
@@ -246,9 +244,7 @@ pub fn resolve_type_ref(
                         } => format!(
                             "the trait `{}` cannot be made into an object because supertrait `{}` is not object-safe",
                             ctx.name_str(trait_def.name),
-                            ctx.trait_def(trait_id)
-                                .map(|t| ctx.name_str(t.name).to_string())
-                                .unwrap_or_else(|| format!("#{}", trait_id.index())),
+                            ctx.trait_def(trait_id).map_or_else(|| format!("#{}", trait_id.index()), |t| ctx.name_str(t.name).to_string()),
                         ),
                     };
                     diagnostics.push(GlyimDiagnostic::type_error(span, msg));
@@ -330,7 +326,7 @@ fn resolve_const_ref(
     }
 }
 
-/// build_param_tys.
+/// `build_param_tys`.
 pub fn build_param_tys(
     ctx: &mut TyCtxMut,
     params: &[glyim_hir::GenericParam],
@@ -357,16 +353,15 @@ pub fn build_param_tys(
 }
 
 #[derive(Clone, Debug)]
-/// FnSig.
+/// `FnSig`.
 pub struct FnSig {
-    /// Struct.
+    /// `Struct`.
     pub param_tys: Vec<Ty>,
-    /// Struct.
+    /// `Struct`.
     pub return_ty: Ty,
 }
 
-#[allow(clippy::too_many_arguments)]
-/// resolve_fn_sig.
+/// `resolve_fn_sig`.
 pub fn resolve_fn_sig(
     ctx: &mut TyCtxMut,
     infer: &mut InferenceTable,
@@ -401,17 +396,16 @@ pub fn resolve_fn_sig(
         // previously dropped the reference, typing the receiver as the bare
         // pointee). This keeps every `&self` / `&mut self` method working.
         let ty = if param.name == self_name {
-            match self_ty {
-                Some(st) => match &param.ty {
+            if let Some(st) = self_ty {
+                match &param.ty {
                     Some(glyim_hir::TypeRef::Ref { mutability, .. }) => {
                         ctx.mk_ref(Region::Erased, st, *mutability)
                     }
                     _ => st,
-                },
-                None => {
-                    let var = infer.new_ty_var(ctx);
-                    ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)))
                 }
+            } else {
+                let var = infer.new_ty_var(ctx);
+                ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)))
             }
         } else if let Some(ty_ref) = &param.ty {
             let resolved = resolve_type_ref(
@@ -430,12 +424,11 @@ pub fn resolve_fn_sig(
                 resolved
             }
         } else if param.name == ctx.resolver().intern("self") {
-            match self_ty {
-                Some(st) => st,
-                None => {
-                    let var = infer.new_ty_var(ctx);
-                    ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)))
-                }
+            if let Some(st) = self_ty {
+                st
+            } else {
+                let var = infer.new_ty_var(ctx);
+                ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)))
             }
         } else {
             // Script 657: `impl Trait` in parameter position
@@ -482,7 +475,7 @@ pub fn resolve_fn_sig(
     }
 }
 
-/// resolve_impl_header.
+/// `resolve_impl_header`.
 pub fn resolve_impl_header(
     ctx: &mut TyCtxMut,
     _infer: &mut InferenceTable,
@@ -531,26 +524,23 @@ pub fn resolve_impl_header(
                         }
                     }
                 }
+            } else if let Some(trait_def_id) =
+                resolve_path_to_trait_def_id(def_map, ctx, path, span)
+            {
+                let substs = ctx.intern_substitution(vec![]);
+                (Some(trait_def_id), path.as_name(), substs)
             } else {
-                match resolve_path_to_trait_def_id(def_map, ctx, path, span) {
-                    Some(trait_def_id) => {
-                        let substs = ctx.intern_substitution(vec![]);
-                        (Some(trait_def_id), path.as_name(), substs)
-                    }
-                    None => {
-                        let path_str = path
-                            .segments
-                            .iter()
-                            .map(|s| ctx.name_str(s.name))
-                            .collect::<Vec<_>>()
-                            .join("::");
-                        diagnostics.push(GlyimDiagnostic::type_error(
-                            span,
-                            format!("cannot find trait `{}` in this scope", path_str),
-                        ));
-                        (None, None, ctx.intern_substitution(vec![]))
-                    }
-                }
+                let path_str = path
+                    .segments
+                    .iter()
+                    .map(|s| ctx.name_str(s.name))
+                    .collect::<Vec<_>>()
+                    .join("::");
+                diagnostics.push(GlyimDiagnostic::type_error(
+                    span,
+                    format!("cannot find trait `{path_str}` in this scope"),
+                ));
+                (None, None, ctx.intern_substitution(vec![]))
             }
         }
         None => (None, None, ctx.intern_substitution(vec![])),
@@ -575,7 +565,7 @@ pub fn resolve_impl_header(
     }
 }
 
-/// resolve_path_type.
+/// `resolve_path_type`.
 pub fn resolve_path_type(
     ctx: &mut TyCtxMut,
     infer: &mut InferenceTable,
@@ -656,13 +646,14 @@ pub fn resolve_path_type(
         // the first bound (preserves the previous best-effort behaviour
         // for genuinely unrelated projections).
         let bound_tid: Option<glyim_core::def_id::TraitDefId> = {
-            let candidates = ctx.param_bounds_for(qname).map(|b| b.to_vec());
+            let candidates = ctx
+                .param_bounds_for(qname)
+                .map(<[(glyim_core::Name, glyim_core::TraitDefId)]>::to_vec);
             match candidates {
                 Some(list) => {
                     let matching = list.iter().find(|(_, tid)| {
                         ctx.trait_def(*tid)
-                            .map(|d| d.associated_types.contains(&aname))
-                            .unwrap_or(false)
+                            .is_some_and(|d| d.associated_types.contains(&aname))
                     });
                     matching
                         .map(|(_, tid)| *tid)
@@ -863,12 +854,12 @@ pub fn resolve_path_type(
 
     diagnostics.push(GlyimDiagnostic::type_error(
         span,
-        format!("unresolved type `{}`", path_str),
+        format!("unresolved type `{path_str}`"),
     ));
     Ty::ERROR
 }
 
-/// Resolve qualified paths like std::vec::Vec<T>
+/// Resolve qualified paths like `std::vec::Vec`<T>
 fn resolve_qualified_path(
     ctx: &mut TyCtxMut,
     def_map: &glyim_def_map::CrateDefMap,
@@ -1007,25 +998,24 @@ pub(crate) fn resolve_path_to_local_def_id(
         if i + 1 == path.segments.len() {
             let res = def_map.modules[current].scope.resolve(seg.name)?;
             return Some(res.0);
-        } else {
-            let child = def_map.modules[current]
-                .children
-                .iter()
-                .find(|(name, _)| *name == seg.name)
-                .map(|(_, id)| *id)?;
-            current = child;
         }
+        let child = def_map.modules[current]
+            .children
+            .iter()
+            .find(|(name, _)| *name == seg.name)
+            .map(|(_, id)| *id)?;
+        current = child;
     }
 
     None
 }
 
-/// Resolve a (possibly multi‑segment) path to an `AdtId`, walking the module
+/// Resolve a (possibly multi-segment) path to an `AdtId`, walking the module
 /// tree like `resolve_path_to_local_def_id`. Used by struct/variant *patterns*
-/// (plan §9.4 multi‑segment path support) where the final segment names an ADT.
+/// (plan §9.4 multi-segment path support) where the final segment names an ADT.
 /// Referenced from the `multi_seg_path` test module; kept available for
 /// pattern-path lowering once that tier lands.
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) fn resolve_path_to_adt_id(
     ctx: &TyCtxMut,
     def_map: &glyim_def_map::CrateDefMap,
@@ -1080,7 +1070,7 @@ pub(crate) fn resolve_enum_variant_path(
         .map(|(idx, _)| (adt_id, idx as u32))
 }
 
-/// Resolve path to trait DefId
+/// Resolve path to trait `DefId`
 pub(crate) fn resolve_path_to_trait_def_id(
     def_map: &glyim_def_map::CrateDefMap,
     ctx: &TyCtxMut,
@@ -1225,7 +1215,7 @@ pub(crate) fn resolve_name_to_adt_ty(
     // builtin directly, so the alias never competes with it).
     if let Some((params, template)) = ctx.lookup_type_alias(name).cloned() {
         let caller_args = path.segments.last().and_then(|s| s.generic_args.as_deref());
-        let n_caller = caller_args.map_or(0, |a| a.len());
+        let n_caller = caller_args.map_or(0, <[glyim_hir::TypeRef]>::len);
         if n_caller == params.len() {
             let mut subst: HashMap<u32, GenericArg> = HashMap::new();
             if let Some(args) = caller_args {
@@ -1257,7 +1247,7 @@ pub(crate) fn resolve_name_to_adt_ty(
                 let arity = ctx.adt_generic_arity(builtin_id);
                 let args = path.segments.last().and_then(|s| s.generic_args.as_deref());
                 let mut substs: Vec<GenericArg> =
-                    Vec::with_capacity(args.map_or(0, |a| a.len()).max(arity));
+                    Vec::with_capacity(args.map_or(0, <[glyim_hir::TypeRef]>::len).max(arity));
                 if let Some(args) = args {
                     for arg in args {
                         let resolved = resolve_type_ref(
@@ -1326,38 +1316,38 @@ pub(crate) fn resolve_name_to_adt_ty(
         ctx.adt_id_by_name(ctx_name)
             .filter(|id| ctx.adt_def(*id).is_some())
     });
-    let adt_id = match canonical_id {
-        Some(id) => id,
-        None => {
-            let from_defmap = path
-                .as_name()
-                .and_then(|hir_name| resolve_name_to_def_id(def_map, hir_name))
-                .map(|def_id| AdtId::from_raw(def_id.local_id.to_raw()));
-            // Script 172: accept a def-map-derived AdtId even when no
-            // `adt_def` is registered yet. The def-map is the authoritative
-            // declaration source; the ADT body is only registered when the
-            // corresponding `ItemKind::Struct`/`ItemKind::Enum` handler runs
-            // (or, for builtins, canonicalized to a reserved id by
-            // `adt_id_for_item`). Callers such as `populate_deref_registry`
-            // legitimately need the AdtId before that registration runs (a
-            // minimal `impl Deref for Wrapper` harness has no struct item).
-            // The previous `if ctx.adt_def(id).is_some()` guard turned those
-            // into `None`, which then made `resolve_type_ref` return
-            // `TyKind::Error` — silently dropping the deref registration.
-            //
-            // The genuinely-dangerous case (def-map id 9 for `Option` vs the
-            // canonical builtin 1010) is already handled above: `canonical_id`
-            // — a name-keyed lookup into `ctx.adt_by_name` — takes precedence
-            // whenever it resolves to an id that has a real `adt_def`.
-            from_defmap?
-        }
+    let adt_id = if let Some(id) = canonical_id {
+        id
+    } else {
+        let from_defmap = path
+            .as_name()
+            .and_then(|hir_name| resolve_name_to_def_id(def_map, hir_name))
+            .map(|def_id| AdtId::from_raw(def_id.local_id.to_raw()));
+        // Script 172: accept a def-map-derived AdtId even when no
+        // `adt_def` is registered yet. The def-map is the authoritative
+        // declaration source; the ADT body is only registered when the
+        // corresponding `ItemKind::Struct`/`ItemKind::Enum` handler runs
+        // (or, for builtins, canonicalized to a reserved id by
+        // `adt_id_for_item`). Callers such as `populate_deref_registry`
+        // legitimately need the AdtId before that registration runs (a
+        // minimal `impl Deref for Wrapper` harness has no struct item).
+        // The previous `if ctx.adt_def(id).is_some()` guard turned those
+        // into `None`, which then made `resolve_type_ref` return
+        // `TyKind::Error` — silently dropping the deref registration.
+        //
+        // The genuinely-dangerous case (def-map id 9 for `Option` vs the
+        // canonical builtin 1010) is already handled above: `canonical_id`
+        // — a name-keyed lookup into `ctx.adt_by_name` — takes precedence
+        // whenever it resolves to an id that has a real `adt_def`.
+        from_defmap?
     };
     let arity = ctx.adt_generic_arity(adt_id);
 
     // Generic arguments live on the final path segment (the ADT itself).
     let args = path.segments.last().and_then(|s| s.generic_args.as_deref());
 
-    let mut substs: Vec<GenericArg> = Vec::with_capacity(args.map_or(0, |a| a.len()).max(arity));
+    let mut substs: Vec<GenericArg> =
+        Vec::with_capacity(args.map_or(0, <[glyim_hir::TypeRef]>::len).max(arity));
     if let Some(args) = args {
         // Plan unstub-5 P5: previously this branch bailed out to a 0-argument
         // `Poll` whenever `args.len() != arity`. That was wrong for two real
