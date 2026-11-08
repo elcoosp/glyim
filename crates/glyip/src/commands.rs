@@ -56,8 +56,7 @@ pub fn cmd_new(name: &str, opts: &NewOptions, dir: Option<&Path>) -> GlyipResult
     let package_name = dir
         .file_name()
         .and_then(|n| n.to_str())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| name.to_string());
+        .map_or_else(|| name.to_string(), std::string::ToString::to_string);
 
     info!(
         "Creating new {} project '{}' at {}",
@@ -349,7 +348,7 @@ pub fn cmd_test(project_dir: &Path, opts: &TestOptions) -> GlyipResult<TestResul
                         // it has the same code/span/severity shape as
                         // `glyim`'s CLI output.
                         for d in &diags {
-                            eprintln!("{}", d);
+                            eprintln!("{d}");
                         }
                         None
                     }
@@ -502,7 +501,7 @@ fn compile_and_run_compiled(
         None,
         None,
     ) {
-        Ok(_) => {}
+        Ok(()) => {}
         Err(diags) => {
             return Err(format!(
                 "compilation failed: {}",
