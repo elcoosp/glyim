@@ -1,27 +1,6 @@
 //! Type checker: HIR → THIR with full inference and trait solving.
 // Stylistic clippy lints suppressed crate-wide (test-noise lints).
-#![allow(
-    clippy::cloned_ref_to_slice_refs,
-    clippy::vec_init_then_push,
-    clippy::assertions_on_constants,
-    clippy::type_complexity,
-    clippy::too_many_arguments,
-    clippy::manual_c_str_literals,
-    clippy::doc_lazy_continuation,
-    clippy::empty_line_after_doc_comments,
-    clippy::manual_strip,
-    clippy::needless_range_loop,
-    clippy::unnecessary_cast,
-    clippy::clone_on_copy,
-    clippy::mutable_key_type,
-    clippy::only_used_in_recursion,
-    clippy::let_unit_value,
-    clippy::unnecessary_literal_unwrap,
-    clippy::format_in_format_args,
-    clippy::permissions_set_readonly_false,
-    clippy::needless_lifetimes,
-    clippy::collapsible_if
-)]
+
 // Plan §3.1 (ratchet, not a hard ban): type checking consumes untrusted user
 // input, so `unwrap`/`expect`/`panic!` on source-derived values must become
 // `Diagnostic`/Result. `#[warn]` (not `#[deny]`) surfaces the count under
@@ -32,7 +11,6 @@
 // the production-code opt-in strict (warn) but allow the same lints
 // inside `#[cfg(test)]` modules so test helpers stay concise.
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
-
 mod check_body;
 mod check_expr;
 mod check_pat;
@@ -65,11 +43,11 @@ use glyim_type::{
 };
 
 #[derive(Clone, Debug)]
-/// TypeckResult.
+/// `TypeckResult`.
 pub struct TypeckResult {
     #[doc = "field"]
     pub thir_bodies: Vec<(LocalDefId, thir::Body)>,
-    /// Struct.
+    /// `Struct`.
     pub diagnostics: Vec<GlyimDiagnostic>,
     /// Evaluated values of constant definitions (Part C: const value
     /// materialization). Populated during `typeck_crate` by const-evaluating
@@ -97,22 +75,22 @@ pub struct TypeckResult {
 }
 
 #[derive(Clone, Debug)]
-/// Adjustment.
+/// `Adjustment`.
 pub struct Adjustment {
-    /// Struct.
+    /// `Struct`.
     pub kind: AdjustKind,
-    /// Struct.
+    /// `Struct`.
     pub target: Ty,
 }
 
 #[derive(Clone, Debug)]
-/// AdjustKind.
+/// `AdjustKind`.
 pub enum AdjustKind {
-    /// Variant.
+    /// `Variant`.
     Deref,
-    #[allow(missing_docs)]
+    /// `Borrow`.
     Borrow(Mutability),
-    /// Variant.
+    /// `Variant`.
     NeverToAny,
 }
 
@@ -197,10 +175,7 @@ fn adt_id_for_item(
     {
         let id = ctx.next_synthetic_adt_id();
         if std::env::var("GLYIM_DBG_SYNTH").is_ok() {
-            eprintln!(
-                "[SYNTH] name={:?} synthetic_id={:?} module={:?}",
-                name, id, module_id
-            );
+            eprintln!("[SYNTH] name={name:?} synthetic_id={id:?} module={module_id:?}");
         }
         id
     }
@@ -314,9 +289,8 @@ fn register_adt_item(
 /// canonical (adt_defs-backed) `AdtId` for it. The stdlib declares
 /// `enum Option<T>` in `option.g`, giving it a def-map `LocalDefId`
 /// (e.g. `LocalDefId(9)`); but `register_builtin_ranges` ALSO registers
-/// `Option` at the canonical builtin AdtId 1010. `variant_map` records the
+/// `Option` at the canonical builtin `AdtId` 1010. `variant_map` records the
 /// def-map id, so a raw `AdtId::from_raw(enum_local.to_raw())` produces a
-/// phantom AdtId (9) that never unifies with the real definition (1010).
 ///
 /// Strategy: reverse-lookup the name by scanning every module's `types`
 /// namespace for a `LocalDefId` equal to `enum_local`, then look up that
@@ -359,7 +333,7 @@ fn canonical_enum_adt_id(
 }
 
 #[tracing::instrument(level = "info", skip(ctx, solver))]
-/// typeck_crate.
+/// `typeck_crate`.
 pub fn typeck_crate(
     mut ctx: TyCtxMut,
     def_map: &glyim_def_map::CrateDefMap,
@@ -390,17 +364,6 @@ pub fn typeck_crate(
     // previously overwrote `io::copy`'s `FnSig` (also id 51), making
     // `io::copy(..)` type as `Adt63` (OpenOptions).
     let mut next_local_def_id: u32 = def_map.max_local_def_id;
-    let _alloc_local_def_id = |counter: &mut u32, diags: &mut Vec<GlyimDiagnostic>| -> LocalDefId {
-        let id = *counter;
-        *counter += 1;
-        if *counter == u32::MAX {
-            diags.push(GlyimDiagnostic::type_error(
-                Span::DUMMY,
-                "exhausted LocalDefId space",
-            ));
-        }
-        LocalDefId::from_raw(id)
-    };
 
     // any trait/impl/function type resolution. The coherence pass and the
     // signature-resolution loops below resolve types that reference these ADTs
@@ -552,8 +515,7 @@ pub fn typeck_crate(
                             .children
                             .iter()
                             .find(|(n, _)| *n == item.name)
-                            .map(|(_, id)| *id)
-                            .unwrap_or(module_id);
+                            .map_or(module_id, |(_, id)| *id);
                         visit_consts(hir, &m.children, def_map, child_mod, visit);
                     }
                     ItemKind::Const(_) | ItemKind::Static(_) => visit(item, module_id),
@@ -1010,8 +972,7 @@ pub fn typeck_crate(
                 resolver
                     .resolve_path(&core_path)
                     .values
-                    .map(|(id, _)| id)
-                    .unwrap_or_else(|| LocalDefId::from_raw(item.id.to_raw()))
+                    .map_or_else(|| LocalDefId::from_raw(item.id.to_raw()), |(id, _)| id)
             };
             let sig = tyconv::resolve_fn_sig(
                 &mut ctx,
@@ -1070,7 +1031,6 @@ pub fn typeck_crate(
         if child_set.contains(&item_id) {
             continue;
         }
-        let _item_span = item.span;
 
         match &item.kind {
             ItemKind::Fn(_) => {}
@@ -1201,7 +1161,7 @@ pub fn typeck_crate(
     // between "no annotation possible" and "explicit error sentinel" is
     // lost.
     let mut unresolved_ty_var_spans: HashMap<LocalDefId, Vec<glyim_span::Span>> = HashMap::new();
-    for (owner, body) in thir_bodies.iter() {
+    for (owner, body) in &thir_bodies {
         let spans = zonk::collect_unresolved_ty_var_spans(&infer, &frozen_ctx, body);
         if !spans.is_empty() {
             unresolved_ty_var_spans.insert(*owner, spans);
@@ -1225,13 +1185,12 @@ pub fn typeck_crate(
     // variable after zonking. A failure here means a new `Ty` slot was added
     // to THIR without extending `zonk::walk_*`. Caught at the *source* —
     // before any downstream phase can misinterpret the raw type.
-    for (owner, b) in thir_bodies.iter() {
+    for (owner, b) in &thir_bodies {
         debug_assert!(
             !zonk::body_has_infer_ints_or_floats(&frozen_ctx, b),
-            "typeck invariant violated: THIR body {:?} still carries an \
+            "typeck invariant violated: THIR body {owner:?} still carries an \
              int/float inference variable after zonk; extend \
              `glyim_typeck::zonk` to cover the new `Ty` slot",
-            owner,
         );
     }
     debug_assert!(
@@ -1494,7 +1453,6 @@ fn pre_allocate_impl_method_ids(
 /// one `check_path` derives from the def map when resolving a value-namespace
 /// path (`foo`, `mod::foo`). The flat body-check loop in `typeck_crate` skips
 /// `ModItem` children and delegates them here.
-#[allow(clippy::too_many_arguments)]
 fn check_fn_items_in_module(
     ctx: &mut TyCtxMut,
     infer: &mut InferenceTable,
@@ -1819,16 +1777,15 @@ fn check_fn_items_in_module(
                     // (which runs before any body check); fall back to a fresh
                     // allocation for methods without a direct body (trait
                     // defaults, where the pre-pass has no `BodyId` to key on).
-                    let local_def_id = match method
+                    let local_def_id = if let Some(id) = method
                         .body
                         .and_then(|bid| body_owner_map.get(&bid).copied())
                     {
-                        Some(id) => id,
-                        None => {
-                            let id = *next_local_def_id;
-                            *next_local_def_id += 1;
-                            LocalDefId::from_raw(id)
-                        }
+                        id
+                    } else {
+                        let id = *next_local_def_id;
+                        *next_local_def_id += 1;
+                        LocalDefId::from_raw(id)
                     };
                     let owner = DefId::new(local_krate, local_def_id);
                     if let Some(bid) = method.body {
@@ -2099,13 +2056,14 @@ fn check_fn_items_in_module(
             ItemKind::Static(s) => {
                 // Resolve the static's value type and register it so
                 // `check_path` can produce a `StaticRef` with the right type.
-                let static_def_id = match def_map.modules[module_id].scope.values.get(&item.name) {
-                    Some((id, _, _)) => StaticDefId::from_raw(id.to_raw()),
-                    None => {
-                        let id = *next_local_def_id;
-                        *next_local_def_id += 1;
-                        StaticDefId::from_raw(id)
-                    }
+                let static_def_id = if let Some((id, _, _)) =
+                    def_map.modules[module_id].scope.values.get(&item.name)
+                {
+                    StaticDefId::from_raw(id.to_raw())
+                } else {
+                    let id = *next_local_def_id;
+                    *next_local_def_id += 1;
+                    StaticDefId::from_raw(id)
                 };
                 let empty_params: HashMap<Name, Ty> = HashMap::new();
                 let static_ty = tyconv::resolve_type_ref(
@@ -2228,13 +2186,14 @@ fn check_fn_items_in_module(
                         }
                     }
                 }
-                let const_def_id = match def_map.modules[module_id].scope.values.get(&item.name) {
-                    Some((id, _, _)) => ConstDefId::from_raw(id.to_raw()),
-                    None => {
-                        let id = *next_local_def_id;
-                        *next_local_def_id += 1;
-                        ConstDefId::from_raw(id)
-                    }
+                let const_def_id = if let Some((id, _, _)) =
+                    def_map.modules[module_id].scope.values.get(&item.name)
+                {
+                    ConstDefId::from_raw(id.to_raw())
+                } else {
+                    let id = *next_local_def_id;
+                    *next_local_def_id += 1;
+                    ConstDefId::from_raw(id)
                 };
                 let empty_params: HashMap<Name, Ty> = HashMap::new();
                 let const_ty = tyconv::resolve_type_ref(
@@ -2330,12 +2289,11 @@ fn check_fn_items_in_module(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn check_body(
     ctx: &mut TyCtxMut,
     infer: &mut InferenceTable,
     diagnostics: &mut Vec<GlyimDiagnostic>,
-    pending_obligations: &mut Vec<Obligation>,
+    _pending_obligations: &mut Vec<Obligation>,
     hir: &glyim_hir::CrateHir,
     body_id: glyim_hir::BodyId,
     owner: DefId,
@@ -2344,7 +2302,7 @@ fn check_body(
     thir_bodies: &mut Vec<(LocalDefId, thir::Body)>,
     local_def_id: LocalDefId,
     def_map: &glyim_def_map::CrateDefMap,
-    trait_ctx: &TraitContext,
+    _trait_ctx: &TraitContext,
     body_owner_map: &HashMap<glyim_hir::BodyId, LocalDefId>,
     expr_types: &mut HashMap<LocalDefId, HashMap<ExprId, Ty>>,
     module_id: glyim_def_map::ModuleId,
@@ -2381,16 +2339,14 @@ fn check_body(
         ctx,
         infer,
         diagnostics,
-        pending_obligations,
         hir,
         body,
         env,
         return_ty,
         owner,
-        expr_cache: Default::default(),
+        expr_cache: std::collections::HashMap::default(),
         def_map,
         current_module,
-        trait_ctx,
         capture_log: Vec::new(),
         body_owner_map,
         param_map: body_param_map,
@@ -2408,7 +2364,6 @@ fn check_body(
     expr_types.insert(local_def_id, body_expr_types);
 }
 
-#[allow(clippy::too_many_arguments)]
 fn process_where_clauses(
     ctx: &mut TyCtxMut,
     infer: &mut InferenceTable,
@@ -2462,23 +2417,23 @@ fn process_where_clauses(
             }
 
             let trait_path = &bound.trait_path;
-            let trait_def_id =
-                match tyconv::resolve_path_to_trait_def_id(def_map, ctx, trait_path, bound.span) {
-                    Some(id) => Some(id),
-                    None => {
-                        let path_str = trait_path
-                            .segments
-                            .iter()
-                            .map(|s| ctx.name_str(s.name))
-                            .collect::<Vec<_>>()
-                            .join("::");
-                        diagnostics.push(GlyimDiagnostic::type_error(
-                            bound.span,
-                            format!("unresolved trait `{}` in where clause", path_str),
-                        ));
-                        None
-                    }
-                };
+            let trait_def_id = if let Some(id) =
+                tyconv::resolve_path_to_trait_def_id(def_map, ctx, trait_path, bound.span)
+            {
+                Some(id)
+            } else {
+                let path_str = trait_path
+                    .segments
+                    .iter()
+                    .map(|s| ctx.name_str(s.name))
+                    .collect::<Vec<_>>()
+                    .join("::");
+                diagnostics.push(GlyimDiagnostic::type_error(
+                    bound.span,
+                    format!("unresolved trait `{path_str}` in where clause"),
+                ));
+                None
+            };
 
             if let Some(trait_def_id) = trait_def_id {
                 let trait_ref = TraitRef {
@@ -2547,6 +2502,7 @@ impl TypeckResult {
     /// had no `Fn` item, or the id is out of range). The type is fully
     /// resolved (no inference variables) — see `typeck_crate`'s post-
     /// fulfillment resolution step.
+    #[must_use]
     pub fn expr_ty(&self, body_id: LocalDefId, expr_id: usize) -> Option<Ty> {
         self.expr_types
             .get(&body_id)
@@ -2558,10 +2514,12 @@ impl TypeckResult {
     /// Patterns are not yet collected into a per-`PatId` cache during
     /// `typeck_crate`, so this returns `None` rather than a fake value.
     /// Wiring pattern-type collection (mirroring `expr_types`) is a follow-up.
+    #[must_use]
     pub fn pat_ty(&self, _body_id: LocalDefId, _pat_id: usize) -> Option<Ty> {
         None
     }
     /// adjustments.
+    #[must_use]
     pub fn adjustments(&self, _body_id: LocalDefId, _expr_id: usize) -> &[Adjustment] {
         &[]
     }
