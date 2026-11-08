@@ -1,4 +1,4 @@
-//! Tests for Const and ConstKind.
+//! Tests for Const and `ConstKind`.
 
 use glyim_core::primitives::UintTy;
 
@@ -52,7 +52,7 @@ fn const_char_kind() {
 
 #[test]
 fn const_string_kind() {
-    let (ctx, _) = with_fresh_ty_ctx(|c| {
+    let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let name = c.resolver().intern("hello");
         let cnst = Const {
             kind: ConstKind::String(name),
@@ -92,7 +92,7 @@ fn const_infer_kind() {
 
 #[test]
 fn const_param_kind() {
-    let (ctx, _) = with_fresh_ty_ctx(|c| {
+    let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let name = c.resolver().intern("N");
         let param = ParamConst { index: 0, name };
         let cnst = Const {
@@ -151,6 +151,6 @@ fn const_debug_format() {
         kind: ConstKind::Bool(true),
         ty: Ty::BOOL,
     };
-    let debug = format!("{:?}", c);
+    let debug = format!("{c:?}");
     assert!(debug.contains("Bool(true)"));
 }
