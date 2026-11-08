@@ -1,6 +1,6 @@
 use super::arbitrary::{Generator, sentinel_invariant};
 
-/// check_ty_property.
+/// `check_ty_property`.
 pub fn check_ty_property<F>(seed: u64, n_cases: usize, property: F) -> Result<(), String>
 where
     F: Fn(&glyim_type::TyCtx, glyim_type::Ty) -> Result<(), String>,
