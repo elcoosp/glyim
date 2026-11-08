@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 use crate::parser::parse_to_syntax;
 use glyim_span::FileId;
 use glyim_syntax::SyntaxKind;
