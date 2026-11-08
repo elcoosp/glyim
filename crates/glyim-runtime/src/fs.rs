@@ -39,7 +39,7 @@ pub(crate) unsafe fn slice_from_raw_parts<'a>(ptr: *const u8, len: usize) -> &'a
     // codegen length bug and a wrapped `from_raw_parts` (memory UB), so it
     // must fire in release too.
     assert!(
-        len <= isize::MAX as usize,
+        isize::try_from(len).is_ok(),
         "glyim runtime FFI: slice length {len} exceeds isize::MAX; \
          refusing to reconstruct a potentially-overflowing slice"
     );
@@ -51,7 +51,7 @@ pub(crate) unsafe fn slice_from_raw_parts<'a>(ptr: *const u8, len: usize) -> &'a
 pub(crate) unsafe fn slice_from_raw_parts_mut<'a>(ptr: *mut u8, len: usize) -> &'a mut [u8] {
     // Unconditional (not `debug_assert!`): see `slice_from_raw_parts`.
     assert!(
-        len <= isize::MAX as usize,
+        isize::try_from(len).is_ok(),
         "glyim runtime FFI: slice length {len} exceeds isize::MAX; \
          refusing to reconstruct a potentially-overflowing slice"
     );
@@ -68,7 +68,7 @@ use std::sync::{Mutex, OnceLock};
 // Error codes
 // ---------------------------------------------------------------------------
 
-/// Success.
+/// `Success`.
 pub const FS_OK: i32 = 0;
 /// Generic I/O error.
 pub const FS_EIO: i32 = -1;
@@ -103,7 +103,8 @@ pub const FS_O_APPEND: u32 = 4;
 pub const FS_O_CREAT: u32 = 8;
 /// Truncate the file to zero length if it exists.
 pub const FS_O_TRUNC: u32 = 16;
-/// Fail if the file already exists (must be used with FS_O_CREAT).
+/// Fail if the file already exists (must be used with `FS_O_CREAT`).
+/// Fail if the file already exists (must be used with `FS_O_CREAT`).
 pub const FS_O_EXCL: u32 = 32;
 
 // ---------------------------------------------------------------------------
@@ -269,7 +270,9 @@ macro_rules! glyim_ffi_fn {
             // SAFETY: Caller guarantees buf points to writable memory of buf_len bytes.
             // The debug_assert inside the helper rejects an overflowing length.
             let slice = unsafe { slice_from_raw_parts_mut(buf, buf_len) };
-            let mut table = fs_table().lock().unwrap_or_else(|e| e.into_inner());
+            let mut table = fs_table()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let file = match table.get_mut(fd) {
                 Some(f) => f,
                 None => return FS_EBADF as isize,
@@ -301,7 +304,9 @@ macro_rules! glyim_ffi_fn {
             // SAFETY: Caller guarantees buf points to readable memory of buf_len bytes.
             // The debug_assert inside the helper rejects an overflowing length.
             let slice = unsafe { slice_from_raw_parts(buf as *const u8, buf_len) };
-            let mut table = fs_table().lock().unwrap_or_else(|e| e.into_inner());
+            let mut table = fs_table()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let file = match table.get_mut(fd) {
                 Some(f) => f,
                 None => return FS_EBADF as isize,
@@ -398,7 +403,9 @@ pub unsafe extern "C" fn glyim_fs_open(path: *const u8, path_len: usize, flags: 
 
     match opts.open(p) {
         Ok(file) => {
-            let mut table = fs_table().lock().unwrap_or_else(|e| e.into_inner());
+            let mut table = fs_table()
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             table.insert(file)
         }
         Err(e) => io_err_to_errno(&e),
@@ -415,7 +422,9 @@ pub unsafe extern "C" fn glyim_fs_open(path: *const u8, path_len: usize, flags: 
 ///   not already been closed (double-close returns `FS_EBADF`)
 #[unsafe(no_mangle)]
 pub extern "C" fn glyim_fs_close(fd: i32) -> i32 {
-    let mut table = fs_table().lock().unwrap_or_else(|e| e.into_inner());
+    let mut table = fs_table()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if table.remove(fd).is_some() {
         FS_OK
     } else {
@@ -459,7 +468,9 @@ glyim_ffi_fn! {
 /// - `fd` must be a valid file descriptor opened for writing
 #[unsafe(no_mangle)]
 pub extern "C" fn glyim_fs_flush(fd: i32) -> i32 {
-    let mut table = fs_table().lock().unwrap_or_else(|e| e.into_inner());
+    let mut table = fs_table()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let file = match table.get_mut(fd) {
         Some(f) => f,
         None => return FS_EBADF,
@@ -713,10 +724,10 @@ pub unsafe extern "C" fn glyim_fs_canonicalize(
 /// FFI struct matching `fs.g`'s `MetadataRaw` (64-byte layout).
 ///
 /// Offsets must match the .g struct exactly:
-///   size: u64 @0, perm: u32 @8, file_type: u32 @12,
-///   modified_secs: u64 @16, modified_nanos: u32 @24, _pad0: u32 @28,
-///   accessed_secs: u64 @32, accessed_nanos: u32 @40, _pad1: u32 @44,
-///   created_secs: u64 @48, created_nanos: u32 @56, _pad2: u32 @60
+///   `size: u64 @0`, `perm: u32 @8`, `file_type: u32 @12`,
+///   `modified_secs: u64 @16`, `modified_nanos: u32 @24`, `pad0: u32 @28`,
+///   `accessed_secs: u64 @32`, `accessed_nanos: u32 @40`, `pad1: u32 @44`,
+///   `created_secs: u64 @48`, `created_nanos: u32 @56`, `pad2: u32 @60`
 #[repr(C)]
 pub struct MetadataRaw {
     /// Size of the file in bytes.
@@ -730,19 +741,19 @@ pub struct MetadataRaw {
     /// Nanoseconds component of modified time.
     pub modified_nanos: u32,
     /// Padding (alignment).
-    pub _pad0: u32,
+    pub pad0: u32,
     /// Seconds component of accessed time.
     pub accessed_secs: u64,
     /// Nanoseconds component of accessed time.
     pub accessed_nanos: u32,
     /// Padding (alignment).
-    pub _pad1: u32,
+    pub pad1: u32,
     /// Seconds component of created time.
     pub created_secs: u64,
     /// Nanoseconds component of created time.
     pub created_nanos: u32,
     /// Padding (alignment).
-    pub _pad2: u32,
+    pub pad2: u32,
 }
 
 const _: () = {
@@ -802,13 +813,13 @@ fn meta_to_raw(meta: &std::fs::Metadata) -> MetadataRaw {
         file_type,
         modified_secs: msecs,
         modified_nanos: mnanos,
-        _pad0: 0,
+        pad0: 0,
         accessed_secs: asecs,
         accessed_nanos: ananos,
-        _pad1: 0,
+        pad1: 0,
         created_secs: csecs,
         created_nanos: cnanos,
-        _pad2: 0,
+        pad2: 0,
     }
 }
 
@@ -911,8 +922,8 @@ mod tests {
     fn zero_len_slice_from_valid_ptr_is_safe() {
         let mut sentinel = 0u8;
         let s = unsafe { slice_from_raw_parts(&sentinel as *const u8, 0) };
-        assert!(s.is_empty());
+        assert!(s.is_empty(), "s: {s:?}");
         let m = unsafe { slice_from_raw_parts_mut(&mut sentinel as *mut u8, 0) };
-        assert!(m.is_empty());
+        assert!(m.is_empty(), "m: {m:?}");
     }
 }
