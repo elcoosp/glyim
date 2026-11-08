@@ -10,30 +10,30 @@ use tokio_tungstenite::tungstenite::Message;
 const EVENT_CHANNEL_CAPACITY: usize = 1024;
 
 #[derive(Debug, Clone)]
-/// ServerEvent.
+/// `ServerEvent`.
 pub enum ServerEvent {
-    /// Variant.
+    /// `Variant`.
     Connected {
-        /// Struct.
+        /// `Struct`.
         addr: SocketAddr,
     },
-    /// Variant.
+    /// `Variant`.
     Message {
-        /// Struct.
+        /// `Struct`.
         session_id: Option<String>,
-        /// Struct.
+        /// `Struct`.
         trace_id: Option<String>,
-        /// Struct.
+        /// `Struct`.
         msg: ExtensionMessage,
     },
-    /// Variant.
+    /// `Variant`.
     Disconnected {
-        /// Struct.
+        /// `Struct`.
         addr: SocketAddr,
     },
 }
 
-/// WsServer.
+/// `WsServer`.
 pub struct WsServer {
     addr: SocketAddr,
     event_tx: mpsc::Sender<ServerEvent>,
@@ -43,6 +43,7 @@ pub struct WsServer {
 
 impl WsServer {
     /// new.
+    #[must_use]
     pub fn new(host: &str, port: u16) -> Self {
         let addr: SocketAddr = format!("{host}:{port}")
             .parse()
@@ -56,11 +57,12 @@ impl WsServer {
             cli_msg_tx,
         }
     }
-    /// take_event_rx.
+    /// `take_event_rx`.
     pub fn take_event_rx(&mut self) -> Option<mpsc::Receiver<ServerEvent>> {
         self.event_rx.take()
     }
-    /// cli_msg_sender.
+    /// `cli_msg_sender`.
+    #[must_use]
     pub fn cli_msg_sender(&self) -> broadcast::Sender<String> {
         self.cli_msg_tx.clone()
     }
@@ -111,7 +113,6 @@ impl WsServer {
                                     }
                                     Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
                                         tracing::warn!("cli forward lagged, {n} messages dropped");
-                                        continue;
                                     }
                                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                                 }
@@ -142,8 +143,12 @@ impl WsServer {
                                             // local WebSocket lets a local
                                             // attacker create files/refs
                                             // outside the worktree base.
-                                            let sid = ext_msg.session_id().map(|s| s.to_string());
-                                            let tid = ext_msg.trace_id().map(|s| s.to_string());
+                                            let sid = ext_msg
+                                                .session_id()
+                                                .map(std::string::ToString::to_string);
+                                            let tid = ext_msg
+                                                .trace_id()
+                                                .map(std::string::ToString::to_string);
                                             let mut rejected = false;
                                             if let Some(s) = sid.as_deref() {
                                                 if let Err(e) = crate::error::validate_id(s) {
