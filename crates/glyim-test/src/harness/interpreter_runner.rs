@@ -14,10 +14,11 @@
 //! `// exit-code:` fixture exercises the same contract on both paths.
 
 use glyim_mir_interp::Interpreter;
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
 
-/// InterpRunner.
+/// `InterpRunner`.
 pub struct InterpRunner {
     bodies: Vec<Arc<glyim_mir::Body>>,
     ty_ctx: Arc<glyim_type::TyCtx>,
@@ -27,6 +28,7 @@ pub struct InterpRunner {
 
 impl InterpRunner {
     /// new.
+    #[must_use]
     pub fn new(
         bodies: Vec<Arc<glyim_mir::Body>>,
         ty_ctx: Arc<glyim_type::TyCtx>,
@@ -40,6 +42,7 @@ impl InterpRunner {
     }
 
     /// run.
+    #[must_use]
     pub fn run(self, timeout: Duration) -> super::runner::RunResult {
         let start = std::time::Instant::now();
         let (tx, rx) = std::sync::mpsc::channel();
@@ -50,33 +53,30 @@ impl InterpRunner {
             let output = interpret_bodies(&self.bodies, self.ty_ctx.as_ref(), self.entry_main);
             let _ = tx.send(output);
         });
-        match rx.recv_timeout(timeout) {
-            Ok(output) => {
-                // Worker finished; join it to reclaim the OS thread.
-                let _ = handle.join();
-                let duration = start.elapsed();
-                super::runner::RunResult {
-                    exit_code: Some(output.exit_code),
-                    stdout: output.stdout,
-                    stderr: output.stderr,
-                    timed_out: false,
-                    duration,
-                }
+        if let Ok(output) = rx.recv_timeout(timeout) {
+            // Worker finished; join it to reclaim the OS thread.
+            let _ = handle.join();
+            let duration = start.elapsed();
+            super::runner::RunResult {
+                exit_code: Some(output.exit_code),
+                stdout: output.stdout,
+                stderr: output.stderr,
+                timed_out: false,
+                duration,
             }
-            Err(_) => {
-                // Worker is still running (timeout). It will eventually
-                // finish and exit; joining here would block forever, so we
-                // intentionally detach it. This is the one intentional
-                // leak, and it only occurs on the timeout path.
-                drop(handle);
-                let duration = start.elapsed();
-                super::runner::RunResult {
-                    exit_code: None,
-                    stdout: String::new(),
-                    stderr: format!("interpreter timed out after {}s", timeout.as_secs()),
-                    timed_out: true,
-                    duration,
-                }
+        } else {
+            // Worker is still running (timeout). It will eventually
+            // finish and exit; joining here would block forever, so we
+            // intentionally detach it. This is the one intentional
+            // leak, and it only occurs on the timeout path.
+            drop(handle);
+            let duration = start.elapsed();
+            super::runner::RunResult {
+                exit_code: None,
+                stdout: String::new(),
+                stderr: format!("interpreter timed out after {}s", timeout.as_secs()),
+                timed_out: true,
+                duration,
             }
         }
     }
@@ -156,7 +156,7 @@ fn interpret_bodies(
             let exit_code = match interpreter.get_return_value() {
                 Some(glyim_mir_interp::InterpValue::Int(v)) => (v as i64 & 0xff) as i32,
                 Some(glyim_mir_interp::InterpValue::Uint(v)) => (v as u64 & 0xff) as i32,
-                Some(glyim_mir_interp::InterpValue::Bool(b)) => b as i32,
+                Some(glyim_mir_interp::InterpValue::Bool(b)) => i32::from(b),
                 _ => 0,
             };
             InterpOutput {
@@ -172,7 +172,7 @@ fn interpret_bodies(
             // Previously this was `"interpreter error: {e}\n"`, and `e`'s
             // Display started with `"panic: "` — two layers of wrapping
             // that no LLVM-produced binary ever produces.
-            stderr.push_str(&format!("thread 'main' panicked: {}\n", e));
+            let _ = writeln!(stderr, "thread 'main' panicked: {e}");
             InterpOutput {
                 exit_code: 101,
                 stdout,
