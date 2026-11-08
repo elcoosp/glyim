@@ -10,10 +10,10 @@ fn parse(source: &str) -> glyim_syntax::SyntaxNode {
     parse_to_syntax(source, FileId::BOGUS).root
 }
 
-/// Test that a simple macro_rules! identity macro expands correctly.
+/// Test that a simple `macro_rules`! identity macro expands correctly.
 #[test]
 fn identity_macro_expands_to_input() {
-    let source = r#"
+    let source = r"
 macro_rules! ident {
     ($x:expr) => { $x }
 }
@@ -21,32 +21,30 @@ macro_rules! ident {
 fn main() {
     let _ = ident!(42);
 }
-"#;
+";
     let root = parse(source);
     let mut hygiene = HygieneCtx::default();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags) = expander.expand_crate(&root);
 
     let has_error = diags.iter().any(|d: &GlyimDiagnostic| d.is_error());
-    assert!(!has_error, "Expected no errors, got: {:?}", diags);
+    assert!(!has_error, "Expected no errors, got: {diags:?}");
 
     let expanded_text = expanded.text().to_string();
     assert!(
         expanded_text.contains("42"),
-        "Expected expanded output to contain '42', got: {}",
-        expanded_text
+        "Expected expanded output to contain '42', got: {expanded_text}"
     );
     assert!(
         !expanded_text.contains("ident!"),
-        "Expected macro call 'ident!' to be expanded away, got: {}",
-        expanded_text
+        "Expected macro call 'ident!' to be expanded away, got: {expanded_text}"
     );
 }
 
 /// Test that a macro with multiple arms selects the correct one.
 #[test]
 fn multi_arm_macro_selects_correct_arm() {
-    let source = r#"
+    let source = r"
 macro_rules! choose {
     ($x:ident) => { 1 }
     ($x:literal) => { 2 }
@@ -56,32 +54,30 @@ fn main() {
     let _ = choose!(foo);
     let _ = choose!(99);
 }
-"#;
+";
     let root = parse(source);
     let mut hygiene = HygieneCtx::default();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags) = expander.expand_crate(&root);
 
     let has_error = diags.iter().any(|d: &GlyimDiagnostic| d.is_error());
-    assert!(!has_error, "Expected no errors, got: {:?}", diags);
+    assert!(!has_error, "Expected no errors, got: {diags:?}");
 
     let expanded_text = expanded.text().to_string();
     assert!(
-        expanded_text.contains("1"),
-        "Expected expanded output to contain '1' from ident arm, got: {}",
-        expanded_text
+        expanded_text.contains('1'),
+        "Expected expanded output to contain '1' from ident arm, got: {expanded_text}"
     );
     assert!(
-        expanded_text.contains("2"),
-        "Expected expanded output to contain '2' from literal arm, got: {}",
-        expanded_text
+        expanded_text.contains('2'),
+        "Expected expanded output to contain '2' from literal arm, got: {expanded_text}"
     );
 }
 
 /// Test that a macro with repetition ($($x)* ) expands correctly.
 #[test]
 fn repetition_macro_expands() {
-    let source = r#"
+    let source = r"
 macro_rules! make_tuple {
     ($($x:tt),*) => { ($($x),*) }
 }
@@ -89,7 +85,7 @@ macro_rules! make_tuple {
 fn main() {
     let _ = make_tuple!(1, 2, 3);
 }
-"#;
+";
     let root = parse(source);
     let mut hygiene = HygieneCtx::default();
     let mut expander = Expander::new(&mut hygiene);
@@ -98,8 +94,7 @@ fn main() {
     let expanded_text = expanded.text().to_string();
     assert!(
         !expanded_text.contains("make_tuple!"),
-        "Expected macro call to be expanded away, got: {}",
-        expanded_text
+        "Expected macro call to be expanded away, got: {expanded_text}"
     );
     let _ = diags;
 }
@@ -107,7 +102,7 @@ fn main() {
 /// Test that a macro producing a struct definition works.
 #[test]
 fn macro_produces_struct() {
-    let source = r#"
+    let source = r"
 macro_rules! unit_struct {
     ($name:ident) => { struct $name; }
 }
@@ -115,7 +110,7 @@ macro_rules! unit_struct {
 unit_struct!(Foo);
 
 fn main() {}
-"#;
+";
     let root = parse(source);
     let mut hygiene = HygieneCtx::default();
     let mut expander = Expander::new(&mut hygiene);
@@ -124,13 +119,11 @@ fn main() {}
     let expanded_text = expanded.text().to_string();
     assert!(
         expanded_text.contains("struct"),
-        "Expected expanded output to contain 'struct', got: {}",
-        expanded_text
+        "Expected expanded output to contain 'struct', got: {expanded_text}"
     );
     assert!(
         expanded_text.contains("Foo"),
-        "Expected expanded output to contain 'Foo', got: {}",
-        expanded_text
+        "Expected expanded output to contain 'Foo', got: {expanded_text}"
     );
     let _ = diags;
 }
@@ -138,7 +131,7 @@ fn main() {}
 /// Test that substitution replaces $x with the captured value.
 #[test]
 fn substitution_replaces_metavar() {
-    let source = r#"
+    let source = r"
 macro_rules! echo {
     ($x:ident) => { $x }
 }
@@ -146,25 +139,23 @@ macro_rules! echo {
 fn main() {
     let _ = echo!(value);
 }
-"#;
+";
     let root = parse(source);
     let mut hygiene = HygieneCtx::default();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags) = expander.expand_crate(&root);
 
     let has_error = diags.iter().any(|d: &GlyimDiagnostic| d.is_error());
-    assert!(!has_error, "Expected no errors, got: {:?}", diags);
+    assert!(!has_error, "Expected no errors, got: {diags:?}");
 
     let expanded_text = expanded.text().to_string();
     assert!(
         expanded_text.contains("value"),
-        "Expected expanded output to contain 'value', got: {}",
-        expanded_text
+        "Expected expanded output to contain 'value', got: {expanded_text}"
     );
     assert!(
         !expanded_text.contains("echo!"),
-        "Expected macro call to be expanded away, got: {}",
-        expanded_text
+        "Expected macro call to be expanded away, got: {expanded_text}"
     );
 }
 
@@ -173,7 +164,7 @@ fn main() {
 /// captured by the matcher (`$x:ident`).
 #[test]
 fn unbound_metavariable_is_hard_error() {
-    let source = r#"
+    let source = r"
 macro_rules! bad {
     ($x:ident) => { $y }
 }
@@ -181,7 +172,7 @@ macro_rules! bad {
 fn main() {
     let _ = bad!(value);
 }
-"#;
+";
     let root = parse(source);
     let mut hygiene = HygieneCtx::default();
     let mut expander = Expander::new(&mut hygiene);
@@ -194,8 +185,7 @@ fn main() {
     let expanded_text = expanded.text().to_string();
     assert!(
         expanded_text.contains("bad!"),
-        "Expected ill-formed macro call to be left intact, got: {}",
-        expanded_text
+        "Expected ill-formed macro call to be left intact, got: {expanded_text}"
     );
 
     let msg = diags
@@ -205,15 +195,14 @@ fn main() {
         .unwrap_or_default();
     assert!(
         msg.contains("$y") && msg.contains("bad"),
-        "Error should name the unbound metavariable and macro, got: {:?}",
-        msg
+        "Error should name the unbound metavariable and macro, got: {msg:?}"
     );
 }
 
-/// Test expand() public API with a registered builtin macro.
+/// Test `expand()` public API with a registered builtin macro.
 #[test]
 fn expand_api_with_builtin_file_macro() {
-    let source = r#"file!()"#;
+    let source = r"file!()";
     let root = parse(source);
     let mut hygiene = HygieneCtx::default();
     let mut expander = Expander::new(&mut hygiene);
@@ -245,8 +234,7 @@ fn expand_api_with_builtin_file_macro() {
     let expanded_text = result.expanded.unwrap().text().to_string();
     assert!(
         expanded_text.contains("42"),
-        "Expected file!() expansion to contain file ID 42, got: {}",
-        expanded_text
+        "Expected file!() expansion to contain file ID 42, got: {expanded_text}"
     );
 }
 
@@ -258,7 +246,7 @@ fn expand_api_with_builtin_file_macro() {
 /// `$( let _ = $e; )*` produced six malformed statements. It must produce two.
 #[test]
 fn repetition_multi_token_fragment_expands_once_per_iteration() {
-    let source = r#"
+    let source = r"
 macro_rules! stmts {
     ($($e:expr),*) => {
         $( let _ = $e; )*
@@ -268,28 +256,26 @@ macro_rules! stmts {
 fn main() {
     stmts!(aa + bb, cc * dd);
 }
-"#;
+";
     let root = parse(source);
     let mut hygiene = HygieneCtx::default();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags) = expander.expand_crate(&root);
 
     let has_error = diags.iter().any(|d: &GlyimDiagnostic| d.is_error());
-    assert!(!has_error, "Expected no errors, got: {:?}", diags);
+    assert!(!has_error, "Expected no errors, got: {diags:?}");
 
     let expanded_text = expanded.text().to_string();
     assert!(
         !expanded_text.contains("stmts!"),
-        "Expected macro call to be expanded away, got: {}",
-        expanded_text
+        "Expected macro call to be expanded away, got: {expanded_text}"
     );
     // Exactly two `let` statements — one per `$e` iteration. The pre-fix code
     // emitted six (one per captured token: aa, +, bb, cc, *, dd).
     let lets = expanded_text.matches("let").count();
     assert_eq!(
         lets, 2,
-        "multi-token fragments must expand once per iteration, got {lets} `let`s in: {}",
-        expanded_text
+        "multi-token fragments must expand once per iteration, got {lets} `let`s in: {expanded_text}"
     );
 }
 
@@ -301,7 +287,7 @@ fn main() {
 /// token at every boundary that would change how the text re-lexes.
 #[test]
 fn expansion_does_not_fuse_adjacent_identifier_tokens() {
-    let source = r#"
+    let source = r"
 macro_rules! stmts {
     ($($e:expr),*) => {
         $( let _ = $e; )*
@@ -311,21 +297,20 @@ macro_rules! stmts {
 fn main() {
     stmts!(1 + 2, 3 * 4);
 }
-"#;
+";
     let root = parse(source);
     let mut hygiene = HygieneCtx::default();
     let mut expander = Expander::new(&mut hygiene);
     let (expanded, diags) = expander.expand_crate(&root);
 
     let has_error = diags.iter().any(|d: &GlyimDiagnostic| d.is_error());
-    assert!(!has_error, "Expected no errors, got: {:?}", diags);
+    assert!(!has_error, "Expected no errors, got: {diags:?}");
 
     let text = expanded.text().to_string();
     assert!(
         !text.contains("let_"),
-        "`let` and `_` fused into `let_`; expansion text was: {}",
-        text
+        "`let` and `_` fused into `let_`; expansion text was: {text}"
     );
     // Both `let`s must still be present (HIR-2: one per iteration).
-    assert_eq!(text.matches("let").count(), 2, "expansion was: {}", text);
+    assert_eq!(text.matches("let").count(), 2, "expansion was: {text}");
 }
