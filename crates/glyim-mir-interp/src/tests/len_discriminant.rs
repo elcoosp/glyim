@@ -85,7 +85,7 @@ fn w1_c03_t03_len_array() {
     let result = interp.run_body(&body);
     assert!(result.is_ok());
     let ret = interp.get_return_value().unwrap();
-    assert_eq!(ret, InterpValue::Int(3), "Expected len = 3, got {:?}", ret);
+    assert_eq!(ret, InterpValue::Int(3), "Expected len = 3, got {ret:?}");
 }
 
 #[test]
@@ -153,8 +153,7 @@ fn discriminant_variant_0() {
     assert_eq!(
         ret,
         InterpValue::Int(0),
-        "Expected discriminant = 0, got {:?}",
-        ret
+        "Expected discriminant = 0, got {ret:?}"
     );
 }
 
@@ -223,7 +222,6 @@ fn discriminant_variant_1() {
     assert_eq!(
         ret,
         InterpValue::Int(5),
-        "Expected discriminant = 5, got {:?}",
-        ret
+        "Expected discriminant = 5, got {ret:?}"
     );
 }
