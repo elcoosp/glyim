@@ -1,0 +1,166 @@
+# M1.2 feature registry seed — `runtime/ffi.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "RUNTIME-FFI-ALLOC"
+title         = "`glyim_alloc`/`glyim_dealloc` allocator entry points"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-ATOMIC"
+title         = "atomic load/store/CAS/fetch family (10 symbols)"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-CONDVAR"
+title         = "condvar create/wait/notify FFI"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-ENV"
+title         = "environment FFI family: vars, args, cwd, home, temp"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-ERRNO"
+title         = "`glyim_errno` error reporting"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-FS"
+title         = "file-system FFI family (16 symbols)"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-IO"
+title         = "stdin/stdout/stderr FFI family"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-NET"
+title         = "socket FFI family (14 symbols)"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-PROCESS"
+title         = "process spawn/exit FFI family"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-SYNC"
+title         = "mutex/rwlock FFI family"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-THREAD"
+title         = "thread spawn/join FFI family"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-TIME"
+title         = "clock/time FFI family"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-VECSTR"
+title         = "Vec/String growth and str marshalling FFI (vec_*, string_*, str_*, slice)"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-PANIC"
+title         = "`glyim_panic`, `glyim_drop_in_place` and unwinding entry points"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-CSTR"
+title         = "`glyim_free_cstr` C-string marshalling helper"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "RUNTIME-FFI-REACTOR"
+title         = "async reactor FFI hooks"
+area          = "runtime.ffi"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
