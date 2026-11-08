@@ -74,8 +74,7 @@ fn const_eval_additive_constant() {
     assert_eq!(
         val,
         InterpValue::Int(7),
-        "Expected const-eval to fold 3 + 4 = 7, got {:?}",
-        val
+        "Expected const-eval to fold 3 + 4 = 7, got {val:?}"
     );
 }
 
@@ -135,7 +134,6 @@ fn const_eval_division_by_zero_is_error() {
     let result = interp.const_eval(&body);
     assert!(
         matches!(result, Err(crate::InterpError::DivisionByZero)),
-        "const-eval division by zero must be a DivisionByZero error, got {:?}",
-        result
+        "const-eval division by zero must be a DivisionByZero error, got {result:?}"
     );
 }
