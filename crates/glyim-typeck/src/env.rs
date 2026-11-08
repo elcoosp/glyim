@@ -19,6 +19,7 @@
 use std::collections::HashMap;
 
 use glyim_core::interner::Name;
+#[cfg(test)]
 use glyim_core::primitives::Mutability;
 use glyim_type::Ty;
 
@@ -26,7 +27,6 @@ use crate::thir::LocalVarId;
 
 /// Information about a single local variable binding.
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub struct LocalVarInfo {
     /// The allocated ID for this variable.
     pub id: LocalVarId,
@@ -34,7 +34,13 @@ pub struct LocalVarInfo {
     pub name: Name,
     /// The resolved type of the binding.
     pub ty: Ty,
-    /// Whether the binding is mutable.
+    /// The binding's declared mutability.
+    ///
+    /// Test-only today (the env tests assert shadowing keeps the outer
+    /// binding's mutability intact); a lib-side consumer (borrow-checker
+    /// hand-off) is the scheduled follow-up, so the field is cfg(test) to
+    /// stay out of the lib build's dead-code gate.
+    #[cfg(test)]
     pub mutability: Mutability,
 }
 
@@ -71,8 +77,7 @@ impl LocalEnv {
             // Unconditional (not `debug_assert!`): an unbalanced leave is a
             // typeck-internal invariant violation; failing loudly in every
             // profile beats silently corrupting name resolution in release.
-            assert!(false, "leave_scope without matching enter_scope");
-            return;
+            unreachable!("leave_scope without matching enter_scope");
         };
 
         // Iterate over the variables added in this scope to update the name_map,
@@ -100,7 +105,7 @@ impl LocalEnv {
         }
     }
 
-    pub fn add_binding(&mut self, name: Name, ty: Ty, mutability: Mutability) -> LocalVarId {
+    pub fn add_binding(&mut self, name: Name, ty: Ty) -> LocalVarId {
         let id = LocalVarId::from_raw(self.vars.len() as u32);
         if std::env::var_os("GLYIM_DBG_BIND").is_some() {
             eprintln!(
@@ -114,7 +119,8 @@ impl LocalEnv {
             id,
             name,
             ty,
-            mutability,
+            #[cfg(test)]
+            mutability: Mutability::Not,
         });
         self.name_map.entry(name).or_default().push(id);
         id
@@ -137,14 +143,22 @@ impl LocalEnv {
             .and_then(|&id| self.vars.get(id.to_raw() as usize))
     }
 
-    /// Debug helper: the set of names currently bound in the environment.
-    #[allow(dead_code)]
-    pub fn name_map_keys(&self) -> Vec<Name> {
-        self.name_map.keys().copied().collect()
+    /// Test-only binding constructor with an explicit mutability (see
+    /// `LocalVarInfo::mutability`).
+    #[cfg(test)]
+    pub fn add_binding_with_mutability(
+        &mut self,
+        name: Name,
+        ty: Ty,
+        mutability: Mutability,
+    ) -> LocalVarId {
+        let id = self.add_binding(name, ty);
+        self.vars[id.to_raw() as usize].mutability = mutability;
+        id
     }
 
-    #[inline]
-    #[allow(dead_code)]
+    /// Test-only lookup by allocated id (order-independent access).
+    #[cfg(test)]
     pub fn lookup_by_id(&self, id: LocalVarId) -> Option<&LocalVarInfo> {
         self.vars.get(id.to_raw() as usize)
     }
@@ -184,17 +198,17 @@ mod tests {
         let ty_i32 = Ty::UNIT; // placeholder — any Ty will do for this test
 
         // Parameter
-        let x0 = env.add_binding(x, ty_i32, Mutability::Not);
+        let x0 = env.add_binding_with_mutability(x, ty_i32, Mutability::Not);
         assert_eq!(env.lookup_by_name(x).unwrap().ty, ty_i32);
 
         // Enter inner scope, shadow x
         env.enter_scope();
-        let x1 = env.add_binding(x, ty_i32, Mutability::Mut);
+        let x1 = env.add_binding_with_mutability(x, ty_i32, Mutability::Mut);
         assert_eq!(env.lookup_by_name(x).unwrap().mutability, Mutability::Mut);
         assert_ne!(x0, x1);
 
         // Add y in inner scope
-        let _y0 = env.add_binding(y, ty_i32, Mutability::Not);
+        let _y0 = env.add_binding(y, ty_i32);
         assert!(env.lookup_by_name(y).is_some());
 
         // Leave inner scope — x shadow and y should disappear
