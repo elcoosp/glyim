@@ -1,0 +1,37 @@
+# M1.2 feature registry seed — `compiler/proc-macro.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "COMPILER-PROC-MACRO-ABI"
+title         = "C-compatible token-stream ABI for proc macros"
+area          = "compiler.proc-macro"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "COMPILER-PROC-MACRO-LOADER"
+title         = "`dlopen`-based cdylib proc-macro loader"
+area          = "compiler.proc-macro"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "COMPILER-PROC-MACRO-EXPANSION"
+title         = "proc-macro expansion integrated into def-map construction"
+area          = "compiler.proc-macro"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+requires      = ["COMPILER-PROC-MACRO-ABI", "COMPILER-FRONT-DEFTABLE"]
+owner_lane    = "F"
