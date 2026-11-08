@@ -1,0 +1,105 @@
+# M1.2 feature registry seed — `lang/views.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "LANG-VIEW-ELEMENTS"
+title         = "typed GSX elements with host-agnostic tags"
+area          = "lang.views"
+tier          = "experimental"
+spec          = "docs/design/GSX-in-Glyim.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+requires      = ["LANG-GSX-VIEWS"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-VIEW-HOLES"
+title         = "GSX holes (`{...}`) with typed children"
+area          = "lang.views"
+tier          = "experimental"
+spec          = "docs/design/GSX-in-Glyim.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+requires      = ["LANG-GSX-VIEWS"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-VIEW-DIRECTIVES"
+title         = "directive attributes (`on:click={...}`)"
+area          = "lang.views"
+tier          = "experimental"
+spec          = "docs/design/GSX-in-Glyim.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+requires      = ["LANG-GSX-VIEWS"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-VIEW-KEYED-ITER"
+title         = "keyed iteration over GSX children"
+area          = "lang.views"
+tier          = "experimental"
+spec          = "docs/design/GSX-in-Glyim.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+requires      = ["LANG-GSX-VIEWS"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-VIEW-VIEWIR"
+title         = "dedicated compiler stage lowering GSX to View IR"
+area          = "lang.views"
+tier          = "experimental"
+spec          = "docs/design/gsx-implementation.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+requires      = ["LANG-GSX-VIEWS"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-VIEW-BLUEPRINTS"
+title         = "flat-`u32` blueprint emission from View IR"
+area          = "lang.views"
+tier          = "experimental"
+spec          = "docs/design/gsx-implementation.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+requires      = ["LANG-VIEW-VIEWIR"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-VIEW-REACTIVITY"
+title         = "ownership-driven reactivity with mutation-specialized patches"
+area          = "lang.views"
+tier          = "experimental"
+spec          = "docs/design/GSX-in-Glyim.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+requires      = ["LANG-VIEW-VIEWIR"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-VIEW-SSR"
+title         = "SSR string emitter for GSX views"
+area          = "lang.views"
+tier          = "experimental"
+spec          = "docs/design/gsx-implementation.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+requires      = ["LANG-VIEW-VIEWIR"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-VIEW-TEST-HOST"
+title         = "headless GSX test host"
+area          = "lang.views"
+tier          = "experimental"
+spec          = "docs/design/gsx-implementation.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+requires      = ["LANG-VIEW-VIEWIR"]
+owner_lane    = "M"

@@ -1,0 +1,96 @@
+# M1.2 feature registry seed — `lang/types.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "LANG-TY-PRIMITIVES"
+title         = "integer widths (i8..i128, u8..u128, usize/isize), f64, bool, char, unit"
+area          = "lang.types"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "LANG-TY-REF"
+title         = "shared references `&T` with auto-deref"
+area          = "lang.types"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "LANG-TY-REF-MUT"
+title         = "mutable references `&mut T`"
+area          = "lang.types"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "LANG-TY-SLICE"
+title         = "slice types `&[T]` / `&mut [T]` with len and indexing"
+area          = "lang.types"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "LANG-TY-ARRAY"
+title         = "fixed-size array types `[T; N]`"
+area          = "lang.types"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "LANG-TY-TUPLE"
+title         = "tuple types with field projection"
+area          = "lang.types"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "LANG-TY-STR"
+title         = "`&str` string slices with UTF-8 semantics"
+area          = "lang.types"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "LANG-TY-FN-PTR"
+title         = "function pointers (`fn` types, `fn(...)` values)"
+area          = "lang.types"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "LANG-TY-RAW-PTR"
+title         = "raw pointers `*const T` / `*mut T` with `as` casts from references"
+area          = "lang.types"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"

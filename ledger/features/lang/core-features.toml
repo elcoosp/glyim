@@ -43,7 +43,7 @@ title         = "`async`/`await` with straight-line and multi-await state-machin
 area          = "lang.async"
 tier          = "core"
 spec          = "docs/specs/v0.1.0.md"
-target_level  = "L4"
+target_level  = "L5"
 backends      = ["gam", "llvm"]
 owner_lane    = "M"
 

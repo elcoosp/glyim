@@ -1,0 +1,81 @@
+# M1.2 feature registry seed — `lang/builtins.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "LANG-BUILTIN-OPTION"
+title         = "`Option<T>` as a compiler-known builtin type"
+area          = "lang.builtins"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+requires      = ["STD-CORE-OPTION"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-BUILTIN-RESULT"
+title         = "`Result<T, E>` as a compiler-known builtin type"
+area          = "lang.builtins"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+requires      = ["STD-CORE-RESULT"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-BUILTIN-VEC"
+title         = "`Vec<T>` as a compiler-known builtin type"
+area          = "lang.builtins"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+requires      = ["STD-ALLOC-VEC"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-BUILTIN-STRING"
+title         = "`String` as a compiler-known builtin type"
+area          = "lang.builtins"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+requires      = ["STD-ALLOC-STRING"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-BUILTIN-BOX"
+title         = "`Box<T>` as a compiler-known builtin type"
+area          = "lang.builtins"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+requires      = ["STD-ALLOC-BOX"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-BUILTIN-PHANTOMDATA"
+title         = "`PhantomData<T>` as a compiler-known builtin type"
+area          = "lang.builtins"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "LANG-BUILTIN-UNSAFECELL"
+title         = "`UnsafeCell<T>` as a compiler-known builtin type"
+area          = "lang.builtins"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"

@@ -1,0 +1,67 @@
+# M1.2 feature registry seed — `lang/macros.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "LANG-MACRO-RULES"
+title         = "`macro_rules!` with fragment specifiers (`:expr`, `:ty`, `:pat`, `:tt`, ...)"
+area          = "lang.macros"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-MACRO-BUILTIN-SRC"
+title         = "source builtins `file!`, `line!`, `column!`"
+area          = "lang.macros"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-MACRO-BUILTIN-ENV"
+title         = "environment builtins `env!`, `option_env!`"
+area          = "lang.macros"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-MACRO-BUILTIN-INCLUDE"
+title         = "file builtins `include!`, `include_str!`, `include_bytes!`"
+area          = "lang.macros"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-MACRO-BUILTIN-STR"
+title         = "token builtins `concat!`, `concat_idents!`, `stringify!`"
+area          = "lang.macros"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "F"
+
+[[feature]]
+id            = "LANG-MACRO-PROC-DECL"
+title         = "procedural macro invocation from user code"
+area          = "lang.macros"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+requires      = ["COMPILER-PROC-MACRO-ABI", "COMPILER-PROC-MACRO-LOADER"]
+owner_lane    = "F"
