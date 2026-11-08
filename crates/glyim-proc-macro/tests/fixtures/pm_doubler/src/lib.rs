@@ -16,8 +16,6 @@
 //! host later frees it via `pm_ts_free` (which calls `std::alloc::realloc`).
 //! Using `std::alloc::alloc` here matches that free path exactly.
 
-#![allow(dead_code)]
-
 use std::alloc::{alloc, Layout};
 use std::os::raw::c_char;
 
