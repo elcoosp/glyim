@@ -4,13 +4,15 @@ use crate::annotations::Annotation;
 use crate::comparison::{self, DiagSeverityExt, NormalizedDiag};
 use crate::error::FailureReason;
 use glyim_diag::GlyimDiagnostic;
+use std::fmt::Write as _;
 use std::path::Path;
 
-/// CompilePassStrategy.
+/// `CompilePassStrategy`.
 pub struct CompilePassStrategy;
 
 impl CompilePassStrategy {
     /// evaluate.
+    #[must_use]
     pub fn evaluate(
         &self,
         diagnostics: &[GlyimDiagnostic],
@@ -72,11 +74,12 @@ impl CompilePassStrategy {
     }
 }
 
-/// CompileFailStrategy.
+/// `CompileFailStrategy`.
 pub struct CompileFailStrategy;
 
 impl CompileFailStrategy {
     /// evaluate.
+    #[must_use]
     pub fn evaluate(
         &self,
         diagnostics: &[GlyimDiagnostic],
@@ -126,7 +129,7 @@ impl CompileFailStrategy {
     }
 }
 
-/// UiTestStrategy.
+/// `UiTestStrategy`.
 pub struct UiTestStrategy;
 
 impl UiTestStrategy {
@@ -141,6 +144,7 @@ impl UiTestStrategy {
     /// snapshotted.
     ///
     /// `GLYIM_BLESS=1` writes the `.expected` file instead of comparing.
+    #[must_use]
     pub fn evaluate(
         &self,
         output: &CompileOutput,
@@ -150,8 +154,11 @@ impl UiTestStrategy {
     ) -> super::executor::TestOutcome {
         let text = format_diagnostics(&output.diagnostics, source, test_path);
 
-        let normalized =
-            crate::comparison::normalize::normalize_output(&text, test_path, &Default::default());
+        let normalized = crate::comparison::normalize::normalize_output(
+            &text,
+            test_path,
+            &crate::comparison::normalize::NormalizeRules::default(),
+        );
 
         let expected_path = test_path.with_extension("expected");
 
@@ -180,7 +187,7 @@ impl UiTestStrategy {
                     similar::ChangeTag::Insert => "+",
                     similar::ChangeTag::Equal => " ",
                 };
-                diff_str.push_str(&format!("{}{}", sign, change));
+                let _ = write!(diff_str, "{sign}{change}");
             }
             super::executor::TestOutcome::Failed {
                 reason: FailureReason::UiOutputDiffers { diff: diff_str },
@@ -226,41 +233,32 @@ fn format_diagnostics(diagnostics: &[GlyimDiagnostic], source: &str, test_path: 
 
     let mut out = String::new();
     for diag in diagnostics {
-        out.push_str(&format!(
-            "{}[{}]: {}\n",
+        let _ = writeln!(
+            out,
+            "{}[{}]: {}",
             diag.severity.display_name(),
             diag.code,
             diag.message,
-        ));
+        );
 
         let primary = diag.span.primary;
         if primary == glyim_span::Span::DUMMY {
             out.push_str("  (no location)\n");
         } else if let Some((line_i, col_i)) = offset_to_line_col(primary.lo.to_usize()) {
-            out.push_str(&format!(
-                " --> {}:{}:{}\n",
-                file_name,
-                line_i + 1,
-                col_i + 1,
-            ));
+            let _ = writeln!(out, " --> {}:{}:{}", file_name, line_i + 1, col_i + 1);
             // Source excerpt with a caret underline.
             if let Some(src_line) = lines.get(line_i) {
                 let width = line_i + 1;
                 let gutter = " ".repeat(width);
-                out.push_str(&format!("{} |\n", gutter));
-                out.push_str(&format!("{} | {}\n", line_i + 1, src_line));
+                let _ = writeln!(out, "{gutter} |");
+                let _ = writeln!(out, "{} | {}", line_i + 1, src_line);
                 let caret_pad = " ".repeat(col_i);
                 let caret_len = primary
                     .hi
                     .to_usize()
                     .saturating_sub(primary.lo.to_usize())
                     .max(1);
-                out.push_str(&format!(
-                    "{} | {}{}\n",
-                    gutter,
-                    caret_pad,
-                    "^".repeat(caret_len)
-                ));
+                let _ = writeln!(out, "{} | {}{}", gutter, caret_pad, "^".repeat(caret_len));
             }
         }
         out.push('\n');
@@ -270,11 +268,12 @@ fn format_diagnostics(diagnostics: &[GlyimDiagnostic], source: &str, test_path: 
     out.trim_end().to_string() + "\n"
 }
 
-/// RunPassStrategy.
+/// `RunPassStrategy`.
 pub struct RunPassStrategy;
 
 impl RunPassStrategy {
     /// evaluate.
+    #[must_use]
     pub fn evaluate(
         &self,
         output: &CompileOutput,
@@ -349,11 +348,12 @@ impl RunPassStrategy {
     }
 }
 
-/// RunFailStrategy.
+/// `RunFailStrategy`.
 pub struct RunFailStrategy;
 
 impl RunFailStrategy {
     /// evaluate.
+    #[must_use]
     pub fn evaluate(
         &self,
         output: &CompileOutput,
