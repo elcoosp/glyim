@@ -56,8 +56,7 @@ fn v05_t01_fn_bound_for_a_ref_u32() {
                 if let TyKind::Ref(region, inner, Mutability::Not) = ctx.ty_kind(input_ty) {
                     assert!(
                         matches!(region, Region::Placeholder(_)),
-                        "Expected placeholder region, got {:?}",
-                        region
+                        "Expected placeholder region, got {region:?}"
                     );
                     assert!(matches!(ctx.ty_kind(*inner), TyKind::Uint(UintTy::U32)));
                 } else {
@@ -66,7 +65,7 @@ fn v05_t01_fn_bound_for_a_ref_u32() {
             }
             assert!(matches!(ctx.ty_kind(sig.output), TyKind::Bool));
         }
-        other => panic!("Expected FnPtr type, got {:?}", other),
+        other => panic!("Expected FnPtr type, got {other:?}"),
     }
 }
 
@@ -675,7 +674,7 @@ fn test_substitute_fn_ptr_shared_bound_region() {
             assert_eq!(r0, r1, "Both input regions should be the same placeholder");
             assert_eq!(r0, r_out, "Input and output regions should match");
         }
-        other => panic!("Expected FnPtr, got {:?}", other),
+        other => panic!("Expected FnPtr, got {other:?}"),
     }
 }
 
