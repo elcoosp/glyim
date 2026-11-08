@@ -8,8 +8,7 @@ fn alloc_source_no_stub_macros() {
         let src = alloc_source(name).unwrap();
         assert!(
             !src.contains("stub!"),
-            "alloc module '{}' should not contain stub!() macros",
-            name
+            "alloc module '{name}' should not contain stub!() macros"
         );
     }
 }
@@ -20,8 +19,7 @@ fn alloc_source_no_todo_macros() {
         let src = alloc_source(name).unwrap();
         assert!(
             !src.contains("todo!"),
-            "alloc module '{}' should not contain todo!() macros",
-            name
+            "alloc module '{name}' should not contain todo!() macros"
         );
     }
 }
@@ -38,8 +36,7 @@ fn alloc_source_has_keyword_definitions() {
             || src.contains("type ");
         assert!(
             has_definition,
-            "alloc module '{}' should contain at least one definition (fn/struct/enum/trait/impl/type)",
-            name
+            "alloc module '{name}' should contain at least one definition (fn/struct/enum/trait/impl/type)"
         );
     }
 }
@@ -54,11 +51,10 @@ fn alloc_source_all_is_non_empty() {
 fn alloc_source_all_has_all_module_headers() {
     let all = alloc_source_all();
     for name in alloc_modules() {
-        let header = format!("// === module: {} ===", name);
+        let header = format!("// === module: {name} ===");
         assert!(
             all.contains(&header),
-            "alloc_source_all should contain header for '{}'",
-            name
+            "alloc_source_all should contain header for '{name}'"
         );
     }
 }
@@ -67,12 +63,11 @@ fn alloc_source_all_has_all_module_headers() {
 fn alloc_source_all_modules_appear_exactly_once() {
     let all = alloc_source_all();
     for name in alloc_modules() {
-        let header = format!("// === module: {} ===", name);
+        let header = format!("// === module: {name} ===");
         let count = all.matches(&header).count();
         assert_eq!(
             count, 1,
-            "alloc_source_all should contain exactly one header for '{}', found {}",
-            name, count
+            "alloc_source_all should contain exactly one header for '{name}', found {count}"
         );
     }
 }
@@ -83,8 +78,7 @@ fn alloc_source_each_module_starts_with_doc_comment() {
         let src = alloc_source(name).unwrap();
         assert!(
             src.starts_with("//!"),
-            "alloc module '{}' should start with a module-level doc comment (//!)",
-            name
+            "alloc module '{name}' should start with a module-level doc comment (//!)"
         );
     }
 }
