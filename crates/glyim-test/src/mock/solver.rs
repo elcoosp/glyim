@@ -1,13 +1,13 @@
 use glyim_solve::{SolverIteratorNextInfo, SolverResult, TraitSolver};
 use glyim_type::{Predicate, TraitPredicate, Ty, TyCtx};
 
-/// MockSolver.
+/// `MockSolver`.
 pub struct MockSolver {
     responses: Vec<(PredicateMatcher, SolverResult)>,
     calls: Vec<TraitPredicate>,
     default: SolverResult,
     /// Optional override for `iterator_next_info` so tests can simulate
-    /// "solver resolved Iterator::next" vs "solver didn't" in isolation.
+    /// "solver resolved `Iterator::next`" vs "solver didn't" in isolation.
     iterator_next_override: Option<Box<dyn Fn(Ty, Ty) -> Option<SolverIteratorNextInfo>>>,
 }
 
@@ -18,6 +18,7 @@ enum PredicateMatcher {
 
 impl MockSolver {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             responses: Vec::new(),
@@ -26,12 +27,14 @@ impl MockSolver {
             iterator_next_override: None,
         }
     }
-    /// default_result.
+    /// `default_result`.
+    #[must_use]
     pub fn default_result(mut self, result: SolverResult) -> Self {
         self.default = result;
         self
     }
-    /// respond_for_trait.
+    /// `respond_for_trait`.
+    #[must_use]
     pub fn respond_for_trait(
         mut self,
         id: glyim_core::def_id::TraitDefId,
@@ -40,7 +43,8 @@ impl MockSolver {
         self.responses.push((PredicateMatcher::TraitId(id), result));
         self
     }
-    /// respond_for_any.
+    /// `respond_for_any`.
+    #[must_use]
     pub fn respond_for_any(mut self, result: SolverResult) -> Self {
         self.responses.push((PredicateMatcher::Any, result));
         self
@@ -49,6 +53,7 @@ impl MockSolver {
     /// consults this closure, letting a test exercise both the "solver found
     /// it" (`Some(info)`) and "solver didn't" (`None`) branches of the Tier
     /// 1.3 fallback code in isolation.
+    #[must_use]
     pub fn with_iterator_next(
         mut self,
         f: impl Fn(Ty, Ty) -> Option<SolverIteratorNextInfo> + 'static,
@@ -56,11 +61,13 @@ impl MockSolver {
         self.iterator_next_override = Some(Box::new(f));
         self
     }
-    /// call_count.
+    /// `call_count`.
+    #[must_use]
     pub fn call_count(&self) -> usize {
         self.calls.len()
     }
     /// calls.
+    #[must_use]
     pub fn calls(&self) -> &[TraitPredicate] {
         &self.calls
     }
