@@ -37,7 +37,7 @@ fn build_from_hir_records_definitions_and_references() {
         items: glyim_core::IndexVec::from_raw(vec![item]),
         bodies: glyim_core::IndexVec::new(),
         body_owners: glyim_core::IndexVec::new(),
-        interner: Default::default(),
+        interner: Interner::default(),
     };
     let mut graph = ReferenceGraph::new();
     // `build_from_hir` records top-level item names as definitions, so after
