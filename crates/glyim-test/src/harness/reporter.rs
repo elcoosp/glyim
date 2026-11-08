@@ -3,18 +3,20 @@ use super::plan::TestSummary;
 use std::io::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
-/// TestReporter.
+/// `TestReporter`.
 pub struct TestReporter {
     verbose: bool,
 }
 
 impl TestReporter {
     /// new.
+    #[must_use]
     pub fn new(verbose: bool) -> Self {
         Self { verbose }
     }
 
     /// report.
+    #[must_use]
     pub fn report(&self, results: &[TestResult]) -> TestSummary {
         let mut stderr = StandardStream::stderr(ColorChoice::Always);
         let mut summary = TestSummary::default();
@@ -30,7 +32,7 @@ impl TestReporter {
                     summary.failed += 1;
                     self.write_status(&mut stderr, "FAILED", Color::Red);
                     if self.verbose {
-                        let _ = writeln!(stderr, "\n{}", reason);
+                        let _ = writeln!(stderr, "\n{reason}");
                     }
                 }
                 TestOutcome::Ignored => {
@@ -57,7 +59,7 @@ impl TestReporter {
 
     fn write_status(&self, stream: &mut StandardStream, status: &str, color: Color) {
         let _ = stream.set_color(ColorSpec::new().set_fg(Some(color)).set_bold(true));
-        let _ = write!(stream, "{:>8} ", status);
+        let _ = write!(stream, "{status:>8} ");
         let _ = stream.reset();
     }
 
