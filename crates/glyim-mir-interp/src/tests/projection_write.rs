@@ -11,7 +11,7 @@ use glyim_type::{FieldIdx, Ty};
 /// - local 2: an Aggregate with two fields
 /// - local 3: index for the field we want to write
 ///
-/// We assign to (*local 1).field_0 and check that local 2's first field is updated.
+/// We assign to (*local `1).field_0` and check that local 2's first field is updated.
 #[test]
 fn write_through_deref_field_updates_nested_value() {
     let ctx = glyim_test::test_frozen_ty_ctx();
@@ -141,7 +141,7 @@ fn write_through_deref_field_updates_nested_value() {
     };
 
     let result = interp.run_body(&body);
-    assert!(result.is_ok(), "run_body failed: {:?}", result);
+    assert!(result.is_ok(), "run_body failed: {result:?}");
 
     let ret = interp.get_local_value(LocalIdx::from_raw(0));
     assert!(ret.is_some(), "return place not set");
@@ -163,7 +163,7 @@ fn write_through_deref_field_updates_nested_value() {
                 "field 1 should be unchanged at 200"
             );
         }
-        other => panic!("expected Aggregate, got {:?}", other),
+        other => panic!("expected Aggregate, got {other:?}"),
     }
 }
 
@@ -274,7 +274,7 @@ fn write_through_deref_only() {
     };
 
     let result = interp.run_body(&body);
-    assert!(result.is_ok(), "run_body failed: {:?}", result);
+    assert!(result.is_ok(), "run_body failed: {result:?}");
 
     let ret = interp.get_local_value(LocalIdx::from_raw(0));
     assert!(ret.is_some(), "return place not set");
@@ -383,7 +383,7 @@ fn write_through_field_only() {
     };
 
     let result = interp.run_body(&body);
-    assert!(result.is_ok(), "run_body failed: {:?}", result);
+    assert!(result.is_ok(), "run_body failed: {result:?}");
 
     let ret = interp.get_local_value(LocalIdx::from_raw(0));
     assert!(ret.is_some(), "return place not set");
