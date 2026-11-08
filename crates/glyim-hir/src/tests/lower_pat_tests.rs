@@ -13,11 +13,7 @@ fn lower_source(source: &str) -> TestContext {
     let root = trace.parse_tree.unwrap();
     let mut interner = Interner::new();
     let (hir, diags) = lower_crate_for_pipeline(&root, &mut interner);
-    assert!(
-        diags.is_empty(),
-        "Lowering produced diagnostics: {:?}",
-        diags
-    );
+    assert!(diags.is_empty(), "Lowering produced diagnostics: {diags:?}");
     TestContext { hir, interner }
 }
 
@@ -48,13 +44,13 @@ fn find_match_arm_pattern(hir: &CrateHir, body_id: BodyId) -> Option<Pat> {
 
 #[test]
 fn test_or_pattern_lowering() {
-    let source = r#"
+    let source = r"
         fn test(x: Option<i32>) {
             match x {
                 Some(y) | None => { }
             }
         }
-    "#;
+    ";
     let ctx = lower_source(source);
     let body_id = find_fn_body(&ctx, "test").expect("Function test not found");
     let pat = find_match_arm_pattern(&ctx.hir, body_id).expect("Match arm pattern not found");
@@ -67,6 +63,6 @@ fn test_or_pattern_lowering() {
                 assert!(!matches!(ctx.hir.bodies[body_id].pats[pid], Pat::Err));
             }
         }
-        _ => panic!("Expected Pat::Or, got {:?}", pat),
+        _ => panic!("Expected Pat::Or, got {pat:?}"),
     }
 }
