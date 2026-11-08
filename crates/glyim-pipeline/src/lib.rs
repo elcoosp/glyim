@@ -81,7 +81,7 @@ use mono_cache::{
 };
 use pipeline_context::{PipelineBorrowckCtx, PipelineLowerCtx};
 
-/// Pipeline.
+/// `Pipeline`.
 pub struct Pipeline;
 
 /// Artifacts produced by compiling a source file through the full pipeline.
@@ -89,13 +89,13 @@ pub struct Pipeline;
 /// can inspect the mid-pipeline results (def-map, type-check, MIR bodies) that
 /// the standard `compile_file` discards.
 pub struct CompileArtifacts {
-    /// Struct.
+    /// `Struct`.
     pub def_map: glyim_def_map::CrateDefMap,
-    /// Struct.
+    /// `Struct`.
     pub typeck_result: glyim_typeck::TypeckResult,
-    /// Struct.
+    /// `Struct`.
     pub mir_bodies: Vec<(String, Arc<glyim_mir::Body>)>,
-    /// Struct.
+    /// `Struct`.
     pub ty_ctx: Arc<glyim_type::TyCtx>,
     /// Non-error diagnostics (warnings, notes) produced during a *successful*
     /// compile. The pipeline treats these as advisory — they never abort the
@@ -115,7 +115,6 @@ pub struct CompileArtifacts {
 /// the same *monomorphized* bodies. Previously `emit_llvm_ir` / `emit_asm`
 /// re-implemented a partial chain that stopped before monomorphization, so
 /// generic stdlib definitions reached codegen with `TyKind::Param` still in
-/// their locals and `fn_abi_of` ICEd with `UnknownType`.
 pub(crate) struct PreparedCompilation {
     /// The crate's definition map.
     pub def_map: glyim_def_map::CrateDefMap,
@@ -141,34 +140,14 @@ pub(crate) struct PreparedCompilation {
     pub pre_opt_bodies: Vec<(String, Arc<Body>)>,
     /// Non-error diagnostics accumulated during the front half.
     pub warnings: Vec<GlyimDiagnostic>,
-    /// P2-A3: bodies removed by `body_is_raw_generic` before emission.
-    /// Empty in the common case (empirically: a typical stdlib `hello.g`
-    /// compile drops zero). Each entry names the mangled symbol a call
-    /// site would reference, and the reason the filter matched.
-    ///
-    /// **Status: infrastructure only.** The field is populated on every
-    /// compile but has no consumer yet — `PreparedCompilation` is
-    /// `pub(crate)`, so external crates (including the CLI) cannot read
-    /// it. The full P2-A3 story ("correlate a link-time
-    /// `undefined symbol __glyim_fn_XXX` with this filter") requires
-    /// either exposing this field on `CompileArtifacts` or emitting a
-    /// per-symbol warning into the diagnostic sink. That last mile is
-    /// deferred to a dedicated session. Recording the drops now is the
-    /// prerequisite, so the follow-up is a small wiring change rather
-    /// than a re-plumb.
-    #[allow(dead_code)]
-    pub dropped_raw_generic: Vec<DroppedRawGenericBody>,
-}
-
-/// P2-A3: one body dropped by `Pipeline::prepare_compilation`'s
-/// raw-generic filter. See [`PreparedCompilation::dropped_raw_generic`].
-#[derive(Debug, Clone)]
-pub struct DroppedRawGenericBody {
-    /// Mangled symbol a call site would reference (e.g. `__glyim_fn_42`).
-    /// Matches a linker's `Undefined symbols:` line.
-    pub symbol: String,
-    /// Human-readable reason the filter matched.
-    pub reason: &'static str,
+    // P2-A3 follow-up note: the raw-generic filter drops bodies before
+    // emission; correlating a link-time `undefined symbol __glyim_fn_XXX`
+    // with this filter (exposing the dropped symbols on the public
+    // artifacts or warning per symbol) is a dedicated follow-up. The
+    // interim `dropped_raw_generic` recording field was removed as dead
+    // code (nothing could read it — `PreparedCompilation` is
+    // `pub(crate)`), so re-add it *with a consumer* when the story is
+    // wired.
 }
 
 /// Load a crate's source into the VFS and **flatten its external modules**.
@@ -183,7 +162,7 @@ pub struct DroppedRawGenericBody {
 ///
 /// Centralising this is what keeps the emit paths consistent: previously
 /// only `compile_file_with_artifacts` loaded external modules, so
-/// `--emit=mir` silently produced error-typed MIR and `--emit=llvm-ir` ICEd
+/// `--emit=mir` silently produced error-typed MIR and `--emit=llvm-ir` `ICEd`
 /// on the unresolved module path. Any new pipeline entry point must call this
 /// rather than reading the VFS directly.
 fn load_crate_source(
@@ -199,7 +178,7 @@ fn load_crate_source(
         _ => db
             .vfs()
             .add_file_from_disk(path)
-            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("I/O Error: {}", e))])?,
+            .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("I/O Error: {e}"))])?,
     };
     let raw = db
         .vfs()
@@ -733,7 +712,7 @@ impl Pipeline {
                 mono_ctx.polymorphize_and_deduplicate(&mut poly_ctx);
             }
             // §8.12: post-monomorphization semantic checks. These were dead
-            // `#[allow(dead_code)]` functions; they now run here, immediately
+            // `` functions; they now run here, immediately
             // after monomorphization, so unsized locals / unused generic params
             // / pathological mono-set sizes surface as diagnostics instead of
             // being silently ignored.
@@ -907,41 +886,26 @@ impl Pipeline {
         // leak through mono and would ICE `fn_abi_of` on `UnknownType(Param)`.
         // See `body_is_raw_generic` for why we only test the return type.
         //
-        // P2-A3: every dropped symbol is recorded on `dropped_raw_generic`
-        // (returned on `PreparedCompilation`) so a downstream link error
-        // (`undefined symbol __glyim_fn_XXX`) can be correlated with this
-        // filter instead of being a silent mystery. The `GLYIM_TMP_FILT`
-        // env-gated `eprintln!` trace is preserved unchanged.
-        let mut dropped_raw_generic: Vec<DroppedRawGenericBody> = Vec::new();
+        // P2-A3: a downstream link error (`undefined symbol
+        // __glyim_fn_XXX`) can be correlated with this filter; the interim
+        // `dropped_raw_generic` recording field was removed as dead code,
+        // so the `GLYIM_TMP_FILT` env-gated `eprintln!` trace is the only
+        // observation point until the follow-up lands with a consumer.
+        let mut dropped = 0usize;
         {
             let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
             let ty_ctx_ref = ty_ctx_guard.as_ref();
             let mut kept: Vec<(String, Arc<Body>)> = Vec::new();
             for (sym, body) in std::mem::take(&mut all_bodies) {
                 if body_is_raw_generic(&body, ty_ctx_ref) {
-                    let reason = match ty_ctx_ref.ty_kind(body.return_ty) {
-                        glyim_type::TyKind::Param(_) => "return type is a generic parameter",
-                        glyim_type::TyKind::Bound(_, _) => "return type is a bound variable",
-                        glyim_type::TyKind::Projection(_) => {
-                            "return type is an associated-type projection"
-                        }
-                        _ => "return type is unmonomorphizable",
-                    };
-                    dropped_raw_generic.push(DroppedRawGenericBody {
-                        symbol: sym,
-                        reason,
-                    });
+                    dropped += 1;
                 } else {
                     kept.push((sym, body));
                 }
             }
             all_bodies = kept;
-            let dropped = dropped_raw_generic.len();
             if dropped > 0 && std::env::var_os("GLYIM_TMP_FILT").is_some() {
-                eprintln!(
-                    "[GLYIM_FILT] dropped {} raw-generic bodies from all_bodies",
-                    dropped
-                );
+                eprintln!("[GLYIM_FILT] dropped {dropped} raw-generic bodies from all_bodies");
             }
         }
 
@@ -972,7 +936,6 @@ impl Pipeline {
             all_bodies,
             pre_opt_bodies,
             warnings,
-            dropped_raw_generic,
         })
     }
 
@@ -1034,6 +997,7 @@ impl MirCompilation {
     /// The returned bodies are suitable for the in-process
     /// `glyim_mir_interp` interpreter: add each `(owner, body)` pair to the
     /// interpreter's function table and run the entry body.
+    #[must_use]
     pub fn monomorphize(
         &self,
         entry: glyim_core::def_id::FnDefId,
@@ -1093,7 +1057,7 @@ pub fn compile_file_to_mir(
     })
 }
 
-/// emit_mir.
+/// `emit_mir`.
 pub fn emit_mir(
     db: &mut Database,
     input: &Path,
@@ -1159,7 +1123,7 @@ pub fn emit_syntax(
     Ok(())
 }
 
-/// emit_llvm_ir.
+/// `emit_llvm_ir`.
 pub fn emit_llvm_ir(
     db: &mut Database,
     input: &Path,
@@ -1183,8 +1147,7 @@ pub fn emit_llvm_ir(
             .emit_ir_to_string(&prepared.ty_ctx, body, Some(symbol.as_str()))
             .map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
-                    "LLVM IR generation failed: {:?}",
-                    e
+                    "LLVM IR generation failed: {e:?}"
                 ))]
             })?;
         ir.push_str(&one);
@@ -1212,8 +1175,7 @@ pub fn emit_asm(
         .emit_assembly(&prepared.all_bodies, output)
         .map_err(|e| {
             vec![GlyimDiagnostic::internal_error(format!(
-                "LLVM assembly generation failed: {:?}",
-                e
+                "LLVM assembly generation failed: {e:?}"
             ))]
         })?;
     Ok(())
@@ -1250,7 +1212,6 @@ fn closure_body_has_unmonomorphized_ty(body: &glyim_mir::Body, ctx: &glyim_type:
     body.locals.iter().any(|l| ty_has_unmono(l.ty, ctx))
 }
 
-/// Step A (HANDOFF_SESSION_13_FINAL.md §2): a body is a *raw generic* body if
 /// its `return_ty` is a rigid, unsubstituted type parameter (`Param`),
 /// higher-ranked `Bound`, or an unnormalized `Projection`. Those cannot be
 /// monomorphized (no concrete `T` to substitute) and must not reach codegen:
