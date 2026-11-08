@@ -1,4 +1,4 @@
-//! Additional interning tests for less common TyKind variants.
+//! Additional interning tests for less common `TyKind` variants.
 
 use glyim_core::def_id::{ClosureId, FnDefId, OpaqueTyId};
 use glyim_core::primitives::{Abi, IntTy, Mutability, Safety, UintTy};
@@ -33,7 +33,7 @@ fn mk_array_ty() {
             assert_eq!(*inner, Ty::BOOL);
             assert!(matches!(len_const.kind, ConstKind::Uint(5)));
         }
-        other => panic!("expected Array, got {:?}", other),
+        other => panic!("expected Array, got {other:?}"),
     }
 }
 
@@ -49,7 +49,7 @@ fn mk_fn_def_ty() {
             assert_eq!(fn_def_id.to_raw(), 10);
             assert_eq!(substs.len(), 1);
         }
-        other => panic!("expected FnDef, got {:?}", other),
+        other => panic!("expected FnDef, got {other:?}"),
     }
 }
 
@@ -65,7 +65,7 @@ fn mk_closure_ty() {
             assert_eq!(closure_id.to_raw(), 20);
             assert!(substs.is_empty());
         }
-        other => panic!("expected Closure, got {:?}", other),
+        other => panic!("expected Closure, got {other:?}"),
     }
 }
 
@@ -82,7 +82,7 @@ fn mk_opaque_ty() {
             assert_eq!(opaque_id.to_raw(), 30);
             assert_eq!(substs.len(), 1);
         }
-        other => panic!("expected Opaque, got {:?}", other),
+        other => panic!("expected Opaque, got {other:?}"),
     }
 }
 
@@ -106,7 +106,7 @@ fn mk_dynamic_ty() {
             assert!(matches!(region, Region::Erased));
             assert_eq!(binder.bound_vars.len(), 1);
         }
-        other => panic!("expected Dynamic, got {:?}", other),
+        other => panic!("expected Dynamic, got {other:?}"),
     }
 }
 
@@ -121,7 +121,7 @@ fn mk_param_ty() {
         TyKind::Param(p) => {
             assert_eq!(p.index, 0);
         }
-        other => panic!("expected Param, got {:?}", other),
+        other => panic!("expected Param, got {other:?}"),
     }
 }
 
@@ -139,7 +139,7 @@ fn mk_bound_ty() {
             assert_eq!(*debruijn, 0);
             assert!(matches!(bound.kind, BoundTyKind::Anon));
         }
-        other => panic!("expected Bound, got {:?}", other),
+        other => panic!("expected Bound, got {other:?}"),
     }
 }
 
@@ -162,7 +162,7 @@ fn mk_fn_ptr_variadic() {
             assert_eq!(sig.unsafety, Safety::Unsafe);
             assert_eq!(sig.abi, Abi::C);
         }
-        other => panic!("expected FnPtr, got {:?}", other),
+        other => panic!("expected FnPtr, got {other:?}"),
     }
 }
 
@@ -179,6 +179,6 @@ fn mk_raw_ptr_mut() {
             assert_eq!(*inner, Ty::BOOL);
             assert_eq!(*mutability, Mutability::Mut);
         }
-        other => panic!("expected RawPtr, got {:?}", other),
+        other => panic!("expected RawPtr, got {other:?}"),
     }
 }
