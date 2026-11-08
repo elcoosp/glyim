@@ -1,4 +1,4 @@
-/// event_handler.
+/// `event_handler`.
 pub mod event_handler;
 /// messages.
 pub mod messages;
