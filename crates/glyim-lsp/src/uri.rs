@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 use url::Url;
 
-/// path_to_uri.
+/// `path_to_uri`.
 pub fn path_to_uri(path: &Path) -> Result<String, String> {
-    let url = Url::from_file_path(path).map_err(|_| {
+    let url = Url::from_file_path(path).map_err(|()| {
         format!(
             "path is not absolute or cannot be represented as file:// URI: {}",
             path.display()
@@ -12,14 +12,14 @@ pub fn path_to_uri(path: &Path) -> Result<String, String> {
     Ok(url.to_string())
 }
 
-/// uri_to_file_path.
+/// `uri_to_file_path`.
 pub fn uri_to_file_path(uri: &str) -> Result<PathBuf, String> {
     let url = Url::parse(uri).map_err(|e| format!("invalid URI: {e}"))?;
     url.to_file_path()
-        .map_err(|_| format!("not a file:// URI or cannot be converted to path: {uri}"))
+        .map_err(|()| format!("not a file:// URI or cannot be converted to path: {uri}"))
 }
 
-/// offset_to_position.
+/// `offset_to_position`.
 pub fn offset_to_position(text: &str, offset: usize) -> Result<(usize, usize), String> {
     if offset > text.len() {
         return Err(format!(
