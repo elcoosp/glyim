@@ -22,7 +22,7 @@ use glyim_db::Database;
 use glyim_mir_interp::Interpreter;
 use glyim_pipeline::compile_file_to_mir;
 
-const SRC: &str = r#"
+const SRC: &str = r"
 enum Poll<T> { Ready(T), Pending }
 trait Future {
     type Output;
@@ -37,7 +37,7 @@ fn main() {
     let mut f = one_step(7);
     let _ = f.poll();
 }
-"#;
+";
 
 #[test]
 fn async_state_machine_runs_via_interpreter() {
@@ -45,7 +45,7 @@ fn async_state_machine_runs_via_interpreter() {
     let call_id = CALL_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let unique_tag = format!("{}_{}", std::process::id(), call_id);
     let dir = std::env::temp_dir();
-    let path = dir.join(format!("glyim_async_runtime_{}.g", unique_tag));
+    let path = dir.join(format!("glyim_async_runtime_{unique_tag}.g"));
     {
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(SRC.as_bytes()).unwrap();
