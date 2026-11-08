@@ -17,7 +17,7 @@ fn test_diag_sink_error_limit() {
     let span = Span::DUMMY;
     let mut sink = DiagSink::with_error_limit(2);
     for i in 0..5 {
-        let diag = GlyimDiagnostic::lex_error(span, format!("error {}", i));
+        let diag = GlyimDiagnostic::lex_error(span, format!("error {i}"));
         sink.emit(diag);
     }
     // Only 2 errors recorded, plus an internal error about suppression later
