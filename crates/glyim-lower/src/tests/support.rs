@@ -24,7 +24,7 @@ impl<'a> MockLowerCtx<'a> {
     }
 }
 
-impl<'a> LowerCtx for MockLowerCtx<'a> {
+impl LowerCtx for MockLowerCtx<'_> {
     fn ty_ctx(&self) -> &TyCtx {
         self.ty_ctx
     }
