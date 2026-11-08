@@ -67,9 +67,9 @@ fn def_map_with_module_fn() -> CrateDefMap {
         modules,
         krate: CrateId::from_raw(0),
         interner: global_interner(),
-        variant_map: Default::default(),
+        variant_map: std::collections::HashMap::default(),
         max_local_def_id: 0,
-        def_to_module: Default::default(),
+        def_to_module: std::collections::HashMap::default(),
     }
 }
 
@@ -123,18 +123,17 @@ fn multi_segment_function_path_resolves_to_fn_ref() {
     );
     assert!(
         diags.is_empty(),
-        "multi-segment fn path should resolve cleanly: {:?}",
-        diags
+        "multi-segment fn path should resolve cleanly: {diags:?}"
     );
 
     let stmt = &thir_body.stmts[0];
     let expr = match stmt {
         crate::thir::Stmt::Expr { expr, .. } => expr,
-        other => panic!("expected Expr statement, got {:?}", other),
+        other => panic!("expected Expr statement, got {other:?}"),
     };
     match &expr.kind {
         crate::thir::ExprKind::FnRef(id) => assert_eq!(*id, square),
-        other => panic!("expected FnRef, got {:?}", other),
+        other => panic!("expected FnRef, got {other:?}"),
     }
     assert!(
         matches!(ctx.ty_kind(expr.ty), TyKind::FnDef(id, _) if *id == square),
@@ -181,15 +180,14 @@ fn multi_segment_function_call_yields_registered_return_type() {
     );
     assert!(
         diags.is_empty(),
-        "multi-segment fn call should resolve cleanly: {:?}",
-        diags
+        "multi-segment fn call should resolve cleanly: {diags:?}"
     );
 
     // The call expression is the second statement.
     let stmt = &thir_body.stmts[1];
     let expr = match stmt {
         crate::thir::Stmt::Expr { expr, .. } => expr,
-        other => panic!("expected Expr statement, got {:?}", other),
+        other => panic!("expected Expr statement, got {other:?}"),
     };
     assert!(
         matches!(
