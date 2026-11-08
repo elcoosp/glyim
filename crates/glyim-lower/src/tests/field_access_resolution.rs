@@ -8,7 +8,7 @@ use glyim_test::test_ty_ctx;
 use glyim_type::*;
 use glyim_typeck::thir::{self, ExprKind};
 
-/// S20-T01: Field access lowers to correct FieldIdx projection
+/// S20-T01: Field access lowers to correct `FieldIdx` projection
 #[test]
 fn field_access_uses_resolved_field_idx() {
     let mut ctx_mut = test_ty_ctx();
