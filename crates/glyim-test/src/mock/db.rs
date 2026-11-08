@@ -2,7 +2,7 @@ use glyim_db::{CrateConfig, Database};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// TestDbBuilder.
+/// `TestDbBuilder`.
 pub struct TestDbBuilder {
     name: Option<String>,
     target_triple: Option<String>,
@@ -12,6 +12,7 @@ pub struct TestDbBuilder {
 
 impl TestDbBuilder {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             name: None,
@@ -21,26 +22,31 @@ impl TestDbBuilder {
         }
     }
     /// name.
+    #[must_use]
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
-    /// target_triple.
+    /// `target_triple`.
+    #[must_use]
     pub fn target_triple(mut self, triple: impl Into<String>) -> Self {
         self.target_triple = Some(triple.into());
         self
     }
-    /// opt_level.
+    /// `opt_level`.
+    #[must_use]
     pub fn opt_level(mut self, level: u8) -> Self {
         self.opt_level = level;
         self
     }
     /// file.
+    #[must_use]
     pub fn file(mut self, path: impl Into<PathBuf>, content: impl Into<Arc<str>>) -> Self {
         self.files.push((path.into(), content.into()));
         self
     }
     /// build.
+    #[must_use]
     pub fn build(self) -> Database {
         let config = CrateConfig {
             name: self.name.unwrap_or_else(|| "test".to_string()),
