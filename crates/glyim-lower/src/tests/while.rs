@@ -61,7 +61,7 @@ fn while_to_loop_with_conditional_break() {
 
     let body = b.into_body(stmts, vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body)
+    let _ = assert_mir(&ctx, &result.body)
         .block_count(4)
         .block_terminator(BasicBlockIdx::from_raw(0), "Goto");
 }
