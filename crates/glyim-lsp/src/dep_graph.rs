@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Tracks dependencies between files. When a file changes, all files that depend on it
 /// must be re-analyzed.
@@ -18,6 +18,7 @@ impl Default for DependencyGraph {
 
 impl DependencyGraph {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             deps: HashMap::new(),
@@ -54,11 +55,10 @@ impl DependencyGraph {
     }
 
     /// Get all files that need to be re-analyzed when `file` changes.
-    /// Returns a set containing the changed file and all its reverse dependencies (transitively).
-    #[allow(clippy::ptr_arg)] // &PathBuf matches the stored key type
-    pub fn affected_files(&self, file: &PathBuf) -> HashSet<PathBuf> {
+    #[must_use]
+    pub fn affected_files(&self, file: &Path) -> HashSet<PathBuf> {
         let mut affected = HashSet::new();
-        let mut stack = vec![file.clone()];
+        let mut stack = vec![file.to_path_buf()];
         while let Some(f) = stack.pop() {
             if affected.insert(f.clone())
                 && let Some(dependents) = self.rev_deps.get(&f)
@@ -72,6 +72,7 @@ impl DependencyGraph {
     }
 
     /// Get direct dependencies of a file (for debugging)
+    #[must_use]
     pub fn dependencies(&self, file: &PathBuf) -> Option<&HashSet<PathBuf>> {
         self.deps.get(file)
     }
