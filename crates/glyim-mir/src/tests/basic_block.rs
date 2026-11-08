@@ -14,7 +14,7 @@ fn basic_block_data_new_with_terminator() {
     assert!(!bb.is_cleanup);
     match &bb.terminator.kind {
         TerminatorKind::Return => {}
-        other => panic!("Expected Return, got {:?}", other),
+        other => panic!("Expected Return, got {other:?}"),
     }
 }
 
