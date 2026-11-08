@@ -9,7 +9,7 @@ fn s11_t02_changing_file_updates_diagnostics_incrementally() {
     let file_id = db.file_map.write().get_or_create(&path);
 
     let analyze = |db: &mut AnalysisDatabase, source: &str| {
-        let sm = SourceMap::new(path.clone(), file_id, source.to_string());
+        let sm = SourceMap::new(file_id, source.to_string());
         db.source_maps.write().insert(file_id, sm.clone());
         let lex_result = glyim_frontend::lex(source, file_id);
         let parse_result = glyim_frontend::parse_to_syntax(source, file_id);
@@ -51,7 +51,6 @@ fn s11_t02_changing_file_updates_diagnostics_incrementally() {
     let is_empty2 = stored2.is_none();
     assert!(
         is_empty2,
-        "Expected empty or removed diagnostics after clean source, got {:?}",
-        stored2
+        "Expected empty or removed diagnostics after clean source, got {stored2:?}"
     );
 }
