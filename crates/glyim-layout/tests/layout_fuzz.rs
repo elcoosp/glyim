@@ -73,7 +73,7 @@ fn fuzz_random_adt_layouts() {
         for i in 0..field_count {
             let ty = build_random_ty(&mut ctx_mut, &mut rng, 0);
             fields.push(FieldDef {
-                name: ctx_mut.resolver().intern(&format!("f{}", i)),
+                name: ctx_mut.resolver().intern(&format!("f{i}")),
                 ty,
             });
         }
@@ -160,7 +160,7 @@ fn fuzz_random_enum_layouts() {
             for fi in 0..field_count {
                 let ty = build_random_ty(&mut ctx_mut, &mut rng, 0);
                 fields.push(FieldDef {
-                    name: ctx_mut.resolver().intern(&format!("v{}_{}", vi, fi)),
+                    name: ctx_mut.resolver().intern(&format!("v{vi}_{fi}")),
                     ty,
                 });
             }
@@ -169,7 +169,7 @@ fn fuzz_random_enum_layouts() {
                 variant_fields.push(f.clone());
             }
             variants.push(VariantDef {
-                name: ctx_mut.resolver().intern(&format!("v{}", vi)),
+                name: ctx_mut.resolver().intern(&format!("v{vi}")),
                 style: glyim_type::adt_def::VariantStyle::Unit,
                 fields: variant_fields,
             });
