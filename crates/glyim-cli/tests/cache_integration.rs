@@ -296,7 +296,7 @@ fn host_triple() -> String {
         ("aarch64", "linux") => "aarch64-unknown-linux-gnu".to_string(),
         ("x86_64", "windows") => "x86_64-pc-windows-msvc".to_string(),
         ("aarch64", "windows") => "aarch64-pc-windows-msvc".to_string(),
-        _ => format!("{}-{}", arch, os),
+        _ => format!("{arch}-{os}"),
     }
 }
 
