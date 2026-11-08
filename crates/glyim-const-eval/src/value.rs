@@ -54,31 +54,32 @@ pub enum ConstValue {
 
 impl ConstValue {
     /// Validate that this value fits within the range of its declared type.
+    #[must_use]
     pub fn validate_range(&self, pointer_width: u32) -> Option<ConstValue> {
         match self {
             ConstValue::Int(v, IntTy::I8) => {
-                if *v >= i8::MIN as i128 && *v <= i8::MAX as i128 {
+                if *v >= i128::from(i8::MIN) && *v <= i128::from(i8::MAX) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             ConstValue::Int(v, IntTy::I16) => {
-                if *v >= i16::MIN as i128 && *v <= i16::MAX as i128 {
+                if *v >= i128::from(i16::MIN) && *v <= i128::from(i16::MAX) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             ConstValue::Int(v, IntTy::I32) => {
-                if *v >= i32::MIN as i128 && *v <= i32::MAX as i128 {
+                if *v >= i128::from(i32::MIN) && *v <= i128::from(i32::MAX) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             ConstValue::Int(v, IntTy::I64) => {
-                if *v >= i64::MIN as i128 && *v <= i64::MAX as i128 {
+                if *v >= i128::from(i64::MIN) && *v <= i128::from(i64::MAX) {
                     Some(self.clone())
                 } else {
                     None
@@ -86,14 +87,14 @@ impl ConstValue {
             }
             ConstValue::Int(v, IntTy::Isize) => {
                 let max = if pointer_width == 64 {
-                    i64::MAX as i128
+                    i128::from(i64::MAX)
                 } else {
-                    i32::MAX as i128
+                    i128::from(i32::MAX)
                 };
                 let min = if pointer_width == 64 {
-                    i64::MIN as i128
+                    i128::from(i64::MIN)
                 } else {
-                    i32::MIN as i128
+                    i128::from(i32::MIN)
                 };
                 if *v >= min && *v <= max {
                     Some(self.clone())
@@ -102,28 +103,28 @@ impl ConstValue {
                 }
             }
             ConstValue::Uint(v, UintTy::U8) => {
-                if *v <= u8::MAX as u128 {
+                if *v <= u128::from(u8::MAX) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             ConstValue::Uint(v, UintTy::U16) => {
-                if *v <= u16::MAX as u128 {
+                if *v <= u128::from(u16::MAX) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             ConstValue::Uint(v, UintTy::U32) => {
-                if *v <= u32::MAX as u128 {
+                if *v <= u128::from(u32::MAX) {
                     Some(self.clone())
                 } else {
                     None
                 }
             }
             ConstValue::Uint(v, UintTy::U64) => {
-                if *v <= u64::MAX as u128 {
+                if *v <= u128::from(u64::MAX) {
                     Some(self.clone())
                 } else {
                     None
@@ -131,9 +132,9 @@ impl ConstValue {
             }
             ConstValue::Uint(v, UintTy::Usize) => {
                 let max = if pointer_width == 64 {
-                    u64::MAX as u128
+                    u128::from(u64::MAX)
                 } else {
-                    u32::MAX as u128
+                    u128::from(u32::MAX)
                 };
                 if *v <= max { Some(self.clone()) } else { None }
             }
@@ -142,12 +143,14 @@ impl ConstValue {
         }
     }
 
-    /// is_bool.
+    /// `is_bool`.
+    #[must_use]
     pub fn is_bool(&self) -> bool {
         matches!(self, ConstValue::Bool(_))
     }
 
-    /// as_bool.
+    /// `as_bool`.
+    #[must_use]
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             ConstValue::Bool(b) => Some(*b),
@@ -155,7 +158,8 @@ impl ConstValue {
         }
     }
 
-    /// as_i128.
+    /// `as_i128`.
+    #[must_use]
     pub fn as_i128(&self) -> Option<i128> {
         match self {
             ConstValue::Int(v, _) => Some(*v),
@@ -164,7 +168,8 @@ impl ConstValue {
         }
     }
 
-    /// as_u128.
+    /// `as_u128`.
+    #[must_use]
     pub fn as_u128(&self) -> Option<u128> {
         match self {
             ConstValue::Int(v, _) => Some(*v as u128),
@@ -173,7 +178,8 @@ impl ConstValue {
         }
     }
 
-    /// as_f64.
+    /// `as_f64`.
+    #[must_use]
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             ConstValue::FloatBits(bits, _) => Some(f64::from_bits(*bits)),
@@ -181,7 +187,8 @@ impl ConstValue {
         }
     }
 
-    /// checked_add.
+    /// `checked_add`.
+    #[must_use]
     pub fn checked_add(&self, other: &ConstValue) -> Option<ConstValue> {
         match (self, other) {
             (ConstValue::Int(a, ty_a), ConstValue::Int(b, ty_b)) if ty_a == ty_b => {
@@ -200,7 +207,8 @@ impl ConstValue {
         }
     }
 
-    /// checked_sub.
+    /// `checked_sub`.
+    #[must_use]
     pub fn checked_sub(&self, other: &ConstValue) -> Option<ConstValue> {
         match (self, other) {
             (ConstValue::Int(a, ty_a), ConstValue::Int(b, ty_b)) if ty_a == ty_b => {
@@ -219,7 +227,8 @@ impl ConstValue {
         }
     }
 
-    /// checked_mul.
+    /// `checked_mul`.
+    #[must_use]
     pub fn checked_mul(&self, other: &ConstValue) -> Option<ConstValue> {
         match (self, other) {
             (ConstValue::Int(a, ty_a), ConstValue::Int(b, ty_b)) if ty_a == ty_b => {
@@ -238,7 +247,8 @@ impl ConstValue {
         }
     }
 
-    /// checked_div.
+    /// `checked_div`.
+    #[must_use]
     pub fn checked_div(&self, other: &ConstValue) -> Option<ConstValue> {
         match (self, other) {
             (ConstValue::Int(a, ty_a), ConstValue::Int(b, ty_b)) if ty_a == ty_b => {
@@ -262,7 +272,8 @@ impl ConstValue {
         }
     }
 
-    /// checked_rem.
+    /// `checked_rem`.
+    #[must_use]
     pub fn checked_rem(&self, other: &ConstValue) -> Option<ConstValue> {
         match (self, other) {
             (ConstValue::Int(a, ty_a), ConstValue::Int(b, ty_b)) if ty_a == ty_b => {
@@ -286,7 +297,8 @@ impl ConstValue {
         }
     }
 
-    /// checked_neg.
+    /// `checked_neg`.
+    #[must_use]
     pub fn checked_neg(&self) -> Option<ConstValue> {
         match self {
             ConstValue::Int(v, ty) => v.checked_neg().map(|r| ConstValue::Int(r, *ty)),
@@ -299,6 +311,7 @@ impl ConstValue {
     }
 
     /// not.
+    #[must_use]
     pub fn not(&self) -> Option<ConstValue> {
         match self {
             ConstValue::Bool(b) => Some(ConstValue::Bool(!b)),
