@@ -46,7 +46,7 @@ fn probe_stdlib_modules_parse() {
         fail += 1;
     }
 
-    println!("STD-PARSE-PROBE: {} pass, {} fail", pass, fail);
+    println!("STD-PARSE-PROBE: {pass} pass, {fail} fail");
     // Gap-mapping probe: failing modules printed above as [PARSE-FAIL].
     assert!(pass > 0);
 }
