@@ -45,8 +45,7 @@ pub(crate) fn substitute(
                             // silently producing unparseable output.
                             if iterations.len() > 1 {
                                 return Err(SmolStr::from(format!(
-                                    "metavariable `${}` used outside its repetition",
-                                    name
+                                    "metavariable `${name}` used outside its repetition"
                                 )));
                             }
                             // Exactly one iteration (or zero): splice verbatim.
@@ -101,8 +100,7 @@ pub(crate) fn substitute(
                             for name in &var_names {
                                 if !bindings.contains_key(name) {
                                     return Err(SmolStr::from(format!(
-                                        "unbound metavariable `${}` inside a repetition",
-                                        name
+                                        "unbound metavariable `${name}` inside a repetition"
                                     )));
                                 }
                             }
@@ -112,7 +110,7 @@ pub(crate) fn substitute(
                         // count.
                         let repetitions: usize = var_names
                             .iter()
-                            .filter_map(|name| bindings.get(name).map(|v| v.len()))
+                            .filter_map(|name| bindings.get(name).map(std::vec::Vec::len))
                             .max()
                             .unwrap_or(0);
 
@@ -313,7 +311,7 @@ mod hir3_tests {
             .iter()
             .filter(|t| matches!(t, TokenTree::Token(SyntaxKind::KwLet, _)))
             .count();
-        assert_eq!(lets, 2, "one `let` per iteration, got {}", lets);
+        assert_eq!(lets, 2, "one `let` per iteration, got {lets}");
         // And the whole fragment is spliced intact.
         assert!(
             out.iter()
