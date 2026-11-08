@@ -2,10 +2,10 @@ use std::io;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-/// PilotError.
+/// `PilotError`.
 pub enum PilotError {
     #[error("protocol parse error at line {line}: {message}")]
-    /// Variant.
+    /// `Variant`.
     Parse {
         /// line field.
         line: usize,
@@ -13,27 +13,27 @@ pub enum PilotError {
         message: String,
     },
 
+    /// A file-application error.
     #[error("file apply error: {0}")]
-    #[allow(missing_docs)]
     Apply(#[from] ApplyError),
 
     #[error("path security violation: {path} escapes worktree {root}: {reason}")]
-    /// Variant.
+    /// `Variant`.
     PathEscape {
-        /// Struct.
+        /// `Struct`.
         path: String,
-        /// Struct.
+        /// `Struct`.
         root: String,
-        /// Struct.
+        /// `Struct`.
         reason: String,
     },
 
+    /// A git operation failure.
     #[error("git operation failed: {0}")]
-    #[allow(missing_docs)]
     Git(String),
 
     #[error("gate '{gate}' infrastructure failure: {message}")]
-    /// Variant.
+    /// `Variant`.
     Gate {
         /// gate field.
         gate: String,
@@ -41,25 +41,26 @@ pub enum PilotError {
         message: String,
     },
 
+    /// A configuration error.
     #[error("config error: {0}")]
-    #[allow(missing_docs)]
     Config(String),
 
     #[error("session error: {0}")]
-    #[allow(missing_docs)]
+    /// `Session`.
     Session(String),
 
+    /// An apply-limits violation.
     #[error("apply limits exceeded: {0}")]
-    #[allow(missing_docs)]
     Limits(String),
 
+    /// An underlying I/O failure.
     #[error("io error: {0}")]
-    #[allow(missing_docs)]
     Io(#[source] io::Error),
 }
 
 impl PilotError {
     /// code.
+    #[must_use]
     pub fn code(&self) -> &'static str {
         match self {
             Self::Parse { .. } => "E0100",
@@ -76,38 +77,38 @@ impl PilotError {
 }
 
 #[derive(Debug, Error)]
-/// ApplyError.
+/// `ApplyError`.
 pub enum ApplyError {
     #[error("FIND text not found in {path}")]
-    /// Variant.
+    /// `Variant`.
     FindNotFound {
         /// path field.
         path: String,
     },
     #[error("FIND text found {count} times in {path} (expected exactly 1)")]
-    /// Variant.
+    /// `Variant`.
     FindAmbiguous {
         /// path field.
         path: String,
         /// count field.
         count: usize,
     },
+    /// A requested file does not exist.
     #[error("file not found: {0}")]
-    #[allow(missing_docs)]
     FileNotFound(String),
     #[error("I/O error during {operation} on {path}: {source}")]
-    /// Variant.
+    /// `Variant`.
     Io {
-        /// Struct.
+        /// `Struct`.
         path: String,
-        /// Struct.
+        /// `Struct`.
         operation: String,
         #[source]
-        /// Struct.
+        /// `Struct`.
         source: io::Error,
     },
     #[error("task join failure during {operation}: {reason}")]
-    /// Variant.
+    /// `Variant`.
     TaskJoin {
         /// operation field.
         operation: String,
@@ -115,7 +116,7 @@ pub enum ApplyError {
         reason: String,
     },
     #[error("apply failed and was rolled back: {detail}")]
-    /// Struct.
+    /// `Struct`.
     RolledBack {
         /// detail field.
         detail: String,
@@ -124,6 +125,7 @@ pub enum ApplyError {
 
 impl ApplyError {
     /// code.
+    #[must_use]
     pub fn code(&self) -> &'static str {
         match self {
             Self::FindNotFound { .. } => "E0201",
