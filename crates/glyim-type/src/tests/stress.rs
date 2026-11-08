@@ -97,7 +97,7 @@ fn many_adts_with_substs() {
             assert_eq!(id.to_raw(), i as u32);
             assert_eq!(substs.len(), 1);
         } else {
-            panic!("expected Adt at index {}", i);
+            panic!("expected Adt at index {i}");
         }
     }
 }
