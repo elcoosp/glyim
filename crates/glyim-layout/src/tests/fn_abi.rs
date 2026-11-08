@@ -1,4 +1,4 @@
-//! S15-T03: fn_abi_of respects SystemV and AAPCS calling conventions
+//! S15-T03: `fn_abi_of` respects `SystemV` and AAPCS calling conventions
 
 use crate::*;
 use glyim_core::primitives::*;
