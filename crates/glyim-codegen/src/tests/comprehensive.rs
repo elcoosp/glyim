@@ -112,12 +112,12 @@ fn binary_op_large_values() {
                     BinOp::BitAnd,
                     Box::new((
                         Operand::Constant(MirConst {
-                            kind: MirConstKind::Int(i64::MAX as i128),
+                            kind: MirConstKind::Int(i128::from(i64::MAX)),
                             ty: Ty::ERROR,
                             span: Span::DUMMY,
                         }),
                         Operand::Constant(MirConst {
-                            kind: MirConstKind::Int(i64::MIN as i128),
+                            kind: MirConstKind::Int(i128::from(i64::MIN)),
                             ty: Ty::ERROR,
                             span: Span::DUMMY,
                         }),
@@ -366,7 +366,7 @@ fn cast_kind_bytes() {
             glyim_core::TargetInfo::default(),
         );
         let result = backend.generate_function(&Arc::new(body));
-        assert!(result.is_ok(), "Cast kind {:?} should succeed", kind);
+        assert!(result.is_ok(), "Cast kind {kind:?} should succeed");
         let bc = result.unwrap();
         let cast_pos = bc
             .iter()
@@ -375,9 +375,7 @@ fn cast_kind_bytes() {
         assert_eq!(
             bc[cast_pos + 1],
             expected_byte,
-            "Cast kind {:?} should emit byte {}",
-            kind,
-            expected_byte
+            "Cast kind {kind:?} should emit byte {expected_byte}"
         );
     }
 }
