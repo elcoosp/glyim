@@ -60,15 +60,13 @@ fn t53_body_without_fn_sig_lowers_via_fallback() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("@__glyim_fn_7"),
-        "expected a function named __glyim_fn_7, got:\n{}",
-        ir
+        "expected a function named __glyim_fn_7, got:\n{ir}"
     );
     // The default Glyim ABI emits the `fastcc` calling convention (distinct
     // from the C ABI used by `extern \"C\" fn`), which is why the prefix is
     // present in the IR.
     assert!(
         ir.contains("fastcc"),
-        "expected the Glyim default (fastcc) calling convention, got:\n{}",
-        ir
+        "expected the Glyim default (fastcc) calling convention, got:\n{ir}"
     );
 }
