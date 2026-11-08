@@ -4,7 +4,7 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
-/// Idx.
+/// `Idx`.
 pub struct Idx<T> {
     raw: u32,
     _marker: PhantomData<T>,
@@ -45,7 +45,8 @@ impl<T> fmt::Debug for Idx<T> {
 
 impl<T> Idx<T> {
     #[inline]
-    /// from_raw.
+    /// `from_raw`.
+    #[must_use]
     pub fn from_raw(raw: u32) -> Self {
         Self {
             raw,
@@ -53,22 +54,24 @@ impl<T> Idx<T> {
         }
     }
     #[inline]
-    /// to_raw.
+    /// `to_raw`.
+    #[must_use]
     pub fn to_raw(self) -> u32 {
         self.raw
     }
     #[inline]
     /// index.
+    #[must_use]
     pub fn index(self) -> usize {
         self.raw as usize
     }
 }
 
-/// IdxLike.
+/// `IdxLike`.
 pub trait IdxLike: Copy + Eq + fmt::Debug + 'static {
-    /// from_raw.
+    /// `from_raw`.
     fn from_raw(raw: u32) -> Self;
-    /// to_raw.
+    /// `to_raw`.
     fn to_raw(self) -> u32;
     /// index.
     fn index(self) -> usize {
@@ -85,35 +88,41 @@ impl<T: 'static> IdxLike for Idx<T> {
     }
 }
 
+/// `from_raw`/`to_raw`/`index` accessors.
 #[macro_export]
-#[allow(missing_docs)]
 macro_rules! define_idx {
     ($name:ident) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
         #[doc = "Newtype index into an arena-backed collection."]
         pub struct $name(u32);
 
-        #[allow(missing_docs)]
         impl $name {
+            /// Wraps a raw `u32` index.
             #[inline]
+            #[must_use]
             pub fn from_raw(raw: u32) -> Self {
                 Self(raw)
             }
+            /// Returns the raw `u32` index.
             #[inline]
+            #[must_use]
             pub fn to_raw(self) -> u32 {
                 self.0
             }
+            /// Converts to a `usize` for slice indexing.
             #[inline]
+            #[must_use]
             pub fn index(self) -> usize {
                 self.0 as usize
             }
         }
 
-        #[allow(missing_docs)]
         impl $crate::arena::IdxLike for $name {
+            /// Wraps a raw `u32` index.
             fn from_raw(raw: u32) -> Self {
                 Self(raw)
             }
+            /// Returns the raw `u32` index.
             fn to_raw(self) -> u32 {
                 self.0
             }
@@ -122,7 +131,7 @@ macro_rules! define_idx {
 }
 
 #[derive(Clone, Debug)]
-/// IndexVec.
+/// `IndexVec`.
 pub struct IndexVec<I: IdxLike, T> {
     raw: Vec<T>,
     _marker: PhantomData<I>,
@@ -130,20 +139,23 @@ pub struct IndexVec<I: IdxLike, T> {
 
 impl<I: IdxLike, T> IndexVec<I, T> {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             raw: Vec::new(),
             _marker: PhantomData,
         }
     }
-    /// with_capacity.
+    /// `with_capacity`.
+    #[must_use]
     pub fn with_capacity(cap: usize) -> Self {
         Self {
             raw: Vec::with_capacity(cap),
             _marker: PhantomData,
         }
     }
-    /// from_raw.
+    /// `from_raw`.
+    #[must_use]
     pub fn from_raw(raw: Vec<T>) -> Self {
         Self {
             raw,
@@ -161,10 +173,12 @@ impl<I: IdxLike, T> IndexVec<I, T> {
         self.raw.reserve(additional);
     }
     /// len.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.raw.len()
     }
-    /// is_empty.
+    /// `is_empty`.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.raw.is_empty()
     }
@@ -176,7 +190,7 @@ impl<I: IdxLike, T> IndexVec<I, T> {
         );
         self.raw.get(idx.index())
     }
-    /// get_mut.
+    /// `get_mut`.
     pub fn get_mut(&mut self, idx: I) -> Option<&mut T> {
         self.raw.get_mut(idx.index())
     }
@@ -184,37 +198,40 @@ impl<I: IdxLike, T> IndexVec<I, T> {
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.raw.iter()
     }
-    /// iter_mut.
+    /// `iter_mut`.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.raw.iter_mut()
     }
-    /// iter_enumerated.
+    /// `iter_enumerated`.
     pub fn iter_enumerated(&self) -> impl Iterator<Item = (I, &T)> {
         self.raw
             .iter()
             .enumerate()
             .map(|(i, v)| (I::from_raw(i as u32), v))
     }
-    /// into_iter_enumerated.
+    /// `into_iter_enumerated`.
     pub fn into_iter_enumerated(self) -> impl Iterator<Item = (I, T)> {
         self.raw
             .into_iter()
             .enumerate()
             .map(|(i, v)| (I::from_raw(i as u32), v))
     }
-    /// into_raw.
+    /// `into_raw`.
+    #[must_use]
     pub fn into_raw(self) -> Vec<T> {
         self.raw
     }
-    /// as_slice.
+    /// `as_slice`.
+    #[must_use]
     pub fn as_slice(&self) -> &[T] {
         &self.raw
     }
-    /// as_mut_slice.
+    /// `as_mut_slice`.
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         &mut self.raw
     }
     /// last.
+    #[must_use]
     pub fn last(&self) -> Option<&T> {
         self.raw.last()
     }
