@@ -30,8 +30,7 @@ fn test_compile_valid_file() {
     let result = run_with_args(args);
     assert!(
         result.is_ok(),
-        "Expected compilation to succeed, got: {:?}",
-        result
+        "Expected compilation to succeed, got: {result:?}"
     );
 }
 
@@ -134,7 +133,7 @@ fn test_emit_asm_produces_assembly_file() {
         deny: Vec::new(),
     };
     let result = run_with_args(args);
-    assert!(result.is_ok(), "asm emit should succeed, got: {:?}", result);
+    assert!(result.is_ok(), "asm emit should succeed, got: {result:?}");
 
     assert!(asm_path.exists(), "assembly output file should exist");
     let asm = std::fs::read_to_string(&asm_path).unwrap();
@@ -142,12 +141,11 @@ fn test_emit_asm_produces_assembly_file() {
     // every supported host backend.
     assert!(
         asm.contains("ret"),
-        "assembly output should contain a `ret` instruction; got:\n{}",
-        asm
+        "assembly output should contain a `ret` instruction; got:\n{asm}"
     );
 }
 
-/// T126-PATCHED: `--lto fat` is a tracked gap (KNOWN_GAPS Phase 10.2).
+/// T126-PATCHED: `--lto fat` is a tracked gap (`KNOWN_GAPS` Phase 10.2).
 /// The driver must emit a clear error rather than silently downgrading
 /// to thin/off. This test pins the error contract; the neighbouring
 /// `test_lto_thin_surfaces_tracked_gap` covers the same for `thin`.
@@ -288,8 +286,7 @@ fn test_emit_cdylib_produces_shared_library() {
     let result = run_with_args(args);
     assert!(
         result.is_ok(),
-        "cdylib emit should succeed, got: {:?}",
-        result
+        "cdylib emit should succeed, got: {result:?}"
     );
     assert!(cdylib_path.exists(), "cdylib output should exist");
     let meta = std::fs::metadata(&cdylib_path).unwrap();
