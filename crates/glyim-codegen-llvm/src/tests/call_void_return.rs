@@ -104,5 +104,5 @@ fn call_returning_void_has_no_store() {
 
     let module = result.unwrap();
     let ir = module.print_to_string().to_string();
-    assert!(ir.contains("call"), "LLVM IR must contain 'call':\n{}", ir);
+    assert!(ir.contains("call"), "LLVM IR must contain 'call':\n{ir}");
 }
