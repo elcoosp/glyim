@@ -8,6 +8,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Feature registry seed (M1.2)**: the ledger's claim surface grows from
+  6 smoke-test entries to 216 curated features across 32 registry files,
+  covering the documented inventory end to end: the README feature list
+  and language tour, `docs/specs/v0.1.0.md`, all eight `docs/design/*`
+  documents, the 33 stdlib modules of `glyim-lang-core`/`-alloc`/`-std`,
+  the 16 runtime FFI symbol families, and the tooling surface (CLI,
+  `glyip`, LSP, test harness, and the ledger/metrics tooling itself).
+  - `ledger-schema`: the feature taxonomy the master plan delegates to an
+    "Appendix C" that was never checked in (docs drift found during the
+    M1.2 deep dive) now lands in-repo as `TAXONOMY` — 34 areas over six
+    namespaces (`lang.*`, `compiler.*`, `codegen.*`, `tooling.*`,
+    `std.*`, `runtime.*`), each with an enforced ID prefix — plus
+    `min_target_level` encoding release gate RG-09 (`core` ⇒ L5,
+    `std` ⇒ L4) at declaration time. `ledger check` now fails on unknown
+    areas (`LEDGER-AREA-UNKNOWN`), prefix mismatches
+    (`LEDGER-ID-AREA-MISMATCH`), tier/target violations
+    (`LEDGER-TIER-TARGET`), and dead spec references
+    (`LEDGER-SPEC-MISSING`): every entry's `spec` must resolve to a real
+    repo-relative file, so a moved or renamed doc breaks CI instead of
+    silently rotting the registry.
+  - `ledger-schema`: new `load_project_registry` production entry point —
+    `glyim-ledger check <ROOT>` walks `ROOT/ledger` and anchors
+    repo-relative references (`spec` paths, gap witnesses) at the project
+    root, matching the plan's path examples; the fixture-facing
+    `load_registry` keeps its behavior for tests.
+  - `glyim-ledger`: the check gate runs the taxonomy/spec validation and
+    reports a `bytecode` backend variant for the
+    `glyim-codegen`/`glyim-bytecode-vm` executor (goes away with
+    ADR-004's removal, if accepted).
+  - Bench: the `ledger-schema` load+validate harness is scaled to the
+    registry's real size (300 features / 50 gaps synthetic, was
+    200/40), switched to the production `load_project_registry` path and
+    fixed to a taxonomy-valid fixture, so CI headroom tracking measures
+    the M1.2 shape: ~2.6 ms per load+validate of 350 entries.
+  - Seed data fixes found by the new gates: `LANG-ASYNC-AWAIT` now
+    targets L5 as RG-09 requires for `core` tier entries.
+  - 65 tests total in the two ledger crates (14 new taxonomy/spec tests
+    in `ledger-schema`, 2 new check-integration tests in
+    `glyim-ledger`), written test-first.
 - **Readiness Ledger v1 foundation (M1.1)**: new `tools/ledger-schema`
   and `tools/glyim-ledger` crates implementing the registry schema half
   of the master plan's Workstream A (§3).
