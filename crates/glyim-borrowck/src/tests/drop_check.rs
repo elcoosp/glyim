@@ -28,7 +28,7 @@ impl<'a> TestCtx<'a> {
     }
 }
 
-impl<'a> crate::BorrowckCtx for TestCtx<'a> {
+impl crate::BorrowckCtx for TestCtx<'_> {
     fn ty_ctx(&self) -> &TyCtx {
         self.ty_ctx
     }
@@ -102,7 +102,7 @@ fn body_with_statements(stmts: Vec<Statement>) -> Body {
 #[test]
 fn use_after_drop_error() {
     // V11-T01: using a value after it has been dropped should report an error.
-    let (ctx, _) = with_fresh_ty_ctx(|_ctx_mut| {});
+    let (ctx, ()) = with_fresh_ty_ctx(|_ctx_mut| {});
     let stmts = vec![
         glyim_mir::Statement {
             kind: StatementKind::StorageDead(LocalIdx::from_raw(0)),
@@ -126,7 +126,7 @@ fn use_after_drop_error() {
 fn drop_order_mixed_fields() {
     // V11-T03: Dropping a struct with mixed fields should not cause false errors.
     // The test simply drops a local (representing a struct) and does not use it afterwards.
-    let (ctx, _) = with_fresh_ty_ctx(|_ctx_mut| {});
+    let (ctx, ()) = with_fresh_ty_ctx(|_ctx_mut| {});
     let stmts = vec![glyim_mir::Statement {
         kind: StatementKind::StorageDead(LocalIdx::from_raw(0)),
         source_info: SourceInfo::new(Span::DUMMY),
@@ -143,7 +143,7 @@ fn drop_order_mixed_fields() {
 #[test]
 fn use_after_drop_field_error() {
     // Dropping a struct then accessing one of its fields should error.
-    let (ctx, _) = with_fresh_ty_ctx(|_ctx_mut| {});
+    let (ctx, ()) = with_fresh_ty_ctx(|_ctx_mut| {});
     let stmts = vec![
         glyim_mir::Statement {
             kind: StatementKind::StorageDead(LocalIdx::from_raw(0)),
@@ -174,7 +174,7 @@ fn use_after_drop_field_error() {
 #[test]
 fn use_before_drop_no_error() {
     // Using a value before StorageDead should be fine.
-    let (ctx, _) = with_fresh_ty_ctx(|_ctx_mut| {});
+    let (ctx, ()) = with_fresh_ty_ctx(|_ctx_mut| {});
     let stmts = vec![
         glyim_mir::Statement {
             kind: StatementKind::Assign(
@@ -210,7 +210,7 @@ fn use_before_drop_no_error() {
 #[test]
 fn drop_then_use_copy_field_error() {
     // Even if a field is Copy, accessing it after the whole struct is dropped is an error.
-    let (ctx, _) = with_fresh_ty_ctx(|_ctx_mut| {});
+    let (ctx, ()) = with_fresh_ty_ctx(|_ctx_mut| {});
     let stmts = vec![
         glyim_mir::Statement {
             kind: StatementKind::StorageDead(LocalIdx::from_raw(0)),
@@ -242,7 +242,7 @@ fn drop_then_use_copy_field_error() {
 fn conditional_drop_one_branch_only() {
     // V11-T04: conditional drop does not flag false positives.
     // Move a Copy type before drop, then drop, no error.
-    let (ctx, _) = with_fresh_ty_ctx(|_ctx_mut| {});
+    let (ctx, ()) = with_fresh_ty_ctx(|_ctx_mut| {});
     let stmts = vec![
         // Move(Copy) of local0 (Copy type) to local1 — not a real move, no error.
         glyim_mir::Statement {
@@ -271,7 +271,7 @@ fn conditional_drop_one_branch_only() {
 #[test]
 fn conditional_drop_flags() {
     // V11-T04: placeholder test for conditional drop flags.
-    let (ctx, _) = with_fresh_ty_ctx(|_ctx_mut| {});
+    let (ctx, ()) = with_fresh_ty_ctx(|_ctx_mut| {});
     let body = dummy_body();
     let test_ctx = TestCtx::new(&ctx, &body.locals);
     let result = check_borrows(&test_ctx, &body);
