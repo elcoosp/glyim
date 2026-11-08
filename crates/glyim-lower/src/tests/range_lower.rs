@@ -35,7 +35,7 @@ fn lower_range(start: i128, end: i128, inclusive: bool) -> (AdtId, usize) {
     );
     let body = b.into_body(vec![thir::Stmt::Expr { expr: range_expr }], vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 
     // Find the Aggregate assignment and return its ADT id + operand count.
     for stmt in &result.body.basic_blocks[glyim_mir::BasicBlockIdx::from_raw(0)].statements {
