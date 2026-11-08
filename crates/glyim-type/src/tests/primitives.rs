@@ -1,4 +1,4 @@
-//! Tests for primitive types: IntTy, UintTy, FloatTy, Mutability, etc.
+//! Tests for primitive types: `IntTy`, `UintTy`, `FloatTy`, Mutability, etc.
 
 use glyim_core::primitives::*;
 
