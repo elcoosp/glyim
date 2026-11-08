@@ -81,6 +81,6 @@ fn if_inside_while_lowers_correctly() {
     let result = lower_body(&mock, &body);
     // Full lowering produces: entry, while-header, while-body(if-switch),
     // then, else, if-merge, while-exit = 7 blocks
-    assert_mir(&ctx, &result.body).block_count(7);
+    let _ = assert_mir(&ctx, &result.body).block_count(7);
     assert!(result.diagnostics.is_empty());
 }
