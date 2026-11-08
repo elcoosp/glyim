@@ -1,10 +1,10 @@
-//! Tests for bytecode backend: OP_INDEX, OP_FIELD, OP_REPEAT, and stub removal.
+//! Tests for bytecode backend: `OP_INDEX`, `OP_FIELD`, `OP_REPEAT`, and stub removal.
 //!
 //! Test cases:
-//! - W5-C03-T01: arr[i] emits OP_LOAD_LOCAL_ADDR + offset + OP_DEREF
-//! - W5-C03-T02: [value; count] emits OP_REPEAT
-//! - W5-C03-T03: struct aggregate emits OP_AGGREGATE with field count
-//! - W5-C03-T04: field access emits OP_LOAD_LOCAL_ADDR + offset + OP_ADD
+//! - W5-C03-T01: arr[i] emits `OP_LOAD_LOCAL_ADDR` + offset + `OP_DEREF`
+//! - W5-C03-T02: [value; count] emits `OP_REPEAT`
+//! - W5-C03-T03: struct aggregate emits `OP_AGGREGATE` with field count
+//! - W5-C03-T04: field access emits `OP_LOAD_LOCAL_ADDR` + offset + `OP_ADD`
 //! - W5-C03-T05: out-of-bounds local panics (stub removed)
 //! - W5-C03-T06: zero-sized element panics (stub removed)
 
@@ -79,7 +79,7 @@ fn build_body(
 }
 
 /// Return the number of operand bytes consumed by an opcode.
-/// For variable-length instructions (AGGREGATE, SWITCH_INT, CALL, REPEAT),
+/// For variable-length instructions (AGGREGATE, `SWITCH_INT`, CALL, REPEAT),
 /// returns `None` since we cannot determine the size without parsing sub-operands.
 fn opcode_operand_size(op: u8) -> Option<usize> {
     match op {
@@ -182,24 +182,15 @@ fn test_index_emits_load_addr_plus_offset_plus_deref() {
 
     assert!(
         la < ll,
-        "OP_LOAD_LOCAL_ADDR at {} should precede OP_LOAD_LOCAL at {}",
-        la,
-        ll
+        "OP_LOAD_LOCAL_ADDR at {la} should precede OP_LOAD_LOCAL at {ll}"
     );
     assert!(
         ll < lc,
-        "OP_LOAD_LOCAL at {} should precede OP_LOAD_CONST at {}",
-        ll,
-        lc
+        "OP_LOAD_LOCAL at {ll} should precede OP_LOAD_CONST at {lc}"
     );
-    assert!(
-        lc < m,
-        "OP_LOAD_CONST at {} should precede OP_MUL at {}",
-        lc,
-        m
-    );
-    assert!(m < a, "OP_MUL at {} should precede OP_ADD at {}", m, a);
-    assert!(a < d, "OP_ADD at {} should precede OP_DEREF at {}", a, d);
+    assert!(lc < m, "OP_LOAD_CONST at {lc} should precede OP_MUL at {m}");
+    assert!(m < a, "OP_MUL at {m} should precede OP_ADD at {a}");
+    assert!(a < d, "OP_ADD at {a} should precede OP_DEREF at {d}");
 }
 
 // ---------------------------------------------------------------------------
@@ -330,17 +321,10 @@ fn test_field_access_emits_load_addr_plus_offset() {
 
     assert!(
         la < lc,
-        "OP_LOAD_LOCAL_ADDR at {} should precede OP_LOAD_CONST at {}",
-        la,
-        lc
+        "OP_LOAD_LOCAL_ADDR at {la} should precede OP_LOAD_CONST at {lc}"
     );
-    assert!(
-        lc < a,
-        "OP_LOAD_CONST at {} should precede OP_ADD at {}",
-        lc,
-        a
-    );
-    assert!(a < d, "OP_ADD at {} should precede OP_DEREF at {}", a, d);
+    assert!(lc < a, "OP_LOAD_CONST at {lc} should precede OP_ADD at {a}");
+    assert!(a < d, "OP_ADD at {a} should precede OP_DEREF at {d}");
 }
 
 // ---------------------------------------------------------------------------
@@ -381,7 +365,7 @@ struct ZeroSizeLayoutProvider;
 
 impl LayoutProvider for ZeroSizeLayoutProvider {
     fn field_offset(&self, _ty: Ty, field_idx: FieldIdx) -> u64 {
-        (field_idx.to_raw() as u64)
+        u64::from(field_idx.to_raw())
             .saturating_mul(8)
             .saturating_add(8)
     }
