@@ -17,6 +17,8 @@
 //! subtree has no slots, no patch code, and nothing is ever visited again
 //! (§6.2, G2).
 
+use std::fmt::Write as _;
+
 /// One blueprint op, decoded form.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BpOp {
@@ -109,25 +111,30 @@ impl Blueprint {
         let mut out = String::new();
         for op in self.decode() {
             match op {
-                BpOp::Create(t) => out.push_str(&format!("Create({}) ", t)),
-                BpOp::StaticProp(p, s) => out.push_str(&format!(
-                    "StaticProp({}, {:?}) ",
-                    p,
-                    self.strings
+                BpOp::Create(t) => {
+                    let _ = write!(out, "Create({t}) ");
+                }
+                BpOp::StaticProp(p, s) => {
+                    let tag = self
+                        .strings
                         .get(s as usize)
                         .map(|x| x.as_str())
-                        .unwrap_or("?")
-                )),
-                BpOp::Text(s) => out.push_str(&format!(
-                    "Text({:?}) ",
-                    self.strings
+                        .unwrap_or("?");
+                    let _ = write!(out, "StaticProp({p}, {tag:?}) ");
+                }
+                BpOp::Text(s) => {
+                    let txt = self
+                        .strings
                         .get(s as usize)
                         .map(|x| x.as_str())
-                        .unwrap_or("?")
-                )),
+                        .unwrap_or("?");
+                    let _ = write!(out, "Text({txt:?}) ");
+                }
                 BpOp::Enter => out.push_str("Enter "),
                 BpOp::Leave => out.push_str("Leave "),
-                BpOp::SlotMarker(i) => out.push_str(&format!("SlotMarker({}) ", i)),
+                BpOp::SlotMarker(i) => {
+                    let _ = write!(out, "SlotMarker({i}) ");
+                }
             }
         }
         out.trim_end().to_string()
@@ -200,7 +207,7 @@ mod tests {
         assert_eq!(std::mem::size_of_val(bp.ops.as_slice()), 8);
     }
 
-    /// §6.2: a fully static subtree has no SlotMarker — nothing is ever
+    /// §6.2: a fully static subtree has no `SlotMarker` — nothing is ever
     /// visited again.
     #[test]
     fn fully_static_detection() {
@@ -251,7 +258,7 @@ mod tests {
         assert_eq!(bp.decode(), vec![BpOp::SlotMarker(idx)]);
     }
 
-    /// StaticProp field packing roundtrips both ids.
+    /// `StaticProp` field packing roundtrips both ids.
     #[test]
     fn static_prop_packing() {
         let mut bp = Blueprint::default();
