@@ -3,7 +3,10 @@
 //! The actual implementation is in `.g` files. This crate only provides
 //! access to those sources.
 
+use std::fmt::Write as _;
+
 /// Returns the source code of an alloc library module by name.
+#[must_use]
 pub fn alloc_source(name: &str) -> Option<&'static str> {
     match name {
         "alloc" => Some(include_str!("../lib/alloc.g")),
@@ -16,17 +19,19 @@ pub fn alloc_source(name: &str) -> Option<&'static str> {
     }
 }
 
-/// alloc_modules.
+/// `alloc_modules`.
+#[must_use]
 pub fn alloc_modules() -> &'static [&'static str] {
     &["alloc", "boxed", "vec", "string", "rc", "raw_vec"]
 }
 
-/// alloc_source_all.
+/// `alloc_source_all`.
+#[must_use]
 pub fn alloc_source_all() -> String {
     let mut out = String::new();
     for name in alloc_modules() {
         if let Some(src) = alloc_source(name) {
-            out.push_str(&format!("// === module: {} ===\n", name));
+            let _ = writeln!(out, "// === module: {name} ===");
             out.push_str(src);
             out.push('\n');
         }
