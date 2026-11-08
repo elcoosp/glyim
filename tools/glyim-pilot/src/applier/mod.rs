@@ -10,46 +10,46 @@ use crate::protocol::types::FileOp;
 use security::validate_path;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-/// ApplyResult.
+/// `ApplyResult`.
 pub struct ApplyResult {
-    /// Struct.
+    /// `Struct`.
     pub path: String,
-    /// Struct.
+    /// `Struct`.
     pub action: ApplyAction,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-/// ApplyAction.
+/// `ApplyAction`.
 pub enum ApplyAction {
-    /// Variant.
+    /// `Variant`.
     Created,
-    /// Variant.
+    /// `Variant`.
     Modified,
-    /// Variant.
+    /// `Variant`.
     Deleted,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-/// PlannedChange.
+/// `PlannedChange`.
 pub struct PlannedChange {
-    /// Struct.
+    /// `Struct`.
     pub path: String,
-    /// Struct.
+    /// `Struct`.
     pub action: PlannedAction,
-    /// Struct.
+    /// `Struct`.
     pub current_content_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-/// PlannedAction.
+/// `PlannedAction`.
 pub enum PlannedAction {
-    /// Variant.
+    /// `Variant`.
     Create,
-    /// Variant.
+    /// `Variant`.
     Overwrite,
-    /// Variant.
+    /// `Variant`.
     Modify,
-    /// Variant.
+    /// `Variant`.
     Delete,
 }
 
@@ -58,7 +58,7 @@ struct Backup {
     original_content: Option<String>,
 }
 
-/// apply_ops.
+/// `apply_ops`.
 pub fn apply_ops(
     worktree_root: &Path,
     ops: &[FileOp],
@@ -90,12 +90,12 @@ pub fn apply_ops(
     Ok(results)
 }
 
-/// preview_ops.
+/// `preview_ops`.
 pub fn preview_ops(worktree_root: &Path, ops: &[FileOp]) -> Result<Vec<PlannedChange>, PilotError> {
     ops.iter().map(|op| preview_op(worktree_root, op)).collect()
 }
 
-/// apply_ops_async.
+/// `apply_ops_async`.
 pub async fn apply_ops_async(
     worktree_root: std::path::PathBuf,
     ops: Vec<FileOp>,
@@ -115,7 +115,7 @@ pub async fn apply_ops_async(
         })?
 }
 
-/// preview_ops_async.
+/// `preview_ops_async`.
 pub async fn preview_ops_async(
     worktree_root: std::path::PathBuf,
     ops: Vec<FileOp>,
@@ -205,35 +205,31 @@ fn create_backups(worktree_root: &Path, ops: &[FileOp]) -> Result<Vec<Backup>, P
 fn rollback(worktree_root: &Path, backups: &[Backup], results: &[ApplyResult]) {
     for result in results {
         let backup = backups.iter().find(|b| b.rel_path == result.path);
-        match backup {
-            Some(b) => match &b.original_content {
-                Some(content) => {
-                    let abs_path = match validate_path(worktree_root, &b.rel_path) {
-                        Ok(p) => p,
-                        Err(_) => continue,
-                    };
-                    if let Err(e) = fs::write(&abs_path, content) {
-                        tracing::error!(path = &b.rel_path, error = %e, "rollback: failed to restore");
-                    }
+        if let Some(b) = backup {
+            if let Some(content) = &b.original_content {
+                let abs_path = match validate_path(worktree_root, &b.rel_path) {
+                    Ok(p) => p,
+                    Err(_) => continue,
+                };
+                if let Err(e) = fs::write(&abs_path, content) {
+                    tracing::error!(path = &b.rel_path, error = %e, "rollback: failed to restore");
                 }
-                None => {
-                    let abs_path = match validate_path(worktree_root, &b.rel_path) {
-                        Ok(p) => p,
-                        Err(_) => continue,
-                    };
-                    if abs_path.exists() {
-                        let _ = fs::remove_file(&abs_path);
-                    }
-                }
-            },
-            None => {
-                let abs_path = match validate_path(worktree_root, &result.path) {
+            } else {
+                let abs_path = match validate_path(worktree_root, &b.rel_path) {
                     Ok(p) => p,
                     Err(_) => continue,
                 };
                 if abs_path.exists() {
                     let _ = fs::remove_file(&abs_path);
                 }
+            }
+        } else {
+            let abs_path = match validate_path(worktree_root, &result.path) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            if abs_path.exists() {
+                let _ = fs::remove_file(&abs_path);
             }
         }
     }
