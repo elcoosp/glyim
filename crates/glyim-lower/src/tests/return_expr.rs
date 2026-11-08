@@ -25,7 +25,7 @@ fn return_with_value_generates_assign_then_return() {
     );
     let result = lower_body(&mock, &body);
     // Entry block with assign to _0 then Return
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
     assert!(result.diagnostics.is_empty());
 }
 
@@ -45,5 +45,5 @@ fn return_without_value_just_terminates() {
         vec![],
     );
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }
