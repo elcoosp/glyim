@@ -1,8 +1,8 @@
 use crate::display::TypeLookup;
 use crate::predicate::Predicate;
-use crate::region::*;
-use crate::substitution::*;
-use crate::ty::*;
+use crate::region::Region;
+use crate::substitution::GenericArg;
+use crate::ty::TyKind;
 use bitflags::bitflags;
 
 bitflags! {
@@ -34,7 +34,7 @@ bitflags! {
     }
 }
 
-/// compute_flags.
+/// `compute_flags`.
 pub fn compute_flags(kind: &TyKind, ctx: &dyn TypeLookup, depth: u32) -> TypeFlags {
     const MAX_DEPTH: u32 = 64;
     if depth > MAX_DEPTH {
