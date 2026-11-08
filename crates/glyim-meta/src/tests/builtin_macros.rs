@@ -22,7 +22,7 @@ fn string_lit_token(s: &str) -> SyntaxNode {
     builder.start_node(GlyimLang::kind_to_raw(glyim_syntax::SyntaxKind::TokenTree));
     builder.token(
         GlyimLang::kind_to_raw(glyim_syntax::SyntaxKind::StringLit),
-        &format!("\"{}\"", s),
+        &format!("\"{s}\""),
     );
     builder.finish_node();
     SyntaxNode::new_root(builder.finish())
@@ -36,7 +36,7 @@ fn concat_args(a: &str, b: &str) -> SyntaxNode {
     builder.start_node(GlyimLang::kind_to_raw(glyim_syntax::SyntaxKind::TokenTree));
     builder.token(
         GlyimLang::kind_to_raw(glyim_syntax::SyntaxKind::StringLit),
-        &format!("\"{}\"", a),
+        &format!("\"{a}\""),
     );
     builder.finish_node();
     // Comma punctuation
@@ -45,7 +45,7 @@ fn concat_args(a: &str, b: &str) -> SyntaxNode {
     builder.start_node(GlyimLang::kind_to_raw(glyim_syntax::SyntaxKind::TokenTree));
     builder.token(
         GlyimLang::kind_to_raw(glyim_syntax::SyntaxKind::StringLit),
-        &format!("\"{}\"", b),
+        &format!("\"{b}\""),
     );
     builder.finish_node();
     builder.finish_node();
@@ -94,8 +94,7 @@ fn test_file_macro() {
     let text = expanded.text().to_string();
     assert!(
         text.contains("file_42") || text.contains("42"),
-        "Expected file ID 42 in expansion, got {}",
-        text
+        "Expected file ID 42 in expansion, got {text}"
     );
 }
 
@@ -113,7 +112,7 @@ fn test_line_macro() {
     assert!(result.diagnostics.is_empty());
     let expanded = result.expanded.unwrap();
     let text = expanded.text().to_string();
-    assert!(text.contains("3"), "Expected line 3, got {}", text);
+    assert!(text.contains('3'), "Expected line 3, got {text}");
 }
 
 #[test]
@@ -130,7 +129,7 @@ fn test_column_macro() {
     assert!(result.diagnostics.is_empty());
     let expanded = result.expanded.unwrap();
     let text = expanded.text().to_string();
-    assert!(text.contains("43"), "Expected column 43, got {}", text);
+    assert!(text.contains("43"), "Expected column 43, got {text}");
 }
 
 #[test]
@@ -160,8 +159,7 @@ fn test_env_macro() {
     let text = expanded.text().to_string();
     assert!(
         text.contains("hello_from_env"),
-        "Expected 'hello_from_env', got {}",
-        text
+        "Expected 'hello_from_env', got {text}"
     );
 }
 
@@ -191,8 +189,7 @@ fn test_option_env_macro() {
     let text = result.expanded.unwrap().text().to_string();
     assert!(
         text.contains("Some(\"present_value\")"),
-        "Expected Some(\"present_value\"), got {}",
-        text
+        "Expected Some(\"present_value\"), got {text}"
     );
 
     // Absent case: option_env! expands to None rather than erroring.
@@ -219,7 +216,7 @@ fn test_option_env_macro() {
         "option_env! must not error on missing var"
     );
     let text2 = result2.expanded.unwrap().text().to_string();
-    assert!(text2.contains("None"), "Expected None, got {}", text2);
+    assert!(text2.contains("None"), "Expected None, got {text2}");
 }
 
 #[test]
@@ -297,12 +294,7 @@ fn test_include_str_macro() {
     assert!(result.diagnostics.is_empty());
     let expanded = result.expanded.unwrap();
     let text = expanded.text().to_string();
-    assert!(
-        text.contains(content),
-        "Expected '{}', got {}",
-        content,
-        text
-    );
+    assert!(text.contains(content), "Expected '{content}', got {text}");
 }
 
 #[test]
@@ -334,8 +326,7 @@ fn test_include_bytes_macro() {
     // Produces a bracketed integer-array literal `[104, 105, 10]`.
     assert!(
         text.contains("104") && text.contains("105") && text.contains("10"),
-        "Expected byte-array literal, got {}",
-        text
+        "Expected byte-array literal, got {text}"
     );
 }
 
@@ -353,11 +344,7 @@ fn test_concat_macro() {
     assert!(result.diagnostics.is_empty());
     let expanded = result.expanded.unwrap();
     let text = expanded.text().to_string();
-    assert!(
-        text.contains("\"foobar\""),
-        "Expected 'foobar', got {}",
-        text
-    );
+    assert!(text.contains("\"foobar\""), "Expected 'foobar', got {text}");
 }
 
 #[test]
@@ -390,8 +377,7 @@ fn test_concat_idents_macro() {
     let text = expanded.text().to_string();
     assert!(
         text.contains("foo_bar"),
-        "Expected identifier 'foo_bar', got {}",
-        text
+        "Expected identifier 'foo_bar', got {text}"
     );
 }
 
@@ -409,5 +395,5 @@ fn test_stringify_macro() {
     assert!(result.diagnostics.is_empty());
     let expanded = result.expanded.unwrap();
     let text = expanded.text().to_string();
-    assert!(text.contains("1 + 2"), "Expected '1 + 2', got {}", text);
+    assert!(text.contains("1 + 2"), "Expected '1 + 2', got {text}");
 }
