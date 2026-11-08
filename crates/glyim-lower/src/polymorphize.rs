@@ -16,7 +16,7 @@ use std::collections::HashSet;
 
 use crate::mono::{MonoItem, MonoItemData};
 
-/// analyze_used_params.
+/// `analyze_used_params`.
 pub fn analyze_used_params(
     body: &glyim_mir::Body,
     ctx: &dyn TypeLookup,
@@ -41,7 +41,7 @@ pub fn analyze_used_params(
     used
 }
 
-/// polymorphize_substs.
+/// `polymorphize_substs`.
 pub fn polymorphize_substs(
     ctx: &mut TyCtxMut,
     substs: Substitution,
@@ -69,7 +69,7 @@ pub fn polymorphize_substs(
     ctx.intern_substitution(args)
 }
 
-/// compute_poly_item.
+/// `compute_poly_item`.
 pub fn compute_poly_item(ctx: &mut TyCtxMut, item: &MonoItem, body: &glyim_mir::Body) -> MonoItem {
     match item {
         MonoItem::Fn { def_id, substs } => {
@@ -265,7 +265,7 @@ fn mark_used_params(ty: Ty, ctx: &dyn TypeLookup, used: &mut [bool]) {
             mark_used_params(sig.output, ctx, used);
         }
         TyKind::Dynamic(binder, _) => {
-            for pred in binder.clone().skip_binder().iter() {
+            for pred in &binder.clone().skip_binder() {
                 mark_used_params_in_predicate(pred, ctx, used);
             }
         }
@@ -368,7 +368,7 @@ fn mark_used_params_in_place(
 
     // `Index(local)`: the index operand is itself a use of that local's type
     // parameters when generic; ensure the index local's type is marked.
-    for elem in place.projection.iter() {
+    for elem in &place.projection {
         if let ProjectionElem::Index(local) = elem
             && let Some(decl) = local_decls.get(*local)
         {
@@ -465,7 +465,7 @@ mod tests {
     use glyim_type::const_val::{Const, ConstKind, ParamConst};
     use glyim_type::ty_ctx_mut::TyCtxMut;
 
-    /// Phase 2 (GLYIM_DESTUB_PLAN), Step 2b: `mark_used_params` must mark the
+    /// Phase 2 (`GLYIM_DESTUB_PLAN`), Step 2b: `mark_used_params` must mark the
     /// array length const's params as used. A `[i32; N]` with `N = ParamConst(0)`
     /// must set `used[0] = true`, so polymorphize does not merge
     /// `[i32; 3]` and `[i32; 7]` into one mono item (which would corrupt the
