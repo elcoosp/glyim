@@ -1,17 +1,18 @@
 use std::path::Path;
 
 #[derive(Clone, Debug, Default)]
-/// NormalizeRules.
+/// `NormalizeRules`.
 pub struct NormalizeRules {
-    /// Struct.
+    /// `Struct`.
     pub normalize_slashes: bool,
-    /// Struct.
+    /// `Struct`.
     pub normalize_line_endings: bool,
-    /// Struct.
+    /// `Struct`.
     pub substitute_dir: bool,
 }
 
-/// normalize_output.
+/// `normalize_output`.
+#[must_use]
 pub fn normalize_output(output: &str, test_path: &Path, rules: &NormalizeRules) -> String {
     let mut result = output.to_string();
     if rules.normalize_line_endings {
