@@ -114,7 +114,6 @@ fn double_mutable_borrow_error() {
     let error_msg = errors[0].to_string();
     assert!(
         error_msg.contains("cannot borrow") && error_msg.contains("mutable"),
-        "Error message did not mention mutable borrow conflict: {}",
-        error_msg
+        "Error message did not mention mutable borrow conflict: {error_msg}"
     );
 }
