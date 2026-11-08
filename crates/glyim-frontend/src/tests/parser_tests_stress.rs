@@ -1,4 +1,3 @@
-#![allow(unused_variables)]
 use crate::parser::parse_to_syntax;
 use glyim_span::FileId;
 
@@ -92,7 +91,7 @@ fn test_generic_with_multiple_bounds() {
 
 #[test]
 fn test_generic_with_lifetime_like() {
-    let result = parse_to_syntax("fn f<'a, T: 'a>(x: &'a T) {}", file_id());
+    let _result = parse_to_syntax("fn f<'a, T: 'a>(x: &'a T) {}", file_id());
     // lifetimes not fully supported, just check no crash
 }
 
@@ -126,7 +125,7 @@ fn test_where_clause_complex() {
 // ─── Struct with visibility ───
 #[test]
 fn test_struct_pub_fields() {
-    let result = parse_to_syntax("struct S { pub x: i32, y: f64 }", file_id());
+    let _result = parse_to_syntax("struct S { pub x: i32, y: f64 }", file_id());
     // pub on fields may produce diagnostics but shouldn't crash
 }
 
