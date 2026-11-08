@@ -14,7 +14,7 @@ fn make_item(index: u32, module: u32) -> MonoItemData {
             substs: glyim_type::Substitution::empty(),
         },
         body,
-        symbol: format!("item_{}", index),
+        symbol: format!("item_{index}"),
         source_module: module,
     }
 }
