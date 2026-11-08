@@ -7,7 +7,7 @@ use crate::gates::{
 };
 use std::sync::Arc;
 
-/// run_done_pipeline.
+/// `run_done_pipeline`.
 pub async fn run_done_pipeline(
     ctx: &GateContext,
     config: &ResolvedDoneGates,
