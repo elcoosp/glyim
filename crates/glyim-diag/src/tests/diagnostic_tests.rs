@@ -103,7 +103,7 @@ fn test_is_error() {
 fn test_display_implementation() {
     let span = Span::DUMMY;
     let diag = GlyimDiagnostic::lex_error(span, "bad token");
-    let output = format!("{}", diag);
+    let output = format!("{diag}");
     assert!(output.contains("E0001"));
     assert!(output.contains("bad token"));
 }
@@ -112,7 +112,7 @@ fn test_display_implementation() {
 fn test_error_trait() {
     let span = Span::DUMMY;
     let diag = GlyimDiagnostic::lex_error(span, "test");
-    let _err: &dyn std::error::Error = &diag; // must compile
+    let _: &dyn std::error::Error = &diag; // must compile
 }
 
 #[test]
