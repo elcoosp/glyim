@@ -1,15 +1,15 @@
 use crate::interner::Name;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// PathKind.
+/// `PathKind`.
 pub enum PathKind {
-    /// Variant.
+    /// `Variant`.
     Plain,
-    /// Variant.
+    /// `Variant`.
     SelfPath,
-    #[allow(missing_docs)]
+    /// A `super::`-prefixed path with the given number of levels.
     Super(u32),
-    /// Variant.
+    /// `Variant`.
     Crate,
 }
 
@@ -23,7 +23,7 @@ pub enum PathKind {
 /// round-trips with each segment's args intact.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PathSegment {
-    /// Struct.
+    /// `Struct`.
     pub name: Name,
     /// The generic arguments written at this segment, if any. `None` means no
     /// `<...>` was written; `Some(vec![])` means `<>` (empty, e.g. turbofish).
@@ -31,16 +31,17 @@ pub struct PathSegment {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-/// Path.
+/// `Path`.
 pub struct Path {
-    /// Struct.
+    /// `Struct`.
     pub segments: Vec<PathSegment>,
-    /// Struct.
+    /// `Struct`.
     pub kind: PathKind,
 }
 
 impl Path {
     /// A single-segment path with no generic arguments.
+    #[must_use]
     pub fn from_single(name: Name) -> Self {
         Self {
             segments: vec![PathSegment {
@@ -52,6 +53,7 @@ impl Path {
     }
 
     /// Build a path from an explicit list of segments (plan §1.1).
+    #[must_use]
     pub fn from_segments(segments: Vec<PathSegment>) -> Self {
         Self {
             segments,
@@ -60,6 +62,7 @@ impl Path {
     }
 
     /// Convenience: a single-segment path carrying generic arguments.
+    #[must_use]
     pub fn from_single_with_args(name: Name, generic_args: Vec<Name>) -> Self {
         Self {
             segments: vec![PathSegment {
@@ -70,7 +73,8 @@ impl Path {
         }
     }
 
-    /// as_name.
+    /// `as_name`.
+    #[must_use]
     pub fn as_name(&self) -> Option<Name> {
         if self.segments.len() == 1 && self.kind == PathKind::Plain {
             Some(self.segments[0].name)
