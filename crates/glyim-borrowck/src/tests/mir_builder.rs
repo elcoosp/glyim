@@ -5,7 +5,7 @@ use glyim_mir::*;
 use glyim_span::Span;
 use glyim_type::Ty;
 
-/// Create a dummy DefId for test bodies.
+/// Create a dummy `DefId` for test bodies.
 pub fn dummy_def_id() -> DefId {
     DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
 }
@@ -33,7 +33,7 @@ impl MirBodyBuilder {
         }
     }
 
-    /// Add a new local variable. Returns its LocalIdx.
+    /// Add a new local variable. Returns its `LocalIdx`.
     pub fn add_local(&mut self, ty: Ty, mutability: Mutability) -> LocalIdx {
         let idx = LocalIdx::from_raw(self.locals.len() as u32);
         self.locals.push(LocalDecl {
@@ -44,15 +44,7 @@ impl MirBodyBuilder {
         idx
     }
 
-    /// Add a function argument local.
-    #[allow(dead_code)]
-    pub fn add_arg(&mut self, ty: Ty, mutability: Mutability) -> LocalIdx {
-        let idx = self.add_local(ty, mutability);
-        self.arg_count += 1;
-        idx
-    }
-
-    /// Add a new basic block with the given terminator. Returns its BasicBlockIdx.
+    /// Add a new basic block with the given terminator. Returns its `BasicBlockIdx`.
     pub fn push_block(&mut self, terminator: Terminator) -> BasicBlockIdx {
         let idx = BasicBlockIdx::from_raw(self.basic_blocks.len() as u32);
         self.basic_blocks.push(BasicBlockData::new(terminator));
@@ -101,7 +93,7 @@ pub fn ret() -> Terminator {
     }
 }
 
-/// Helper: create a SwitchInt terminator for an if-else branch.
+/// Helper: create a `SwitchInt` terminator for an if-else branch.
 pub fn if_switch(discr: LocalIdx, switch_ty: Ty, then_bb: u32, else_bb: u32) -> Terminator {
     Terminator {
         kind: TerminatorKind::SwitchInt {
@@ -129,15 +121,6 @@ pub fn assign_copy(dest: LocalIdx, src: LocalIdx) -> StatementKind {
     )
 }
 
-/// Helper: create an Assign statement that moves a value.
-#[allow(dead_code)]
-pub fn assign_move(dest: LocalIdx, src: LocalIdx) -> StatementKind {
-    StatementKind::Assign(
-        Place::new(dest),
-        Rvalue::Use(Operand::Move(Place::new(src))),
-    )
-}
-
 /// A local mock implementing `BorrowckCtx` for tests.
 ///
 /// We implement this inside `glyim-borrowck` itself to avoid the
@@ -154,7 +137,7 @@ impl<'a> TestBorrowckCtx<'a> {
     }
 }
 
-impl<'a> crate::BorrowckCtx for TestBorrowckCtx<'a> {
+impl crate::BorrowckCtx for TestBorrowckCtx<'_> {
     fn ty_ctx(&self) -> &glyim_type::TyCtx {
         self.ty_ctx
     }
