@@ -18,8 +18,7 @@ fn test_not_bool() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i1 false"),
-        "Expected 'store i1 false':\n{}",
-        ir
+        "Expected 'store i1 false':\n{ir}"
     );
 }
 
@@ -38,8 +37,7 @@ fn test_not_bool_false() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i1 true"),
-        "Expected 'store i1 true':\n{}",
-        ir
+        "Expected 'store i1 true':\n{ir}"
     );
 }
 
@@ -59,7 +57,6 @@ fn test_neg_i32() {
     let ir = module.print_to_string().to_string();
     assert!(
         ir.contains("store i32 -42"),
-        "Expected 'store i32 -42':\n{}",
-        ir
+        "Expected 'store i32 -42':\n{ir}"
     );
 }
