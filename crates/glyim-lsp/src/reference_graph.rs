@@ -5,20 +5,22 @@ use glyim_span::{FileId, Span};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
-/// Reference.
+/// `Reference`.
 pub struct Reference {
-    /// Struct.
+    /// `Struct`.
     pub file_id: FileId,
-    /// Struct.
+    /// `Struct`.
     pub span: Span,
-    /// Struct.
+    /// `Struct`.
     pub is_definition: bool,
-    /// Struct.
+    /// `Struct`.
     pub kind: ReferenceKind,
     /// Read/write access. A reference is `Write` when it is the direct LHS of an
     /// `Expr::Assign` or the operand of a `&mut` borrow; everything else is a
     /// `Read`. Mirrors Tier 1.1's `is_mut_use` classification.
     pub access: AccessKind,
+    /// The definition this reference resolves to, when name resolution
+    /// succeeded (from the def map / symbol index).
     pub def_id: Option<glyim_core::def_id::DefId>,
     /// T129-PATCHED [LSP-5]: the `ItemId` of the enclosing HIR item (for
     /// locals, the function/impl-method body that owns them; for free
@@ -35,34 +37,34 @@ pub struct Reference {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-/// AccessKind.
+/// `AccessKind`.
 pub enum AccessKind {
-    /// Variant.
+    /// `Variant`.
     Read,
-    /// Variant.
+    /// `Variant`.
     Write,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-/// ReferenceKind.
+/// `ReferenceKind`.
 pub enum ReferenceKind {
-    /// Variant.
+    /// `Variant`.
     Call,
-    /// Variant.
+    /// `Variant`.
     TypeReference,
-    /// Variant.
+    /// `Variant`.
     FieldAccess,
-    /// Variant.
+    /// `Variant`.
     Constructor,
-    /// Variant.
+    /// `Variant`.
     Pattern,
-    /// Variant.
+    /// `Variant`.
     Definition,
-    /// Variant.
+    /// `Variant`.
     Variable,
 }
 
-/// ReferenceGraph.
+/// `ReferenceGraph`.
 pub struct ReferenceGraph {
     references: HashMap<String, Vec<Reference>>,
     function_names: HashSet<String>,
@@ -76,6 +78,7 @@ impl Default for ReferenceGraph {
 
 impl ReferenceGraph {
     /// new.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             references: HashMap::new(),
@@ -83,7 +86,7 @@ impl ReferenceGraph {
         }
     }
 
-    /// build_from_hir.
+    /// `build_from_hir`.
     pub fn build_from_hir(&mut self, file_id: FileId, hir: &CrateHir, interner: &Interner) {
         // T051-PATCHED [LSP-2]: only drop refs that belong to *this* file.
         // The previous `retain(|_, refs| refs.iter().all(|r| r.file_id != file_id))`
@@ -856,11 +859,12 @@ impl ReferenceGraph {
         }
     }
 
-    /// find_references.
+    /// `find_references`.
+    #[must_use]
     pub fn find_references(&self, symbol_name: &str) -> &[Reference] {
         self.references
             .get(symbol_name)
-            .map(|v| v.as_slice())
+            .map(std::vec::Vec::as_slice)
             .unwrap_or(&[])
     }
 
@@ -871,6 +875,7 @@ impl ReferenceGraph {
     /// unused-import code action (Tier 6.5) to replace the old text-substring
     /// heuristic, which false-positived on shadowed names and false-negatived
     /// on names that appear only inside strings/comments.
+    #[must_use]
     pub fn used_symbols(&self) -> HashSet<String> {
         self.references.keys().cloned().collect()
     }
