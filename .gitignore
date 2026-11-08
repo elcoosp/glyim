@@ -8,3 +8,6 @@ dump.txt
 
 # local release script (delivery artifact, not repo content)
 /ship.sh
+
+# session-local PR body (delivery artifact consumed by ship.sh, not repo content)
+.github/pr-body.md

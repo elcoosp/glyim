@@ -1,0 +1,25 @@
+# Seed gap registry (M1.1) — migrated from KNOWN_GAPS.md §§1–2 in spirit;
+# M1.7 performs the full migration with witness fixtures.
+#
+# Both entries are `unwitnessed`: witness fixtures carrying
+# `//@ known-gap: GAP-XXXX` headers are introduced by M1.6/M1.7, so until
+# then these count as witness debt (a ratcheted metric, plan §3.3).
+
+[[gap]]
+id        = "GAP-0001"
+class     = "a"
+title     = ".await inside a loop body rejected by async lowering (diagnostic T0060)"
+affects   = ["LANG-ASYNC-AWAIT"]
+caps      = "L2"
+expect    = { diagnostic = "T0060" }
+opened_in = "v0.3.0"
+status    = "unwitnessed"
+
+[[gap]]
+id        = "GAP-0002"
+class     = "b"
+title     = "Windows SEH cleanup edges are unreachable: no lowering site sets cleanup (panic exits 101)"
+affects   = ["LANG-UNWIND-CLEANUP"]
+caps      = "L2"
+opened_in = "v0.3.0"
+status    = "unwitnessed"
