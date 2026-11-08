@@ -10,32 +10,33 @@ use lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 /// [`convert_diagnostics`] (plan §22.4).
 #[derive(Debug, Clone)]
 pub struct ExternalDiagnostic {
-    /// Struct.
+    /// `Struct`.
     pub file_id: FileId,
     /// 0-based line of the primary span.
     pub line: u32,
     /// 0-based column of the primary span.
     pub column: u32,
-    /// Struct.
+    /// `Struct`.
     pub message: String,
-    /// Struct.
+    /// `Struct`.
     pub severity: ExternalSeverity,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-/// ExternalSeverity.
+/// `ExternalSeverity`.
 pub enum ExternalSeverity {
-    /// Variant.
+    /// `Variant`.
     Error,
-    /// Variant.
+    /// `Variant`.
     Warning,
-    /// Variant.
+    /// `Variant`.
     Note,
 }
 
 impl ExternalDiagnostic {
     /// Build an `ExternalDiagnostic`. `file_id` lets the LSP filter external
     /// diagnostics to the currently-open file.
+    #[must_use]
     pub fn new(
         file_id: FileId,
         line: u32,
@@ -61,6 +62,7 @@ impl ExternalDiagnostic {
 /// primary span's `line`/`column` (0-based) and map the `level` to a severity.
 /// Lines that are not compiler messages (e.g. `compiler-artifact`,
 /// `build-script-executed`) are ignored. Malformed lines are skipped.
+#[must_use]
 pub fn parse_cargo_check_json(json: &str) -> Vec<ExternalDiagnostic> {
     let mut out = Vec::new();
     for line in json.lines() {
@@ -94,21 +96,28 @@ pub fn parse_cargo_check_json(json: &str) -> Vec<ExternalDiagnostic> {
             .and_then(|spans| {
                 spans
                     .iter()
-                    .find(|s| s.get("is_primary").and_then(|p| p.as_bool()) == Some(true))
+                    .find(|s| {
+                        s.get("is_primary").and_then(serde_json::Value::as_bool) == Some(true)
+                    })
                     .or_else(|| spans.first())
             });
         let (line, column, file_id) = match primary {
             Some(span) => {
-                let line = span.get("line").and_then(|l| l.as_u64()).unwrap_or(0) as u32;
-                let column = span.get("column").and_then(|c| c.as_u64()).unwrap_or(0) as u32;
+                let line = span
+                    .get("line")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0) as u32;
+                let column = span
+                    .get("column")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0) as u32;
                 // Cargo reports 1-based line/column; convert to 0-based.
                 let line = line.saturating_sub(1);
                 let column = column.saturating_sub(1);
                 let file_id = span
                     .get("file_name")
                     .and_then(|f| f.as_str())
-                    .map(|_name| FileId::from_raw(0))
-                    .unwrap_or(FileId::from_raw(0));
+                    .map_or(FileId::from_raw(0), |_name| FileId::from_raw(0));
                 (line, column, file_id)
             }
             None => (0, 0, FileId::from_raw(0)),
@@ -124,7 +133,8 @@ pub fn parse_cargo_check_json(json: &str) -> Vec<ExternalDiagnostic> {
     out
 }
 
-/// convert_diagnostics.
+/// `convert_diagnostics`.
+#[must_use]
 pub fn convert_diagnostics(
     _file_id: FileId,
     source_map: &crate::database::SourceMap,
@@ -170,6 +180,7 @@ pub fn convert_diagnostics(
 /// column)` positions rather than glyim `Span`s, so they are mapped directly to
 /// LSP `Position`s. This is the `cargo check` / external-linter integration
 /// path (plan §22.4).
+#[must_use]
 pub fn convert_external_diagnostics(diags: &[ExternalDiagnostic]) -> Vec<Diagnostic> {
     diags
         .iter()
