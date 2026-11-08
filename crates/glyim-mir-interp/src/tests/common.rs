@@ -94,8 +94,8 @@ pub fn build_sub_body(_tcx: &TyCtxMut, lhs: i128, rhs: i128, ty: Ty) -> Body {
 }
 
 /// Build a body that branches on a boolean constant.
-/// If cond is true, then_bb is executed (returns), else_bb is unreachable.
-/// If cond is false, then_bb is unreachable, else_bb is executed (returns).
+/// If cond is true, `then_bb` is executed (returns), `else_bb` is unreachable.
+/// If cond is false, `then_bb` is unreachable, `else_bb` is executed (returns).
 pub fn build_branch_body(cond: bool, then_unreachable: bool, else_unreachable: bool) -> Body {
     let mut body = Body::dummy(dummy_def_id());
     let bool_ty = Ty::BOOL;
@@ -237,7 +237,7 @@ pub fn build_unreachable_body() -> Body {
     body
 }
 
-/// Build a body with StorageLive, assign, StorageDead.
+/// Build a body with `StorageLive`, assign, `StorageDead`.
 pub fn build_allocation_body(tcx: &mut TyCtxMut, val: i128) -> Body {
     let mut body = Body::dummy(dummy_def_id());
     let local = LocalIdx::from_raw(1);
