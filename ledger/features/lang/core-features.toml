@@ -1,0 +1,68 @@
+# Seed feature registry (M1.1).
+#
+# M1.2 will generate the full ~400-entry skeleton from the inventory
+# extractors; this file seeds the registry with real language features so
+# `ledger check` exercises references, enums and determinism end-to-end in
+# CI. Entries are declarations only — the registry has no status fields
+# (plan C1); status is computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "LANG-FOR-SLICE-ITER"
+title         = "`for x in <slice-iterable>` lowers to an index loop over the elements"
+area          = "lang.control-flow"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-MATCH-GUARDS"
+title         = "`match` arms with `if` guards over literals, ranges, or-patterns, slices, structs, tuples and enums"
+area          = "lang.pattern-matching"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-GENERIC-WHERE"
+title         = "generic type parameters with trait bounds and where-clauses"
+area          = "lang.generics"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L5"
+backends      = ["gam", "llvm"]
+requires      = ["LANG-MATCH-GUARDS"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "LANG-ASYNC-AWAIT"
+title         = "`async`/`await` with straight-line and multi-await state-machine desugaring"
+area          = "lang.async"
+tier          = "core"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-GSX-VIEWS"
+title         = "GSX view syntax: typed elements, holes, directive attributes and keyed iteration (docs/design/GSX-in-Glyim.md)"
+area          = "lang.views"
+tier          = "experimental"
+spec          = "docs/design/GSX-in-Glyim.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "LANG-UNWIND-CLEANUP"
+title         = "unwind cleanup edges run Drop scopes during panic unwinding"
+area          = "lang.panics"
+tier          = "experimental"
+spec          = "docs/specs/v0.1.0.md"
+target_level  = "L3"
+backends      = ["llvm"]
+owner_lane    = "B"
