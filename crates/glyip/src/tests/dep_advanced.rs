@@ -31,7 +31,7 @@ fn resolve_dev_dependencies() {
     let dir = TempDir::new().expect("temp dir");
     let mut index = CrateIndex::new();
     index.insert(IndexEntry {
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         name: "test-util".to_string(),
         versions: vec!["0.1.0".to_string()],
         checksums: HashMap::new(),
@@ -60,7 +60,7 @@ fn resolve_multiple_dependencies() {
     let dir = TempDir::new().expect("temp dir");
     let mut index = CrateIndex::new();
     index.insert(IndexEntry {
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         name: "dep-a".to_string(),
         versions: vec!["1.0.0".to_string()],
         checksums: {
@@ -70,7 +70,7 @@ fn resolve_multiple_dependencies() {
         },
     });
     index.insert(IndexEntry {
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         name: "dep-b".to_string(),
         versions: vec!["2.0.0".to_string()],
         checksums: {
@@ -99,7 +99,7 @@ fn resolve_deduplicates_same_dep() {
     let dir = TempDir::new().expect("temp dir");
     let mut index = CrateIndex::new();
     index.insert(IndexEntry {
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         name: "shared".to_string(),
         versions: vec!["1.0.0".to_string()],
         checksums: HashMap::new(),
@@ -129,7 +129,7 @@ fn resolve_deduplicates_same_dep() {
 fn crate_index_insert_and_get() {
     let mut index = CrateIndex::new();
     index.insert(IndexEntry {
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         name: "mylib".to_string(),
         versions: vec!["3.0.0".to_string()],
         checksums: HashMap::new(),
@@ -150,7 +150,7 @@ fn crate_index_missing_entry() {
 fn resolve_version_no_match_is_not_found() {
     let mut index = CrateIndex::new();
     index.insert(IndexEntry {
-        dependencies: Default::default(),
+        dependencies: HashMap::default(),
         name: "foo".to_string(),
         versions: vec!["5.0.0".to_string(), "4.0.0".to_string()],
         checksums: HashMap::new(),
