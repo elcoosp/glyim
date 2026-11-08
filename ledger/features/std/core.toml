@@ -1,0 +1,176 @@
+# M1.2 feature registry seed — `std/core.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "STD-CORE-CELL"
+title         = "`cell` module: `UnsafeCell`, `Cell`, `RefCell`, `Ref`, `RefMut`"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "STD-CORE-CMP"
+title         = "`cmp` module: `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Ordering`, `Reverse`"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "STD-CORE-CONVERT"
+title         = "`convert` module: `Into`, `From`, `TryFrom`, `TryInto`, `AsRef`, `AsMut`, `Infallible`"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "STD-CORE-DEFAULT"
+title         = "`default` module: `Default`"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "STD-CORE-FUTURE"
+title         = "`future` module: `Future`, `Poll`, `Waker`, `Context`"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "STD-CORE-HINT"
+title         = "`hint` module: compiler hints"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "STD-CORE-ITER"
+title         = "`iter` module: `Iterator` traits and adaptors (45 fns)"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "STD-CORE-MARKER"
+title         = "`marker` module: `Sized`, `Copy`, `Send`, `Sync`, `PhantomData`"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "STD-CORE-MEM"
+title         = "`mem` module: `ManuallyDrop`, `MaybeUninit`, swap/replace (16 fns)"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "STD-CORE-OPS"
+title         = "`ops` module: `Deref`, `Drop`, `Fn` family, operator traits (24 fns)"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "T"
+
+[[feature]]
+id            = "STD-CORE-OPTION"
+title         = "`option` module: `Option` combinators (26 fns)"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "STD-CORE-PANIC"
+title         = "`panic` module: panic entry points (4 fns)"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "STD-CORE-PARSE"
+title         = "`parse` module: int/float parsing with error types"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "STD-CORE-PTR"
+title         = "`ptr` module: `NonNull` and raw-pointer helpers"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "STD-CORE-RESULT"
+title         = "`result` module: `Result` combinators (19 fns)"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "STD-CORE-SLICE"
+title         = "`slice` module: slice helpers (11 fns)"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "STD-CORE-STR"
+title         = "`str` module: `Chars`, `Lines`, `FromStr` (12 fns)"
+area          = "std.core"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"

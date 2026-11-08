@@ -1,0 +1,106 @@
+# M1.2 feature registry seed — `std/std.toml`.
+#
+# Curated from the documented inventory (README feature list + language
+# tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
+# M1.2. Entries are declarations only: no status fields (plan C1); levels
+# are computed from evidence by `ledger compute` (M1.8).
+
+[[feature]]
+id            = "STD-STD-ENV"
+title         = "`env` module: environment variables, args, cwd, home (24 fns)"
+area          = "std.std"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "STD-STD-FS"
+title         = "`fs` module: files, metadata, directories (68 fns)"
+area          = "std.std"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "STD-STD-INT-STR"
+title         = "`int_str` module: integer/string conversions (4 fns)"
+area          = "std.std"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "STD-STD-IO"
+title         = "`io` module: `Read`/`Write`/`BufRead`, std streams, buffered IO (57 fns)"
+area          = "std.std"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "STD-STD-NET"
+title         = "`net` module: TCP streams/listeners, address types (63 fns)"
+area          = "std.std"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "STD-STD-PROCESS"
+title         = "`process` module: `Command`, children, exit status (33 fns)"
+area          = "std.std"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "STD-STD-SYNC"
+title         = "`sync` module: `Mutex`, `RwLock`, `OnceLock`, `Condvar`, `Barrier` (64 fns)"
+area          = "std.std"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "STD-STD-TASK"
+title         = "`task` module: `Reactor`, `Sleep` async task plumbing (6 fns)"
+area          = "std.std"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "M"
+
+[[feature]]
+id            = "STD-STD-THREAD"
+title         = "`thread` module: `Thread`, `JoinHandle`, `Builder` (32 fns)"
+area          = "std.std"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "STD-STD-TIME"
+title         = "`time` module: `Duration`, `SystemTime`, `Instant` (34 fns)"
+area          = "std.std"
+tier          = "std"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
