@@ -1,4 +1,4 @@
-//! VTable layout constants and utilities for code generation backends.
+//! `VTable` layout constants and utilities for code generation backends.
 //!
 //! A vtable is a structure in memory containing pointers to the concrete
 //! implementations of the methods of a trait, plus metadata for drop, size,
@@ -25,6 +25,7 @@ pub const VTABLE_METHODS_START: usize = 3;
 
 /// Returns the vtable index for a given method index (0-based).
 /// The method pointer for method `i` is stored at `VTABLE_METHODS_START + i`.
+#[must_use]
 pub const fn method_index(i: usize) -> usize {
     VTABLE_METHODS_START + i
 }
