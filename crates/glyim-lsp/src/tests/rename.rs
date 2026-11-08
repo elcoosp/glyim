@@ -10,14 +10,13 @@ async fn test_rename_symbol_updates_all_references() {
         opt_level: 0,
     });
     let mut state = LspState::new(db);
-    let cache_dir = std::env::temp_dir().join("glyim-lsp-test");
-    state.start_driver(cache_dir);
+    state.start_driver();
 
     let path = PathBuf::from("/test/main.g");
-    let content = r#"
+    let content = r"
 fn old_name() -> i32 { 42 }
 fn main() { let x = old_name(); }
-"#;
+";
     state.did_open(path.clone(), content.to_string(), 1);
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -42,11 +41,7 @@ fn test_rename_text_fallback_skips_string_and_comment() {
     // only the real identifier and leave the string/comment occurrences alone.
     let content =
         "let target = 1;\nlet s = \"target in a string\";\n// target in a comment\ntarget = 2;\n";
-    let sm = SourceMap::new(
-        std::path::PathBuf::from("/test/main.g"),
-        FileId::from_raw(0),
-        content.to_string(),
-    );
+    let sm = SourceMap::new(FileId::from_raw(0), content.to_string());
 
     let edits = rename_text_fallback(&sm, FileId::from_raw(0), "target", "renamed")
         .expect("expected fallback edits for the real identifier occurrences");
@@ -60,8 +55,7 @@ fn test_rename_text_fallback_skips_string_and_comment() {
         let line = e.range.start.line;
         assert!(
             line == 0 || line == 3,
-            "edit landed on line {} — must be a real identifier, not string/comment",
-            line
+            "edit landed on line {line} — must be a real identifier, not string/comment"
         );
         assert_eq!(e.new_text, "renamed");
     }
@@ -77,11 +71,7 @@ fn test_rename_text_fallback_target_only_in_string_is_none() {
     // identifier occurrence — so the fallback must produce no edits (and must
     // NOT corrupt the string/comment text).
     let content = "let s = \"target in a string\";\n// target in a comment\n";
-    let sm = SourceMap::new(
-        std::path::PathBuf::from("/test/main.g"),
-        FileId::from_raw(0),
-        content.to_string(),
-    );
+    let sm = SourceMap::new(FileId::from_raw(0), content.to_string());
 
     let edits = rename_text_fallback(&sm, FileId::from_raw(0), "target", "renamed");
     assert!(
