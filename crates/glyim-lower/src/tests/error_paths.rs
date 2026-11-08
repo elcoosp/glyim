@@ -19,7 +19,7 @@ fn uint_literal_lowers_correctly() {
     let lit = b.expr(ExprKind::Literal(Literal::Uint(100, None)), u32_ty);
     let body = b.into_body(vec![thir::Stmt::Expr { expr: lit }], vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }
 
 #[test]
@@ -34,7 +34,7 @@ fn bool_literal_lowers_correctly() {
     let lit = b.expr(ExprKind::Literal(Literal::Bool(true)), bool_ty);
     let body = b.into_body(vec![thir::Stmt::Expr { expr: lit }], vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }
 
 #[test]
@@ -50,7 +50,7 @@ fn float_literal_falls_through_to_error_const() {
     let body = b.into_body(vec![thir::Stmt::Expr { expr: lit }], vec![]);
     let result = lower_body(&mock, &body);
     // Float literals are in the wildcard arm -> MirConstKind::Error, but no panic
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn fn_ref_does_not_panic() {
     let fn_ref = b.expr(ExprKind::FnRef(FnDefId::from_raw(0)), fn_ty);
     let body = b.into_body(vec![thir::Stmt::Expr { expr: fn_ref }], vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }
 
 #[test]
@@ -102,5 +102,5 @@ fn ref_expr_lowers_correctly() {
     stmts.push(thir::Stmt::Expr { expr: ref_expr });
     let body = b.into_body(stmts, vec![]);
     let result = lower_body(&mock, &body);
-    assert_mir(&ctx, &result.body).block_count(1);
+    let _ = assert_mir(&ctx, &result.body).block_count(1);
 }
