@@ -1,4 +1,4 @@
-//! Unification and type resolution logic for FnCtxt.
+//! Unification and type resolution logic for `FnCtxt`.
 
 use glyim_core::def_id::{AdtId, ConstDefId, FnDefId, StaticDefId};
 use glyim_core::interner::Name;
@@ -11,7 +11,7 @@ use glyim_type::{FieldIdx, FnSig, GenericArg, InferVar, Ty, TyCtxMut, TyKind};
 use crate::check_body::FnCtxt;
 use crate::thir;
 
-impl<'a> FnCtxt<'a> {
+impl FnCtxt<'_> {
     pub fn expr_span(&self, expr_id: ExprId) -> Span {
         if (expr_id.to_raw() as usize) < self.body.expr_spans.len() {
             self.body.expr_spans[expr_id]
@@ -225,8 +225,7 @@ impl<'a> FnCtxt<'a> {
                     .ctx
                     .adt_def(adt_id)
                     .and_then(|def| def.variants.get(variant_idx.index()))
-                    .map(|v| !v.fields.is_empty())
-                    .unwrap_or(false);
+                    .is_some_and(|v| !v.fields.is_empty());
 
                 if has_fields {
                     let ctor_fn_def_id = self.ctx.alloc_variant_ctor_fn_def_id();
@@ -654,8 +653,7 @@ impl<'a> FnCtxt<'a> {
                             glyim_type::TyKind::Adt(id, _) => *id,
                             _ => adt_id,
                         })
-                        .map(|d| d.generic_params.len())
-                        .unwrap_or(0);
+                        .map_or(0, |d| d.generic_params.len());
                     for i in 0..(n_params as u32) {
                         if let std::collections::hash_map::Entry::Vacant(e) = subst.entry(i) {
                             let v = self.infer.new_ty_var(self.ctx);
@@ -770,12 +768,7 @@ impl<'a> FnCtxt<'a> {
                         // fresh vars (or the `Call` wrapper's argument-derived
                         // `subst` layers over them), and mono enqueues the
                         // concrete instance.
-                        let arity = subst
-                            .keys()
-                            .copied()
-                            .max()
-                            .map(|k| k as usize + 1)
-                            .unwrap_or(0);
+                        let arity = subst.keys().copied().max().map_or(0, |k| k as usize + 1);
                         let subst_args: Vec<GenericArg> = (0..arity)
                             .map(|i| {
                                 subst
@@ -945,8 +938,7 @@ impl<'a> FnCtxt<'a> {
             let is_unit_struct = self
                 .ctx
                 .adt_def(adt_id)
-                .map(|def| def.fields.is_empty())
-                .unwrap_or(false);
+                .is_some_and(|def| def.fields.is_empty());
             if is_unit_struct {
                 // A generic unit struct (`struct P<T>;`, `PhantomData<T>`) is
                 // still written *without* its arguments at value position —
@@ -1005,7 +997,7 @@ impl<'a> FnCtxt<'a> {
             .and_then(|adt_ty| {
                 if let glyim_type::TyKind::Adt(adt_id, _) = self.ctx.ty_kind(adt_ty) {
                     let def = self.ctx.adt_def(*adt_id);
-                    let is_unit = def.map(|d| d.fields.is_empty()).unwrap_or(false);
+                    let is_unit = def.is_some_and(|d| d.fields.is_empty());
                     // `PhantomData` is written as a bare value (`_marker: PhantomData`)
                     // even though it is declared with a `marker: T` field; treat
                     // the builtin zero-sized marker type as a unit value.
@@ -1088,25 +1080,23 @@ impl<'a> FnCtxt<'a> {
                 "[VEXPR] adt_id={:?} variant_idx={:?} explicit_args={}",
                 adt_id,
                 variant_idx,
-                explicit_args.map(|a| a.len()).unwrap_or(0)
+                explicit_args.map_or(0, <[glyim_hir::TypeRef]>::len)
             );
         }
         let arity = self.ctx.adt_generic_arity(adt_id);
         let substs: Vec<GenericArg> = (0..arity)
             .map(|i| {
-                let resolved = explicit_args
-                    .and_then(|args| args.get(i as usize))
-                    .map(|ty_ref| {
-                        crate::tyconv::resolve_type_ref(
-                            self.ctx,
-                            self.infer,
-                            self.def_map,
-                            self.diagnostics,
-                            ty_ref,
-                            &self.param_map,
-                            span,
-                        )
-                    });
+                let resolved = explicit_args.and_then(|args| args.get(i)).map(|ty_ref| {
+                    crate::tyconv::resolve_type_ref(
+                        self.ctx,
+                        self.infer,
+                        self.def_map,
+                        self.diagnostics,
+                        ty_ref,
+                        &self.param_map,
+                        span,
+                    )
+                });
                 match resolved {
                     Some(t) if t != Ty::ERROR => GenericArg::Ty(t),
                     _ => {
@@ -1122,8 +1112,7 @@ impl<'a> FnCtxt<'a> {
             .ctx
             .adt_def(adt_id)
             .and_then(|def| def.variants.get(variant_idx.index()))
-            .map(|v| !v.fields.is_empty())
-            .unwrap_or(false);
+            .is_some_and(|v| !v.fields.is_empty());
         if has_fields {
             let ctor_fn_def_id = self.ctx.alloc_variant_ctor_fn_def_id();
             // Substitute the variant's DECLARED field types (which carry
@@ -1206,9 +1195,8 @@ impl<'a> FnCtxt<'a> {
                         &param_map,
                         span,
                     );
-                } else {
-                    return Ty::UNIT;
                 }
+                return Ty::UNIT;
             }
         }
         self.fresh_infer_ty()
