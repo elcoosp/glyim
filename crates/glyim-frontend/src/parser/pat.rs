@@ -2,7 +2,7 @@ use super::Parser;
 use glyim_syntax::{GlyimLang, SyntaxKind};
 use rowan::Language;
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     pub(crate) fn parse_pat(&mut self) {
         let cp = self.checkpoint();
         self.parse_pat_single();
@@ -297,7 +297,7 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let found = self.current_kind();
-                self.error(format!("expected pattern, found {:?}", found));
+                self.error(format!("expected pattern, found {found:?}"));
                 if self.current().is_some() {
                     self.bump();
                 }
