@@ -1,4 +1,4 @@
-//! Direct tests for compute_flags function: depth overflow, propagation through kinds.
+//! Direct tests for `compute_flags` function: depth overflow, propagation through kinds.
 use super::helpers::test_ty_ctx;
 use crate::*;
 use glyim_core::def_id::AdtId;
