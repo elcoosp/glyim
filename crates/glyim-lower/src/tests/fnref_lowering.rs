@@ -8,7 +8,7 @@ use glyim_test::test_ty_ctx;
 use glyim_type::*;
 use glyim_typeck::thir::{self, ExprKind};
 
-/// S20-T05: FnRef lowers to Operand::Constant(MirConst::Fn)
+/// S20-T05: `FnRef` lowers to `Operand::Constant(MirConst::Fn)`
 #[test]
 fn fn_ref_lowers_to_constant_fn() {
     let mut ctx_mut = test_ty_ctx();
