@@ -113,6 +113,6 @@ fn mir_const_debug_format() {
         ty: Ty::BOOL,
         span: Span::DUMMY,
     };
-    let s = format!("{:?}", c);
+    let s = format!("{c:?}");
     assert!(s.contains("Bool"));
 }
