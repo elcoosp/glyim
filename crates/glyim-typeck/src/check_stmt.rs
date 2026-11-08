@@ -1,4 +1,4 @@
-//! Statement checking logic for FnCtxt.
+//! Statement checking logic for `FnCtxt`.
 
 use std::collections::HashMap;
 
@@ -11,7 +11,7 @@ use glyim_type::Ty;
 use crate::check_body::FnCtxt;
 use crate::thir;
 
-impl<'a> FnCtxt<'a> {
+impl FnCtxt<'_> {
     /// Collect the `ExprId`s that are part of a match arm's *guard* subtree
     /// (the guard expression plus all of its descendant expressions).
     ///
@@ -138,7 +138,7 @@ impl<'a> FnCtxt<'a> {
 
     pub fn check(mut self, params: &[(Name, Ty, Span)]) -> (thir::Body, HashMap<ExprId, Ty>) {
         let mut thir_params = Vec::with_capacity(params.len());
-        for (name, ty, span) in params.iter() {
+        for (name, ty, span) in params {
             // CRITICAL: the THIR `Param.local` / `Param.pat.var_id` MUST use the
             // *same* `LocalVarId` that `add_binding` registers in the name map.
             // References to the parameter (`Expr::Path`) resolve through
@@ -156,7 +156,7 @@ impl<'a> FnCtxt<'a> {
             // parameter read returns uninitialized stack garbage. Using the
             // `add_binding` id for both the binding and the param keeps them
             // consistent regardless of check order.
-            let local_id = self.env.add_binding(*name, *ty, Mutability::Not);
+            let local_id = self.env.add_binding(*name, *ty);
 
             thir_params.push(thir::Param {
                 name: *name,
