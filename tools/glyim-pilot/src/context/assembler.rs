@@ -3,21 +3,21 @@ use crate::config::types::PilotConfig;
 use crate::error::PilotError;
 use std::sync::Arc;
 
-/// AssembledContext.
+/// `AssembledContext`.
 pub struct AssembledContext {
-    /// Struct.
+    /// `Struct`.
     pub prompt: String,
-    /// Struct.
+    /// `Struct`.
     pub total_tokens: usize,
-    /// Struct.
+    /// `Struct`.
     pub tier1_tokens: usize,
-    /// Struct.
+    /// `Struct`.
     pub tier2_tokens: usize,
-    /// Struct.
+    /// `Struct`.
     pub tier3_tokens: usize,
 }
 
-/// ContextAssembler.
+/// `ContextAssembler`.
 pub struct ContextAssembler {
     project_root: std::path::PathBuf,
     config: Arc<PilotConfig>,
@@ -25,7 +25,7 @@ pub struct ContextAssembler {
 
 impl ContextAssembler {
     /// new.
-    pub async fn new(project_root: std::path::PathBuf, config: Arc<PilotConfig>) -> Self {
+    pub fn new(project_root: std::path::PathBuf, config: Arc<PilotConfig>) -> Self {
         Self {
             project_root,
             config,
@@ -45,8 +45,9 @@ impl ContextAssembler {
             .context
             .providers
             .get(provider_id)
-            .map(|c| c.max_context_tokens)
-            .unwrap_or(self.config.context.max_context_tokens);
+            .map_or(self.config.context.max_context_tokens, |c| {
+                c.max_context_tokens
+            });
         let mut budget = TokenBudget::new(max_tokens);
         let mut prompt = String::new();
 
@@ -59,7 +60,7 @@ impl ContextAssembler {
         for path in owned_files {
             let full = self.project_root.join(path);
             if let Ok(content) = tokio::fs::read_to_string(&full).await {
-                let section = format!("\n### {path}\n```rust\n{}\n```\n", content);
+                let section = format!("\n### {path}\n```rust\n{content}\n```\n");
                 let tokens = TokenBudget::estimate_tokens(&section);
                 if budget.try_allocate(tokens) {
                     prompt.push_str(&section);
