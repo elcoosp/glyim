@@ -11,11 +11,11 @@ fn parse(source: &str) -> glyim_syntax::SyntaxNode {
 /// Test that file!() expands to a string containing the file ID.
 #[test]
 fn file_macro_expands() {
-    let source = r#"
+    let source = r"
 fn main() {
     let _ = file!();
 }
-"#;
+";
     let root = parse(source);
     let mut hygiene = HygieneCtx::default();
     let mut expander = Expander::new(&mut hygiene);
@@ -35,13 +35,11 @@ fn main() {
     let expanded_text = expanded.text().to_string();
     assert!(
         !expanded_text.contains("file!()"),
-        "Expected file!() to be expanded away, got: {}",
-        expanded_text
+        "Expected file!() to be expanded away, got: {expanded_text}"
     );
     assert!(
         expanded_text.contains('"'),
-        "Expected file!() expansion to contain a string literal, got: {}",
-        expanded_text
+        "Expected file!() expansion to contain a string literal, got: {expanded_text}"
     );
     let _ = diags;
 }
@@ -49,11 +47,11 @@ fn main() {
 /// Test that line!() expands to a line number.
 #[test]
 fn line_macro_expands() {
-    let source = r#"
+    let source = r"
 fn main() {
     let _ = line!();
 }
-"#;
+";
     let root = parse(source);
     let mut hygiene = HygieneCtx::default();
     let mut expander = Expander::new(&mut hygiene);
@@ -73,13 +71,11 @@ fn main() {
     let expanded_text = expanded.text().to_string();
     assert!(
         !expanded_text.contains("line!()"),
-        "Expected line!() to be expanded away, got: {}",
-        expanded_text
+        "Expected line!() to be expanded away, got: {expanded_text}"
     );
     assert!(
         expanded_text.chars().any(|c: char| c.is_ascii_digit()),
-        "Expected line!() expansion to contain a digit, got: {}",
-        expanded_text
+        "Expected line!() expansion to contain a digit, got: {expanded_text}"
     );
     let _ = diags;
 }
@@ -87,11 +83,11 @@ fn main() {
 /// Test that column!() expands to a column number.
 #[test]
 fn column_macro_expands() {
-    let source = r#"
+    let source = r"
 fn main() {
     let _ = column!();
 }
-"#;
+";
     let root = parse(source);
     let mut hygiene = HygieneCtx::default();
     let mut expander = Expander::new(&mut hygiene);
@@ -111,13 +107,12 @@ fn main() {
     let expanded_text = expanded.text().to_string();
     assert!(
         !expanded_text.contains("column!()"),
-        "Expected column!() to be expanded away, got: {}",
-        expanded_text
+        "Expected column!() to be expanded away, got: {expanded_text}"
     );
     let _ = diags;
 }
 
-/// Test the expand() public API directly for the file! builtin.
+/// Test the `expand()` public API directly for the file! builtin.
 #[test]
 fn builtin_file_expand_api() {
     let mut hygiene = HygieneCtx::default();
@@ -153,13 +148,12 @@ fn builtin_file_expand_api() {
 
     let expanded_text = result.expanded.unwrap().text().to_string();
     assert!(
-        expanded_text.contains("7"),
-        "Expected file!() expansion to reference file 7, got: {}",
-        expanded_text
+        expanded_text.contains('7'),
+        "Expected file!() expansion to reference file 7, got: {expanded_text}"
     );
 }
 
-/// Test the expand() public API directly for the line! builtin.
+/// Test the `expand()` public API directly for the line! builtin.
 #[test]
 fn builtin_line_expand_api() {
     let mut hygiene = HygieneCtx::default();
@@ -196,12 +190,11 @@ fn builtin_line_expand_api() {
     let expanded_text = result.expanded.unwrap().text().to_string();
     assert!(
         expanded_text.chars().any(|c: char| c.is_ascii_digit()),
-        "Expected line!() expansion to contain a number, got: {}",
-        expanded_text
+        "Expected line!() expansion to contain a number, got: {expanded_text}"
     );
 }
 
-/// Test the expand() public API directly for the env! builtin.
+/// Test the `expand()` public API directly for the env! builtin.
 #[test]
 fn builtin_env_expand_api() {
     let mut hygiene = HygieneCtx::default();
@@ -243,8 +236,7 @@ fn builtin_env_expand_api() {
     let expanded_text = result.expanded.unwrap().text().to_string();
     assert!(
         expanded_text.contains("hello-env"),
-        "Expected env!() expansion to contain the variable value, got: {}",
-        expanded_text
+        "Expected env!() expansion to contain the variable value, got: {expanded_text}"
     );
 }
 
@@ -296,13 +288,11 @@ fn vfs_backed_line_column_and_include() {
     // the VFS-backed real line/col path ran.
     assert!(
         !text.contains("line!"),
-        "line!() should be expanded away, got: {}",
-        text
+        "line!() should be expanded away, got: {text}"
     );
     assert!(
-        text.contains("2"),
-        "line!() should expand to the real line 2, got: {}",
-        text
+        text.contains('2'),
+        "line!() should expand to the real line 2, got: {text}"
     );
 
     // include! resolves relative to the calling file's directory.
@@ -328,19 +318,16 @@ fn vfs_backed_line_column_and_include() {
     let (inc_expanded, inc_diags) = expander2.expand_crate(&inc_root);
     assert!(
         inc_diags.is_empty(),
-        "include! of an existing file must not diagnose: {:?}",
-        inc_diags
+        "include! of an existing file must not diagnose: {inc_diags:?}"
     );
     let inc_text = inc_expanded.text().to_string();
     assert!(
         inc_text.contains("42"),
-        "include! should splice the file's contents (expected `42`), got: {}",
-        inc_text
+        "include! should splice the file's contents (expected `42`), got: {inc_text}"
     );
     assert!(
         !inc_text.contains("include!"),
-        "include! should be expanded away, got: {}",
-        inc_text
+        "include! should be expanded away, got: {inc_text}"
     );
 }
 
@@ -385,11 +372,11 @@ fn expand_with_builtin(source: &str) -> (String, Vec<glyim_diag::GlyimDiagnostic
 /// argument to `()`.
 #[test]
 fn t084_assert_preserves_condition() {
-    let src = r#"
+    let src = r"
 fn main() {
     let _ = assert!(is_ok());
 }
-"#;
+";
     let (text, _diags) = expand_with_builtin(src);
     assert!(
         text.contains("is_ok"),
@@ -408,11 +395,11 @@ fn main() {
 /// T084-REGRESSION: `assert_eq!(a, b)` must contain both operands and `==`.
 #[test]
 fn t084_assert_eq_builds_comparison() {
-    let src = r#"
+    let src = r"
 fn main() {
     let _ = assert_eq!(left(), right());
 }
-"#;
+";
     let (text, _diags) = expand_with_builtin(src);
     assert!(
         text.contains("left") && text.contains("right"),
@@ -427,11 +414,11 @@ fn main() {
 /// T084-REGRESSION: `assert_ne!(a, b)` must use `!=`.
 #[test]
 fn t084_assert_ne_builds_inequality() {
-    let src = r#"
+    let src = r"
 fn main() {
     let _ = assert_ne!(left(), right());
 }
-"#;
+";
     let (text, _diags) = expand_with_builtin(src);
     assert!(
         text.contains("!="),
@@ -443,11 +430,11 @@ fn main() {
 /// returning true/false — not the constant `true` the stub produced.
 #[test]
 fn t084_matches_builds_match_expression() {
-    let src = r#"
+    let src = r"
 fn main() {
     let _ = matches!(x, 1);
 }
-"#;
+";
     let (text, _diags) = expand_with_builtin(src);
     assert!(
         text.contains("match"),
