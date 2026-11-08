@@ -89,7 +89,7 @@ fn s08_t07_with_target_constructor() {
 
 #[test]
 fn s08_t08_default_trait() {
-    let backend: LlvmBackend = Default::default();
+    let backend: LlvmBackend = LlvmBackend::default();
     assert_eq!(backend.name(), "llvm");
 }
 
@@ -215,8 +215,8 @@ fn s08_t15_generate_function_different_owners() {
     let bytes1 = r1.unwrap();
     let bytes2 = r2.unwrap();
     // Both should return non-empty bytes
-    assert!(!bytes1.is_empty());
-    assert!(!bytes2.is_empty());
+    assert_ne!(bytes1, [] as [u8; 0]);
+    assert_ne!(bytes2, [] as [u8; 0]);
     // They might differ in internal function names, but minimal object may be identical.
     // At least we ensure no crash and non-empty.
 }
@@ -271,10 +271,14 @@ fn s08_t18_generate_to_readonly_directory() {
         "writing to read-only directory should error"
     );
 
-    // Clean up: restore permissions so tempfile can delete
-    let mut perms = std::fs::metadata(dir.path()).unwrap().permissions();
-    perms.set_readonly(false);
-    std::fs::set_permissions(dir.path(), perms).ok();
+    // Clean up: restore write permission so tempfile can delete (POSIX
+    // mode bits; `set_readonly(false)` is the pedantic-forbidden Windows
+    // spelling and the backend tests only run on unix targets).
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o644));
+    }
 }
 
 #[test]
@@ -362,7 +366,7 @@ fn s08_t30_generate_function_returns_vec_u8() {
     )));
     let bytes = backend.generate_function(&body).expect("should succeed");
     // bytes must be a valid Vec<u8> (not empty, not a slice pointing to invalid memory)
-    assert!(!bytes.is_empty());
+    assert_ne!(bytes, [] as [u8; 0]);
     // Ensure we can read the entire buffer without panic
     let _ = bytes[0];
 }
