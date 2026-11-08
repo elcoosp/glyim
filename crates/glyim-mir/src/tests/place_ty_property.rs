@@ -1,4 +1,4 @@
-//! Property-based tests for Place::ty() functionality
+//! Property-based tests for `Place::ty()` functionality
 
 use crate::*;
 use glyim_core::arena::IndexVec;
