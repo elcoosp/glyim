@@ -1,10 +1,10 @@
 use crate::adt_def::*;
 use crate::auto_trait::*;
 use crate::display::TypeLookup;
-use crate::flags::*;
+use crate::flags::TypeFlags;
 use crate::fn_sig::FnSig;
 use crate::lang_items::LangItems;
-use crate::region::*;
+use crate::region::Region;
 use crate::substitution::*;
 use crate::ty::*;
 use crate::ty_ctx_mut::TyCtxMut;
@@ -17,7 +17,7 @@ use glyim_core::interner::{Interner, Name};
 use glyim_core::primitives::Mutability;
 use std::collections::{HashMap, HashSet};
 
-/// TyCtx.
+/// `TyCtx`.
 pub struct TyCtx {
     /// Shared, canonical type table for this compilation (see `type_arena`).
     /// An `Arc` so handles allocated by any derived `TyCtxMut` are valid
@@ -35,12 +35,11 @@ pub struct TyCtx {
     /// instead of assuming zero auto traits.
     pub(crate) opaque_hidden: HashMap<OpaqueTyId, Ty>,
     pub(crate) interior_mutable_adt_ids: HashSet<AdtId>,
-    /// Struct.
+    /// `Struct`.
     pub adt_defs: HashMap<AdtId, AdtDef>,
     /// Maps an ADT's (HIR-interned) name to its `AdtId`. Populated by
     /// `register_adt_with_name` during typeck so ADT type resolution by name
-    /// works on the frozen context too (needed by `PipelineLowerCtx::
-    /// iterator_next_fn`, Phase 1 GLYIM_DESTUB_PLAN).
+    /// works on the frozen context too.
     pub(crate) adt_by_name: HashMap<Name, AdtId>,
     pub(crate) trait_defs: HashMap<glyim_core::def_id::TraitDefId, crate::TraitDef>,
     /// Maps a trait's (interned) name to its `TraitDefId` (mirror of the
@@ -50,14 +49,13 @@ pub struct TyCtx {
     pub trait_by_name: HashMap<Name, glyim_core::def_id::TraitDefId>,
     pub(crate) variant_types: HashMap<AdtId, Vec<Ty>>,
     pub(crate) fn_sigs: HashMap<FnDefId, FnSig>,
-    /// Reverse index from builtin method FnDefId to (AdtId, Name).
+    /// Reverse index from builtin method `FnDefId` to (`AdtId`, Name).
     pub(crate) builtin_fn_index: HashMap<FnDefId, (AdtId, Name)>,
     /// Inherent impl methods: `(AdtId, Name) -> FnDefId`. Populated from
     /// `TyCtxMut::inherent_method_fns` at freeze time.
     pub(crate) inherent_method_fns: HashMap<(AdtId, Name), FnDefId>,
     /// Name-keyed mirror of `inherent_method_fns`.
     pub(crate) inherent_methods_by_name: HashMap<(Name, Name), FnDefId>,
-    /// Maps an FnDefId that names an `extern` C function to its symbol
     /// name (e.g. `glyim_stdout_write`). Codegen uses this to declare and
     /// call the C symbol directly rather than emitting `__glyim_fn_{id}`.
     pub(crate) extern_fns: HashMap<FnDefId, String>,
@@ -97,7 +95,7 @@ pub struct TyCtx {
 }
 
 impl TyCtx {
-    /// to_mut.
+    /// `to_mut`.
     /// Produce a fresh `TyCtxMut` that **shares the same canonical type arena**
     /// as this frozen context. Any type/substitution allocated through the
     /// returned mutator is valid when read back through this (or any other)
@@ -106,26 +104,31 @@ impl TyCtx {
     /// (the P0 canonical-interner fix). Unlike the old deep-`Vec`-clone
     /// `to_mut`, this copies only the `&'static` arena pointer, so it is cheap
     /// and cannot desynchronize the tables.
+    #[must_use]
     pub fn to_mut(&self) -> TyCtxMut {
         TyCtxMut::from_ty_ctx(self)
     }
 
-    /// ty_kind.
+    /// `ty_kind`.
+    #[must_use]
     pub fn ty_kind(&self, ty: Ty) -> &TyKind {
         self.arena.ty_kind(ty)
     }
 
     /// Access the language-item registry (builtin `Option`/`Range`/`Drop`/…).
+    #[must_use]
     pub fn lang_items(&self) -> &LangItems {
         &self.lang_items
     }
 
-    /// ty_flags.
+    /// `ty_flags`.
+    #[must_use]
     pub fn ty_flags(&self, ty: Ty) -> TypeFlags {
         self.arena.ty_flags(ty)
     }
 
-    /// substitution_args.
+    /// `substitution_args`.
+    #[must_use]
     pub fn substitution_args(&self, sub: Substitution) -> &[GenericArg] {
         self.arena.substitution_args(sub)
     }
@@ -135,18 +138,21 @@ impl TyCtx {
     /// mutation — under the single-threaded-per-compilation invariant this is
     /// sound (same design as the P0 canonical interner). Needed by lowering
     /// passes that synthesize types while only holding a `&TyCtx`
-    /// (e.g. `PipelineLowerCtx::iterator_next_fn`, Phase 1 GLYIM_DESTUB_PLAN).
+    /// (e.g. `PipelineLowerCtx::iterator_next_fn`, Phase 1 `GLYIM_DESTUB_PLAN`).
+    #[must_use]
     pub fn mk_ty(&self, kind: TyKind) -> Ty {
         let flags = crate::flags::compute_flags(&kind, self, 0);
         self.arena.alloc_ty(kind, flags)
     }
 
     /// Build a reference type, interning into the shared arena (see `mk_ty`).
+    #[must_use]
     pub fn mk_ref(&self, region: Region, ty: Ty, mutability: Mutability) -> Ty {
         self.mk_ty(TyKind::Ref(region, ty, mutability))
     }
 
     /// Intern a substitution into the shared arena (see `mk_ty`).
+    #[must_use]
     pub fn intern_substitution(&self, args: Vec<GenericArg>) -> Substitution {
         self.arena.intern_substitution(args)
     }
@@ -154,12 +160,13 @@ impl TyCtx {
     /// Resolve a registered ADT by its (HIR-interned) name. Populated by
     /// `register_adt_with_name` during typeck and carried into the frozen
     /// context, so lowering passes holding only a `&TyCtx` can map a type name
-    /// to its `AdtId` (Phase 1 GLYIM_DESTUB_PLAN).
+    #[must_use]
     pub fn adt_id_by_name(&self, name: Name) -> Option<AdtId> {
         self.adt_by_name.get(&name).copied()
     }
 
     /// Recursive substitution — see `TypeLookup::subst_ty`.
+    #[must_use]
     pub fn subst_ty_recursive(&self, ty: Ty, subst: Substitution) -> Ty {
         match self.ty_kind(ty) {
             TyKind::Param(p) => self
@@ -221,7 +228,6 @@ impl TyCtx {
     /// `impl_self_ty = VecIntoIter<Param(0, T)>`,
     /// `query_self_ty = VecIntoIter<i32>`, `assoc = Param(0, T)`; this
     /// helper substitutes `{0 -> i32}` and returns `i32`.
-    #[allow(clippy::collapsible_if)]
     fn subst_impl_params_into_assoc(&self, impl_self_ty: Ty, query_self_ty: Ty, assoc: Ty) -> Ty {
         let (impl_sub, query_sub) = match (self.ty_kind(impl_self_ty), self.ty_kind(query_self_ty))
         {
@@ -257,16 +263,19 @@ impl TyCtx {
     }
 
     /// region.
+    #[must_use]
     pub fn region(&self, vid: RegionVid) -> &Region {
         &self.regions[vid]
     }
 
     /// resolver.
+    #[must_use]
     pub fn resolver(&self) -> &Interner {
         &self.resolver
     }
 
-    /// name_str.
+    /// `name_str`.
+    #[must_use]
     pub fn name_str(&self, name: Name) -> &str {
         self.resolver.resolve(name)
     }
@@ -274,6 +283,7 @@ impl TyCtx {
     /// Resolve an associated-type projection `Self::Item` / `Type::Item` to its
     /// defining type via the projection table populated at impl-registration
     /// time (plan unstub-5 P5). Returns `None` when no matching impl exists.
+    #[must_use]
     pub fn resolve_associated_type(
         &self,
         self_ty: Ty,
@@ -336,11 +346,11 @@ impl TyCtx {
         // (return `None`) rather than guess.
         let mut found: Option<Ty> = None;
         let mut ambiguous = false;
-        for ((_, tid), entries) in self.impl_assoc_types.iter() {
+        for ((_, tid), entries) in &self.impl_assoc_types {
             if *tid != trait_def_id {
                 continue;
             }
-            for (n, ty) in entries.iter() {
+            for (n, ty) in entries {
                 if *n == assoc_name && found != Some(*ty) {
                     if found.is_some() {
                         ambiguous = true;
@@ -368,6 +378,7 @@ impl TyCtx {
     /// `TyCtx` and the typeck `TyCtxMut` may intern the same identifier into
     /// different `Name` indices), which would otherwise make a handle-based
     /// lookup miss a perfectly valid impl.
+    #[must_use]
     pub fn resolve_associated_type_by_self_ty_name(
         &self,
         self_ty: Ty,
@@ -394,6 +405,8 @@ impl TyCtx {
             })
     }
 
+    #[must_use]
+    /// Resolve Associated Type By Self Ty.
     pub fn resolve_associated_type_by_self_ty(&self, self_ty: Ty, assoc_name: Name) -> Option<Ty> {
         let self_adt = match self.ty_kind(self_ty) {
             TyKind::Adt(adt_id, _) => Some(*adt_id),
@@ -416,7 +429,8 @@ impl TyCtx {
             })
     }
 
-    /// is_copy.
+    /// `is_copy`.
+    #[must_use]
     pub fn is_copy(&self, ty: Ty) -> bool {
         match self.ty_kind(ty) {
             TyKind::Bool | TyKind::Int(_) | TyKind::Uint(_) | TyKind::Float(_) | TyKind::Char => {
@@ -458,6 +472,7 @@ impl TyCtx {
     /// `dyn Trait` (trait objects), and ADTs whose last field is itself unsized
     /// (recursively). This is the structural `Sized` check used by the trait
     /// solver for `T: Sized` bounds (de-stubbing plan §8.1).
+    #[must_use]
     pub fn is_sized(&self, ty: Ty) -> bool {
         match self.ty_kind(ty) {
             TyKind::Slice(_) | TyKind::Dynamic(..) | TyKind::Opaque(..) => false,
@@ -491,47 +506,56 @@ impl TyCtx {
         }
     }
 
-    /// error_ty.
+    /// `error_ty`.
+    #[must_use]
     pub fn error_ty(&self) -> Ty {
         Ty::ERROR
     }
 
-    /// never_ty.
+    /// `never_ty`.
+    #[must_use]
     pub fn never_ty(&self) -> Ty {
         Ty::NEVER
     }
 
-    /// unit_ty.
+    /// `unit_ty`.
+    #[must_use]
     pub fn unit_ty(&self) -> Ty {
         Ty::UNIT
     }
 
-    /// bool_ty.
+    /// `bool_ty`.
+    #[must_use]
     pub fn bool_ty(&self) -> Ty {
         Ty::BOOL
     }
 
-    /// ty_is_error.
+    /// `ty_is_error`.
+    #[must_use]
     pub fn ty_is_error(&self, ty: Ty) -> bool {
         self.ty_flags(ty).contains(TypeFlags::HAS_ERROR)
     }
 
-    /// ty_has_depth_overflow.
+    /// `ty_has_depth_overflow`.
+    #[must_use]
     pub fn ty_has_depth_overflow(&self, ty: Ty) -> bool {
         self.ty_flags(ty).contains(TypeFlags::HAS_DEPTH_OVERFLOW)
     }
 
-    /// auto_trait_flags.
+    /// `auto_trait_flags`.
+    #[must_use]
     pub fn auto_trait_flags(&self, ty: Ty) -> AutoTraitFlags {
         compute_auto_traits(ty, self, &self.auto_trait_registry, &self.adt_reprs)
     }
 
-    /// implements_auto_trait.
+    /// `implements_auto_trait`.
+    #[must_use]
     pub fn implements_auto_trait(&self, ty: Ty, auto_trait: AutoTrait) -> bool {
         self.auto_trait_flags(ty).contains(auto_trait.flag())
     }
 
-    /// has_negative_impl.
+    /// `has_negative_impl`.
+    #[must_use]
     pub fn has_negative_impl(&self, adt_id: AdtId, auto_trait: AutoTrait) -> bool {
         self.auto_trait_registry
             .has_negative_impl(adt_id, auto_trait)
@@ -543,6 +567,7 @@ impl TyCtx {
     /// (e.g. `Box<T>`, `Rc<T>`) require the `Deref` trait impl to be registered,
     /// which is gated on the HIR → `TraitContext` population, so they return
     /// `None` here rather than guessing.
+    #[must_use]
     pub fn deref_ty(&self, ty: Ty) -> Option<Ty> {
         match self.ty_kind(ty) {
             TyKind::Ref(_, inner, _) => Some(*inner),
@@ -587,35 +612,37 @@ impl TyCtx {
         }
     }
 
-    /// Phase 5 (GLYIM_DESTUB_PLAN): test/introspection helper returning the
     /// registered `Deref::Target` type for a `Deref`-implementing ADT, as
     /// recorded by `populate_deref_registry` during typeck. Returns `None` if
     /// no `impl Deref` for `adt_id` was registered.
+    #[must_use]
     pub fn deref_registry_target_for(&self, adt_id: AdtId) -> Option<Ty> {
         self.deref_registry
             .template(adt_id)
             .map(|(_self_params, target)| *target)
     }
 
-    /// has_manual_impl.
+    /// `has_manual_impl`.
+    #[must_use]
     pub fn has_manual_impl(&self, adt_id: AdtId, auto_trait: AutoTrait) -> bool {
         self.auto_trait_registry.has_manual_impl(adt_id, auto_trait)
     }
 
-    /// adt_repr.
+    /// `adt_repr`.
+    #[must_use]
     pub fn adt_repr(&self, adt_id: AdtId) -> Option<&AdtRepr> {
         self.adt_reprs.get(&adt_id)
     }
 
-    /// field_ty.
+    /// `field_ty`.
+    #[must_use]
     pub fn field_ty(&self, adt_id: AdtId, field_idx: usize) -> Ty {
         if let Some(def) = self.adt_defs.get(&adt_id) {
             return def
                 .fields
                 .as_slice()
                 .get(field_idx)
-                .map(|f| f.ty)
-                .unwrap_or_else(|| self.error_ty());
+                .map_or_else(|| self.error_ty(), |f| f.ty);
         }
         if let Some(repr) = self.adt_reprs.get(&adt_id) {
             return repr
@@ -627,7 +654,7 @@ impl TyCtx {
         self.error_ty()
     }
 
-    /// adt_def.
+    /// `adt_def`.
     /// Snapshot of every registered ADT id. Used by post-inference passes
     /// (`glyim_typeck::zonk`) that fold inference variables out of
     /// `AdtDef` field types.
@@ -636,16 +663,21 @@ impl TyCtx {
     /// this scans it to answer `AdtId -> Name`. Needed by the typeck
     /// builtin-method fallback so `my_struct.unwrap()` can be rejected
     /// (the ADT's name is not Option/Result).
+    #[must_use]
     pub fn adt_name_for_id(&self, id: AdtId) -> Option<Name> {
         self.adt_by_name
             .iter()
             .find_map(|(name, aid)| if *aid == id { Some(*name) } else { None })
     }
 
+    #[must_use]
+    /// Adt Def Ids.
     pub fn adt_def_ids(&self) -> Vec<AdtId> {
         self.adt_defs.keys().copied().collect()
     }
 
+    #[must_use]
+    /// Adt Def.
     pub fn adt_def(&self, id: AdtId) -> Option<&AdtDef> {
         self.adt_defs.get(&id)
     }
@@ -654,11 +686,11 @@ impl TyCtx {
     /// (`struct S<T, U>` → 2). Returns 0 for non-generic ADTs and for unknown
     /// ADT ids. Drives substitution-arity checking in type resolution
     /// (unstub-5 P1.4).
+    #[must_use]
     pub fn adt_generic_arity(&self, adt_id: AdtId) -> usize {
         self.adt_defs
             .get(&adt_id)
-            .map(|d| d.generic_params.len())
-            .unwrap_or(0)
+            .map_or(0, |d| d.generic_params.len())
     }
 
     /// Resolve a trait method call on a *concrete* receiver type to the
@@ -671,6 +703,7 @@ impl TyCtx {
     /// (the receiver). The receiver may be `Self`, `&Self`, or `&mut Self`, so
     /// all three shapes are probed. Returns `None` if no `impl` of
     /// `trait_def_id` for the receiver's underlying ADT defines `method_name`.
+    #[must_use]
     pub fn resolve_trait_method(
         &self,
         trait_def_id: glyim_core::def_id::TraitDefId,
@@ -712,6 +745,7 @@ impl TyCtx {
     /// practice it is the def-map id. Callers that need "which function is
     /// this type's destructor" therefore cannot hardcode 2002 — scan the
     /// dispatch table for a `drop` entry keyed on `ty` under any trait id.
+    #[must_use]
     pub fn drop_method_for(&self, ty: Ty) -> Option<FnDefId> {
         let drop_name = self.resolver().intern("drop");
         let mut base = ty;
@@ -719,7 +753,7 @@ impl TyCtx {
             base = *inner;
         }
         let mut found: Option<FnDefId> = None;
-        for ((_, self_ty), methods) in self.impl_method_fns.iter() {
+        for ((_, self_ty), methods) in &self.impl_method_fns {
             if *self_ty == base
                 && let Some(&fn_id) = methods.get(&drop_name)
             {
@@ -735,6 +769,7 @@ impl TyCtx {
     /// `String → true`, `glyim-opt` conservative `true` for unknown ADTs) which
     /// could disagree on identical types — the soundness risk flagged by the
     /// de-stubbing plan §8.2/§12.3.
+    #[must_use]
     pub fn has_drop_impl(&self, adt_id: AdtId) -> bool {
         self.drop_impls.contains(&adt_id)
     }
@@ -756,6 +791,7 @@ impl TyCtx {
     /// impossible to do correctly without their concrete layout, and the
     /// alternative (spurious drop glue) is the worse failure mode. This matches
     /// the prior `glyim-lower` behaviour and is the safer default.
+    #[must_use]
     pub fn needs_drop(&self, ty: Ty) -> bool {
         let mut visited = HashSet::new();
         self.needs_drop_rec(ty, &mut visited)
@@ -812,7 +848,8 @@ impl TyCtx {
         result
     }
 
-    /// field_index.
+    /// `field_index`.
+    #[must_use]
     pub fn field_index(&self, adt_id: AdtId, field_name: Name) -> Option<usize> {
         if let Some(def) = self.adt_defs.get(&adt_id) {
             for (i, field) in def.fields.iter_enumerated() {
@@ -824,7 +861,8 @@ impl TyCtx {
         None
     }
 
-    /// fn_sig.
+    /// `fn_sig`.
+    #[must_use]
     pub fn fn_sig(&self, def_id: FnDefId) -> Option<&FnSig> {
         self.fn_sigs.get(&def_id)
     }
@@ -833,10 +871,13 @@ impl TyCtx {
     ///
     /// Used by registry-consistency tests: every id here must also have an
     /// entry in `fn_sigs` (codegen resolves the call ABI through `fn_sig`).
+    #[must_use]
     pub fn builtin_fn_ids(&self) -> Vec<FnDefId> {
         self.builtin_fn_index.keys().copied().collect()
     }
 
+    #[must_use]
+    /// Builtin Fn Id.
     pub fn builtin_fn_id(&self, id: FnDefId) -> Option<(AdtId, Name)> {
         self.builtin_fn_index.get(&id).copied()
     }
@@ -856,6 +897,7 @@ impl TyCtx {
     /// __glyim_fn_XXXX` at link time. This lookup makes the dependency
     /// explicit and the failure mode a clean `None` (`.expect` in the
     /// caller with a clear message).
+    #[must_use]
     pub fn builtin_method_fn_id(&self, adt: AdtId, method_name: &str) -> Option<FnDefId> {
         self.builtin_fn_index
             .iter()
@@ -865,11 +907,13 @@ impl TyCtx {
 
     /// Inherent (non-trait) impl method lookup for `Type::method(args)`
     /// path calls on concrete ADTs.
+    #[must_use]
     pub fn inherent_method(&self, adt_id: AdtId, name: Name) -> Option<FnDefId> {
         self.inherent_method_fns.get(&(adt_id, name)).copied()
     }
 
     /// Name-keyed inherent-method lookup.
+    #[must_use]
     pub fn inherent_method_by_name(&self, type_name: Name, method_name: Name) -> Option<FnDefId> {
         self.inherent_methods_by_name
             .get(&(type_name, method_name))
@@ -883,12 +927,14 @@ impl TyCtx {
         self.const_fns.get(&id).map(String::as_str)
     }
 
+    /// Extern Fn Name.
     pub fn extern_fn_name(&self, id: FnDefId) -> Option<&str> {
         self.extern_fns.get(&id).map(String::as_str)
     }
 
     /// The value type of a constant definition (e.g. `i32` for
     /// `const X: i32 = ...`). Populated by typeck when checking the const.
+    #[must_use]
     pub fn const_ty(&self, def_id: ConstDefId) -> Option<Ty> {
         self.const_tys.get(&def_id).copied()
     }
@@ -897,31 +943,37 @@ impl TyCtx {
     /// `static X: i32 = ...`). Populated by typeck when checking the
     /// static; consumed by `check_path` so a bare static path resolves
     /// to `thir::ExprKind::StaticRef` with the right type.
+    #[must_use]
     pub fn static_ty(&self, def_id: StaticDefId) -> Option<Ty> {
         self.static_tys.get(&def_id).copied()
     }
 
     /// Whether the static with the given def id is `static mut`.
+    #[must_use]
     pub fn static_is_mut(&self, def_id: StaticDefId) -> bool {
         self.static_is_mut.get(&def_id).copied().unwrap_or(false)
     }
 
-    /// closure_sig.
+    /// `closure_sig`.
+    #[must_use]
     pub fn closure_sig(&self, closure_id: ClosureId) -> Option<&FnSig> {
         self.closure_sigs.get(&closure_id)
     }
 
     /// Recover the synthetic `AdtId` for a closure's captured environment.
+    #[must_use]
     pub fn closure_adt(&self, closure_id: ClosureId) -> Option<AdtId> {
         self.closure_adt_map.get(&closure_id).copied()
     }
 
-    /// body_ty.
+    /// `body_ty`.
+    #[must_use]
     pub fn body_ty(&self, def_id: LocalDefId) -> Option<Ty> {
         self.body_tys.get(&def_id).copied()
     }
 
-    /// variant_type.
+    /// `variant_type`.
+    #[must_use]
     pub fn variant_type(&self, adt_id: AdtId, variant_idx: u32) -> Ty {
         self.variant_types
             .get(&adt_id)
@@ -961,8 +1013,7 @@ impl TypeLookup for TyCtx {
                 .fields
                 .as_slice()
                 .get(field_idx)
-                .map(|f| f.ty)
-                .unwrap_or_else(|| self.error_ty());
+                .map_or_else(|| self.error_ty(), |f| f.ty);
         }
         if let Some(repr) = self.adt_reprs.get(&adt_id) {
             return repr
@@ -984,6 +1035,7 @@ impl TypeLookup for TyCtx {
 }
 impl TyCtx {
     /// Get the trait definition by ID.
+    #[must_use]
     pub fn trait_def(&self, id: glyim_core::def_id::TraitDefId) -> Option<&crate::TraitDef> {
         self.trait_defs.get(&id)
     }
