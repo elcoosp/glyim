@@ -1,4 +1,4 @@
-//! ABI classification tests: verify PassMode decisions for different types
+//! ABI classification tests: verify `PassMode` decisions for different types
 
 use glyim_core::{Abi, FloatTy, IntTy, Interner, Safety, TargetInfo, UintTy};
 use glyim_layout::LayoutComputer;
