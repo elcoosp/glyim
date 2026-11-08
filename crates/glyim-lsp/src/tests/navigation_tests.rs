@@ -15,7 +15,7 @@ fn setup_db_with_file(path: &str, source: &str) -> (AnalysisDatabase, FileId) {
     let db = AnalysisDatabase::new();
     let path_buf = PathBuf::from(path);
     let file_id = db.file_map.write().get_or_create(&path_buf);
-    let sm = SourceMap::new(path_buf.clone(), file_id, source.to_string());
+    let sm = SourceMap::new(file_id, source.to_string());
     db.source_maps.write().insert(file_id, sm);
 
     let parse_result = glyim_frontend::parse_to_syntax(source, file_id);
@@ -48,8 +48,8 @@ fn test_goto_definition_jumps_to_definition() {
                 character: 12,
             },
         },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
+        partial_result_params: lsp_types::PartialResultParams::default(),
     };
 
     let result = crate::goto_definition::goto_definition(&db, &file_map, &params);
