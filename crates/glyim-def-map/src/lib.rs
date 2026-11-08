@@ -1,27 +1,5 @@
 //! Module graph and lightweight definition map.
 // Stylistic clippy lints suppressed crate-wide (test-noise lints).
-#![allow(
-    clippy::cloned_ref_to_slice_refs,
-    clippy::vec_init_then_push,
-    clippy::assertions_on_constants,
-    clippy::type_complexity,
-    clippy::too_many_arguments,
-    clippy::manual_c_str_literals,
-    clippy::doc_lazy_continuation,
-    clippy::empty_line_after_doc_comments,
-    clippy::manual_strip,
-    clippy::needless_range_loop,
-    clippy::unnecessary_cast,
-    clippy::clone_on_copy,
-    clippy::mutable_key_type,
-    clippy::only_used_in_recursion,
-    clippy::let_unit_value,
-    clippy::unnecessary_literal_unwrap,
-    clippy::format_in_format_args,
-    clippy::permissions_set_readonly_false,
-    clippy::needless_lifetimes,
-    clippy::collapsible_if
-)]
 
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::{CrateId, LocalDefId, VariantIdx};
@@ -37,15 +15,15 @@ use std::collections::HashMap;
 glyim_core::define_idx!(ModuleId);
 
 #[derive(Clone, Debug)]
-/// CrateDefMap.
+/// `CrateDefMap`.
 pub struct CrateDefMap {
-    /// Struct.
+    /// `Struct`.
     pub root: ModuleId,
-    /// Struct.
+    /// `Struct`.
     pub modules: IndexVec<ModuleId, ModuleData>,
-    /// Struct.
+    /// `Struct`.
     pub krate: CrateId,
-    /// Struct.
+    /// `Struct`.
     pub interner: Interner,
     /// Reverse map from a variant's value-namespace `LocalDefId` to the
     /// enclosing enum's `LocalDefId` and the variant's index. Populated while
@@ -56,7 +34,6 @@ pub struct CrateDefMap {
     /// bodies (checked later by typeck) must allocate ids *above* this so
     /// they cannot collide with the def-map's ids — an impl method that got
     /// id 51 previously overwrote `io::copy`'s `FnSig` (also id 51),
-    /// making `io::copy(..)` type as `Adt63` (OpenOptions).
     pub max_local_def_id: u32,
     /// T124-PATCHED [PIPE-4]: maps every `LocalDefId` to its declaring
     /// module. Consumed by mono-collection to populate
@@ -67,17 +44,17 @@ pub struct CrateDefMap {
 }
 
 #[derive(Clone, Debug)]
-/// ModuleData.
+/// `ModuleData`.
 pub struct ModuleData {
-    /// Struct.
+    /// `Struct`.
     pub parent: Option<ModuleId>,
     #[doc = "field"]
     pub children: Vec<(Name, ModuleId)>,
-    /// Struct.
+    /// `Struct`.
     pub scope: ItemScope,
-    /// Struct.
+    /// `Struct`.
     pub origin: ModuleOrigin,
-    /// Struct.
+    /// `Struct`.
     pub span: Span,
     /// Every module has a unique `LocalDefId` so it can be referred to by `use` paths
     pub def_id: LocalDefId,
@@ -87,30 +64,31 @@ pub struct ModuleData {
 
 impl ModuleData {
     /// resolve.
+    #[must_use]
     pub fn resolve(&self, name: Name) -> Option<(LocalDefId, Visibility)> {
         self.scope.resolve(name)
     }
 }
 
 #[derive(Clone, Debug)]
-/// ModuleOrigin.
+/// `ModuleOrigin`.
 pub enum ModuleOrigin {
-    /// Variant.
+    /// `Variant`.
     File {
-        /// file_id field.
+        /// `file_id` field.
         file_id: FileId,
     },
-    /// Variant.
+    /// `Variant`.
     Inline {
         /// span field.
         span: Span,
     },
-    /// Variant.
+    /// `Variant`.
     CrateRoot,
 }
 
 #[derive(Clone, Debug, Default)]
-/// ItemScope.
+/// `ItemScope`.
 pub struct ItemScope {
     #[doc = "field"]
     pub types: IndexMap<Name, (LocalDefId, Visibility, Span)>,
@@ -122,6 +100,7 @@ pub struct ItemScope {
 
 impl ItemScope {
     /// resolve.
+    #[must_use]
     pub fn resolve(&self, name: Name) -> Option<(LocalDefId, Visibility)> {
         if let Some((id, vis, _)) = self.types.get(&name) {
             return Some((*id, vis.clone()));
@@ -157,18 +136,18 @@ impl ItemScope {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// Namespace.
+/// `Namespace`.
 pub enum Namespace {
-    /// Variant.
+    /// `Variant`.
     Types,
-    /// Variant.
+    /// `Variant`.
     Values,
-    /// Variant.
+    /// `Variant`.
     Macros,
 }
 
 #[derive(Clone, Debug, Default)]
-/// PerNs.
+/// `PerNs`.
 pub struct PerNs {
     #[doc = "field"]
     pub types: Option<(LocalDefId, Visibility)>,
@@ -179,11 +158,13 @@ pub struct PerNs {
 }
 
 impl PerNs {
-    /// is_none.
+    /// `is_none`.
+    #[must_use]
     pub fn is_none(&self) -> bool {
         self.types.is_none() && self.values.is_none() && self.macros.is_none()
     }
-    /// from_types.
+    /// `from_types`.
+    #[must_use]
     pub fn from_types(id: LocalDefId, vis: Visibility) -> Self {
         Self {
             types: Some((id, vis)),
@@ -193,7 +174,7 @@ impl PerNs {
     }
 }
 
-/// Resolver.
+/// `Resolver`.
 pub struct Resolver<'a> {
     modules: &'a IndexVec<ModuleId, ModuleData>,
     root: ModuleId,
@@ -202,6 +183,7 @@ pub struct Resolver<'a> {
 
 impl<'a> Resolver<'a> {
     /// new.
+    #[must_use]
     pub fn new(
         modules: &'a IndexVec<ModuleId, ModuleData>,
         root: ModuleId,
@@ -214,7 +196,8 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// resolve_path.
+    /// `resolve_path`.
+    #[must_use]
     pub fn resolve_path(&self, path: &Path) -> PerNs {
         let mut current_module = self.module;
         let start_idx = match path.kind {
@@ -298,18 +281,20 @@ impl<'a> Resolver<'a> {
         PerNs::default()
     }
 
-    /// def_map.
+    /// `def_map`.
+    #[must_use]
     pub fn def_map(&self) -> &IndexVec<ModuleId, ModuleData> {
         self.modules
     }
 
-    /// Module.
+    /// `Module`.
+    #[must_use]
     pub fn module(&self) -> ModuleId {
         self.module
     }
 }
 
-/// Helper to resolve a path that ends at a module, returning the ModuleId.
+/// Helper to resolve a path that ends at a module, returning the `ModuleId`.
 fn resolve_module_path_for_modules(
     modules: &IndexVec<ModuleId, ModuleData>,
     start_module: ModuleId,
@@ -363,7 +348,7 @@ fn resolve_module_path_for_modules(
             }
             {
                 let id = found?;
-                current_module = id
+                current_module = id;
             }
         } else {
             return None;
@@ -411,7 +396,7 @@ fn extract_alias_from_use_tree(node: &SyntaxNode, interner: &Interner) -> Option
     None
 }
 
-/// Extract a `Path` from a syntax node (UseTree or PathExpr).
+/// Extract a `Path` from a syntax node (`UseTree` or `PathExpr`).
 fn extract_path_from_syntax(node: &SyntaxNode, interner: &Interner) -> Option<Path> {
     let mut segments: Vec<PathSegment> = Vec::new();
     let mut kind = PathKind::Plain;
@@ -472,15 +457,15 @@ fn extract_path_from_syntax(node: &SyntaxNode, interner: &Interner) -> Option<Pa
         });
     }
 
-    if !segments.is_empty() {
-        Some(Path { segments, kind })
-    } else {
+    if segments.is_empty() {
         None
+    } else {
+        Some(Path { segments, kind })
     }
 }
 
 #[tracing::instrument(skip(root))]
-/// build_def_map.
+/// `build_def_map`.
 pub fn build_def_map(
     root: &SyntaxNode,
     krate: CrateId,
@@ -687,8 +672,7 @@ fn process_use_tree(
                             let last_segment = inner_p
                                 .segments
                                 .last()
-                                .map(|s| s.name)
-                                .unwrap_or_else(|| interner.intern("_"));
+                                .map_or_else(|| interner.intern("_"), |s| s.name);
                             let inner_alias = extract_alias_from_use_tree(&child, interner);
                             let bind_name = inner_alias.unwrap_or(last_segment);
 
@@ -806,7 +790,7 @@ fn process_use_tree(
     }
 }
 
-/// Collect items from a syntax node (SourceFile or Module node) into the given module.
+/// Collect items from a syntax node (`SourceFile` or Module node) into the given module.
 /// For a Module node, the node itself is the container; its children (nodes only) are the items.
 fn collect_items(
     node: &SyntaxNode,
@@ -1040,7 +1024,7 @@ fn extract_module_name(module_node: &SyntaxNode) -> String {
 fn extract_ident(node: &SyntaxNode) -> String {
     if node.kind() == SyntaxKind::ImplDef {
         let offset = u32::from(node.text_range().start());
-        return format!("__impl_{}", offset);
+        return format!("__impl_{offset}");
     }
     if node.kind() == SyntaxKind::ExternBlock {
         let mut found_as = false;
@@ -1194,23 +1178,22 @@ fn visibility_of_node(node: &SyntaxNode, interner: &Interner) -> Visibility {
                             return Visibility::PubSuper;
                         } else if has_self {
                             return Visibility::Inherited;
-                        } else {
-                            // pub(in path)
-                            let mut path_segments = Vec::new();
-                            for child in n.children() {
-                                if child.kind() == SyntaxKind::UsePath {
-                                    for p_child in child.children_with_tokens() {
-                                        if let Some(tok) = p_child.as_token()
-                                            && tok.kind() == SyntaxKind::Ident
-                                        {
-                                            path_segments.push(interner.intern(tok.text()));
-                                        }
+                        }
+                        // pub(in path)
+                        let mut path_segments = Vec::new();
+                        for child in n.children() {
+                            if child.kind() == SyntaxKind::UsePath {
+                                for p_child in child.children_with_tokens() {
+                                    if let Some(tok) = p_child.as_token()
+                                        && tok.kind() == SyntaxKind::Ident
+                                    {
+                                        path_segments.push(interner.intern(tok.text()));
                                     }
                                 }
                             }
-                            if !path_segments.is_empty() {
-                                return Visibility::PubIn(path_segments);
-                            }
+                        }
+                        if !path_segments.is_empty() {
+                            return Visibility::PubIn(path_segments);
                         }
                     }
                 }
@@ -1359,11 +1342,11 @@ fn validate_import_visibility(
                 // the target's declared visibility instead; otherwise a legal
                 // `use io::Read` from a sibling module (`fs`) is flagged as
                 // private simply because `fs` is not a descendant of `io`.
-                let effective_vis = if defining_mod != module_id {
+                let effective_vis = if defining_mod == module_id {
+                    vis.clone()
+                } else {
                     declared_visibility_of(modules, defining_mod, *def_id)
                         .unwrap_or_else(|| vis.clone())
-                } else {
-                    vis.clone()
                 };
                 if !is_accessible_from(effective_vis, defining_mod, module_id, modules) {
                     diagnostics.push(GlyimDiagnostic::parse_error(
@@ -1380,11 +1363,11 @@ fn validate_import_visibility(
         // Check value namespace items
         for (name, (def_id, vis, span)) in &scope.values {
             if let Some(&defining_mod) = def_to_module.get(def_id) {
-                let effective_vis = if defining_mod != module_id {
+                let effective_vis = if defining_mod == module_id {
+                    vis.clone()
+                } else {
                     declared_visibility_of(modules, defining_mod, *def_id)
                         .unwrap_or_else(|| vis.clone())
-                } else {
-                    vis.clone()
                 };
                 if !is_accessible_from(effective_vis, defining_mod, module_id, modules) {
                     diagnostics.push(GlyimDiagnostic::parse_error(
@@ -1401,11 +1384,11 @@ fn validate_import_visibility(
         // Check macro namespace items
         for (name, (def_id, vis, span)) in &scope.macros {
             if let Some(&defining_mod) = def_to_module.get(def_id) {
-                let effective_vis = if defining_mod != module_id {
+                let effective_vis = if defining_mod == module_id {
+                    vis.clone()
+                } else {
                     declared_visibility_of(modules, defining_mod, *def_id)
                         .unwrap_or_else(|| vis.clone())
-                } else {
-                    vis.clone()
                 };
                 if !is_accessible_from(effective_vis, defining_mod, module_id, modules) {
                     diagnostics.push(GlyimDiagnostic::parse_error(
@@ -1451,6 +1434,7 @@ fn use_line_path(trimmed: &str) -> Option<String> {
 /// to place the insertion and the exact text (newline-terminated) to insert.
 /// Reuses the existing top-level `use` block when present. Returns `None` when
 /// the path is already imported (idempotent).
+#[must_use]
 pub fn insert_use_edit(source: &str, import_path: &str) -> Option<(usize, String)> {
     let lines: Vec<&str> = source.lines().collect();
 
@@ -1476,7 +1460,7 @@ pub fn insert_use_edit(source: &str, import_path: &str) -> Option<(usize, String
     }
 
     // The text to insert: a newline-terminated `use` line.
-    let new_text = format!("use {};\n", import_path);
+    let new_text = format!("use {import_path};\n");
 
     if use_lines.is_empty() {
         // No existing use block: insert at the top, after any leading shebang.
@@ -1504,6 +1488,7 @@ pub fn insert_use_edit(source: &str, import_path: &str) -> Option<(usize, String
 /// Insert a `use <import_path>;` statement into `source`, reusing the existing
 /// top-level `use` block when one is present. Idempotent: returns `source`
 /// unchanged when the path is already imported.
+#[must_use]
 pub fn insert_use(source: &str, import_path: &str) -> String {
     let Some((offset, new_text)) = insert_use_edit(source, import_path) else {
         return source.to_string();
