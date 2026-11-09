@@ -203,6 +203,51 @@ fn prose_comments_are_ignored() {
     assert!(!a.needs_llvm);
 }
 
+// -------------------------------------------------------------------------
+// M1.6 strict-xfail witness grammar (plan §3.3): `//@ known-gap: GAP-NNNN`
+// -------------------------------------------------------------------------
+
+#[test]
+fn known_gap_directive_parses_registry_ids() {
+    let a = parse("//@ known-gap: GAP-0001\nfn main() {}\n");
+    assert!(a.present);
+    assert_eq!(a.known_gap.as_deref(), Some("GAP-0001"));
+
+    // The `GAP-` prefix + 4-digit shape is exactly what the ledger's
+    // `[[gap]] id` field uses; `ledger check` re-validates the *existence*
+    // of the named gap, the harness only pins the shape here.
+    let a = parse("//@ mode: compile-fail\n//@ known-gap: GAP-0042\n");
+    assert_eq!(a.known_gap.as_deref(), Some("GAP-0042"));
+}
+
+#[test]
+fn known_gap_rejects_malformed_ids() {
+    for bad in [
+        "gap-0001",
+        "GAP-1",
+        "GAP-00001",
+        "FEAT-0001",
+        "GAP_0001",
+        "GAP-",
+        "GAP-abcd",
+    ] {
+        let msg = parse_err(&format!("//@ known-gap: {bad}\n"));
+        assert!(msg.contains("malformed known-gap ID"), "{bad}: {msg}");
+    }
+}
+
+#[test]
+fn known_gap_duplicate_is_an_error() {
+    let msg = parse_err("//@ known-gap: GAP-0001\n//@ known-gap: GAP-0001\n");
+    assert!(msg.contains("duplicate `known-gap:`"), "{msg}");
+
+    // Even two *different* gap IDs in one fixture are ambiguous: a witness
+    // reproduces exactly one gap, and which one the inversion applies to
+    // would be undecidable.
+    let msg = parse_err("//@ known-gap: GAP-0001\n//@ known-gap: GAP-0002\n");
+    assert!(msg.contains("duplicate `known-gap:`"), "{msg}");
+}
+
 #[test]
 fn feature_id_shape_check() {
     assert!(is_valid_feature_id("LANG-TY-ARRAY"));

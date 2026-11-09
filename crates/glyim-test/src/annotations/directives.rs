@@ -71,6 +71,15 @@ pub struct FixtureAnnotations {
     pub revisions: Vec<String>,
     /// `//@ [rev] compile-flags:` per-revision flags.
     pub revision_compile_flags: HashMap<String, Vec<String>>,
+    /// M1.6 strict-xfail witness tag (`//@ known-gap: GAP-NNNN`, plan
+    /// §3.3). `Some(id)` marks this fixture as the reproducible witness of
+    /// a readiness-ledger gap: while the gap is open, the compiler must
+    /// *reject* this program (the compile-fail expectations hold); when
+    /// the gap closes, the fixture fails with
+    /// [`crate::error::FailureReason::KnownGapClosed`] instead of a
+    /// generic diagnostic mismatch, forcing the witness to be retired in
+    /// the same change that fixes the gap.
+    pub known_gap: Option<String>,
     /// True when at least one `//@` directive was present. This is the
     /// `M1.4` `DoD` bit: fixtures without any annotation are rejected by the
     /// collector.
@@ -311,6 +320,27 @@ fn parse_directive_body(
                 .extend(value.split_whitespace().map(String::from));
             Ok(())
         }
+        "known-gap" => {
+            // M1.6 (plan §3.3): the strict-xfail witness tag. One fixture
+            // witnesses exactly one gap — duplicates are rejected even
+            // when the two IDs are equal, because the inversion semantics
+            // would be applied twice with no way to tell which tag the
+            // ledger should consume.
+            if out.known_gap.is_some() {
+                return err(lineno, "duplicate `known-gap:` directive");
+            }
+            if !is_valid_gap_id(value) {
+                return err(
+                    lineno,
+                    format!(
+                        "malformed known-gap ID `{value}` (expected `GAP-` + 4 digits, \
+                         matching a `[[gap]] id` under ledger/gaps/**)"
+                    ),
+                );
+            }
+            out.known_gap = Some(value.to_string());
+            Ok(())
+        }
         other => err(
             lineno,
             format!(
@@ -337,6 +367,18 @@ pub fn is_valid_feature_id(id: &str) -> bool {
         && !id.starts_with('-')
         && !id.ends_with('-')
         && !id.contains("--")
+}
+
+/// Gap-ID shape check for the M1.6 witness tag (plan §3.3): exactly
+/// `GAP-` followed by 4 ASCII digits, mirroring the `[[gap]] id` spelling
+/// in `ledger/gaps/**` (e.g. `GAP-0001`). Deliberately stricter than
+/// [`is_valid_feature_id`]: the ledger's witness matcher reads the ID out
+/// of the fixture header line, so a loose shape here would silently
+/// produce witness fixtures that never join their gap.
+#[must_use]
+pub fn is_valid_gap_id(id: &str) -> bool {
+    let digits = id.strip_prefix("GAP-").unwrap_or("");
+    digits.len() == 4 && digits.bytes().all(|b| b.is_ascii_digit())
 }
 
 #[cfg(test)]
