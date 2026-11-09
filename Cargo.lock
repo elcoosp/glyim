@@ -918,7 +918,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-borrowck"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "fixedbitset",
  "glyim-core",
@@ -943,7 +943,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-cli"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "clap",
  "glyim-codegen",
@@ -979,7 +979,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-codegen-llvm"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-codegen",
  "glyim-core",
@@ -998,7 +998,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-const-eval"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-core",
  "glyim-diag",
@@ -1011,7 +1011,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-test",
  "lasso",
@@ -1020,7 +1020,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-db"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-core",
  "glyim-diag",
@@ -1037,7 +1037,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-def-map"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-core",
  "glyim-diag",
@@ -1051,7 +1051,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-diag"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-span",
  "glyim-test",
@@ -1061,7 +1061,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-frontend"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-diag",
  "glyim-span",
@@ -1074,7 +1074,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-gsx"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-frontend",
  "glyim-span",
@@ -1083,7 +1083,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-hir"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-core",
  "glyim-diag",
@@ -1107,7 +1107,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-lang-core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-frontend",
  "glyim-span",
@@ -1116,7 +1116,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-lang-std"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-frontend",
  "glyim-span",
@@ -1125,7 +1125,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-layout"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-core",
  "glyim-test",
@@ -1144,7 +1144,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-lower"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "fixedbitset",
  "glyim-borrowck",
@@ -1171,7 +1171,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-lsp"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "async-lsp",
  "crossbeam-channel",
@@ -1201,7 +1201,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-meta"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-core",
  "glyim-diag",
@@ -1226,7 +1226,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-mir"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-core",
  "glyim-span",
@@ -1250,7 +1250,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-opt"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-core",
  "glyim-mir",
@@ -1299,7 +1299,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-pipeline"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-borrowck",
  "glyim-bytecode-vm",
@@ -1339,7 +1339,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-runtime"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-core",
  "libc",
@@ -1351,7 +1351,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-solve"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-core",
  "glyim-diag",
@@ -1363,7 +1363,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-span"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-core",
  "glyim-test",
@@ -1373,7 +1373,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-syntax"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-core",
  "glyim-test",
@@ -1383,7 +1383,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-test"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-borrowck",
  "glyim-cli",
@@ -1428,7 +1428,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-type"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "bitflags 2.13.2",
  "glyim-core",
@@ -1441,7 +1441,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-typeck"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-const-eval",
  "glyim-core",
@@ -1460,7 +1460,7 @@ dependencies = [
 
 [[package]]
 name = "glyim-vfs"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "glyim-span",
  "glyim-test",
@@ -1471,7 +1471,7 @@ dependencies = [
 
 [[package]]
 name = "glyip"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "clap",
  "flate2",
