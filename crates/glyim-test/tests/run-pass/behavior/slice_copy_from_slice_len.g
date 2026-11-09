@@ -1,6 +1,8 @@
-// test-mode: run-pass
-// exit-code: 3
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 3
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-TY-SLICE, STD-CORE-SLICE, STD-CORE-MARKER, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let mut a = Vec::new();
     a.push(1);

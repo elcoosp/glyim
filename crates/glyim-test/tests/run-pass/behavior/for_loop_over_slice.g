@@ -5,9 +5,11 @@
 // and panicked with "deref of Ref from dead frame 1". The index-walk
 // keeps the reference target in the caller's frame and works on both
 // backends.
-// test-mode: run-pass
-// exit-code: 3
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 3
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-FOR-SLICE-ITER, LANG-TY-SLICE, STD-CORE-SLICE, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let v: Vec<i32> = [1, 2].to_vec();
     let mut s = 0;

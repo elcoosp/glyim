@@ -19,10 +19,12 @@
 // wrong value (e.g. via a stale `Infer` that zonk folded to `ERROR`
 // and codegen happened to lay out as zero) returns a different exit
 // code — 140 — instead of 140 by accident.
-// test-mode: run-pass
-// exit-code: 140
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 140
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-SYN-OPERATORS, COMPILER-MONO-MONOMORPHIZE, STD-CORE-OPTION, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     // Option<u8> unwrap → u8 → i32
     let a: Option<u8> = Option::Some(23);

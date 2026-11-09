@@ -3,10 +3,12 @@
 // Extends `for_loop_over_array.g` with a conditional inside the body
 // (the `if` branch must not corrupt the loop index or exit condition)
 // and an expression body that reads the binding twice.
-// test-mode: run-pass
-// exit-code: 15
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 15
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-FOR-SLICE-ITER, LANG-TY-ARRAY, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a = [1, 2, 3, 4, 5, 6];
     let mut s = 0;

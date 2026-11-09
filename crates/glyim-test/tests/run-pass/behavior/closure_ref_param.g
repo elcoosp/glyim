@@ -4,9 +4,11 @@
 // params from an expected fn-sig, so a standalone closure got an unbound
 // param and `*x` failed with "cannot dereference non-pointer type".
 // Fixed by adding `param_tys` to `Expr::Closure`.
-// test-mode: run-pass
-// exit-code: 6
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 6
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-CLOSURE-EXPR, LANG-TY-REF, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let f = |x: &i32| *x + 1;
     let n = 5;

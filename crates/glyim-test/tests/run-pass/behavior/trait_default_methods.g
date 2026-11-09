@@ -14,10 +14,12 @@
 // method — rolling all of that back if the body can't be checked for
 // this impl (missing associated-type bindings in the stdlib's generic
 // trait defaults).
-// test-mode: run-pass
-// exit-code: 105
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 105
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-SYN-FIELD-ACCESS, LANG-TRAIT-IMPL, LANG-TRAIT-DEFAULT-METHODS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 trait Greet {
     fn name(&self) -> i32;
     fn greet(&self) -> i32 { self.name() + 100 }

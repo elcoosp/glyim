@@ -5,10 +5,12 @@
 // `contains`, `chars`, `lines`, `trim`, `parse` were defined). Added
 // naive byte-scan implementations that match Rust's byte-substring
 // semantics.
-// test-mode: run-pass
-// exit-code: 19
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 19
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-TY-STR, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a: i32 = if "hello".starts_with("he") { 1 } else { 0 };
     let b: i32 = if "hello".ends_with("lo") { 2 } else { 0 };

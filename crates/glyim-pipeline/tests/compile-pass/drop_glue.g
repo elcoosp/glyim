@@ -1,5 +1,7 @@
-// test-mode: compile-pass
-// compile-flags: --backend mock
+//@ mode: compile-pass
+//@ compile-flags: --backend mock
+//@ feature: COMPILER-OPT-DROP-ELAB, STD-CORE-OPS, TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 
 struct MyBox<T> {
     inner: T,

@@ -1,5 +1,7 @@
-// test-mode: run-pass
-// exit-code: 30
+//@ mode: run-pass
+//@ expect-exit: 30
+//@ feature: LANG-SYN-STRUCT, LANG-SYN-FIELD-ACCESS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 struct Pair { a: i32, b: i32 }
 

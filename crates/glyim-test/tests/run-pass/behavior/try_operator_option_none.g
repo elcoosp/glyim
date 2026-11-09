@@ -1,7 +1,9 @@
 // `?` on Option::None propagates `None` to the caller.
-// test-mode: run-pass
-// exit-code: 99
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 99
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-BUILTIN-OPTION, STD-CORE-OPTION, LANG-ERR-TRY-RESULT, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn get() -> Option<i32> { Option::None }
 fn inner() -> Option<i32> {
     let v = get()?;

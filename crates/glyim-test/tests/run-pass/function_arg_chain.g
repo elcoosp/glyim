@@ -1,5 +1,7 @@
-// test-mode: run-pass
-// exit-code: 6
+//@ mode: run-pass
+//@ expect-exit: 6
+//@ feature: LANG-SYN-FN-DEF, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 fn step1(x: i32) -> i32 { x + 1 }
 fn step2(x: i32) -> i32 { step1(x) * 2 }

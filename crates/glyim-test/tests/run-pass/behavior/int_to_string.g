@@ -1,8 +1,11 @@
 // §3.5.22: integer to_string + format!("{}", int).
 // Uses byte-length checks instead of string equality (comparison ops
 // on String may not work in all contexts). test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ feature: LANG-BUILTIN-STRING, STD-ALLOC-STRING, STD-STD-INT-STR, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a = 42.to_string();
     if a.as_str().len() != 2 { return 1; }        // "42"

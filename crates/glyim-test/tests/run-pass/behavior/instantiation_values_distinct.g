@@ -12,10 +12,12 @@
 // value (or crash on stack corruption). The summed exit code (65) is
 // distinctive; any substitution that returns a tag or a payload from a
 // different layer produces a different total.
-// test-mode: run-pass
-// exit-code: 65
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 65
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a: i32 = Option::Some(11).unwrap();                                    // 11
     let b: i32 = Option::Some(Option::Some(23)).unwrap().unwrap();             // 23

@@ -16,9 +16,11 @@
 //    prerequisite: `self.v` for `VecIter<T>` is
 //    `Adt(1020, [Param(0)])` and would otherwise leak `Param(0)` into
 //    codegen.
-// test-mode: run-pass
-// exit-code: 6
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 6
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-FIELD-ACCESS, LANG-BUILTIN-VEC, STD-ALLOC-VEC, COMPILER-MONO-MONOMORPHIZE, STD-CORE-ITER, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 struct VecIter<T> { v: Vec<T>, i: usize }
 
 impl<T> Iterator for VecIter<T> {

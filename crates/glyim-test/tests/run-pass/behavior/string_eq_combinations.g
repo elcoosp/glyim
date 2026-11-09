@@ -7,9 +7,11 @@
 // slot). Per-side shape extraction in codegen's `string_ptr_len` fixes
 // all combinations. Interp path already compares via `InterpValue`
 // equality.
-// test-mode: run-pass
-// exit-code: 15
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 15
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-BUILTIN-STRING, STD-ALLOC-STRING, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a = String::from("x");
     let b = String::from("x");

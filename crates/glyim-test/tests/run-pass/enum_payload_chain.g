@@ -1,8 +1,10 @@
 // Enum payload extracted, then fed into a chain of arithmetic.
 // Combines the enum-aggregate-fold fix, the Field-offset fix, and the
 // binary-expr checkpoint fix.
-// test-mode: run-pass
-// exit-code: 20
+//@ mode: run-pass
+//@ expect-exit: 20
+//@ feature: LANG-SYN-ENUM, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 enum Wrapper { Value(i32), Empty }
 

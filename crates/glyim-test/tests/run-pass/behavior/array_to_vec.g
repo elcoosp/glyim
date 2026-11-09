@@ -3,9 +3,11 @@
 // coercion, so codegen handled only the `{ptr, len}` fat-pointer case and
 // emitted an undefined `__glyim_fn_<builtin>` symbol. Codegen now spills the
 // array and passes its address plus the static length.
-// test-mode: run-pass
-// exit-code: 3
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 3
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-TY-ARRAY, LANG-BUILTIN-VEC, STD-ALLOC-VEC, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a = [1, 2, 3];
     let v = a.to_vec();

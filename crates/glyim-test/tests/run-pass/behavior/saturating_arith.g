@@ -11,9 +11,11 @@
 // unsuffixed literals are silently wrapped, where Rust errors). Suffixing
 // sidesteps the gap entirely so this fixture tests saturating arithmetic,
 // not literal typing.
-// test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-OPERATORS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let mut fails = 0;
 

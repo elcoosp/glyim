@@ -1,8 +1,10 @@
 // §3.5.19 follow-up: signed (i32/i64) saturating arithmetic, and
 // regression coverage for the unsigned path.
-// test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-OPERATORS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     // Signed i32
     let a: i32 = 2000000000;

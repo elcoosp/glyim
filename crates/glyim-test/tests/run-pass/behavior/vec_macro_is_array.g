@@ -5,8 +5,10 @@
 //
 // Design note: `vec![...]` is an array, NOT a `Vec` — see §3.7's design
 // note. `.push()` / `.as_slice()` still need the `Vec::new()` route.
-// test-mode: run-pass
-// exit-code: 3
+//@ mode: run-pass
+//@ expect-exit: 3
+//@ feature: LANG-TY-ARRAY, LANG-BUILTIN-VEC, STD-ALLOC-VEC, LANG-MACRO-RULES, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let v = vec![1, 2, 3];
     v.len() as i32

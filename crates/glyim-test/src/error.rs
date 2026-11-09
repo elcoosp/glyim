@@ -28,6 +28,24 @@ pub enum TestDiscoveryError {
         /// `Struct`.
         message: String,
     },
+    /// `M1.4` `DoD`: the fixture has no `//@` annotation header at all, so it
+    /// cannot be joined to a registry feature or backend by the readiness
+    /// ledger.
+    MissingAnnotations {
+        /// `Struct`.
+        path: PathBuf,
+    },
+    /// `M1.4` `DoD`: the fixture is annotated but lacks the expectation its
+    /// mode requires (a run-pass/run-fail outcome or a compile-fail error
+    /// pattern), so it can only pass by tolerance.
+    MissingExpectation {
+        /// `Struct`.
+        path: PathBuf,
+        /// `Struct`.
+        mode: crate::harness::config::TestMode,
+        /// `Struct`.
+        requirement: String,
+    },
 }
 
 impl std::fmt::Display for TestDiscoveryError {
@@ -49,6 +67,20 @@ impl std::fmt::Display for TestDiscoveryError {
                     path.display()
                 )
             }
+            Self::MissingAnnotations { path } => write!(
+                f,
+                "fixture {} has no `//@` annotation header (plan M1.4: every fixture must be tagged)",
+                path.display()
+            ),
+            Self::MissingExpectation {
+                path,
+                mode,
+                requirement,
+            } => write!(
+                f,
+                "fixture {} ({mode:?}) lacks the required expectation: {requirement}",
+                path.display()
+            ),
         }
     }
 }

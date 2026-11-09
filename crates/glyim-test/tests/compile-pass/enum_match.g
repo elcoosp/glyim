@@ -1,4 +1,6 @@
-// test-mode: compile-pass
+//@ mode: compile-pass
+//@ feature: LANG-MATCH-GUARDS, LANG-SYN-ENUM, TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 enum Pair { Both(i32, i32), Neither }
 fn main() -> i32 {
     let p = Pair::Both(1, 2);

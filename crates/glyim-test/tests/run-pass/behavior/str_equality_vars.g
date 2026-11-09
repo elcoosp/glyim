@@ -4,10 +4,12 @@
 // The empty-string branch exercises `glyim_str_eq`'s `l_len == 0` early
 // return: the byte pointers may be null/dangling, so a wrong
 // implementation that dereferences before checking length segfaults.
-// test-mode: run-pass
-// exit-code: 19
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 19
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-TY-STR, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let empty_a = "";
     let empty_b = "";

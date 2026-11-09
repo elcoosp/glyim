@@ -23,10 +23,12 @@
 // 420, and 420 & 255 = 164 — verified by running the compiled binary
 // directly (`glyim-cli --with-stdlib --emit=exec …; ./out; echo $?` →
 // 164). The header was stale, not the program; corrected to 164.
-// test-mode: run-pass
-// exit-code: 164
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 164
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-TY-SLICE, STD-CORE-SLICE, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a = [10, 20, 30, 40, 50, 60, 70, 80, 90];
     // a[2..5] = [30,40,50] -> 120; a[..3] = [10,20,30] -> 60; a[6..] = [70,80,90] -> 240

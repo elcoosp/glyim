@@ -11,10 +11,12 @@
 // source-order position as the field index. Distinct primes per field
 // (and a 100/10/1 weighting) make any wrong binding produce a distinctly
 // wrong exit code.
-// test-mode: run-pass
-// exit-code: 234
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 234
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-MATCH-GUARDS, LANG-SYN-ENUM, LANG-TY-TUPLE, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 enum E {
     A(i32, i32, i32),
     B,

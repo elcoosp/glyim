@@ -4,9 +4,11 @@
 // with a rigid `Param(0)` input alongside an `Adt(id, [Infer(X)])`
 // output, so X was never bound. Passing `b` to `.or()` then ICEd.
 // Fixed by sharing the ctor vars between sig input and output.
-// test-mode: run-pass
-// exit-code: 8
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 8
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-BUILTIN-OPTION, STD-CORE-OPTION, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a: Option<i32> = Option::None;
     let b = Option::Some(8);

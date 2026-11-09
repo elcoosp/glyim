@@ -4,9 +4,11 @@
 //
 // The value is dropped at `work`'s return (scope-exit drops are emitted per
 // *function*, not per inner block — a separate, pre-existing gap).
-// test-mode: run-pass
-// exit-code: 5
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 5
+//@ compile-flags: --with-stdlib
+//@ feature: COMPILER-OPT-DROP-ELAB, STD-CORE-OPS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 static mut COUNT: i32 = 0;
 struct G { v: i32 }
 impl Drop for G {

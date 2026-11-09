@@ -16,10 +16,12 @@
 //
 // Distinct primes across the shadow and the outer read make a leak
 // produce a distinctly wrong exit code.
-// test-mode: run-pass
-// exit-code: 40
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 40
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-SCOPE-SHADOWING, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let x = 5;
     let y = { let x = 20; x };   // inner x = 20

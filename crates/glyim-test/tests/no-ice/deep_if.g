@@ -1,6 +1,8 @@
-// test-mode: no-ice
+
 // A deeply nested `else if` chain. The T078 recursion guard must produce a
 // diagnostic instead of overflowing the stack (FE-111).
+//@ feature: LANG-SYN-IF, TOOL-TEST-NO-ICE
+//@ backends: gam
 fn main() -> i32 {
     if false { 0 }
     else if false { 1 }

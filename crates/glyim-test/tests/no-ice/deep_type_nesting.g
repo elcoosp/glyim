@@ -1,6 +1,8 @@
 // no-ice corpus: a 100,000-deep reference type must produce a parse
 // diagnostic, not a stack overflow. Prior to the parse_type depth guard
 // this crashed the compiler with SIGSEGV (uncatchable).
+//@ feature: TOOL-TEST-NO-ICE
+//@ backends: gam
 fn main() {
     let p: &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&i32 = 0;
     let _ = p;

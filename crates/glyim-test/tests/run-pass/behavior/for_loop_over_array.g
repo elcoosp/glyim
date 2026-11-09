@@ -15,10 +15,12 @@
 //
 // Distinct prime sums across 5 elements make any residual off-by-one
 // or skipped-element regression produce a distinctly wrong exit code.
-// test-mode: run-pass
-// exit-code: 15
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 15
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-FOR-SLICE-ITER, LANG-TY-ARRAY, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a = [1, 2, 3, 4, 5];
     let mut s = 0;

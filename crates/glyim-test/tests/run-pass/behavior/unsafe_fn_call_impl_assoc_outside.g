@@ -1,8 +1,10 @@
 // §3.5.30 item 2: calling an inherent associated `unsafe fn`
 // (`S::get_value()`) outside any `unsafe { }` block must compile
 // (warn) and run.
-// test-mode: run-pass
-// exit-code: 42
+//@ mode: run-pass
+//@ expect-exit: 42
+//@ feature: LANG-SYN-IMPL, LANG-SYN-UNSAFE-BLOCK, LANG-SYN-FN-DEF, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 struct S;
 
 impl S {

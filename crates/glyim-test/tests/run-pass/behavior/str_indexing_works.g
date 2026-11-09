@@ -10,10 +10,12 @@
 //
 // ASCII primes so any wrong-index or wrong-width read produces a
 // distinct exit code.
-// test-mode: run-pass
-// exit-code: 215
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 215
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-TY-STR, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let s = "hello";
     let a: u8 = s[0];       // 'h' = 104

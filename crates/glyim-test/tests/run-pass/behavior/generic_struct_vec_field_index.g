@@ -8,9 +8,11 @@
 // rejected ("monomorphization should have resolved this"). The
 // substitution is now recursive via `TypeLookup::subst_ty` (leaf-only
 // default) overridden on the frozen `TyCtx`.
-// test-mode: run-pass
-// exit-code: 20
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 20
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-STRUCT, LANG-SYN-FIELD-ACCESS, LANG-BUILTIN-VEC, STD-ALLOC-VEC, COMPILER-MONO-MONOMORPHIZE, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 struct Wrap<T> { v: Vec<T>, i: usize }
 fn main() -> i32 {
     let w = Wrap { v: [10, 20, 30].to_vec(), i: 1 };

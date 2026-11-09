@@ -6,9 +6,11 @@
 // Lowering emits the `into_iter(v)` call into a fresh local and rebinds
 // `iter_local` to it — avoiding the 3-word Vec vs 2-word slice-pointer
 // layout mismatch that segfaulted earlier attempts.
-// test-mode: run-pass
-// exit-code: 6
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 6
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-FOR-SLICE-ITER, LANG-BUILTIN-VEC, STD-ALLOC-VEC, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let v: Vec<i32> = [1, 2, 3].to_vec();
     let mut sum = 0;

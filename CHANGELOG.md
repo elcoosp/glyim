@@ -8,6 +8,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Fixture annotation grammar + codemod (M1.4)**: every `.g` fixture
+  carries a machine-readable `//@` header, and the harness rejects
+  fixtures that lack one — the "100% of fixtures tagged; fixtures lacking
+  expectations rejected" DoD is a tested fact, not a promise.
+  - `glyim-test`: new `annotations::directives` grammar — `//@ mode:`,
+    `//@ feature:` (comma-separated registry IDs, shape-checked),
+    `//@ backends:` (validated against the ledger's `gam`/`llvm`/
+    `cranelift`/`bytecode` set), the `expect-*` outcome family
+    (`expect-exit`/`expect-stdout`/`expect-stderr`/`expect-error`/
+    `expect-warning`/`forbid-warning`), and the harness gates
+    (`needs-llvm`, `ignore`, `only-target`, `compile-flags`, `aux-file`,
+    `timeout`, `min-version`, `revisions`, `[rev] compile-flags`).
+    Unknown keys, malformed IDs, duplicate singular keys, and mixing a
+    legacy `// key:` header with its canonical `//@` spelling are hard
+    parse errors, so a typo can never become a silent no-op tag.
+  - `glyim-test`: the collector rejects fixtures with no `//@` header
+    (`MissingAnnotations`) and fixtures whose mode lacks the required
+    expectation — run-pass/run-fail must pin an exit code or
+    stdout/stderr pattern (the strategies' defaults `0`/`1` are now
+    spelled out in every fixture), compile-fail must carry an inline
+    `//~` annotation or `//@ expect-error:` (`MissingExpectation`).
+  - `glyim-test`: new `glyim-tag-fixtures` codemod bin converts every
+    fixture header to the canonical form and derives the ledger tags
+    (410 fixtures: 375 in the `glyim-test` corpora plus the 35 in the
+    per-crate corpora of `glyim-lower`/`glyim-typeck`/`glyim-pipeline`/
+    `glyim-lang-{alloc,core,std}` that drive the same `TestCollector`):
+    `feature` from a curated keyword table (92 distinct IDs, all
+    cross-checked against the M1.2 registry via `--verify-ids`) plus the
+    fixture-mode feature, `backends` from the CI reality (`gam, llvm`
+    for the run corpora and `needs-llvm` fixtures; `gam, bytecode` for
+    the `--backend=bytecode` fixture; `gam` elsewhere). The rewrite is
+    idempotent; prose comments pass through untouched.
+  - The tagging surfaced two real seams: `runtime/drop_order.g` (a
+    bytecode-backend fixture not driven by any corpus — the async-proof
+    gating in `tests/runtime.rs` covers `runtime/m5` only) and the
+    `typeck/` + `codegen/` fixture dirs (no corpus root points at them).
+    Both are now tagged and recorded for the ledger's work queue (M1.9
+    `ledger next`), not silently fixed here.
+  - Bench: `glyim-test --bench annotations` measures one full discovery
+    pass (parse: 375 rich headers in ~0.4 ms; codemod rewrite: 375
+    legacy fixtures in ~1.4 ms) — the M1.4 gate is effectively free.
+  - New tests: 29 unit tests across the grammar contract and the codemod
+    rewrite rules, plus the workspace-wide `annotations_corpus` DoD gate
+    (covering the per-crate corpora as well). The M0 metrics ratchet
+    baseline is refreshed (+129 test functions, 0 inline allows).
+  - Docs drift fixed while landing: README badge/MSRV said Rust 1.94
+    (workspace `rust-version` is 1.95), the crate-count badge said 20+
+    (the workspace has 38 members), and the stale committed `Cargo.lock`
+    (members at 0.5.0 vs workspace 0.5.1) is regenerated.
 - **Inventory extractors, slice 1 (M1.3)**: `ledger inventory` reads the
   source, so the registry can no longer drift from the code (plan §3.5).
   - `ledger-schema`: two `syn`-based extractors — MIR IR variants

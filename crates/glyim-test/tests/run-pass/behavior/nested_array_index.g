@@ -12,10 +12,12 @@
 //
 // Distinct values per cell make any wrong-offset read produce a
 // distinctly wrong exit code.
-// test-mode: run-pass
-// exit-code: 10
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 10
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-TY-ARRAY, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let m = [[1, 2], [3, 4]];
     // 1 + 2 + 3 + 4 = 10

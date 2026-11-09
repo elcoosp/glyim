@@ -1,5 +1,7 @@
-// test-mode: compile-pass
+//@ mode: compile-pass
 // V16-T05: cmp::min, cmp::max
+//@ feature: STD-CORE-CMP, TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 
 fn main() {
     let a = 5;

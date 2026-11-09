@@ -14,10 +14,12 @@
 //
 // A failure here is a link error (`___glyim_fn_362`) — or, if the symbol
 // happened to match, a wrong-ABI call.
-// test-mode: run-pass
-// exit-code: 4
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 4
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: COMPILER-MONO-MONOMORPHIZE, COMPILER-TI-UNIFICATION, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     // The receiver of the second `.unwrap` is the *result* of the first
     // (type still infer at the read site).

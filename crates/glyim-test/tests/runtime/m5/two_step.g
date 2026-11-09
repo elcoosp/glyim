@@ -21,9 +21,11 @@
 // runnable ELF, and asserts it exits with `3`. The MIR-interpreter proof
 // (`glyim-pipeline::async_multi_await_runtime::m5_two_step_runtime_returns_3`)
 // also remains green.
-// test-mode: run-pass
-// only-target: x86_64-unknown-linux-gnu
-// exit-code: 3
+//@ mode: run-pass
+//@ only-target: x86_64-unknown-linux-gnu
+//@ expect-exit: 3
+//@ feature: LANG-ASYNC-AWAIT, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 enum Poll<T> { Ready(T), Pending }
 trait Future {
     type Output;

@@ -1,8 +1,10 @@
 // Two pointers to different locals must be unequal — exercises the
 // `ne` arm's pointer path (same lowering as `eq`, `NE` predicate).
-// test-mode: run-pass
-// exit-code: 1
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 1
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-TY-RAW-PTR, STD-CORE-PTR, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let x = 7;
     let y = 7;

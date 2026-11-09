@@ -2,9 +2,11 @@
 // in patterns must bind the named field, not by position. Before this,
 // `E::A { y, .. }` bound `y` to the *first* declared field (`x`), so
 // this program exited 1 instead of 0.
-// test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-MATCH-GUARDS, LANG-SYN-ENUM, LANG-SYN-STRUCT, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 enum E {
     A { x: u8, y: u64 },
     B,

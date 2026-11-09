@@ -19,10 +19,12 @@
 // The fix returns `thir_expr.ty` (the dispatch arm's precise type) from
 // the MethodCall arm rather than the outer `ret_ty`, so the bound local
 // and the destination local agree.
-// test-mode: run-pass
-// exit-code: 42
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 42
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-MATCH-GUARDS, LANG-BUILTIN-RESULT, STD-CORE-RESULT, STD-CORE-PARSE, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let r = "42".parse::<i32>();
     match r {

@@ -10,7 +10,9 @@
 // `VariantCtor` calls (data-carrying variants), not `VariantRef` values
 // (unit variants). Adding the `VariantRef` arm routes the span into the
 // existing E0282 pipeline, which emits this clean diagnostic instead.
-// test-mode: compile-fail
+//@ mode: compile-fail
+//@ feature: STD-CORE-OPTION, COMPILER-TI-UNIFICATION, TOOL-TEST-COMPILE-FAIL
+//@ backends: gam
 fn main() -> i32 {
     let b = Option::None; //~ ERROR type annotations needed
     let _ = b;

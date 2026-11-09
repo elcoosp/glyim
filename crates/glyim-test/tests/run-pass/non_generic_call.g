@@ -2,8 +2,10 @@
 //
 // Regression: the `Call` arm once built the callee's `FnDef` substs from the
 // formal parameter list, so `add_one(x: i32)` got a spurious `substs = [i32]`.
-// test-mode: run-pass
-// exit-code: 42
+//@ mode: run-pass
+//@ expect-exit: 42
+//@ feature: LANG-SYN-FN-DEF, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 fn add_one(x: i32) -> i32 { x + 1 }
 

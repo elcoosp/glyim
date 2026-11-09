@@ -1,5 +1,7 @@
-// test-mode: compile-pass
+//@ mode: compile-pass
 // V17-T06: Vec::from_iter works
+//@ feature: STD-CORE-ITER, TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 
 fn main() {
     let items = [1, 2, 3, 4, 5];

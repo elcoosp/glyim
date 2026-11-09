@@ -1,8 +1,10 @@
 // Closure param must be seeded with the *resolved* formal (concrete
 // `&str`), not a raw Infer var — else `p.len()` reports no-method.
-// test-mode: run-pass
-// exit-code: 5
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 5
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-TY-REF, LANG-BUILTIN-OPTION, STD-CORE-OPTION, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let s = "hello";
     let o: Option<&str> = Option::Some(s);

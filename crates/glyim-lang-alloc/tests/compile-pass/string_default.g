@@ -1,5 +1,7 @@
-// test-mode: compile-pass
+//@ mode: compile-pass
 // V17: String::default() works
+//@ feature: LANG-BUILTIN-STRING, STD-ALLOC-STRING, LANG-TRAIT-DEFAULT-METHODS, STD-CORE-DEFAULT, TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 
 fn main() {
     let s: String = Default::default();

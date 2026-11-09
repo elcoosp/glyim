@@ -1,6 +1,8 @@
-// test-mode: run-pass
-// exit-code: 3
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 3
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-BUILTIN-STRING, STD-ALLOC-STRING, RUNTIME-FFI-VECSTR, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let mut v = Vec::new();
     v.push(97u8);

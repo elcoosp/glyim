@@ -14,10 +14,12 @@
 // is what `..p` desugars to. Distinct primes in every field ensure a
 // residual placeholder or a swapped field produces a distinct exit
 // code.
-// test-mode: run-pass
-// exit-code: 89
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 89
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-SYN-STRUCT, LANG-SYN-STRUCT-UPDATE, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 struct P { a: i32, b: i32, c: i32 }
 fn main() -> i32 {
     let p = P { a: 11, b: 23, c: 37 };

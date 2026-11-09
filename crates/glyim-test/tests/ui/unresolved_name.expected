@@ -1,5 +1,5 @@
 ERROR[T0001]: unresolved name `undefined_symbol`
- --> unresolved_name.g:3:5
-    |
-3 |     undefined_symbol
-    |     ^^^^^^^^^^^^^^^^^
+ --> unresolved_name.g:5:5
+      |
+5 |     undefined_symbol
+      |     ^^^^^^^^^^^^^^^^^

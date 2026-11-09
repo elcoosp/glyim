@@ -7,6 +7,9 @@
 //
 // The minimal shape that used to fail was any `let NAME: i32 = (..) - (b'0' as i32);`
 // followed by a use of `NAME`.
+//@ mode: compile-pass
+//@ feature: LANG-SYN-OPERATORS, TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 fn digit_value(ch: u8) -> i32 {
     let digit: i32 = (ch as i32) - (b'0' as i32);
     digit

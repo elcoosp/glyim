@@ -16,10 +16,12 @@
 // LLVM codegen instead of a typeck diagnostic), tracked separately in
 // §3.5.24. This fixture uses the valid form so the lowering path stays
 // covered while that's fixed.
-// test-mode: run-pass
-// exit-code: 49
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 49
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-SYN-IF-LET, LANG-SYN-IF, STD-CORE-OPTION, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a: i32 = if let Option::Some(x) = Option::Some(42) { x } else { 0 };
     let none_val: Option<i32> = Option::None;

@@ -3,6 +3,16 @@ pub mod pattern;
 
 pub use pattern::MatchPattern;
 
+pub use directives::{FixtureAnnotations, KNOWN_BACKENDS, is_valid_feature_id, parse_directives};
+
+/// directives.
+pub mod directives;
+
+/// codemod.
+pub mod codemod;
+
+pub use codemod::{backends_for, keyword_features, mode_feature, mode_for_dir, rewrite_fixture};
+
 use glyim_diag::DiagSeverity;
 
 #[derive(Clone, Debug)]

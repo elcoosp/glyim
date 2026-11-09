@@ -12,10 +12,12 @@
 //    and the call site's substitution is resolved through the inference
 //    table before the mangling key is computed (so the *inner* `.unwrap`
 //    on an `Infer(TyVar)` receiver still produces the concrete key).
-// test-mode: run-pass
-// exit-code: 6
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 6
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-BUILTIN-OPTION, STD-CORE-OPTION, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let o: Option<Option<i32>> = Option::Some(Option::Some(6));
     o.unwrap().unwrap()

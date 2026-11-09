@@ -1,1 +1,3 @@
+//@ feature: LANG-TY-PRIMITIVES, TOOL-TEST-NO-ICE
+//@ backends: gam
 fn main() -> i32 { 99999999999999999999999999999999 }

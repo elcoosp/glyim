@@ -2,7 +2,9 @@
 // the unsafe-fn-call diagnostic to error. The error fires at the call site
 // (inside `main`), not at the callee declaration — the diagnostic's span
 // is the call expression, matching rustc's behavior.
-// test-mode: compile-fail
+//@ mode: compile-fail
+//@ feature: LANG-SYN-UNSAFE-BLOCK, LANG-SCOPE-ATTR-ALLOW, LANG-SYN-FN-DEF, TOOL-TEST-COMPILE-FAIL
+//@ backends: gam
 unsafe fn get_value() -> i32 {
     42
 }

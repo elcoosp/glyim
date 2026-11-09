@@ -13,10 +13,12 @@
 //
 // Prior behavior when this class of bug was present: the program built
 // without diagnostics but returned a value that did not match the source.
-// test-mode: run-pass
-// exit-code: 199
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 199
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: STD-CORE-PARSE, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a = "61".parse::<i32>().unwrap();   // 61
     let b = "67".parse::<i32>().unwrap();   // 67

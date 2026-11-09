@@ -9,10 +9,12 @@
 // so this fixture no longer needs the `// needs-llvm` gate.
 //
 // The check-stderr matcher is LINE-anchored (TEST-1, 5b81184f).
-// test-mode: run-fail
-// exit-code: 101
-// check-stderr: thread 'main' panicked: attempt to divide by zero
-// compile-flags: --with-stdlib
+//@ mode: run-fail
+//@ expect-exit: 101
+//@ expect-stderr: thread 'main' panicked: attempt to divide by zero
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-OPERATORS, STD-STD-IO, RUNTIME-FFI-IO, TOOL-TEST-RUN-FAIL
+//@ backends: gam, llvm
 fn main() -> i32 {
     let x = 0;
     10 / x

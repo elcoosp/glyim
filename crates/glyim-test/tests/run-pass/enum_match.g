@@ -4,8 +4,10 @@
 // `E::A(42)` into a `MirConstKind::Aggregate` that dropped the variant index,
 // so codegen wrote 42 into the tag byte and the `match` read the tag as the
 // payload.
-// test-mode: run-pass
-// exit-code: 42
+//@ mode: run-pass
+//@ expect-exit: 42
+//@ feature: LANG-MATCH-GUARDS, LANG-SYN-ENUM, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 enum E { A(i32), B }
 

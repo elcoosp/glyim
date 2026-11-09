@@ -7,9 +7,11 @@
 // resolves `Iterator::next` on `iter_ty` directly and does not call
 // `IntoIterator::into_iter` first. That's a separate typeck change
 // tracked in KNOWN_GAPS §3.4.
-// test-mode: run-pass
-// exit-code: 6
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 6
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-BUILTIN-VEC, STD-ALLOC-VEC, STD-CORE-ITER, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let v: Vec<i32> = [1, 2, 3].to_vec();
     let mut it = v.into_iter();

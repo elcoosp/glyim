@@ -6,10 +6,12 @@
 // exercises the `(FnDefId, Substitution)` mangling key with a non-unit
 // second parameter, which is where a hash-by-length-only scheme would
 // collide.
-// test-mode: run-pass
-// exit-code: 7
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 7
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: STD-CORE-OPTION, LANG-BUILTIN-RESULT, STD-CORE-RESULT, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let r: Result<Result<i32, i32>, i32> = Result::Ok(Result::Ok(7));
     r.unwrap().unwrap()

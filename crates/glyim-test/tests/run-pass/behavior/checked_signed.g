@@ -4,9 +4,11 @@
 // arms whose body is a bare `return` currently mis-type (`mismatched
 // types: () vs i32`), a pre-existing shape separate from this feature.
 // checked_arith.g uses is_some/is_none too — same pattern.
-// test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-OPERATORS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     // i32 add: MAX + -1 = Some(MAX-1) — the sadd trap
     let a: i32 = 2147483647;

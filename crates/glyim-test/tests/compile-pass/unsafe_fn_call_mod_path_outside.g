@@ -1,6 +1,8 @@
 // §3.5.30 item 4: `mod::f` unsafe call outside `unsafe { }` must warn.
-// test-mode: compile-pass
-// expect-warning: call to unsafe function
+//@ mode: compile-pass
+//@ expect-warning: call to unsafe function
+//@ feature: LANG-SYN-UNSAFE-BLOCK, LANG-SCOPE-MOD-DECL, LANG-SYN-FN-DEF, TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 mod m {
     unsafe fn get_value() -> i32 {
         42
