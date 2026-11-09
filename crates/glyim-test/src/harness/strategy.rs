@@ -175,7 +175,23 @@ impl UiTestStrategy {
             };
         }
 
-        let expected = std::fs::read_to_string(&expected_path).unwrap();
+        // Micro-debt fix (M1.6 pass): the previous
+        // `fs::read_to_string(..).unwrap()` sat in the TOCTOU window between
+        // the `exists()` check above and the read — a file removed in
+        // between, a permissions change, or an `X.expected` *directory*
+        // panicked the whole test process. A snapshot that exists but
+        // cannot be read is a per-fixture failure, not an infra crash.
+        let expected = match std::fs::read_to_string(&expected_path) {
+            Ok(text) => text,
+            Err(err) => {
+                return super::executor::TestOutcome::Failed {
+                    reason: FailureReason::UiExpectedUnreadable {
+                        path: expected_path,
+                        message: err.to_string(),
+                    },
+                };
+            }
+        };
         if normalized == expected {
             super::executor::TestOutcome::Passed
         } else {

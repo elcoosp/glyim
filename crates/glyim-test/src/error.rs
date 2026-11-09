@@ -46,6 +46,17 @@ pub enum TestDiscoveryError {
         /// `Struct`.
         requirement: String,
     },
+    /// M1.6 strict-xfail witness contract (plan §3.3): the fixture carries
+    /// `//@ known-gap: GAP-NNNN` but its resolved mode is not
+    /// `compile-fail`. The inversion semantics are defined on "the
+    /// compiler rejected / accepted the witness", which only a compile-fail
+    /// fixture measures; any other mode is annotation drift.
+    WitnessRequiresCompileFail {
+        /// The offending fixture.
+        path: PathBuf,
+        /// The resolved (non-compile-fail) mode.
+        mode: crate::harness::config::TestMode,
+    },
 }
 
 impl std::fmt::Display for TestDiscoveryError {
@@ -79,6 +90,15 @@ impl std::fmt::Display for TestDiscoveryError {
             } => write!(
                 f,
                 "fixture {} ({mode:?}) lacks the required expectation: {requirement}",
+                path.display()
+            ),
+            Self::WitnessRequiresCompileFail { path, mode } => write!(
+                f,
+                "fixture {} declares `//@ known-gap:` but resolves to mode {mode:?}: \
+                 a strict-xfail witness must be a compile-fail fixture, because the \
+                 inversion is defined on the compiler rejecting (or accepting) the witness \
+                 (plan §3.3, M1.6). Set `//@ mode: compile-fail` and annotate the expected \
+                 diagnostic with `//@ expect-error:` or `//~ ERROR`.",
                 path.display()
             ),
         }
@@ -135,6 +155,18 @@ pub enum FailureReason {
         /// `Struct`.
         path: PathBuf,
     },
+    /// Micro-debt fix (M1.6 pass): the `.expected` snapshot file exists
+    /// (the `exists()` gate passed) but could not be read — a TOCTOU
+    /// window, a permissions change, or an `X.expected` *directory*.
+    /// The previous `fs::read_to_string(..).unwrap()` turned this into a
+    /// panic that killed the whole test process; it is a per-fixture
+    /// failure, not an infra crash.
+    UiExpectedUnreadable {
+        /// The unreadable snapshot path.
+        path: PathBuf,
+        /// The underlying io error message.
+        message: String,
+    },
     /// `Variant`.
     TimeoutExceeded {
         /// `Struct`.
@@ -163,6 +195,16 @@ pub enum FailureReason {
         /// Human-readable detail: what was required vs. what was
         /// available.
         detail: String,
+    },
+    /// M1.6 strict-xfail inversion (plan §3.3): a compile-fail fixture
+    /// carrying `//@ known-gap: GAP-NNNN` compiled *cleanly* — the gap it
+    /// witnesses has closed. This is the strict half of strict-xfail: the
+    /// witness must be retired in the same change that fixes the gap, and
+    /// the readiness ledger must be updated, otherwise the registry
+    /// claims a regression that no longer exists.
+    KnownGapClosed {
+        /// The witnessed gap ID, e.g. `"GAP-0001"`.
+        gap: String,
     },
     /// `Variant`.
     RunFailed {
@@ -222,6 +264,15 @@ impl std::fmt::Display for FailureReason {
             }
             Self::UiOutputDiffers { diff } => write!(f, "output differs:\n{diff}"),
             Self::UiNoExpectedFile { path } => write!(f, "no expected file: {}", path.display()),
+            Self::UiExpectedUnreadable { path, message } => write!(
+                f,
+                "cannot read expected snapshot {}: {message}\
+                 \nhelp: the file passed the `exists()` check but is unreadable \
+                 (removed between the check and the read, a permissions change, \
+                 or `X.expected` is a directory). This is a per-fixture failure, \
+                 not a harness crash.",
+                path.display()
+            ),
             Self::TimeoutExceeded { timeout_secs } => {
                 write!(f, "exceeded {timeout_secs}s timeout")
             }
@@ -258,6 +309,14 @@ impl std::fmt::Display for FailureReason {
                     "required {need} not satisfied: {detail} (GLYIM_TEST_NO_SKIP=1 makes this a hard failure)"
                 )
             }
+            Self::KnownGapClosed { gap } => write!(
+                f,
+                "known-gap {gap} closed: the compiler now accepts this witness fixture.\
+                 \nhelp: the strict-xfail contract (plan §3.3, M1.6) requires retiring the \
+                 witness in the same change that fixes the gap — remove the \
+                 `//@ known-gap:` header, migrate the fixture to the pass corpus, and \
+                 update the `[[gap]]` entry under ledger/gaps/**.",
+            ),
         }
     }
 }

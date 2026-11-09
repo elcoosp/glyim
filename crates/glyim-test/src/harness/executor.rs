@@ -153,10 +153,29 @@ impl TestExecutor {
     /// `run_parallel`.
     #[must_use]
     pub fn run_parallel(&self, tests: &[Arc<DiscoveredTest>]) -> Vec<TestResult> {
-        let pool = rayon::ThreadPoolBuilder::new()
+        // Micro-debt fix (M1.6 pass): the previous `build().unwrap()` turned
+        // an OS thread-creation failure (RLIMIT_NPROC, cgroup caps, a
+        // max_concurrent larger than the kernel allows) into a panic that
+        // killed the whole test process — losing every result instead of
+        // degrading gracefully. Falling back to the sequential path keeps
+        // the run correct (just slower) and the reason visible in tracing.
+        let pool = match rayon::ThreadPoolBuilder::new()
             .num_threads(self.max_concurrent)
             .build()
-            .unwrap();
+        {
+            Ok(pool) => Some(pool),
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    max_concurrent = self.max_concurrent,
+                    "rayon thread-pool build failed; running the corpus sequentially instead"
+                );
+                None
+            }
+        };
+        let Some(pool) = pool else {
+            return self.run_sequential(tests);
+        };
         let tests_c: Vec<Arc<DiscoveredTest>> = tests.to_vec();
         let compiler = Arc::clone(&self.compiler);
         let bless = self.bless;
@@ -317,6 +336,23 @@ fn execute_test(
     let duration = start.elapsed();
     tracing::info!(duration_ms = duration.as_millis(), "done");
 
+    // M1.6 strict-xfail witness inversion (plan §3.3): a compile-fail
+    // fixture carrying `//@ known-gap: GAP-NNNN` is the reproducible
+    // witness of an open readiness gap. While the gap is open the compiler
+    // must *reject* the witness — the compile-fail expectations hold and
+    // the outcome passes through unchanged. If the compiler instead
+    // *accepts* the witness (no error diagnostics at all), the generic
+    // `DiagnosticMismatch` would read as "test bug"; it actually means the
+    // gap has CLOSED, and the strict-xfail contract demands a loud,
+    // self-describing failure that tells the author how to retire the
+    // witness.
+    let outcome = apply_witness_inversion(
+        test.config.known_gap.as_deref(),
+        test.config.mode,
+        outcome,
+        &diagnostics,
+    );
+
     TestResult {
         test,
         revision,
@@ -324,6 +360,37 @@ fn execute_test(
         duration,
         diagnostics,
     }
+}
+
+/// Apply the M1.6 strict-xfail inversion to a compile-fail outcome when the
+/// fixture is a `//@ known-gap:` witness. Passing the outcome through a named
+/// function (instead of inline branching) keeps the executor's happy path
+/// flat and gives the seam one tracing span.
+fn apply_witness_inversion(
+    known_gap: Option<&str>,
+    mode: super::config::TestMode,
+    outcome: TestOutcome,
+    diagnostics: &[GlyimDiagnostic],
+) -> TestOutcome {
+    let (Some(gap), super::config::TestMode::CompileFail) = (known_gap, mode) else {
+        return outcome;
+    };
+    let witness_span = tracing::info_span!("witness", gap = %gap);
+    let _enter = witness_span.enter();
+
+    let compiler_accepted = diagnostics.iter().all(|d| !d.is_error());
+    if compiler_accepted {
+        tracing::warn!(
+            gap = %gap,
+            "known-gap witness closed: the compiler accepted a fixture it must reject"
+        );
+        return TestOutcome::Failed {
+            reason: FailureReason::KnownGapClosed {
+                gap: gap.to_string(),
+            },
+        };
+    }
+    outcome
 }
 
 fn execute_inner(
