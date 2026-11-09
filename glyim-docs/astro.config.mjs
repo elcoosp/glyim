@@ -10,6 +10,9 @@ export default defineConfig({
   site: 'https://glyim.vercel.app',
         integrations: [
                 starlight({
+                        expressiveCode: {
+                        	themes: ['github-light', 'github-dark'],
+                        },
                         title: 'Glyim',
                         description:
                                 'Documentation for Glyim, a modular, from-scratch compiler for a Rust-like systems programming language, written in Rust.',

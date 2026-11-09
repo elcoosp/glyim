@@ -6,14 +6,13 @@ sidebar:
   order: 2
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 This page walks through Glyim's compilation pipeline stage by stage — what each stage consumes, what it produces, and why it exists. The pipeline is end-to-end functional for a substantial subset of the language.
 
 ## The map
 
-```text
-source.g
+<Code lang="text" code={`source.g
    │
    ▼
 Lexer → Parser → CST                (glyim-frontend, glyim-syntax)
@@ -35,8 +34,7 @@ Lowering → MIR (CFG)                (glyim-lower, glyim-mir)
                      │           (const-eval, tests)
                      ▼
         LLVM IR → .o / exe      or      Bytecode → .gbc
-        (glyim-codegen-llvm)            (glyim-codegen, glyim-bytecode-vm)
-```
+        (glyim-codegen-llvm)            (glyim-codegen, glyim-bytecode-vm)`} />
 
 ## Frontend: from characters to a lossless tree
 

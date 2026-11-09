@@ -6,7 +6,7 @@ sidebar:
   order: 4
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, Code } from '@astrojs/starlight/components';
 
 The compiler's lint framework (§3.5.30 in the internal plan) assigns a severity level to named checks. This page documents every available lint and the flags that control them.
 
@@ -31,8 +31,7 @@ All three flags are repeatable, and later flags override earlier ones for the sa
 
 ## Usage
 
-```bash
-# Promote the unsafe_fn_call lint to an error
+<Code lang="bash" code={`# Promote the unsafe_fn_call lint to an error
 glyim input.g -D unsafe
 
 # Suppress it
@@ -42,8 +41,7 @@ glyim input.g -A unsafe_fn_call
 glyim input.g -W unused_generic_params
 
 # List every available lint name and alias
-glyim -W help
-```
+glyim -W help`} />
 
 `glyim -W help` answers before argument parsing enforces the required input file, so it works as a standalone command.
 

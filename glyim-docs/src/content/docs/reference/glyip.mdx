@@ -6,7 +6,7 @@ sidebar:
   order: 2
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, Badge, Code } from '@astrojs/starlight/components';
 
 `glyip` is Cargo's counterpart for Glyim projects. It reads a `Glyip.toml` manifest, resolves dependencies with SemVer 2.0 matching, maintains a `Glyip.lock` lockfile, and drives the compiler.
 
@@ -22,10 +22,8 @@ Scaffold a new project.
 | `--lib` | flag | off | Create a library project instead of a binary. |
 | `--edition <EDITION>` | string | `2024` | Language edition. |
 
-```bash
-glyip new my_project
-glyip new my_lib --lib
-```
+<Code lang="bash" code={`glyip new my_project
+glyip new my_lib --lib`} />
 
 ### `glyip build`
 
@@ -39,9 +37,7 @@ Compile the project. Builds are incremental — sources and build configuration 
 | `--opt-level <N>` | 0–3 | `0` | Optimization level. |
 | `--lto <KIND>` | `off` \| `thin` \| `fat` | `off` | Link-time optimization. Unknown values are treated as `off`. |
 
-```bash
-glyip build --release -O2
-```
+<Code lang="bash" code={`glyip build --release -O2`} />
 
 ### `glyip test`
 
@@ -54,9 +50,7 @@ Run the project's tests.
 | `--no-run` | flag | off | Compile the tests but do not run them. |
 | `--compiled` | flag | off | Compile each test file to a native executable and run it as a real subprocess instead of the in-process MIR interpreter. |
 
-```bash
-glyip test --filter parser --compiled
-```
+<Code lang="bash" code={`glyip test --filter parser --compiled`} />
 
 ### `glyip run`
 
@@ -69,9 +63,7 @@ Build and execute the project's binary. Always uses the LLVM backend, because ru
 | `--lto <KIND>` | `off` \| `thin` \| `fat` | `off` | Link-time optimization. |
 | `-- <ARGS>` | strings | none | Everything after `--` is passed to the program. |
 
-```bash
-glyip run -- --flag value
-```
+<Code lang="bash" code={`glyip run -- --flag value`} />
 
 ## The `Glyip.toml` manifest
 
@@ -81,13 +73,13 @@ The manifest is parsed with unknown-key rejection: an unrecognized key is an err
 
 | Key | Type | Default | Required | Description |
 |-----|------|---------|----------|-------------|
-| `name` | string | — | yes | Crate name. |
-| `version` | string | `"0.1.0"` | no | Semantic version. |
-| `edition` | string | `"2024"` | no | Language edition. |
-| `authors` | string array | `[]` | no | Author list. |
-| `description` | string | none | no | Short description. |
-| `bin` | table array | none | no | Binary targets. |
-| `lib` | table | none | no | Library target. |
+| `name` | string | — | <Badge text="Required" variant="danger" /> | Crate name. |
+| `version` | string | `"0.1.0"` | <Badge text="Optional" variant="note" /> | Semantic version. |
+| `edition` | string | `"2024"` | <Badge text="Optional" variant="note" /> | Language edition. |
+| `authors` | string array | `[]` | <Badge text="Optional" variant="note" /> | Author list. |
+| `description` | string | none | <Badge text="Optional" variant="note" /> | Short description. |
+| `bin` | table array | none | <Badge text="Optional" variant="note" /> | Binary targets. |
+| `lib` | table | none | <Badge text="Optional" variant="note" /> | Library target. |
 
 Each `bin` entry accepts `name` (required) and `path` (source file, relative to the project root). The `lib` entry accepts `path`.
 
@@ -95,15 +87,13 @@ Each `bin` entry accepts `name` (required) and `path` (source file, relative to 
 
 Both sections map a crate name to either a bare version requirement or a detail table:
 
-```toml
-[dependencies]
+<Code lang="toml" code={`[dependencies]
 serde = "1.0"
 local_util = { path = "../local_util" }
 my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }
 
 [dev-dependencies]
-test_helpers = { path = "../test_helpers" }
-```
+test_helpers = { path = "../test_helpers" }`} />
 
 | Key | Type | Description |
 |-----|------|-------------|

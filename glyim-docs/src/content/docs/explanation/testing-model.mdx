@@ -6,7 +6,7 @@ sidebar:
   order: 5
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 Glyim's test harness (`glyim-test`) is a first-class part of the project, not an afterthought. This page explains the reasoning behind its layers: why there are five test modes, why every phase has a mock, and what property tests add.
 
@@ -28,13 +28,11 @@ The modes are deliberately coarse-grained: a test file states *what* must hold, 
 
 A `compile-fail` test pins diagnostics next to the code that produces them:
 
-```glyim
-fn main() {
+<Code lang="rust" code={`fn main() {
     let x: i32 = "hello";
     //~^ ERROR mismatched types
     //~| expected i32, found str
-}
-```
+}`} />
 
 The annotation grammar supports continuations (`//~|`), back-references (`//~^`), fuzzy ±1-line matching (`//~~`), and optional diagnostics (`//~?`). The effect: every diagnostic the compiler is expected to produce is written down next to the code that triggers it, so a diagnostic's text or placement cannot drift without a test failing.
 

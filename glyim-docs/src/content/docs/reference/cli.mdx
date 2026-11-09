@@ -6,13 +6,11 @@ sidebar:
   order: 1
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, Code } from '@astrojs/starlight/components';
 
 The `glyim` compiler driver (built as `glyim-cli`) compiles a single `.g` source file. This page documents the complete command-line surface, verified against the argument parser in `crates/glyim-cli`.
 
-```bash
-glyim <INPUT> [FLAGS]
-```
+<Code lang="bash" code={`glyim <INPUT> [FLAGS]`} />
 
 ## Arguments and flags
 
@@ -72,8 +70,7 @@ The LLVM backend is a hard dependency of the pipeline — there is no feature fl
 
 ## Examples
 
-```bash
-# Object file with the LLVM backend (defaults)
+<Code lang="bash" code={`# Object file with the LLVM backend (defaults)
 glyim input.g -o output.o
 
 # LLVM IR for inspection
@@ -89,8 +86,7 @@ glyim input.g --target aarch64-unknown-linux-gnu
 glyim input.g --error-format json
 
 # Prepend the standard library, deny the unsafe_fn_call lint
-glyim input.g --with-stdlib -D unsafe
-```
+glyim input.g --with-stdlib -D unsafe`} />
 
 ## Next steps
 
