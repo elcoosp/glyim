@@ -6,14 +6,13 @@ sidebar:
   order: 3
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, Code } from '@astrojs/starlight/components';
 
 Glyim is a Rust-like systems programming language with its own file extension, `.g`. This page lists the constructs the compiler accepts. The full grammar is still evolving — the `glyim-lang-core`, `glyim-lang-alloc`, and `glyim-lang-std` crates contain the current standard library source, written in Glyim, and serve as the compiler's bootstrapping corpus.
 
 ## A tour in one block
 
-```glyim
-// Structs, enums, generics, traits.
+<Code lang="rust" code={`// Structs, enums, generics, traits.
 struct Point<T> {
     x: T,
     y: T,
@@ -59,8 +58,7 @@ async fn fetch_twice() -> i32 {
     let a = fetch_one().await;
     let b = fetch_one().await;
     a + b
-}
-```
+}`} />
 
 ## Constructs
 

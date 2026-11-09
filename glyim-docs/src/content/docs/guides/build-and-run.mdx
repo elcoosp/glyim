@@ -6,7 +6,7 @@ sidebar:
   order: 1
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 This guide shows how to drive the day-to-day build workflow with `glyip`: debug and release builds, backend selection, optimization levels, link-time optimization, and running the result.
 
@@ -14,23 +14,17 @@ This guide shows how to drive the day-to-day build workflow with `glyip`: debug 
 
 Run this command in the directory that contains your `Glyip.toml`:
 
-```bash
-glyip build
-```
+<Code lang="bash" code={`glyip build`} />
 
 The build is incremental: `glyip` fingerprints sources and build configuration with SHA-256 and recompiles only what changed.
 
 ## Build in release mode
 
-```bash
-glyip build --release
-```
+<Code lang="bash" code={`glyip build --release`} />
 
 Combine `--release` with an explicit optimization level and LTO strategy when you want a tuned build:
 
-```bash
-glyip build --release -O2 --lto fat
-```
+<Code lang="bash" code={`glyip build --release -O2 --lto fat`} />
 
 <Aside type="caution">
 `fat` LTO performs an in-compiler module merge and optimize step. `thin` LTO requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution that `glyim-codegen-llvm` was built against; requesting `thin` with the bytecode backend is an explicit error rather than a silent no-op.
@@ -40,9 +34,7 @@ glyip build --release -O2 --lto fat
 
 `glyip build --backend` accepts `llvm` (the default, producing native executables) or `bytecode` (Glyim's own opcode format, used for testing and embedded execution — its output is not directly runnable):
 
-```bash
-glyip build --backend bytecode
-```
+<Code lang="bash" code={`glyip build --backend bytecode`} />
 
 `glyip run` always builds with the LLVM backend, because running needs something the operating system can execute.
 
@@ -50,9 +42,7 @@ glyip build --backend bytecode
 
 Everything after `--` is passed to your program:
 
-```bash
-glyip run -- --flag value
-```
+<Code lang="bash" code={`glyip run -- --flag value`} />
 
 `glyip run` builds first, then executes the binary, and exits with the child's exit status. A program that exits with a failure status produces a failing `glyip run` invocation.
 
@@ -60,9 +50,7 @@ glyip run -- --flag value
 
 Pass a target triple to build for another architecture:
 
-```bash
-glyip run --target aarch64-unknown-linux-gnu
-```
+<Code lang="bash" code={`glyip run --target aarch64-unknown-linux-gnu`} />
 
 The default triple is `x86_64-unknown-linux-gnu`. The same `--target` flag exists on `glyim` (see the [CLI reference](/reference/cli/)).
 

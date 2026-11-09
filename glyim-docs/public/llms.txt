@@ -1,0 +1,24 @@
+# glyim
+
+> AI-agent index.
+
+- [Page not found](/404/)
+- [Architecture](/explanation/architecture/) — Why Glyim is split into more than 30 single-responsibility crates, and how context traits, arena-allocated IRs, and interning make every phase testable in isolation.
+- [Borrow Checking](/explanation/borrow-checking/) — How Glyim's NLL borrow checker works — Polonius-style region inference, cross-block liveness, two-phase borrows, and move analysis on the MIR control-flow graph.
+- [Ownership-Driven Reactivity](/explanation/gsx-reactivity/) — How GSX uses the borrow checker's read/write sets instead of a virtual DOM — skeletons, slots, mutation-specialized patches, and the cost model.
+- [The Compilation Pipeline](/explanation/pipeline/) — A stage-by-stage walkthrough of what happens between source.g and a native binary or bytecode program.
+- [The Testing Model](/explanation/testing-model/) — Why the compiler ships five test modes, phase mocks, snapshots, and property tests — and how each layer catches a different class of bug.
+- [Build and Run Your Project](/guides/build-and-run/) — Use glyip build and glyip run to produce debug and release builds, choose a backend, set optimization levels and LTO, and pass arguments to your program.
+- [Inspect the Compilation Pipeline](/guides/inspect-compilation/) — Use glyim to emit MIR, LLVM IR, assembly, or object files, tune optimization and codegen units, read diagnostics as JSON, and adjust lint levels.
+- [Manage Dependencies](/guides/manage-dependencies/) — Declare path, registry, and git dependencies in Glyip.toml, understand the lockfile, and diagnose resolution conflicts.
+- [Test Your Code](/guides/test-your-code/) — Run tests with glyip test, choose between the MIR interpreter and compiled native executables, annotate expected errors inline, and bless snapshot changes.
+- [Use the Language Server](/guides/use-the-lsp/) — Run the glyim-lsp language server and integrate its diagnostics, navigation, and code actions into your editor workflow.
+- [Write GSX Views](/guides/write-gsx-views/) — Author typed GSX view elements with directives, keyed iteration, and two-way bindings, and run them through the glyim-gsx compiler stage and headless test host.
+- [Glyim Documentation](/) — Glyim is a modular, from-scratch compiler for a Rust-like systems programming language, written in Rust, with an LLVM backend, a bytecode VM, an LSP, and the glyip build tool.
+- [glyim CLI Reference](/reference/cli/) — Every flag of the glyim compiler driver — emit kinds, backends, optimization, LTO, targets, diagnostics formats, the standard library prelude, and lint levels.
+- [Crate Reference](/reference/crates/) — Every crate in the Glyim Cargo workspace and its role in the compilation pipeline.
+- [glyip Reference](/reference/glyip/) — The glyip build tool commands and the complete Glyip.toml manifest schema — package metadata, targets, and dependency declarations.
+- [GSX Reference](/reference/gsx/) — The GSX view syntax and the glyim-gsx compiler stage API — grammar, directives, regions, blueprints, hosts, and diagnostics.
+- [Language Reference](/reference/language/) — The Glyim language — declarations, types, traits, pattern matching, closures, async/await, macros, and compiler-known builtin types.
+- [Lint Reference](/reference/lints/) — The compiler lint framework — available lints, their aliases, severity levels, and the -A/-W/-D command-line flags.
+- [Getting Started with Glyim](/tutorials/getting-started/) — Build the Glyim compiler from source, scaffold a project with glyip, and run your first Glyim program end to end.

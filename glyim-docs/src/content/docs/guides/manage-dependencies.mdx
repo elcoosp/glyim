@@ -6,7 +6,7 @@ sidebar:
   order: 2
 ---
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
 
 This guide shows how to declare dependencies in `Glyip.toml`, how `glyip` resolves them, and how to read a resolution failure.
 
@@ -14,27 +14,21 @@ This guide shows how to declare dependencies in `Glyip.toml`, how `glyip` resolv
 
 `glyip` accepts two dependency syntaxes. Use a bare string for a registry requirement:
 
-```toml
-[dependencies]
-serde = "1.0"
-```
+<Code lang="toml" code={`[dependencies]
+serde = "1.0"`} />
 
 Use a table for path, git, or mixed requirements:
 
-```toml
-[dependencies]
+<Code lang="toml" code={`[dependencies]
 local_util = { path = "../local_util" }
-my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }
-```
+my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }`} />
 
 A git dependency pins exactly one ref: `branch`, `tag`, or an exact `rev` hash. With none of them, the repository's default branch tip is used.
 
 Development-only dependencies go into `[dev-dependencies]` and use the same syntax:
 
-```toml
-[dev-dependencies]
-test_helpers = { path = "../test_helpers" }
-```
+<Code lang="toml" code={`[dev-dependencies]
+test_helpers = { path = "../test_helpers" }`} />
 
 <Aside type="tip">
 Unknown keys in `Glyip.toml` are rejected — the manifest parser uses `deny_unknown_fields`, so a typo such as `dependecies` fails loudly instead of being ignored.

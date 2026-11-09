@@ -1,0 +1,1646 @@
+---
+title: Page not found
+editUrl: false
+pagefind: false
+tableOfContents: false
+---
+
+The page you're looking for doesn't exist or has moved.
+
+Return to the [homepage](/).
+
+
+---
+
+---
+title: Architecture
+description: Why Glyim is split into more than 30 single-responsibility crates, and how context traits, arena-allocated IRs, and interning make every phase testable in isolation.
+type: explanation
+sidebar:
+  order: 1
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Glyim's architecture follows one rule: every compilation phase is a self-contained crate with a narrow public API, so each phase can be studied and tested in isolation — and replaced without touching the rest. This page explains the ideas behind that rule and the mechanisms that make it work.
+
+## Why small crates
+
+Most compiler projects grow a single binary with internal modules. Glyim takes the Cargo-workspace route, with more than 30 crates, because the boundaries between phases are where compilers get muddy: the type checker reaches into the parser's internals, the borrow checker re-derives facts the type checker already knew, and tests grow tangled fixtures. A crate boundary is a compiler-enforced wall. `glyim-opt` cannot depend on parser internals, because its `Cargo.toml` does not list `glyim-frontend` as a dependency.
+
+The split also makes the dependency direction visible. Each phase consumes the previous phase's IR and exposes a minimal interface, so the pipeline reads as a straight line: frontend to def-map to HIR to typeck to MIR to borrow checking to codegen. See the [pipeline walkthrough](/explanation/pipeline/) for the full sequence.
+
+## Context traits: dependency injection for compiler phases
+
+Every phase defines a narrow trait that describes exactly what it needs from the rest of the compiler — `LowerCtx` for lowering, `BorrowckCtx` for borrow checking, `TypeLookup` for type queries, `TraitSolver` for trait obligations. The pipeline driver implements these traits against the real compilation database (`glyim-db`).
+
+This decoupling has two payoffs:
+
+- **The core logic cannot over-reach.** A lowering function that only receives a `LowerCtx` has no access to, say, the diagnostic sink's formatting internals. The trait signature is the permission list.
+- **Tests substitute mocks.** `glyim-test` ships `MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen`, and `TestDbBuilder`. A test that checks move analysis does not need an LLVM context, because the borrow checker consumes a `BorrowckCtx`, and the mock implements that trait.
+
+## Arena-allocated IRs
+
+Intermediate representations are arena-allocated: all nodes of one IR live in a single vector, and references between them are typed indices instead of pointers. `IndexVec<I, T>` gives every IR node a typed, cheaply-copyable ID — a `DefId` cannot be confused with a `LocalId`, because the index types differ.
+
+The consequences:
+
+- **No reference-counting or borrowing fights** while the IR is being built. Allocation is a push into a vector.
+- **Cheap, stable handles.** An ID stays valid for the IR's lifetime and is `Copy`, so passing it around costs nothing.
+- **Destructive rewrites are safe.** Optimization passes mutate bodies in place, keyed by index, with no aliasing hazards.
+
+## Interned types
+
+Types are interned in `TyCtx`: each distinct type exists once, and every mention of it holds the same interned handle. Two types are equal when their handles are equal — a pointer compare, not a structural walk. Interning also makes substitutions cheap, because a substitution produces a new handle from the existing arena rather than rebuilding type trees.
+
+This is what makes the trait solver and the unification engine tractable: inference variables, predicates, and regions are all interned values with stable identities.
+
+## Diagnostics as data
+
+Every phase returns `Vec<GlyimDiagnostic>` — diagnostics are values, not side effects. The driver collects them and renders them with `miette` (human-readable, with source snippets and labels) or serializes them to JSON for editors and tooling.
+
+Because diagnostics are data with source spans, they compose: the test harness matches them against inline `//~ ERROR` annotations, the language server publishes them over LSP, and the CLI formats them as JSON on request. One representation serves three consumers.
+
+## Incremental compilation
+
+The pipeline fingerprints sources and build configuration with SHA-256. `glyip build` uses these fingerprints to skip recompilation of unchanged inputs, and the monomorphization cache (`mono_cache` in `glyim-pipeline` and `glyim-db`) reuses monomorphized items across compilations. Polymorphization — replacing unused generic parameters with canonical placeholders — increases cache hits, because a function monomorphized for `Vec<T>` that never touches `T` needs one instance, not one per `T`.
+
+## Error philosophy
+
+The pipeline distinguishes sharply between program errors and compiler bugs:
+
+- **Program errors** are diagnostics with error codes, rendered for humans or machines.
+- **Internal compiler errors (ICEs)** are panics. The CLI driver installs a panic hook that captures the message and a backtrace at the panic site, then prints a structured ICE report instead of a raw Rust backtrace. An ICE is always a compiler bug worth reporting.
+
+Release builds enable `overflow-checks`, so arithmetic overflow inside the compiler is an ICE, never a silent wrap.
+
+<Aside type="note">
+The design is heavily inspired by rustc's architecture — arena-allocated IRs, interned types, query-style contexts, trait-based dependency injection — but written from scratch with readable code and testability as the priorities.
+</Aside>
+
+## Next steps
+
+<LinkCard title="The pipeline, explained" href="/explanation/pipeline/" description="Walk the stages from source.g to a native binary." />
+<LinkCard title="Crate reference" href="/reference/crates/" description="Which crate owns which responsibility." />
+
+
+---
+
+---
+title: Borrow Checking
+description: How Glyim's NLL borrow checker works — Polonius-style region inference, cross-block liveness, two-phase borrows, and move analysis on the MIR control-flow graph.
+type: explanation
+sidebar:
+  order: 3
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Glyim implements a non-lexical lifetime (NLL) borrow checker, the same family of design that rustc uses in production. This page explains what that means for the programs you write and how the checker works internally.
+
+## What NLL buys you
+
+A borrow in Glyim ends at its **last use**, not at the end of the enclosing lexical scope. Because the checker works on the MIR control-flow graph rather than on brace structure, it tracks precisely where each borrow is live:
+
+- A mutable borrow ends as soon as the value is no longer used, so a later borrow of the same place is accepted.
+- A borrow can flow through a conditional and outlive the branch it was created in.
+- Loops are handled as control-flow cycles, with liveness computed across block boundaries (cross-block liveness analysis).
+
+This is "non-lexical": lifetimes are tied to program points in the CFG, not to source-level scopes.
+
+## Where the checker sits
+
+Borrow checking runs on MIR, after type checking, lowering, and monomorphization. By that point every type is concrete, every generic function is specialized, and every implicit drop is explicit — so the checker reasons about a flat control-flow graph of assignments, calls, and terminators, with field-granular place projections (`local.field[i]` is one place).
+
+## Region inference in the Polonius style
+
+The checker formulates borrowing as a constraint problem:
+
+1. Every borrow creates a region — the set of program points where the borrow may be used.
+2. Liveness constraints add the program points where the borrowed value is later used.
+3. Outlives constraints (`'a: 'b`) flow from type signatures and propagate through the graph.
+4. The solver computes a fixpoint: if every region contains all the points its constraints demand, the function passes.
+
+This is the Polonius-style formulation — regions as computed sets, checked against a logic of loans and accesses — rather than a lexical approximation.
+
+## Two-phase borrows
+
+A shared borrow that becomes mutable (the `args.push(args.len())` shape) is a source of false errors in naive checkers. Glyim implements **two-phase borrows**: the borrow starts as a *reservation* that permits reads, and is *activated* only at the mutating use. If an intervening access conflicts, the activation fails with a diagnostic instead of the whole borrow being rejected.
+
+## Move analysis and drop elaboration
+
+Assigning a non-`Copy` value moves it. Move analysis tracks this per place, including **partial moves** — moving one field out of a struct leaves the other fields usable, and the analysis records exactly which parts moved. Where a partially-moved value meets the end of its scope, **drop-flag elaboration** inserts the flags that make the runtime behavior precise: only the still-present components are dropped.
+
+## How it connects to the rest of the pipeline
+
+- The type checker's regions and predicates feed the outlives constraints.
+- The borrow checker's demand for drop flags is answered by drop elaboration in the optimizer.
+- Diagnostics carry spans back to the source, rendered by `miette` in the CLI and published over LSP in the editor.
+
+<Aside type="note">
+Two known limits shape current behavior: `panic!` aborts without unwinding (exit code 101), and cross-frame unwinding in the MIR interpreter supports single-frame cleanup so far — both are tracked gaps in the development plan, not design decisions.
+</Aside>
+
+## Next steps
+
+<LinkCard title="The pipeline, explained" href="/explanation/pipeline/" description="Where borrow checking sits in the full compilation flow." />
+<LinkCard title="Test your code" href="/guides/test-your-code/" description="Write compile-fail tests that pin borrow-checker diagnostics." />
+
+
+---
+
+---
+title: Ownership-Driven Reactivity
+description: How GSX uses the borrow checker's read/write sets instead of a virtual DOM — skeletons, slots, mutation-specialized patches, and the cost model.
+type: explanation
+sidebar:
+  order: 4
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Most view frameworks optimize updates by diffing a virtual DOM at runtime, or by wiring signals that notify subscribers. GSX takes a third path, available because Glyim owns the compiler and the borrow checker: **the compiler proves who can write to what, and specializes the update code in advance.** This page explains the idea and its machinery.
+
+## The thesis
+
+React's arrangement — a view is a runtime function-call tree the compiler cannot see into — forces every optimization to *recover* structure that syntax threw away. GSX inverts it: a view element is a first-class, typed expression that survives deep into the compiler, so structure is never erased early. The compiler sees the static skeleton, the dynamic holes, and which writes can touch which slots.
+
+Three principles follow:
+
+1. **Structure is never erased early.** A view stays an `Expr::Gsx` through HIR and typeck; only a dedicated pass lowers it further.
+2. **The compiler is host-agnostic; hosts are libraries.** Passes know schemas, slots, regions, and invalidation classes — never HTML. HTML, native widgets, terminals, and test hosts are dialects plugged in from outside.
+3. **Ownership is the reactivity system.** Where the borrow checker can prove exactly which places a handler writes, no runtime diffing or signal machinery is needed on the fast path.
+
+## Skeleton, slots, and regions
+
+The `glyim-gsx` stage lowers checked views into **View IR (VIR)** with three ingredients:
+
+- **Skeleton** — the static part of the view: element shapes, static attributes, fixed text.
+- **Slots** — the dynamic holes: interpolated text, dynamic attributes, event handlers. Each slot has a *read-set*: the places it depends on. A text hole showing `{s.count}` reads `s.count`.
+- **Regions** — the control-flow parts: `if`/`match` regions and keyed `for` regions, which own their own skeletons and can be mounted or torn down as a unit.
+
+## Mutation-specialized patches
+
+For every event handler the analysis computes a **write-set**: the places the handler can write, derived from the same place-granular facts the borrow checker uses. The stage then emits one **mutation-specialized patch (MSP)** per distinct write-set — a straight-line function that updates exactly the slots affected by that handler, with no diffing:
+
+- A handler that writes `s.count` produces a patch that updates the slots reading `s.count`, and nothing else.
+- When two slots' read-sets overlap by prefix (both read `s` and one reads `s.count`), **prefix interference** is detected and the affected slots are grouped conservatively.
+- Structural changes — an `if` region flipping, a keyed list reordering — route to region-level operations: the `if` region mounts its else-branch skeleton, and keyed lists reconcile with a longest-increasing-subsequence algorithm that minimizes element moves.
+- Two-way `bind:` attributes desugar to a write on the bound place plus echo suppression, so the input that caused the update does not re-render itself.
+
+The output is a **blueprint**: a flat `u32` operation array plus a string table, encodable as a static. Mount interprets it once per host; patches are the specialized functions above.
+
+## The cost model
+
+Because patches are straight-line and chosen by write-set, the update cost is statically known. The headless, op-recording host makes this a test subject: the flagship Counter test asserts the *exact* sequence and count of host operations for a mount, a click, and a patch. A regression in update cost fails the test — the cost model is part of the specification, not a benchmark footnote.
+
+## Where signals still appear
+
+Ownership analysis covers the common shapes: local state, handler writes, inlined components composed as lens compositions. When a value is genuinely aliased and mutable — a shared cell that several owners can write — the analysis cannot prove a write-set. That is the escape hatch: the compiler emits the `Signal<T>` diagnostic (G0201) with a fix-it, and the host falls back to signal bits for that slot. Signals are the exception path, not the fast path.
+
+<Aside type="note">
+GSX is experimental: the stage is implemented and tested as a library, and CLI driver wiring has not landed yet. See the GSX reference for the exact status table.
+</Aside>
+
+## Next steps
+
+<LinkCard title="GSX reference" href="/reference/gsx/" description="The grammar, the stage's public API, and diagnostics." />
+<LinkCard title="Write GSX views" href="/guides/write-gsx-views/" description="The flagship Counter example, step by step." />
+
+
+---
+
+---
+title: The Compilation Pipeline
+description: A stage-by-stage walkthrough of what happens between source.g and a native binary or bytecode program.
+type: explanation
+sidebar:
+  order: 2
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+This page walks through Glyim's compilation pipeline stage by stage — what each stage consumes, what it produces, and why it exists. The pipeline is end-to-end functional for a substantial subset of the language.
+
+## The map
+
+<Code lang="text" code={`source.g
+   │
+   ▼
+Lexer → Parser → CST                (glyim-frontend, glyim-syntax)
+                     │
+                     ▼
+HIR (untyped) ← Def-Map ← Macro     (glyim-hir, glyim-def-map, glyim-meta)
+                     │              expansion
+                     ▼
+Typeck (inference) ⇄ Trait solving  (glyim-typeck, glyim-solve)
+   → THIR (typed)
+                     │
+                     ▼
+Lowering → MIR (CFG)                (glyim-lower, glyim-mir)
+   (monomorphization)
+                     │
+         ┌───────────┼───────────┐
+         ▼           ▼           ▼
+   Borrowck (NLL)  Optimizer   MIR interpreter
+                     │           (const-eval, tests)
+                     ▼
+        LLVM IR → .o / exe      or      Bytecode → .gbc
+        (glyim-codegen-llvm)            (glyim-codegen, glyim-bytecode-vm)`} />
+
+## Frontend: from characters to a lossless tree
+
+The lexer tokenizes the whole file up front — it is eager and context-free, with no mode stack. The parser then builds a **concrete syntax tree** with Rowan: whitespace, comments, and even syntax errors are preserved in the tree. Error recovery is a first-class feature, so a file with a mistake still produces a usable CST for IDE features such as goto-definition and completion.
+
+GSX view elements are parsed in the same pass (`parse_gsx_element`), producing dedicated `Gsx*` CST nodes with zero lexer changes — text in views is always a string literal, which removes the need for lexer modes.
+
+## Name resolution and macros
+
+The def-map builds the module graph and resolves names: item scopes, `use` imports, and visibility checks. Macro expansion interleaves with resolution — `macro_rules!` rules and built-in macros (`file!`, `line!`, `env!`, `include_str!`, and friends) expand over token trees, and procedural macros enter through the C-ABI bridge and a `dlopen`-based loader.
+
+## HIR: structure without types
+
+The high-level IR is an arena of expression variants — `Path`, `Literal`, `Block`, `If`, `While`, `For`, `Match`, `Call`, `MethodCall`, and `Expr::Gsx` for views. HIR keeps structure intact and defers meaning to the next stage. Async functions are desugared here into state machines (straight-line and multi-await bodies).
+
+## Typeck and trait solving
+
+The type checker lowers HIR to **THIR** (typed HIR) while running inference: unification variables (general, integer, and float kinds), an occurs-check, and bidirectional checking. Trait obligations flow into a fulfillment context with an obligation queue; the solver handles higher-ranked trait bounds (`for<'a>`) and computes auto-traits (`Send`, `Sync`, `Unpin`).
+
+GSX expressions are checked here against dialect schemas — tags, props, events, and children are validated as data, not string-matched.
+
+## Lowering and monomorphization
+
+`glyim-lower` turns THIR into **MIR**, a control-flow graph of `Assign(Place, Rvalue)` statements and terminators, with field-granular place projections. Generic functions are monomorphized — specialized for concrete types — with two refinements: polymorphization replaces unused generic parameters with canonical placeholders, and items are partitioned into codegen units (defaulting to the available parallelism, capped at 16) for parallel code generation.
+
+## Borrow checking: NLL on the CFG
+
+The borrow checker runs on MIR with non-lexical lifetimes: region inference in the Polonius style, cross-block liveness analysis, two-phase borrows (a reservation that can be promoted to an active borrow before the call actually happens), and move analysis with partial-move tracking. Drop elaboration inserts the drop flags that make partial moves sound.
+
+Because the checker works on the CFG, a borrow can end after its last use rather than at the end of a lexical scope — that is what "non-lexical" means, and it is why this pattern borrows fine.
+
+## Optimization
+
+`glyim-opt` runs per-body MIR passes: constant propagation, dead code elimination, CFG simplification, unreachable block elimination, slice desugaring, and drop elaboration. There is no MIR-level inliner — inlining is left to LLVM — so GSX specialization runs above MIR, where structure is still visible.
+
+## Code generation
+
+Two backends consume the optimized MIR:
+
+- **LLVM** (`glyim-codegen-llvm`, via `inkwell`) computes type layouts with ABI-aware argument passing (`sret`, `byval`, `Direct`, `Split`), generates vtables for trait objects, emits debug info and exception handling (Itanium and SEH), and supports fat and thin LTO. The linker driver then produces executables with the system linker.
+- **Bytecode** (`glyim-codegen`) emits a compact stack-machine format, executed by `glyim-bytecode-vm` — the backend used for testing and embedded execution.
+
+The **MIR interpreter** (`glyim-mir-interp`) executes MIR directly: it powers `const fn` evaluation and the in-process test runner.
+
+## After the compiler: linking and running
+
+The CLI driver links produced object files into executables, honoring `--linker` and `--link-flags`. `glyip run` wraps the whole flow — build, then execute, then exit with the child's status — and the standard library (`glyim-lang-core`, `glyim-lang-alloc`, `glyim-lang-std`) supplies the `Option`/`Vec`/`io`/`thread` layer written in Glyim itself.
+
+<Aside type="note">
+Incremental compilation spans this whole map: SHA-256 fingerprints of sources and build configuration decide what recompiles, and the monomorphization cache reuses specialized items across compilations.
+</Aside>
+
+## Next steps
+
+<LinkCard title="Borrow checking, explained" href="/explanation/borrow-checking/" description="How NLL region inference and two-phase borrows work on the CFG." />
+<LinkCard title="Inspect the pipeline from the CLI" href="/guides/inspect-compilation/" description="Emit MIR, LLVM IR, and assembly to see the stages yourself." />
+
+
+---
+
+---
+title: The Testing Model
+description: Why the compiler ships five test modes, phase mocks, snapshots, and property tests — and how each layer catches a different class of bug.
+type: explanation
+sidebar:
+  order: 5
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Glyim's test harness (`glyim-test`) is a first-class part of the project, not an afterthought. This page explains the reasoning behind its layers: why there are five test modes, why every phase has a mock, and what property tests add.
+
+## One analysis, many failure modes
+
+A compiler bug can surface anywhere. A borrowing rule can be wrongly enforced (a valid program rejected) or wrongly relaxed (an invalid program accepted); a lowering step can drop a drop-flag; a codegen choice can corrupt the ABI. No single testing style catches all of these, so the harness layers five complementary modes over the same `.g` sources, selected by an inline header or the containing directory:
+
+| Mode | Catches |
+|------|---------|
+| `compile-pass` | False rejections: valid programs must compile. |
+| `compile-fail` | False acceptances: invalid programs must fail, with the *right* message, pinned by inline annotations. |
+| `ui` | Unintended changes anywhere in compiler output — CST, def-map, typeck, diagnostics — against `.expected` snapshots. |
+| `run-pass` | Semantic correctness end to end: the program must exit successfully with the expected stdout/stderr. |
+| `run-fail` | Error-path semantics: specific exit codes and output on failure. |
+
+The modes are deliberately coarse-grained: a test file states *what* must hold, and the harness decides *how* to check it. This keeps the corpus readable — each case is a few lines of Glyim plus annotations.
+
+## Inline annotations as an executable spec
+
+A `compile-fail` test pins diagnostics next to the code that produces them:
+
+<Code lang="rust" code={`fn main() {
+    let x: i32 = "hello";
+    //~^ ERROR mismatched types
+    //~| expected i32, found str
+}`} />
+
+The annotation grammar supports continuations (`//~|`), back-references (`//~^`), fuzzy ±1-line matching (`//~~`), and optional diagnostics (`//~?`). The effect: every diagnostic the compiler is expected to produce is written down next to the code that triggers it, so a diagnostic's text or placement cannot drift without a test failing.
+
+## Mocks replace the pipeline
+
+Because every phase communicates through a narrow context trait (`LowerCtx`, `BorrowckCtx`, `TraitSolver`, …), the harness ships mocks that implement each trait in memory: `MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen`, and `TestDbBuilder` for assembling a database from source strings.
+
+The payoff is precision. A move-analysis test can run the borrow checker alone against a hand-built MIR body, with no parser, no type checker, and no LLVM in the loop. When such a test fails, the bug is in the phase under test — not three phases downstream.
+
+## Snapshots for structured output
+
+CST shapes, def-maps, and MIR bodies are compared as snapshots (`insta`). Snapshots shine where the expected output is too large to write by hand but too important to leave unpinned: when an optimization pass changes a MIR body, the snapshot diff shows the exact instruction-level change. Blessing is explicit — `GLYIM_BLESS=1` or `cargo insta review` — so snapshot churn is always a reviewed decision.
+
+## Property tests for the type system
+
+Types have algebraic invariants that example tests underline only accidentally. The harness's property module generates random types (with and without inference variables) and checks invariants such as:
+
+- unification of a type with itself succeeds,
+- unification of two distinct types fails.
+
+Generated cases reach corners that hand-written tests miss — exotic substitutions, deeply nested types, inference variables in unusual positions.
+
+## Fuzzing the boundaries
+
+Two cargo-fuzz targets probe the boundaries where malformed input meets recursive descent: `fuzz_parse` (lexer/parser/CST round-trip) and `fuzz_compile` (a full-pipeline internal-compiler-error detector), with corpus seeds and a token dictionary. Fuzzing complements the corpus: the corpus encodes known behavior, fuzzing hunts unknown crashes.
+
+<Aside type="note">
+The harness runs on the MIR interpreter by default (`glyip test`), which executes tests in-process; `--compiled` runs the same corpus as native executables through the LLVM backend, exercising the full pipeline. The CI differential suite compares both execution paths against each other.
+</Aside>
+
+## Next steps
+
+<LinkCard title="Test your code" href="/guides/test-your-code/" description="How to run and annotate tests in practice." />
+<LinkCard title="Architecture, explained" href="/explanation/architecture/" description="The context-trait design that makes phase mocks possible." />
+
+
+---
+
+---
+title: Build and Run Your Project
+description: Use glyip build and glyip run to produce debug and release builds, choose a backend, set optimization levels and LTO, and pass arguments to your program.
+type: how-to
+sidebar:
+  order: 1
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+This guide shows how to drive the day-to-day build workflow with `glyip`: debug and release builds, backend selection, optimization levels, link-time optimization, and running the result.
+
+## Build a project
+
+Run this command in the directory that contains your `Glyip.toml`:
+
+<Code lang="bash" code={`glyip build`} />
+
+The build is incremental: `glyip` fingerprints sources and build configuration with SHA-256 and recompiles only what changed.
+
+## Build in release mode
+
+<Code lang="bash" code={`glyip build --release`} />
+
+Combine `--release` with an explicit optimization level and LTO strategy when you want a tuned build:
+
+<Code lang="bash" code={`glyip build --release -O2 --lto fat`} />
+
+<Aside type="caution">
+`fat` LTO performs an in-compiler module merge and optimize step. `thin` LTO requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution that `glyim-codegen-llvm` was built against; requesting `thin` with the bytecode backend is an explicit error rather than a silent no-op.
+</Aside>
+
+## Choose a backend
+
+`glyip build --backend` accepts `llvm` (the default, producing native executables) or `bytecode` (Glyim's own opcode format, used for testing and embedded execution — its output is not directly runnable):
+
+<Code lang="bash" code={`glyip build --backend bytecode`} />
+
+`glyip run` always builds with the LLVM backend, because running needs something the operating system can execute.
+
+## Run your program with arguments
+
+Everything after `--` is passed to your program:
+
+<Code lang="bash" code={`glyip run -- --flag value`} />
+
+`glyip run` builds first, then executes the binary, and exits with the child's exit status. A program that exits with a failure status produces a failing `glyip run` invocation.
+
+## Cross-compile with a target triple
+
+Pass a target triple to build for another architecture:
+
+<Code lang="bash" code={`glyip run --target aarch64-unknown-linux-gnu`} />
+
+The default triple is `x86_64-unknown-linux-gnu`. The same `--target` flag exists on `glyim` (see the [CLI reference](/reference/cli/)).
+
+## Next steps
+
+<LinkCard title="Inspect intermediate representations" href="/guides/inspect-compilation/" description="Emit MIR, LLVM IR, or assembly to see what the compiler does with your code." />
+<LinkCard title="glyip command reference" href="/reference/glyip/" description="Every glyip command, flag, and manifest key." />
+
+
+---
+
+---
+title: Inspect the Compilation Pipeline
+description: Use glyim to emit MIR, LLVM IR, assembly, or object files, tune optimization and codegen units, read diagnostics as JSON, and adjust lint levels.
+type: how-to
+sidebar:
+  order: 4
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+This guide shows how to look inside the compiler while it processes a single source file: emitting intermediate representations, choosing backends, tuning codegen, and adjusting lint levels.
+
+Every command below compiles a file named `input.g`. Add `--with-stdlib` when your file uses names such as `println`, `Vec`, `Option`, `Result`, `String`, or `Box` — the flag prepends the assembled standard library so those names resolve without explicit `use` statements:
+
+<Code lang="bash" code={`glyim input.g --with-stdlib --emit mir`} />
+
+## Emit intermediate representations
+
+The `--emit` flag selects the output artifact:
+
+<Code lang="bash" code={`glyim input.g --emit mir        # MIR after lowering — useful for debugging lowering
+glyim input.g --emit llvm-ir    # LLVM IR from the LLVM backend
+glyim input.g --emit asm        # target assembly
+glyim input.g --emit obj        # native object file (default)
+glyim input.g --emit exec -o hello   # runnable executable
+glyim input.g --emit cdylib     # dynamic library, used for proc-macro crates`} />
+
+Write the artifact to a specific path with `-o`:
+
+<Code lang="bash" code={`glyim input.g --emit llvm-ir -o out.ll`} />
+
+## Compare the two backends
+
+The `--backend` flag selects between `llvm` (default) and `bytecode`. The bytecode backend emits compact stack-machine bytecode that the `glyim-bytecode-vm` crate executes — useful for testing and embedded execution:
+
+<Code lang="bash" code={`glyim input.g --backend bytecode --emit obj`} />
+
+## Tune optimization and codegen units
+
+<Code lang="bash" code={`glyim input.g -O2 --lto thin          # optimization level 2, thin LTO
+glyim input.g --codegen-units 4       # partition into 4 codegen units`} />
+
+- `-O/--opt-level` ranges from 0 (default) to 3.
+- `--codegen-units` defaults to the available parallelism capped at 16, mirroring rustc's `-C codegen-units` policy.
+- `--lto` accepts `off` (default), `fat`, or `thin`. `fat` requires multi-CGU support, which is not yet implemented, and errors cleanly. `thin` requires the `llvm-lto2` tool from the LLVM distribution the backend was built against.
+
+## Cross-compile
+
+<Code lang="bash" code={`glyim input.g --target aarch64-unknown-linux-gnu`} />
+
+Override the system linker and pass extra flags when needed:
+
+<Code lang="bash" code={`glyim input.g --linker /path/to/ld --link-flags "-L/opt/lib -lmylib"`} />
+
+## Get machine-readable diagnostics
+
+Editors and tooling consume diagnostics as JSON, one object per diagnostic:
+
+<Code lang="bash" code={`glyim input.g --error-format json`} />
+
+The default `human` format renders diagnostics with `miette`, including source snippets and labels.
+
+## Use procedural macros
+
+Compile proc-macro dependency sources to host cdylibs first, then reference them with a comma-separated list:
+
+<Code lang="bash" code={`glyim proc_macro_dep.g --emit cdylib
+glyim main.g --proc-macro-deps proc_macro_dep.g`} />
+
+<Aside type="caution">
+The two-stage host compile for procedural macros is still being wired into the default `glyim-cli` flow. The flag surface exists and the C-ABI bridge (`glyim-proc-macro`, `dlopen`-based) is functional, but expect rough edges.
+</Aside>
+
+## Adjust lint levels
+
+The compiler currently ships two lints: `unsafe_fn_call` (alias `unsafe`) and `unused_generic_params` (alias `unused_generics`). Set their levels with repeatable flags:
+
+<Code lang="bash" code={`glyim input.g -D unsafe                     # promote to error
+glyim input.g -A unsafe_fn_call             # suppress
+glyim input.g -W unused_generic_params      # set back to warning (the default)
+glyim -W help                               # list all available lints`} />
+
+`-A` allows (suppresses), `-W` warns (default), and `-D` denies, which aborts compilation at the pipeline's error gate. See the [lint reference](/reference/lints/) for details.
+
+## Next steps
+
+<LinkCard title="glyim CLI reference" href="/reference/cli/" description="Every flag with its type, default, and description." />
+<LinkCard title="The compilation pipeline, explained" href="/explanation/pipeline/" description="What happens at each stage between source.g and a binary." />
+
+
+---
+
+---
+title: Manage Dependencies
+description: Declare path, registry, and git dependencies in Glyip.toml, understand the lockfile, and diagnose resolution conflicts.
+type: how-to
+sidebar:
+  order: 2
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+This guide shows how to declare dependencies in `Glyip.toml`, how `glyip` resolves them, and how to read a resolution failure.
+
+## Declare a dependency
+
+`glyip` accepts two dependency syntaxes. Use a bare string for a registry requirement:
+
+<Code lang="toml" code={`[dependencies]
+serde = "1.0"`} />
+
+Use a table for path, git, or mixed requirements:
+
+<Code lang="toml" code={`[dependencies]
+local_util = { path = "../local_util" }
+my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }`} />
+
+A git dependency pins exactly one ref: `branch`, `tag`, or an exact `rev` hash. With none of them, the repository's default branch tip is used.
+
+Development-only dependencies go into `[dev-dependencies]` and use the same syntax:
+
+<Code lang="toml" code={`[dev-dependencies]
+test_helpers = { path = "../test_helpers" }`} />
+
+<Aside type="tip">
+Unknown keys in `Glyip.toml` are rejected — the manifest parser uses `deny_unknown_fields`, so a typo such as `dependecies` fails loudly instead of being ignored.
+</Aside>
+
+## Understand the lockfile
+
+`glyip` maintains a `Glyip.lock` lockfile next to the manifest. Lockfile entries are keyed by `name-version`, and the lockfile records the resolved graph so repeated builds are reproducible.
+
+## Expect the resolver's semantics
+
+`glyip`'s resolver is deliberately simpler than Cargo's. Knowing the differences up front saves debugging a resolution failure that is not a bug:
+
+- **Greedy breadth-first, no backtracking.** The resolver walks the graph breadth-first from the root manifest. When it encounters `foo = "1.0"`, it picks the highest version that satisfies the requirement at that moment and moves on. If a later transitive dependency needs an incompatible `foo`, the resolver reports a conflict instead of retrying with a lower version.
+- **One version per crate name.** Two requirements on the same crate that disagree on versions are a hard `DependencyConflict` error, not two parallel copies.
+- **Deterministic version selection.** "Highest matching version" is computed by parsing every candidate and sorting by SemVer 2.0 precedence (caret, tilde, wildcard, and comparison operators are supported), not by trusting registry listing order. An unsatisfiable requirement surfaces as `DependencyNotFound` rather than a silent upgrade.
+- **Cycle detection.** A path-dependency cycle (crate A depends on B, B depends on A) is caught by the visited check before infinite recursion. Two path dependencies with the same declared package name but different directories resolve as distinct crates.
+
+## Diagnose a conflict
+
+When two requesters disagree, the `DependencyConflict` error names the crate, every distinct requirement gathered, and every `(requester, requirement)` edge. For example, a diamond where your crate requires `foo = "1.0"` and another dependency requires `foo = "2.0"` produces an error listing both edges — align the two requirements to resolve it.
+
+## Next steps
+
+<LinkCard title="glyip reference" href="/reference/glyip/" description="The complete Glyip.toml manifest schema and command flags." />
+<LinkCard title="Test your code" href="/guides/test-your-code/" description="Run tests with glyip test, inline annotations, and snapshots." />
+
+
+---
+
+---
+title: Test Your Code
+description: Run tests with glyip test, choose between the MIR interpreter and compiled native executables, annotate expected errors inline, and bless snapshot changes.
+type: how-to
+sidebar:
+  order: 3
+---
+
+import { Aside, Code, LinkCard, Steps } from '@astrojs/starlight/components';
+
+This guide shows how to run tests for a Glyim project, how the compiler's own test harness classifies tests, and how to annotate expected diagnostics inline.
+
+## Run your project's tests
+
+From the directory that contains your `Glyip.toml`:
+
+<Code lang="bash" code={`glyip test`} />
+
+Useful variations:
+
+<Code lang="bash" code={`glyip test --filter parser    # run only tests whose name matches "parser"
+glyip test --no-run           # compile the tests but do not run them
+glyip test --compiled         # compile each test to a native exe and run it
+glyip test --release          # build the tests in release mode`} />
+
+By default tests run in-process on the MIR interpreter. `--compiled` produces a real executable per test and runs it as a subprocess, which exercises the full LLVM codegen path.
+
+## Understand the harness test modes
+
+The compiler's own test harness (`glyim-test`) discovers `.g` files under `tests/` and runs them in one of five modes, selected by an inline header or the containing directory name:
+
+| Mode | Meaning |
+|------|---------|
+| `compile-pass` | The source compiles without errors. |
+| `compile-fail` | The source produces specific errors, checked against inline annotations. |
+| `ui` | The full compiler output (CST, def-map, typeck, diagnostics) matches an `.expected` snapshot. |
+| `run-pass` | The compiled program exits successfully and matches its expected stdout/stderr. |
+| `run-fail` | The compiled program fails with a specific exit code and output. |
+
+## Annotate expected errors inline
+
+A `compile-fail` test names the diagnostics it expects next to the offending line:
+
+<Code lang="rust" code={`fn main() {
+    let x: i32 = "hello";
+    //~^ ERROR mismatched types
+    //~| expected i32, found str
+}`} />
+
+The annotation grammar:
+
+- `//~ ERROR <pattern>` — the annotated line produces an error whose message contains `<pattern>`.
+- `//~| ERROR <pattern>` — a continuation of the previous annotation, for multi-line diagnostic blocks.
+- `//~^`, `//~^^`, … — point at earlier lines instead of the current one.
+- `//~~` — fuzzy matching: the diagnostic may land within ±1 line.
+- `//~? ERROR …` — the diagnostic is optional; the test passes if it is absent.
+
+## Work with snapshots
+
+Snapshot tests for the CST, def-map, and MIR use `insta` inside the compiler workspace:
+
+<Code lang="rust" code={`snapshot_cst("my_syntax_case", source);
+snapshot_mir("my_mir_case", &ctx, &body);`} />
+
+When an intentional change alters snapshots, update them:
+
+<Code lang="bash" code={`GLYIM_BLESS=1 cargo test -p glyim-test
+# or, for interactive review
+cargo insta review`} />
+
+To see captured program output from run-pass/run-fail tests, set `GLYIM_TEST_SHOW_OUTPUT=1`:
+
+<Code lang="bash" code={`GLYIM_TEST_SHOW_OUTPUT=1 cargo test -p glyim-test`} />
+
+<Aside type="note">
+The harness also ships mocking utilities for every compiler phase (`MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen`, `TestDbBuilder`) and a property module that generates random types to check invariants such as "unification of a type with itself succeeds".
+</Aside>
+
+## Next steps
+
+<LinkCard title="glyip test reference" href="/reference/glyip/#glyip-test" description="Every flag the test command accepts." />
+<LinkCard title="Why the compiler has five test modes" href="/explanation/testing-model/" description="The rationale behind the harness's classification and mocks." />
+
+
+---
+
+---
+title: Use the Language Server
+description: Run the glyim-lsp language server and integrate its diagnostics, navigation, and code actions into your editor workflow.
+type: how-to
+sidebar:
+  order: 5
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+This guide shows how to start the Glyim language server and wire it into an editor that speaks the Language Server Protocol.
+
+## Start the server
+
+After building the workspace (see the [getting started tutorial](/tutorials/getting-started/)), the server binary is available at `target/release/glyim-lsp`:
+
+<Code lang="bash" code={`./target/release/glyim-lsp`} />
+
+The server communicates over stdio, the standard LSP transport, and publishes diagnostics with `textDocument/publishDiagnostics` as you edit.
+
+## Configure your editor
+
+Point your editor's LSP client at the `glyim-lsp` binary. Most editors expose this as a "custom server command" setting. A generic configuration pattern:
+
+<Code lang="json" code={`{
+  "languageserver": {
+    "glyim": {
+      "command": "/absolute/path/to/glyim/target/release/glyim-lsp",
+      "args": [],
+      "filetypes": ["glyim"]
+    }
+  }
+}`} />
+
+<Aside type="tip">
+Use an absolute path to the binary. The server needs to find the compiler's components, and a relative path resolves against the editor's working directory, not yours.
+</Aside>
+
+## Available capabilities
+
+`glyim-lsp` implements:
+
+- **Diagnostics** — compiler errors and warnings pushed as you type, driven by the same pipeline the CLI uses.
+- **Navigation** — goto definition, find references, workspace symbols, and document folding ranges.
+- **Hover and completion** — type information on hover and completion suggestions from the def-map.
+- **Formatting** — document formatting for consistent layout.
+- **Rename** — symbol renaming across the workspace.
+- **Code actions** — quick fixes, including:
+  - add missing `match` arms,
+  - generate an `impl` block,
+  - remove unused imports,
+  - auto-import for unresolved names.
+
+## Fall back to JSON diagnostics
+
+If you drive tooling without LSP, the compiler emits one JSON object per diagnostic:
+
+<Code lang="bash" code={`glyim input.g --error-format json`} />
+
+This is the same feed the language server uses internally, which makes it suitable for custom integrations, CI checks, and log analysis.
+
+## Next steps
+
+<LinkCard title="Inspect the compilation pipeline" href="/guides/inspect-compilation/" description="Emit MIR, LLVM IR, and assembly from the command line." />
+<LinkCard title="Crate reference" href="/reference/crates/" description="Which crate implements which LSP capability." />
+
+
+---
+
+---
+title: Write GSX Views
+description: Author typed GSX view elements with directives, keyed iteration, and two-way bindings, and run them through the glyim-gsx compiler stage and headless test host.
+type: how-to
+sidebar:
+  order: 6
+---
+
+import { Aside, Badge, Code, LinkCard } from '@astrojs/starlight/components';
+
+This guide shows how to author views with Glyim's GSX syntax: elements, text holes, event and binding directives, and keyed iteration — and how the compiler turns them into blueprints with mutation-specialized patches.
+
+<Aside type="caution">
+GSX is experimental. The parser, type checker, and the `glyim-gsx` stage are implemented and tested (the flagship Counter example runs end to end through the library API), but the `glyim-cli` driver does not run the GSX stage yet: a body containing GSX ends type checking with a clean hand-off diagnostic. Until driver wiring lands, you exercise GSX through the `glyim-gsx` library API, as the crate's own tests do.
+</Aside>
+
+## Author a view
+
+GSX view elements are first-class expressions in Glyim. A complete component from the design's flagship example:
+
+<Code lang="rust" code={`use ui::{View, Host, Handler};
+
+#[state]
+struct Counter {
+    count: i32,
+    step:  i32,
+    name:  String,
+}
+
+#[component]
+fn CounterView(s: &Counter) -> View {
+    <section class="counter" aria-label="Counter">
+        <h1>"Hello, {s.name}!"</h1>
+
+        <button on:click={|s, _| s.count -= s.step}>"−"</button>
+        <output class:warn={s.count < 0}>"{s.count}"</output>
+        <button on:click={|s, _| s.count += s.step}>"+"</button>
+
+        <input bind:value={s.name} placeholder="Your name" />
+
+        {if s.count > 10 {
+            <p class="big">"That's a lot."</p>
+        } else {
+            <></>
+        }}
+
+        <ul>
+            {for item in s.history.iter() by item.id {
+                <li>"{item.label}"</li>
+            }}
+        </ul>
+    </section>
+}`} />
+
+## Know the text rules
+
+Text is always a string literal — JSX-style raw text is not part of the syntax, which keeps the lexer unchanged and avoids whitespace-collapsing rules:
+
+<Code lang="rust" code={`<h1>"Hello, {s.name}!"</h1>`} />
+
+The GSX parser splits the literal into static pieces and typed holes at parse time, so each hole's read-set is syntactically visible and escaping is type-driven. Spaces between siblings are not significant; write `" "` explicitly when you need one.
+
+## Use attributes, spreads, and directives
+
+| Construct | Syntax | Meaning |
+|---|---|---|
+| Attribute | `name="lit"`, `name={expr}` | Static string or dynamic expression. |
+| Bare attribute | `disabled` | Equivalent to `disabled={true}`. |
+| Shorthand | `{name}` | Equivalent to `name={name}`. |
+| Spread | `{..props}` | Typed against the target's prop struct. |
+| Event handler | `on:click={handler}` | Handlers are state transformers `fn(&mut S, E)`. |
+| Class toggle | `class:active={cond}` | Statically decomposed into slots. |
+| Style toggle | `style:width={px}` | Statically decomposed into slots. |
+| Two-way binding | `bind:value={place}` | `place` is a place expression (lvalue). |
+
+Lowercase tags resolve through the active dialect schema — the compiler validates tags, props, events, and children against the schema, never by string matching. Uppercase tags such as `<Name …/>` resolve through the def-map like any item. Namespaced escapes such as `<web:canvas/>` and `<native:window/>` select host-specific dialects.
+
+## Control flow is the language
+
+There are no template directives such as `v-if` or `{#each}` — you use Glyim's native `if`, `match`, and `for` inside `{ }`, and the compiler recognizes those forms as regions:
+
+<Code lang="rust" code={`{if s.count > 10 {
+    <p class="big">"That's a lot."</p>
+} else {
+    <></>
+}}`} />
+
+For lists, add a `by` key expression — a GSX-scoped contextual keyword accepted only in child-position `for` — to get keyed reconciliation:
+
+<Code lang="rust" code={`{for item in s.history.iter() by item.id {
+    <li>"{item.label}"</li>
+}}`} />
+
+## Run it through the compiler stage
+
+The `glyim-gsx` stage is a library: it lowers checked GSX expressions through View IR (skeleton + slots + regions), read/write-set analysis with prefix interference, and mutation-specialized patch functions, then emits flat-`u32` blueprints plus an SSR string. The headless, op-recording host mounts, patches, and dispatches views so tests can assert exact update costs — the Counter test in `crates/glyim-gsx/tests/counter.rs` is the reference walkthrough.
+
+<Aside type="tip">
+If a value cannot be tracked by ownership analysis — a shared mutable cell behind `Rc<RefCell<T>>`-style aliasing — the compiler emits the `Signal<T>` diagnostic (G0201) with a fix-it, and the host falls back to signal bits for that slot.
+</Aside>
+
+## Next steps
+
+<LinkCard title="GSX reference" href="/reference/gsx/" description="The complete syntax and the glyim-gsx public API." />
+<LinkCard title="Ownership-driven reactivity, explained" href="/explanation/gsx-reactivity/" description="Why the compiler proves who can write to what instead of diffing a vdom." />
+
+
+---
+
+---
+title: Glyim Documentation
+description: Glyim is a modular, from-scratch compiler for a Rust-like systems programming language, written in Rust, with an LLVM backend, a bytecode VM, an LSP, and the glyip build tool.
+template: splash
+hero:
+  title: "Glyim Documentation"
+
+  tagline: A modular, from-scratch compiler for a Rust-like systems programming language — written in Rust.
+  image:
+    file: ../../assets/logo.png
+    alt: "Glyim logo"
+  actions:
+    - text: Get started in one pass
+      link: /tutorials/getting-started/
+      icon: right-arrow
+    - text: Command-line reference
+      link: /reference/cli/
+      icon: external
+      variant: minimal
+---
+
+import { Aside, Badge, Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
+
+Glyim implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference and trait solving, borrow checking, optimizations, and two code generation backends (LLVM and a custom bytecode VM). The project is organized as a Cargo workspace with more than 30 crates, designed for clarity, testability, and incremental development. Every stage is a self-contained crate with a narrow public API, so you can study and test each phase in isolation.
+
+## Choose your path
+
+<CardGrid stagger>
+    <Card title="Build your first project" icon="rocket">
+        Follow the golden path: build the compiler, scaffold a project with `glyip`, and run a Glyim program.
+    </Card>
+    <Card title="Solve a specific task" icon="wrench">
+        Use a how-to guide to manage dependencies, write tests, inspect intermediate representations, or tune codegen.
+    </Card>
+    <Card title="Look something up" icon="document">
+        Consult the reference for every CLI flag, `glyip` command, manifest key, lint, and language construct.
+    </Card>
+    <Card title="Understand the design" icon="open-book">
+        Read the explanation section to learn why the pipeline is split into crates and how ownership-driven reactivity works.
+    </Card>
+</CardGrid>
+
+<LinkButton href="/tutorials/getting-started/" icon="right-arrow">Start the tutorial</LinkButton>
+
+## Feature highlights
+
+- **Rust-like language** — generics, traits with associated types, pattern matching, closures with capture analysis, `async`/`await`, declarative and procedural macros.
+- **Real type system** — inference with unification, trait solving with HRTB, auto-trait computation, monomorphization with polymorphization.
+- **NLL borrow checker** — Polonius-style region inference, cross-block liveness, two-phase borrows, move analysis with partial moves.
+- **Two backends** — LLVM 23 via `inkwell` with real ABI lowering and LTO, plus a stack-machine bytecode backend with its own VM.
+- **Full toolchain** — the `glyim` compiler driver, the Cargo-like `glyip` build tool with dependency resolution and lockfiles, a language server, and a five-mode test harness.
+- **GSX view syntax** <Badge text="experimental" variant="caution" /> — first-class, typed view elements with a dedicated compiler stage, ownership-driven reactivity, and an SSR emitter.
+
+<Aside type="note">
+Glyim is a research-grade compiler under active development. The pipeline is end-to-end functional for a substantial subset of the language, and Glyim is not yet self-hosting: the compiler is written in Rust, while the standard library is written in Glyim.
+</Aside>
+
+## Next steps
+
+<LinkCard title="Getting started tutorial" href="/tutorials/getting-started/" description="Build the compiler and run your first Glyim program end to end." />
+
+
+---
+
+---
+title: glyim CLI Reference
+description: Every flag of the glyim compiler driver — emit kinds, backends, optimization, LTO, targets, diagnostics formats, the standard library prelude, and lint levels.
+type: reference
+sidebar:
+  order: 1
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+
+The `glyim` compiler driver (built as `glyim-cli`) compiles a single `.g` source file. This page documents the complete command-line surface, verified against the argument parser in `crates/glyim-cli`.
+
+<Code lang="bash" code={`glyim <INPUT> [FLAGS]`} />
+
+## Arguments and flags
+
+| Argument | Type | Default | Required | Description |
+|----------|------|---------|----------|-------------|
+| `<INPUT>` | path | — | yes | The `.g` source file to compile. |
+| `-o`, `--output <PATH>` | path | derived | no | Write the output artifact to this path. |
+| `--emit <KIND>` | enum | `obj` | no | Output artifact kind — see [emit kinds](#emit-kinds). |
+| `-O`, `--opt-level <N>` | 0–3 | `0` | no | Optimization level. |
+| `--target <TRIPLE>` | string | host default | no | Target triple, for example `aarch64-unknown-linux-gnu`. Defaults to `x86_64-unknown-linux-gnu` when unset. |
+| `--backend <NAME>` | enum | `llvm` | no | Code generation backend: `llvm` or `bytecode`. |
+| `--linker <PATH>` | path | system linker | no | Override the system linker used to link executables. |
+| `--link-flags <FLAGS>` | string | none | no | Extra flags passed to the linker. |
+| `--lto <KIND>` | enum | `off` | no | Link-time optimization strategy: `off`, `fat`, or `thin`. |
+| `--codegen-units <N>` | integer | parallelism | no | Number of codegen units (CGUs) for parallel code generation. Defaults to the available parallelism, capped at 16. |
+| `--proc-macro-deps <LIST>` | string | none | no | Comma-separated proc-macro dependency source files, compiled for the host triple to cdylibs and loaded via `dlopen`. |
+| `--error-format <FMT>` | enum | `human` | no | Diagnostic format: `human` (miette-rendered) or `json` (one JSON object per diagnostic). |
+| `--with-stdlib` | flag | off | no | Prepend the assembled standard library to the input, so `println`, `Vec`, `Option`, `Result`, `String`, `Box`, `Rc`, and `Iterator` resolve without explicit `use` statements. |
+| `-A`, `--allow <LINT>` | lint name | none | no | Suppress the named lint. Repeatable. |
+| `-W`, `--warn <LINT>` | lint name | none | no | Set the named lint to warning level (the default). Repeatable. `glyim -W help` lists all lints. |
+| `-D`, `--deny <LINT>` | lint name | none | no | Promote the named lint to error level, aborting compilation. Repeatable. |
+| `-h`, `--help` | flag | — | no | Print help. |
+| `-V`, `--version` | flag | — | no | Print version. |
+
+## Emit kinds
+
+| Kind | Output | Notes |
+|------|--------|-------|
+| `obj` | Native object file | The default. |
+| `exec` | Runnable executable | Requires the LLVM backend; the driver links with the system linker. |
+| `mir` | MIR dump | Human-readable mid-level IR, useful for debugging lowering. |
+| `llvm-ir` | LLVM IR | Textual `.ll` output of the LLVM backend. |
+| `asm` | Assembly | Target assembly for the selected `--target`. |
+| `cdylib` | Dynamic library | Used for proc-macro crates; compiled for the host when driven by `--proc-macro-deps`. |
+
+## LTO behavior
+
+| Value | Behavior |
+|-------|----------|
+| `off` | No link-time optimization (default). |
+| `fat` | In-compiler module merge and optimize. Requires multi-CGU support, which is not yet implemented; requesting it with multiple CGUs errors cleanly rather than silently ignoring the request. |
+| `thin` | Requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution the backend was built against. Requesting `thin` with `--backend bytecode` is an explicit error. |
+
+## Internal compiler errors
+
+When the compiler itself panics, the driver catches the unwind and prints a structured ICE (internal compiler error) report instead of a raw Rust backtrace. The report includes the panic message and a backtrace captured at the panic site. A language-oriented error never appears as an ICE; an ICE is always a compiler bug worth reporting.
+
+## Environment
+
+| Variable | Purpose |
+|----------|---------|
+| `LLVM_SYS_231_PREFIX` | LLVM 23 installation prefix, required to build the workspace. Homebrew: `$(brew --prefix llvm@23)`; Debian/Ubuntu: `/usr/lib/llvm-23`. |
+
+<Aside type="caution">
+The LLVM backend is a hard dependency of the pipeline — there is no feature flag to build without it.
+</Aside>
+
+## Examples
+
+<Code lang="bash" code={`# Object file with the LLVM backend (defaults)
+glyim input.g -o output.o
+
+# LLVM IR for inspection
+glyim input.g --emit llvm-ir
+
+# Optimized executable with thin LTO
+glyim input.g --emit exec -O2 --lto thin -o hello
+
+# Cross-compile to AArch64 Linux
+glyim input.g --target aarch64-unknown-linux-gnu
+
+# JSON diagnostics for editor tooling
+glyim input.g --error-format json
+
+# Prepend the standard library, deny the unsafe_fn_call lint
+glyim input.g --with-stdlib -D unsafe`} />
+
+## Next steps
+
+See [inspect the compilation pipeline](/guides/inspect-compilation/) for task-oriented walkthroughs of these flags, and the [lint reference](/reference/lints/) for the lint framework.
+
+
+---
+
+---
+title: Crate Reference
+description: Every crate in the Glyim Cargo workspace and its role in the compilation pipeline.
+type: reference
+sidebar:
+  order: 5
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Glyim is organized as a Cargo workspace of small, single-responsibility crates. Each phase consumes the previous phase's IR and exposes a minimal trait-based interface, so tests can substitute mocks for any phase. All crates live under `crates/`.
+
+## Foundation
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-core` | Foundation types: index vectors, definition IDs, interner, paths, ABI constants, the lint registry. |
+| `glyim-span` | Source locations (file, byte index, span), hygiene contexts, multispan diagnostics. |
+| `glyim-diag` | Diagnostic types, error codes, `DiagSink`, `miette` integration. |
+| `glyim-vfs` | Virtual file system with in-memory file content tracking. |
+| `glyim-db` | Compilation database: interners, VFS, type context, trait context. |
+
+## Frontend
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-syntax` | CST definition (Rowan-based), `SyntaxKind` enum, AST node helpers, including the `Gsx*` node kinds. |
+| `glyim-frontend` | Lexer and parser (merged), produces `SyntaxNode`. The parser handles GSX elements with zero lexer changes. |
+| `glyim-meta` | Macro expansion: `macro_rules!` declarative macros and built-in macros. |
+| `glyim-proc-macro` | C-compatible proc-macro ABI, registry, and `dlopen` loader. |
+
+## Analysis
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-def-map` | Module graph, item scopes, name resolution. |
+| `glyim-hir` | High-level IR (untyped), lowered from the CST. Preserves GSX element structure. |
+| `glyim-type` | Type interning (`TyCtx`), type kinds, substitutions, regions, predicates, auto-traits, object safety, layout hints, printing. |
+| `glyim-solve` | `InferenceTable`, unification, trait solver, fulfillment context, HRTB support. |
+| `glyim-typeck` | Type checker: HIR to THIR with inference and trait resolution, including `check_gsx`. |
+| `glyim-const-eval` | Constant expression evaluator over HIR. |
+
+## Lowering and MIR
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-mir` | Mid-level IR (CFG), place types, statement and terminator kinds. |
+| `glyim-lower` | THIR to MIR lowering, monomorphization, CGU partitioning, polymorphization, post-mono lint checks. |
+| `glyim-borrowck` | NLL borrow checker with two-phase borrows, move analysis, and drop-flag elaboration. |
+| `glyim-opt` | MIR optimization passes: constant propagation, DCE, CFG simplification, unreachable block elimination, slice desugaring, drop elaboration. |
+| `glyim-mir-interp` | Interpreter for MIR, used for `const fn` evaluation and test execution. |
+
+## Code generation and runtime
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-layout` | Type layout computation (size, alignment, ABI, vtables) with ABI-aware argument passing (`sret`, `byval`, `Ignore`, `Direct`, `Split`). |
+| `glyim-codegen` | Abstract code generation backend trait plus the bytecode backend. |
+| `glyim-codegen-llvm` | LLVM backend (via `inkwell`, LLVM 23) with full ABI handling, debug info, exception handling, and LTO. |
+| `glyim-bytecode-vm` | Switch-dispatch VM executing the bytecode backend's output. |
+| `glyim-runtime` | Runtime FFI: alloc, dealloc, drop glue, panic, fs/net/thread/time/process. |
+
+## GSX
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-gsx` | View IR (skeleton, slots, regions), flat-`u32` blueprints, read/write-set analysis, mutation-specialized patches, SSR emitter, `Host` trait and headless test host, keyed-list LIS reconciliation. |
+
+## Tooling
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-pipeline` | End-to-end compilation driver: lex, parse, def-map, HIR, typeck, lower, borrowck, opt, codegen. |
+| `glyim-cli` | Command-line interface (`clap`) and linker driver. Built as `glyim-cli`. |
+| `glyim-lsp` | Language Server Protocol implementation: diagnostics, hover, completion, navigation, code actions. |
+| `glyim-test` | Testing framework: discovery, five test modes, snapshots, mocks, property testing. |
+| `glyip` | Package manager and build tool. |
+
+## Standard library source
+
+| Crate | Contents |
+|-------|----------|
+| `glyim-lang-core` | Core library source (`.g` files): `Option`, `Result`, `iter`, `slice`, `str`, `cell`, `mem`, `ptr`, `ops`, `cmp`, `marker`, `panic`, `hint`, `convert`, `default`, `future`. |
+| `glyim-lang-alloc` | Allocation library source: `Box`, `Vec`, `String`, `Rc`, `RawVec`. |
+| `glyim-lang-std` | Standard library source: `io`, `fs`, `net`, `thread`, `sync`, `env`, `time`, `process`, `task`. |
+
+<Aside type="note">
+The standard library is written in Glyim and consumed by the compiler as its bootstrapping corpus. The compiler itself is Rust — Glyim is not yet self-hosting.
+</Aside>
+
+## Next steps
+
+<LinkCard title="Architecture, explained" href="/explanation/architecture/" description="Why the workspace is split this way: context traits, arena IRs, and interning." />
+<LinkCard title="The pipeline, explained" href="/explanation/pipeline/" description="How the crates connect from source.g to a native binary." />
+
+
+---
+
+---
+title: glyip Reference
+description: The glyip build tool commands and the complete Glyip.toml manifest schema — package metadata, targets, and dependency declarations.
+type: reference
+sidebar:
+  order: 2
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+
+`glyip` is Cargo's counterpart for Glyim projects. It reads a `Glyip.toml` manifest, resolves dependencies with SemVer 2.0 matching, maintains a `Glyip.lock` lockfile, and drives the compiler.
+
+## Commands
+
+### `glyip new`
+
+Scaffold a new project.
+
+| Argument / flag | Type | Default | Description |
+|-----------------|------|---------|-------------|
+| `<NAME>` | string | — | Project name. |
+| `--lib` | flag | off | Create a library project instead of a binary. |
+| `--edition <EDITION>` | string | `2024` | Language edition. |
+
+<Code lang="bash" code={`glyip new my_project
+glyip new my_lib --lib`} />
+
+### `glyip build`
+
+Compile the project. Builds are incremental — sources and build configuration are fingerprinted with SHA-256.
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--release` | flag | off | Build in release mode. |
+| `--target <TRIPLE>` | string | host | Target triple. |
+| `--backend <NAME>` | `llvm` \| `bytecode` | `llvm` | Codegen backend. `bytecode` output is not directly runnable. |
+| `--opt-level <N>` | 0–3 | `0` | Optimization level. |
+| `--lto <KIND>` | `off` \| `thin` \| `fat` | `off` | Link-time optimization. Unknown values are treated as `off`. |
+
+<Code lang="bash" code={`glyip build --release -O2`} />
+
+### `glyip test`
+
+Run the project's tests.
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--release` | flag | off | Build in release mode. |
+| `--filter <SUBSTRING>` | string | all | Run only tests whose name contains the substring. |
+| `--no-run` | flag | off | Compile the tests but do not run them. |
+| `--compiled` | flag | off | Compile each test file to a native executable and run it as a real subprocess instead of the in-process MIR interpreter. |
+
+<Code lang="bash" code={`glyip test --filter parser --compiled`} />
+
+### `glyip run`
+
+Build and execute the project's binary. Always uses the LLVM backend, because running requires an executable the operating system can start. Exits with the child's exit status.
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--release` | flag | off | Build in release mode. |
+| `--target <TRIPLE>` | string | host | Target triple. |
+| `--lto <KIND>` | `off` \| `thin` \| `fat` | `off` | Link-time optimization. |
+| `-- <ARGS>` | strings | none | Everything after `--` is passed to the program. |
+
+<Code lang="bash" code={`glyip run -- --flag value`} />
+
+## The `Glyip.toml` manifest
+
+The manifest is parsed with unknown-key rejection: an unrecognized key is an error.
+
+### `[package]`
+
+| Key | Type | Default | Required | Description |
+|-----|------|---------|----------|-------------|
+| `name` | string | — | yes | Crate name. |
+| `version` | string | `"0.1.0"` | no | Semantic version. |
+| `edition` | string | `"2024"` | no | Language edition. |
+| `authors` | string array | `[]` | no | Author list. |
+| `description` | string | none | no | Short description. |
+| `bin` | table array | none | no | Binary targets. |
+| `lib` | table | none | no | Library target. |
+
+Each `bin` entry accepts `name` (required) and `path` (source file, relative to the project root). The `lib` entry accepts `path`.
+
+### `[dependencies]` and `[dev-dependencies]`
+
+Both sections map a crate name to either a bare version requirement or a detail table:
+
+<Code lang="toml" code={`[dependencies]
+serde = "1.0"
+local_util = { path = "../local_util" }
+my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }
+
+[dev-dependencies]
+test_helpers = { path = "../test_helpers" }`} />
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `version` | string | SemVer 2.0 requirement — caret, tilde, wildcard, and comparison operators are supported. |
+| `path` | path | Local filesystem dependency. |
+| `git` | URL | Git repository dependency. |
+| `branch` | string | Track a named branch (resolved to its current tip commit). |
+| `tag` | string | Track a named tag (resolved to the commit the tag points at). |
+| `rev` | string | Pin an exact revision hash. |
+
+Exactly one git ref is active; without `branch`, `tag`, or `rev`, the repository's default branch tip is used.
+
+### The lockfile
+
+`glyip` maintains `Glyip.lock` with entries keyed by `name-version`, so repeated builds resolve the same graph. The conflict check enforces one resolved version per crate name — see [manage dependencies](/guides/manage-dependencies/) for the resolver's exact semantics.
+
+<Aside type="tip">
+A typo in a version string is an error (`DependencyNotFound`), not a silent fallback to the latest version.
+</Aside>
+
+## Next steps
+
+See [manage dependencies](/guides/manage-dependencies/) for practical workflows, and [test your code](/guides/test-your-code/) for testing patterns.
+
+
+---
+
+---
+title: GSX Reference
+description: The GSX view syntax and the glyim-gsx compiler stage API — grammar, directives, regions, blueprints, hosts, and diagnostics.
+type: reference
+sidebar:
+  order: 6
+---
+
+import { Aside, Badge, LinkCard } from '@astrojs/starlight/components';
+
+GSX is Glyim's first-class, typed, host-agnostic view syntax: JSX's ergonomics, but a compiler-visible structure instead of a runtime function-call tree. Elements are data described by schemas, and the same source can target HTML, SSR strings, native widgets, terminals, and headless test hosts.
+
+<Aside type="caution">
+GSX is experimental <Badge text="v0.1" variant="note" />. The parsing, type checking, and the `glyim-gsx` stage are implemented and tested, but the CLI driver does not run the GSX stage yet — see the [authoring guide](/guides/write-gsx-views/) for the current usage path.
+</Aside>
+
+## Grammar
+
+| Construct | Syntax | Notes |
+|-----------|--------|-------|
+| Element | `<tag attrs> children </tag>` or `<tag attrs />` | Prefix-position `<` followed by an identifier. Lowercase tags resolve through the active dialect schema; uppercase tags resolve through the def-map as components. |
+| Fragment | `<> … </>` | Grouping without a host element. |
+| Text | `"Hello"`, `"Hello {name}"` | Always a string literal — there is no raw-text mode, so the lexer is unchanged. The parser splits the literal into static pieces and typed holes at parse time. |
+| Dynamic child | `{expr}` | Any expression of type `View` or a text-able type. |
+| Attribute | `name="lit"`, `name={expr}` | Static string or dynamic expression. |
+| Bare attribute | `disabled` | Equivalent to `disabled={true}`. |
+| Shorthand | `{name}` | Equivalent to `name={name}`. |
+| Spread | `{..props}` | Typed against the target's prop struct. |
+| Event directive | `on:click={handler}` | Handlers are state transformers `fn(&mut S, E)`, not capturing closures. |
+| Class directive | `class:active={cond}` | Statically decomposed into slots. |
+| Style directive | `style:width={px}` | Statically decomposed into slots. |
+| Two-way binding | `bind:value={place}` | `place` is a place expression (lvalue); desugared with echo suppression. |
+| Control flow | `if`, `match`, `for` inside `{ }` | The language is the template language. The compiler recognizes these forms as regions. |
+| Keyed iteration | `for x in xs by key { … }` | `by` is a GSX-scoped contextual keyword, accepted only in child-position `for`. |
+| Namespaced dialect | `<web:canvas/>`, `<native:window/>` | Escape hatch for host-specific elements. |
+| Macro escape hatch | `gsx! { … }` | Optional token-tree entry for use inside macros. |
+
+Hyphenated attribute and tag names (such as `aria-label`) are accepted.
+
+## The compilation model
+
+A GSX expression travels through the pipeline as structure, never as a desugared call tree:
+
+1. **CST** — dedicated `Gsx*` node kinds (`GsxElement`, `GsxFragment`, `GsxDirectiveAttr`, `GsxSpread`, `GsxTextLit`, `GsxBlockChild`, `GsxForBy`, …) parsed by `parse_gsx_element` with zero lexer changes.
+2. **HIR** — `Expr::Gsx` preserves the element structure.
+3. **Typeck** — `check_gsx` validates tags, props, events, and children against the active dialect schema and checks every hole expression.
+4. **The `glyim-gsx` stage** — where views become programs:
+   - **VIR** (View IR): static skeleton, dynamic slots, and regions (`if`, `match`, keyed `for`, component).
+   - **Analyses**: read-sets and write-sets per slot, with prefix interference detection.
+   - **MSPs** (mutation-specialized patches): one straight-line patch function per distinct write-set.
+   - **Emit**: a `Blueprint` — a flat `u32` operation array plus a string table — and an SSR string emitter.
+
+## Public API surface (`glyim-gsx`)
+
+| Item | Role |
+|------|------|
+| Schema / Dialect registry | Describes tags, props, events, and children per host dialect; the compiler validates against schemas, never against tag-name strings. |
+| `Host` trait | The interface a rendering backend implements: mount, patch, patch-mask, dispatch, SSR. |
+| Headless host | An op-recording `Host` implementation for tests; assertions state exact update costs. |
+| `ViewRuntime::mount` | Mounts a blueprint onto a host and returns a live view handle. |
+| Blueprint | Flat-`u32` ops plus string table; encodable as a static for AOT embedding. |
+| SSR emitter | Renders a blueprint to an HTML-like string server-side. |
+| Keyed-list reconciliation | Longest-increasing-subsequence algorithm for `for … by` lists. |
+
+## Diagnostics
+
+| Code | Meaning |
+|------|---------|
+| `G0201` | A value cannot be tracked by ownership analysis and needs the `Signal<T>` escape hatch; the diagnostic ships a fix-it, and the host falls back to signal bits for that slot. |
+| hand-off diagnostic | A GSX-containing body reached the end of typeck without the GSX stage running — a clean pointer to the stage API, not an internal error. |
+
+## Status and scope :badge[experimental]{variant="caution"}
+
+- Implemented and tested: syntax, HIR preservation, schema-driven typeck, VIR, analyses, MSPs, blueprint + SSR emission, keyed reconciliation, `bind:` desugaring with echo suppression, composition as lens composition for inlined components, the §3.1 Counter example end to end (flagship tests in `crates/glyim-gsx/tests/counter.rs`).
+- Not started: host dialect `.g` libraries (`glyim-lang-ui`), arena node trees, layout, styles, accessibility-tree emission, a WASM host protocol, a VM-based hot-reload host, and CLI driver wiring.
+
+## Next steps
+
+<LinkCard title="Write GSX views" href="/guides/write-gsx-views/" description="A task-oriented walkthrough with the flagship Counter example." />
+<LinkCard title="Ownership-driven reactivity" href="/explanation/gsx-reactivity/" description="Why mutation-specialized patches replace vdom diffing." />
+
+
+---
+
+---
+title: Language Reference
+description: The Glyim language — declarations, types, traits, pattern matching, closures, async/await, macros, and compiler-known builtin types.
+type: reference
+sidebar:
+  order: 3
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+
+Glyim is a Rust-like systems programming language with its own file extension, `.g`. This page lists the constructs the compiler accepts. The full grammar is still evolving — the `glyim-lang-core`, `glyim-lang-alloc`, and `glyim-lang-std` crates contain the current standard library source, written in Glyim, and serve as the compiler's bootstrapping corpus.
+
+## A tour in one block
+
+<Code lang="rust" code={`// Structs, enums, generics, traits.
+struct Point<T> {
+    x: T,
+    y: T,
+}
+
+enum Shape {
+    Circle(f64),
+    Rectangle(f64, f64),
+    Point,
+}
+
+trait Area {
+    fn area(&self) -> f64;
+}
+
+impl Area for Shape {
+    fn area(&self) -> f64 {
+        match self {
+            Shape::Circle(r) => 3.14159 * r * r,
+            Shape::Rectangle(w, h) => w * h,
+            Shape::Point => 0.0,
+        }
+    }
+}
+
+// Pattern matching, ranges, guards.
+fn classify(n: i32) -> &str {
+    match n {
+        0 => "zero",
+        1 | 2 => "small",
+        x if x < 0 => "negative",
+        _ => "large",
+    }
+}
+
+// Closures and iterators.
+fn sum_of_squares(values: &[i32]) -> i32 {
+    values.iter().map(|x| *x * *x).sum()
+}
+
+// Async / await.
+async fn fetch_twice() -> i32 {
+    let a = fetch_one().await;
+    let b = fetch_one().await;
+    a + b
+}`} />
+
+## Constructs
+
+### Declarations
+
+| Construct | Syntax | Notes |
+|-----------|--------|-------|
+| Function | `fn name(params) -> Ret { … }` | Free functions and associated functions in `impl` blocks. |
+| Struct | `struct Name { field: T, … }` | Tuple and unit forms supported. Generic parameters with bounds and where-clauses. |
+| Enum | `enum Name { A, B(T), C { x: T } }` | Algebraic data types. |
+| Trait | `trait Name { fn method(&self); }` | Default methods and associated types are supported. |
+| Impl | `impl Trait for Type { … }` / `impl Type { … }` | Static dispatch through the trait system. |
+| Local binding | `let pattern: Type = expr;` | Types are usually inferred. |
+
+### Control flow
+
+| Construct | Forms |
+|-----------|-------|
+| Conditional | `if expr { … } else { … }` |
+| Loop | `while cond { … }`, `loop { … }`, `for x in iter { … }` |
+| Match | `match expr { pattern => arm, … }` |
+| Async | `async fn …` and `expr.await` — desugared to state machines (straight-line and multi-await bodies). |
+
+### Pattern matching
+
+Patterns support literals, ranges, or-patterns (`1 | 2`), slices, structs, tuples, enums, bindings, and `if` guards. The wildcard `_` covers unmatched cases. Match arms are checked for exhaustiveness by the type checker.
+
+### Generics and traits
+
+- Type parameters: `struct Point<T>`, `fn f<T: Trait>(…)`, and where-clauses.
+- Trait bounds participate in the trait solver, which handles higher-ranked trait bounds (`for<'a>`).
+- Auto-traits (`Send`, `Sync`, `Unpin`) are computed automatically.
+- Trait objects use vtable generation for dynamic dispatch.
+
+### Closures
+
+Closures capture their environment with capture analysis that classifies each capture as `ByValue`, `ByRef(Mut)`, or `ByRef(Not)`. Closure syntax mirrors Rust: `|x| x + 1`, `|x: i32| -> i32 { x + 1 }`.
+
+### Unsafe
+
+`unsafe fn` declares a function with unchecked contracts. Calls to an `unsafe fn` outside an enclosing `unsafe { }` block trigger the [`unsafe_fn_call` lint](/reference/lints/), which warns by default and can be allowed or denied from the CLI.
+
+### Macros
+
+Declarative macros use `macro_rules!` with fragment specifiers including `:expr`, `:ty`, `:pat`, and `:tt`. Built-in macros:
+
+| Macro | Purpose |
+|-------|---------|
+| `file!`, `line!`, `column!` | Source location reporting. |
+| `env!`, `option_env!` | Environment variable access (required / optional). |
+| `include!`, `include_str!`, `include_bytes!` | Embed other files at compile time. |
+| `concat!`, `concat_idents!` | Literal and identifier concatenation. |
+| `stringify!` | Render an expression as a string literal. |
+
+Procedural macros are supported through a C-compatible token-stream ABI (`glyim-proc-macro`) with a `dlopen`-based cdylib loader, driven by the `--proc-macro-deps` CLI flag.
+
+### Compiler-known builtin types
+
+| Category | Types |
+|----------|-------|
+| Primitives | `i32`, `u32`, `f64`, `bool`, `char`, `str`, `&str` and friends |
+| Ranges | `Range`, `RangeInclusive`, and the `..` / `..=` syntax |
+| Optional / fallible | `Option<T>`, `Result<T, E>` |
+| Collections | `Vec<T>`, `String` |
+| Smart pointers | `Box<T>`, `Rc`, `PhantomData<T>`, `UnsafeCell<T>` |
+
+<Aside type="note">
+Some builtin methods on `Vec`, `String`, `Result`, and `Option` lower to synthetic function bodies that the LLVM backend must intrinsic-lower; unimplemented ones produce an explicit compiler error rather than wrong code.
+</Aside>
+
+## Standard library
+
+The standard library is written in Glyim and ships in three crates:
+
+- **`glyim-lang-core`** — `Option`, `Result`, `iter`, `slice`, `str`, `cell`, `mem`, `ptr`, `ops`, `cmp`, `marker`, `panic`, `hint`, `convert`, `default`, `future`.
+- **`glyim-lang-alloc`** — `Box`, `Vec`, `String`, `Rc`, `RawVec`.
+- **`glyim-lang-std`** — `io`, `fs`, `net`, `thread`, `sync`, `env`, `time`, `process`, `task`.
+
+Pass [`--with-stdlib`](/reference/cli/) to the compiler (or use `glyip`, which does this for you) to make these names resolve without explicit `use` statements.
+
+## Next steps
+
+See the [GSX reference](/reference/gsx/) for view syntax, and [the pipeline explained](/explanation/pipeline/) for how the compiler processes these constructs.
+
+
+---
+
+---
+title: Lint Reference
+description: The compiler lint framework — available lints, their aliases, severity levels, and the -A/-W/-D command-line flags.
+type: reference
+sidebar:
+  order: 4
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+
+The compiler's lint framework (§3.5.30 in the internal plan) assigns a severity level to named checks. This page documents every available lint and the flags that control them.
+
+## Lints
+
+| Lint | Alias | Default level | Fires when |
+|------|-------|---------------|------------|
+| `unsafe_fn_call` | `unsafe` | warn | A declared `unsafe fn` is called outside any enclosing `unsafe { }` block. |
+| `unused_generic_params` | `unused_generics` | warn | A monomorphized function does not use one or more of its generic parameters. Checked post-monomorphization by `glyim-lower`. |
+
+The lint list is small by design and grows deliberately: adding a lint means adding a variant, a canonical name, the check that emits the diagnostic, and a drift-detection test so the lint cannot become invisible to `-W help`.
+
+## Levels
+
+| Level | Flag | Behavior |
+|-------|------|----------|
+| allow | `-A`, `--allow` | Suppress the diagnostic entirely. |
+| warn | `-W`, `--warn` | Emit as a warning. This is the default. |
+| deny | `-D`, `--deny` | Emit as an error and abort compilation at the pipeline's error gate. |
+
+All three flags are repeatable, and later flags override earlier ones for the same lint.
+
+## Usage
+
+<Code lang="bash" code={`# Promote the unsafe_fn_call lint to an error
+glyim input.g -D unsafe
+
+# Suppress it
+glyim input.g -A unsafe_fn_call
+
+# Explicitly set warning level
+glyim input.g -W unused_generic_params
+
+# List every available lint name and alias
+glyim -W help`} />
+
+`glyim -W help` answers before argument parsing enforces the required input file, so it works as a standalone command.
+
+<Aside type="caution">
+Unknown lint names are currently ignored silently by the flag parser. Attribute-based control (`#[allow(..)]` and friends) is not yet implemented; levels are set from the command line only.
+</Aside>
+
+## Next steps
+
+See the [CLI reference](/reference/cli/) for the full flag table, and the [language reference](/reference/language/#unsafe) for `unsafe fn` semantics.
+
+
+---
+
+---
+title: Getting Started with Glyim
+description: Build the Glyim compiler from source, scaffold a project with glyip, and run your first Glyim program end to end.
+type: tutorial
+sidebar:
+  order: 1
+---
+
+import { Aside, Code, LinkCard, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+In this tutorial you build the Glyim compiler from source, create a new project with the `glyip` build tool, and run a Glyim program. You finish with a working toolchain and a mental model of the build workflow.
+
+## Prerequisites
+
+- **Rust** — latest stable toolchain, 2024 edition. Rust 1.94 or newer is recommended; the declared MSRV is 1.85.
+- **LLVM 23** — required by the LLVM backend. The backend is a hard dependency of the workspace; there is no feature flag to build without it.
+- **`just`** and **`watchexec`** — optional, only for the convenience recipes in the repository's `justfile`.
+
+Before building, set `LLVM_SYS_231_PREFIX` to your LLVM 23 installation prefix:
+
+<Tabs>
+   <TabItem label="macOS (Homebrew)">
+        <Code lang="bash" code={`export LLVM_SYS_231_PREFIX="$(brew --prefix llvm@23)"`} />
+   </TabItem>
+   <TabItem label="Debian / Ubuntu">
+        <Code lang="bash" code={`export LLVM_SYS_231_PREFIX="/usr/lib/llvm-23"`} />
+   </TabItem>
+</Tabs>
+
+<Aside type="tip">
+Add the `export` line to your shell profile so every future session picks it up. The CI pipeline installs LLVM 23 with the `llvm.sh 23` script if you need a reproducible reference setup.
+</Aside>
+
+## Build the compiler
+
+<Steps>
+
+1. Clone the repository:
+
+   <Code lang="bash" code={`git clone https://github.com/elcoosp/glyim
+cd glyim`} />
+
+2. Build the workspace in release mode:
+
+   <Code lang="bash" code={`cargo build --release`} />
+
+3. Locate the compiler driver. The binary is at `target/release/glyim-cli` — invoke it as `glyim-cli` (rename or symlink it to `glyim` if you prefer):
+
+   <Code lang="bash" code={`./target/release/glyim-cli --version`} />
+
+   You can also invoke the driver through Cargo on every call, which avoids symlinks:
+
+   <Code lang="bash" code={`cargo run -p glyim-cli -- --help`} />
+
+</Steps>
+
+## Create and run a project
+
+`glyip` is Cargo's counterpart for Glyim projects. It reads a `Glyip.toml` manifest, resolves dependencies, maintains a `Glyip.lock` lockfile, and drives the compiler.
+
+<Steps>
+
+1. Scaffold a new binary project:
+
+   <Code lang="bash" code={`cargo run -p glyip -- new hello
+cd hello`} />
+
+2. Inspect what `glyip new` generated. The project contains a `Glyip.toml` manifest and a `src/main.g` source file:
+
+   <Code lang="bash" code={`cat Glyip.toml
+cat src/main.g`} />
+
+3. Build the project:
+
+   <Code lang="bash" code={`cargo run -p glyip -- build`} />
+
+4. Run it:
+
+   <Code lang="bash" code={`cargo run -p glyip -- run`} />
+
+   `glyip run` is a transparent wrapper: it exits with the compiled program's exit code, so a failing program does not look like a passing command.
+
+</Steps>
+
+## What the scaffold looks like
+
+The scaffolded manifest declares the package and its targets:
+
+<Code lang="toml" code={`[package]
+name = "hello"
+version = "0.1.0"
+edition = "2024"`} />
+
+The default template produces a binary that prints a greeting. Edit `src/main.g`, rebuild, and run again — `glyip build` uses SHA-256 source fingerprints, so it recompiles only what changed.
+
+## Compile a single file directly
+
+Once you are comfortable with `glyip`, you can bypass project management and drive the compiler directly. The equivalent of the tutorial so far, in one command:
+
+<Code lang="bash" code={`glyim-cli src/main.g --emit exec -o hello
+./hello`} />
+
+The `--emit exec` flag produces a runnable executable; the default `--emit obj` produces an object file. See the [CLI reference](/reference/cli/) for every flag.
+
+## Next steps
+
+You have a working toolchain. From here:
+
+<LinkCard title="Build and run your project" href="/guides/build-and-run/" description="Release builds, optimization levels, LTO, and passing arguments to your program." />
+<LinkCard title="Manage dependencies" href="/guides/manage-dependencies/" description="Path, registry, and git dependencies in Glyip.toml, and how the resolver behaves." />
+<LinkCard title="How the pipeline works" href="/explanation/pipeline/" description="A stage-by-stage walkthrough of what happens between source.g and a native binary." />

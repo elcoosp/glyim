@@ -8,6 +8,7 @@ hero:
   tagline: A modular, from-scratch compiler for a Rust-like systems programming language — written in Rust.
   image:
     file: ../../assets/logo.png
+    alt: "Glyim logo"
   actions:
     - text: Get started in one pass
       link: /tutorials/getting-started/
@@ -18,7 +19,7 @@ hero:
       variant: minimal
 ---
 
-import { Card, CardGrid, LinkCard, Aside, Badge } from '@astrojs/starlight/components';
+import { Aside, Badge, Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
 
 Glyim implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference and trait solving, borrow checking, optimizations, and two code generation backends (LLVM and a custom bytecode VM). The project is organized as a Cargo workspace with more than 30 crates, designed for clarity, testability, and incremental development. Every stage is a self-contained crate with a narrow public API, so you can study and test each phase in isolation.
 
@@ -38,6 +39,8 @@ Glyim implements a complete compilation pipeline: lexing, parsing, name resoluti
         Read the explanation section to learn why the pipeline is split into crates and how ownership-driven reactivity works.
     </Card>
 </CardGrid>
+
+<LinkButton href="/tutorials/getting-started/" icon="right-arrow">Start the tutorial</LinkButton>
 
 ## Feature highlights
 
