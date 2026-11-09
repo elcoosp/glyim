@@ -1,9 +1,13 @@
 # Seed gap registry (M1.1) — migrated from KNOWN_GAPS.md §§1–2 in spirit;
 # M1.7 performs the full migration with witness fixtures.
 #
-# Both entries are `unwitnessed`: witness fixtures carrying
-# `//@ known-gap: GAP-XXXX` headers are introduced by M1.6/M1.7, so until
-# then these count as witness debt (a ratcheted metric, plan §3.3).
+# GAP-0001 is witnessed since M1.6: the fixture at `witness` reproduces the
+# gap and carries the `//@ known-gap: GAP-0001` header, and the harness
+# applies the strict-xfail inversion (if the compiler starts accepting the
+# witness, the fixture fails with `known-gap GAP-0001 closed`, forcing the
+# witness to be retired in the gap-closing change). GAP-0002 remains
+# `unwitnessed` witness debt (plan §3.3): it is Windows-only (SEH) and has
+# no cross-platform reproducible fixture yet.
 
 [[gap]]
 id        = "GAP-0001"
@@ -13,7 +17,8 @@ affects   = ["LANG-ASYNC-AWAIT"]
 caps      = "L2"
 expect    = { diagnostic = "T0060" }
 opened_in = "v0.3.0"
-status    = "unwitnessed"
+status    = "witnessed"
+witness   = "crates/glyim-test/tests/compile-fail/async-await-in-loop-known-gap.g"
 
 [[gap]]
 id        = "GAP-0002"
