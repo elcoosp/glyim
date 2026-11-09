@@ -1,0 +1,124 @@
+# M1.3 inventory ignore registry (plan §3.5): items extracted from
+# source that deliberately have no claiming feature. Keys are exact —
+# no globs — so a NEW MIR variant can never be silently swallowed:
+# it fails `ledger check` until it is claimed or ignored with a
+# reason. The seed ignores are the 29 existing glyim-mir IR variants
+# across StatementKind/Rvalue/Operand/ProjectionElem/TerminatorKind;
+# per-variant backend-parity rows become the §3.6 matrix once the
+# ledger-trace counters and M1.8 evidence land.
+
+[[ignore]]
+item = "mir.Operand.Constant"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.Operand.Copy"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.Operand.Move"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.ProjectionElem.ConstantIndex"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.ProjectionElem.Deref"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.ProjectionElem.Downcast"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.ProjectionElem.Field"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.ProjectionElem.Index"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.ProjectionElem.Subslice"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.Rvalue.Aggregate"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.Rvalue.BinaryOp"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.Rvalue.Cast"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.Rvalue.Discriminant"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.Rvalue.Len"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.Rvalue.Ref"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.Rvalue.Repeat"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.Rvalue.UnaryOp"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.Rvalue.Use"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.StatementKind.Assign"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.StatementKind.Nop"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.StatementKind.StorageDead"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.StatementKind.StorageLive"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.TerminatorKind.Assert"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.TerminatorKind.Call"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.TerminatorKind.Drop"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.TerminatorKind.Goto"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.TerminatorKind.Return"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.TerminatorKind.SwitchInt"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+[[ignore]]
+item = "mir.TerminatorKind.Unreachable"
+reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"

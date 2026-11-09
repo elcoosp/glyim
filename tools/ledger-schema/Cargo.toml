@@ -8,6 +8,9 @@ publish = false
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+# M1.3 inventory extractors parse the compiler's own sources; `full`
+# enables item/enum/fn grammar coverage, `parsing` the Parse plumbing.
+syn = { version = "2.0", default-features = false, features = ["full", "parsing"] }
 toml = "1.2.1"
 
 [dev-dependencies]
@@ -21,6 +24,11 @@ path = "src/lib.rs"
 name = "load_registry"
 harness = false
 path = "load_registry.rs"
+
+[[bench]]
+name = "extract_inventory"
+harness = false
+path = "extract_inventory.rs"
 
 [lints]
 workspace = true

@@ -8,6 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Inventory extractors, slice 1 (M1.3)**: `ledger inventory` reads the
+  source, so the registry can no longer drift from the code (plan §3.5).
+  - `ledger-schema`: two `syn`-based extractors — MIR IR variants
+    (`mir.<Enum>.<Variant>` for the five backend-parity enums
+    `StatementKind`/`Rvalue`/`Operand`/`ProjectionElem`/`TerminatorKind`
+    in `crates/glyim-mir`) and runtime FFI symbols
+    (`runtime.ffi.<symbol>` for every `#[no_mangle]`/`#[unsafe(no_mangle)]`
+    `pub extern "C"` fn in `crates/glyim-runtime`, 99 of them). Feature
+    entries gain an optional `inventory = [...]` claim list; a new
+    `ledger/inventory-ignore.toml` registers deliberate non-features
+    (exact keys only — no globs, so a new variant can never be silently
+    swallowed). `inventory_diagnostics` fails `ledger check` on unmapped
+    items (`LEDGER-INVENTORY-UNMAPPED`), stale ignores
+    (`LEDGER-INVENTORY-STALE-IGNORE`), stale claims
+    (`LEDGER-INVENTORY-STALE-CLAIM`), duplicate claims/ignores
+    (`LEDGER-INVENTORY-DUP-CLAIM`, `LEDGER-INVENTORY-DUP-IGNORE`),
+    claimed-and-ignored conflicts (`LEDGER-INVENTORY-CONFLICT`), and
+    unparseable sources (`LEDGER-INVENTORY-PARSE`) — the M1.3 DoD
+    "adding a MIR variant without registration fails `ledger check`
+    (tested)" is a unit + integration tested fact.
+  - `glyim-ledger`: new `ledger inventory [ROOT]` subcommand (items with
+    claim/ignore status, exit 1 on gate errors); `ledger check` now runs
+    the inventory gate and reports the extracted item count.
+  - Registry seed: the 15 implemented FFI families claim their 99
+    symbols; the 29 existing MIR variants are ignored-with-reason (the
+    per-variant rows are the §3.6 backend-parity matrix, M1.8). The
+    extractor immediately surfaced registry drift: `RUNTIME-FFI-FS`
+    claimed 16 symbols in its title but implements 14 (title corrected);
+    `RUNTIME-FFI-SYNC` (mutex/rwlock) has no backing symbols at all and
+    stays unclaimed until they land.
+  - Bench: `extract_inventory` harness measures parse+extract of a
+    synthetic 150-variant/100-symbol corpus (~1.4 ms, parse-dominated).
+  - 31 new tests across the two ledger crates, written test-first.
 - **Feature registry seed (M1.2)**: the ledger's claim surface grows from
   6 smoke-test entries to 216 curated features across 32 registry files,
   covering the documented inventory end to end: the README feature list
@@ -112,6 +145,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **zero inline `#[allow]`/`#[expect]` attributes** in the tree.
 - `rust-toolchain.toml` pins local development to the `stable` toolchain
   (MSRV 1.95.0 stays a separate CI job).
+
+### Fixed
+- **GSX SSR emitter dropped every element's closing `>`** (`</h1` instead of
+  `</h1>`) — the crate's own G7 snapshot tests were left red on `main` (the
+  ubuntu `Test` job has been failing since); the fix makes all 88 `glyim-gsx`
+  tests pass.
+- **`glyim-test`'s `json-output` feature did not compile when enabled**: the
+  optional `serde` dependency lacked its `derive` feature, so the feature's
+  `#[derive(Serialize)]` blocks failed (`cargo test --all-features` could not
+  build the crate). Found by the M1.3 gate run.
 
 ### Changed
 - **`regalloc2` dependency removed** from the workspace (unused).

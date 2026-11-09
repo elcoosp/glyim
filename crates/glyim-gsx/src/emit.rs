@@ -476,7 +476,7 @@ fn ssr_node(node: &VirNode, vir: &Vir, p: &mut SsrProgram) {
             for c in children {
                 ssr_node(c, vir, p);
             }
-            p.chunks.push(SsrChunk::Static(format!("</{tag}")));
+            p.chunks.push(SsrChunk::Static(format!("</{tag}>")));
         }
         VirNode::Fragment { children } => {
             for c in children {
