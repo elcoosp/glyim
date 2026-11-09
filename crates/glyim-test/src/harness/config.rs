@@ -50,6 +50,12 @@ pub struct TestConfig {
     /// `M1.4` readiness-ledger tags: declared backends (`//@ backends:`).
     /// Empty = not declared (rejected by the collector gate).
     pub backends: Vec<String>,
+    /// M1.6 strict-xfail witness tag (`//@ known-gap: GAP-NNNN`, plan
+    /// §3.3). `None` = not a witness fixture. Only meaningful together
+    /// with [`TestMode::CompileFail`] — the collector rejects the
+    /// combination with any other mode
+    /// ([`crate::error::TestDiscoveryError::WitnessRequiresCompileFail`]).
+    pub known_gap: Option<String>,
 }
 
 impl Default for TestConfig {
@@ -73,6 +79,7 @@ impl Default for TestConfig {
             forbid_warnings: Vec::new(),
             features: Vec::new(),
             backends: Vec::new(),
+            known_gap: None,
         }
     }
 }
@@ -378,6 +385,7 @@ pub fn parse_test_config(source: &str) -> Result<ParsedConfig, String> {
     config
         .backends
         .clone_from(&annotations.backends.clone().unwrap_or_default());
+    config.known_gap.clone_from(&annotations.known_gap);
 
     Ok(ParsedConfig {
         config,

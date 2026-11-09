@@ -124,6 +124,7 @@ impl<'a> TestCollector<'a> {
             config.aux_files = header_config.aux_files;
             config.features = header_config.features;
             config.backends = header_config.backends;
+            config.known_gap = header_config.known_gap;
 
             // M1.4 DoD gate: a fixture that could only pass *by tolerance*
             // is rejected at discovery. The required expectation depends on
@@ -160,6 +161,18 @@ impl<'a> TestCollector<'a> {
                     }
                 }
                 TestMode::CompilePass | TestMode::Ui => {}
+            }
+
+            // M1.6 witness contract (plan §3.3): a `//@ known-gap:` tag only
+            // means something on a compile-fail fixture. Rejecting here
+            // (discovery time) keeps the inversion logic in the executor
+            // total — it never has to guess what a witness on a run-pass
+            // fixture would mean.
+            if config.known_gap.is_some() && config.mode != TestMode::CompileFail {
+                return Err(TestDiscoveryError::WitnessRequiresCompileFail {
+                    path: path.to_path_buf(),
+                    mode: config.mode,
+                });
             }
 
             let name = path
