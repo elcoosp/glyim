@@ -1,9 +1,9 @@
 {
-  "code_lines": 232561,
-  "documented_items": 2095,
+  "code_lines": 233600,
+  "documented_items": 2111,
   "inline_allows": 0,
-  "public_items": 2422,
-  "rust_files": 919,
-  "test_functions": 4940,
+  "public_items": 2439,
+  "rust_files": 924,
+  "test_functions": 4950,
   "workspace_members": 38
 }
