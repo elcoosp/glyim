@@ -1,5 +1,12 @@
 # M1.2 feature registry seed — `runtime/ffi.toml`.
 #
+# M1.3 inventory claims: every `runtime.ffi.*` key below is extracted
+# from `crates/glyim-runtime/src` by `ledger inventory` (plan §3.5);
+# `ledger check` fails when a symbol exists without a claim here or an
+# entry in `ledger/inventory-ignore.toml`. RUNTIME-FFI-SYNC claims
+# nothing: no mutex/rwlock symbols exist in the runtime yet, so that
+# declared family stays unbacked until its symbols land.
+
 # Curated from the documented inventory (README feature list + language
 # tour, docs/specs, docs/design/*) per docs/roadmaps/glyim-master-plan.md
 # M1.2. Entries are declarations only: no status fields (plan C1); levels
@@ -13,7 +20,11 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_alloc",
+                 "runtime.ffi.glyim_dealloc",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-ATOMIC"
@@ -23,7 +34,19 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_atomic_u8_cas",
+                 "runtime.ffi.glyim_atomic_u8_fetch_and",
+                 "runtime.ffi.glyim_atomic_u8_fetch_or",
+                 "runtime.ffi.glyim_atomic_u8_load",
+                 "runtime.ffi.glyim_atomic_u8_store",
+                 "runtime.ffi.glyim_atomic_usize_cas",
+                 "runtime.ffi.glyim_atomic_usize_fetch_add",
+                 "runtime.ffi.glyim_atomic_usize_fetch_sub",
+                 "runtime.ffi.glyim_atomic_usize_load",
+                 "runtime.ffi.glyim_atomic_usize_store",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-CONDVAR"
@@ -33,7 +56,13 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_condvar_new",
+                 "runtime.ffi.glyim_condvar_notify_all",
+                 "runtime.ffi.glyim_condvar_notify_one",
+                 "runtime.ffi.glyim_condvar_wait",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-ENV"
@@ -43,7 +72,20 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_env_args_count",
+                 "runtime.ffi.glyim_env_args_get",
+                 "runtime.ffi.glyim_env_current_dir",
+                 "runtime.ffi.glyim_env_current_exe",
+                 "runtime.ffi.glyim_env_home_dir",
+                 "runtime.ffi.glyim_env_remove_var",
+                 "runtime.ffi.glyim_env_set_var",
+                 "runtime.ffi.glyim_env_temp_dir",
+                 "runtime.ffi.glyim_env_var",
+                 "runtime.ffi.glyim_env_vars_count",
+                 "runtime.ffi.glyim_env_vars_get",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-ERRNO"
@@ -53,17 +95,36 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_errno",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-FS"
-title         = "file-system FFI family (16 symbols)"
+title         = "file-system FFI family (14 symbols)"
 area          = "runtime.ffi"
 tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_fs_canonicalize",
+                 "runtime.ffi.glyim_fs_close",
+                 "runtime.ffi.glyim_fs_create_dir",
+                 "runtime.ffi.glyim_fs_create_dir_all",
+                 "runtime.ffi.glyim_fs_flush",
+                 "runtime.ffi.glyim_fs_metadata",
+                 "runtime.ffi.glyim_fs_metadata_fd",
+                 "runtime.ffi.glyim_fs_open",
+                 "runtime.ffi.glyim_fs_remove_dir",
+                 "runtime.ffi.glyim_fs_remove_dir_all",
+                 "runtime.ffi.glyim_fs_remove_file",
+                 "runtime.ffi.glyim_fs_rename",
+                 "runtime.ffi.glyim_fs_symlink_metadata",
+                 "runtime.ffi.glyim_fs_truncate",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-IO"
@@ -73,7 +134,13 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_stderr_write",
+                 "runtime.ffi.glyim_stdin_read",
+                 "runtime.ffi.glyim_stdout_flush",
+                 "runtime.ffi.glyim_stdout_write",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-NET"
@@ -83,7 +150,23 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_net_tcp_accept",
+                 "runtime.ffi.glyim_net_tcp_bind",
+                 "runtime.ffi.glyim_net_tcp_connect",
+                 "runtime.ffi.glyim_net_tcp_local_addr",
+                 "runtime.ffi.glyim_net_tcp_peer_addr",
+                 "runtime.ffi.glyim_net_tcp_read",
+                 "runtime.ffi.glyim_net_tcp_set_nonblocking",
+                 "runtime.ffi.glyim_net_tcp_write",
+                 "runtime.ffi.glyim_net_udp_bind",
+                 "runtime.ffi.glyim_net_udp_connect",
+                 "runtime.ffi.glyim_net_udp_recv",
+                 "runtime.ffi.glyim_net_udp_recv_from",
+                 "runtime.ffi.glyim_net_udp_send",
+                 "runtime.ffi.glyim_net_udp_send_to",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-PROCESS"
@@ -93,7 +176,18 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_process_abort",
+                 "runtime.ffi.glyim_process_abort_with_msg",
+                 "runtime.ffi.glyim_process_exit",
+                 "runtime.ffi.glyim_process_getpid",
+                 "runtime.ffi.glyim_process_getppid",
+                 "runtime.ffi.glyim_process_kill",
+                 "runtime.ffi.glyim_process_spawn",
+                 "runtime.ffi.glyim_process_wait",
+                 "runtime.ffi.glyim_process_wait_output",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-SYNC"
@@ -113,7 +207,19 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_thread_available_parallelism",
+                 "runtime.ffi.glyim_thread_current_id",
+                 "runtime.ffi.glyim_thread_join",
+                 "runtime.ffi.glyim_thread_park",
+                 "runtime.ffi.glyim_thread_park_timeout",
+                 "runtime.ffi.glyim_thread_sleep",
+                 "runtime.ffi.glyim_thread_spawn",
+                 "runtime.ffi.glyim_thread_spawn_named",
+                 "runtime.ffi.glyim_thread_unpark",
+                 "runtime.ffi.glyim_thread_yield",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-TIME"
@@ -123,7 +229,14 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_time_now",
+                 "runtime.ffi.glyim_time_now_nanos",
+                 "runtime.ffi.glyim_time_now_secs",
+                 "runtime.ffi.glyim_time_system_nanos",
+                 "runtime.ffi.glyim_time_system_secs",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-VECSTR"
@@ -133,7 +246,19 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_slice_to_vec",
+                 "runtime.ffi.glyim_str_eq",
+                 "runtime.ffi.glyim_str_is_utf8",
+                 "runtime.ffi.glyim_string_from_bytes",
+                 "runtime.ffi.glyim_string_push_str",
+                 "runtime.ffi.glyim_vec_insert",
+                 "runtime.ffi.glyim_vec_pop",
+                 "runtime.ffi.glyim_vec_push",
+                 "runtime.ffi.glyim_vec_remove",
+                 "runtime.ffi.glyim_vec_reserve",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-PANIC"
@@ -143,7 +268,11 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_drop_in_place",
+                 "runtime.ffi.glyim_panic",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-CSTR"
@@ -153,7 +282,10 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "B"
+             inventory = [
+                 "runtime.ffi.glyim_free_cstr",
+             ]
+             owner_lane    = "B"
 
 [[feature]]
 id            = "RUNTIME-FFI-REACTOR"
@@ -163,4 +295,8 @@ tier          = "std"
 spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
-owner_lane    = "M"
+             inventory = [
+                 "runtime.ffi.glyim_reactor_deregister",
+                 "runtime.ffi.glyim_reactor_register",
+             ]
+             owner_lane    = "M"
