@@ -546,3 +546,163 @@ fn test_run_parallel_collects_results_with_progress_reporting() {
         assert!(matches!(a.outcome, TestOutcome::Passed));
     }
 }
+
+// -------------------------------------------------------------------------
+// M1.6 strict-xfail witness (plan §3.3): `//@ known-gap: GAP-NNNN` on a
+// compile-fail fixture inverts the failure meaning — the compiler *still
+// rejecting* the witness is the pass state, and the compiler *accepting* it
+// means the gap has closed and the witness must be retired.
+// -------------------------------------------------------------------------
+
+#[test]
+fn witness_reports_known_gap_closed_when_compiler_accepts() {
+    use crate::harness::collector::DiscoveredTest;
+    use crate::harness::compiler::FrontendOnlyCompiler;
+    use crate::harness::config::{TestConfig, TestMode};
+    use crate::harness::executor::{TestExecutor, TestOutcome};
+
+    // A witness fixture whose source compiles cleanly (no diagnostics at
+    // all) and whose compile-fail expectations can therefore not match:
+    // plain compile-fail would report `DiagnosticMismatch`; the witness
+    // seam must sharpen that into `KnownGapClosed`.
+    let t = DiscoveredTest {
+        path: std::path::PathBuf::from("witness.g"),
+        name: "witness".to_string(),
+        source: std::sync::Arc::from("fn main() {}\n"),
+        config: TestConfig {
+            mode: TestMode::CompileFail,
+            known_gap: Some("GAP-0001".to_string()),
+            ..Default::default()
+        },
+        revisions: vec!["default".to_string()],
+    };
+
+    let executor = TestExecutor::new(false, false, 1, false)
+        .with_compiler(std::sync::Arc::new(FrontendOnlyCompiler));
+    let results = executor.run_sequential(&[std::sync::Arc::new(t)]);
+
+    assert_eq!(results.len(), 1);
+    match &results[0].outcome {
+        TestOutcome::Failed { reason } => match reason {
+            crate::error::FailureReason::KnownGapClosed { gap } => {
+                assert_eq!(gap, "GAP-0001");
+            }
+            other => panic!("expected KnownGapClosed, got {other:?}"),
+        },
+        other => panic!("expected Failed outcome, got {other:?}"),
+    }
+}
+
+#[test]
+fn witness_without_known_gap_reports_plain_mismatch() {
+    use crate::harness::collector::DiscoveredTest;
+    use crate::harness::compiler::FrontendOnlyCompiler;
+    use crate::harness::config::{TestConfig, TestMode};
+    use crate::harness::executor::{TestExecutor, TestOutcome};
+
+    // Control: a fixture under plain compile-fail (no `//@ known-gap:`) that
+    // fails to satisfy its inline annotation keeps the generic
+    // diagnostic-mismatch failure — the witness sharpening must only apply
+    // to real witnesses, not to ordinary compile-fail bookkeeping.
+    let t = DiscoveredTest {
+        path: std::path::PathBuf::from("plain.g"),
+        name: "plain".to_string(),
+        // Parse-only compiler: the type error never fires, so the inline
+        // annotation is unmet → DiagnosticMismatch.
+        source: std::sync::Arc::from(
+            "fn main() {\n    let x: i32 = \"hello\"; //~ ERROR mismatched types\n}\n",
+        ),
+        config: TestConfig {
+            mode: TestMode::CompileFail,
+            known_gap: None,
+            ..Default::default()
+        },
+        revisions: vec!["default".to_string()],
+    };
+
+    let executor = TestExecutor::new(false, false, 1, false)
+        .with_compiler(std::sync::Arc::new(FrontendOnlyCompiler));
+    let results = executor.run_sequential(&[std::sync::Arc::new(t)]);
+
+    match &results[0].outcome {
+        TestOutcome::Failed {
+            reason: crate::error::FailureReason::DiagnosticMismatch { .. },
+        } => {}
+        other => panic!("expected DiagnosticMismatch, got {other:?}"),
+    }
+}
+
+#[test]
+fn collector_rejects_known_gap_on_non_compile_fail_modes() {
+    use crate::error::TestDiscoveryError;
+    use crate::harness::collector::TestCollector;
+    use std::fs;
+
+    // A `//@ known-gap:` witness must be a compile-fail fixture: the
+    // inversion is defined on "the compiler rejected / accepted the
+    // witness", which only compile-fail measures. Any other mode is drift
+    // and is rejected at discovery, not silently tolerated.
+    for (mode_dir, header) in [
+        ("run-pass", "//@ mode: run-pass\n//@ expect-exit: 0\n"),
+        ("ui", "//@ mode: ui\n"),
+    ] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join(mode_dir);
+        fs::create_dir(&root).unwrap();
+        let fixture = root.join("witness.g");
+        fs::write(
+            &fixture,
+            format!("{header}//@ known-gap: GAP-0001\nfn main() {{}}\n"),
+        )
+        .unwrap();
+
+        let collector = TestCollector::new(dir.path());
+        let err = collector
+            .collect(None, None)
+            .expect_err("known-gap on a non-compile-fail mode must be rejected");
+        match err {
+            TestDiscoveryError::WitnessRequiresCompileFail { path, mode } => {
+                assert_eq!(path, fixture);
+                assert_ne!(
+                    mode,
+                    crate::harness::config::TestMode::CompileFail,
+                    "the reported mode must be the offending one"
+                );
+            }
+            other => panic!("expected WitnessRequiresCompileFail, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn ui_unreadable_expected_snapshot_is_a_typed_failure() {
+    // Micro-debt fix (M1.6 pass): `UiTestStrategy::evaluate` used
+    // `fs::read_to_string(..).unwrap()` right after an `exists()` check.
+    // The TOCTOU window (file removed/permissions changed in between) or
+    // an `X.expected` *directory* crashed the whole test process instead
+    // of reporting a typed failure.
+    use crate::harness::compiler::CompileOutput;
+    use crate::harness::strategy::UiTestStrategy;
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let test_path = dir.path().join("case.g");
+    std::fs::write(&test_path, "fn main() {}\n").unwrap();
+    // `case.expected` exists but is a *directory*: exists() is true,
+    // read_to_string fails. The old `.unwrap()` panicked here.
+    std::fs::create_dir(dir.path().join("case.expected")).unwrap();
+
+    let outcome =
+        UiTestStrategy.evaluate(&CompileOutput::default(), "fn main() {}", &test_path, false);
+    match outcome {
+        crate::harness::executor::TestOutcome::Failed {
+            reason: crate::error::FailureReason::UiExpectedUnreadable { path, message },
+        } => {
+            assert_eq!(path, dir.path().join("case.expected"));
+            assert!(
+                message.contains("Is a directory") || !message.is_empty(),
+                "the io error message must be carried through: {message}"
+            );
+        }
+        other => panic!("expected UiExpectedUnreadable failure, got {other:?}"),
+    }
+}
