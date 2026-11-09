@@ -15,7 +15,8 @@
 //!   `has_errors()` check, aborts compilation.
 //!
 //! The MVP flag surface is a flat `HashMap<LintId, LintLevel>`. Attribute
-//! resolution (`#[allow(..)]` etc.) is deferred; see `KNOWN_GAPS.md §3.5.30`.
+//! resolution (`allow` attributes etc.) is deferred; see
+//! `KNOWN_GAPS.md §3.5.30`.
 
 use std::collections::HashMap;
 
