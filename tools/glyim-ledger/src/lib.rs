@@ -1,12 +1,15 @@
 //! CLI library for the Readiness Ledger tool (plan M1.1).
 //!
-//! Two subcommands:
+//! Three subcommands:
 //!
 //! - `glyim-ledger check [ROOT]` — load `ROOT/ledger`, run the schema and
-//!   semantic validators, print every diagnostic sorted, exit 1 on any
-//!   error. This is the CI registry gate.
+//!   semantic validators, cross-check the M1.3 inventory extractors, print
+//!   every diagnostic sorted, exit 1 on any error. This is the CI registry
+//!   gate.
 //! - `glyim-ledger schema [OUT]` — write the JSON-Schema export document
 //!   for both entry types to `OUT` (pretty-printed), or to stdout.
+//! - `glyim-ledger inventory [ROOT]` — enumerate the source-derived
+//!   inventory items (plan §3.5) with their claim/ignore status.
 //!
 //! Argument handling mirrors `glyim-metrics`: hand-rolled, no `clap`, so
 //! the tool's own supply chain stays dependency-light.
@@ -14,7 +17,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ledger_schema::{Diagnostic, Severity, load_project_registry, registry_schema};
+use ledger_schema::{
+    Diagnostic, Severity, extract_inventory, inventory_diagnostics, load_inventory_ignore,
+    load_project_registry, registry_schema, unmapped_item_keys,
+};
 
 /// Parsed command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,12 +37,17 @@ pub enum Command {
         /// stdout.
         out: Option<PathBuf>,
     },
+    /// `inventory [ROOT]` — source inventory report (plan §3.5).
+    Inventory {
+        /// Project directory to extract from (`.` by default).
+        root: PathBuf,
+    },
 }
 
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger schema [OUT]\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout."
         .into()
@@ -57,7 +68,7 @@ where
         None => Ok(Command::Check {
             root: PathBuf::from("."),
         }),
-        Some("check" | "schema") => {
+        Some("check" | "schema" | "inventory") => {
             let rest = &items[1..];
             if rest.len() > 1 {
                 return Err(format!(
@@ -66,14 +77,23 @@ where
                     usage()
                 ));
             }
-            if items[0] == "check" {
-                let root = rest
-                    .first()
-                    .map_or_else(|| PathBuf::from("."), PathBuf::from);
-                Ok(Command::Check { root })
-            } else {
-                let out = rest.first().map(|p| PathBuf::from(p));
-                Ok(Command::Schema { out })
+            match items[0].as_str() {
+                "check" => {
+                    let root = rest
+                        .first()
+                        .map_or_else(|| PathBuf::from("."), PathBuf::from);
+                    Ok(Command::Check { root })
+                }
+                "inventory" => {
+                    let root = rest
+                        .first()
+                        .map_or_else(|| PathBuf::from("."), PathBuf::from);
+                    Ok(Command::Inventory { root })
+                }
+                _ => {
+                    let out = rest.first().map(|p| PathBuf::from(p));
+                    Ok(Command::Schema { out })
+                }
             }
         }
         Some("-h" | "--help") => Err(usage()),
@@ -85,7 +105,8 @@ where
 /// Result of a full `ledger check` run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckOutcome {
-    /// All diagnostics (schema + semantic), sorted and de-duplicated.
+    /// All diagnostics (schema + semantic + inventory), sorted and
+    /// de-duplicated.
     pub diagnostics: Vec<Diagnostic>,
     /// Feature entries loaded.
     pub features: usize,
@@ -93,6 +114,9 @@ pub struct CheckOutcome {
     pub gaps: usize,
     /// Registry files walked (including files that failed to parse).
     pub files: usize,
+    /// Source-derived inventory items the §3.5 gate extracted and
+    /// cross-checked.
+    pub inventory: usize,
 }
 
 impl CheckOutcome {
@@ -124,11 +148,27 @@ impl CheckOutcome {
 /// Load + validate the registry under `root` (the project directory that
 /// contains `ledger/`). Repo-relative references inside the registry
 /// (`spec` paths, witness fixtures) resolve against `root`.
+///
+/// The M1.3 inventory gate runs as part of the check (plan §3.5/§3.7:
+/// "every inventory item mapped" is registry consistency): source
+/// extraction runs first, then every item must be claimed by a feature's
+/// `inventory` list or ignored in `ledger/inventory-ignore.toml`.
 #[must_use]
 pub fn run_check(root: &Path) -> CheckOutcome {
     let loaded = load_project_registry(root);
     let mut diagnostics = loaded.diagnostics;
     diagnostics.extend(loaded.registry.validate());
+
+    let extraction = extract_inventory(root);
+    diagnostics.extend(extraction.diagnostics);
+    let ignores = load_inventory_ignore(root);
+    diagnostics.extend(ignores.diagnostics);
+    diagnostics.extend(inventory_diagnostics(
+        &extraction.items,
+        &ignores.ignores,
+        loaded.registry.features(),
+    ));
+
     diagnostics.sort_by(|a, b| a.code.cmp(b.code).then(a.message.cmp(&b.message)));
     diagnostics.dedup();
     CheckOutcome {
@@ -136,6 +176,7 @@ pub fn run_check(root: &Path) -> CheckOutcome {
         features: loaded.registry.feature_count(),
         gaps: loaded.registry.gap_count(),
         files: loaded.registry.file_count(),
+        inventory: extraction.items.len(),
     }
 }
 
@@ -149,10 +190,11 @@ pub fn format_outcome(outcome: &CheckOutcome) -> String {
         .collect();
     if outcome.is_ok() {
         lines.push(format!(
-            "ledger check OK: {} features, {} gaps, {} files, 0 errors, {} warning(s)",
+            "ledger check OK: {} features, {} gaps, {} files, {} inventory items, 0 errors, {} warning(s)",
             outcome.features,
             outcome.gaps,
             outcome.files,
+            outcome.inventory,
             outcome.warnings()
         ));
     } else {
@@ -162,9 +204,113 @@ pub fn format_outcome(outcome: &CheckOutcome) -> String {
             outcome.warnings()
         ));
         lines.push(format!(
-            "registry: {} features, {} gaps, {} files",
-            outcome.features, outcome.gaps, outcome.files
+            "registry: {} features, {} gaps, {} files, {} inventory items",
+            outcome.features, outcome.gaps, outcome.files, outcome.inventory
         ));
+    }
+    let mut text = lines.join("\n");
+    text.push('\n');
+    text
+}
+
+/// Result of a full `ledger inventory` run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InventoryOutcome {
+    /// Inventory gate diagnostics (stale/duplicate/unmapped), sorted.
+    pub diagnostics: Vec<Diagnostic>,
+    /// Extracted items, sorted by `(extractor, key)`.
+    pub items: Vec<ledger_schema::InventoryItem>,
+    /// Keys with neither a claim nor an ignore (subset of `items`).
+    pub unmapped_keys: Vec<String>,
+    /// Ignore entries loaded from `ledger/inventory-ignore.toml`.
+    pub ignores: usize,
+    /// Feature entries loaded from the registry.
+    pub features: usize,
+}
+
+impl InventoryOutcome {
+    /// Number of error-severity diagnostics.
+    #[must_use]
+    pub fn errors(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .count()
+    }
+
+    /// True when no error-severity diagnostic was produced.
+    #[must_use]
+    pub fn is_ok(&self) -> bool {
+        self.errors() == 0
+    }
+}
+
+/// Run the plan §3.5 inventory extraction + gate without the full
+/// registry validation: extract from `root`'s sources, load the ignore
+/// file, load the registry for claim resolution, and report every
+/// violation. `ledger check` runs this same gate as part of its pass.
+#[must_use]
+pub fn run_inventory(root: &Path) -> InventoryOutcome {
+    let loaded = load_project_registry(root);
+    let extraction = extract_inventory(root);
+    let ignores = load_inventory_ignore(root);
+    let mut diagnostics = Vec::new();
+    diagnostics.extend(loaded.diagnostics);
+    diagnostics.extend(extraction.diagnostics);
+    diagnostics.extend(ignores.diagnostics);
+    diagnostics.extend(inventory_diagnostics(
+        &extraction.items,
+        &ignores.ignores,
+        loaded.registry.features(),
+    ));
+    diagnostics.sort_by(|a, b| a.code.cmp(b.code).then(a.message.cmp(&b.message)));
+    diagnostics.dedup();
+    let unmapped_keys = unmapped_item_keys(
+        &extraction.items,
+        &ignores.ignores,
+        loaded.registry.features(),
+    );
+    InventoryOutcome {
+        diagnostics,
+        items: extraction.items,
+        unmapped_keys,
+        ignores: ignores.ignores.len(),
+        features: loaded.registry.feature_count(),
+    }
+}
+
+/// Render the full stdout report for an inventory run: a summary line,
+/// every item (unmapped ones flagged), then the diagnostics.
+#[must_use]
+pub fn format_inventory(outcome: &InventoryOutcome) -> String {
+    let plural = if outcome.items.len() == 1 {
+        "item"
+    } else {
+        "items"
+    };
+    let mut lines = vec![format!(
+        "inventory: {} {} ({} unmapped), {} ignore entries, {} features",
+        outcome.items.len(),
+        plural,
+        outcome.unmapped_keys.len(),
+        outcome.ignores,
+        outcome.features
+    )];
+    for item in &outcome.items {
+        let flag = if outcome.unmapped_keys.iter().any(|key| key == &item.key) {
+            " UNMAPPED"
+        } else {
+            ""
+        };
+        lines.push(format!(
+            "  {:<12} {:<44} {}{flag}",
+            item.extractor.as_str(),
+            item.key,
+            item.source
+        ));
+    }
+    for diagnostic in &outcome.diagnostics {
+        lines.push(diagnostic.to_string());
     }
     let mut text = lines.join("\n");
     text.push('\n');
@@ -189,6 +335,7 @@ pub fn write_schema(out: &Path) -> Result<String, String> {
 mod tests {
     use super::*;
     use ledger_schema::CODE_DUP_FEATURE;
+    use std::fmt::Write as _;
 
     fn args(items: &[&str]) -> impl Iterator<Item = String> {
         items.iter().map(|s| (*s).to_string())
@@ -216,6 +363,34 @@ mod tests {
                 root: PathBuf::from("/tmp/reg")
             }
         );
+    }
+
+    #[test]
+    fn inventory_takes_optional_root() {
+        let cmd = parse_args(args(&["inventory", "/tmp/src"])).expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Inventory {
+                root: PathBuf::from("/tmp/src")
+            }
+        );
+    }
+
+    #[test]
+    fn inventory_defaults_to_current_dir() {
+        let cmd = parse_args(args(&["inventory"])).expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Inventory {
+                root: PathBuf::from(".")
+            }
+        );
+    }
+
+    #[test]
+    fn inventory_rejects_extra_positionals() {
+        let err = parse_args(args(&["inventory", "a", "b"])).expect_err("reject");
+        assert!(err.contains("unexpected extra argument"), "{err}");
     }
 
     #[test]
@@ -379,6 +554,200 @@ mod tests {
         );
     }
 
+    // -- inventory run -------------------------------------------------------
+
+    /// A minimal `#[unsafe(no_mangle)]` FFI source tree fixture.
+    fn write_runtime_symbol(root: &Path, symbol: &str) {
+        write_file(
+            &root.join("crates/glyim-runtime/src"),
+            "lib.rs",
+            &format!(
+                "#[unsafe(no_mangle)]\npub extern \"C\" fn {symbol}(size: usize) -> usize {{ size }}\n"
+            ),
+        );
+    }
+
+    /// Minimal claim-bearing feature entry (area/tier/spec fields are
+    /// taxonomy-shaped so a future `validate()` pass would also accept it).
+    fn feature_toml_with_claims(id: &str, claims: &[&str]) -> String {
+        let list = claims
+            .iter()
+            .map(|c| format!("\"{c}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "[[feature]]\n\
+             id = \"{id}\"\n\
+             title = \"t {id}\"\n\
+             area = \"runtime.ffi\"\n\
+             tier = \"std\"\n\
+             spec = \"docs/specs/v0.1.0.md\"\n\
+             target_level = \"L4\"\n\
+             backends = [\"gam\", \"llvm\"]\n\
+             inventory = [{list}]\n\
+             owner_lane = \"B\"\n"
+        )
+    }
+
+    #[test]
+    fn run_inventory_fails_on_unregistered_symbol() {
+        let dir = tempfile::tempdir().expect("tmp");
+        write_runtime_symbol(dir.path(), "glyim_orphan");
+        let outcome = run_inventory(dir.path());
+        assert!(
+            !outcome.is_ok(),
+            "unregistered symbol must fail: {:?}",
+            outcome.diagnostics
+        );
+        assert_eq!(outcome.items.len(), 1);
+        assert_eq!(outcome.unmapped_keys, vec!["runtime.ffi.glyim_orphan"]);
+        assert_eq!(outcome.ignores, 0);
+    }
+
+    #[test]
+    fn run_inventory_passes_when_a_feature_claims_the_symbol() {
+        let dir = tempfile::tempdir().expect("tmp");
+        write_runtime_symbol(dir.path(), "glyim_claimed");
+        write_file(
+            &dir.path().join("ledger/features/runtime"),
+            "ffi.toml",
+            &feature_toml_with_claims("RUNTIME-FFI-CLAIMED", &["runtime.ffi.glyim_claimed"]),
+        );
+        let outcome = run_inventory(dir.path());
+        assert!(
+            outcome.is_ok(),
+            "claimed symbol must pass: {:?}",
+            outcome.diagnostics
+        );
+        assert_eq!(outcome.features, 1);
+        assert!(outcome.unmapped_keys.is_empty());
+    }
+
+    #[test]
+    fn format_inventory_renders_summary_items_and_diagnostics() {
+        let outcome = InventoryOutcome {
+            diagnostics: vec![Diagnostic {
+                code: ledger_schema::CODE_INVENTORY_UNMAPPED,
+                message: "inventory item `runtime.ffi.glyim_orphan` (runtime-ffi, src/lib.rs) is \
+                          neither claimed by a feature's `inventory` list nor ignored"
+                    .into(),
+                severity: Severity::Error,
+            }],
+            items: vec![ledger_schema::InventoryItem {
+                extractor: ledger_schema::InventoryExtractor::RuntimeFfi,
+                key: "runtime.ffi.glyim_orphan".into(),
+                source: "src/lib.rs".into(),
+            }],
+            unmapped_keys: vec!["runtime.ffi.glyim_orphan".into()],
+            ignores: 0,
+            features: 0,
+        };
+        let text = format_inventory(&outcome);
+        assert!(text.contains("inventory: 1 item (1 unmapped)"), "{text}");
+        assert!(text.contains("runtime.ffi.glyim_orphan"), "{text}");
+        assert!(text.contains("UNMAPPED"), "{text}");
+        assert!(text.contains("error[LEDGER-INVENTORY-UNMAPPED]"), "{text}");
+    }
+
+    // -- the M1.3 DoD: unregistered MIR variants fail `ledger check` ---------
+
+    fn write_mir_enum(root: &Path, variants: &[&str]) {
+        let mut body = String::new();
+        for variant in variants {
+            let _ = writeln!(body, "    {variant},");
+        }
+        write_file(
+            &root.join("crates/glyim-mir/src"),
+            "lib.rs",
+            &format!("pub enum StatementKind {{\n{body}}}\n"),
+        );
+    }
+
+    fn write_ignore(root: &Path, items: &[&str]) {
+        let mut body = String::new();
+        for item in items {
+            let _ = writeln!(
+                body,
+                "[[ignore]]\nitem = \"{item}\"\nreason = \"seed: no per-variant feature yet\"\n"
+            );
+        }
+        write_file(&root.join("ledger"), "inventory-ignore.toml", &body);
+    }
+
+    #[test]
+    fn check_passes_with_registered_mir_variants() {
+        let dir = tempfile::tempdir().expect("tmp");
+        write_spec(dir.path());
+        write_file(
+            &dir.path().join("ledger/features/lang"),
+            "a.toml",
+            &feature_toml("LANG-A"),
+        );
+        write_mir_enum(dir.path(), &["Assign", "Nop"]);
+        write_ignore(
+            dir.path(),
+            &["mir.StatementKind.Assign", "mir.StatementKind.Nop"],
+        );
+        let outcome = run_check(dir.path());
+        assert!(
+            outcome.is_ok(),
+            "fully registered inventory must pass: {:?}",
+            outcome.diagnostics
+        );
+        assert_eq!(outcome.inventory, 2);
+    }
+
+    #[test]
+    fn check_fails_when_a_mir_variant_is_added_without_registration() {
+        let dir = tempfile::tempdir().expect("tmp");
+        write_spec(dir.path());
+        write_file(
+            &dir.path().join("ledger/features/lang"),
+            "a.toml",
+            &feature_toml("LANG-A"),
+        );
+        write_mir_enum(dir.path(), &["Assign", "Nop", "Ghost"]);
+        write_ignore(
+            dir.path(),
+            &["mir.StatementKind.Assign", "mir.StatementKind.Nop"],
+        );
+        let outcome = run_check(dir.path());
+        assert!(
+            !outcome.is_ok(),
+            "M1.3 DoD: the new variant must fail the gate"
+        );
+        assert!(
+            outcome
+                .diagnostics
+                .iter()
+                .any(|d| d.code == ledger_schema::CODE_INVENTORY_UNMAPPED
+                    && d.message.contains("mir.StatementKind.Ghost")),
+            "diagnostic names the unregistered variant: {:?}",
+            outcome.diagnostics
+        );
+    }
+
+    #[test]
+    fn check_fails_on_stale_claims() {
+        let dir = tempfile::tempdir().expect("tmp");
+        write_spec(dir.path());
+        write_file(
+            &dir.path().join("ledger/features/runtime"),
+            "ffi.toml",
+            &feature_toml_with_claims("RUNTIME-FFI-GHOST", &["runtime.ffi.glyim_ghost"]),
+        );
+        let outcome = run_check(dir.path());
+        assert!(!outcome.is_ok(), "stale claim must fail");
+        assert!(
+            outcome
+                .diagnostics
+                .iter()
+                .any(|d| d.code == ledger_schema::CODE_INVENTORY_STALE_CLAIM),
+            "{:?}",
+            outcome.diagnostics
+        );
+    }
+
     // -- rendering -----------------------------------------------------------
 
     #[test]
@@ -388,11 +757,12 @@ mod tests {
             features: 6,
             gaps: 2,
             files: 8,
+            inventory: 104,
         };
         let text = format_outcome(&outcome);
         assert_eq!(
             text,
-            "ledger check OK: 6 features, 2 gaps, 8 files, 0 errors, 0 warning(s)\n"
+            "ledger check OK: 6 features, 2 gaps, 8 files, 104 inventory items, 0 errors, 0 warning(s)\n"
         );
     }
 
@@ -407,11 +777,12 @@ mod tests {
             features: 2,
             gaps: 0,
             files: 2,
+            inventory: 0,
         };
         let text = format_outcome(&outcome);
         assert!(text.contains("error[LEDGER-DUP-FEATURE]: duplicate feature id LANG-DUP"));
         assert!(text.contains("ledger check FAILED: 1 error(s), 0 warning(s)"));
-        assert!(text.contains("2 features, 0 gaps, 2 files"));
+        assert!(text.contains("2 features, 0 gaps, 2 files, 0 inventory items"));
     }
 
     // -- schema export -------------------------------------------------------
