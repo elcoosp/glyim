@@ -2,7 +2,7 @@
   <img src="docs/logo.png" alt="Glyim Logo" width="300"/>
   <p>
     <strong>A modular, from‑scratch compiler for a Rust‑like systems programming language, written in Rust.</strong><br/>
-    Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference &amp; trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with 38 crates, designed for clarity, testability, and incremental development.
+    Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference &amp; trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with 38 members — 34 compiler/stdlib crates plus 4 tooling crates — designed for clarity, testability, and incremental development.
   </p>
   <p>
     <img src="https://img.shields.io/badge/Rust-1.95%20%7C%202024-000000?style=flat-square&logo=rust" alt="Rust"/>
@@ -107,6 +107,7 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `glyim-vfs` | Virtual file system with in-memory file content tracking. |
 | `glyim-syntax` | CST definition (Rowan-based), `SyntaxKind` enum, AST node helpers. |
 | `glyim-frontend` | Lexer + parser (merged), produces `SyntaxNode`. |
+| `glyim-gsx` | GSX view syntax: parser, View IR (VIR), flat-`u32` blueprints, ownership-driven reactivity analysis, SSR emitter, headless test host. |
 | `glyim-def-map` | Module graph, item scopes, name resolution. |
 | `glyim-meta` | Macro expansion: `macro_rules!` declarative macros and built-in macros. |
 | `glyim-proc-macro` | C-compatible proc-macro ABI, registry, and `dlopen` loader. |
@@ -134,6 +135,10 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `glyim-lang-alloc` | Alloc library source: `Box`, `Vec`, `String`, `Rc`, `RawVec`. |
 | `glyim-lang-std` | Standard library source: `io`, `fs`, `net`, `thread`, `sync`, `env`, `time`, `process`, `task`. |
 | `glyip` | Package manager / build tool. |
+| `tools/glyim-metrics` | Repo-health metrics (code lines, tests, doc coverage, inline-allow count) behind the CI metrics ratchet. |
+| `tools/glyim-pilot` | Agent orchestrator with gate bundles (clippy, fmt, contracts, coverage, mutation, ledger). |
+| `tools/ledger-schema` | `deny_unknown_fields` schemas shared by the readiness ledger and inventory extractors. |
+| `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `inventory`, `schema` — registry consistency gates run in CI. |
 
 ### Compilation Pipeline
 
@@ -454,6 +459,19 @@ cargo test -p glyim-test -- --filter parser
 
 # Verbose output
 GLYIM_TEST_SHOW_OUTPUT=1 cargo test -p glyim-test
+```
+
+### Library Examples
+
+The `examples/` directories show how to consume the compiler crates as
+libraries rather than through the CLI:
+
+```bash
+# Drive the pipeline in-process: write a .g program, lower it to MIR.
+cargo run -p glyim-pipeline --example hello_pipeline
+
+# Round-trip the readiness ledger's evidence JSONL (M1.5 seam).
+cargo run -p glyim-test --example evidence_report
 ```
 
 ---

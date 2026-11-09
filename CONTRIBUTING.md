@@ -7,7 +7,7 @@ build, test, and submit changes.
 
 | Tool | Version | Notes |
 |---|---|---|
-| Rust toolchain | ≥ 1.85 (see `rust-version` in `Cargo.toml`) | `rustup toolchain install stable` |
+| Rust toolchain | ≥ 1.95 (see `rust-version` in `Cargo.toml`; the `msrv` CI job enforces it) | `rustup toolchain install stable` |
 | LLVM | 23 | Required by `glyim-codegen-llvm` (`inkwell`) |
 | `cargo-nextest` | any recent | `cargo install cargo-nextest --locked` |
 
@@ -77,9 +77,14 @@ unless you are contributing to the dev-loop tooling itself.
 ## Coding style
 
 - `rustfmt` is enforced (`just fmt-check`). No per-crate `rustfmt.toml`.
-- `clippy` at `-D warnings` (`just clippy`). If a lint is genuinely
-  wrong for this codebase, add an `#[allow(..., reason = "...")]` at
-  the narrowest scope with a comment.
+- `clippy` at `-D warnings` (`just clippy`). The workspace also runs
+  `clippy::pedantic` as the review baseline (see `[workspace.lints.clippy]` in
+  the root `Cargo.toml`). **Do not add inline `#[allow]`/`#[expect]`** — the
+  metrics ratchet (`metrics/baseline.json`, `inline_allows: 0`) and CI's
+  allow-grep fail any PR that introduces one. If a lint is genuinely wrong
+  for this codebase, add a rationale-annotated relaxation to
+  `[workspace.lints.clippy]` in the root `Cargo.toml` (one reviewable place;
+  gates never weaken, plan C9).
 - **No `#![allow(missing_docs)]`.** The workspace sets
   `missing_docs = "warn"` and every public item is documented. Add a
   doc comment (even a short one) to each public struct, enum, fn,
@@ -89,9 +94,16 @@ unless you are contributing to the dev-loop tooling itself.
 
 - **Every bug fix gets a fixture.** Put it under
   `crates/glyim-test/tests/run-pass/` (or `run-fail/`,
-  `compile-fail/`) with the appropriate `// test-mode:`,
-  `// exit-code:`, and `// compile-flags:` header. The fixture is the
-  regression guard — a fix that is not covered by one will regress.
+  `compile-fail/`) with the canonical M1.4 `//@` header — `//@ mode:`,
+  `//@ expect-exit:` / `//@ expect-stdout:` / `//@ expect-stderr:` for
+  run fixtures, `//@ expect-error:` or an inline `//~` annotation for
+  `compile-fail`. Every fixture also carries `//@ feature:` and
+  `//@ backends:` registry tags, and the collector rejects fixtures
+  without a `//@` header. The legacy `// key: value` spelling parses
+  but must not be mixed with it; `cargo run -p glyim-test --bin
+  glyim-tag-fixtures -- --write` converts old headers mechanically.
+  The fixture is the regression guard — a fix that is not covered by
+  one will regress.
 - **Surgical fixes only.** If a change touches more than ~4 files,
   split it into a series of small PRs. Each PR should pass the full
   suite on its own.
@@ -146,8 +158,11 @@ cargo build -p glyim-runtime
 
 ### Long corpus runs time out under load
 
-`run_pass_corpus` runs ~260 fixtures end-to-end, each spawning a
-compile and execute. A full `cargo nextest run --workspace` takes
+`run_pass_corpus` runs the ~410 tagged fixtures end-to-end (375 in
+the `glyim-test` corpora plus the per-crate corpora of
+`glyim-lower`/`glyim-typeck`/`glyim-pipeline`/`glyim-lang-*`), each
+spawning a compile and execute. A full `cargo nextest run --workspace`
+takes
 5-6 minutes on an idle machine and 8-10 under load. The per-test
 timeout is 60 seconds, and `run_pass_corpus_passes` is a single test
 that fans out internally — so a `TimeoutExceeded` on a *fixture* means

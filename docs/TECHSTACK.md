@@ -1,122 +1,110 @@
-```markdown
 # Glyim Technology Stack Specification
 
-**Document Version:** 1.3.0  
-**Status:** Updated  
-**Date:** 2025-04-10  
-**Owner:** Language Infrastructure Team
+**Document Version:** 2.0.0
+**Status:** Updated
+**Date:** 2026-11-09
+**Source of truth:** the root `Cargo.toml` (`[workspace.package]`,
+`[workspace.dependencies]`) at workspace version 0.6.0 (commit `6a798c9d`).
+
+> The previous revision (1.3.0, dated 2025-04-10) described an aspirational
+> stack that never matched the tree: it listed `salsa`, `chumsky`, `egg`,
+> `regalloc2`, `async-lsp`, `tower`, and crates that do not exist
+> (`glyim-egraph`, `glyim-orchestrator`, `glyim-server`,
+> `glyim-codegen-cranelift`). This revision lists only what the manifests
+> actually declare. If a table here and a `Cargo.toml` disagree, the
+> manifest wins (plan F1: status is checked against code, not trusted).
 
 ---
 
-## 1. Core Infrastructure (Layer 0)
+## 1. Toolchain & Build Rails
 
-This layer provides foundational utilities, data structures, and the central nervous system (Query Engine) for the compiler. We prioritize crates that are actively maintained, support modern Rust editions, and offer zero-allocation optimizations.
+| Tool | Version | Purpose |
+| :--- | :--- | :--- |
+| Rust (stable channel) | MSRV `rust-version = "1.95"` (workspace `edition = "2024"`) | Language implementation; the `msrv` CI job compiles the workspace on 1.95.0 exactly. |
+| LLVM | 23 (`LLVM_SYS_231_PREFIX`) | Hard dependency of the workspace via `inkwell`/`llvm-sys`; there is no feature flag to build without it. |
+| `cargo-nextest` | current | Test runner used by CI and the `justfile`. |
+| `cargo-deny` | current | Advisory + license gate (`deny.toml`). |
+| `just` / `watchexec` | current | Dev recipes (`justfile`) and session watchers. |
+| `cargo-fuzz` | nightly driver | `fuzz/` targets (`fuzz_parse`, `fuzz_compile`); excluded from the workspace build. |
+| Node.js + pnpm | current | `glyim-docs` (Astro docs site) and the `tools/glyim-pilot` browser extension. |
 
-| Crate | Version | Purpose | Rationale |
+---
+
+## 2. Workspace Dependencies (root `Cargo.toml`)
+
+Every member crate inherits these pins; versions below are the declared
+minimums in `[workspace.dependencies]`.
+
+| Crate | Version | Used by | Purpose |
 | :--- | :--- | :--- | :--- |
-| **`salsa`** | `0.26.0` | Query Engine Framework | The industry standard for incremental recomputation in compilers. Latest version improves incremental re-use and cycle detection. |
-| **`lasso`** | `0.7.3` | String Interning | Fast, copy-on-write string interning with `Lasso<SmartString>`. Replaces `string-interner` to significantly reduce memory footprint and allocations in `glyim-interner`. |
-| **`miette`** | `7.6.0` | Error Reporting | The modern successor to `anyhow`/`eyre`. Provides beautiful, structured diagnostic types with `Diagnostic` and `Severity`. Essential for `glyim-diag` to provide IDE-quality error messages. |
-| **`anyhow`** | `1.0.0` | Error Propagation | Retained for legacy compatibility in early bootstrapping, though `miette` is now primary. |
-| **`tracing`** | `0.1.40` | Instrumentation & Logging | Structured, `tokio`-aware instrumentation. Used by `salsa` to visualize query execution and profile compilation bottlenecks. |
-| **`dashmap`** | `7.0.0-rc2` | High-Performance Maps | Adopted Release Candidate `7.0.0-rc2`. Offers significant performance improvements and updated hash algorithms compared to `6.1.0`. |
+| `rowan` | 0.17 | `glyim-syntax`, `glyim-frontend` | Lossless CST (green/red trees). |
+| `lasso` | 0.7.3 | `glyim-core` | String interning (`ThreadedRodeo`). |
+| `smol_str` | 0.3.7 | frontend | Small-string optimization for tokens/identifiers. |
+| `num_enum` | 0.7.6 | `glyim-syntax` | `SyntaxKind` u16 conversions. |
+| `bitflags` | 2.13 | `glyim-type` | Flag sets (type/attribute flags). |
+| `indexmap` | 2.14 | `glyim-def-map`, `glyim-type` | Order-stable maps for item scopes. |
+| `smallvec` | 1.16 | `glyim-borrowck`, `glyim-core`, `glyim-type` | Stack-allocated small collections in hot IR paths. |
+| `fixedbitset` | 0.5.7 | `glyim-borrowck`, `glyim-lower` | Dense bitsets for dataflow/liveness. |
+| `parking_lot` | 0.13 | `glyim-db`, harness | Faster `Mutex`/`RwLock` for interner and caches. |
+| `dashmap` | 6.2.1 | `glyim-lsp` | Concurrent map for LSP state. |
+| `tracing` / `tracing-subscriber` | 0.1.44 / 0.3.23 | typeck, lsp, test harness, codegen-llvm, glyip | Structured spans; subscriber with `env-filter` + `json`. |
+| `miette` | 7.6 | `glyim-diag` (+ `glyim-test` evidence errors) | Structured diagnostics with labels/help; `glyim-diag` re-exports it. |
+| `clap` | 4.6 (derive) | `glyim-cli`, `glyim-ledger` | CLI argument parsing. |
+| `serde` / `serde_json` | 1.0 | `glyip`, ledger tools, pilot, harness | Config, lockfiles, evidence/JSON output. |
+| `toml` | 1.2.1 | `glyip`, ledger | Manifest + registry parsing. |
+| `semver` | 1.0 | `glyip` | SemVer 2.0 requirement parsing/matching. |
+| `reqwest` / `flate2` / `tar` | 0.13 | `glyip` (feature `registry`) | Registry client: download + unpack crate archives. |
+| `sha2` | 0.11.1 | `glyim-db` (cache fingerprints), `glyip` (lockfiles), `glyim-test` (evidence fixture hashes) | SHA-256 content addressing. |
+| `tempfile` | 3.27 | test-harness-heavy crates (13 manifests) | Scratch dirs for compile-and-run fixtures. |
+| `tokio` | 1.54 | `glyim-lsp`, `tools/glyim-pilot` | Async runtime for the LSP server and the pilot agent. |
+| `lsp-types` | 0.97 | `glyim-lsp` | LSP wire types. |
+| `libloading` | 0.9 | `glyim-proc-macro` | `dlopen`-based proc-macro cdylib loading. |
+| `rayon` | 1.12 | `glyim-test` (parallel fixture execution) | Data parallelism in the harness. |
+| `insta` | 1.49 | `glyim-test` | Snapshot testing (CST, def-map, MIR). |
+| `anyhow` | 1.0.104 | `tools/glyim-pilot` | Agent-side error propagation (host tooling, not compiler core). |
+| `inkwell` | git pin `c9d9734a…` | `glyim-codegen-llvm` | Safe LLVM bindings; drives `llvm-sys` 231.x (LLVM 23). |
+
+Per-crate extras (declared directly by members): `termcolor`, `similar`,
+`walkdir`, `regex`, `shell-words`, `rand` in `glyim-test`; `notify` 8.2
+(file watching) in `glyim-lsp`; `uuid` v4 in `tools/glyim-pilot`; `syn` in
+`tools/ledger-schema` (inventory extraction); `prometheus` (feature) in
+`tools/glyim-pilot`.
 
 ---
 
-## 2. Frontend & Syntax (Layer 1)
+## 3. Test & Supply-Chain Rails
 
-Crates responsible for lexing, parsing, and maintaining a lossless syntax tree necessary for IDE features and macro hygiene.
-
-| Crate | Version | Purpose | Rationale |
-| :--- | :--- | :--- | :--- |
-| **`rowan`** | `0.16.1` | Lossless Syntax Tree | Retains whitespace, comments, and trivia perfectly. Critical for Tier 1 (Syntax) compilation and accurate error reporting. |
-| **`chumsky`** | `0.9.3` | Parser Combinators | Used to build `glyim-parse`. **Efficiency:** Using `chumsky` combinators to build a custom Pratt parser is more efficient than generated parsers (like `lalrpop`) because it eliminates intermediate grammar processing and reduces runtime indirection. It also offers superior error recovery for indentation-sensitive grammars. |
-| **`smol_str`** | `0.3.6` | Small String Optimization | Optimizes string storage for identifiers to reduce memory footprint in `rowan` trees. |
-
----
-
-## 3. Analysis & Metaprogramming (Layer 2)
-
-The "Brain" of the compiler, handling type inference, trait resolution, and the execution of compile-time code.
-
-| Crate | Version | Purpose | Rationale |
-| :--- | :--- | :--- | :--- |
-| **`rayon`** | `1.12.0` | Parallelism Framework | Used to parallelize heavy lifting phases (type checking, monomorphization) in `glyim-db` and `glyim-egraph`. |
-| **`regalloc2`** | `0.15.1` | Register Allocator | High-performance register allocator for `glyim-mir-interp` (MIR Interpreter) to execute `comptime` functions efficiently. |
-
----
-
-## 4. Optimization & Graph Theory (Layer 3)
-
-Crates responsible for optimizing code via Equality Saturation and managing graph structures for the module system.
-
-| Crate | Version | Purpose | Rationale |
-| :--- | :--- | :--- | :--- |
-| **`egg`** | `0.11.0` | E-Graphs Library | The definitive library for equality saturation. Used by `glyim-egraph` to perform aggressive algebraic optimization on MIR. |
-| **`petgraph`** | `0.6.5` | Generic Graph Algorithms | Provides algorithms (isomorphism, dot export, dominators) used by `glyim-def-map` for module resolution and `glyim-mir` for CFG analysis. |
-| **`fixedbitset`** | `0.5.7` | Efficient Bitsets | High-performance bitsets used by `glyim-borrowck` and dataflow analysis for efficient liveness lookups. |
-
----
-
-## 5. Tooling & Interfaces (Layer 4)
-
-Supporting infrastructure for CLI, LSP, and build orchestration.
-
-| Crate | Version | Purpose | Rationale |
-| :--- | :--- | :--- | :--- |
-| **`async-lsp`** | `0.25.0` | LSP Server Framework | Replaces `tower_lsp`. Provides async/await support with `tokio` and integrates seamlessly with our custom server architecture. Better suited for high-performance, stateful LSP handling than the standard `tower_lsp` middleware. |
-| **`tower`** | `0.5.3` | Service Abstraction | Modular framework for `glyim-lsp` and `glyim-server` (CAS Daemon) to handle concurrency, timeouts, and middleware. |
-| **`clap`** | `4.5.31` | CLI Parser | Modern, derive-based argument parsing for `glyim-cli`. |
-| **`insta`** | `1.47.2` | Snapshot Testing | Used for `glyim-test` to ensure compiler errors/outputs match golden files. |
-
----
-
-## 6. Backend & Runtime (Layer 5)
-
-Crates for code generation and runtime support.
-
-| Crate | Version | Purpose | Rationale |
-| :--- | :--- | :--- | :--- |
-| **`inkwell`** | `0.10.0` (git master, LLVM 23) | LLVM Bindings | Rust wrappers around LLVM C++ API. Used by `glyim-codegen-llvm` for IR generation and optimization passes. |
-| **`llvm-sys`** | `231.0.1` | Raw LLVM Bindings | The underlying FFI layer. We explicitly vendor this or pin a compatible version to ensure ABI stability for `inkwell`. |
-| **`tokio`** | `1.52.3` | Async Runtime | Async runtime for `glyim-orchestrator` (distributed builds) and optional compiler server. |
-| **`serde`** | `1.0.228` | Serialization | Used for configuration (`glyim-config`), artifact metadata, and network protocols in `glyim-server`. |
-| **`tracing-subscriber`** | `0.3.23` | Log Formatting | Human-readable log output layer for `tracing`, integrating with `miette` for colored terminal output. |
-
----
-
-## 7. Dependencies by Workspace Crate
-
-A matrix view of how external dependencies map to internal crates (non-exhaustive).
-
-| Internal Crate | Key External Dependencies |
+| Rail | Mechanism |
 | :--- | :--- |
-| `glyim-db` | `salsa`, `parking_lot`, `tracing` |
-| `glyim-lex` / `glyim-parse` | `chumsky`, `rowan`, `smol_str` |
-| `glyim-mir-interp` | `regalloc2` |
-| `glyim-egraph` | `egg`, `rayon` |
-| `glyim-def-map` | `petgraph`, `fixedbitset` |
-| `glyim-lsp` | `async-lsp`, `tower`, `rowan` |
-| `glyim-diag` | `miette`, `owo-colors`, `textwrap` |
-| `glyim-cli` | `clap` |
-| `glyim-codegen-llvm` | `inkwell` (linked against `llvm-sys` 231.x) |
-| `glyim-server` | `tokio`, `tower`, `serde` |
+| Fixture corpora | `glyim-test` harness: compile-pass / compile-fail / ui / run-pass / run-fail, M1.4 `//@` annotation grammar, ~410 tagged fixtures. |
+| Differential gate | Every run-pass fixture compiled with the LLVM backend *and* run in the MIR interpreter; exit code + stdout must agree. |
+| Metrics ratchet | `tools/glyim-metrics` vs `metrics/baseline.json` (code lines, tests, doc coverage, `inline_allows: 0`). |
+| Readiness ledger | `ledger/features/**`, `ledger/gaps/**` checked by `tools/glyim-ledger check` (deny_unknown_fields schemas from `tools/ledger-schema`). |
+| Lint rails | `missing_docs = warn` + `clippy::pedantic` baseline workspace-wide; zero inline allows (relaxations live in `[workspace.lints.clippy]` with rationale). |
+| Miri | Nightly job over the pure-analysis crates (`glyim-type`, `glyim-borrowck`, `glyim-solve`). |
 
 ---
 
-## 8. Exclusions & Alternatives
+## 4. Exclusions & Alternatives
 
-**Excluded:**
-*   **`lalrpop`**: We are building a custom Pratt parser using `chumsky`. Generated parsers like `lalrpop` add indirection and bloat compared to optimized combinators.
-*   **`nom`**: `nom` is powerful but significantly increases binary size and compile times compared to `chumsky`.
-*   **`syn`**: We are building a compiler, so we cannot depend on `syn` (which is Rust-specific). We use `rowan` for our syntax tree.
-*   **`log`**: Replaced by `tracing` for better instrumentation support and `span` handling.
-*   **`tower_lsp`**: While powerful, we prefer `async-lsp` for tighter integration with `tokio` and our custom server architecture.
+Deliberately **not** in the stack (as of 0.6.0):
 
-**Alternatives Considered:**
-*   **`logos`**: Considered for parsing, but `chumsky` was chosen for better error recovery support in an indentation-sensitive grammar.
-*   **`cranelift`**: Considered as a primary backend for tiered compilation due to faster compile times. Currently adopted as an **experimental** backend (`glyim-codegen-cranelift`) not in v1.0 scope, but `inkwell` is the primary supported path.
-*   **`llvm-sys` versions**: While 231 is the latest major version, we pin this tightly via `inkwell` to ensure our passes work reliably against the API surface.
+*   **`salsa`** — the query engine is planned (M6, master plan); today
+    `glyim-db` is an interner + VFS + `TyCtx` handle and the driver is a
+    straight-line pipeline. Do not cite salsa as a current dependency.
+*   **`chumsky`/`lalrpop`/`nom`** — the parser is hand-written (recursive
+    descent + Pratt expression parsing in `glyim-frontend`) for error
+    recovery control; no parser-combinator or generator framework.
+*   **`egg` / equality saturation** — `glyim-opt` runs five hand-written
+    MIR passes (const-prop, DCE, CFG-simplify, unreachable-elim, slice
+    desugar); verified rewrites are the M10 workstream.
+*   **`regalloc2`** — the MIR interpreter is a value-model interpreter, not
+    a register-allocated VM.
+*   **`async-lsp` / `tower` / `tower_lsp`** — `glyim-lsp` is implemented
+    directly on `tokio` + `lsp-types`.
+*   **Cranelift** — a ledger backend *tag* (`//@ backends: cranelift`) and
+    a reserved `EvidenceBackend` variant only; there is no
+    `glyim-codegen-cranelift` crate. LLVM and the bytecode backend are the
+    two real code paths.
 
 ---
-```

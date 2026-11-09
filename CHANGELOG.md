@@ -8,6 +8,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Evidence JSONL emitter (M1.5 slice)**: `glyim-test` now emits one
+  readiness-ledger evidence record per executed fixture when
+  `GLYIM_TEST_EVIDENCE` names an output path — the machine-checked
+  input `ledger compute` (M1.8) will consume, per plan §3.4/§6 M1.5.
+  - `harness::evidence`: typed `EvidenceRecord` (`glyim.evidence/1`) with
+    outcome/backend enums from the ledger's backend set, SHA-256 fixture
+    hashes over the exact source bytes, mode, revision, declared
+    `//@ feature:`/`//@ backends:` tags, and stable short reason classes
+    (free-form compiler output deliberately dropped so message refactors
+    cannot move ledger statistics). `instructions`/`rss_kb` are reserved
+    (always `None` until M2's counting-allocator instrumentation).
+  - Hermetic by construction: no clock or PRNG data —
+    `TestResult::duration` never reaches a record, and two runs against
+    the same fixtures serialise byte-identically (tested). Records
+    deserialise strictly (`deny_unknown_fields`, same discipline as
+    `ledger-schema`), and `write_evidence` validates the whole slice
+    before writing so a schema bug cannot poison the evidence store.
+  - `tracing` spans (`evidence_write`, record/byte count events) on the
+    emission path, matching the harness's existing span style; failures
+    render through `miette` with actionable `help` text (the remedy names
+    `GLYIM_TEST_EVIDENCE` or the schema rule that was violated).
+  - Bench: `glyim-test --bench evidence` measures a full 375-fixture
+    evidence pass (record construction ≈0.6 ms, serialisation ≈0.2 ms,
+    validated write ≈0.6 ms) — the M1.5 gate is effectively free.
+  - New consumer examples: `crates/glyim-test/examples/evidence_report.rs`
+    round-trips the JSONL contract (producer + validator + reason-class
+    aggregate) and `crates/glyim-pipeline/examples/hello_pipeline.rs`
+    drives the compiler as a library (write a `.g` program, lower it to
+    MIR in-process).
+- **Micro-debt cleanup**: the harness JSON reporter no longer swallows
+  failures — `GLYIM_TEST_JSON` write/serialise errors now print a
+  miette-rendered diagnostic instead of vanishing into `let _ =`; the
+  dead workspace dependencies `textwrap`, `owo-colors`, and `petgraph`
+  (declared in `[workspace.dependencies]`, referenced by no member,
+  absent from `Cargo.lock`) are removed; the stale committed
+  `Cargo.lock` (members at 0.5.1 vs workspace 0.6.0) is regenerated.
+- **Docs drift fixes**: README's architecture table gains the missing
+  `glyim-gsx` row and a tooling row for `tools/*` (the workspace has 38
+  members: 34 crates + 4 tools); CONTRIBUTING says Rust ≥ 1.95 (was
+  1.85), replaces the inline-`#[allow]` guidance with the M0
+  zero-allow policy (relaxations only in `[workspace.lints.clippy]`),
+  documents the M1.4 `//@` fixture grammar instead of the legacy
+  `// key:` headers, and updates the corpus count (~260 → ~410);
+  `docs/TECHSTACK.md` is rewritten (v2.0.0) to list only dependencies
+  the manifests actually declare (the previous revision listed
+  `salsa`/`chumsky`/`egg`/`regalloc2`/`async-lsp` and nonexistent
+  crates); the master plan's F1 evidence pointer now reflects that the
+  production-readiness playbook has been retired from `docs/roadmaps/`.
+  The M0 metrics ratchet baseline is refreshed (+1,041 code lines, +10
+  test functions, +16 documented items, 0 inline allows).
 - **Fixture annotation grammar + codemod (M1.4)**: every `.g` fixture
   carries a machine-readable `//@` header, and the harness rejects
   fixtures that lack one — the "100% of fixtures tagged; fixtures lacking
