@@ -62,6 +62,11 @@ rand             = "0.10"
 serde            = { version = "1.0", features = ["derive"], optional = true }
 serde_json       = { workspace = true, optional = true }
 
+[[bench]]
+name = "annotations"
+harness = false
+path = "benches/annotations.rs"
+
 [dev-dependencies]
 tempfile = "3"
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).

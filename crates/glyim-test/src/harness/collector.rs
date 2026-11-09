@@ -66,12 +66,24 @@ impl<'a> TestCollector<'a> {
             let ParsedConfig {
                 config: header_config,
                 has_explicit_mode,
+                has_annotations,
+                ..
             } = super::config::parse_test_config(&source).map_err(|msg| {
                 TestDiscoveryError::InvalidConfig {
                     path: path.to_path_buf(),
                     message: msg,
                 }
             })?;
+
+            // M1.4 DoD gate: fixtures without any `//@` annotation header
+            // are rejected — an untagged fixture cannot be joined to a
+            // registry feature by the readiness ledger, so running it
+            // silently would hide the gap.
+            if !has_annotations {
+                return Err(TestDiscoveryError::MissingAnnotations {
+                    path: path.to_path_buf(),
+                });
+            }
 
             let mut config = TestConfig::default();
 
@@ -110,6 +122,45 @@ impl<'a> TestCollector<'a> {
             config.check_stderr = header_config.check_stderr;
             config.expected_exit_code = header_config.expected_exit_code;
             config.aux_files = header_config.aux_files;
+            config.features = header_config.features;
+            config.backends = header_config.backends;
+
+            // M1.4 DoD gate: a fixture that could only pass *by tolerance*
+            // is rejected at discovery. The required expectation depends on
+            // the resolved mode: run-pass/run-fail must pin an outcome
+            // (exit code or stdout/stderr pattern); compile-fail must name
+            // at least one error (header pattern or inline `//~`).
+            match config.mode {
+                TestMode::RunPass | TestMode::RunFail => {
+                    let has_outcome = config.expected_exit_code.is_some()
+                        || config.check_stdout.is_some()
+                        || config.check_stderr.is_some();
+                    if !has_outcome {
+                        return Err(TestDiscoveryError::MissingExpectation {
+                            path: path.to_path_buf(),
+                            mode: config.mode,
+                            requirement:
+                                "declare `//@ expect-exit:` (or `//@ expect-stdout:` / `//@ expect-stderr:`)"
+                                    .to_string(),
+                        });
+                    }
+                }
+                TestMode::CompileFail => {
+                    let has_inline = !crate::annotations::Annotation::parse_all(&source)
+                        .unwrap_or_default()
+                        .is_empty();
+                    if config.error_patterns.is_empty() && !has_inline {
+                        return Err(TestDiscoveryError::MissingExpectation {
+                            path: path.to_path_buf(),
+                            mode: config.mode,
+                            requirement:
+                                "add an inline `//~ ERROR` annotation or `//@ expect-error:`"
+                                    .to_string(),
+                        });
+                    }
+                }
+                TestMode::CompilePass | TestMode::Ui => {}
+            }
 
             let name = path
                 .strip_prefix(self.root)
