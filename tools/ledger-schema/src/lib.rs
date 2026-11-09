@@ -12,6 +12,9 @@
 //! - [`Registry::validate`], the `ledger check` engine: unique IDs,
 //!   reference resolution, `requires` cycle detection, and the
 //!   strict-xfail witness contract (plan §3.3);
+//! - the M1.3 inventory extractors ([`extract_inventory`], module
+//!   [`inventory`]): source-derived items that must be claimed or ignored
+//!   so the registry cannot drift from the code (plan §3.5);
 //! - hand-rolled JSON-Schema export for both entry types so external
 //!   editors can validate registry files without adding a dependency.
 //!
@@ -24,6 +27,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+
+pub mod inventory;
+
+pub use inventory::{
+    CODE_INVENTORY_CONFLICT, CODE_INVENTORY_DUP_CLAIM, CODE_INVENTORY_DUP_IGNORE,
+    CODE_INVENTORY_PARSE, CODE_INVENTORY_STALE_CLAIM, CODE_INVENTORY_STALE_IGNORE,
+    CODE_INVENTORY_UNMAPPED, InventoryExtraction, InventoryExtractor, InventoryIgnore,
+    InventoryIgnoreFile, InventoryItem, LoadedIgnore, MIR_SOURCE_DIR, MIR_VARIANT_ENUMS,
+    RUNTIME_SOURCE_DIR, extract_inventory, extract_mir_variants, extract_runtime_ffi,
+    inventory_diagnostics, load_inventory_ignore, unmapped_item_keys,
+};
 
 // ---------------------------------------------------------------------------
 // Vocabulary enums
@@ -489,6 +503,13 @@ pub struct FeatureEntry {
     /// Error codes this feature may emit (each needs a negative fixture).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
+    /// Source-derived inventory keys this feature claims (plan §3.5),
+    /// e.g. `"mir.TerminatorKind.Call"` or `"runtime.ffi.glyim_alloc"`.
+    /// Every extracted inventory item must be claimed here or ignored in
+    /// `ledger/inventory-ignore.toml`; `ledger check` fails on anything
+    /// unmapped, stale, duplicated, or both-claimed-and-ignored.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inventory: Vec<String>,
     /// Owning workstream lane.
     pub owner_lane: Lane,
 }
@@ -1344,6 +1365,7 @@ pub fn feature_schema() -> serde_json::Value {
             },
             "requires": { "type": "array", "items": { "type": "string" } },
             "errors": { "type": "array", "items": { "type": "string" } },
+            "inventory": { "type": "array", "items": { "type": "string" } },
             "owner_lane": { "enum": ["L", "F", "T", "M", "B", "Q"] }
         }
     })
