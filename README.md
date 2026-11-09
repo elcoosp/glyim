@@ -2,13 +2,13 @@
   <img src="docs/logo.png" alt="Glyim Logo" width="300"/>
   <p>
     <strong>A modular, from‑scratch compiler for a Rust‑like systems programming language, written in Rust.</strong><br/>
-    Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference &amp; trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with more than 20 crates, designed for clarity, testability, and incremental development.
+    Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference &amp; trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with 38 crates, designed for clarity, testability, and incremental development.
   </p>
   <p>
-    <img src="https://img.shields.io/badge/Rust-1.94%20%7C%202024-000000?style=flat-square&logo=rust" alt="Rust"/>
+    <img src="https://img.shields.io/badge/Rust-1.95%20%7C%202024-000000?style=flat-square&logo=rust" alt="Rust"/>
     <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License MIT"/>
     <img src="https://img.shields.io/badge/LLVM-23-262D3A?style=flat-square&logo=llvm" alt="LLVM"/>
-    <img src="https://img.shields.io/badge/Crates-20%2B-6F4E37?style=flat-square" alt="Crates"/>
+    <img src="https://img.shields.io/badge/Crates-38-6F4E37?style=flat-square" alt="Crates"/>
     <img src="https://img.shields.io/badge/Backend-LLVM%20%2B%20Bytecode-6A0DAD?style=flat-square" alt="Backend"/>
     <img src="https://img.shields.io/badge/Language%20Server-LSP-4B32C3?style=flat-square" alt="LSP"/>
     <img src="https://img.shields.io/badge/Testing-Snapshot%20%2B%20UI-00BFFF?style=flat-square" alt="Testing"/>
@@ -181,7 +181,7 @@ source.g
 
 ### Prerequisites
 
-- **Rust** — latest stable, 2024 edition (Rust 1.94+ recommended).
+- **Rust** — latest stable, 2024 edition (Rust 1.95+ recommended; the MSRV is pinned in `Cargo.toml` and enforced by the `msrv` CI job).
 - **LLVM 23** — required only for the LLVM backend. Set `LLVM_SYS_231_PREFIX` to your LLVM installation prefix before building.
 - **`watchexec`** — optional, for the `justfile` recipes.
 
@@ -485,6 +485,28 @@ fn main() {
 - `//~^`, `//~^^`, … — point at earlier lines.
 - `//~~` — fuzzy matching (allow the diagnostic to land within ±1 line).
 - `//~? ERROR …` — the diagnostic is optional; the test still passes if it is absent.
+
+### Fixture Annotations
+
+Every `.g` fixture carries a machine-readable `//@` header (plan M1.4). The harness rejects fixtures with no `//@` annotations, and run fixtures must pin an explicit outcome:
+
+```glyim
+//@ mode: run-pass
+//@ expect-exit: 42
+//@ feature: LANG-SYN-OPERATORS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
+
+fn main() -> i32 { 42 }
+```
+
+- `//@ mode:` — explicit test mode (`run-pass`, `compile-fail`, …).
+- `//@ expect-exit:` / `//@ expect-stdout:` / `//@ expect-stderr:` — the outcome a run fixture must produce.
+- `//@ expect-error:` — a diagnostic substring a `compile-fail` fixture must produce (in addition to inline `//~` annotations).
+- `//@ feature:` — readiness-ledger registry IDs the fixture exercises (joined against `ledger/features/**` by `ledger compute`).
+- `//@ backends:` — which backends the fixture is verified on (`gam`, `llvm`, `cranelift`, `bytecode`).
+- `//@ needs-llvm`, `//@ ignore`, `//@ only-target:`, `//@ compile-flags:`, `//@ aux-file:`, `//@ timeout:`, `//@ min-version:` — harness gates.
+
+The legacy `// key: value` spelling is still parsed, but a fixture must not mix the two forms, and re-tagging is mechanical: `cargo run -p glyim-test --bin glyim-tag-fixtures -- --write`.
 
 ### Snapshot Testing
 
