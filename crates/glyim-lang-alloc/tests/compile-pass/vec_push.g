@@ -1,5 +1,7 @@
-// test-mode: compile-pass
+//@ mode: compile-pass
 // V17-T01: Vec::push and indexing works
+//@ feature: LANG-BUILTIN-VEC, STD-ALLOC-VEC, STD-ALLOC-STRING, TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 
 fn main() {
     let mut v: Vec<i32> = Vec::new();

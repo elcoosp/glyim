@@ -8,9 +8,11 @@
 // checked_* on i32/i64 is not covered here: that family was never
 // registered for signed types (see §3.5.32). The saturating and wrapping
 // families both prove the literal-receiver fix is family-agnostic.
-// test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-FIELD-ACCESS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     // Literal receiver: saturating + wrapping
     if 100.saturating_mul(2) != 200 { return 1; }

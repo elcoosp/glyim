@@ -1,9 +1,11 @@
 // A `Drop` type holding an owning `String`: running the destructor twice
 // would double-free the string's buffer. The moved-from temp's drop flag
 // must be cleared by the move.
-// test-mode: run-pass
-// exit-code: 31
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 31
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-FIELD-ACCESS, COMPILER-OPT-DROP-ELAB, STD-CORE-OPS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 static mut COUNT: i32 = 0;
 struct H { s: String }
 impl Drop for H {

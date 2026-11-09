@@ -4,9 +4,11 @@
 // hit the P1-C2 gate ("resolved by the type checker but not implemented
 // by the LLVM backend") for add/sub, and "no method" for mul (mul was
 // not even registered).
-// test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-OPERATORS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let mut fails = 0;
 

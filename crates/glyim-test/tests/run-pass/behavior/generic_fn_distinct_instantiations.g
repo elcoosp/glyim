@@ -12,10 +12,12 @@
 // ___glyim_fn_<id>` — or, if the mangling were subtly wrong, as silently
 // wrong-code (the wrong instantiation's body reached for the caller's
 // arguments). Either is a hard test failure.
-// test-mode: run-pass
-// exit-code: 42
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 42
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: COMPILER-MONO-MONOMORPHIZE, LANG-SYN-FN-DEF, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     // Two instantiations of `Option::<T>::unwrap` at *different* `T`s.
     let a: i32 = Option::Some(7).unwrap();                  // T = i32

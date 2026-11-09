@@ -1,5 +1,7 @@
-// test-mode: run-pass
-// exit-code: 3
+//@ mode: run-pass
+//@ expect-exit: 3
+//@ feature: LANG-SYN-IF, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 fn main() -> i32 {
     let x = 5;

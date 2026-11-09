@@ -1,4 +1,6 @@
-// test-mode: compile-pass
+//@ mode: compile-pass
+//@ feature: LANG-SYN-IMPL, LANG-TRAIT-IMPL, TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 trait Shape {
     fn area(&self) -> i32;
 }

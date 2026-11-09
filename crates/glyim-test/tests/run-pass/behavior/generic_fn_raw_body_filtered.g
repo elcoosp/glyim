@@ -10,10 +10,12 @@
 //
 // A failure here is a compile-time ICE:
 // `[X0000] fn type lowering failed: fn_abi_of failed: UnknownType(...)`.
-// test-mode: run-pass
-// exit-code: 6
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 6
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-TY-RAW-PTR, COMPILER-MONO-MONOMORPHIZE, LANG-SYN-FN-DEF, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     // Uses `Option::<Option<i32>>::unwrap` and `Option::<i32>::unwrap` in
     // one chain so the *raw* generic template of `unwrap` would have been

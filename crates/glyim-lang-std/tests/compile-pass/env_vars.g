@@ -1,5 +1,7 @@
-// test-mode: compile-pass
+//@ mode: compile-pass
 // V18-T05: Environment variables
+//@ feature: STD-STD-ENV, RUNTIME-FFI-ENV, TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 
 fn main() {
     let val = env::var("HOME");

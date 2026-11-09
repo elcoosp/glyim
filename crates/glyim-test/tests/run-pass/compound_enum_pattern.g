@@ -1,5 +1,7 @@
-// test-mode: run-pass
-// exit-code: 8
+//@ mode: run-pass
+//@ expect-exit: 8
+//@ feature: LANG-MATCH-GUARDS, LANG-SYN-ENUM, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 enum Shape { Circle(i32), Square(i32) }
 

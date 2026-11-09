@@ -1,3 +1,6 @@
+//@ mode: compile-pass
+//@ feature: COMPILER-FRONT-DEFTABLE, TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 struct Vec<T> { data: *mut T, len: usize, cap: usize }
 impl<T> Vec<T> {
     fn push(&mut self, value: T) { }

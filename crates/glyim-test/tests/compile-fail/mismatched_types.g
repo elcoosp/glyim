@@ -1,4 +1,6 @@
-// test-mode: compile-fail
+//@ mode: compile-fail
+//@ feature: COMPILER-TI-UNIFICATION, TOOL-TEST-COMPILE-FAIL
+//@ backends: gam
 fn main() -> i32 {
     let x: i32 = 1;
     let y: bool = true;

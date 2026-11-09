@@ -1,8 +1,10 @@
 // `w.v.is_empty()` — same shape as vec_field_len; exercises the shared
 // `len | is_empty` codegen arm and the interp Ref-projection path.
-// test-mode: run-pass
-// exit-code: 1
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 1
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-FIELD-ACCESS, LANG-BUILTIN-VEC, STD-ALLOC-VEC, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 struct W { v: Vec<i32> }
 fn main() -> i32 {
     let w = W { v: [].to_vec() };

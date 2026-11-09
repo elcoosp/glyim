@@ -4,9 +4,11 @@
 // fell through to the literal-concat fallback because try_interp only
 // handled ONE {} then rejected multi-{} format strings). After: the
 // expander loops over every {} and emits one push_str per substitution.
-// test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ feature: STD-STD-IO, RUNTIME-FFI-IO, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     // 2 substitutions
     let s = format!("a={} b={}", 42, 100);

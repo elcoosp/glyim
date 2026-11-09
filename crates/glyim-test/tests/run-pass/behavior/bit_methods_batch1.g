@@ -5,9 +5,11 @@
 // The overflow case of `next_power_of_two` (x > 2^(width-1)) is
 // intentionally not exercised here; see the arm comment in
 // codegen-llvm/src/lower.rs for the current wrap-to-0 behavior.
-// test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-OPERATORS, LANG-SYN-FIELD-ACCESS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let mut fails = 0;
 

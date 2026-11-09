@@ -12,10 +12,12 @@
 // Three distinct primes in the `Ok` arm and zero contribution from the
 // `Err` arm. Any wrong-field extraction or payload misread makes the sum
 // differ from 223.
-// test-mode: run-pass
-// exit-code: 223
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 223
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-MATCH-GUARDS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a = match "71".parse::<i32>() {
         Result::Ok(v) => v,               // 71

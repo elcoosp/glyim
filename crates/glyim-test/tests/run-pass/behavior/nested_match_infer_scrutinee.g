@@ -16,10 +16,12 @@
 // at `check_pattern` entry. (`preserve_int`, not the plain
 // `resolve_ty_shallow`, because the latter defaults unbound int vars
 // to `i32` and changed behaviour for already-working pattern sites.)
-// test-mode: run-pass
-// exit-code: 5
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 5
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-MATCH-GUARDS, COMPILER-TI-UNIFICATION, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a = Option::Some(Option::Some(5));
     match a {

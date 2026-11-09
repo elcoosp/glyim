@@ -1,5 +1,7 @@
-// test-mode: run-pass
-// exit-code: 11
+//@ mode: run-pass
+//@ expect-exit: 11
+//@ feature: COMPILER-MONO-MONOMORPHIZE, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 fn first<T, U>(a: T, b: U) -> T { a }
 

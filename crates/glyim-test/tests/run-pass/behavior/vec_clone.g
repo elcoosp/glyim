@@ -4,9 +4,11 @@
 // via the shared `glyim_slice_to_vec` runtime helper. The clone must be
 // independent — mutating the original after cloning must not affect the
 // clone's length.
-// test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-BUILTIN-VEC, STD-ALLOC-VEC, STD-CORE-MARKER, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     // Basic clone preserves length.
     let v: Vec<i32> = [1, 2, 3].to_vec();

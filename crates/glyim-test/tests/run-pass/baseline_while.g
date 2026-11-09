@@ -1,5 +1,7 @@
-// test-mode: run-pass
-// exit-code: 10
+//@ mode: run-pass
+//@ expect-exit: 10
+//@ feature: LANG-SYN-WHILE, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let mut i = 0;
     let mut s = 0;

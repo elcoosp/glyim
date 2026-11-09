@@ -2,6 +2,9 @@
 // ICE with `[X0000] ConstRef(..) reached LLVM codegen` for ADT-typed
 // consts because the eval error was suppressed; it must be a clean
 // `[C0001]`.
+//@ mode: ui
+//@ feature: LANG-SYN-CONST-ITEM, COMPILER-INTERP-CONST-EVAL, LANG-SYN-FN-DEF, TOOL-TEST-UI
+//@ backends: gam
 struct S { v: i32 }
 fn make() -> S { S { v: 7 } }
 const K: S = make();

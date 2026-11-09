@@ -1,5 +1,7 @@
-// test-mode: run-pass
-// exit-code: 5
+//@ mode: run-pass
+//@ expect-exit: 5
+//@ feature: LANG-SYN-ENUM, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 enum Inner { A(i32), B }
 struct Wrapper { inner: Inner, label: i32 }

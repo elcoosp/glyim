@@ -1,5 +1,7 @@
-// test-mode: compile-pass
+//@ mode: compile-pass
 // V17: Vec::pop returns Option
+//@ feature: LANG-BUILTIN-VEC, STD-ALLOC-VEC, TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 
 fn main() {
     let mut v: Vec<i32> = Vec::new();

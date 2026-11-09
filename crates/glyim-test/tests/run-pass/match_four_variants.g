@@ -1,5 +1,7 @@
-// test-mode: run-pass
-// exit-code: 3
+//@ mode: run-pass
+//@ expect-exit: 3
+//@ feature: LANG-MATCH-GUARDS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 enum Four { A, B, C, D }
 

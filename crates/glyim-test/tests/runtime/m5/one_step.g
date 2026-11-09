@@ -18,9 +18,11 @@
 // to `x86_64-unknown-linux-gnu` from a non-Linux host also produces a valid,
 // linkable ELF object today; only *running* it needs a Linux host (the
 // `only-target:` gate handles that).
-// test-mode: run-pass
-// only-target: x86_64-unknown-linux-gnu
-// exit-code: 42
+//@ mode: run-pass
+//@ only-target: x86_64-unknown-linux-gnu
+//@ expect-exit: 42
+//@ feature: LANG-ASYNC-AWAIT, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 enum Poll<T> { Ready(T), Pending }
 trait Future {

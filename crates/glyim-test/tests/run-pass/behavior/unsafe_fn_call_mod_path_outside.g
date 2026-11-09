@@ -2,8 +2,10 @@
 // (`m::get_value`) outside any `unsafe { }` block must compile (warn)
 // and run. Warning presence is verified by manual probe, not by
 // check-stderr (which captures program stderr, not compiler output).
-// test-mode: run-pass
-// exit-code: 42
+//@ mode: run-pass
+//@ expect-exit: 42
+//@ feature: LANG-SYN-UNSAFE-BLOCK, LANG-SCOPE-MOD-DECL, LANG-SYN-FN-DEF, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 mod m {
     unsafe fn get_value() -> i32 {
         42

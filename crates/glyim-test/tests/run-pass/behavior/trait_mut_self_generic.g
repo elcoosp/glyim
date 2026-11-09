@@ -1,6 +1,8 @@
 // §3.10 second variant: trait with `&mut self` on a generic-lifetime ADT.
-// test-mode: run-pass
-// exit-code: 42
+//@ mode: run-pass
+//@ expect-exit: 42
+//@ feature: LANG-SYN-SELF, LANG-SYN-MUT, LANG-TRAIT-IMPL, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 trait Read {
     fn get(&mut self) -> i32;
 }

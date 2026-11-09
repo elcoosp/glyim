@@ -4,8 +4,10 @@
 // paths (HIR `UsePath`, typeck `check_path`, typeck `Call`), so `T` was
 // erased and the program was miscompiled as a monomorphic call to a
 // generic fn.
-// test-mode: run-pass
-// exit-code: 42
+//@ mode: run-pass
+//@ expect-exit: 42
+//@ feature: COMPILER-MONO-MONOMORPHIZE, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 fn id<T>(x: T) -> T { x }
 

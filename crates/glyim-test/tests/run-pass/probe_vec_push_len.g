@@ -1,5 +1,7 @@
-// test-mode: run-pass
-// exit-code: 3
+//@ mode: run-pass
+//@ expect-exit: 3
+//@ feature: LANG-BUILTIN-VEC, STD-ALLOC-VEC, STD-ALLOC-STRING, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let mut v = Vec::new();
     v.push(1);

@@ -1,5 +1,7 @@
-// test-mode: run-pass
-// exit-code: 5
+//@ mode: run-pass
+//@ expect-exit: 5
+//@ feature: LANG-MATCH-GUARDS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 fn main() -> i32 {
     let x = 5;

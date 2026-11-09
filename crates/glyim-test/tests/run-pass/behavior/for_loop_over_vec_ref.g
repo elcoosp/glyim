@@ -14,9 +14,11 @@
 // By-value `for x in v` still needs a real `IntoIterator for Vec<T>`
 // yielding `T` by move (see KNOWN_GAPS §3.4) and remains rejected with
 // the same hint.
-// test-mode: run-pass
-// exit-code: 6
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 6
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-FOR-SLICE-ITER, LANG-BUILTIN-VEC, STD-ALLOC-VEC, LANG-TY-REF, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let v: Vec<i32> = [1, 2, 3].to_vec();
     let mut s = 0;

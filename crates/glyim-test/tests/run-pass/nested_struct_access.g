@@ -1,5 +1,7 @@
-// test-mode: run-pass
-// exit-code: 42
+//@ mode: run-pass
+//@ expect-exit: 42
+//@ feature: LANG-SYN-STRUCT, LANG-SYN-FIELD-ACCESS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 struct Inner { value: i32 }
 struct Outer { inner: Inner }

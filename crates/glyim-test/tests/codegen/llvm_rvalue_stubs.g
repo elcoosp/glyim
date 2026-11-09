@@ -1,6 +1,8 @@
-// test-mode: compile-pass
-// compile-flags: --backend=llvm
-// check-stdout: 2
+//@ mode: compile-pass
+//@ compile-flags: --backend=llvm
+//@ expect-stdout: 2
+//@ feature: TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 
 fn main() -> i32 {
     let arr = [1, 2, 3];

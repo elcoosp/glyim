@@ -1,6 +1,8 @@
 // The other variant must be selected by the discriminant.
-// test-mode: run-pass
-// exit-code: 7
+//@ mode: run-pass
+//@ expect-exit: 7
+//@ feature: TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 
 enum E { A(i32), B(i32) }
 

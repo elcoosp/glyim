@@ -9,10 +9,12 @@
 //
 // The `Err` arm's value (97) is deliberately *distinct* from the `Ok`
 // arm's (0) so taking the wrong branch produces a different exit code.
-// test-mode: run-pass
-// exit-code: 97
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 97
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-MATCH-GUARDS, STD-CORE-RESULT, STD-CORE-PARSE, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     match "not_a_number".parse::<i32>() {
         Result::Ok(_) => 0,               // must NOT be taken

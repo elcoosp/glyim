@@ -1,6 +1,8 @@
-// test-mode: run-pass
-// compile-flags: --backend=bytecode
-// check-stdout: drop 2\ndrop 1
+//@ mode: run-pass
+//@ compile-flags: --backend=bytecode
+//@ expect-stdout: drop 2\ndrop 1
+//@ feature: COMPILER-OPT-DROP-ELAB, STD-CORE-OPS, TOOL-TEST-RUN-PASS
+//@ backends: gam, bytecode
 
 struct WithDrop {
     id: i32

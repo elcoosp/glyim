@@ -5,9 +5,11 @@
 // Literals carry explicit suffixes for the same reason documented in
 // `saturating_arith.g` (§3.5.18): an unsuffixed `4294967296` types as
 // i32 first and is rejected by the range check.
-// test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-OPERATORS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let mut fails = 0;
 

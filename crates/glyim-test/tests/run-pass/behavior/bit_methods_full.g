@@ -3,9 +3,11 @@
 // (typeck: "no method"); `u8` had only `is_power_of_two`; `u64` had
 // 2 of 6; and a duplicate `prim_bit_methods` block re-registered 14
 // entries into a second id range (dead code, now removed).
-// test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-OPERATORS, LANG-SYN-FIELD-ACCESS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let mut fails = 0;
 

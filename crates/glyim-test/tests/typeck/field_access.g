@@ -1,4 +1,6 @@
-// test-mode: compile-pass
+//@ mode: compile-pass
+//@ feature: LANG-SYN-FIELD-ACCESS, TOOL-TEST-COMPILE-PASS
+//@ backends: gam
 
 struct Point { x: i32, y: i32 }
 

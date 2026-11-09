@@ -15,10 +15,12 @@
 //      `__glyim_fn_<id>_<subst_idx>_<len>` — a symbol that never gets
 //      defined. Fixed by special-casing closures to use the un-mangled
 //      form.
-// test-mode: run-pass
-// exit-code: 67
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 67
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-CLOSURE-EXPR, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a = 11;
     let b = 13;

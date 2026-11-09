@@ -1,7 +1,9 @@
 // `?` in helper, chained; Ok path.
-// test-mode: run-pass
-// exit-code: 11
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 11
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-ERR-TRY-RESULT, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn a() -> Result<i32, i32> { Result::Ok(1) }
 fn b() -> Result<i32, i32> {
     let x = a()?;

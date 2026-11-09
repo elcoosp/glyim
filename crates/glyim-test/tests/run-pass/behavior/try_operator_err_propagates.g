@@ -1,7 +1,9 @@
 // `?` on Result::Err propagates the error to the caller.
-// test-mode: run-pass
-// exit-code: 42
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 42
+//@ compile-flags: --with-stdlib
+//@ feature: STD-CORE-RESULT, LANG-ERR-TRY-RESULT, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn get() -> Result<i32, i32> { Result::Err(42) }
 fn inner() -> Result<i32, i32> {
     let v = get()?;

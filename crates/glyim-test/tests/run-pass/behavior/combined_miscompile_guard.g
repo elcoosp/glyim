@@ -22,10 +22,12 @@
 // `generic_method_turbofish_all_primitives.g` fixture, which exercises
 // every primitive `FromStr` impl at the parse site without casting the
 // parsed value across types.
-// test-mode: run-pass
-// exit-code: 60
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 60
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a = "11".parse::<i32>().unwrap();                                       // 11
     let b = match "13".parse::<i32>() {                                         // 13

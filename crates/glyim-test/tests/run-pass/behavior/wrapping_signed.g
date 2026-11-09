@@ -1,8 +1,10 @@
 // §3.5.31(b): signed (i32/i64) wrapping arithmetic + unsigned regression.
 // All expectations computed via Python (wrap_i32/wrap_i64), not hand.
-// test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-OPERATORS, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let a: i32 = 2147483647;
     if a.wrapping_add(1) != -2147483648 { return 1; }

@@ -3,9 +3,11 @@
 // through the pointer (see commit 683948e3). The interpreter stores the
 // `Ref`'s projection (see KNOWN_GAPS §8) so the `&mut _5.field0` ref
 // resolves to the Vec field, not the whole struct.
-// test-mode: run-pass
-// exit-code: 3
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 3
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-SYN-FIELD-ACCESS, LANG-BUILTIN-VEC, STD-ALLOC-VEC, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 struct W { v: Vec<i32> }
 fn main() -> i32 {
     let w = W { v: [1, 2, 3].to_vec() };

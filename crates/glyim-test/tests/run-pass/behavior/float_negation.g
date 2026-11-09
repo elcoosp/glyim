@@ -10,10 +10,12 @@
 //      `FloatBits(-3.5)`), so the surrounding `+` / `&` saw a float
 //      where an `i32` was expected and codegen ICEd with "add:
 //      mismatched types" / "bitand: expected integer types".
-// test-mode: run-pass
-// exit-code: 253
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 253
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let f = -3.5;
     (f as i32) & 255

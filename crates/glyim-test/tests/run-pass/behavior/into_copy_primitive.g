@@ -6,9 +6,11 @@
 // `Undefined symbols: ___glyim_fn_477`. After the fix, `into` on a
 // direct Copy receiver resolves to the sentinel with the receiver type
 // as output, and lowering turns it into a plain operand use.
-// test-mode: run-pass
-// exit-code: 42
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 42
+//@ compile-flags: --with-stdlib
+//@ feature: STD-CORE-MARKER, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let x: i32 = 42;
     let y: i32 = x.into();

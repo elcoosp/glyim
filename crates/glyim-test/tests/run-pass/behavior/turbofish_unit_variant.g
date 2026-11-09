@@ -12,10 +12,12 @@
 // Exercises: unit variant + turbofish in a match scrutinee (the
 // narrowest shape that used to ICE); the annotated `let` form is already
 // covered by `if_let_some_none.g`.
-// test-mode: run-pass
-// exit-code: 7
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 7
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: LANG-SYN-TUPLE-STRUCT, COMPILER-MONO-MONOMORPHIZE, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     match Option::<i32>::None {
         Option::Some(_) => 1,

@@ -3,9 +3,11 @@
 // returned `ERROR`, the latter rejected the projection outright with an
 // internal error. A Vec header is `{[3 x i64]}` (data ptr, capacity, len),
 // so indexing reads word 0 and GEPs by the index.
-// test-mode: run-pass
-// exit-code: 50
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 50
+//@ compile-flags: --with-stdlib
+//@ feature: LANG-BUILTIN-VEC, STD-ALLOC-VEC, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let mut v = Vec::new();
     v.push(10);

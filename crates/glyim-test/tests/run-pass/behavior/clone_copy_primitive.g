@@ -2,9 +2,11 @@
 // Before this fix the compiler resolved `clone` to a sentinel FnDefId and
 // lowering replaced the call with a zeroing `MirConstKind::Error` constant
 // even on live paths — this fixture produced 0 instead of 5.
-// test-mode: run-pass
-// exit-code: 5
-// compile-flags: --with-stdlib
+//@ mode: run-pass
+//@ expect-exit: 5
+//@ compile-flags: --with-stdlib
+//@ feature: STD-CORE-MARKER, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() -> i32 {
     let x: i32 = 5;
     let y = x.clone();

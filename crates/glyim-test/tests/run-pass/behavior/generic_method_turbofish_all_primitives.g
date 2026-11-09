@@ -16,10 +16,12 @@
 // A failure here is a runtime SIGSEGV (exit 139 / signal 11) with no
 // diagnostic — the exact reason existing tests passed: they only checked
 // *compilation*, not execution.
-// test-mode: run-pass
-// exit-code: 0
-// compile-flags: --with-stdlib
-// needs-llvm
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ compile-flags: --with-stdlib
+//@ needs-llvm
+//@ feature: COMPILER-MONO-MONOMORPHIZE, TOOL-TEST-RUN-PASS
+//@ backends: gam, llvm
 fn main() {
     // Every primitive `FromStr` impl, so a regression at any one of them
     // surfaces as a distinct runtime failure.
