@@ -2,6 +2,7 @@ mod annotation_tests;
 mod comparison_tests;
 mod diag_tests;
 mod error_tests;
+mod evidence_tests;
 mod fixture_tests;
 mod harness_tests;
 mod mock_tests;

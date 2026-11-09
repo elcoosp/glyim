@@ -2,6 +2,7 @@ use super::collector::DiscoveredTest;
 use super::compiler::{FrontendOnlyCompiler, PipelineCompiler, TestCompiler};
 use super::strategy;
 use crate::error::{FailureReason, TimeoutError};
+use crate::harness::evidence::EvidenceBackend;
 use glyim_diag::GlyimDiagnostic;
 use glyim_span::FileId;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -53,26 +54,38 @@ pub struct TestExecutor {
     max_concurrent: usize,
     target_triple: String,
     compiler: Arc<dyn TestCompiler>,
+    /// The backend the chosen compiler actually drives — the evidence
+    /// record's `backend` value (M1.5). `FrontendOnlyCompiler` never runs
+    /// a program, so it records the GAM oracle tag.
+    backend: EvidenceBackend,
 }
 
 impl TestExecutor {
     /// new.
     #[must_use]
     pub fn new(bless: bool, no_skip: bool, max_concurrent: usize, use_pipeline: bool) -> Self {
-        let compiler: Arc<dyn TestCompiler> = if use_pipeline {
+        let compiler: Arc<dyn TestCompiler>;
+        let backend;
+        if use_pipeline {
             // The `runtime` integration test enables `real_llvm` via the
             // `GLYIM_TEST_REAL_LLVM` env var (set only on the Linux CI runner),
             // which swaps in the real `LlvmBackend` so run-pass fixtures are
             // linked and executed for real. Other hosts keep the hermetic
             // `MockCodegen` path.
             let real_llvm = std::env::var("GLYIM_TEST_REAL_LLVM").is_ok();
-            Arc::new(
+            backend = if real_llvm {
+                EvidenceBackend::Llvm
+            } else {
+                EvidenceBackend::Gam
+            };
+            compiler = Arc::new(
                 PipelineCompiler::new(Arc::new(crate::mock::MockCodegen::new()))
                     .with_real_llvm_if(real_llvm),
-            )
+            );
         } else {
-            Arc::new(FrontendOnlyCompiler)
-        };
+            backend = EvidenceBackend::Gam;
+            compiler = Arc::new(FrontendOnlyCompiler);
+        }
 
         Self {
             bless,
@@ -91,7 +104,15 @@ impl TestExecutor {
             // Linux, which is what the fixtures actually intend.
             target_triple: host_target_triple(),
             compiler,
+            backend,
         }
+    }
+
+    /// The backend evidence records should name for fixtures run by this
+    /// executor (M1.5).
+    #[must_use]
+    pub fn backend(&self) -> EvidenceBackend {
+        self.backend
     }
 
     /// `with_target_triple`.

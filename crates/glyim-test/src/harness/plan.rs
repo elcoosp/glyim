@@ -180,6 +180,27 @@ impl TestPlan {
         let reporter = TestReporter::new(self.verbose);
         let summary = reporter.report(&results);
 
+        // M1.5: emit readiness-ledger evidence (JSONL, one record per
+        // fixture) when GLYIM_TEST_EVIDENCE names a path. Hermetic and
+        // byte-deterministic by construction (see harness::evidence).
+        if let Ok(path) = std::env::var(super::evidence::EVIDENCE_ENV) {
+            let backend = executor.backend();
+            let records: Vec<super::evidence::EvidenceRecord> = results
+                .iter()
+                .map(|result| {
+                    let opt =
+                        super::evidence::opt_level_from_flags(&result.test.config.compile_flags);
+                    super::evidence::EvidenceRecord::from_result(result, backend, opt)
+                })
+                .collect();
+            match super::evidence::write_evidence(std::path::Path::new(&path), &records) {
+                Ok(bytes) => eprintln!("evidence written to {path} ({bytes} bytes)"),
+                // Loud failure with a remedy; the diagnostic names the env
+                // var and the schema rule that was violated.
+                Err(err) => eprintln!("{:?}", miette::Report::new(err)),
+            }
+        }
+
         ExecutionResult { results, summary }
     }
 

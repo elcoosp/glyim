@@ -2,7 +2,6 @@ use super::executor::{TestOutcome, TestResult};
 use super::plan::TestSummary;
 use std::io::Write;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-
 /// `TestReporter`.
 pub struct TestReporter {
     verbose: bool,
@@ -51,7 +50,15 @@ impl TestReporter {
         );
 
         if std::env::var("GLYIM_TEST_JSON").is_ok() {
-            self.write_json(results, &summary);
+            // Loud failure: a dropped JSON report is a real defect (the
+            // consumer may gate on it), so it prints a miette-rendered
+            // diagnostic instead of vanishing into a `let _ =`.
+            if let Err(err) = self.write_json(results, &summary) {
+                let report =
+                    miette::Report::msg(format!("JSON test report could not be written: {err}"));
+                eprintln!("{report:?}");
+                eprintln!("help: ensure the working directory is writable and `target/` exists");
+            }
         }
 
         summary
@@ -63,8 +70,14 @@ impl TestReporter {
         let _ = stream.reset();
     }
 
-    #[cfg(feature = "json-output")]
-    fn write_json(&self, results: &[TestResult], summary: &TestSummary) {
+    /// Serialises the run to `target/test-results.json` when
+    /// `GLYIM_TEST_JSON` is set.
+    ///
+    /// Errors are returned, not swallowed: a run whose JSON report was
+    /// silently dropped used to look identical to one that wrote it —
+    /// the M0 weak-error rail flags exactly that shape. Console write
+    /// failures (broken pipe) still degrade gracefully via `let _ =`.
+    fn write_json(&self, results: &[TestResult], summary: &TestSummary) -> std::io::Result<()> {
         use serde::Serialize;
         #[derive(Serialize)]
         struct Out {
@@ -108,14 +121,10 @@ impl TestReporter {
             ignored: summary.ignored,
             tests,
         };
-        if let Ok(s) = serde_json::to_string_pretty(&out) {
-            let _ = std::fs::write("target/test-results.json", s);
-            eprintln!("JSON results written to target/test-results.json");
-        }
-    }
 
-    #[cfg(not(feature = "json-output"))]
-    fn write_json(&self, _results: &[TestResult], _summary: &TestSummary) {
-        eprintln!("Note: Enable 'json-output' feature for JSON output");
+        let text = serde_json::to_string_pretty(&out).map_err(std::io::Error::other)?;
+        std::fs::write("target/test-results.json", text)?;
+        eprintln!("JSON results written to target/test-results.json");
+        Ok(())
     }
 }

@@ -4,6 +4,8 @@ pub mod collector;
 pub mod compiler;
 /// config.
 pub mod config;
+/// Evidence records for the readiness ledger (M1.5).
+pub mod evidence;
 /// executor.
 pub mod executor;
 pub mod interpreter_runner;

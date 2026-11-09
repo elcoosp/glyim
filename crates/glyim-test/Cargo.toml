@@ -6,7 +6,6 @@ version.workspace = true
 
 [features]
 default = []
-json-output = ["serde", "serde_json"]
 # Real LLVM backend for the `runtime` integration test. When enabled, the
 # `PipelineCompiler` harness produces a real native object (via
 # `glyim-codegen-llvm`), links it, and executes it — turning the M5 fixtures
@@ -53,19 +52,26 @@ tracing          = { workspace = true }
 tracing-subscriber = { workspace = true }
 parking_lot      = { workspace = true }
 rayon            = { workspace = true }
+miette           = { workspace = true }
+sha2             = { workspace = true }
+serde            = { version = "1.0", features = ["derive"] }
+serde_json       = { workspace = true }
 similar          = "3"
 termcolor        = "1.4"
 walkdir          = "2"
 regex            = "1"
 shell-words      = "1.1"
 rand             = "0.10"
-serde            = { version = "1.0", features = ["derive"], optional = true }
-serde_json       = { workspace = true, optional = true }
 
 [[bench]]
 name = "annotations"
 harness = false
 path = "benches/annotations.rs"
+
+[[bench]]
+name = "evidence"
+harness = false
+path = "benches/evidence.rs"
 
 [dev-dependencies]
 tempfile = "3"
