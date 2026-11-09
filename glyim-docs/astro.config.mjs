@@ -7,15 +7,14 @@ import headingBadges from 'starlight-heading-badges';
 
 // https://astro.build/config
 export default defineConfig({
+  site: 'https://glyim.vercel.app',
         integrations: [
                 starlight({
                         title: 'Glyim',
                         description:
                                 'Documentation for Glyim, a modular, from-scratch compiler for a Rust-like systems programming language, written in Rust.',
-                        logo: {
-                                light: './src/assets/logo-light.png',
-                                dark: './src/assets/logo-dark.png',
-                        },
+
+                        logo: { src: './src/assets/logo.png' },
                         favicon: '/favicon.png',
                         customCss: ['./src/styles/custom.css'],
                         social: [

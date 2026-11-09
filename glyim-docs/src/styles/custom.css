@@ -14,15 +14,15 @@
  */
 
 :root {
-        --sl-color-accent-low: hsl(200, 40%, 92%);
-        --sl-color-accent: hsl(200, 48%, 32%);
-        --sl-color-accent-high: hsl(200, 52%, 25%);
+        --sl-color-accent-low: hsl(0 30% 93%);
+        --sl-color-accent: hsl(0 30% 35%);
+        --sl-color-accent-high: hsl(0 30% 28%);
 }
 
 [data-theme='dark'] {
-        --sl-color-accent-low: hsl(200, 42%, 14%);
-        --sl-color-accent: hsl(199, 45%, 58%);
-        --sl-color-accent-high: hsl(197, 48%, 74%);
+        --sl-color-accent-low: hsl(0 30% 16%);
+        --sl-color-accent: hsl(0 30% 60%);
+        --sl-color-accent-high: hsl(0 30% 75%);
 }
 
 /* Keep the header logo crisp next to the wordmark. */
