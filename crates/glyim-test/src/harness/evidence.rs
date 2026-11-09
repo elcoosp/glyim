@@ -234,6 +234,11 @@ pub fn reason_class(reason: &crate::error::FailureReason) -> String {
         F::ErrorPatternNotFound { .. } => "error pattern not found".to_string(),
         F::UiOutputDiffers { .. } => "ui output differs".to_string(),
         F::UiNoExpectedFile { .. } => "ui expected file missing".to_string(),
+        F::UiExpectedUnreadable { .. } => "ui expected file unreadable".to_string(),
+        // The gap ID is registry-stable (a `[[gap]] id` under
+        // ledger/gaps/**), so embedding it keeps the class aggregatable
+        // per gap without exposing free-form compiler text.
+        F::KnownGapClosed { gap } => format!("known-gap closed: {gap}"),
         F::TimeoutExceeded { .. } | F::RunTimeout { .. } => "timeout exceeded".to_string(),
         F::CompilationFailed { phase, .. } => format!("compilation failed at {phase}"),
         F::NeedUnsatisfiable { need, .. } => format!("need unsatisfiable: {need}"),
