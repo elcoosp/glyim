@@ -917,6 +917,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "glyim-bench"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "libc",
+ "miette",
+ "serde",
+ "serde_json",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "glyim-borrowck"
 version = "0.7.1"
 dependencies = [
@@ -1138,6 +1151,7 @@ name = "glyim-ledger"
 version = "0.1.0"
 dependencies = [
  "ledger-schema",
+ "miette",
  "serde_json",
  "tempfile",
 ]
@@ -1221,6 +1235,7 @@ dependencies = [
 name = "glyim-metrics"
 version = "0.1.0"
 dependencies = [
+ "miette",
  "serde_json",
 ]
 

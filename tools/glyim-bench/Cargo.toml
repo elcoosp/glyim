@@ -1,0 +1,34 @@
+[package]
+name = "glyim-bench"
+version = "0.1.0"
+edition = "2024"
+description = "M2.2 measurement harness: instruction counts (perf stat / callgrind), wall time, child RSS, a counting allocator, and the CoV stability gate"
+publish = false
+
+[dependencies]
+clap = { workspace = true }
+# `getrusage(RUSAGE_CHILDREN)` for the child RSS column; already in the
+# dependency graph transitively, promoted to a direct dependency here.
+libc = "0.2"
+miette = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[lib]
+name = "glyim_bench"
+path = "src/lib.rs"
+
+[[bin]]
+name = "glyim-bench"
+path = "src/main.rs"
+
+[[bench]]
+name = "runner_overhead"
+harness = false
+path = "benches/runner_overhead.rs"
+
+# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+[lints]
+workspace = true

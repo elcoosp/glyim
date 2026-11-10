@@ -45,6 +45,7 @@ members = [
     "crates/glyim-lang-alloc",
     "tools/glyim-metrics",
     "tools/glyim-pilot",
+    "tools/glyim-bench",
     "tools/ledger-schema",
     "tools/glyim-ledger",
 

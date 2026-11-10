@@ -1,0 +1,279 @@
+//! Typed errors for every measurement seam.
+//!
+//! Every variant implements [`miette::Diagnostic`] with an actionable `help`
+//! line — the same discipline as the `glyim-test` evidence seam (`EvidenceError`)
+//! and the fixture-header parser (`TestConfigError`): a failure must name the
+//! remedy, not just the symptom.
+
+use std::fmt;
+
+use crate::source::MeasurementSource;
+
+/// Errors produced by the harness runner, parsers, and CLI.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BenchError {
+    /// The run plan itself is invalid (e.g. zero iterations).
+    InvalidPlan {
+        /// What is wrong with the plan.
+        detail: String,
+    },
+    /// The requested counter source's wrapper program could not be launched
+    /// or reported failure on its own `--version` probe.
+    MeasurementSourceUnavailable {
+        /// The source that was requested.
+        source: MeasurementSource,
+        /// The wrapper program that failed to launch (`perf`, `valgrind`).
+        program: String,
+    },
+    /// `perf stat -x,` output could not be parsed into instruction/cycle
+    /// counters.
+    PerfStatParse {
+        /// What went wrong (unexpected row shape, no `instructions` event).
+        detail: String,
+    },
+    /// A callgrind output file had no parsable `summary:` line.
+    CallgrindParse {
+        /// What went wrong.
+        detail: String,
+    },
+    /// The measured (or wrapper) program could not be spawned.
+    CommandLaunch {
+        /// The program that failed to spawn.
+        program: String,
+        /// The underlying IO error message.
+        detail: String,
+    },
+    /// An iteration of the measured command exited non-zero (or was
+    /// terminated by a signal).
+    ChildFailed {
+        /// The measured program.
+        program: String,
+        /// Exit code, or `None` when terminated by a signal.
+        code: Option<i32>,
+    },
+    /// A report file could not be read.
+    ReportRead {
+        /// The report path.
+        path: String,
+        /// The underlying IO error message.
+        detail: String,
+    },
+    /// A report file's contents are not a valid `glyim.bench/1` document.
+    ReportParse {
+        /// The deserialisation error message.
+        detail: String,
+    },
+    /// A report file could not be written.
+    ReportWrite {
+        /// The report path.
+        path: String,
+        /// The underlying IO error message.
+        detail: String,
+    },
+    /// The stability gate failed: the measured metric's coefficient of
+    /// variation exceeded the budget.
+    GateFailed {
+        /// Which metric failed (`instructions` or `wall_ns`).
+        metric: String,
+        /// Measured CoV, in percent.
+        cov_pct: f64,
+        /// Allowed CoV, in percent.
+        max_cov_pct: f64,
+    },
+}
+
+impl fmt::Display for BenchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidPlan { detail } => write!(f, "invalid bench plan: {detail}"),
+            Self::MeasurementSourceUnavailable { source, program } => write!(
+                f,
+                "measurement source {source} is unavailable: `{program}` could not be launched"
+            ),
+            Self::PerfStatParse { detail } => write!(f, "cannot parse `perf stat` output: {detail}"),
+            Self::CallgrindParse { detail } => {
+                write!(f, "cannot parse callgrind output: {detail}")
+            }
+            Self::CommandLaunch { program, detail } => {
+                write!(f, "cannot launch `{program}`: {detail}")
+            }
+            Self::ChildFailed { program, code } => match code {
+                Some(code) => write!(f, "`{program}` exited with status {code}"),
+                None => write!(f, "`{program}` was terminated by a signal"),
+            },
+            Self::ReportRead { path, detail } => write!(f, "cannot read {path}: {detail}"),
+            Self::ReportParse { detail } => write!(f, "invalid bench report: {detail}"),
+            Self::ReportWrite { path, detail } => write!(f, "cannot write {path}: {detail}"),
+            Self::GateFailed {
+                metric,
+                cov_pct,
+                max_cov_pct,
+            } => write!(
+                f,
+                "stability gate failed: {metric} CoV {cov_pct:.3}% exceeds budget {max_cov_pct:.3}%"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for BenchError {}
+
+impl miette::Diagnostic for BenchError {
+    fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        Some(Box::new(match self {
+            Self::InvalidPlan { .. } => "glyim-bench::invalid_plan",
+            Self::MeasurementSourceUnavailable { .. } => "glyim-bench::source_unavailable",
+            Self::PerfStatParse { .. } => "glyim-bench::perf_stat_parse",
+            Self::CallgrindParse { .. } => "glyim-bench::callgrind_parse",
+            Self::CommandLaunch { .. } => "glyim-bench::command_launch",
+            Self::ChildFailed { .. } => "glyim-bench::child_failed",
+            Self::ReportRead { .. } => "glyim-bench::report_read",
+            Self::ReportParse { .. } => "glyim-bench::report_parse",
+            Self::ReportWrite { .. } => "glyim-bench::report_write",
+            Self::GateFailed { .. } => "glyim-bench::gate_failed",
+        }))
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        Some(Box::new(match self {
+            Self::InvalidPlan { .. } => {
+                "pass a positive `--iterations` count (the M2.2 gate expects 10)"
+                    .to_string()
+            }
+            Self::MeasurementSourceUnavailable { source, .. } => match source {
+                MeasurementSource::PerfStat => {
+                    "install `perf` (linux-tools for your kernel) or run with \
+                     `--source wall` for wall-clock-only sampling"
+                        .to_string()
+                }
+                MeasurementSource::Callgrind => {
+                    "install `valgrind` (the callgrind tool ships with it) or run \
+                     with `--source perf` / `--source wall`"
+                        .to_string()
+                }
+                MeasurementSource::WallOnly => {
+                    "wall-clock sampling needs no external tools; this indicates \
+                     a broken PATH — check that the shell can spawn processes"
+                        .to_string()
+                }
+            },
+            Self::PerfStatParse { .. } => {
+                "the harness expects `perf stat -x,` CSV rows (count,unit,event,..); \
+                 re-run with `--source wall` to isolate a format drift, and pin \
+                 the perf version in the environment"
+                    .to_string()
+            }
+            Self::CallgrindParse { .. } => {
+                "callgrind writes a final `summary: <Ir>` line when the run \
+                 completes; ensure `--callgrind-out-file` points at the file \
+                 this harness parses and that the child was not killed"
+                    .to_string()
+            }
+            Self::CommandLaunch { program, .. } => {
+                format!("check that `{program}` exists and is executable on PATH")
+            }
+            Self::ChildFailed { .. } => {
+                "every measured iteration must succeed for the samples to be \
+                 comparable; fix the child's failure (or its exit code) first"
+                    .to_string()
+            }
+            Self::ReportRead { .. } => {
+                "check the path passed to `glyim-bench gate` / `--json` and its \
+                 permissions"
+                    .to_string()
+            }
+            Self::ReportParse { .. } => {
+                "reports are `glyim.bench/1` JSON documents with a strict \
+                 (deny_unknown_fields) schema; regenerate with \
+                 `glyim-bench run --json <path> -- <command>`"
+                    .to_string()
+            }
+            Self::ReportWrite { .. } => {
+                "check that the parent directory exists and is writable; the \
+                 harness does not create nested directories implicitly"
+                    .to_string()
+            }
+            Self::GateFailed { .. } => {
+                "raise `--iterations` (the M2.2 gate expects 10 runs), pin the \
+                 machine (disable turbo/ASLR where possible), or investigate \
+                 the outlier samples in the report before trusting any delta"
+                    .to_string()
+            }
+        }))
+    }
+
+    fn severity(&self) -> Option<miette::Severity> {
+        Some(miette::Severity::Error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BenchError;
+    use crate::source::MeasurementSource;
+
+    #[test]
+    fn every_variant_renders_with_help_text() {
+        let errors = [
+            BenchError::InvalidPlan {
+                detail: "zero iterations".into(),
+            },
+            BenchError::MeasurementSourceUnavailable {
+                source: MeasurementSource::PerfStat,
+                program: "perf".into(),
+            },
+            BenchError::PerfStatParse {
+                detail: "no instructions row".into(),
+            },
+            BenchError::CallgrindParse {
+                detail: "no summary line".into(),
+            },
+            BenchError::CommandLaunch {
+                program: "nope".into(),
+                detail: "No such file".into(),
+            },
+            BenchError::ChildFailed {
+                program: "fail".into(),
+                code: Some(3),
+            },
+            BenchError::ReportRead {
+                path: "r.json".into(),
+                detail: "missing".into(),
+            },
+            BenchError::ReportParse {
+                detail: "bad json".into(),
+            },
+            BenchError::ReportWrite {
+                path: "r.json".into(),
+                detail: "denied".into(),
+            },
+            BenchError::GateFailed {
+                metric: "instructions".into(),
+                cov_pct: 0.5,
+                max_cov_pct: 0.1,
+            },
+        ];
+        for err in errors {
+            assert!(!err.to_string().is_empty(), "{err:?} must render");
+            let help = miette::Diagnostic::help(&err)
+                .expect("every BenchError variant must carry help text");
+            assert!(
+                !help.to_string().is_empty(),
+                "{err:?} help text must be non-empty"
+            );
+            assert_eq!(
+                miette::Diagnostic::severity(&err),
+                Some(miette::Severity::Error)
+            );
+        }
+    }
+
+    #[test]
+    fn display_names_the_program_and_code() {
+        let err = BenchError::ChildFailed {
+            program: "glyim".into(),
+            code: Some(101),
+        };
+        assert_eq!(err.to_string(), "`glyim` exited with status 101");
+    }
+}
