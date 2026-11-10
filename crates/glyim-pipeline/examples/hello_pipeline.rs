@@ -53,15 +53,20 @@ fn main() {
 
     // 3. Lower to MIR. Errors come back as `Vec<GlyimDiagnostic>`,
     //    rendered with miette — the same diagnostics the CLI prints.
+    //    Success also carries the per-phase profile (M2.1): the same
+    //    data `glyim --time-passes` prints, free for library consumers.
     let out = dir.join("hello.mir");
     match glyim_pipeline::emit_mir(&mut db, &source, &out, None) {
-        Ok(()) => {
+        Ok(profile) => {
             let text = std::fs::read_to_string(&out).unwrap_or_default();
             println!("MIR written to {} ({} bytes)\n", out.display(), text.len());
             // Show the head so the example's output is self-describing.
             for line in text.lines().take(24) {
                 println!("{line}");
             }
+            // The phase table: deterministic schema, wall-clock numbers.
+            println!("\nPhase profile for this compile:");
+            print!("{}", profile.render_text());
         }
         Err(diags) => {
             for diag in diags {
