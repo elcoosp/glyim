@@ -5,35 +5,36 @@ use std::str::FromStr;
 use crate::annotations::directives::{self, FixtureAnnotations};
 
 #[derive(Clone, Debug)]
-/// `TestConfig`.
+/// The per-fixture configuration a fixture header (legacy `//` or canonical
+/// `//@`) resolves to; every collector/executor decision reads from here.
 pub struct TestConfig {
-    /// `Struct`.
+    /// Test mode (compile-pass, compile-fail, ui, run-pass, run-fail).
     pub mode: TestMode,
-    /// `Struct`.
+    /// Named revision blocks (`[rev]` headers) declared by the fixture.
     pub revisions: Vec<String>,
-    /// `Struct`.
+    /// Per-revision compile flags (`[rev NAME] compile-flags:`).
     pub revision_compile_flags: HashMap<String, Vec<String>>,
-    /// `Struct`.
+    /// Extra flags passed to the compiler for every revision.
     pub compile_flags: Vec<String>,
-    /// `Struct`.
+    /// Diagnostic substrings a `compile-fail` fixture must produce.
     pub error_patterns: Vec<String>,
-    /// `Struct`.
+    /// Whether the fixture needs the real LLVM backend (`//@ needs-llvm`).
     pub needs_llvm: bool,
-    /// `Struct`.
+    /// Minimum harness/tool version the fixture requires.
     pub min_version: Option<String>,
-    /// `Struct`.
+    /// Structural skip (`//@ ignore`): the fixture never runs.
     pub ignore: bool,
-    /// `Struct`.
+    /// Runner triple gate (`//@ only-target:`): run only on this triple.
     pub only_target: Option<String>,
-    /// `Struct`.
+    /// Auxiliary files copied next to the fixture before compiling.
     pub aux_files: Vec<PathBuf>,
-    /// `Struct`.
+    /// Per-run timeout in seconds (default 60).
     pub timeout_secs: u64,
-    /// `Struct`.
+    /// Substring that must appear on the program's stdout.
     pub check_stdout: Option<String>,
-    /// `Struct`.
+    /// Substring that must appear on the program's stderr.
     pub check_stderr: Option<String>,
-    /// `Struct`.
+    /// The exit code a run fixture must produce.
     pub expected_exit_code: Option<i32>,
     /// §3.5.30 item 4: warning-presence assertions for `compile-pass`
     /// fixtures. Each pattern must match at least one warning diagnostic
@@ -86,22 +87,23 @@ impl Default for TestConfig {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-/// `TestMode`.
+/// The five fixture modes the harness executes; also the directory-name
+/// taxonomy of `crates/glyim-test/tests/`.
 pub enum TestMode {
-    /// `Variant`.
+    /// The source must compile without errors.
     CompilePass,
-    /// `Variant`.
+    /// The source must produce specific errors (inline annotations).
     CompileFail,
-    /// `Variant`.
+    /// The full compiler output must match an `.expected` snapshot.
     Ui,
-    /// `Variant`.
+    /// The compiled program must exit successfully and match its output.
     RunPass,
-    /// `Variant`.
+    /// The compiled program must fail with a specific exit code and output.
     RunFail,
 }
 
 impl FromStr for TestMode {
-    type Err = String;
+    type Err = TestModeError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim() {
             "compile-pass" => Ok(Self::CompilePass),
@@ -109,19 +111,57 @@ impl FromStr for TestMode {
             "ui" => Ok(Self::Ui),
             "run-pass" => Ok(Self::RunPass),
             "run-fail" => Ok(Self::RunFail),
-            other => Err(format!(
-                "unknown test-mode: {other:?}. Expected: compile-pass, compile-fail, ui, run-pass, run-fail"
-            )),
+            other => Err(TestModeError {
+                bad_value: other.to_string(),
+            }),
         }
     }
 }
 
+/// A typed test-mode parse failure.
+///
+/// Micro-debt cleanup (same debt class as the ledger/metrics CLI errors
+/// fixed earlier): `TestMode: FromStr` used to carry `Err = String`, so
+/// callers embedding the message had to re-state the remedy themselves. The
+/// typed error renders through `miette` (the same pipeline as
+/// [`TestConfigError`]) and carries an actionable `help` line pointing at
+/// the canonical mode list. The `Display` text is byte-identical to the
+/// former string error, so message-substring assertions keep passing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestModeError {
+    /// The unrecognized mode spelling (after trimming).
+    pub bad_value: String,
+}
+
+impl std::fmt::Display for TestModeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "unknown test-mode: {:?}. Expected: compile-pass, compile-fail, ui, run-pass, run-fail",
+            self.bad_value
+        )
+    }
+}
+
+impl std::error::Error for TestModeError {}
+
+impl miette::Diagnostic for TestModeError {
+    fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        Some(Box::new(
+            "canonical modes: compile-pass, compile-fail, ui, run-pass, run-fail \
+             (see the `//@ mode:` grammar in the README's Testing section)",
+        ))
+    }
+}
+
 impl TestMode {
-    /// `from_str_exact`.
-    pub fn from_str_exact(s: &str) -> Result<Self, String> {
+    /// Parse a mode spelling, forwarding to `TestMode::from_str` (which
+    /// trims surrounding whitespace). Call sites that surface the failure
+    /// to users get the typed [`TestModeError`] with its help text.
+    pub fn from_str_exact(s: &str) -> Result<Self, TestModeError> {
         s.parse()
     }
-    /// `dir_name`.
+    /// The directory name this mode's fixtures live under.
     #[must_use]
     pub fn dir_name(self) -> &'static str {
         match self {
@@ -134,12 +174,14 @@ impl TestMode {
     }
 }
 
-/// `ParsedConfig`.
+/// A fixture header parse result: the resolved config plus what the header
+/// actually declared (needed by the M1.4 annotation gates).
 #[derive(Debug)]
 pub struct ParsedConfig {
-    /// `Struct`.
+    /// The resolved fixture configuration.
     pub config: TestConfig,
-    /// `Struct`.
+    /// Whether the mode came from an explicit header (vs a directory
+    /// default).
     pub has_explicit_mode: bool,
     /// `M1.4`: whether the fixture carried at least one `//@` directive.
     pub has_annotations: bool,
@@ -240,7 +282,9 @@ pub fn parse_test_config(source: &str) -> Result<ParsedConfig, TestConfigError> 
             legacy_seen.insert("test-mode");
             config.mode = value
                 .parse::<TestMode>()
-                .map_err(|msg| TestConfigError { message: msg })?;
+                .map_err(|e| TestConfigError {
+                    message: e.to_string(),
+                })?;
             has_explicit_mode = true;
         } else if let Some(value) = content.strip_prefix("revisions:") {
             legacy_seen.insert("revisions");

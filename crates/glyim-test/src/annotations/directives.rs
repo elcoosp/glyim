@@ -218,7 +218,10 @@ fn parse_directive_body(
             if out.mode.is_some() {
                 return err(lineno, "duplicate `mode:` directive");
             }
-            let mode: TestMode = value.parse().map_err(|e: String| (lineno, e))?;
+            // `TestMode: FromStr` carries the typed `TestModeError`; the
+            // directive-level error stays `(line, message)`, so flatten the
+            // diagnostic to its `Display` text here.
+            let mode: TestMode = value.parse().map_err(|e| (lineno, e.to_string()))?;
             out.mode = Some(mode);
             Ok(())
         }
