@@ -771,31 +771,14 @@ fn rewrite_for_poll(
     );
 }
 
-/// Compute, for each suspend point `k`, the set of local bindings that are
-/// *live after* suspend point `k` (i.e. referenced by some expression that
-/// executes after `k`). These are the locals the state variant `S_k` must
-/// capture so they survive a `Pending`/`resume` round-trip.
-///
-/// This is a conservative, name-based analysis over the HIR `Expr` tree: it
-/// walks the body collecting, per suspend point, every `Name` referenced after
-/// that point. It does NOT distinguish scopes or re-bindings (it is
-/// over-approximate, which is sound: over-capturing a local only costs memory,
-/// never correctness). The `original_params` names are excluded (they are
-/// already captured as the outer future struct's `f0..fn` fields and reachable
-/// via `self.fN`).
-/// Compute, for each suspend point `k`, the set of local bindings that are
-/// *live after* suspend point `k`. Scaffold for the deferred multi-await v1
-/// transform; not yet wired into dispatch.
-/// Build the state-enum HIR item `FooState` with Start, S0..S{n-1}, Done variants.
-/// Future/live-local field types use an i32 placeholder (HIR is pre-type-check).
-/// See module docs / section 6.1 for the type-check gap.
-/// Build the `FooState` enum for the (deferred) multi-await v1 transform.
-/// Retained as scaffold; the real v1 is the post-MIR pass in
-/// `glyim-lower/src/async_state_transform.rs` (see plan §Phase 3). Marked
-/// `allow(dead_code)` because it is not yet wired into the dispatch.
 /// Build the outer future wrapper struct: `struct FooFuture { state: FooState }`.
-/// Build the outer future wrapper struct. Scaffold for the deferred multi-await
-/// v1 transform (the real v1 is a post-MIR pass); not yet wired into dispatch.
+///
+/// Shared by both desugar paths: `rewrite_for_poll` (single-poll) and
+/// `desugar_multi_async_fn` (multi-await resume-dispatch) both call this.
+/// Historical note: an earlier revision of this doc called the helper an
+/// unwired scaffold carrying a nonexistent `allow(dead_code)`; the
+/// multi-await v1 resume-dispatch has since landed (plan §Phase 3 / M4)
+/// and this helper is on its live path.
 fn build_future_wrapper_struct(
     hir: &mut crate::CrateHir,
     future_name: &str,
@@ -822,9 +805,9 @@ fn build_future_wrapper_struct(
 }
 
 /// Build `impl Future for FooFuture { type Output = R; fn poll(&mut self) -> Poll<R> }`.
-/// Shared by both the single-poll and multi-poll desugar paths.
-/// Build `impl Future for FooFuture`. Scaffold for the deferred multi-await v1
-/// transform (the real v1 is a post-MIR pass); not yet wired into dispatch.
+/// Shared by both the single-poll and multi-poll desugar paths (the same
+/// "scaffold, not wired in" note that used to sit here was stale — see
+/// `build_future_wrapper_struct`).
 fn build_future_impl(
     hir: &mut crate::CrateHir,
     future_name: &str,
@@ -869,14 +852,15 @@ fn build_future_impl(
     }
 }
 
-/// Multi-poll state-machine desugar. Builds the state enum, future wrapper,
+/// Multi-poll state-machine desugar: builds the state enum, future wrapper,
 /// `impl Future` with a `loop { match self.state { .. } }` poll body, and the
-/// wrapper fn. Retained as scaffold for the deferred v1 resume-dispatch; the
-/// real v1 is the post-MIR pass (plan §Phase 3). Currently NOT invoked from
-/// `desugar_async` because its emitted poll body is a broken skeleton
-/// (`S_k` arms hardcode `Poll::Pending`, `Done` panics) that would hang
-/// forever — the dispatch instead emits a clear diagnostic for multi-await
-/// bodies. See module docs for the type-check gap.
+/// wrapper fn. This IS the real v1 resume-dispatch for multi-await
+/// sequential bodies (plan §Phase 3 / M4): `desugar_async` routes every
+/// body with `suspend_count >= 2` and no loop-await here. An earlier
+/// revision of this doc called the function an uninvoked "broken
+/// skeleton" scaffold — that was true before the v1 dispatch landed and
+/// is false today; see the `desugar_async` call site and the module docs
+/// for the type-check gap.
 /// Multi-await (sequential, `suspend_count >= 2`, no loop-await) async state
 /// machine desugar — the real v1 resume-dispatch (plan §Phase 3 / M4).
 ///
