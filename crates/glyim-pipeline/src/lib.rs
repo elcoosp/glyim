@@ -1,4 +1,5 @@
 //! Crate root.
+pub mod phase_prof;
 use glyim_codegen::CodegenBackend;
 use glyim_codegen_llvm::LlvmBackend;
 use glyim_core::def_id::TraitDefId as SolveTraitDefId;
@@ -20,6 +21,7 @@ use glyim_type::TraitRef;
 use glyim_type::Ty;
 use glyim_type::TyKind;
 use glyim_typeck::tyconv;
+pub use phase_prof::{Phase, PhaseProfile, StatsReport};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
@@ -104,6 +106,9 @@ pub struct CompileArtifacts {
     /// to act on it. Before this field existed the CLI discarded every
     /// non-error diagnostic on success.
     pub warnings: Vec<GlyimDiagnostic>,
+    /// Per-phase wall-clock profile of the compile that produced these
+    /// artifacts (`--time-passes` / `--self-profile` read this).
+    pub profile: PhaseProfile,
 }
 
 /// Everything produced by the *front half* of the pipeline — parse → expand →
@@ -122,6 +127,11 @@ pub(crate) struct PreparedCompilation {
     pub typeck_result: glyim_typeck::TypeckResult,
     /// Frozen type context (also published on the `Database`).
     pub ty_ctx: Arc<glyim_type::TyCtx>,
+    /// Per-phase wall-clock profile of the compile that produced this
+    /// value (the `--time-passes` / `--self-profile` / `--emit=stats`
+    /// backbone). Recorded unconditionally; the cost is one `Instant`
+    /// pair plus two `Cell` writes per phase.
+    pub profile: PhaseProfile,
     /// Monomorphized + optimized MIR bodies, ready for codegen, each paired
     /// with its mangled LLVM symbol (`__glyim_fn_<id>[_<i>_<len>]`, see
     /// `glyim_type::mangle_fn_symbol`). Threading the symbol from mono
@@ -357,17 +367,27 @@ impl Pipeline {
         // crates like stdlib are not forcibly monomorphized.
         emit_object: bool,
     ) -> CompResult<PreparedCompilation> {
+        // M2.1: every phase below brackets itself with the recorder; the
+        // snapshot travels out on `PreparedCompilation` so the CLI (or any
+        // library consumer) can render `--time-passes` / trace files.
+        let recorder = phase_prof::PhaseRecorder::new();
         let sink = DiagSink::new();
         let sink_cell = RefCell::new(sink);
 
-        let (file_id, source) = match load_crate_source(db, path) {
-            Ok(pair) => pair,
-            Err(mod_diags) => {
-                sink_cell.borrow_mut().extend(mod_diags);
-                return Err(sink_cell.into_inner().into_diagnostics());
+        let (file_id, source) = {
+            let _guard = recorder.enter(Phase::Load);
+            match load_crate_source(db, path) {
+                Ok(pair) => pair,
+                Err(mod_diags) => {
+                    sink_cell.borrow_mut().extend(mod_diags);
+                    return Err(sink_cell.into_inner().into_diagnostics());
+                }
             }
         };
-        let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
+        let parse_result = {
+            let _guard = recorder.enter(Phase::Parse);
+            glyim_frontend::parse_to_syntax(&source, file_id)
+        };
         sink_cell
             .borrow_mut()
             .extend(parse_result.diagnostics.clone());
@@ -388,6 +408,7 @@ impl Pipeline {
         // it on the same expander, preserving the previous proc-macro
         // behavior exactly.
         let expanded_root = {
+            let _guard = recorder.enter(Phase::Expand);
             let mut hygiene = glyim_span::HygieneCtx::new();
             let mut expander = glyim_meta::Expander::new(&mut hygiene);
             // Anchor `file!`/`include!`/`line!` to the real source and let
@@ -408,18 +429,23 @@ impl Pipeline {
             }
             expanded
         };
-        let (def_map, def_diagnostics) =
-            glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone());
+        let (def_map, def_diagnostics) = {
+            let _guard = recorder.enter(Phase::DefMap);
+            glyim_def_map::build_def_map(&expanded_root, db.krate(), db.interner().clone())
+        };
         sink_cell.borrow_mut().extend(def_diagnostics);
         if sink_cell.borrow().has_errors() {
             return Err(sink_cell.into_inner().into_diagnostics());
         }
 
-        let (hir, hir_diags) = glyim_hir::pipeline_api::lower_crate_for_pipeline_with_file_id(
-            &expanded_root,
-            db.intern_mut(),
-            file_id,
-        );
+        let (hir, hir_diags) = {
+            let _guard = recorder.enter(Phase::Hir);
+            glyim_hir::pipeline_api::lower_crate_for_pipeline_with_file_id(
+                &expanded_root,
+                db.intern_mut(),
+                file_id,
+            )
+        };
 
         sink_cell.borrow_mut().extend(hir_diags.clone());
 
@@ -448,7 +474,12 @@ impl Pipeline {
         // §3.5.30 framework: forward per-lint levels from the Database.
         ty_ctx_mut.set_lints(db.lints().clone());
         let mut trait_ctx = glyim_solve::TraitContext::new();
-        register_builtin_traits(&mut trait_ctx, db.interner());
+        {
+            // Impl-header/alias resolution feeds typeck; charge it to the
+            // typeck slot (accumulates with the `typeck_crate` call below).
+            let _guard = recorder.enter(Phase::Typeck);
+            register_builtin_traits(&mut trait_ctx, db.interner());
+        }
         // Register every ADT's name -> id up front so the impl-header
         // resolution below (which needs each impl's `Self` type to resolve,
         // e.g. `impl Future for twoFuture` / `impl Future for depFuture`) can
@@ -570,8 +601,10 @@ impl Pipeline {
             }
         }
         let mut solver = SimpleTraitSolver::new(&trait_ctx);
-        let (ty_ctx, typeck_result) =
-            glyim_typeck::typeck_crate(ty_ctx_mut, &def_map, &hir, &mut solver);
+        let (ty_ctx, typeck_result) = {
+            let _guard = recorder.enter(Phase::Typeck);
+            glyim_typeck::typeck_crate(ty_ctx_mut, &def_map, &hir, &mut solver)
+        };
         sink_cell
             .borrow_mut()
             .extend(typeck_result.diagnostics.clone());
@@ -602,7 +635,10 @@ impl Pipeline {
             > = std::collections::HashMap::new();
 
             for (_owner_def_id, thir_body) in &typeck_result.thir_bodies {
-                let mut lower_result = glyim_lower::lower_body(&lower_ctx, thir_body);
+                let mut lower_result = {
+                    let _guard = recorder.enter(Phase::Lower);
+                    glyim_lower::lower_body(&lower_ctx, thir_body)
+                };
                 // A never-instantiated generic template's placeholder `Err`
                 // nodes are expected; drop only that warning for such bodies.
                 drop_raw_generic_err_warnings(
@@ -619,7 +655,10 @@ impl Pipeline {
                 let mir_arc = Arc::new(mir_body);
 
                 let borrowck_ctx = PipelineBorrowckCtx::new(ty_ctx_ref, &mir_arc);
-                let borrowck_result = glyim_borrowck::check_borrows(&borrowck_ctx, &mir_arc);
+                let borrowck_result = {
+                    let _guard = recorder.enter(Phase::Borrowck);
+                    glyim_borrowck::check_borrows(&borrowck_ctx, &mir_arc)
+                };
                 sink_cell.borrow_mut().extend(borrowck_result.errors);
                 if sink_cell.borrow().has_errors() {
                     return Err(sink_cell.into_inner().into_diagnostics());
@@ -631,7 +670,10 @@ impl Pipeline {
                 // regression test relies on seeing).
                 pre_opt_bodies_map.insert(owner, mir_arc.clone());
 
-                let opt_body = glyim_opt::optimize(ty_ctx_ref, &mir_arc);
+                let opt_body = {
+                    let _guard = recorder.enter(Phase::Opt);
+                    glyim_opt::optimize(ty_ctx_ref, &mir_arc)
+                };
                 bodies.insert(owner, Arc::new(opt_body.body));
 
                 // P6.2: closures captured while lowering this function are real
@@ -650,13 +692,18 @@ impl Pipeline {
                     }
                     let c_mir_arc = Arc::new(cbody);
                     let c_borrowck_ctx = PipelineBorrowckCtx::new(ty_ctx_ref, &c_mir_arc);
-                    let c_borrowck_result =
-                        glyim_borrowck::check_borrows(&c_borrowck_ctx, &c_mir_arc);
+                    let c_borrowck_result = {
+                        let _guard = recorder.enter(Phase::Borrowck);
+                        glyim_borrowck::check_borrows(&c_borrowck_ctx, &c_mir_arc)
+                    };
                     sink_cell.borrow_mut().extend(c_borrowck_result.errors);
                     if sink_cell.borrow().has_errors() {
                         return Err(sink_cell.into_inner().into_diagnostics());
                     }
-                    let c_opt = glyim_opt::optimize(ty_ctx_ref, &c_mir_arc);
+                    let c_opt = {
+                        let _guard = recorder.enter(Phase::Opt);
+                        glyim_opt::optimize(ty_ctx_ref, &c_mir_arc)
+                    };
                     let c_body = c_opt.body;
                     let c_sym = format!("__glyim_fn_{}", c_body.owner.local_id.to_raw());
                     closure_bodies_codegen.push((c_sym, Arc::new(c_body)));
@@ -666,6 +713,7 @@ impl Pipeline {
         };
 
         let (mono_roots, discovery_diags) = {
+            let _guard = recorder.enter(Phase::Mono);
             let mut ty_ctx_mut_for_discovery = glyim_type::TyCtxMut::new(db.interner().clone());
             glyim_lower::discovery::discover_mono_roots(
                 &parse_result.root,
@@ -677,6 +725,7 @@ impl Pipeline {
         sink_cell.borrow_mut().extend(discovery_diags);
 
         let mono_items: Vec<glyim_lower::mono::MonoItemData> = {
+            let _guard = recorder.enter(Phase::Mono);
             let mut mono_ctx = MonoCtx::new();
             let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
             let ty_ctx_ref = ty_ctx_guard.as_ref();
@@ -825,6 +874,7 @@ impl Pipeline {
             // the full stdlib surface is not legal for those
             // (`stdlib_full_probe` regression, KNOWN_GAPS §3.5.20).
             let synthesized: Option<Vec<(String, Arc<Body>)>> = if emit_object {
+                let _guard = recorder.enter(Phase::Mono);
                 let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
                 let ty_ctx_ref = ty_ctx_guard.as_ref();
                 let empty_subst = glyim_type::Substitution::empty();
@@ -936,6 +986,7 @@ impl Pipeline {
             all_bodies,
             pre_opt_bodies,
             warnings,
+            profile: recorder.profile(),
         })
     }
 
@@ -954,13 +1005,23 @@ impl Pipeline {
         proc_registry: Option<&glyim_proc_macro::Registry>,
     ) -> CompResult<CompileArtifacts> {
         let prepared = Self::prepare_compilation(db, path, codegen_units, proc_registry, true)?;
+        let mut profile = prepared.profile;
         let out_path = if output_path.as_os_str().is_empty() {
             Path::new("output.o")
         } else {
             output_path
         };
         if !prepared.all_bodies.is_empty() {
-            backend.generate(&prepared.all_bodies, out_path)?;
+            // M2.1: charge backend code generation to the `codegen` slot of
+            // the same profile the front half filled in.
+            let cg_recorder = phase_prof::PhaseRecorder::new();
+            let generate_result = {
+                let _guard = cg_recorder.enter(Phase::Codegen);
+                backend.generate(&prepared.all_bodies, out_path)
+            };
+            generate_result?;
+            profile =
+                profile.with_micros(Phase::Codegen, cg_recorder.profile().micros(Phase::Codegen));
         }
         Ok(CompileArtifacts {
             def_map: prepared.def_map,
@@ -968,6 +1029,7 @@ impl Pipeline {
             mir_bodies: prepared.all_bodies,
             ty_ctx: prepared.ty_ctx,
             warnings: prepared.warnings,
+            profile,
         })
     }
 }
@@ -1063,7 +1125,7 @@ pub fn emit_mir(
     input: &Path,
     output: &Path,
     proc_registry: Option<&glyim_proc_macro::Registry>,
-) -> Result<(), Vec<GlyimDiagnostic>> {
+) -> Result<PhaseProfile, Vec<GlyimDiagnostic>> {
     // Route through the shared front half (`prepare_compilation`) so the
     // body goes through the same diagnostics, monomorphization, and
     // raw-generic filtering as every other emit mode. The previous
@@ -1097,7 +1159,7 @@ pub fn emit_mir(
     std::fs::write(output, out)
         .map_err(|e| vec![GlyimDiagnostic::internal_error(e.to_string())])?;
 
-    Ok(())
+    Ok(prepared.profile)
 }
 /// Emit the parser's output syntax tree (`--emit=syntax`).
 pub fn emit_syntax(
@@ -1105,22 +1167,32 @@ pub fn emit_syntax(
     input: &Path,
     output: &Path,
     proc_registry: Option<&glyim_proc_macro::Registry>,
-) -> Result<(), Vec<GlyimDiagnostic>> {
+) -> Result<PhaseProfile, Vec<GlyimDiagnostic>> {
+    // `--emit=syntax` is a parse-only dump: it does not run the shared front
+    // half. Its profile therefore covers exactly the two phases it executes
+    // (load + parse) so `--time-passes` stays meaningful in this mode.
+    let recorder = phase_prof::PhaseRecorder::new();
     let _ = (db, proc_registry);
-    let source = std::fs::read_to_string(input).map_err(|e| {
-        vec![GlyimDiagnostic::internal_error(format!(
-            "emit=syntax: read: {e}"
-        ))]
-    })?;
+    let source = {
+        let _guard = recorder.enter(Phase::Load);
+        std::fs::read_to_string(input).map_err(|e| {
+            vec![GlyimDiagnostic::internal_error(format!(
+                "emit=syntax: read: {e}"
+            ))]
+        })?
+    };
     let file_id = glyim_span::FileId::from_raw(0);
-    let parsed = glyim_frontend::parse_to_syntax(&source, file_id);
+    let parsed = {
+        let _guard = recorder.enter(Phase::Parse);
+        glyim_frontend::parse_to_syntax(&source, file_id)
+    };
     let dump = format!("{:#?}", parsed.root);
     std::fs::write(output, dump).map_err(|e| {
         vec![GlyimDiagnostic::internal_error(format!(
             "emit=syntax: write: {e}"
         ))]
     })?;
-    Ok(())
+    Ok(recorder.profile())
 }
 
 /// `emit_llvm_ir`.
@@ -1129,7 +1201,7 @@ pub fn emit_llvm_ir(
     input: &Path,
     output: &Path,
     proc_registry: Option<&glyim_proc_macro::Registry>,
-) -> Result<(), Vec<GlyimDiagnostic>> {
+) -> Result<PhaseProfile, Vec<GlyimDiagnostic>> {
     // Route through the shared front half (`prepare_compilation`) so the
     // bodies are monomorphized. The previous standalone implementation
     // stopped after `lower_body` — before `discover_mono_roots` /
@@ -1154,7 +1226,7 @@ pub fn emit_llvm_ir(
         ir.push('\n');
     }
     std::fs::write(output, ir).map_err(|e| vec![GlyimDiagnostic::internal_error(e.to_string())])?;
-    Ok(())
+    Ok(prepared.profile)
 }
 
 /// Compile a single `.g` file to **assembly** (`.s`) and write it to `output`.
@@ -1165,7 +1237,7 @@ pub fn emit_asm(
     input: &Path,
     output: &Path,
     proc_registry: Option<&glyim_proc_macro::Registry>,
-) -> Result<(), Vec<GlyimDiagnostic>> {
+) -> Result<PhaseProfile, Vec<GlyimDiagnostic>> {
     // Route through the shared front half (`prepare_compilation`) — see
     // `emit_llvm_ir` for why the standalone chain was wrong (it skipped
     // monomorphization, so generic bodies ICEd in `fn_abi_of`).
@@ -1178,7 +1250,27 @@ pub fn emit_asm(
                 "LLVM assembly generation failed: {e:?}"
             ))]
         })?;
-    Ok(())
+    Ok(prepared.profile)
+}
+
+/// Measure a compile without emitting code: run the shared front half
+/// (parse → expand → defmap → hir → typeck → lower → borrowck → opt →
+/// monomorphize) and return the per-phase profile plus the mono/warning
+/// counters. This is the engine behind `--emit=stats`.
+///
+/// Like every analysis-only path, no backend runs — the profile's
+/// `codegen` slot stays 0 (see [`Phase::Codegen`]).
+pub fn compile_stats(
+    db: &mut Database,
+    path: &Path,
+    proc_registry: Option<&glyim_proc_macro::Registry>,
+) -> Result<StatsReport, Vec<GlyimDiagnostic>> {
+    let prepared = Pipeline::prepare_compilation(db, path, None, proc_registry, false)?;
+    Ok(StatsReport {
+        profile: prepared.profile,
+        mono_bodies: prepared.all_bodies.len(),
+        warnings: prepared.warnings.len(),
+    })
 }
 
 fn format_body(body: &Body, ctx: &glyim_type::TyCtx) -> String {
