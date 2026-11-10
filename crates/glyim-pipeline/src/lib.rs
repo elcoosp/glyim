@@ -1042,6 +1042,20 @@ pub struct MirCompilation {
     pub def_map: glyim_def_map::CrateDefMap,
     /// The type context produced during type-checking (required by the interpreter).
     pub ty_ctx: Arc<glyim_type::TyCtx>,
+    /// Non-error diagnostics (warnings, notes) produced during a *successful*
+    /// compile, mirroring [`CompileArtifacts::warnings`]. Callers must render
+    /// them: an MIR-only runner that silently drops a warning gives its user
+    /// no way to act on it.
+    pub warnings: Vec<GlyimDiagnostic>,
+    /// Per-phase wall-clock profile of the compile that produced this value
+    /// (`--time-passes` / `--self-profile` read this in run mode), mirroring
+    /// [`CompileArtifacts::profile`]. Recorded unconditionally by the shared
+    /// front half, so every entry point publishes the same observability
+    /// side-channels.
+    ///
+    /// [`CompileArtifacts::warnings`]: CompileArtifacts::warnings
+    /// [`CompileArtifacts::profile`]: CompileArtifacts::profile
+    pub profile: PhaseProfile,
 }
 
 impl MirCompilation {
@@ -1097,17 +1111,39 @@ impl MirCompilation {
 /// This is the entry point used by `glyip test` and other runners that execute
 /// MIR bodies directly (e.g. via the in-process `glyim_mir_interp` interpreter)
 /// instead of producing a native object file.
+///
+/// Registry-less wrapper for [`compile_file_to_mir_with_proc_registry`], kept
+/// for the same reason as [`Pipeline::entry_main_local_id`]: unit-test and
+/// legacy callers that don't have a proc-macro registry to give. Runners that
+/// do (the `glyim` CLI's `--emit=run`, `glyip` with `proc-macro-deps`) must
+/// call the registry-threaded variant so item-emitting proc macros shift the
+/// `LocalDefId` numbering identically in the entry pre-pass and the compile.
 pub fn compile_file_to_mir(
     db: &mut Database,
     path: &Path,
 ) -> Result<MirCompilation, Vec<GlyimDiagnostic>> {
-    // P1-C9 (production-readiness plan §6): route through the shared front
-    // half. The previous standalone implementation re-implemented the
-    // pipeline inline and skipped borrowck + glyim_opt::optimize — a
-    // second, weaker language definition reachable via fuzz_compile and
-    // glyip test discovery. prepare_compilation runs every phase with the
-    // same diagnostics.
-    let prepared = Pipeline::prepare_compilation(db, path, None, None, false)?;
+    compile_file_to_mir_with_proc_registry(db, path, None)
+}
+
+/// Compile a single source file to MIR only, threading the proc-macro
+/// registry through the shared front half.
+///
+/// P1-C9 (production-readiness plan §6) routes this through
+/// `prepare_compilation` so every phase (borrowck, `glyim_opt::optimize`,
+/// monomorphization, the E0282 annotation check) runs exactly once with the
+/// same diagnostics — there is no second, weaker MIR-only language
+/// definition. The registry is threaded for the same reason
+/// [`Pipeline::entry_main_local_id_with_proc_registry`] exists: an
+/// item-emitting proc macro shifts `LocalDefId` numbering, and the entry
+/// pre-pass and the compile must agree on it or the wrong body runs.
+///
+/// [`Pipeline::entry_main_local_id_with_proc_registry`]: Pipeline::entry_main_local_id_with_proc_registry
+pub fn compile_file_to_mir_with_proc_registry(
+    db: &mut Database,
+    path: &Path,
+    proc_registry: Option<&glyim_proc_macro::Registry>,
+) -> Result<MirCompilation, Vec<GlyimDiagnostic>> {
+    let prepared = Pipeline::prepare_compilation(db, path, None, proc_registry, false)?;
     let mut bodies = std::collections::HashMap::with_capacity(prepared.all_bodies.len());
     for (_symbol, body) in prepared.all_bodies {
         bodies.insert(body.owner, body);
@@ -1116,6 +1152,8 @@ pub fn compile_file_to_mir(
         bodies,
         def_map: prepared.def_map,
         ty_ctx: prepared.ty_ctx,
+        warnings: prepared.warnings,
+        profile: prepared.profile,
     })
 }
 
