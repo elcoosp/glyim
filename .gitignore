@@ -9,5 +9,8 @@ dump.txt
 # local release script (delivery artifact, not repo content)
 /ship.sh
 
+# declarative delivery manifest consumed by ship (delivery artifact, not repo content)
+/ship.toml
+
 # session-local PR body (delivery artifact consumed by ship.sh, not repo content)
 .github/pr-body.md
