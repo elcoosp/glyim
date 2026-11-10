@@ -340,29 +340,23 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
             // and the emitted order fixed: original stmt, plain flag,
             // per-element flag.
             let element_flag = match &stmt.kind {
-                StatementKind::Assign(place, _) => {
-                    match flags.per_element.get(&place.local) {
-                        Some((flag_arr, _)) => {
-                            match place
-                                .projection
-                                .iter()
-                                .find(|p| matches!(p, ProjectionElem::Index(_)))
-                            {
-                                Some(ProjectionElem::Index(idx_local)) => {
-                                    Some(DropFlags::set_flag_stmt_indexed(
-                                        *flag_arr,
-                                        *idx_local,
-                                        true,
-                                        span,
-                                        &tc,
-                                    ))
-                                }
-                                _ => None,
+                StatementKind::Assign(place, _) => match flags.per_element.get(&place.local) {
+                    Some((flag_arr, _)) => {
+                        match place
+                            .projection
+                            .iter()
+                            .find(|p| matches!(p, ProjectionElem::Index(_)))
+                        {
+                            Some(ProjectionElem::Index(idx_local)) => {
+                                Some(DropFlags::set_flag_stmt_indexed(
+                                    *flag_arr, *idx_local, true, span, &tc,
+                                ))
                             }
+                            _ => None,
                         }
-                        None => None,
                     }
-                }
+                    None => None,
+                },
                 _ => None,
             };
             new_stmts.push(stmt);

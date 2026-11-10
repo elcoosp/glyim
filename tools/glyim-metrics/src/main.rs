@@ -173,8 +173,7 @@ impl miette::Diagnostic for MetricsCliError {
                     .to_string(),
             )),
             Self::Mkdir { .. } | Self::Write { .. } => Some(Box::new(
-                "check that the parent directory exists and is writable"
-                    .to_string(),
+                "check that the parent directory exists and is writable".to_string(),
             )),
             Self::RatchetFailed { .. } => Some(Box::new(
                 "fix the regressions, or re-baseline deliberately with \
@@ -194,18 +193,18 @@ fn parse_args() -> Result<Args, MetricsCliError> {
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--check" => {
-                check = Some(PathBuf::from(
-                    it.next().ok_or(MetricsCliError::MissingValue {
+                check = Some(PathBuf::from(it.next().ok_or(
+                    MetricsCliError::MissingValue {
                         flag: "--check".into(),
-                    })?,
-                ));
+                    },
+                )?));
             }
             "--write" => {
-                write = Some(PathBuf::from(
-                    it.next().ok_or(MetricsCliError::MissingValue {
+                write = Some(PathBuf::from(it.next().ok_or(
+                    MetricsCliError::MissingValue {
                         flag: "--write".into(),
-                    })?,
-                ));
+                    },
+                )?));
             }
             "-h" | "--help" => {
                 return Err(MetricsCliError::HelpRequested { usage: usage() });
@@ -247,11 +246,10 @@ fn run() -> Result<String, MetricsCliError> {
             serde_json::from_str(&raw).map_err(|e| MetricsCliError::BaselineJson {
                 detail: e.to_string(),
             })?;
-        let baseline = RepoMetrics::from_json(&value).map_err(|e| {
-            MetricsCliError::BaselineShape {
+        let baseline =
+            RepoMetrics::from_json(&value).map_err(|e| MetricsCliError::BaselineShape {
                 detail: e.to_string(),
-            }
-        })?;
+            })?;
         let regressions = Ratchet::check(&current, &baseline);
         if regressions.is_empty() {
             return Ok(format!(
@@ -276,10 +274,11 @@ fn run() -> Result<String, MetricsCliError> {
         return Err(MetricsCliError::RatchetFailed { detail: msg });
     }
 
-    let json = serde_json::to_string_pretty(&current.to_json())
-        .map_err(|e| MetricsCliError::Serialize {
+    let json = serde_json::to_string_pretty(&current.to_json()).map_err(|e| {
+        MetricsCliError::Serialize {
             detail: e.to_string(),
-        })?;
+        }
+    })?;
     if let Some(path) = args.write {
         if let Some(parent) = path.parent()
             && !parent.as_os_str().is_empty()
@@ -366,9 +365,12 @@ mod tests {
         ];
         for err in errors {
             assert!(!err.to_string().is_empty(), "{err:?} must render");
-            let help = miette::Diagnostic::help(&err)
-                .expect("every failure variant carries help text");
-            assert!(!help.to_string().is_empty(), "{err:?} help must be non-empty");
+            let help =
+                miette::Diagnostic::help(&err).expect("every failure variant carries help text");
+            assert!(
+                !help.to_string().is_empty(),
+                "{err:?} help must be non-empty"
+            );
         }
         // The help request is not a failure and deliberately has no help.
         let requested = MetricsCliError::HelpRequested { usage: usage() };

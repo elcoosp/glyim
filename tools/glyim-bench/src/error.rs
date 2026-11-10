@@ -114,7 +114,9 @@ impl fmt::Display for BenchError {
                 f,
                 "measurement source {source} is unavailable: `{program}` could not be launched"
             ),
-            Self::PerfStatParse { detail } => write!(f, "cannot parse `perf stat` output: {detail}"),
+            Self::PerfStatParse { detail } => {
+                write!(f, "cannot parse `perf stat` output: {detail}")
+            }
             Self::CallgrindParse { detail } => {
                 write!(f, "cannot parse callgrind output: {detail}")
             }
@@ -177,8 +179,7 @@ impl miette::Diagnostic for BenchError {
     fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
         Some(Box::new(match self {
             Self::InvalidPlan { .. } => {
-                "pass a positive `--iterations` count (the M2.2 gate expects 10)"
-                    .to_string()
+                "pass a positive `--iterations` count (the M2.2 gate expects 10)".to_string()
             }
             Self::MeasurementSourceUnavailable { source, .. } => match source {
                 MeasurementSource::PerfStat => {
@@ -222,12 +223,10 @@ impl miette::Diagnostic for BenchError {
                  permissions"
                     .to_string()
             }
-            Self::ReportParse { .. } => {
-                "reports are `glyim.bench/1` JSON documents with a strict \
+            Self::ReportParse { .. } => "reports are `glyim.bench/1` JSON documents with a strict \
                  (deny_unknown_fields) schema; regenerate with \
                  `glyim-bench run --json <path> -- <command>`"
-                    .to_string()
-            }
+                .to_string(),
             Self::ReportWrite { .. } => {
                 "check that the parent directory exists and is writable; the \
                  harness does not create nested directories implicitly"

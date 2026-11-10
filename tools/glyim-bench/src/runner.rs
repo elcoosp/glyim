@@ -15,7 +15,7 @@ use tracing::info_span;
 
 use crate::error::BenchError;
 use crate::report::{BenchReport, BenchSample, GateOutcome};
-use crate::source::{MeasurementSource, parse_callgrind_summary, parse_perf_stat, PerfCounters};
+use crate::source::{MeasurementSource, PerfCounters, parse_callgrind_summary, parse_perf_stat};
 use crate::stats::{self, SampleStats};
 
 /// A planned bench run: what to execute, how often, and with which counter
@@ -122,7 +122,10 @@ fn child_max_rss_kb() -> Option<u64> {
 }
 
 fn scratch_path(iteration: usize) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("glyim-bench-{}-{iteration}.out", std::process::id()))
+    std::env::temp_dir().join(format!(
+        "glyim-bench-{}-{iteration}.out",
+        std::process::id()
+    ))
 }
 
 /// Execute one iteration and collect its counters.
@@ -133,7 +136,15 @@ fn run_once(plan: &RunPlan, iteration: usize) -> Result<BenchSample, BenchError>
     let (mut command, needs_counters) = match plan.source {
         MeasurementSource::PerfStat => {
             let mut cmd = Command::new("perf");
-            cmd.args(["stat", "-x,", "-e", "instructions,cycles", "-o", &out_str, "--"]);
+            cmd.args([
+                "stat",
+                "-x,",
+                "-e",
+                "instructions,cycles",
+                "-o",
+                &out_str,
+                "--",
+            ]);
             (cmd, true)
         }
         MeasurementSource::Callgrind => {
@@ -152,16 +163,14 @@ fn run_once(plan: &RunPlan, iteration: usize) -> Result<BenchSample, BenchError>
     command.stdin(Stdio::null());
 
     let start = Instant::now();
-    let status = command
-        .status()
-        .map_err(|err| BenchError::CommandLaunch {
-            program: plan
-                .source
-                .wrapper_program()
-                .unwrap_or(plan.program.as_str())
-                .to_string(),
-            detail: err.to_string(),
-        })?;
+    let status = command.status().map_err(|err| BenchError::CommandLaunch {
+        program: plan
+            .source
+            .wrapper_program()
+            .unwrap_or(plan.program.as_str())
+            .to_string(),
+        detail: err.to_string(),
+    })?;
     let wall_ns = start.elapsed().as_nanos() as u64;
 
     if !status.success() {

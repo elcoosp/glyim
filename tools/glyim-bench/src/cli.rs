@@ -89,10 +89,12 @@ pub fn execute_run(
     json: Option<&PathBuf>,
     command: &[String],
 ) -> Result<BenchReport, BenchError> {
-    let (program, args) = command.split_first().ok_or_else(|| BenchError::InvalidPlan {
-        detail: "no command given after `--`; usage: glyim-bench run -- <program> [args..]"
-            .to_string(),
-    })?;
+    let (program, args) = command
+        .split_first()
+        .ok_or_else(|| BenchError::InvalidPlan {
+            detail: "no command given after `--`; usage: glyim-bench run -- <program> [args..]"
+                .to_string(),
+        })?;
     let source = source.unwrap_or_else(detect_source);
     let mut plan = RunPlan::new(program)
         .with_iterations(iterations)
@@ -137,7 +139,7 @@ pub fn execute_gate(max_cov_pct: f64, report_path: &PathBuf) -> Result<BenchRepo
 
 #[cfg(test)]
 mod tests {
-    use super::{Command, Cli};
+    use super::{Cli, Command};
     use crate::source::MeasurementSource;
     use clap::Parser as _;
 

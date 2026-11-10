@@ -20,13 +20,11 @@ fn main() -> ExitCode {
             source,
             json,
             command,
-        } => {
-            glyim_bench::cli::execute_run(iterations, source, json.as_ref(), &command).map(
-                |report: BenchReport| {
-                    print!("{}", report.render_text());
-                },
-            )
-        }
+        } => glyim_bench::cli::execute_run(iterations, source, json.as_ref(), &command).map(
+            |report: BenchReport| {
+                print!("{}", report.render_text());
+            },
+        ),
         Command::Gate {
             max_cov_pct,
             report,

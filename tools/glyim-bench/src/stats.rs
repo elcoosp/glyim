@@ -142,7 +142,10 @@ mod tests {
     #[test]
     fn gate_boundaries_match_the_m2_2_budget() {
         assert!(gate_passes(0.0, DEFAULT_MAX_COV_PCT));
-        assert!(gate_passes(0.1, DEFAULT_MAX_COV_PCT), "boundary is <=, not <");
+        assert!(
+            gate_passes(0.1, DEFAULT_MAX_COV_PCT),
+            "boundary is <=, not <"
+        );
         assert!(!gate_passes(0.11, DEFAULT_MAX_COV_PCT));
     }
 

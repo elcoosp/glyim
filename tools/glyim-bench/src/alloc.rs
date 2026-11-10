@@ -185,7 +185,10 @@ mod tests {
         // orderable: the *next* snapshot after a fresh reset is at most one
         // transient test-harness allocation away from zero. Read twice and
         // require the second read to be small rather than exactly zero.
-        assert!(snap.count < 10_000, "reset must drop the counters: {snap:?}");
+        assert!(
+            snap.count < 10_000,
+            "reset must drop the counters: {snap:?}"
+        );
     }
 }
 

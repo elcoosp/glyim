@@ -97,9 +97,7 @@ fn main() {
     }
     let render_us = t.elapsed().as_micros() as f64 / ITERATIONS as f64;
 
-    println!(
-        "runner_overhead bench ({SAMPLES}-sample report shape, {ITERATIONS} iterations)"
-    );
+    println!("runner_overhead bench ({SAMPLES}-sample report shape, {ITERATIONS} iterations)");
     println!("  summarize+stats     {stats_us:8.3} µs/call");
     println!("  cov (gate path)     {cov_us:8.3} µs/call");
     println!("  counted alloc+drop  {alloc_us:8.3} µs/call  ({alloc_events} events counted)");

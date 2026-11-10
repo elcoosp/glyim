@@ -81,10 +81,9 @@ impl fmt::Display for LedgerCliError {
         match self {
             Self::HelpRequested { usage } => f.write_str(usage),
             Self::UnknownFlag { flag, usage } => write!(f, "unknown flag {flag}\n{usage}"),
-            Self::UnknownSubcommand {
-                subcommand,
-                usage,
-            } => write!(f, "unknown subcommand {subcommand}\n{usage}"),
+            Self::UnknownSubcommand { subcommand, usage } => {
+                write!(f, "unknown subcommand {subcommand}\n{usage}")
+            }
             Self::ExtraArgument { arg, usage } => {
                 write!(f, "unexpected extra argument {arg}\n{usage}")
             }
@@ -132,8 +131,7 @@ impl miette::Diagnostic for LedgerCliError {
                     .to_string(),
             )),
             Self::SchemaWrite { .. } => Some(Box::new(
-                "check that the parent directory of OUT exists and is writable"
-                    .to_string(),
+                "check that the parent directory of OUT exists and is writable".to_string(),
             )),
         }
     }
@@ -573,11 +571,10 @@ pub fn format_gap_report(outcome: &GapOutcome) -> String {
 /// fails.
 pub fn write_schema(out: &Path) -> Result<String, LedgerCliError> {
     let document = registry_schema();
-    let text = serde_json::to_string_pretty(&document)
-        .map_err(|err| LedgerCliError::SchemaSerialize {
+    let text =
+        serde_json::to_string_pretty(&document).map_err(|err| LedgerCliError::SchemaSerialize {
             detail: err.to_string(),
-        })?
-        + "\n";
+        })? + "\n";
     fs::write(out, text).map_err(|err| LedgerCliError::SchemaWrite {
         path: out.display().to_string(),
         detail: err.to_string(),
@@ -717,9 +714,12 @@ mod tests {
             },
         ];
         for err in errors {
-            let help = miette::Diagnostic::help(&err)
-                .expect("every failure variant carries help text");
-            assert!(!help.to_string().is_empty(), "{err:?} help must be non-empty");
+            let help =
+                miette::Diagnostic::help(&err).expect("every failure variant carries help text");
+            assert!(
+                !help.to_string().is_empty(),
+                "{err:?} help must be non-empty"
+            );
         }
         // The help *request* is not a failure: it deliberately has no help.
         let requested = LedgerCliError::HelpRequested { usage: usage() };

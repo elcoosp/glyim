@@ -280,11 +280,9 @@ pub fn parse_test_config(source: &str) -> Result<ParsedConfig, TestConfigError> 
 
         if let Some(value) = content.strip_prefix("test-mode:") {
             legacy_seen.insert("test-mode");
-            config.mode = value
-                .parse::<TestMode>()
-                .map_err(|e| TestConfigError {
-                    message: e.to_string(),
-                })?;
+            config.mode = value.parse::<TestMode>().map_err(|e| TestConfigError {
+                message: e.to_string(),
+            })?;
             has_explicit_mode = true;
         } else if let Some(value) = content.strip_prefix("revisions:") {
             legacy_seen.insert("revisions");

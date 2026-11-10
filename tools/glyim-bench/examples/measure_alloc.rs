@@ -101,11 +101,14 @@ fn main() {
         Err(err) => eprint!("{:?}", miette::Report::new(err)),
     }
     if !report.gate.passed {
-        eprint!("{:?}", miette::Report::new(glyim_bench::error::BenchError::GateFailed {
-            metric: report.gate.metric.clone(),
-            cov_pct: report.gate.cov_pct,
-            max_cov_pct: report.gate.max_cov_pct,
-        }));
+        eprint!(
+            "{:?}",
+            miette::Report::new(glyim_bench::error::BenchError::GateFailed {
+                metric: report.gate.metric.clone(),
+                cov_pct: report.gate.cov_pct,
+                max_cov_pct: report.gate.max_cov_pct,
+            })
+        );
         std::process::exit(1);
     }
 }

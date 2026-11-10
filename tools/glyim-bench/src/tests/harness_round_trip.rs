@@ -37,8 +37,7 @@ fn two_runs_of_the_same_plan_serialise_identically_for_equal_samples() {
     // samples by rendering one report twice and one deserialised copy.
     let report = glyim_bench::runner::run_iterated(&trivial_plan()).expect("runs");
     let json_a = report.to_json_pretty().expect("serialises");
-    let copy: BenchReport =
-        serde_json::from_str(&json_a).expect("deserialises");
+    let copy: BenchReport = serde_json::from_str(&json_a).expect("deserialises");
     let json_b = copy.to_json_pretty().expect("serialises");
     assert_eq!(json_a, json_b);
     assert_eq!(report.render_text(), copy.render_text());

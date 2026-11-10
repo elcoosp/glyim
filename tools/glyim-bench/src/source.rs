@@ -153,8 +153,7 @@ pub fn parse_callgrind_summary(output: &str) -> Result<u64, BenchError> {
         }
     }
     summary.ok_or_else(|| BenchError::CallgrindParse {
-        detail: "no `summary:` line found (was the child killed before completion?)"
-            .to_string(),
+        detail: "no `summary:` line found (was the child killed before completion?)".to_string(),
     })
 }
 

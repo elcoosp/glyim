@@ -757,7 +757,7 @@ fn run_mode_witness_failure_sharpens_to_known_gap_closed() {
 #[test]
 fn run_mode_witness_inversion_matrix() {
     use crate::harness::config::TestMode;
-    use crate::harness::executor::{apply_witness_inversion, TestOutcome};
+    use crate::harness::executor::{TestOutcome, apply_witness_inversion};
 
     // While the gap is open the pinned behaviour holds: a passing run
     // witness passes through unchanged (no inversion noise on the happy
@@ -794,12 +794,7 @@ fn run_mode_witness_inversion_matrix() {
         },
     };
     assert!(matches!(
-        apply_witness_inversion(
-            Some("GAP-0004"),
-            TestMode::CompilePass,
-            failed_cp,
-            &[],
-        ),
+        apply_witness_inversion(Some("GAP-0004"), TestMode::CompilePass, failed_cp, &[],),
         TestOutcome::Failed { .. }
     ));
 }

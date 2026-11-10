@@ -76,16 +76,7 @@ pub const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 pub const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
 /// The seven M2.3 synthetic generator families.
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    serde::Serialize,
-    serde::Deserialize,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CorpusFamily {
     /// Wide straight-line blocks (many independent statements).
@@ -170,9 +161,7 @@ pub struct CorpusProgram {
 
 /// One manifest row: everything needed to regenerate and re-verify a
 /// program without storing its source.
-#[derive(
-    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CorpusEntry {
     /// The family that generated the program.
@@ -194,9 +183,7 @@ pub struct CorpusEntry {
 /// Rows are stored in build order (families outer, seeds inner — both in the
 /// caller's order), so two builds from the same inputs serialise to
 /// identical bytes.
-#[derive(
-    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CorpusManifest {
     /// Schema tag, always [`CORPUS_SCHEMA`].
@@ -252,11 +239,7 @@ pub fn fnv1a64(data: &str) -> u64 {
 /// # Errors
 ///
 /// [`BenchError::CorpusPlan`] when `size` is outside `1..=[MAX_SIZE]`.
-pub fn generate(
-    family: CorpusFamily,
-    seed: u64,
-    size: usize,
-) -> Result<CorpusProgram, BenchError> {
+pub fn generate(family: CorpusFamily, seed: u64, size: usize) -> Result<CorpusProgram, BenchError> {
     if size == 0 || size > MAX_SIZE {
         return Err(BenchError::CorpusPlan {
             detail: format!("size must be within 1..={MAX_SIZE}, got {size}"),
@@ -285,7 +268,10 @@ pub fn generate(
         _ => Vec::new(),
     };
     let identity = fnv1a64(&source);
-    tracing::debug!(identity = format_args!("{identity:016x}"), "corpus program generated");
+    tracing::debug!(
+        identity = format_args!("{identity:016x}"),
+        "corpus program generated"
+    );
     Ok(CorpusProgram {
         family,
         seed,
@@ -301,9 +287,7 @@ pub fn generate(
 /// explicit mode, the by-construction exit code, the registry features the
 /// corpus exercises, and the verified backend set.
 fn header(reference_exit: i32, extra_flags: &[&str]) -> String {
-    let mut text = format!(
-        "//@ mode: run-pass\n//@ expect-exit: {reference_exit}\n"
-    );
+    let mut text = format!("//@ mode: run-pass\n//@ expect-exit: {reference_exit}\n");
     for flag in extra_flags {
         text.push_str(&format!("//@ compile-flags: {flag}\n"));
     }
@@ -329,7 +313,10 @@ fn gen_wide(seed: u64, size: usize) -> (String, i32) {
             prev = format!("a{index}");
         }
     }
-    let source = format!("{}fn main() -> i32 {{\n{body}    {prev}\n}}\n", header(exit, &[]));
+    let source = format!(
+        "{}fn main() -> i32 {{\n{body}    {prev}\n}}\n",
+        header(exit, &[])
+    );
     (source, exit)
 }
 
@@ -347,7 +334,10 @@ fn gen_deep(_seed: u64, size: usize) -> (String, i32) {
     for _ in 0..size {
         body.push_str("    }\n");
     }
-    let source = format!("{}fn main() -> i32 {{\n{body}    acc\n}}\n", header(exit, &[]));
+    let source = format!(
+        "{}fn main() -> i32 {{\n{body}    acc\n}}\n",
+        header(exit, &[])
+    );
     (source, exit)
 }
 
@@ -364,7 +354,10 @@ fn gen_generic(seed: u64, size: usize) -> (String, i32) {
         if index == 0 {
             body.push_str(&format!("    let v0 = id({constant});\n"));
         } else {
-            body.push_str(&format!("    let v{index} = id(v{}) + {constant};\n", index - 1));
+            body.push_str(&format!(
+                "    let v{index} = id(v{}) + {constant};\n",
+                index - 1
+            ));
         }
     }
     let source = format!(
@@ -392,8 +385,13 @@ fn gen_trait(seed: u64, size: usize) -> (String, i32) {
             body.push_str(&format!("    let mut w0 = W0 {{ r: {constant} }};\n"));
             body.push_str("    let s0 = w0.get();\n");
         } else {
-            body.push_str(&format!("    let mut w{index} = W{index} {{ r: {constant} }};\n"));
-            body.push_str(&format!("    let s{index} = s{} + w{index}.get();\n", index - 1));
+            body.push_str(&format!(
+                "    let mut w{index} = W{index} {{ r: {constant} }};\n"
+            ));
+            body.push_str(&format!(
+                "    let s{index} = s{} + w{index}.get();\n",
+                index - 1
+            ));
         }
     }
     let source = format!(
@@ -486,7 +484,10 @@ fn gen_macro(seed: u64, size: usize) -> (String, i32) {
         }
     }
     body.push_str("    println!(\"done\");\n    0\n");
-    let source = format!("{}fn main() -> i32 {{\n{body}}}\n", header(0, &["--with-stdlib"]));
+    let source = format!(
+        "{}fn main() -> i32 {{\n{body}}}\n",
+        header(0, &["--with-stdlib"])
+    );
     (source, 0)
 }
 
@@ -513,7 +514,11 @@ fn gen_closure(seed: u64, size: usize) -> (String, i32) {
             ));
         }
     }
-    let source = format!("{}fn main() -> i32 {{\n{body}    r{}\n}}\n", header(exit, &[]), size - 1);
+    let source = format!(
+        "{}fn main() -> i32 {{\n{body}    r{}\n}}\n",
+        header(exit, &[]),
+        size - 1
+    );
     (source, exit)
 }
 

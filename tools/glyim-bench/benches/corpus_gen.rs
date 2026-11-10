@@ -58,14 +58,16 @@ fn main() {
     let t = Instant::now();
     for i in 0..REGEN_ITERATIONS {
         let family = CorpusFamily::ALL[i % CorpusFamily::ALL.len()];
-        black_box(generate(black_box(family), black_box(i as u64), black_box(size)));
+        black_box(generate(
+            black_box(family),
+            black_box(i as u64),
+            black_box(size),
+        ));
     }
     let per_program_ns = t.elapsed().as_nanos() as f64 / REGEN_ITERATIONS as f64;
 
     let programs = manifest.programs.len();
-    println!(
-        "corpus_gen: {programs} programs (7 families x {SEEDS} seeds, size {size})"
-    );
+    println!("corpus_gen: {programs} programs (7 families x {SEEDS} seeds, size {size})");
     println!(
         "  manifest build: {build_ns:.0} ns total ({:.0} ns/program)",
         build_ns / programs as f64,

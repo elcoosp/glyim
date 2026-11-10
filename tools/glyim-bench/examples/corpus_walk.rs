@@ -38,7 +38,10 @@ fn main() {
         eprint!("{:?}", miette::Report::new(err));
         std::process::exit(1);
     }
-    println!("  verify: {} rows regenerate byte-identically\n", manifest.programs.len());
+    println!(
+        "  verify: {} rows regenerate byte-identically\n",
+        manifest.programs.len()
+    );
 
     // One regenerated program, header included: the source a consumer would
     // write into the corpora directory (or hand to the harness in the

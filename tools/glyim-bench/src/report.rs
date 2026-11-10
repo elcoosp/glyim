@@ -147,9 +147,7 @@ impl BenchReport {
                 .map_or_else(|| "-".to_string(), |v| v.to_string());
             out.push_str(&format!(
                 "  {:<3} {:>12} {:>16}\n",
-                index,
-                sample.wall_ns,
-                instructions
+                index, sample.wall_ns, instructions
             ));
         }
         out.push_str(&format!(

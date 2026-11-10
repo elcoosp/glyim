@@ -21,8 +21,8 @@ fn generation_is_deterministic() {
 
 #[test]
 fn families_are_pairwise_distinct() {
-    let sources: Vec<String> = CorpusFamily::ALL
-        .map(|family| generate(family, 42, 6).expect("generates").source);
+    let sources: Vec<String> =
+        CorpusFamily::ALL.map(|family| generate(family, 42, 6).expect("generates").source);
     for (i, a) in sources.iter().enumerate() {
         for b in &sources[i + 1..] {
             assert_ne!(a, b, "families {i} and later must emit distinct shapes");
@@ -115,12 +115,8 @@ fn family_parse_round_trips() {
 #[test]
 fn manifest_build_is_sorted_and_deterministic() {
     let build = || {
-        CorpusManifest::build(
-            &[CorpusFamily::Match, CorpusFamily::Wide],
-            &[2, 1],
-            8,
-        )
-        .expect("builds")
+        CorpusManifest::build(&[CorpusFamily::Match, CorpusFamily::Wide], &[2, 1], 8)
+            .expect("builds")
     };
     let first = build();
     let second = build();
@@ -162,10 +158,7 @@ fn manifest_json_is_byte_deterministic() {
 fn manifest_json_rejects_unknown_fields() {
     let manifest = CorpusManifest::build(&[CorpusFamily::Wide], &[1], 4).expect("builds");
     let json = manifest.to_json_pretty().expect("serialises");
-    let tampered = json.replace(
-        "\"programs\"",
-        "\"sneaky_extra\": true,\n  \"programs\"",
-    );
+    let tampered = json.replace("\"programs\"", "\"sneaky_extra\": true,\n  \"programs\"");
     let err = CorpusManifest::from_json(&tampered).expect_err("unknown field rejected");
     assert!(
         matches!(err, BenchError::CorpusManifestParse { .. }),
@@ -223,7 +216,9 @@ fn generated_headers_carry_the_registry_tags() {
     for family in CorpusFamily::ALL {
         let program = generate(family, 1, 4).expect("generates");
         assert!(
-            program.source.contains("//@ feature: TOOL-TEST-RUN-PASS, TOOL-BENCH-CORPUS-GEN"),
+            program
+                .source
+                .contains("//@ feature: TOOL-TEST-RUN-PASS, TOOL-BENCH-CORPUS-GEN"),
             "{family:?} must tag the registry features it exercises"
         );
         assert!(
