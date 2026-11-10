@@ -79,23 +79,25 @@ fn witness_fixture(open: bool) -> DiscoveredTest {
     }
 }
 
-/// Scenario 1: the discovery contract. A `//@ known-gap:` tag only means
-/// something on a compile-fail fixture — the collector rejects the drift
-/// before any compilation, with a `Display` that explains why.
+/// Scenario 1: the discovery contract. Since the M1.7 strict-xfail
+/// inversion, a `//@ known-gap:` tag is meaningful on compile-fail **and**
+/// the run modes; only compile-pass / ui pin no outcome the inversion can
+/// sharpen, so a witness there is annotation drift, rejected at discovery
+/// with a `Display` that explains why.
 fn scenario_discovery_contract() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let fixture = dir.path().join("run-pass");
+    let fixture = dir.path().join("compile-pass");
     std::fs::create_dir(&fixture).expect("create mode dir");
     let witness = fixture.join("witness.g");
     std::fs::write(
         &witness,
-        "//@ mode: run-pass\n//@ expect-exit: 0\n//@ known-gap: GAP-0001\nfn main() {}\n",
+        "//@ mode: compile-pass\n//@ known-gap: GAP-0001\nfn main() {}\n",
     )
     .expect("write fixture");
 
     let err = TestCollector::new(dir.path())
         .collect(None, None)
-        .expect_err("a known-gap tag on a run-pass fixture is drift");
+        .expect_err("a known-gap tag on a compile-pass fixture is drift");
 
     println!("scenario 1 — discovery contract");
     println!("{err}");

@@ -20,7 +20,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use super::super::harness::config::TestMode;
+use super::super::harness::config::{TestMode, TestModeError};
 
 /// Backends a fixture may declare. The set mirrors
 /// `ledger_schema::Backend` (the registry's serialization names); the two
@@ -220,8 +220,14 @@ fn parse_directive_body(
             }
             // `TestMode: FromStr` carries the typed `TestModeError`; the
             // directive-level error stays `(line, message)`, so flatten the
-            // diagnostic to its `Display` text here.
-            let mode: TestMode = value.parse().map_err(|e| (lineno, e.to_string()))?;
+            // diagnostic to its `Display` text here. The closure parameter
+            // is annotated explicitly: rustc 1.99 no longer infers
+            // `map_err`'s argument from the annotated `let` binding on the
+            // other side of the `?` (E0282 — see the toolchain note in
+            // `CONTRIBUTING`).
+            let mode: TestMode = value
+                .parse()
+                .map_err(|e: TestModeError| (lineno, e.to_string()))?;
             out.mode = Some(mode);
             Ok(())
         }
