@@ -78,6 +78,21 @@ pub struct CliArgs {
     /// §3.5.30: promote the named lint(s) to error level.
     #[arg(short = 'D', long = "deny", value_name = "LINT")]
     pub deny: Vec<String>,
+    /// Print a per-phase wall-clock table (load/parse/expand/…/codegen) to
+    /// stderr after a successful compile. Plan M2.1: `--time-passes`.
+    /// On a compile-cache hit nothing recompiles, so only a note is
+    /// printed instead of a table.
+    #[arg(long = "time-passes")]
+    pub time_passes: bool,
+    /// Write the per-phase profile as a Chrome Trace JSON event list
+    /// (openable in Perfetto / `chrome://tracing`) to `FILE`, defaulting
+    /// to `trace.json` in the working directory. Plan M2.1:
+    /// `--self-profile`. The value is `=`-bound (`--self-profile=t.json`)
+    /// so the positional INPUT can never be swallowed as the filename;
+    /// a bare `--self-profile` writes `./trace.json`. Never written on a
+    /// compile-cache hit.
+    #[arg(long = "self-profile", value_name = "FILE", require_equals = true, num_args = 0..=1, default_missing_value = "trace.json")]
+    pub self_profile: Option<PathBuf>,
 }
 
 /// Prepend the assembled minimal standard library to `input`'s VFS content.
@@ -332,6 +347,11 @@ enum EmitKind {
     /// the host artifact a procedural-macro crate compiles to so it can be
     /// `dlopen`ed by `glyim_proc_macro::load_cdylib` during macro expansion.
     Cdylib,
+    /// Emit a schema-versioned JSON measurement report (per-phase wall
+    /// clock + mono/warning counters) instead of code. Plan M2.1:
+    /// `--emit=stats` runs the analysis-only front half — no backend
+    /// executes, so no object is produced.
+    Stats,
 }
 
 impl EmitKind {
@@ -344,8 +364,9 @@ impl EmitKind {
             "syntax" => Ok(EmitKind::Syntax),
             "asm" => Ok(EmitKind::Asm),
             "cdylib" => Ok(EmitKind::Cdylib),
+            "stats" => Ok(EmitKind::Stats),
             _ => Err(format!(
-                "invalid value for --emit: '{s}' (expected one of: obj, exec, mir, llvm-ir, asm, cdylib, syntax)"
+                "invalid value for --emit: '{s}' (expected one of: obj, exec, mir, llvm-ir, asm, cdylib, syntax, stats)"
             )),
         }
     }
@@ -422,6 +443,16 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
                     _ => "ll",
                 };
                 p.set_extension(ext);
+                p
+            });
+            (out, None)
+        }
+        EmitKind::Stats => {
+            // Machine-readable report: default to `<input>.stats.json` so
+            // the file never collides with a source or object file.
+            let out = args.output.clone().unwrap_or_else(|| {
+                let mut p = input.clone();
+                p.set_extension("stats.json");
                 p
             });
             (out, None)
@@ -526,14 +557,47 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     // `--proc-macro-deps foo.g --emit=llvm-ir` paid for the cdylib build
     // and dlopen and then produced IR without macro expansion.
     let proc_registry_ref = proc_registry.as_ref();
+    if emit == EmitKind::Stats {
+        // M2.1: analysis-only measurement — run the front half, write the
+        // schema-versioned JSON report, and honour --time-passes /
+        // --self-profile exactly like the code-producing modes.
+        let report = glyim_pipeline::compile_stats(&mut db, input, proc_registry_ref)?;
+        std::fs::write(&object_path, report.render_json()).map_err(|e| {
+            vec![
+                glyim_diag::GlyimDiagnostic::internal_error(format!(
+                    "--emit=stats: failed to write {}: {e}",
+                    object_path.display()
+                ))
+                .with_suggestion(glyim_diag::Suggestion {
+                    message: format!(
+                        "point --output at a writable path (the parent directory of {} must exist)",
+                        object_path.display()
+                    ),
+                    replacements: Vec::new(),
+                    applicability: glyim_diag::Applicability::MaybeIncorrect,
+                }),
+            ]
+        })?;
+        write_profile_outputs(&args, &report.profile)?;
+        return Ok(());
+    }
     if emit == EmitKind::Mir {
-        return glyim_pipeline::emit_mir(&mut db, input, &object_path, proc_registry_ref);
+        let profile = glyim_pipeline::emit_mir(&mut db, input, &object_path, proc_registry_ref)?;
+        write_profile_outputs(&args, &profile)?;
+        return Ok(());
     } else if emit == EmitKind::Syntax {
-        return glyim_pipeline::emit_syntax(&mut db, input, &object_path, proc_registry_ref);
+        let profile = glyim_pipeline::emit_syntax(&mut db, input, &object_path, proc_registry_ref)?;
+        write_profile_outputs(&args, &profile)?;
+        return Ok(());
     } else if emit == EmitKind::LlvmIr {
-        return glyim_pipeline::emit_llvm_ir(&mut db, input, &object_path, proc_registry_ref);
+        let profile =
+            glyim_pipeline::emit_llvm_ir(&mut db, input, &object_path, proc_registry_ref)?;
+        write_profile_outputs(&args, &profile)?;
+        return Ok(());
     } else if emit == EmitKind::Asm {
-        return glyim_pipeline::emit_asm(&mut db, input, &object_path, proc_registry_ref);
+        let profile = glyim_pipeline::emit_asm(&mut db, input, &object_path, proc_registry_ref)?;
+        write_profile_outputs(&args, &profile)?;
+        return Ok(());
     }
 
     // Build the LLVM backend concretely so the Thin path can drive per-CGU
@@ -703,6 +767,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             proc_registry.as_ref(),
         )?;
         print_diagnostics(&artifacts.warnings, &args.error_format);
+        write_profile_outputs(&args, &artifacts.profile)?;
         let bitcode_dir = object_path.with_extension("thin-bc");
         std::fs::create_dir_all(&bitcode_dir).map_err(|e| {
             vec![glyim_diag::GlyimDiagnostic::internal_error(format!(
@@ -795,6 +860,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             proc_registry.as_ref(),
         )?;
         print_diagnostics(&artifacts.warnings, &args.error_format);
+        write_profile_outputs(&args, &artifacts.profile)?;
     } else {
         let backend: Box<dyn glyim_codegen::CodegenBackend> = Box::new(llvm);
         let artifacts = glyim_pipeline::Pipeline::compile_file_with_artifacts(
@@ -806,6 +872,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             proc_registry.as_ref(),
         )?;
         print_diagnostics(&artifacts.warnings, &args.error_format);
+        write_profile_outputs(&args, &artifacts.profile)?;
     }
 
     // Store the produced object in the cache for next time. Only reached
@@ -880,6 +947,42 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
     Ok(())
 }
 
+/// M2.1: emit the phase-profile side outputs after a successful compile.
+///
+/// * `--self-profile[=FILE]`: write the Chrome Trace JSON event list.
+/// * `--time-passes`: print the fixed-width table on stderr.
+///
+/// Both are best-effort-friendly for tracing but strict for I/O: a trace
+/// write failure is a real user error (the requested file could not be
+/// produced) and surfaces as a diagnostic with a fix suggestion.
+fn write_profile_outputs(
+    args: &CliArgs,
+    profile: &glyim_pipeline::PhaseProfile,
+) -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
+    if let Some(trace_path) = &args.self_profile {
+        let json = profile.render_chrome_trace();
+        if let Err(e) = std::fs::write(trace_path, json) {
+            return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(format!(
+                "--self-profile: failed to write {}: {e}",
+                trace_path.display()
+            ))
+            .with_suggestion(glyim_diag::Suggestion {
+                message: format!(
+                    "point --self-profile at a writable path (the parent directory of {} must exist); the flag also accepts a bare --self-profile, which writes ./trace.json",
+                    trace_path.display()
+                ),
+                replacements: Vec::new(),
+                applicability: glyim_diag::Applicability::MaybeIncorrect,
+            })]);
+        }
+        tracing::debug!(path = %trace_path.display(), "chrome trace written");
+    }
+    if args.time_passes {
+        eprint!("{}", profile.render_text());
+    }
+    Ok(())
+}
+
 /// Finish a compile whose object already exists at `object_path` (e.g. a
 /// cache hit): run the link step for `--emit=exec` / `--emit=cdylib`, and
 /// no-op for `--emit=obj`. Mirrors the tail of the normal emit path so the
@@ -890,6 +993,12 @@ fn finalize_after_object(
     final_output_path: Option<&std::path::Path>,
     args: &CliArgs,
 ) -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
+    // M2.1: a cache hit means no phase ran, so there is no profile to
+    // print or trace. Say so explicitly instead of leaving --time-passes
+    // users wondering where their table went.
+    if args.time_passes || args.self_profile.is_some() {
+        eprintln!("cache hit — no phase profile recorded for this compile");
+    }
     if emit == EmitKind::Exec || emit == EmitKind::Cdylib {
         let final_path = final_output_path.ok_or_else(|| {
             vec![glyim_diag::GlyimDiagnostic::internal_error(
@@ -1036,6 +1145,8 @@ fn compile_proc_macro_dep(
         allow: Vec::new(),
         warn: Vec::new(),
         deny: Vec::new(),
+        time_passes: false,
+        self_profile: None,
     };
     run_with_args(args).map_err(|diags| {
         let msg = diags

@@ -26,6 +26,8 @@ fn test_compile_valid_file() {
         allow: Vec::new(),
         warn: Vec::new(),
         deny: Vec::new(),
+        time_passes: false,
+        self_profile: None,
     };
     let result = run_with_args(args);
     assert!(
@@ -57,6 +59,8 @@ fn test_compile_invalid_file() {
         allow: Vec::new(),
         warn: Vec::new(),
         deny: Vec::new(),
+        time_passes: false,
+        self_profile: None,
     };
     let result = run_with_args(args);
     assert!(result.is_err(), "Expected compilation to fail");
@@ -131,6 +135,8 @@ fn test_emit_asm_produces_assembly_file() {
         allow: Vec::new(),
         warn: Vec::new(),
         deny: Vec::new(),
+        time_passes: false,
+        self_profile: None,
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "asm emit should succeed, got: {result:?}");
@@ -179,6 +185,8 @@ fn test_lto_fat_compiles_to_object() {
         allow: Vec::new(),
         warn: Vec::new(),
         deny: Vec::new(),
+        time_passes: false,
+        self_profile: None,
     };
     let result = run_with_args(args);
     assert!(
@@ -227,6 +235,8 @@ fn test_lto_thin_is_no_longer_a_tracked_gap() {
         allow: Vec::new(),
         warn: Vec::new(),
         deny: Vec::new(),
+        time_passes: false,
+        self_profile: None,
     };
     let result = run_with_args(args);
     // Two acceptable outcomes: success when llvm-lto2 is present, or a
@@ -282,6 +292,8 @@ fn test_emit_cdylib_produces_shared_library() {
         allow: Vec::new(),
         warn: Vec::new(),
         deny: Vec::new(),
+        time_passes: false,
+        self_profile: None,
     };
     let result = run_with_args(args);
     assert!(
@@ -315,6 +327,8 @@ fn test_lto_invalid_value_rejected() {
         allow: Vec::new(),
         warn: Vec::new(),
         deny: Vec::new(),
+        time_passes: false,
+        self_profile: None,
     };
     let result = run_with_args(args);
     assert!(result.is_err(), "invalid --lto value must be rejected");
@@ -356,6 +370,8 @@ fn exec_emit_links_and_runs() {
         allow: Vec::new(),
         warn: Vec::new(),
         deny: Vec::new(),
+        time_passes: false,
+        self_profile: None,
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "glyim-cli --emit=exec failed: {:?}", result);
@@ -366,4 +382,149 @@ fn exec_emit_links_and_runs() {
         .status()
         .expect("execute produced binary");
     assert!(status.success(), "produced binary exited non-zero");
+}
+
+// ---------------------------------------------------------------------------
+// M2.1: phase instrumentation flags (`--time-passes`, `--self-profile`,
+// `--emit=stats`). The parse-level tests pin the clap wiring — especially
+// that the optional `--self-profile` value can never swallow the
+// positional INPUT — and the `--emit=stats` run-level test pins the
+// on-disk report contract.
+// ---------------------------------------------------------------------------
+
+/// `--emit=stats` is a recognised emit kind.
+#[test]
+fn test_emit_stats_flag_parses() {
+    let args = CliArgs::try_parse_from(["glyim", "--emit", "stats", "input.g"]).unwrap();
+    assert_eq!(args.emit, "stats");
+}
+
+/// `--time-passes` is a plain boolean flag: it must never consume the
+/// positional INPUT that follows it.
+#[test]
+fn test_time_passes_flag_does_not_swallow_input() {
+    let args = CliArgs::try_parse_from(["glyim", "--time-passes", "input.g"]).unwrap();
+    assert!(args.time_passes);
+    assert_eq!(args.input, std::path::PathBuf::from("input.g"));
+}
+
+/// A bare `--self-profile` defaults to `./trace.json`, and the positional
+/// INPUT stays the positional INPUT (the value is `=`-bound).
+#[test]
+fn test_self_profile_default_value() {
+    let args = CliArgs::try_parse_from(["glyim", "--self-profile", "input.g"]).unwrap();
+    assert_eq!(
+        args.self_profile,
+        Some(std::path::PathBuf::from("trace.json"))
+    );
+    assert_eq!(args.input, std::path::PathBuf::from("input.g"));
+}
+
+/// `--self-profile=FILE` binds the explicit path.
+#[test]
+fn test_self_profile_explicit_value() {
+    let args = CliArgs::try_parse_from(["glyim", "--self-profile=out.json", "input.g"]).unwrap();
+    assert_eq!(
+        args.self_profile,
+        Some(std::path::PathBuf::from("out.json"))
+    );
+}
+
+/// Run-level contract: `--emit=stats` writes a schema-versioned JSON
+/// report with the phase list and counters, and no object file is needed.
+#[test]
+fn test_emit_stats_writes_report() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    writeln!(tmp, "fn main() {{}}").unwrap();
+    let src = tmp.into_temp_path();
+
+    let out_dir = tempfile::tempdir().unwrap();
+    let stats_path = out_dir.path().join("out.stats.json");
+
+    let args = CliArgs {
+        input: src.to_path_buf(),
+        output: Some(stats_path.clone()),
+        opt_level: 0,
+        target: None,
+        backend: "llvm".to_string(),
+        emit: "stats".to_string(),
+        linker: None,
+        link_flags: None,
+        lto: "off".to_string(),
+        codegen_units: None,
+        proc_macro_deps: None,
+        error_format: "human".to_string(),
+        with_stdlib: false,
+        allow: Vec::new(),
+        warn: Vec::new(),
+        deny: Vec::new(),
+        time_passes: false,
+        self_profile: None,
+    };
+    let result = run_with_args(args);
+    assert!(result.is_ok(), "--emit=stats failed: {result:?}");
+    assert!(stats_path.exists(), "stats report not written");
+
+    let text = std::fs::read_to_string(&stats_path).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&text).expect("report is valid JSON");
+    assert_eq!(value["version"], 1, "schema version pinned at 1");
+    let phases = value["phases"].as_array().expect("phases array");
+    assert!(!phases.is_empty(), "phase rows present");
+    assert!(value["total_micros"].is_u64(), "total_micros present");
+    assert!(value["mono_bodies"].is_u64(), "mono_bodies present");
+    assert!(value["warnings"].is_u64(), "warnings present");
+}
+
+/// Run-level contract: `--time-passes` + `--self-profile` on a normal
+/// object compile — the trace file is written and the compile succeeds.
+#[test]
+fn test_self_profile_writes_trace_file() {
+    // The compile cache is content-addressed and persists across runs
+    // ($HOME/.glyip/cache/glyim); a cache hit skips the pipeline and
+    // records no profile. Bust it with a process-unique comment so this
+    // test always exercises a real compile.
+    let token = std::process::id();
+    let mut tmp = NamedTempFile::new().unwrap();
+    writeln!(
+        tmp,
+        "// cache-buster: self-profile-trace-{token}\nfn main() {{}}"
+    )
+    .unwrap();
+    let src = tmp.into_temp_path();
+
+    let out_dir = tempfile::tempdir().unwrap();
+    let trace_path = out_dir.path().join("trace.json");
+    let obj_path = out_dir.path().join("out.o");
+
+    let args = CliArgs {
+        input: src.to_path_buf(),
+        output: Some(obj_path),
+        opt_level: 0,
+        target: None,
+        backend: "llvm".to_string(),
+        emit: "obj".to_string(),
+        linker: None,
+        link_flags: None,
+        lto: "off".to_string(),
+        codegen_units: None,
+        proc_macro_deps: None,
+        error_format: "human".to_string(),
+        with_stdlib: false,
+        allow: Vec::new(),
+        warn: Vec::new(),
+        deny: Vec::new(),
+        time_passes: true,
+        self_profile: Some(trace_path.clone()),
+    };
+    let result = run_with_args(args);
+    assert!(result.is_ok(), "profiled compile failed: {result:?}");
+    let text = std::fs::read_to_string(&trace_path).expect("trace file written");
+    let value: serde_json::Value = serde_json::from_str(&text).expect("trace is valid JSON");
+    let events = value["traceEvents"].as_array().expect("traceEvents array");
+    assert!(
+        events
+            .iter()
+            .any(|e| e["ph"] == "X" && e["name"] == "codegen"),
+        "object compiles record the codegen phase"
+    );
 }
