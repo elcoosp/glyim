@@ -10,13 +10,21 @@
 
 use std::process::ExitCode;
 
-use glyim_ledger::{Command, format_outcome, parse_args, write_schema};
+use glyim_ledger::{Command, LedgerCliError, format_outcome, parse_args, write_schema};
+
+/// Print a typed CLI error with its `miette` help line (when one exists).
+fn report(err: &LedgerCliError) {
+    eprintln!("{err}");
+    if let Some(help) = miette::Diagnostic::help(err) {
+        eprintln!("  help: {help}");
+    }
+}
 
 fn main() -> ExitCode {
     let command = match parse_args(std::env::args().skip(1)) {
         Ok(command) => command,
-        Err(msg) => {
-            eprintln!("{msg}");
+        Err(err) => {
+            report(&err);
             return ExitCode::from(2);
         }
     };
@@ -46,8 +54,8 @@ fn main() -> ExitCode {
                     println!("{summary}");
                     ExitCode::SUCCESS
                 }
-                Err(msg) => {
-                    eprintln!("{msg}");
+                Err(err) => {
+                    report(&err);
                     ExitCode::FAILURE
                 }
             },

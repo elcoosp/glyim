@@ -14,6 +14,7 @@
 //! Argument handling mirrors `glyim-metrics`: hand-rolled, no `clap`, so
 //! the tool's own supply chain stays dependency-light.
 
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -21,6 +22,117 @@ use ledger_schema::{
     Diagnostic, Severity, extract_inventory, inventory_diagnostics, load_inventory_ignore,
     load_project_registry, registry_schema, unmapped_item_keys,
 };
+
+/// Typed error for the CLI seams (`parse_args`, `write_schema`).
+///
+/// Replaces the former stringly-typed `Result<_, String>` returns: variants
+/// are matchable (tests assert on constructors, not message substrings) and
+/// every failure carries a `miette` `help()` with the remedy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LedgerCliError {
+    /// `-h` / `--help` was requested; the usage text travels through the
+    /// error channel so `main` prints it and exits 2, exactly as before.
+    HelpRequested {
+        /// The usage text.
+        usage: String,
+    },
+    /// An unrecognized flag was passed.
+    UnknownFlag {
+        /// The offending flag.
+        flag: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// An unrecognized subcommand was passed.
+    UnknownSubcommand {
+        /// The offending subcommand.
+        subcommand: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// A subcommand received more positional arguments than it accepts.
+    ExtraArgument {
+        /// The offending argument.
+        arg: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// The JSON-Schema document could not be serialized.
+    SchemaSerialize {
+        /// The serialization error message.
+        detail: String,
+    },
+    /// The JSON-Schema document could not be written to its output file.
+    SchemaWrite {
+        /// The output path.
+        path: String,
+        /// The IO error message.
+        detail: String,
+    },
+}
+
+impl fmt::Display for LedgerCliError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::HelpRequested { usage } => f.write_str(usage),
+            Self::UnknownFlag { flag, usage } => write!(f, "unknown flag {flag}\n{usage}"),
+            Self::UnknownSubcommand {
+                subcommand,
+                usage,
+            } => write!(f, "unknown subcommand {subcommand}\n{usage}"),
+            Self::ExtraArgument { arg, usage } => {
+                write!(f, "unexpected extra argument {arg}\n{usage}")
+            }
+            Self::SchemaSerialize { detail } => {
+                write!(f, "cannot serialize ledger schema: {detail}")
+            }
+            Self::SchemaWrite { path, detail } => write!(f, "cannot write {path}: {detail}"),
+        }
+    }
+}
+
+impl std::error::Error for LedgerCliError {}
+
+impl miette::Diagnostic for LedgerCliError {
+    fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        Some(Box::new(match self {
+            Self::HelpRequested { .. } => "glyim-ledger::help",
+            Self::UnknownFlag { .. } => "glyim-ledger::unknown_flag",
+            Self::UnknownSubcommand { .. } => "glyim-ledger::unknown_subcommand",
+            Self::ExtraArgument { .. } => "glyim-ledger::extra_argument",
+            Self::SchemaSerialize { .. } => "glyim-ledger::schema_serialize",
+            Self::SchemaWrite { .. } => "glyim-ledger::schema_write",
+        }))
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        match self {
+            Self::HelpRequested { .. } => None,
+            Self::UnknownFlag { .. } => Some(Box::new(
+                "the only flag is -h/--help; subcommands are `check [ROOT]`, \
+                 `schema [OUT]`, `inventory [ROOT]`"
+                    .to_string(),
+            )),
+            Self::UnknownSubcommand { subcommand, .. } => Some(Box::new(format!(
+                "`{subcommand}` is not a subcommand; try `check`, `schema`, or `inventory`"
+            ))),
+            Self::ExtraArgument { .. } => Some(Box::new(
+                "each subcommand takes at most one positional argument; quote \
+                 paths that contain spaces"
+                    .to_string(),
+            )),
+            Self::SchemaSerialize { .. } => Some(Box::new(
+                "serializing the built-in schema document cannot fail by \
+                 construction — this is an internal bug, please report it"
+                    .to_string(),
+            )),
+            Self::SchemaWrite { .. } => Some(Box::new(
+                "check that the parent directory of OUT exists and is writable"
+                    .to_string(),
+            )),
+        }
+    }
+}
 
 /// Parsed command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,9 +169,10 @@ pub fn usage() -> String {
 ///
 /// # Errors
 ///
-/// Returns a human-readable message (including the usage text) for
-/// unknown subcommands, unknown flags, or extra positional arguments.
-pub fn parse_args<I>(args: I) -> Result<Command, String>
+/// Returns a typed [`LedgerCliError`] (including the usage text) for the
+/// help request, unknown subcommands, unknown flags, or extra positional
+/// arguments.
+pub fn parse_args<I>(args: I) -> Result<Command, LedgerCliError>
 where
     I: Iterator<Item = String>,
 {
@@ -71,11 +184,10 @@ where
         Some("check" | "schema" | "inventory") => {
             let rest = &items[1..];
             if rest.len() > 1 {
-                return Err(format!(
-                    "unexpected extra argument {}\n{}",
-                    rest[1],
-                    usage()
-                ));
+                return Err(LedgerCliError::ExtraArgument {
+                    arg: rest[1].clone(),
+                    usage: usage(),
+                });
             }
             match items[0].as_str() {
                 "check" => {
@@ -96,9 +208,15 @@ where
                 }
             }
         }
-        Some("-h" | "--help") => Err(usage()),
-        Some(flag) if flag.starts_with('-') => Err(format!("unknown flag {flag}\n{}", usage())),
-        Some(subcommand) => Err(format!("unknown subcommand {subcommand}\n{}", usage())),
+        Some("-h" | "--help") => Err(LedgerCliError::HelpRequested { usage: usage() }),
+        Some(flag) if flag.starts_with('-') => Err(LedgerCliError::UnknownFlag {
+            flag: flag.to_string(),
+            usage: usage(),
+        }),
+        Some(subcommand) => Err(LedgerCliError::UnknownSubcommand {
+            subcommand: subcommand.to_string(),
+            usage: usage(),
+        }),
     }
 }
 
@@ -321,13 +439,19 @@ pub fn format_inventory(outcome: &InventoryOutcome) -> String {
 ///
 /// # Errors
 ///
-/// Returns a message when the file cannot be written.
-pub fn write_schema(out: &Path) -> Result<String, String> {
+/// Returns a typed [`LedgerCliError`] when serialization or the file write
+/// fails.
+pub fn write_schema(out: &Path) -> Result<String, LedgerCliError> {
     let document = registry_schema();
     let text = serde_json::to_string_pretty(&document)
-        .map_err(|err| format!("cannot serialize ledger schema: {err}"))?
+        .map_err(|err| LedgerCliError::SchemaSerialize {
+            detail: err.to_string(),
+        })?
         + "\n";
-    fs::write(out, text).map_err(|err| format!("cannot write {}: {err}", out.display()))?;
+    fs::write(out, text).map_err(|err| LedgerCliError::SchemaWrite {
+        path: out.display().to_string(),
+        detail: err.to_string(),
+    })?;
     Ok(format!("wrote ledger JSON schema to {}", out.display()))
 }
 
@@ -390,7 +514,10 @@ mod tests {
     #[test]
     fn inventory_rejects_extra_positionals() {
         let err = parse_args(args(&["inventory", "a", "b"])).expect_err("reject");
-        assert!(err.contains("unexpected extra argument"), "{err}");
+        assert!(
+            matches!(err, LedgerCliError::ExtraArgument { ref arg, .. } if arg == "b"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -413,28 +540,66 @@ mod tests {
     #[test]
     fn unknown_subcommand_is_rejected_with_usage() {
         let err = parse_args(args(&["frobnicate"])).expect_err("reject");
-        assert!(err.contains("usage:"), "error must include usage: {err}");
+        assert!(matches!(
+            err,
+            LedgerCliError::UnknownSubcommand { ref subcommand, .. } if subcommand == "frobnicate"
+        ));
+        assert!(err.to_string().contains("usage:"), "{err}");
     }
 
     #[test]
     fn unknown_flag_is_rejected() {
         let err = parse_args(args(&["--wat"])).expect_err("reject");
         assert!(
-            err.contains("unknown flag"),
-            "message names the flag: {err}"
+            matches!(err, LedgerCliError::UnknownFlag { ref flag, .. } if flag == "--wat"),
+            "error names the flag: {err}"
         );
     }
 
     #[test]
-    fn help_flag_returns_usage() {
+    fn help_flag_is_a_typed_variant_with_usage() {
         let err = parse_args(args(&["-h"])).expect_err("help exits via usage");
-        assert!(err.contains("usage:"));
+        assert!(matches!(err, LedgerCliError::HelpRequested { .. }));
+        assert!(err.to_string().contains("usage:"));
+    }
+
+    #[test]
+    fn every_cli_error_variant_has_help_text() {
+        let errors = [
+            LedgerCliError::UnknownFlag {
+                flag: "--wat".into(),
+                usage: usage(),
+            },
+            LedgerCliError::UnknownSubcommand {
+                subcommand: "frob".into(),
+                usage: usage(),
+            },
+            LedgerCliError::ExtraArgument {
+                arg: "b".into(),
+                usage: usage(),
+            },
+            LedgerCliError::SchemaSerialize {
+                detail: "boom".into(),
+            },
+            LedgerCliError::SchemaWrite {
+                path: "out.json".into(),
+                detail: "denied".into(),
+            },
+        ];
+        for err in errors {
+            let help = miette::Diagnostic::help(&err)
+                .expect("every failure variant carries help text");
+            assert!(!help.to_string().is_empty(), "{err:?} help must be non-empty");
+        }
+        // The help *request* is not a failure: it deliberately has no help.
+        let requested = LedgerCliError::HelpRequested { usage: usage() };
+        assert!(miette::Diagnostic::help(&requested).is_none());
     }
 
     #[test]
     fn extra_positional_is_rejected() {
         let err = parse_args(args(&["check", "a", "b"])).expect_err("reject");
-        assert!(err.contains("unexpected extra argument"), "{err}");
+        assert!(matches!(err, LedgerCliError::ExtraArgument { .. }), "{err}");
     }
 
     // -- check run -----------------------------------------------------------
