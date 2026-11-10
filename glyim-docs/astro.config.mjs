@@ -1,17 +1,33 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import astroTakumi from 'astro-takumi';
+import fs from 'node:fs';
+import { makeRender } from './src/og-render.mjs';
 import docLinks from 'starlight-links-validator';
 import imageZoom from 'starlight-image-zoom';
 import headingBadges from 'starlight-heading-badges';
 
+const __logoB64 = fs.readFileSync("./src/assets/logo.png").toString("base64");
+const __render = makeRender({
+  logoDataUrl: "data:image/png;base64," + __logoB64,
+  accentHex: "#743e3e",
+  accentHexA12: "#743e3e1a",
+  domain: "glyim.vercel.app",
+  projectName: "Glyim",
+});
+
 // https://astro.build/config
 export default defineConfig({
+  vite: {
+    ssr: { external: ["jsdom", "astro-takumi"] },
+  },
   site: 'https://glyim.vercel.app',
         integrations: [
                 starlight({
+                        routeMiddleware: "./src/routeData.ts",
                         expressiveCode: {
-                        	themes: ['github-light', 'github-dark'],
+                                themes: ['github-light', 'github-dark'],
                         },
                         title: 'Glyim',
                         description:
@@ -50,6 +66,17 @@ export default defineConfig({
                                         items: [{ autogenerate: { directory: 'explanation' } }],
                                 },
                         ],
+                }),
+
+                astroTakumi({
+                        options: {
+                                domBackend: "linkedom",
+                                fonts: [fs.readFileSync("./node_modules/@fontsource/roboto/files/roboto-latin-400-normal.woff2")],
+                                width: 1200,
+                                height: 630,
+                                format: "png",
+                        },
+                        render: __render,
                 }),
         ],
 });
