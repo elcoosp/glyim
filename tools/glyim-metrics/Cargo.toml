@@ -6,6 +6,9 @@ description = "M0.6 repo-health metrics: deterministic source-tree measurements 
 publish = false
 
 [dependencies]
+# Typed CLI errors (`MetricsCliError`) with `help()` — the same diagnostic
+# seam `glyim-test` uses for evidence/fixture-header failures.
+miette = { workspace = true }
 serde_json = "1.0"
 
 [lib]
