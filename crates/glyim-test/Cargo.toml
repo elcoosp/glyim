@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "glyim-test"
 license.workspace = true
 edition.workspace = true
