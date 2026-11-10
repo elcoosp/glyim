@@ -29,6 +29,11 @@ name = "runner_overhead"
 harness = false
 path = "benches/runner_overhead.rs"
 
+[[bench]]
+name = "corpus_gen"
+harness = false
+path = "benches/corpus_gen.rs"
+
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true

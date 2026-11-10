@@ -22,6 +22,10 @@
 //! - [`report`] serialises a run as a `glyim.bench/1` JSON document with the
 //!   same discipline as the M1.5 evidence records: `deny_unknown_fields`,
 //!   typed enums, no clock or PRNG data, byte-deterministic rendering.
+//! - [`corpus`] is the M2.3 slice 1 substrate: seven deterministic synthetic
+//!   program generator families (wide/deep/generic/trait/match/macro/closure)
+//!   plus the `glyim.corpus/1` manifest whose identity column makes
+//!   "corpora committed with hashes" machine-checked.
 //! - [`error`] gives every failure seam a `miette` diagnostic with an
 //!   actionable `help` line, mirroring the `glyim-test` evidence seam.
 //!
@@ -43,11 +47,24 @@
 //! ```text
 //! cargo run -p glyim-bench --example measure_alloc
 //! ```
+//!
+//! Build and verify a corpus manifest (M2.3):
+//!
+//! ```text
+//! cargo run -p glyim-bench --example corpus_walk
+//! ```
+//!
+//! The M1.5 evidence schema reserved `instructions` / `rss_kb` columns for
+//! exactly this instrumentation; wiring those columns into `glyim-test` is
+//! the next M2.3 slice, after the corpus substrate has been committed with
+//! hashes.
 
 /// Gross-allocation counting allocator (`counting_allocator!` macro).
 pub mod alloc;
 /// clap-derived CLI surface, kept in the library for unit tests.
 pub mod cli;
+/// Deterministic synthetic program corpus + `glyim.corpus/1` manifest (M2.3).
+pub mod corpus;
 /// Typed errors with `miette` help text for every seam.
 pub mod error;
 /// The `glyim.bench/1` report document and its renderers.

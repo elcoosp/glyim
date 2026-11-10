@@ -80,6 +80,30 @@ pub enum BenchError {
         /// Allowed CoV, in percent.
         max_cov_pct: f64,
     },
+    /// A corpus plan is invalid (empty families/seeds, or a `size` outside
+    /// `1..=MAX_SIZE`).
+    CorpusPlan {
+        /// What is wrong with the plan.
+        detail: String,
+    },
+    /// A corpus manifest file's contents are not a valid `glyim.corpus/1`
+    /// document.
+    CorpusManifestParse {
+        /// The deserialisation error message.
+        detail: String,
+    },
+    /// A committed manifest row no longer regenerates byte-identically: a
+    /// generator template drifted after the manifest was committed.
+    CorpusIdentityMismatch {
+        /// The drifted row's family.
+        family: String,
+        /// The drifted row's seed.
+        seed: u64,
+        /// The identity recorded in the manifest.
+        expected: u64,
+        /// The identity of the regenerated program.
+        actual: u64,
+    },
 }
 
 impl fmt::Display for BenchError {
@@ -112,6 +136,19 @@ impl fmt::Display for BenchError {
                 f,
                 "stability gate failed: {metric} CoV {cov_pct:.3}% exceeds budget {max_cov_pct:.3}%"
             ),
+            Self::CorpusPlan { detail } => write!(f, "invalid corpus plan: {detail}"),
+            Self::CorpusManifestParse { detail } => {
+                write!(f, "invalid corpus manifest: {detail}")
+            }
+            Self::CorpusIdentityMismatch {
+                family,
+                seed,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "corpus program {family}/{seed} drifted: manifest identity {expected:016x}, regenerated {actual:016x}"
+            ),
         }
     }
 }
@@ -131,6 +168,9 @@ impl miette::Diagnostic for BenchError {
             Self::ReportParse { .. } => "glyim-bench::report_parse",
             Self::ReportWrite { .. } => "glyim-bench::report_write",
             Self::GateFailed { .. } => "glyim-bench::gate_failed",
+            Self::CorpusPlan { .. } => "glyim-bench::corpus_plan",
+            Self::CorpusManifestParse { .. } => "glyim-bench::corpus_manifest_parse",
+            Self::CorpusIdentityMismatch { .. } => "glyim-bench::corpus_identity_mismatch",
         }))
     }
 
@@ -199,6 +239,25 @@ impl miette::Diagnostic for BenchError {
                  the outlier samples in the report before trusting any delta"
                     .to_string()
             }
+            Self::CorpusPlan { .. } => {
+                "generate with `size` in 1..=256 (the MAX_SIZE bound that keeps \
+                 every reference exit inside i32) and non-empty families/seeds; \
+                 the M2.3 slice defaults to 24 elements per program"
+                    .to_string()
+            }
+            Self::CorpusManifestParse { .. } => {
+                "manifests are `glyim.corpus/1` JSON documents with a strict \
+                 (deny_unknown_fields) schema; regenerate one with \
+                 `cargo run -p glyim-bench --example corpus_walk`"
+                    .to_string()
+            }
+            Self::CorpusIdentityMismatch { .. } => {
+                "a generator template changed after the manifest was committed; \
+                 either revert the template edit or regenerate and re-commit the \
+                 manifest (the identity column is the M2.3 \"corpora committed \
+                 with hashes\" contract)"
+                    .to_string()
+            }
         }))
     }
 
@@ -251,6 +310,18 @@ mod tests {
                 metric: "instructions".into(),
                 cov_pct: 0.5,
                 max_cov_pct: 0.1,
+            },
+            BenchError::CorpusPlan {
+                detail: "size 0".into(),
+            },
+            BenchError::CorpusManifestParse {
+                detail: "bad json".into(),
+            },
+            BenchError::CorpusIdentityMismatch {
+                family: "wide".into(),
+                seed: 1,
+                expected: 0xab,
+                actual: 0xcd,
             },
         ];
         for err in errors {
