@@ -4,6 +4,17 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
+/// Narrows a `usize` index to the `u32` handle width.
+///
+/// `IndexVec` grows one entry at a time, so a length past `u32::MAX`
+/// violates the handle-space invariant long before allocation could
+/// succeed on any supported target; the failure is surfaced as a loud
+/// panic instead of a silent truncation.
+fn u32_index(i: usize) -> u32 {
+    u32::try_from(i)
+        .unwrap_or_else(|_| panic!("IndexVec index {i} exceeds the u32::MAX handle space"))
+}
+
 /// `Idx`.
 pub struct Idx<T> {
     raw: u32,
@@ -164,7 +175,7 @@ impl<I: IdxLike, T> IndexVec<I, T> {
     }
     /// push.
     pub fn push(&mut self, val: T) -> I {
-        let idx = I::from_raw(self.raw.len() as u32);
+        let idx = I::from_raw(u32_index(self.raw.len()));
         self.raw.push(val);
         idx
     }
@@ -207,14 +218,14 @@ impl<I: IdxLike, T> IndexVec<I, T> {
         self.raw
             .iter()
             .enumerate()
-            .map(|(i, v)| (I::from_raw(i as u32), v))
+            .map(|(i, v)| (I::from_raw(u32_index(i)), v))
     }
     /// `into_iter_enumerated`.
     pub fn into_iter_enumerated(self) -> impl Iterator<Item = (I, T)> {
         self.raw
             .into_iter()
             .enumerate()
-            .map(|(i, v)| (I::from_raw(i as u32), v))
+            .map(|(i, v)| (I::from_raw(u32_index(i)), v))
     }
     /// `into_raw`.
     #[must_use]
