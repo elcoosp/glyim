@@ -26,6 +26,9 @@ glyim-mir = { workspace = true }
 glyim-meta = { workspace = true }
 glyim-proc-macro = { workspace = true }
 tracing = { workspace = true }
+# Phase-profile renderers (`--self-profile` Chrome trace + `--emit=stats`
+# JSON). Workspace pin; no new version surface.
+serde_json = { workspace = true }
 
 [dev-dependencies]
 glyim-bytecode-vm = { workspace = true }
@@ -37,3 +40,8 @@ glyim-lang-std = { workspace = true }
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
+
+[[bench]]
+name = "phase_prof"
+harness = false
+path = "benches/phase_prof.rs"
