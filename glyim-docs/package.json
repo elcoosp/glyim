@@ -31,6 +31,6 @@
     "@types/react-dom": "^19.3.0",
     "sharp": "^0.35.5",
     "svgo": "^4.1.0",
-    "@elcoosp/docs-toolkit": "github:elcoosp/docs-toolkit#bb8119efd1a42f6b9910057d09c9d314ff544459"
+    "@elcoosp/docs-toolkit": "github:elcoosp/docs-toolkit#8084231ffe3841ce1f199644aeb0c0af71b137bb"
   }
 }
