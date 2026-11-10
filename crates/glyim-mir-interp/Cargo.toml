@@ -15,6 +15,14 @@ tracing = { workspace = true }
 glyim-test = { workspace = true }
 
 glyim-span = { workspace = true }
+
+# M2.4: the process-contract bench (`run_program` per-run cost), in the
+# repo's dependency-free `harness = false` shape — see benches/run_program.rs.
+[[bench]]
+name = "run_program"
+harness = false
+path = "benches/run_program.rs"
+
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true

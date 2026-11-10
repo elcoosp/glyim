@@ -28,6 +28,7 @@ mod more_edges;
 mod nested_calls;
 mod nested_projections;
 mod poison;
+mod program_run;
 mod projection_write;
 mod ref_test;
 mod repeat;

@@ -9,9 +9,11 @@ use std::collections::HashMap;
 
 mod interp_error;
 mod interp_value;
+mod run;
 
 pub use interp_error::InterpError;
 pub use interp_value::InterpValue;
+pub use run::{RunKind, RunOutcome, run_program};
 
 /// `Interpreter`.
 pub struct Interpreter<'tcx> {
