@@ -3,10 +3,12 @@
 //! `glyim-ledger check [ROOT]` is the registry gate CI runs: it loads the
 //! ledger under `ROOT`, validates it, cross-checks the M1.3 inventory
 //! extractors (plan §3.5), prints every diagnostic sorted, and exits 1 if
-//! any error-severity diagnostic exists. `glyim-ledger schema [OUT]`
-//! exports the JSON-Schema document for both registry entry types.
-//! `glyim-ledger inventory [ROOT]` reports the source-derived inventory
-//! and its claim/ignore status without full registry validation.
+//! any error-severity diagnostic exists. `glyim-ledger gaps [ROOT]`
+//! renders the M1.7 gap-registry witness report (witness debt is printed,
+//! not failed). `glyim-ledger schema [OUT]` exports the JSON-Schema
+//! document for both registry entry types. `glyim-ledger inventory
+//! [ROOT]` reports the source-derived inventory and its claim/ignore
+//! status without full registry validation.
 
 use std::process::ExitCode;
 
@@ -33,6 +35,15 @@ fn main() -> ExitCode {
         Command::Check { root } => {
             let outcome = glyim_ledger::run_check(&root);
             print!("{}", format_outcome(&outcome));
+            if outcome.is_ok() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Command::Gaps { root } => {
+            let outcome = glyim_ledger::run_gaps(&root);
+            print!("{}", glyim_ledger::format_gap_report(&outcome));
             if outcome.is_ok() {
                 ExitCode::SUCCESS
             } else {

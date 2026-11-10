@@ -1,11 +1,15 @@
 //! CLI library for the Readiness Ledger tool (plan M1.1).
 //!
-//! Three subcommands:
+//! Four subcommands:
 //!
 //! - `glyim-ledger check [ROOT]` — load `ROOT/ledger`, run the schema and
 //!   semantic validators, cross-check the M1.3 inventory extractors, print
 //!   every diagnostic sorted, exit 1 on any error. This is the CI registry
 //!   gate.
+//! - `glyim-ledger gaps [ROOT]` — the M1.7 gap-registry report: witness
+//!   coverage per `[[gap]]` entry, with explicit witness debt rendered
+//!   instead of failed. Error-severity diagnostics still fail the exit
+//!   code.
 //! - `glyim-ledger schema [OUT]` — write the JSON-Schema export document
 //!   for both entry types to `OUT` (pretty-printed), or to stdout.
 //! - `glyim-ledger inventory [ROOT]` — enumerate the source-derived
@@ -19,8 +23,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ledger_schema::{
-    Diagnostic, Severity, extract_inventory, inventory_diagnostics, load_inventory_ignore,
-    load_project_registry, registry_schema, unmapped_item_keys,
+    Diagnostic, GapEntry, GapStatus, HasId, Severity, Sourced, extract_inventory,
+    inventory_diagnostics, load_inventory_ignore, load_project_registry, registry_schema,
+    unmapped_item_keys,
 };
 
 /// Typed error for the CLI seams (`parse_args`, `write_schema`).
@@ -110,11 +115,11 @@ impl miette::Diagnostic for LedgerCliError {
             Self::HelpRequested { .. } => None,
             Self::UnknownFlag { .. } => Some(Box::new(
                 "the only flag is -h/--help; subcommands are `check [ROOT]`, \
-                 `schema [OUT]`, `inventory [ROOT]`"
+                 `gaps [ROOT]`, `schema [OUT]`, `inventory [ROOT]`"
                     .to_string(),
             )),
             Self::UnknownSubcommand { subcommand, .. } => Some(Box::new(format!(
-                "`{subcommand}` is not a subcommand; try `check`, `schema`, or `inventory`"
+                "`{subcommand}` is not a subcommand; try `check`, `gaps`, `schema`, or `inventory`"
             ))),
             Self::ExtraArgument { .. } => Some(Box::new(
                 "each subcommand takes at most one positional argument; quote \
@@ -143,6 +148,12 @@ pub enum Command {
         /// default).
         root: PathBuf,
     },
+    /// `gaps [ROOT]` — M1.7 gap-registry witness report.
+    Gaps {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+    },
     /// `schema [OUT]` — JSON-Schema export.
     Schema {
         /// File to write the pretty-printed document to; `None` writes to
@@ -159,7 +170,7 @@ pub enum Command {
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout."
         .into()
@@ -181,7 +192,7 @@ where
         None => Ok(Command::Check {
             root: PathBuf::from("."),
         }),
-        Some("check" | "schema" | "inventory") => {
+        Some("check" | "gaps" | "schema" | "inventory") => {
             let rest = &items[1..];
             if rest.len() > 1 {
                 return Err(LedgerCliError::ExtraArgument {
@@ -195,6 +206,12 @@ where
                         .first()
                         .map_or_else(|| PathBuf::from("."), PathBuf::from);
                     Ok(Command::Check { root })
+                }
+                "gaps" => {
+                    let root = rest
+                        .first()
+                        .map_or_else(|| PathBuf::from("."), PathBuf::from);
+                    Ok(Command::Gaps { root })
                 }
                 "inventory" => {
                     let root = rest
@@ -425,6 +442,119 @@ pub fn format_inventory(outcome: &InventoryOutcome) -> String {
             item.extractor.as_str(),
             item.key,
             item.source
+        ));
+    }
+    for diagnostic in &outcome.diagnostics {
+        lines.push(diagnostic.to_string());
+    }
+    let mut text = lines.join("\n");
+    text.push('\n');
+    text
+}
+
+/// Result of a `ledger gaps` run (plan §3.3, M1.7): the loaded gap
+/// registry with its witness coverage, plus any load/validation
+/// diagnostics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GapOutcome {
+    /// Load + validation diagnostics, sorted and de-duplicated.
+    pub diagnostics: Vec<Diagnostic>,
+    /// Every gap entry with the file it was loaded from, sorted by ID.
+    pub gaps: Vec<Sourced<GapEntry>>,
+    /// Registry IDs whose `status` is `unwitnessed` — the explicit
+    /// witness-debt list (plan §3.3: allowed, but never silent).
+    pub unwitnessed: Vec<String>,
+}
+
+impl GapOutcome {
+    /// Number of error-severity diagnostics.
+    #[must_use]
+    pub fn errors(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .count()
+    }
+
+    /// True when no error-severity diagnostic was produced. Witness debt
+    /// is a *warning*, so a registry with debt still runs ok — the report
+    /// exists to render the debt, not to fail it (`check` is the gate).
+    #[must_use]
+    pub fn is_ok(&self) -> bool {
+        self.errors() == 0
+    }
+}
+
+/// Run the M1.7 gap-registry report: load the registry under `root`
+/// (the project directory that contains `ledger/`), validate it, and
+/// summarise witness coverage. This is a *report*, not the `check` gate:
+/// witness debt is expected and rendered, not failed.
+#[must_use]
+pub fn run_gaps(root: &Path) -> GapOutcome {
+    let span = tracing::info_span!("gaps_report", root = %root.display());
+    let _enter = span.enter();
+
+    let loaded = load_project_registry(root);
+    let mut diagnostics = loaded.diagnostics;
+    diagnostics.extend(loaded.registry.validate());
+
+    let mut gaps: Vec<Sourced<GapEntry>> = loaded.registry.gaps().to_vec();
+    gaps.sort_by(|a, b| a.id().cmp(b.id()));
+    let unwitnessed: Vec<String> = gaps
+        .iter()
+        .filter(|g| matches!(g.entry.status, GapStatus::Unwitnessed))
+        .map(|g| g.id().to_string())
+        .collect();
+
+    tracing::debug!(
+        gaps = gaps.len(),
+        unwitnessed = unwitnessed.len(),
+        diagnostics = diagnostics.len(),
+        "gap registry loaded for report"
+    );
+
+    diagnostics.sort_by(|a, b| a.code.cmp(b.code).then(a.message.cmp(&b.message)));
+    diagnostics.dedup();
+    GapOutcome {
+        diagnostics,
+        gaps,
+        unwitnessed,
+    }
+}
+
+/// Render the stdout report for a gaps run: a coverage summary line, one
+/// line per gap (class + status + title, with the witness path indented
+/// underneath), the witness-debt reminder, then any diagnostics.
+#[must_use]
+pub fn format_gap_report(outcome: &GapOutcome) -> String {
+    let witnessed = outcome.gaps.len() - outcome.unwitnessed.len();
+    let mut lines = vec![format!(
+        "gaps: {} registered, {} witnessed, {} unwitnessed (witness debt)",
+        outcome.gaps.len(),
+        witnessed,
+        outcome.unwitnessed.len(),
+    )];
+    for gap in &outcome.gaps {
+        let status = match &gap.entry.status {
+            GapStatus::Witnessed => "witnessed",
+            GapStatus::Unwitnessed => "debt",
+        };
+        lines.push(format!(
+            "  {:<8} [{}] {:<9} {}",
+            gap.id(),
+            gap.entry.class.as_str(),
+            status,
+            gap.entry.title,
+        ));
+        if let Some(witness) = &gap.entry.witness {
+            lines.push(format!("          witness: {witness}"));
+        }
+    }
+    if !outcome.unwitnessed.is_empty() {
+        lines.push(format!(
+            "witness debt: {} gap(s) without a strict-xfail witness (plan §3.3); \
+             per-entry reasons live in ledger/gaps/known/*.toml",
+            outcome.unwitnessed.len()
         ));
     }
     for diagnostic in &outcome.diagnostics {
@@ -911,6 +1041,132 @@ mod tests {
             "{:?}",
             outcome.diagnostics
         );
+    }
+
+    // -- gaps run (M1.7) -----------------------------------------------------
+
+    #[test]
+    fn gaps_takes_optional_root() {
+        let cmd = parse_args(args(&["gaps", "/tmp/reg"])).expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Gaps {
+                root: PathBuf::from("/tmp/reg")
+            }
+        );
+    }
+
+    #[test]
+    fn gaps_defaults_to_current_dir() {
+        let cmd = parse_args(args(&["gaps"])).expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Gaps {
+                root: PathBuf::from(".")
+            }
+        );
+    }
+
+    #[test]
+    fn usage_lists_every_subcommand() {
+        // The usage text is the only discoverability surface for `gaps`;
+        // drift here is how a subcommand goes missing.
+        let text = usage();
+        for sub in ["check", "gaps", "schema", "inventory"] {
+            assert!(text.contains(sub), "usage must list `{sub}`: {text}");
+        }
+    }
+
+    /// A witnessed `[[gap]]` entry pointing at a witness fixture that
+    /// carries the `//@ known-gap:` marker (the strict-xfail contract).
+    fn witnessed_gap_toml(id: &str, affects: &str, witness: &str) -> String {
+        format!(
+            "[[gap]]\n\
+             id = \"{id}\"\n\
+             class = \"c\"\n\
+             title = \"g {id}\"\n\
+             affects = [\"{affects}\"]\n\
+             caps = \"L2\"\n\
+             opened_in = \"v0.3.0\"\n\
+             status = \"witnessed\"\n\
+             witness = \"{witness}\"\n"
+        )
+    }
+
+    #[test]
+    fn run_gaps_reports_witness_coverage_and_debt() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let ledger = dir.path().join("ledger");
+        write_spec(dir.path());
+        write_file(&ledger, "features/lang/a.toml", &feature_toml("LANG-A"));
+        write_file(
+            &ledger,
+            "gaps/two.toml",
+            &format!(
+                "{}\n{}",
+                witnessed_gap_toml("GAP-0001", "LANG-A", "witness-1.g"),
+                gap_toml("GAP-0002", "LANG-A")
+            ),
+        );
+        write_file(
+            dir.path(),
+            "witness-1.g",
+            "//@ known-gap: GAP-0001\nfn main() {}\n",
+        );
+
+        let outcome = run_gaps(dir.path());
+        assert!(
+            outcome.is_ok(),
+            "valid registry must pass: {:?}",
+            outcome.diagnostics
+        );
+        assert_eq!(outcome.gaps.len(), 2);
+        assert_eq!(outcome.unwitnessed, vec!["GAP-0002".to_string()]);
+        // Entries render in ID order regardless of file order.
+        assert_eq!(outcome.gaps[0].id(), "GAP-0001");
+        assert_eq!(outcome.gaps[1].id(), "GAP-0002");
+    }
+
+    #[test]
+    fn run_gaps_tolerates_a_missing_registry() {
+        // A report, not a gate: no ledger dir yields an empty report with
+        // the load diagnostic rendered, not a panic.
+        let dir = tempfile::tempdir().expect("tmp");
+        let outcome = run_gaps(dir.path());
+        assert!(!outcome.is_ok());
+        assert!(outcome.gaps.is_empty());
+    }
+
+    #[test]
+    fn format_gap_report_renders_summary_entries_and_debt() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let ledger = dir.path().join("ledger");
+        write_spec(dir.path());
+        write_file(&ledger, "features/lang/a.toml", &feature_toml("LANG-A"));
+        write_file(
+            &ledger,
+            "gaps/two.toml",
+            &format!(
+                "{}\n{}",
+                witnessed_gap_toml("GAP-0001", "LANG-A", "witness-1.g"),
+                gap_toml("GAP-0002", "LANG-A")
+            ),
+        );
+        write_file(
+            dir.path(),
+            "witness-1.g",
+            "//@ known-gap: GAP-0001\nfn main() {}\n",
+        );
+
+        let text = format_gap_report(&run_gaps(dir.path()));
+        assert!(
+            text.contains("gaps: 2 registered, 1 witnessed, 1 unwitnessed"),
+            "{text}"
+        );
+        assert!(text.contains("GAP-0001 [c] witnessed"), "{text}");
+        assert!(text.contains("witness: witness-1.g"), "{text}");
+        assert!(text.contains("GAP-0002 [a] debt"), "{text}");
+        assert!(text.contains("witness debt: 1 gap(s)"), "{text}");
     }
 
     // -- rendering -----------------------------------------------------------

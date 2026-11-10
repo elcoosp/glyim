@@ -1154,6 +1154,7 @@ dependencies = [
  "miette",
  "serde_json",
  "tempfile",
+ "tracing",
 ]
 
 [[package]]

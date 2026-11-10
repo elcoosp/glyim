@@ -2,7 +2,7 @@
 name = "glyim-ledger"
 version = "0.1.0"
 edition = "2024"
-description = "M1.1 Readiness Ledger CLI: `ledger check` registry gate and JSON-Schema export"
+description = "M1.1 Readiness Ledger CLI: `check` registry gate, `gaps` witness report (M1.7), `inventory`, and JSON-Schema export"
 publish = false
 
 [dependencies]
@@ -11,6 +11,10 @@ ledger-schema = { path = "../ledger-schema" }
 # seam `glyim-test` uses for evidence/fixture-header failures.
 miette = { workspace = true }
 serde_json = "1.0"
+# `gaps`-report spans (`gaps_report`) — the same instrumentation seam the
+# bench harness and the test executor use; a no-op unless a subscriber is
+# installed.
+tracing = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.27"
@@ -22,6 +26,11 @@ path = "src/lib.rs"
 [[bin]]
 name = "glyim-ledger"
 path = "src/main.rs"
+
+[[bench]]
+name = "gap_report"
+harness = false
+path = "benches/gap_report.rs"
 
 [lints]
 workspace = true
