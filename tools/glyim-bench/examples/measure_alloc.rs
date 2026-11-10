@@ -31,7 +31,7 @@ fn workload() -> usize {
     let mut total = 0usize;
     let mut outer: Vec<Vec<u64>> = Vec::with_capacity(64);
     for i in 0..64u64 {
-        let inner: Vec<u64> = (0..(i % 8) + 1).collect();
+        let inner: Vec<u64> = (0..=(i % 8)).collect();
         total += inner.len();
         outer.push(inner);
     }

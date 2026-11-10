@@ -155,10 +155,10 @@ fn run_once(plan: &RunPlan, iteration: usize) -> Result<BenchSample, BenchError>
         }
         MeasurementSource::WallOnly => (Command::new(&plan.program), false),
     };
-    if plan.source != MeasurementSource::WallOnly {
-        command.arg(&plan.program).args(&plan.args);
-    } else {
+    if plan.source == MeasurementSource::WallOnly {
         command.args(&plan.args);
+    } else {
+        command.arg(&plan.program).args(&plan.args);
     }
     command.stdin(Stdio::null());
 
@@ -186,10 +186,7 @@ fn run_once(plan: &RunPlan, iteration: usize) -> Result<BenchSample, BenchError>
             detail: err.to_string(),
         })?;
         let parsed = match plan.source {
-            MeasurementSource::PerfStat => {
-                let counters = parse_perf_stat(&text)?;
-                counters
-            }
+            MeasurementSource::PerfStat => parse_perf_stat(&text)?,
             MeasurementSource::Callgrind => {
                 let instructions = parse_callgrind_summary(&text)?;
                 PerfCounters {
@@ -263,10 +260,13 @@ pub fn run_iterated(plan: &RunPlan) -> Result<BenchReport, BenchError> {
     let ins_values: Vec<u64> = samples.iter().filter_map(|s| s.instructions).collect();
     let ins_stats = stats::summarize(&ins_values);
 
-    let (metric, cov_pct) = if ins_stats.is_some() {
-        ("instructions", ins_stats.expect("checked").cov_pct)
-    } else {
-        ("wall_ns", wall_stats.cov_pct)
+    // Borrow through `as_ref` instead of `is_some` + `expect`: `expect`
+    // takes `self` by value, so the old shape moved `ins_stats` out from
+    // under its later use in the report (a hard E0382 under rustc 1.99's
+    // mover). Same semantics — instructions when measured, wall otherwise.
+    let (metric, cov_pct) = match ins_stats.as_ref() {
+        Some(ins) => ("instructions", ins.cov_pct),
+        None => ("wall_ns", wall_stats.cov_pct),
     };
     let gate = GateOutcome {
         metric: metric.to_string(),

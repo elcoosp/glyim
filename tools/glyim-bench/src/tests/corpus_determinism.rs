@@ -3,12 +3,12 @@
 //! The corpus manifest inherits the M1.5/M2.2 discipline: two runs with the
 //! same inputs must be byte-identical, the manifest is strict
 //! (`deny_unknown_fields`), and a committed manifest *fails* once a
-//! generator template drifts (the "corpora committed with hashes" DoD).
+//! generator template drifts (the "corpora committed with hashes" `DoD`).
 
-use glyim_bench::corpus::{
+use crate::corpus::{
     self, CorpusFamily, CorpusManifest, MAX_SIZE, element_constant, fnv1a64, generate,
 };
-use glyim_bench::error::BenchError;
+use crate::error::BenchError;
 
 #[test]
 fn generation_is_deterministic() {
@@ -21,8 +21,11 @@ fn generation_is_deterministic() {
 
 #[test]
 fn families_are_pairwise_distinct() {
-    let sources: Vec<String> =
-        CorpusFamily::ALL.map(|family| generate(family, 42, 6).expect("generates").source);
+    // `ALL` is a fixed-size array; `array::map` stays an array, so convert
+    // for the pairwise comparison below.
+    let sources: Vec<String> = CorpusFamily::ALL
+        .map(|family| generate(family, 42, 6).expect("generates").source)
+        .to_vec();
     for (i, a) in sources.iter().enumerate() {
         for b in &sources[i + 1..] {
             assert_ne!(a, b, "families {i} and later must emit distinct shapes");

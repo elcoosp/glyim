@@ -75,9 +75,9 @@ pub enum BenchError {
     GateFailed {
         /// Which metric failed (`instructions` or `wall_ns`).
         metric: String,
-        /// Measured CoV, in percent.
+        /// Measured `CoV`, in percent.
         cov_pct: f64,
-        /// Allowed CoV, in percent.
+        /// Allowed `CoV`, in percent.
         max_cov_pct: f64,
     },
     /// A corpus plan is invalid (empty families/seeds, or a `size` outside

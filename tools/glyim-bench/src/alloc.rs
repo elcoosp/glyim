@@ -164,7 +164,7 @@ mod tests {
         let scratch: Vec<u64> = vec![7; 1_000];
         let after = alloc_snapshot();
         assert!(
-            after.count >= before.count + 1,
+            after.count > before.count,
             "at least one alloc event must be recorded: {before:?} -> {after:?}"
         );
         assert!(

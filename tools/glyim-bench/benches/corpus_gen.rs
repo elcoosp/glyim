@@ -58,11 +58,11 @@ fn main() {
     let t = Instant::now();
     for i in 0..REGEN_ITERATIONS {
         let family = CorpusFamily::ALL[i % CorpusFamily::ALL.len()];
-        black_box(generate(
-            black_box(family),
-            black_box(i as u64),
-            black_box(size),
-        ));
+        // `generate` is `Result`-valued; the bench measures the Ok path,
+        // and a generator failure must be loud rather than silently benched.
+        let program = generate(black_box(family), black_box(i as u64), black_box(size))
+            .expect("corpus generation must succeed");
+        black_box(&program);
     }
     let per_program_ns = t.elapsed().as_nanos() as f64 / REGEN_ITERATIONS as f64;
 

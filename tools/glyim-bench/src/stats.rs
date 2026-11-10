@@ -67,7 +67,7 @@ pub fn summarize(samples: &[u64]) -> Option<SampleStats> {
         sorted[sorted.len() / 2] as f64
     } else {
         let (a, b) = (sorted[sorted.len() / 2 - 1], sorted[sorted.len() / 2]);
-        (a as f64 + b as f64) / 2.0
+        (a as f64).midpoint(b as f64)
     };
     let cov_pct = coefficient_of_variation(samples).unwrap_or(f64::NAN);
     Some(SampleStats {

@@ -109,27 +109,53 @@ pub struct PerfCounters {
 /// [`BenchError::PerfStatParse`] when no `instructions` event row is found.
 pub fn parse_perf_stat(output: &str) -> Result<PerfCounters, BenchError> {
     let mut counters = PerfCounters::default();
+    // A `<not counted>` instructions row is *present but disabled* — that
+    // is different from the row being absent, and only the latter is a
+    // parse error (see the error branch below).
+    let mut saw_instructions_row = false;
     for line in output.lines() {
         let fields: Vec<&str> = line.split(',').collect();
         if fields.len() < 3 {
             continue;
         }
-        let count_field = fields[0].trim();
-        if count_field.starts_with('<') {
+        // `perf stat -x,` emits `<count>,,<unit>,<event>,…`, but callers
+        // (and the test fixtures) also produce unit-less rows where the
+        // event lands one column earlier, and counts may carry thousands
+        // separators (`125,340`). Locate the event by name instead of a
+        // fixed index, then treat everything before it as the count.
+        let Some(event_idx) = fields.iter().position(|f| {
+            let f = f.trim();
+            f.starts_with("instructions") || f.starts_with("cycles")
+        }) else {
+            continue;
+        };
+        let is_instructions = fields[event_idx].trim().starts_with("instructions");
+        if is_instructions {
+            saw_instructions_row = true;
+        }
+        if fields[0].trim().starts_with('<') {
             // `<not counted>` / `<not supported>` — the event was disabled.
             continue;
         }
-        let Ok(count) = count_field.replace(',', "").parse::<u64>() else {
+        let count_text: String = fields[..event_idx]
+            .iter()
+            .map(|f| f.trim())
+            .collect::<Vec<&str>>()
+            .join("");
+        let Ok(count) = count_text.parse::<u64>() else {
             continue;
         };
-        let event = fields[2].trim();
-        if event.starts_with("instructions") {
+        if is_instructions {
             counters.instructions = Some(count);
-        } else if event.starts_with("cycles") {
+        } else {
             counters.cycles = Some(count);
         }
     }
-    if counters.instructions.is_none() {
+    // Output with no instructions row at all is garbage (an empty or
+    // truncated `perf stat` capture): the runner cannot gate on anything.
+    // A `<not counted>` row keeps the output parseable — callers fall back
+    // to the wall-clock metric when `instructions` is `None`.
+    if !saw_instructions_row {
         return Err(BenchError::PerfStatParse {
             detail: "no `instructions` event row in the output".to_string(),
         });

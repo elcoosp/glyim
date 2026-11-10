@@ -60,6 +60,7 @@
 //! changes.
 
 use crate::error::BenchError;
+use std::fmt::Write as _;
 
 /// Schema tag pinned for the manifest shape.
 pub const CORPUS_SCHEMA: &str = "glyim.corpus/1";
@@ -289,7 +290,7 @@ pub fn generate(family: CorpusFamily, seed: u64, size: usize) -> Result<CorpusPr
 fn header(reference_exit: i32, extra_flags: &[&str]) -> String {
     let mut text = format!("//@ mode: run-pass\n//@ expect-exit: {reference_exit}\n");
     for flag in extra_flags {
-        text.push_str(&format!("//@ compile-flags: {flag}\n"));
+        let _ = writeln!(text, "//@ compile-flags: {flag}");
     }
     text.push_str("//@ feature: TOOL-TEST-RUN-PASS, TOOL-BENCH-CORPUS-GEN\n");
     text.push_str("//@ backends: gam, llvm\n");
@@ -307,9 +308,9 @@ fn gen_wide(seed: u64, size: usize) -> (String, i32) {
         let constant = element_constant(seed, index);
         exit = exit.wrapping_add(constant);
         if index == 0 {
-            body.push_str(&format!("    let a0 = {constant};\n"));
+            let _ = writeln!(body, "    let a0 = {constant};");
         } else {
-            body.push_str(&format!("    let a{index} = {prev} + {constant};\n"));
+            let _ = writeln!(body, "    let a{index} = {prev} + {constant};");
             prev = format!("a{index}");
         }
     }
@@ -330,7 +331,7 @@ fn gen_deep(_seed: u64, size: usize) -> (String, i32) {
     for _ in 0..size {
         body.push_str("    if acc == 0 {\n");
     }
-    body.push_str(&format!("        acc = {exit};\n"));
+    let _ = writeln!(body, "        acc = {exit};");
     for _ in 0..size {
         body.push_str("    }\n");
     }
@@ -352,12 +353,9 @@ fn gen_generic(seed: u64, size: usize) -> (String, i32) {
         let constant = element_constant(seed, index);
         exit = exit.wrapping_add(constant);
         if index == 0 {
-            body.push_str(&format!("    let v0 = id({constant});\n"));
+            let _ = writeln!(body, "    let v0 = id({constant});");
         } else {
-            body.push_str(&format!(
-                "    let v{index} = id(v{}) + {constant};\n",
-                index - 1
-            ));
+            let _ = writeln!(body, "    let v{index} = id(v{}) + {constant};", index - 1);
         }
     }
     let source = format!(
@@ -378,20 +376,16 @@ fn gen_trait(seed: u64, size: usize) -> (String, i32) {
     for index in 0..size {
         let constant = element_constant(seed, index);
         exit = exit.wrapping_add(constant);
-        items.push_str(&format!(
-            "struct W{index} {{ r: i32 }}\n\nimpl Read for W{index} {{\n    fn get(&mut self) -> i32 {{ self.r }}\n}}\n\n"
-        ));
+        let _ = writeln!(
+            items,
+            "struct W{index} {{ r: i32 }}\n\nimpl Read for W{index} {{\n    fn get(&mut self) -> i32 {{ self.r }}\n}}\n"
+        );
         if index == 0 {
-            body.push_str(&format!("    let mut w0 = W0 {{ r: {constant} }};\n"));
+            let _ = writeln!(body, "    let mut w0 = W0 {{ r: {constant} }};");
             body.push_str("    let s0 = w0.get();\n");
         } else {
-            body.push_str(&format!(
-                "    let mut w{index} = W{index} {{ r: {constant} }};\n"
-            ));
-            body.push_str(&format!(
-                "    let s{index} = s{} + w{index}.get();\n",
-                index - 1
-            ));
+            let _ = writeln!(body, "    let mut w{index} = W{index} {{ r: {constant} }};");
+            let _ = writeln!(body, "    let s{index} = s{} + w{index}.get();", index - 1);
         }
     }
     let source = format!(
@@ -415,16 +409,18 @@ fn gen_match(seed: u64, size: usize) -> (String, i32) {
         let position = (index + phase) % 3;
         exit = exit.wrapping_add(VALUES[position]);
         if index == 0 {
-            body.push_str(&format!(
-                "    let r0 = classify(Op::{});\n",
+            let _ = writeln!(
+                body,
+                "    let r0 = classify(Op::{});",
                 variant_name(position)
-            ));
+            );
         } else {
-            body.push_str(&format!(
-                "    let r{index} = r{} + classify(Op::{});\n",
+            let _ = writeln!(
+                body,
+                "    let r{index} = r{} + classify(Op::{});",
                 index - 1,
                 variant_name(position),
-            ));
+            );
         }
     }
     let source = format!(
@@ -458,14 +454,13 @@ fn gen_macro(seed: u64, size: usize) -> (String, i32) {
         // produces; constants are positive, so no sign ambiguity).
         let first = element_constant(seed, index);
         let expected_single = format!("k{index}={first}");
-        body.push_str(&format!(
-            "    let s{index} = format!(\"k{index}={first}\");\n"
-        ));
-        body.push_str(&format!(
-            "    if s{index}.as_str().len() != {} {{ return {}; }}\n",
+        let _ = writeln!(body, "    let s{index} = format!(\"k{index}={first}\");");
+        let _ = writeln!(
+            body,
+            "    if s{index}.as_str().len() != {} {{ return {}; }}",
             expected_single.len(),
             index + 1,
-        ));
+        );
         if index % 3 == 0 {
             // Two-substitution check: `format!("<a> + <b>")` (the multi-arg
             // path format_multiarg.g pins). `{{{a}}}` renders one literal
@@ -473,14 +468,13 @@ fn gen_macro(seed: u64, size: usize) -> (String, i32) {
             let a = element_constant(seed.wrapping_add(1), index);
             let b = element_constant(seed.wrapping_add(2), index);
             let expected_pair = format!("{a} + {b}");
-            body.push_str(&format!(
-                "    let p{index} = format!(\"{{{a}}} + {{{b}}}\");\n"
-            ));
-            body.push_str(&format!(
-                "    if p{index}.as_str().len() != {} {{ return {}; }}\n",
+            let _ = writeln!(body, "    let p{index} = format!(\"{{{a}}} + {{{b}}}\");");
+            let _ = writeln!(
+                body,
+                "    if p{index}.as_str().len() != {} {{ return {}; }}",
                 expected_pair.len(),
                 index + 1,
-            ));
+            );
         }
     }
     body.push_str("    println!(\"done\");\n    0\n");
@@ -501,17 +495,19 @@ fn gen_closure(seed: u64, size: usize) -> (String, i32) {
         let capture = element_constant(seed, index);
         let argument = argument_constant(seed, index);
         exit = exit.wrapping_add(capture).wrapping_add(argument);
-        body.push_str(&format!("    let n{index} = {capture};\n"));
-        body.push_str(&format!(
-            "    let f{index} = |x: i32| -> i32 {{ x + n{index} }};\n"
-        ));
+        let _ = writeln!(body, "    let n{index} = {capture};");
+        let _ = writeln!(
+            body,
+            "    let f{index} = |x: i32| -> i32 {{ x + n{index} }};"
+        );
         if index == 0 {
-            body.push_str(&format!("    let r0 = f0({argument});\n"));
+            let _ = writeln!(body, "    let r0 = f0({argument});");
         } else {
-            body.push_str(&format!(
-                "    let r{index} = r{} + f{index}({argument});\n",
+            let _ = writeln!(
+                body,
+                "    let r{index} = r{} + f{index}({argument});",
                 index - 1,
-            ));
+            );
         }
     }
     let source = format!(
@@ -638,10 +634,11 @@ impl CorpusManifest {
     #[must_use]
     pub fn render_text(&self) -> String {
         let mut out = String::new();
-        out.push_str(&format!(
-            "glyim.corpus/1 manifest\n  programs: {}\n",
+        let _ = writeln!(
+            out,
+            "glyim.corpus/1 manifest\n  programs: {}",
             self.programs.len()
-        ));
+        );
         out.push_str("  family   seed  size  exit  identity            flags\n");
         for entry in &self.programs {
             let flags = if entry.compile_flags.is_empty() {
@@ -649,15 +646,16 @@ impl CorpusManifest {
             } else {
                 entry.compile_flags.join(",")
             };
-            out.push_str(&format!(
-                "  {:<8} {:>4} {:>5} {:>5}  {:016x}  {}\n",
+            let _ = writeln!(
+                out,
+                "  {:<8} {:>4} {:>5} {:>5}  {:016x}  {}",
                 entry.family.as_str(),
                 entry.seed,
                 entry.size,
                 entry.reference_exit,
                 entry.identity,
                 flags,
-            ));
+            );
         }
         out
     }

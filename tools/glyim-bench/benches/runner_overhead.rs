@@ -93,7 +93,7 @@ fn main() {
     );
     let t = Instant::now();
     for _ in 0..ITERATIONS {
-        black_box(report.clone()).render_text();
+        black_box(black_box(report.clone()).render_text());
     }
     let render_us = t.elapsed().as_micros() as f64 / ITERATIONS as f64;
 

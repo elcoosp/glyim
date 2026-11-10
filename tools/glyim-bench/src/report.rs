@@ -8,6 +8,7 @@
 
 use crate::source::MeasurementSource;
 use crate::stats::SampleStats;
+use std::fmt::Write as _;
 
 /// Schema tag pinned for the report shape.
 pub const BENCH_SCHEMA: &str = "glyim.bench/1";
@@ -132,41 +133,46 @@ impl BenchReport {
     #[must_use]
     pub fn render_text(&self) -> String {
         let mut out = String::new();
-        out.push_str(&format!(
-            "glyim-bench report ({})\n  program: {} {}\n  source:  {}\n  runs:    {}\n",
+        let _ = writeln!(
+            out,
+            "glyim-bench report ({})\n  program: {} {}\n  source:  {}\n  runs:    {}",
             self.schema,
             self.program,
             self.args.join(" "),
             self.source.as_str(),
             self.iterations,
-        ));
+        );
         out.push_str("  #    wall_ns      instructions\n");
         for (index, sample) in self.samples.iter().enumerate() {
             let instructions = sample
                 .instructions
                 .map_or_else(|| "-".to_string(), |v| v.to_string());
-            out.push_str(&format!(
-                "  {:<3} {:>12} {:>16}\n",
+            let _ = writeln!(
+                out,
+                "  {:<3} {:>12} {:>16}",
                 index, sample.wall_ns, instructions
-            ));
+            );
         }
-        out.push_str(&format!(
-            "  wall: min {} ns, median {:.0} ns, mean {:.0} ns\n",
+        let _ = writeln!(
+            out,
+            "  wall: min {} ns, median {:.0} ns, mean {:.0} ns",
             self.wall.min, self.wall.median, self.wall.mean,
-        ));
+        );
         if let Some(stats) = &self.instructions {
-            out.push_str(&format!(
-                "  instructions: min {}, median {:.0}, mean {:.0}\n",
+            let _ = writeln!(
+                out,
+                "  instructions: min {}, median {:.0}, mean {:.0}",
                 stats.min, stats.median, stats.mean,
-            ));
+            );
         }
-        out.push_str(&format!(
-            "  gate: {} CoV {:.3}% (budget {:.3}%) -> {}\n",
+        let _ = writeln!(
+            out,
+            "  gate: {} CoV {:.3}% (budget {:.3}%) -> {}",
             self.gate.metric,
             self.gate.cov_pct,
             self.gate.max_cov_pct,
             if self.gate.passed { "PASS" } else { "FAIL" },
-        ));
+        );
         out
     }
 }
@@ -175,7 +181,7 @@ impl BenchReport {
 mod tests {
     use super::{BENCH_SCHEMA, BenchReport, BenchSample, GateOutcome};
     use crate::source::MeasurementSource;
-    use crate::stats::{SampleStats, summarize};
+    use crate::stats::summarize;
 
     fn sample(wall_ns: u64, instructions: Option<u64>) -> BenchSample {
         BenchSample {
@@ -262,10 +268,13 @@ mod tests {
             "sneaky_extra": true
         }"#;
         let err = serde_json::from_str::<BenchReport>(json).expect_err("unknown field");
-        let help = miette::Diagnostic::help(&crate::error::BenchError::ReportParse {
+        // Bind the diagnostic so the returned `help` display does not
+        // borrow a statement-local temporary (E0716 under rustc 1.99's
+        // temporary-drop rules).
+        let diagnostic = crate::error::BenchError::ReportParse {
             detail: err.to_string(),
-        })
-        .expect("help");
+        };
+        let help = miette::Diagnostic::help(&diagnostic).expect("help");
         assert!(help.to_string().contains("glyim.bench/1"));
     }
 

@@ -17,7 +17,7 @@
 //!   for in-process consumers — gross allocation count/bytes from
 //!   [`alloc::CountingAllocator`].
 //! - [`stats`] computes min/mean/median/max and the coefficient of variation,
-//!   and applies the M2.2 definition-of-done gate: **CoV of the instruction
+//!   and applies the M2.2 definition-of-done gate: **`CoV` of the instruction
 //!   counts < 0.1 % over the run**.
 //! - [`report`] serialises a run as a `glyim.bench/1` JSON document with the
 //!   same discipline as the M1.5 evidence records: `deny_unknown_fields`,
