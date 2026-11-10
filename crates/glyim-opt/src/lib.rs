@@ -12,14 +12,31 @@ mod slice_desugar;
 mod unreachable_elim;
 mod validate;
 
+/// The result of a successful [`optimize`] run: the same body with every
+/// enabled MIR pass applied.
 #[derive(Clone, Debug)]
-/// `Optimized`.
 pub struct Optimized {
-    /// `Struct`.
+    /// The optimized MIR body (a private clone of the input; the caller's
+    /// `Arc<Body>` is never mutated).
     pub body: Body,
 }
 
-/// optimize.
+/// Run the full MIR optimization pipeline over `body`.
+///
+/// Pass order is fixed: `slice_desugar` (with its unconditional
+/// post-condition check), `constant_prop`, `dce`, `cfg_simplify`,
+/// `unreachable_elim`. The body is validated *before* the first pass, and
+/// the `Subslice`-elimination invariant is re-checked right after
+/// `slice_desugar`: a violation is a compiler bug (ill-formed MIR handed
+/// over by lowering or by a pass), so it surfaces as a precise ICE panic
+/// naming the [`MirValidationError`] instead of an opaque failure three
+/// passes later (de-stubbing plan §8.7/§8.8).
+///
+/// # Panics
+///
+/// Panics when the input body fails [`validate_body`] or when a `Subslice`
+/// projection survives `slice_desugar`. Both are compiler bugs, not
+/// user-facing errors; the driver's ICE handler renders them.
 #[must_use]
 pub fn optimize(ctx: &TyCtx, body: &Arc<Body>) -> Optimized {
     let mut body = (**body).clone();

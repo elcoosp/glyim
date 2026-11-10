@@ -29,25 +29,25 @@ use std::fmt;
 /// A single well-formedness violation found by the validator.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MirValidationError {
-    /// `Struct`.
+    /// Which invariant was violated.
     pub kind: MirValidationErrorKind,
-    /// `Struct`.
+    /// Source span of the offending MIR statement or terminator, so the
+    /// rendered ICE points at the lowering that produced the body.
     pub span: Span,
 }
 
+/// The invariant classes [`validate_body`] / [`validate_no_subslice`] check.
 #[derive(Clone, Debug, PartialEq, Eq)]
-/// `MirValidationErrorKind`.
 pub enum MirValidationErrorKind {
     /// A terminator references a basic block that does not exist.
     UnknownTarget(BasicBlockIdx),
     /// A `Drop` terminator whose place type does not need drop glue, per the
     /// canonical `TyCtx::needs_drop` (plan §15.1). Holding the offending place
     /// and type makes the diagnostic actionable and lets tests assert on it.
-    /// `Struct`.
     UnnecessaryDrop {
-        /// place field.
+        /// The place the `Drop` terminator targets.
         place: Place,
-        /// ty field.
+        /// The (drop-glue-free) type of that place.
         ty: Ty,
     },
     /// A `ConstantIndex`/`Subslice` projection appears mid-chain (not terminal).

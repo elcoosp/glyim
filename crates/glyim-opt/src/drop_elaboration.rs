@@ -330,29 +330,49 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
                     local = Some(place.local);
                 }
             }
+            // §15.2: decide the per-element flag statement from the
+            // *original* statement before it is moved into `new_stmts`.
+            // The previous re-inspection via `new_stmts.last().unwrap()`
+            // also saw the optional plain-flag statement pushed below
+            // (whenever the assigned local had a whole-value drop flag),
+            // making the branch's meaning depend on push order; computing
+            // the statement up front keeps the branch total (no unwrap)
+            // and the emitted order fixed: original stmt, plain flag,
+            // per-element flag.
+            let element_flag = match &stmt.kind {
+                StatementKind::Assign(place, _) => {
+                    match flags.per_element.get(&place.local) {
+                        Some((flag_arr, _)) => {
+                            match place
+                                .projection
+                                .iter()
+                                .find(|p| matches!(p, ProjectionElem::Index(_)))
+                            {
+                                Some(ProjectionElem::Index(idx_local)) => {
+                                    Some(DropFlags::set_flag_stmt_indexed(
+                                        *flag_arr,
+                                        *idx_local,
+                                        true,
+                                        span,
+                                        &tc,
+                                    ))
+                                }
+                                _ => None,
+                            }
+                        }
+                        None => None,
+                    }
+                }
+                _ => None,
+            };
             new_stmts.push(stmt);
             if let Some(local) = local {
                 if let Some(flag) = flags.get_flag(local) {
                     new_stmts.push(DropFlags::set_flag_stmt(flag, true, span, &tc));
                 }
             }
-            // §15.2: mark the per-element flag when an array element is assigned.
-            if let Statement {
-                kind: StatementKind::Assign(place, _),
-                ..
-            } = new_stmts.last().unwrap()
-            {
-                if let Some((flag_arr, _)) = flags.per_element.get(&place.local) {
-                    let idx_local = place
-                        .projection
-                        .iter()
-                        .find(|p| matches!(p, ProjectionElem::Index(_)));
-                    if let Some(&ProjectionElem::Index(idx_local)) = idx_local {
-                        new_stmts.push(DropFlags::set_flag_stmt_indexed(
-                            *flag_arr, idx_local, true, span, &tc,
-                        ));
-                    }
-                }
+            if let Some(flag_stmt) = element_flag {
+                new_stmts.push(flag_stmt);
             }
         }
         block.statements = new_stmts;
