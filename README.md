@@ -264,8 +264,8 @@ glyim input.g --error-format json
 
 | Flag | Description |
 |------|-------------|
-| `--emit <KIND>` | `obj` (default), `exec`, `mir`, `llvm-ir`, `asm`, `cdylib`, `syntax`, `stats` |
-| `--backend <NAME>` | `llvm` (default) or `bytecode` |
+| `--emit <KIND>` | `obj` (default), `exec`, `mir`, `llvm-ir`, `asm`, `cdylib`, `syntax`, `stats`, `run` |
+| `--backend <NAME>` | `llvm` (default), `bytecode`, or `interp` (run mode only: executes through the in-process MIR interpreter) |
 | `-O, --opt-level <N>` | Optimisation level 0–3 |
 | `--target <TRIPLE>` | Target triple (default: `x86_64-unknown-linux-gnu`) |
 | `--linker <PATH>` | Override the system linker |
@@ -281,6 +281,14 @@ glyim input.g --error-format json
 
 > [!IMPORTANT]
 > `--lto=thin` requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution `glyim-codegen-llvm` was built against. Requesting `thin` with `--backend bytecode` is an explicit error rather than a silent no-op.
+
+> [!TIP]
+> `--emit=run` executes the program in-process through the MIR interpreter (M2.4) — no LLVM toolchain, no system linker, no `glyim-runtime` staticlib. The program's exit code (masked to `0xff`; panics exit 101) becomes the driver's exit code, so it is scriptable exactly like a linked `--emit=exec` binary:
+>
+> ```bash
+> glyim input.g --emit=run --with-stdlib   # runs without a linker
+> glyim input.g --emit=run --backend=interp --time-passes
+> ```
 
 ### The `glyip` Build Tool
 
@@ -474,6 +482,9 @@ libraries rather than through the CLI:
 ```bash
 # Drive the pipeline in-process: write a .g program, lower it to MIR.
 cargo run -p glyim-pipeline --example hello_pipeline
+
+# Execute in-process via the interpreter run contract (M2.4 seam).
+cargo run -p glyim-pipeline --example run_interp
 
 # Round-trip the readiness ledger's evidence JSONL (M1.5 seam).
 cargo run -p glyim-test --example evidence_report
