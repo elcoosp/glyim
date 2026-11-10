@@ -1,37 +1,26 @@
 /*
  * Glyim brand theme.
  *
- * The accent is derived from the project logo: a graphite 3-D "G" whose
- * shaded faces carry a subtle steel-blue tint (dominant chroma pixels
- * around #303048 / #304848). The accent below keeps that cool steel-blue
- * hue (~200°) at contrast-safe lightness levels.
- *
- * WCAG AA contrast (verified programmatically, see docs/decisions/0003):
- * - light accent #2a5f79 on white:        6.97:1
- * - light accent-high #1f4b61 on white:   9.39:1
- * - dark accent #64a6c4 on #181a1e:       6.47:1
- * - dark accent-high #9dcadd on #181a1e:  9.89:1
+ * Accent derived from the graphite 3-D "G" logo: near-achromatic dark gray
+ * at contrast-safe lightness levels.
  */
 
 :root {
-        --sl-color-accent-low: hsl(0 30% 93%);
-        --sl-color-accent: hsl(0 30% 35%);
-        --sl-color-accent-high: hsl(0 30% 28%);
+        --sl-color-accent-low: hsl(0 0% 85%);
+        --sl-color-accent: hsl(0 0% 25%);
+        --sl-color-accent-high: hsl(0 0% 17%);
 }
 
 [data-theme='dark'] {
-        --sl-color-accent-low: hsl(0 30% 16%);
-        --sl-color-accent: hsl(0 30% 60%);
-        --sl-color-accent-high: hsl(0 30% 75%);
+        --sl-color-accent-low: hsl(0 0% 45%);
+        --sl-color-accent: hsl(0 0% 75%);
+        --sl-color-accent-high: hsl(0 0% 85%);
 }
 
-/* Keep the header logo crisp next to the wordmark. */
 .site-title img {
         max-height: 1.75rem;
 }
 
-/* The hero reuses the light-theme logo asset; invert it in dark mode so the
-   graphite mark stays readable on dark backgrounds. */
 [data-theme='dark'] .hero img[src*='logo-light'] {
         filter: invert(1);
 }
