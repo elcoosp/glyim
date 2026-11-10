@@ -103,7 +103,11 @@ clap = { version = "4.6.7", features = ["derive"] }
 insta = "1.49.0"
 miette = "7.6"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# `float_roundtrip` makes f64 deserialisation exact, so a serialized
+# `glyim.bench/1` report deserialises bit-for-bit (the harness round-trip
+# contract in `tools/glyim-bench` tests asserts `back == report` on f64
+# stats; the fast-path float parser drifted on the last ulp).
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
 tokio = "1.54.1"
 bitflags = "2.13.2"
 num_enum = "0.7.6"
