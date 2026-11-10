@@ -529,9 +529,19 @@ impl SyntaxKind {
     /// silently excluded every node kind declared *after* `Error`
     /// (`Visibility`/`VisCrate`/`VisSuper`/`VisSelf`/`VisPath`,
     /// `WherePredicate`, `Bound`, `MetaVar`, `MetaVarCrate`). An explicit list
-    /// cannot drift with the enum's declaration order.
+    /// cannot drift with the enum's declaration order. The list is kept
+    /// explicit, grouped into the category helpers below.
     #[must_use]
     pub fn is_node(&self) -> bool {
+        self.is_node_item()
+            || self.is_node_stmt_expr()
+            || self.is_node_ty_pat()
+            || self.is_node_macro_meta()
+    }
+
+    /// Node kinds that declare items: files, modules, definitions,
+    /// visibility nodes, and macro definitions.
+    fn is_node_item(self) -> bool {
         matches!(
             self,
             SyntaxKind::SourceFile
@@ -546,12 +556,24 @@ impl SyntaxKind {
                 | SyntaxKind::StaticDef
                 | SyntaxKind::UseDecl
                 | SyntaxKind::ExternBlock
-                | SyntaxKind::ParamList
-                | SyntaxKind::Param
-                | SyntaxKind::TypeParamList
-                | SyntaxKind::TypeParam
-                | SyntaxKind::WhereClause
-                | SyntaxKind::Block
+                | SyntaxKind::MacroDef
+                | SyntaxKind::StructField
+                | SyntaxKind::EnumVariant
+                | SyntaxKind::FieldList
+                | SyntaxKind::VariantList
+                | SyntaxKind::Visibility
+                | SyntaxKind::VisCrate
+                | SyntaxKind::VisSuper
+                | SyntaxKind::VisSelf
+                | SyntaxKind::VisPath
+        )
+    }
+
+    /// Node kinds for statements and expressions.
+    fn is_node_stmt_expr(self) -> bool {
+        matches!(
+            self,
+            SyntaxKind::Block
                 | SyntaxKind::LetStmt
                 | SyntaxKind::ExprStmt
                 | SyntaxKind::IfExpr
@@ -573,7 +595,6 @@ impl SyntaxKind {
                 | SyntaxKind::PathExpr
                 | SyntaxKind::TryExpr
                 | SyntaxKind::AwaitExpr
-                | SyntaxKind::ImplTraitType
                 | SyntaxKind::LitExpr
                 | SyntaxKind::ArrayExpr
                 | SyntaxKind::TupleExpr
@@ -583,7 +604,14 @@ impl SyntaxKind {
                 | SyntaxKind::ContinueExpr
                 | SyntaxKind::ReturnExpr
                 | SyntaxKind::AssignExpr
-                | SyntaxKind::RawPtrType
+        )
+    }
+
+    /// Node kinds for types, patterns, and generic arguments.
+    fn is_node_ty_pat(self) -> bool {
+        matches!(
+            self,
+            SyntaxKind::RawPtrType
                 | SyntaxKind::PathType
                 | SyntaxKind::FnType
                 | SyntaxKind::DynType
@@ -593,6 +621,7 @@ impl SyntaxKind {
                 | SyntaxKind::TupleType
                 | SyntaxKind::NeverType
                 | SyntaxKind::InferType
+                | SyntaxKind::ImplTraitType
                 | SyntaxKind::GenericArgList
                 | SyntaxKind::PatIdent
                 | SyntaxKind::PatStruct
@@ -603,24 +632,27 @@ impl SyntaxKind {
                 | SyntaxKind::PatRange
                 | SyntaxKind::PatWild
                 | SyntaxKind::PatSlice
+        )
+    }
+
+    /// Node kinds for paths, parameters, where clauses, macro call
+    /// machinery, metavariables, and the GSX surface syntax.
+    fn is_node_macro_meta(self) -> bool {
+        matches!(
+            self,
+            SyntaxKind::ParamList
+                | SyntaxKind::Param
+                | SyntaxKind::TypeParamList
+                | SyntaxKind::TypeParam
+                | SyntaxKind::WhereClause
+                | SyntaxKind::WherePredicate
+                | SyntaxKind::Bound
                 | SyntaxKind::UsePath
                 | SyntaxKind::UseTree
                 | SyntaxKind::MacroCall
                 | SyntaxKind::TokenTree
-                | SyntaxKind::MacroDef
                 | SyntaxKind::MacroArm
                 | SyntaxKind::MacroPattern
-                | SyntaxKind::StructField
-                | SyntaxKind::EnumVariant
-                | SyntaxKind::FieldList
-                | SyntaxKind::VariantList
-                | SyntaxKind::Visibility
-                | SyntaxKind::VisCrate
-                | SyntaxKind::VisSuper
-                | SyntaxKind::VisSelf
-                | SyntaxKind::VisPath
-                | SyntaxKind::WherePredicate
-                | SyntaxKind::Bound
                 | SyntaxKind::MetaVar
                 | SyntaxKind::MetaVarCrate
                 | SyntaxKind::GsxElement
