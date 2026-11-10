@@ -1,3 +1,4 @@
+import starlightLlmsTxt from 'starlight-llms-txt';
 import { defineDocsConfig } from '@elcoosp/docs-toolkit/config';
 import docLinks from 'starlight-links-validator';
 import imageZoom from 'starlight-image-zoom';
@@ -17,7 +18,14 @@ export default await defineDocsConfig({
   },
   locales: { en: { label: 'English' } },
   defaultLocale: 'en',
-  plugins: [docLinks(), imageZoom(), headingBadges()],
+  plugins: [docLinks(), imageZoom(), headingBadges(), starlightLlmsTxt({
+      customSets: [
+        { label: 'Tutorials',     paths: ['tutorials/**'] },
+        { label: 'How-to Guides', paths: ['guides/**'] },
+        { label: 'Reference',     paths: ['reference/**'] },
+        { label: 'Explanation',   paths: ['explanation/**'] },
+      ],
+    })],
   sidebar: [
     { label: 'Overview', link: '/' },
     { label: 'Tutorials', items: [{ autogenerate: { directory: 'tutorials' } }] },
