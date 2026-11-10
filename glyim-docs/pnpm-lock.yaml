@@ -34,8 +34,8 @@ importers:
         specifier: ^0.9.4
         version: 0.9.12(@emnapi/runtime@1.11.1)(prettier@3.9.10)(typescript@6.0.3)
       '@elcoosp/docs-toolkit':
-        specifier: github:elcoosp/docs-toolkit#d8bb48f1f293a6441cc5964ffa26ebd0121290cd
-        version: https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/d8bb48f1f293a6441cc5964ffa26ebd0121290cd(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(astro@7.4.7(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))(react@19.3.1)
+        specifier: github:elcoosp/docs-toolkit#8a490901e1514378819bee3ff7740249c80fe7ec
+        version: https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/8a490901e1514378819bee3ff7740249c80fe7ec(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(astro@7.4.7(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))(react@19.3.1)
       '@emnapi/runtime':
         specifier: 1.11.1
         version: 1.11.1
@@ -402,9 +402,9 @@ packages:
     resolution: {integrity: sha512-6V0+8vw/GmH92URQ/Ki12FPhoB3nqaQUJE+5xgbFbB5ok0OXYK5jCQsQQoyR3BzCddHsCpyCFRnIcI1PSOVYkQ==}
     engines: {node: '>=14'}
 
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/d8bb48f1f293a6441cc5964ffa26ebd0121290cd':
-    resolution: {gitHosted: true, integrity: sha512-MLxP+Rr8XKAuKEW7Ss2aSSKdBbWWe4PlMN/sv14t2QOcoGG0Bv+BnSLXCH1VGtnhR5bzrQr7+9EPLL0jfXnA+w==, tarball: https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/d8bb48f1f293a6441cc5964ffa26ebd0121290cd}
-    version: 0.1.0
+  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/8a490901e1514378819bee3ff7740249c80fe7ec':
+    resolution: {gitHosted: true, integrity: sha512-JLgqirjzg9t3PCYKRYAOpYBxbj2Tt/akIqA1uH1mGf1GUcIyOcnjv9O6vlMZAJgStc8QCH4jayGdJssFzzj42g==, tarball: https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/8a490901e1514378819bee3ff7740249c80fe7ec}
+    version: 0.2.1
     engines: {node: '>=22.18.0'}
     hasBin: true
     peerDependencies:
@@ -3421,7 +3421,7 @@ snapshots:
 
   '@ctrl/tinycolor@4.3.0': {}
 
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/d8bb48f1f293a6441cc5964ffa26ebd0121290cd(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(astro@7.4.7(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))(react@19.3.1)':
+  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/8a490901e1514378819bee3ff7740249c80fe7ec(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(astro@7.4.7(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))(react@19.3.1)':
     dependencies:
       '@astrojs/starlight': 0.42.10(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(astro@7.4.7(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3)
       astro: 7.4.7(@astrojs/markdown-remark@7.3.6(supports-color@10.2.2))(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1)
