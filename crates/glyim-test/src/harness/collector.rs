@@ -68,10 +68,10 @@ impl<'a> TestCollector<'a> {
                 has_explicit_mode,
                 has_annotations,
                 ..
-            } = super::config::parse_test_config(&source).map_err(|msg| {
+            } = super::config::parse_test_config(&source).map_err(|e| {
                 TestDiscoveryError::InvalidConfig {
                     path: path.to_path_buf(),
-                    message: msg,
+                    message: e.message,
                 }
             })?;
 

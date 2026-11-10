@@ -134,6 +134,7 @@ impl TestMode {
 }
 
 /// `ParsedConfig`.
+#[derive(Debug)]
 pub struct ParsedConfig {
     /// `Struct`.
     pub config: TestConfig,
@@ -143,6 +144,45 @@ pub struct ParsedConfig {
     pub has_annotations: bool,
     /// The parsed `//@` header (empty struct when none present).
     pub annotations: FixtureAnnotations,
+}
+
+/// A typed fixture-header parse failure.
+///
+/// Micro-debt cleanup (M2.1 companion): `parse_test_config` used to return
+/// `Result<_, String>`, leaving callers to embed a bare string in their own
+/// prose. The typed error renders through `miette` (the same pipeline as
+/// `harness::evidence::EvidenceError`) and carries an actionable `help`
+/// line pointing fixture authors at the canonical `//@` grammar.
+#[derive(Debug)]
+pub struct TestConfigError {
+    /// The parse failure message (what was wrong, and where the conflict
+    /// or bad key sits).
+    pub message: String,
+}
+
+impl std::fmt::Display for TestConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for TestConfigError {}
+
+impl miette::Diagnostic for TestConfigError {
+    fn help<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        Some(Box::new(
+            "fixture headers must sit above the first non-comment line. Canonical \
+             directives use the `//@ key: value` grammar (M1.4); a legacy `// key:` \
+             header and its `//@` equivalent cannot both appear. Run \
+             `cargo run -p glyim-test --bin glyim-tag-fixtures` to normalise \
+             legacy headers, and see `annotations::directives` for the grammar."
+                .to_string(),
+        ))
+    }
+
+    fn severity(&self) -> Option<miette::Severity> {
+        Some(miette::Severity::Error)
+    }
 }
 
 /// `parse_test_config`.
@@ -155,7 +195,11 @@ pub struct ParsedConfig {
 /// A legacy key and its canonical `//@` equivalent must not both appear in
 /// one fixture: ambiguity is drift, and drift is rejected at parse time
 /// rather than resolved by a silent precedence rule.
-pub fn parse_test_config(source: &str) -> Result<ParsedConfig, String> {
+///
+/// # Errors
+/// Returns [`TestConfigError`] when legacy and canonical headers conflict;
+/// the error renders through `miette` with a fix-up help line.
+pub fn parse_test_config(source: &str) -> Result<ParsedConfig, TestConfigError> {
     let mut config = TestConfig::default();
     let mut has_explicit_mode = false;
     // Legacy keys seen, for canonical-vs-legacy conflict detection.
@@ -183,8 +227,9 @@ pub fn parse_test_config(source: &str) -> Result<ParsedConfig, String> {
                     .entry(rev.to_string())
                     .or_default()
                     .extend(
-                        shell_words::split(value.trim())
-                            .map_err(|e| format!("invalid compile flags: {e}"))?,
+                        shell_words::split(value.trim()).map_err(|e| TestConfigError {
+                            message: format!("invalid compile flags: {e}"),
+                        })?,
                     );
             }
             continue;
@@ -192,17 +237,22 @@ pub fn parse_test_config(source: &str) -> Result<ParsedConfig, String> {
 
         if let Some(value) = content.strip_prefix("test-mode:") {
             legacy_seen.insert("test-mode");
-            config.mode = value.parse::<TestMode>()?;
+            config.mode = value
+                .parse::<TestMode>()
+                .map_err(|msg| TestConfigError { message: msg })?;
             has_explicit_mode = true;
         } else if let Some(value) = content.strip_prefix("revisions:") {
             legacy_seen.insert("revisions");
             config.revisions = value.split_whitespace().map(String::from).collect();
         } else if let Some(value) = content.strip_prefix("compile-flags:") {
             legacy_seen.insert("compile-flags");
-            config.compile_flags.extend(
-                shell_words::split(value.trim())
-                    .map_err(|e| format!("invalid compile flags: {e}"))?,
-            );
+            config
+                .compile_flags
+                .extend(
+                    shell_words::split(value.trim()).map_err(|e| TestConfigError {
+                        message: format!("invalid compile flags: {e}"),
+                    })?,
+                );
         } else if let Some(value) = content.strip_prefix("error-pattern:") {
             legacy_seen.insert("error-pattern");
             config.error_patterns.push(value.trim().to_string());
@@ -244,8 +294,10 @@ pub fn parse_test_config(source: &str) -> Result<ParsedConfig, String> {
 
     // M1.4: parse the canonical `//@` header and merge it, rejecting
     // legacy/canonical double spellings of the same key.
-    let annotations = directives::parse_directives(source)
-        .map_err(|(line, msg)| format!("`//@` annotation error at line {line}: {msg}"))?;
+    let annotations =
+        directives::parse_directives(source).map_err(|(line, msg)| TestConfigError {
+            message: format!("`//@` annotation error at line {line}: {msg}"),
+        })?;
 
     let conflicts: Vec<&str> = [
         (
@@ -319,11 +371,13 @@ pub fn parse_test_config(source: &str) -> Result<ParsedConfig, String> {
     .collect();
 
     if !conflicts.is_empty() {
-        return Err(format!(
-            "fixture mixes legacy `//` headers and canonical `//@` directives for: {}. \
-             Use the `//@` form only (see annotations::directives)",
-            conflicts.join(", ")
-        ));
+        return Err(TestConfigError {
+            message: format!(
+                "fixture mixes legacy `//` headers and canonical `//@` directives for: {}. \
+                 Use the `//@` form only (see annotations::directives)",
+                conflicts.join(", ")
+            ),
+        });
     }
 
     if let Some(mode) = annotations.mode {

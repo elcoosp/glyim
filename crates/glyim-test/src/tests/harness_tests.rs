@@ -706,3 +706,33 @@ fn ui_unreadable_expected_snapshot_is_a_typed_failure() {
         other => panic!("expected UiExpectedUnreadable failure, got {other:?}"),
     }
 }
+
+/// Micro-debt cleanup (M2.1 companion): a fixture that mixes a legacy
+/// `// key:` header with its canonical `//@` spelling fails with a
+/// **typed** error carrying miette help text — not the bare `String` the
+/// seam used to return, which callers could only embed in prose.
+#[test]
+fn test_config_conflict_error_is_typed_with_help() {
+    use miette::Diagnostic as _;
+    let source = "// test-mode: run-pass\n//@ mode: run-pass\nfn main() {}";
+    let err = harness::config::parse_test_config(source).expect_err("conflict must fail");
+    assert!(
+        err.message.contains("legacy"),
+        "message names the conflict: {}",
+        err.message
+    );
+    let help_text = err
+        .help()
+        .expect("typed error carries miette help")
+        .to_string();
+    assert!(
+        help_text.contains("//@"),
+        "help points at the //@ grammar: {help_text}"
+    );
+    // It renders through miette like every harness diagnostic.
+    let rendered = format!("{:?}", miette::Report::new(err));
+    assert!(
+        rendered.contains("legacy"),
+        "miette report renders: {rendered}"
+    );
+}
