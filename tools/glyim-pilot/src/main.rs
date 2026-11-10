@@ -125,9 +125,21 @@ async fn run_serve(config: Arc<PilotConfig>, project_root: PathBuf) {
 
     let http_addr = SocketAddr::from(([127, 0, 0, 1], 8421));
     tokio::spawn(async move {
-        let listener = tokio::net::TcpListener::bind(http_addr).await.unwrap();
-        if let Err(e) = axum::serve(listener, app).await {
-            tracing::error!("HTTP server error: {e}");
+        // C4 (no panics on user input): a busy/unavailable control port must
+        // degrade to a logged error, not panic the detached task — the WS
+        // server above keeps running and the pilot stays debuggable.
+        match tokio::net::TcpListener::bind(http_addr).await {
+            Ok(listener) => {
+                if let Err(e) = axum::serve(listener, app).await {
+                    tracing::error!("HTTP server error: {e}");
+                }
+            }
+            Err(e) => {
+                tracing::error!(
+                    "cannot bind HTTP control port {http_addr}: {e} \
+                     (another pilot instance is probably running)"
+                );
+            }
         }
     });
 
