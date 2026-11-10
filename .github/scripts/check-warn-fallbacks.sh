@@ -28,7 +28,7 @@ for crate in "${CRATES[@]}"; do
 done
 
 if [ $FAILED -eq 1 ]; then
-    echo "ERROR: Found tracing::warn fallbacks. Please use the stub! macro or unreachable! for these cases."
+    echo "ERROR: Found tracing::warn fallbacks. Surface a typed diagnostic (or let the error propagate) instead of silently degrading; there is no stub! macro in this tree — the convention is GlyimDiagnostic with an actionable help line (see crates/glyim-diag)."
     exit 1
 else
     echo "All good: no risky tracing::warn fallbacks found."
