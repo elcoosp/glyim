@@ -10,6 +10,7 @@
 //! cargo bench -p glyim-ledger --bench gap_report
 //! ```
 
+use std::fmt::Write as _;
 use std::hint::black_box;
 use std::path::Path;
 use std::time::Instant;
@@ -29,7 +30,8 @@ fn write_registry(root: &Path, count: usize) {
     let mut feature = String::new();
     let mut gap = String::new();
     for i in 0..count {
-        feature.push_str(&format!(
+        let _ = writeln!(
+            feature,
             "[[feature]]\n\
              id = \"LANG-BENCH-{i}\"\n\
              title = \"bench feature {i}\"\n\
@@ -39,14 +41,15 @@ fn write_registry(root: &Path, count: usize) {
              target_level = \"L5\"\n\
              backends = [\"gam\", \"llvm\"]\n\
              owner_lane = \"M\"\n\n"
-        ));
+        );
         if i % 2 == 0 {
             std::fs::write(
                 root.join(format!("witness-{i}.g")),
                 format!("//@ known-gap: GAP-{i:04}\nfn main() {{}}\n"),
             )
             .expect("write witness fixture");
-            gap.push_str(&format!(
+            let _ = writeln!(
+                gap,
                 "[[gap]]\n\
                  id = \"GAP-{i:04}\"\n\
                  class = \"c\"\n\
@@ -56,9 +59,10 @@ fn write_registry(root: &Path, count: usize) {
                  opened_in = \"v0.3.0\"\n\
                  status = \"witnessed\"\n\
                  witness = \"witness-{i}.g\"\n\n"
-            ));
+            );
         } else {
-            gap.push_str(&format!(
+            let _ = writeln!(
+                gap,
                 "[[gap]]\n\
                  id = \"GAP-{i:04}\"\n\
                  class = \"c\"\n\
@@ -67,7 +71,7 @@ fn write_registry(root: &Path, count: usize) {
                  caps = \"L2\"\n\
                  opened_in = \"v0.3.0\"\n\
                  status = \"unwitnessed\"\n\n"
-            ));
+            );
         }
     }
     std::fs::write(features.join("bench.toml"), feature).expect("write features");

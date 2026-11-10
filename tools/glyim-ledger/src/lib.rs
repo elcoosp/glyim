@@ -23,9 +23,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ledger_schema::{
-    Diagnostic, GapEntry, GapStatus, HasId, Severity, Sourced, extract_inventory,
-    inventory_diagnostics, load_inventory_ignore, load_project_registry, registry_schema,
-    unmapped_item_keys,
+    Diagnostic, GapEntry, GapStatus, Severity, Sourced, extract_inventory, inventory_diagnostics,
+    load_inventory_ignore, load_project_registry, registry_schema, unmapped_item_keys,
 };
 
 /// Typed error for the CLI seams (`parse_args`, `write_schema`).
