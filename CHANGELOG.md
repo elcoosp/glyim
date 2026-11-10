@@ -8,6 +8,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Per-phase instrumentation (M2.1 slice)**: every pipeline phase
+  (load → parse → expand → defmap → hir → typeck → lower → borrowck →
+  opt → mono → codegen) now opens a `tracing` span and accumulates
+  wall-clock microseconds into a `glyim_pipeline::PhaseProfile`, exposed
+  on `CompileArtifacts` / every emit path.
+  - `glyim` CLI: `--time-passes` prints the fixed-width per-phase table
+    on stderr; `--self-profile[=FILE]` writes a Chrome Trace event list
+    (Perfetto / `chrome://tracing`-openable; value is `=`-bound so the
+    positional INPUT can never be swallowed, bare form defaults to
+    `./trace.json`); `--emit=stats` runs the analysis-only front half and
+    writes a schema-versioned (`version: 1`) JSON report with the phase
+    table plus mono/warning counters. A compile-cache hit records no
+    phases and says so instead of printing an empty table.
+  - New `glyim_pipeline::Pipeline::compile_stats` public API backs
+    `--emit=stats`; `emit_mir`/`emit_syntax`/`emit_llvm_ir`/`emit_asm`
+    now return the profile so every emit mode can honour
+    `--time-passes`/`--self-profile`.
+  - Determinism contract (unit-tested): the phase set/order is pinned,
+    all three renderers are byte-deterministic for a given profile, and
+    an empty profile renders a valid zeroed report (no NaN).
+  - Errors on the new seams carry miette help text (e.g. an unwritable
+    `--self-profile` path suggests the remedy) and the write path emits
+    `tracing::debug!` events.
+  - New consumer example `crates/glyim-pipeline/examples/phase_profile.rs`
+    drives `compile_stats` + all three renderers as a library consumer;
+    `hello_pipeline` now also prints the phase table. New bench
+    `glyim-pipeline --bench phase_prof` measures the renderer cost
+    (sub-µs per render — the instrumentation gate is effectively free).
+- **Micro-debt cleanup**: `glyim-test`'s fixture-header parser
+  (`harness::config::parse_test_config`) returns a typed
+  `TestConfigError` (miette `Diagnostic` with an actionable `help` line
+  naming the `//@` grammar and the tag codemod) instead of a bare
+  `String`; the stale rustdocs in `glyim-hir/src/lower/lower_async.rs`
+  that claimed the multi-await v1 desugar was an unwired scaffold (and
+  referenced a nonexistent `allow(dead_code)`) now describe the live
+  dispatch; the malformed `KNOWN_GAPS` reference in the
+  `glyim-mir-interp` crate docs is fixed.
+- **Docs drift fixes**: README's `glyip` quickstart no longer documents a
+  nonexistent `-O2` flag (`glyip build` takes `--opt-level`), the CLI
+  flag table gains `--with-stdlib`, `-A/-W/-D`, `--emit=syntax`, and the
+  new M2.1 measurement flags, the stdlib module lists match the actual
+  `lib/` directories (`parse`, `alloc`, `int_str`), the "Tracked gaps"
+  section no longer claims cross-frame unwinding is missing (it is
+  implemented and hardened — see `KNOWN_GAPS.md`), and the repository
+  map describes the real milestone state (M0 landed, M1.1–M1.6 landed)
+  instead of "M0 slice". `docs/TECHSTACK.md` now records `async-lsp` in
+  the §2 table (previously claimed absent while `glyim-lsp` depends on
+  it), fixes the `clap` consumer list (`glyim-cli`/`glyip`/
+  `glyim-pilot` — not `glyim-ledger`), corrects the
+  `reqwest`/`flate2`/`tar` versions, updates `miette`'s consumers, and
+  re-anchors its source-of-truth header at workspace 0.7.0.
+  CONTRIBUTING no longer claims `RUSTC_WRAPPER=kache` is set in the
+  default dev environment (it is maintainer-machine-specific), and the
+  stale `glyim-test` manifest note about the (now closed) async
+  `fn_abi_of` codegen gap is reconciled with CI.
 - **Evidence JSONL emitter (M1.5 slice)**: `glyim-test` now emits one
   readiness-ledger evidence record per executed fixture when
   `GLYIM_TEST_EVIDENCE` names an output path — the machine-checked
