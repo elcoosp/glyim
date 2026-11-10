@@ -27,6 +27,17 @@ export LLVM_SYS_231_PREFIX=/usr/lib/llvm-23
 
 Add this to your shell profile if you build often.
 
+### Toolchain note: inference strictness on rustc ≥ 1.99
+
+The `msrv` floor is 1.95, but local `stable` tracks current rustc, which has
+gotten stricter about closure-parameter inference: a `map_err(|e| …)` that
+used to infer `e` from the *annotated binding* on the other side of the `?`
+(`let mode: TestMode = value.parse().map_err(|e| …)?;`) now fails with E0282
+on rustc 1.99. When you hit that, annotate the closure parameter explicitly
+(`|e: TestModeError|`) instead of restructuring the call — see
+`crates/glyim-test/src/annotations/directives.rs` for the one site that
+needed it. Both spellings compile under the MSRV.
+
 ### Building
 
 ```bash
