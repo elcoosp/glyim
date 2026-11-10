@@ -50,11 +50,12 @@ pub struct TestConfig {
     /// `M1.4` readiness-ledger tags: declared backends (`//@ backends:`).
     /// Empty = not declared (rejected by the collector gate).
     pub backends: Vec<String>,
-    /// M1.6 strict-xfail witness tag (`//@ known-gap: GAP-NNNN`, plan
-    /// §3.3). `None` = not a witness fixture. Only meaningful together
-    /// with [`TestMode::CompileFail`] — the collector rejects the
-    /// combination with any other mode
-    /// ([`crate::error::TestDiscoveryError::WitnessRequiresCompileFail`]).
+    /// M1.6/M1.7 strict-xfail witness tag (`//@ known-gap: GAP-NNNN`,
+    /// plan §3.3). `None` = not a witness fixture. Only meaningful on
+    /// the modes the executor's inversion can sharpen —
+    /// [`TestMode::CompileFail`] (M1.6) and [`TestMode::RunPass`] /
+    /// [`TestMode::RunFail`] (M1.7); the collector rejects any other
+    /// mode ([`crate::error::TestDiscoveryError::WitnessUnsupportedMode`]).
     pub known_gap: Option<String>,
 }
 

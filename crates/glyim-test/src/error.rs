@@ -46,15 +46,17 @@ pub enum TestDiscoveryError {
         /// `Struct`.
         requirement: String,
     },
-    /// M1.6 strict-xfail witness contract (plan §3.3): the fixture carries
-    /// `//@ known-gap: GAP-NNNN` but its resolved mode is not
-    /// `compile-fail`. The inversion semantics are defined on "the
-    /// compiler rejected / accepted the witness", which only a compile-fail
-    /// fixture measures; any other mode is annotation drift.
-    WitnessRequiresCompileFail {
+    /// M1.6/M1.7 strict-xfail witness contract (plan §3.3): the fixture
+    /// carries `//@ known-gap: GAP-NNNN` but its resolved mode has no
+    /// outcome the inversion can sharpen — the witness contract is
+    /// meaningful on `compile-fail` (the compiler rejected / accepted the
+    /// witness) and on the run modes (the pinned run behaviour held or
+    /// changed, M1.7). `compile-pass` and `ui` pin no run outcome, so a
+    /// witness there is annotation drift.
+    WitnessUnsupportedMode {
         /// The offending fixture.
         path: PathBuf,
-        /// The resolved (non-compile-fail) mode.
+        /// The resolved (non-invertible) mode.
         mode: crate::harness::config::TestMode,
     },
 }
@@ -92,13 +94,13 @@ impl std::fmt::Display for TestDiscoveryError {
                 "fixture {} ({mode:?}) lacks the required expectation: {requirement}",
                 path.display()
             ),
-            Self::WitnessRequiresCompileFail { path, mode } => write!(
+            Self::WitnessUnsupportedMode { path, mode } => write!(
                 f,
                 "fixture {} declares `//@ known-gap:` but resolves to mode {mode:?}: \
-                 a strict-xfail witness must be a compile-fail fixture, because the \
-                 inversion is defined on the compiler rejecting (or accepting) the witness \
-                 (plan §3.3, M1.6). Set `//@ mode: compile-fail` and annotate the expected \
-                 diagnostic with `//@ expect-error:` or `//~ ERROR`.",
+                 a strict-xfail witness must pin an outcome the inversion can sharpen — \
+                 `compile-fail` (the compiler rejects or accepts the witness, M1.6) or \
+                 `run-pass`/`run-fail` (the pinned run behaviour holds or changes, M1.7) \
+                 (plan §3.3). Switch the mode or drop the `//@ known-gap:` header.",
                 path.display()
             ),
         }

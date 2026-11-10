@@ -163,13 +163,18 @@ impl<'a> TestCollector<'a> {
                 TestMode::CompilePass | TestMode::Ui => {}
             }
 
-            // M1.6 witness contract (plan §3.3): a `//@ known-gap:` tag only
-            // means something on a compile-fail fixture. Rejecting here
-            // (discovery time) keeps the inversion logic in the executor
-            // total — it never has to guess what a witness on a run-pass
-            // fixture would mean.
-            if config.known_gap.is_some() && config.mode != TestMode::CompileFail {
-                return Err(TestDiscoveryError::WitnessRequiresCompileFail {
+            // M1.6/M1.7 witness contract (plan §3.3): a `//@ known-gap:`
+            // tag is meaningful on the modes whose outcome the executor's
+            // inversion can sharpen — compile-fail (M1.6: the compiler
+            // rejected / accepted the witness) and the run modes (M1.7:
+            // the pinned run behaviour held or changed). compile-pass and
+            // ui pin no run outcome, so a witness there is annotation
+            // drift and is rejected at discovery rather than silently
+            // tolerated as an inert tag.
+            if config.known_gap.is_some()
+                && matches!(config.mode, TestMode::CompilePass | TestMode::Ui)
+            {
+                return Err(TestDiscoveryError::WitnessUnsupportedMode {
                     path: path.to_path_buf(),
                     mode: config.mode,
                 });

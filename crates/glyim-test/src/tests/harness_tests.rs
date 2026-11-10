@@ -633,17 +633,19 @@ fn witness_without_known_gap_reports_plain_mismatch() {
 }
 
 #[test]
-fn collector_rejects_known_gap_on_non_compile_fail_modes() {
+fn collector_rejects_known_gap_on_uninvertible_modes() {
     use crate::error::TestDiscoveryError;
     use crate::harness::collector::TestCollector;
     use std::fs;
 
-    // A `//@ known-gap:` witness must be a compile-fail fixture: the
-    // inversion is defined on "the compiler rejected / accepted the
-    // witness", which only compile-fail measures. Any other mode is drift
-    // and is rejected at discovery, not silently tolerated.
+    // M1.6/M1.7: a `//@ known-gap:` witness must pin an outcome the
+    // executor's inversion can sharpen — compile-fail (compiler rejects /
+    // accepts) or run-pass/run-fail (pinned behaviour holds / changes).
+    // compile-pass and ui pin no run outcome, so a witness there is
+    // annotation drift and is rejected at discovery, not silently
+    // tolerated as an inert tag.
     for (mode_dir, header) in [
-        ("run-pass", "//@ mode: run-pass\n//@ expect-exit: 0\n"),
+        ("compile-pass", "//@ mode: compile-pass\n"),
         ("ui", "//@ mode: ui\n"),
     ] {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -659,9 +661,9 @@ fn collector_rejects_known_gap_on_non_compile_fail_modes() {
         let collector = TestCollector::new(dir.path());
         let err = collector
             .collect(None, None)
-            .expect_err("known-gap on a non-compile-fail mode must be rejected");
+            .expect_err("known-gap on a mode without an invertible outcome must be rejected");
         match err {
-            TestDiscoveryError::WitnessRequiresCompileFail { path, mode } => {
+            TestDiscoveryError::WitnessUnsupportedMode { path, mode } => {
                 assert_eq!(path, fixture);
                 assert_ne!(
                     mode,
@@ -669,9 +671,137 @@ fn collector_rejects_known_gap_on_non_compile_fail_modes() {
                     "the reported mode must be the offending one"
                 );
             }
-            other => panic!("expected WitnessRequiresCompileFail, got {other:?}"),
+            other => panic!("expected WitnessUnsupportedMode, got {other:?}"),
         }
     }
+}
+
+#[test]
+fn collector_accepts_known_gap_on_run_modes() {
+    use crate::harness::collector::TestCollector;
+    use std::fs;
+
+    // M1.7: the witness contract covers the run modes — a run fixture
+    // whose `//@ expect-exit:` pins the gap-open behaviour is a valid
+    // strict-xfail witness (see the GAP-0004 fixture under
+    // tests/run-pass/behavior/).
+    for (mode_dir, header) in [
+        ("run-pass", "//@ mode: run-pass\n//@ expect-exit: 1\n"),
+        ("run-fail", "//@ mode: run-fail\n//@ expect-exit: 101\n"),
+    ] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join(mode_dir);
+        fs::create_dir(&root).unwrap();
+        let fixture = root.join("witness.g");
+        fs::write(
+            &fixture,
+            format!("{header}//@ known-gap: GAP-0004\nfn main() {{}}\n"),
+        )
+        .unwrap();
+
+        let collector = TestCollector::new(dir.path());
+        let tests = collector
+            .collect(None, None)
+            .expect("run-mode witnesses are valid since M1.7");
+        assert_eq!(tests.len(), 1, "{mode_dir}");
+        assert_eq!(
+            tests[0].config.known_gap.as_deref(),
+            Some("GAP-0004"),
+            "{mode_dir} must keep the witness tag"
+        );
+    }
+}
+
+#[test]
+fn run_mode_witness_failure_sharpens_to_known_gap_closed() {
+    use crate::harness::collector::DiscoveredTest;
+    use crate::harness::compiler::FrontendOnlyCompiler;
+    use crate::harness::config::{TestConfig, TestMode};
+    use crate::harness::executor::{TestExecutor, TestOutcome};
+
+    // M1.7: a run-pass witness whose pinned behaviour does NOT hold.
+    // The parse-only compiler produces no executable and no MIR bodies,
+    // so `RunPassStrategy` fails with `CompilationFailed`; the witness
+    // seam must sharpen that into `KnownGapClosed` (the gap may have
+    // closed — retire or re-pin the witness) instead of leaving a
+    // generic run bookkeeping failure on a fixture whose whole point is
+    // the strict-xfail contract.
+    let t = DiscoveredTest {
+        path: std::path::PathBuf::from("run_witness.g"),
+        name: "run_witness".to_string(),
+        source: std::sync::Arc::from("fn main() {}\n"),
+        config: TestConfig {
+            mode: TestMode::RunPass,
+            known_gap: Some("GAP-0004".to_string()),
+            ..Default::default()
+        },
+        revisions: vec!["default".to_string()],
+    };
+
+    let executor = TestExecutor::new(false, false, 1, false)
+        .with_compiler(std::sync::Arc::new(FrontendOnlyCompiler));
+    let results = executor.run_sequential(&[std::sync::Arc::new(t)]);
+
+    assert_eq!(results.len(), 1);
+    match &results[0].outcome {
+        TestOutcome::Failed { reason } => match reason {
+            crate::error::FailureReason::KnownGapClosed { gap } => {
+                assert_eq!(gap, "GAP-0004");
+            }
+            other => panic!("expected KnownGapClosed, got {other:?}"),
+        },
+        other => panic!("expected Failed outcome, got {other:?}"),
+    }
+}
+
+#[test]
+fn run_mode_witness_inversion_matrix() {
+    use crate::harness::config::TestMode;
+    use crate::harness::executor::{apply_witness_inversion, TestOutcome};
+
+    // While the gap is open the pinned behaviour holds: a passing run
+    // witness passes through unchanged (no inversion noise on the happy
+    // path). The matrix covers both run modes plus the inert modes the
+    // collector already rejects at discovery.
+    assert!(matches!(
+        apply_witness_inversion(
+            Some("GAP-0004"),
+            TestMode::RunPass,
+            TestOutcome::Passed,
+            &[],
+        ),
+        TestOutcome::Passed
+    ));
+
+    let failed = TestOutcome::Failed {
+        reason: crate::error::FailureReason::RunFailed {
+            exit_code: Some(2),
+            expected_exit_code: Some(1),
+        },
+    };
+    match apply_witness_inversion(Some("GAP-0004"), TestMode::RunFail, failed, &[]) {
+        TestOutcome::Failed {
+            reason: crate::error::FailureReason::KnownGapClosed { gap },
+        } => assert_eq!(gap, "GAP-0004"),
+        other => panic!("expected KnownGapClosed, got {other:?}"),
+    }
+
+    // compile-pass + known-gap never reaches the executor (the collector
+    // rejects it); the inversion must stay inert if it ever did.
+    let failed_cp = TestOutcome::Failed {
+        reason: crate::error::FailureReason::CompilePassUnexpectedErrors {
+            errors: vec!["boom".to_string()],
+        },
+    };
+    assert!(matches!(
+        apply_witness_inversion(
+            Some("GAP-0004"),
+            TestMode::CompilePass,
+            failed_cp,
+            &[],
+        ),
+        TestOutcome::Failed { .. }
+    ));
 }
 
 #[test]

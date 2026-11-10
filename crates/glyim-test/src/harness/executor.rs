@@ -336,16 +336,15 @@ fn execute_test(
     let duration = start.elapsed();
     tracing::info!(duration_ms = duration.as_millis(), "done");
 
-    // M1.6 strict-xfail witness inversion (plan §3.3): a compile-fail
-    // fixture carrying `//@ known-gap: GAP-NNNN` is the reproducible
-    // witness of an open readiness gap. While the gap is open the compiler
-    // must *reject* the witness — the compile-fail expectations hold and
-    // the outcome passes through unchanged. If the compiler instead
-    // *accepts* the witness (no error diagnostics at all), the generic
-    // `DiagnosticMismatch` would read as "test bug"; it actually means the
-    // gap has CLOSED, and the strict-xfail contract demands a loud,
-    // self-describing failure that tells the author how to retire the
-    // witness.
+    // M1.6/M1.7 strict-xfail witness inversion (plan §3.3): a fixture
+    // carrying `//@ known-gap: GAP-NNNN` is the reproducible witness of an
+    // open readiness gap. While the gap is open the pinned outcome holds
+    // (compile-fail: the compiler rejects the witness; run modes: the run
+    // behaviour matches its expectations) and the outcome passes through
+    // unchanged. When the pinned outcome NO LONGER holds, the generic
+    // mismatch would read as "test bug"; it actually means the gap may have
+    // CLOSED, and the strict-xfail contract demands a loud, self-describing
+    // failure that tells the author how to retire the witness.
     let outcome = apply_witness_inversion(
         test.config.known_gap.as_deref(),
         test.config.mode,
@@ -362,35 +361,76 @@ fn execute_test(
     }
 }
 
-/// Apply the M1.6 strict-xfail inversion to a compile-fail outcome when the
+/// Apply the M1.6/M1.7 strict-xfail inversion to a test outcome when the
 /// fixture is a `//@ known-gap:` witness. Passing the outcome through a named
 /// function (instead of inline branching) keeps the executor's happy path
 /// flat and gives the seam one tracing span.
-fn apply_witness_inversion(
+///
+/// The inversion is mode-shaped (plan §3.3):
+///
+/// - **compile-fail** (M1.6): the witness passes while the compiler
+///   *rejects* it; the compiler *accepting* it (no error diagnostics at
+///   all) means the gap closed.
+/// - **run-pass / run-fail** (M1.7): the witness passes while the pinned
+///   run behaviour holds; the run *failing* means the pinned behaviour
+///   changed and the gap may have closed, so the generic exit/output
+///   mismatch is sharpened into [`FailureReason::KnownGapClosed`] too. A
+///   witness that fails for an unrelated regression reads "retire or
+///   re-pin" — actionable either way.
+/// - **compile-pass / ui**: rejected at discovery (see the collector), so
+///   the outcome passes through untouched here.
+///
+/// `pub(crate)` so the witness-inversion matrix is unit-testable directly
+/// (`crates/glyim-test/src/tests/harness_tests.rs`); the executor path
+/// above is the production caller.
+pub(crate) fn apply_witness_inversion(
     known_gap: Option<&str>,
     mode: super::config::TestMode,
     outcome: TestOutcome,
     diagnostics: &[GlyimDiagnostic],
 ) -> TestOutcome {
-    let (Some(gap), super::config::TestMode::CompileFail) = (known_gap, mode) else {
+    let Some(gap) = known_gap else {
         return outcome;
     };
     let witness_span = tracing::info_span!("witness", gap = %gap);
     let _enter = witness_span.enter();
 
-    let compiler_accepted = diagnostics.iter().all(|d| !d.is_error());
-    if compiler_accepted {
-        tracing::warn!(
-            gap = %gap,
-            "known-gap witness closed: the compiler accepted a fixture it must reject"
-        );
-        return TestOutcome::Failed {
-            reason: FailureReason::KnownGapClosed {
-                gap: gap.to_string(),
-            },
-        };
+    match mode {
+        super::config::TestMode::CompileFail => {
+            let compiler_accepted = diagnostics.iter().all(|d| !d.is_error());
+            if compiler_accepted {
+                tracing::warn!(
+                    gap = %gap,
+                    "known-gap witness closed: the compiler accepted a fixture it must reject"
+                );
+                TestOutcome::Failed {
+                    reason: FailureReason::KnownGapClosed {
+                        gap: gap.to_string(),
+                    },
+                }
+            } else {
+                outcome
+            }
+        }
+        super::config::TestMode::RunPass | super::config::TestMode::RunFail => {
+            if matches!(outcome, TestOutcome::Failed { .. }) {
+                tracing::warn!(
+                    gap = %gap,
+                    "known-gap witness closed: the pinned run behaviour changed"
+                );
+                TestOutcome::Failed {
+                    reason: FailureReason::KnownGapClosed {
+                        gap: gap.to_string(),
+                    },
+                }
+            } else {
+                outcome
+            }
+        }
+        // The collector rejects a witness on these modes at discovery;
+        // the inversion stays inert should one ever reach this point.
+        super::config::TestMode::CompilePass | super::config::TestMode::Ui => outcome,
     }
-    outcome
 }
 
 fn execute_inner(
