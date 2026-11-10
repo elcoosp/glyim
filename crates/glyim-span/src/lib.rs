@@ -78,6 +78,13 @@ impl Span {
     };
 
     /// new.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `lo > hi` — a backwards source range is a
+    /// compiler-internal invariant violation that would corrupt every
+    /// downstream span computation. The check is unconditional (not a
+    /// `debug_assert!`) so the failure is loud in production too.
     #[must_use]
     pub fn new(file: FileId, lo: ByteIdx, hi: ByteIdx, ctx: SyntaxContext) -> Self {
         // Unconditional (not `debug_assert!`): a lo>hi span is a
@@ -123,6 +130,12 @@ impl Span {
     }
 
     /// to.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the two spans come from different files: merging
+    /// them would attribute text from one file to another. The check is
+    /// unconditional so the compiler bug is loud in release builds too.
     ///
     /// T198-PATCHED [SPAN-3]: merging spans from different files is a
     /// compiler bug — the resulting span would attribute text from one

@@ -190,14 +190,12 @@ impl Default for HygieneCtx {
 
 impl SyntaxContext {
     pub(crate) fn from_hygiene_key(_key: HygieneKey, raw: u32) -> Self {
-        let _ = _key;
         SyntaxContext(raw)
     }
 }
 
 impl ExpnId {
     pub(crate) fn from_hygiene_key(_key: HygieneKey, raw: u32) -> Self {
-        let _ = _key;
         ExpnId(raw)
     }
 }
