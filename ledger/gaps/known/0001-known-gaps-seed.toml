@@ -1,5 +1,6 @@
 # Seed gap registry (M1.1) — migrated from KNOWN_GAPS.md §§1–2 in spirit;
-# M1.7 performs the full migration with witness fixtures.
+# the M1.7 migration slice landed in `0002-known-gaps-migration.toml`
+# (KNOWN_GAPS §§4/§6 entries GAP-0003..GAP-0005 with the GAP-0004 witness).
 #
 # GAP-0001 is witnessed since M1.6: the fixture at `witness` reproduces the
 # gap and carries the `//@ known-gap: GAP-0001` header, and the harness

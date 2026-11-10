@@ -64,3 +64,13 @@ spec          = "README.md"
 target_level  = "L3"
 backends      = ["gam", "llvm"]
 owner_lane    = "L"
+
+[[feature]]
+id            = "TOOL-LEDGER-GAPS"
+title         = "M1.7 gap-registry migration with `ledger gaps` witness-debt report"
+area          = "tooling.ledger"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+owner_lane    = "L"

@@ -1,0 +1,42 @@
+# M1.7 gap-registry migration slice — the open entries of `KNOWN_GAPS.md`
+# (§§1–8) that were not already in the seed file.
+#
+# Status source of truth: this directory. `KNOWN_GAPS.md` keeps the prose
+# audit (verification recipes, closed-entry history) and points here for
+# the machine-checked status; `glyim-ledger gaps` renders the report.
+#
+# Witness coverage after this slice: GAP-0001 and GAP-0004 are witnessed
+# (strict-xfail fixtures under `crates/glyim-test/tests/`); GAP-0002,
+# GAP-0003 and GAP-0005 are explicit witness debt with the reason recorded
+# per entry (Windows-only repro, OutputCheck contract, unobservable from
+# source). The M1.7 exit gate (>= 90% witnessed) applies to the full
+# milestone — the remaining sources (HANDOFF §2, playbook Appendix A) are
+# still pending migration.
+
+[[gap]]
+id        = "GAP-0003"
+class     = "c"
+title     = "`panic!` does not unwind: `glyim_panic` exits 101 without running destructors (intentional, documented)"
+affects   = ["LANG-UNWIND-CLEANUP"]
+caps      = "L2"
+opened_in = "v0.3.0"
+status    = "unwitnessed"
+
+[[gap]]
+id        = "GAP-0004"
+class     = "c"
+title     = "Partial move out of a Drop-implementing type suppresses the parent destructor entirely (over-retains, never double-frees)"
+affects   = ["COMPILER-BCK-DROP-FLAGS"]
+caps      = "L2"
+opened_in = "v0.3.0"
+status    = "witnessed"
+witness   = "crates/glyim-test/tests/run-pass/behavior/partial_move_drop_guard_known_gap.g"
+
+[[gap]]
+id        = "GAP-0005"
+class     = "c"
+title     = "`TyCtx::needs_drop` is conservative for `dyn Trait`/generic/projection types (drop glue may be skipped)"
+affects   = ["COMPILER-LAYOUT-SIZE-ALIGN"]
+caps      = "L2"
+opened_in = "v0.3.0"
+status    = "unwitnessed"
