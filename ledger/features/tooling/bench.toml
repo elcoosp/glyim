@@ -38,3 +38,14 @@ target_level  = "L4"
 backends      = ["gam", "llvm"]
 requires      = ["TOOL-BENCH-RUN"]
 owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-BENCH-CORPUS-GEN"
+title         = "M2.3 corpus substrate: 7 deterministic generator families + glyim.corpus/1 manifest with identity verify"
+area          = "tooling.bench"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+requires      = []
+owner_lane    = "B"
