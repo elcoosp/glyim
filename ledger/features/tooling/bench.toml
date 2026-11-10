@@ -1,0 +1,40 @@
+# M2.2 feature registry — `tooling/bench.toml`.
+#
+# Declares the measurement-harness surface (`tools/glyim-bench`) in the
+# readiness ledger's taxonomy (plan §6 M2.2). Entries are declarations only:
+# no status fields (plan C1); levels are computed from evidence by
+# `ledger compute` (M1.8). The stability gate is the M2.2 definition of done:
+# instruction-count CoV < 0.1 % over 10 runs.
+
+[[feature]]
+id            = "TOOL-BENCH-RUN"
+title         = "`glyim-bench run` — iterated sampling of a command (wall, instructions, cycles, child RSS)"
+area          = "tooling.bench"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+requires      = []
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-BENCH-COUNTING-ALLOC"
+title         = "counting allocator: gross allocation events/bytes for in-process measurement"
+area          = "tooling.bench"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+requires      = []
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-BENCH-STABILITY-GATE"
+title         = "CoV stability gate (< 0.1 % over 10 runs) with typed, help-annotated failure"
+area          = "tooling.bench"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+requires      = ["TOOL-BENCH-RUN"]
+owner_lane    = "B"

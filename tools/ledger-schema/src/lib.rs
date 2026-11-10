@@ -422,6 +422,10 @@ pub const TAXONOMY: &[AreaRule] = &[
         id_prefix: "STD-",
     },
     AreaRule {
+        area: "tooling.bench",
+        id_prefix: "TOOL-",
+    },
+    AreaRule {
         area: "tooling.cli",
         id_prefix: "TOOL-",
     },
@@ -2165,6 +2169,7 @@ mod tests {
             "compiler.proc-macro",
             "codegen.llvm",
             "codegen.bytecode",
+            "tooling.bench",
             "tooling.cli",
             "tooling.glyip",
             "tooling.lsp",
