@@ -9,6 +9,7 @@
 //! `glyim-ledger`'s CLI errors: a failure names the remedy.
 
 use std::fmt;
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
