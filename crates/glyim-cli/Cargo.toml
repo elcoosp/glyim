@@ -14,6 +14,10 @@ glyim-core = { workspace = true }
 glyim-type = { workspace = true }
 glyim-diag = { workspace = true }
 glyim-proc-macro = { workspace = true }
+# M2.4: `--emit=run` executes the compiled MIR through the canonical
+# in-process program-run contract (`run_program`) shared with the test
+# harness's `InterpRunner`.
+glyim-mir-interp = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

@@ -1,14 +1,14 @@
 //! `glyim` compiler command-line entry point.
 //!
 //! Thin binary wrapper: delegates to `glyim_cli::run`, which prints its
-//! own diagnostics in the `--error-format`-selected style and returns
-//! `Err` purely as the non-zero-exit signal.
+//! own diagnostics in the `--error-format`-selected style. `Ok(code)`
+//! carries the process exit code to terminate with — 0 for code-producing
+//! modes, the interpreted program's own exit code for `--emit=run` — and
+//! `Err` signals a driver failure (exit 1).
 
 fn main() {
-    // `run()` prints any diagnostics itself (in the format selected by
-    // `--error-format`, plan §3.4) and returns `Err` only as a signal to exit
-    // non-zero.
-    if glyim_cli::run().is_err() {
-        std::process::exit(1);
+    match glyim_cli::run() {
+        Ok(code) => std::process::exit(code),
+        Err(_) => std::process::exit(1),
     }
 }

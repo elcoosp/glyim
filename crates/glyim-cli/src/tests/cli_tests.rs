@@ -528,3 +528,178 @@ fn test_self_profile_writes_trace_file() {
         "object compiles record the codegen phase"
     );
 }
+
+// ---- `--emit=run` (M2.4: in-process interpreter execution) ----
+
+/// Helper: build `CliArgs` for `--emit=run` over a temp source file.
+fn run_args(src_path: &std::path::Path, backend: &str, with_stdlib: bool) -> CliArgs {
+    CliArgs {
+        input: src_path.to_path_buf(),
+        output: None,
+        opt_level: 0,
+        target: None,
+        backend: backend.to_string(),
+        emit: "run".to_string(),
+        linker: None,
+        link_flags: None,
+        lto: "off".to_string(),
+        codegen_units: None,
+        proc_macro_deps: None,
+        error_format: "human".to_string(),
+        with_stdlib,
+        allow: Vec::new(),
+        warn: Vec::new(),
+        deny: Vec::new(),
+        time_passes: false,
+        self_profile: None,
+    }
+}
+
+/// M2.4: `--emit=run` executes the program in-process and surfaces the
+/// program's (masked) return value as the process exit code — the same
+/// contract a linked `--emit=exec` binary has for the OS.
+#[test]
+fn test_emit_run_returns_program_exit_code() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    writeln!(tmp, "fn main() -> i32 {{\n    3\n}}").unwrap();
+    let path = tmp.into_temp_path();
+    let result = run_with_args(run_args(&path, "llvm", false));
+    assert!(result.is_ok(), "run mode must succeed: {result:?}");
+    assert_eq!(result.unwrap(), 3, "program exit code must propagate");
+}
+
+/// M2.4: exit-code masking matches a real process (`300 & 0xff == 44`),
+/// and `--with-stdlib` injection composes with run mode.
+#[test]
+fn test_emit_run_masks_exit_code_like_a_native_binary() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    writeln!(tmp, "fn main() -> i32 {{\n    300\n}}").unwrap();
+    let path = tmp.into_temp_path();
+    let result = run_with_args(run_args(&path, "llvm", true));
+    assert!(result.is_ok(), "run mode must succeed: {result:?}");
+    assert_eq!(result.unwrap(), 44, "exit code must be masked to 0xff");
+}
+
+/// M2.4: a unit-returning `main` exits 0 (the println smoke path — the
+/// interpreter's FFI stdout buffer flows to the process stdout).
+#[test]
+fn test_emit_run_unit_main_with_stdlib_exits_zero() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    writeln!(
+        tmp,
+        "fn main() {{\n    println!(\"hello from run mode\");\n}}"
+    )
+    .unwrap();
+    let path = tmp.into_temp_path();
+    let result = run_with_args(run_args(&path, "llvm", true));
+    assert!(result.is_ok(), "run mode must succeed: {result:?}");
+    assert_eq!(result.unwrap(), 0, "a unit-returning main exits 0");
+}
+
+/// M2.4: a program that panics (division by zero — the run-fail corpus
+/// shape) exits 101, matching `glyim_panic` and a native `--emit=exec`
+/// binary; stderr carries the canonical panic line.
+#[test]
+fn test_emit_run_panicking_program_exits_101() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    writeln!(tmp, "fn main() -> i32 {{\n    let z = 0;\n    5 / z\n}}").unwrap();
+    let path = tmp.into_temp_path();
+    let result = run_with_args(run_args(&path, "llvm", false));
+    assert!(
+        result.is_ok(),
+        "a panicking program is a successful driver run: {result:?}"
+    );
+    assert_eq!(result.unwrap(), 101, "panics exit 101 like the native path");
+}
+
+/// M2.4: a compile error in run mode is a driver failure (diagnostics
+/// path), not a program exit code.
+#[test]
+fn test_emit_run_compile_error_is_driver_failure() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    writeln!(tmp, "fn main() -> i32 {{").unwrap();
+    let path = tmp.into_temp_path();
+    let result = run_with_args(run_args(&path, "llvm", false));
+    assert!(result.is_err(), "compile errors must fail the driver");
+}
+
+/// M2.4: `--backend=bytecode` with `--emit=run` is an explicit error —
+/// the bytecode backend is a codegen backend; run mode executes through
+/// the interpreter. Silent ignore would violate the driver's honesty rule.
+#[test]
+fn test_emit_run_rejects_bytecode_backend() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    writeln!(tmp, "fn main() {{}}").unwrap();
+    let path = tmp.into_temp_path();
+    let result = run_with_args(run_args(&path, "bytecode", false));
+    assert!(result.is_err(), "bytecode + run must be rejected");
+    let err_text = format!("{:?}", result.unwrap_err());
+    assert!(
+        err_text.contains("--emit=run") || err_text.contains("--backend"),
+        "error must name the conflicting flags; got: {err_text}"
+    );
+}
+
+/// M2.4: `--backend=interp` is only valid together with `--emit=run`;
+/// it does not emit code, so every other emit kind is an explicit error.
+#[test]
+fn test_backend_interp_rejects_codegen_emit_kinds() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    writeln!(tmp, "fn main() {{}}").unwrap();
+    let path = tmp.into_temp_path();
+    let mut args = run_args(&path, "interp", false);
+    args.emit = "obj".to_string();
+    let result = run_with_args(args);
+    assert!(result.is_err(), "interp backend cannot emit code");
+    let err_text = format!("{:?}", result.unwrap_err());
+    assert!(
+        err_text.contains("--emit=run"),
+        "error must point at the run emit kind; got: {err_text}"
+    );
+}
+
+/// M2.4: `--backend=interp --emit=run` is the explicit spelling of the
+/// interpreter run path and behaves like the default spelling.
+#[test]
+fn test_backend_interp_with_run_mode_executes() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    writeln!(tmp, "fn main() -> i32 {{\n    7\n}}").unwrap();
+    let path = tmp.into_temp_path();
+    let result = run_with_args(run_args(&path, "interp", false));
+    assert!(result.is_ok(), "interp run mode must succeed: {result:?}");
+    assert_eq!(result.unwrap(), 7);
+}
+
+/// M2.4: `--output` writes no artifact in run mode (execution happens
+/// in-process), so the flag is rejected instead of silently ignored.
+#[test]
+fn test_emit_run_rejects_output_flag() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    writeln!(tmp, "fn main() {{}}").unwrap();
+    let path = tmp.into_temp_path();
+    let mut args = run_args(&path, "llvm", false);
+    args.output = Some(std::path::PathBuf::from("unused.o"));
+    let result = run_with_args(args);
+    assert!(result.is_err(), "--output with --emit=run must be rejected");
+    let err_text = format!("{:?}", result.unwrap_err());
+    assert!(
+        err_text.contains("--output"),
+        "error must name the inapplicable flag; got: {err_text}"
+    );
+}
+
+/// M2.4: a program without `main` is a clean, actionable error in run
+/// mode (unlike the fixture fallback the test harness keeps).
+#[test]
+fn test_emit_run_missing_main_is_actionable_error() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    writeln!(tmp, "fn helper() -> i32 {{ 1 }}").unwrap();
+    let path = tmp.into_temp_path();
+    let result = run_with_args(run_args(&path, "llvm", false));
+    assert!(result.is_err(), "no-main program must be a driver error");
+    let err_text = format!("{:?}", result.unwrap_err());
+    assert!(
+        err_text.contains("main"),
+        "error must say main was not found; got: {err_text}"
+    );
+}

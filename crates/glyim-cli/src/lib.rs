@@ -130,7 +130,15 @@ pub fn inject_assembled_stdlib(
 /// CLI entry point: parses argv (honouring `-W help` before clap enforces
 /// the required `<INPUT>` argument), dispatches the requested emit mode,
 /// and maps compile failures onto the process exit code.
-pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
+///
+/// On success the payload is the **process exit code** the binary should
+/// terminate with: 0 for every code-producing mode, and the interpreted
+/// program's own (masked) exit code for `--emit=run` — so
+/// `glyim --emit=run prog.g` is scriptable exactly like running a linked
+/// `--emit=exec` binary. `Err` still means "driver failure" (compile
+/// error, CLI misuse); the diagnostics have already been printed in the
+/// selected `--error-format` by the time `Err` is returned.
+pub fn run() -> Result<i32, Vec<glyim_diag::GlyimDiagnostic>> {
     // §3.5.30 framework: `-W help` must be answered before clap enforces
     // the required `<INPUT>` arg — otherwise `glyim -W help` errors out
     // instead of listing lints. Scan argv directly, then return.
@@ -151,7 +159,7 @@ pub fn run() -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
                 eprintln!(
                     "Aliases: `unsafe` = `unsafe_fn_call`, `unused_generics` = `unused_generic_params`."
                 );
-                return Ok(());
+                return Ok(0);
             }
         }
     }
@@ -352,6 +360,14 @@ enum EmitKind {
     /// `--emit=stats` runs the analysis-only front half — no backend
     /// executes, so no object is produced.
     Stats,
+    /// Execute the program in-process through the MIR interpreter
+    /// (M2.4). No object, no linker, no `glyim-runtime` staticlib, no
+    /// LLVM toolchain: the same portable run path the test harness uses.
+    /// The program's exit code (masked to `0xff`, panics → 101) becomes
+    /// the driver's exit code, exactly as for a linked `--emit=exec`
+    /// binary. Only valid with `--backend=interp` (or the default,
+    /// which the run path treats as "use the interpreter").
+    Run,
 }
 
 impl EmitKind {
@@ -365,14 +381,20 @@ impl EmitKind {
             "asm" => Ok(EmitKind::Asm),
             "cdylib" => Ok(EmitKind::Cdylib),
             "stats" => Ok(EmitKind::Stats),
+            "run" => Ok(EmitKind::Run),
             _ => Err(format!(
-                "invalid value for --emit: '{s}' (expected one of: obj, exec, mir, llvm-ir, asm, cdylib, syntax, stats)"
+                "invalid value for --emit: '{s}' (expected one of: obj, exec, mir, llvm-ir, asm, cdylib, syntax, stats, run)"
             )),
         }
     }
 }
 
-pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
+pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimDiagnostic>> {
+    // M2.4: the success payload is the **process exit code** the driver
+    // should terminate with. Every code-producing mode returns 0; `run`
+    // mode returns the interpreted program's own (masked) exit code so
+    // `glyim --emit=run prog.g` is scriptable exactly like running a
+    // linked `--emit=exec` binary.
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .try_init()
@@ -457,6 +479,18 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             });
             (out, None)
         }
+        EmitKind::Run => {
+            // M2.4: run mode executes in-process and writes no artifact.
+            // `--output` is rejected below, so this path is never written;
+            // the placeholder keeps the `(object_path, final_output_path)`
+            // shape uniform for the early-return branch that follows.
+            let placeholder = {
+                let mut p = input.clone();
+                p.set_extension("run");
+                p
+            };
+            (placeholder, None)
+        }
         EmitKind::Asm => {
             let out = args.output.clone().unwrap_or_else(|| {
                 let mut p = input.clone();
@@ -500,6 +534,50 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
         target_triple: target_triple.clone(),
         opt_level: args.opt_level,
     };
+
+    // M2.4: `--emit=run` mode validation. The interpreter is the run
+    // backend; the bytecode backend is a *codegen* backend whose raw
+    // opcode output has nothing to do with run mode, and `--output` has
+    // no artifact to name. Both are explicit errors rather than silent
+    // no-ops, mirroring the `--backend=bytecode` + `--emit=exec` rule.
+    if emit == EmitKind::Run {
+        if args.backend == "bytecode" {
+            return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(
+                "`--backend=bytecode` cannot run: the bytecode backend is a codegen \
+                 backend and `--emit=run` executes in-process through the MIR \
+                 interpreter, writing no artifact. Drop `--backend=bytecode` (or \
+                 use `--backend=interp` explicitly), or use `--emit=obj` to emit \
+                 bytecode modules.",
+            )]);
+        }
+        if args.output.is_some() {
+            return Err(vec![
+                glyim_diag::GlyimDiagnostic::internal_error(
+                    "`--emit=run` executes the program in-process and writes no \
+                 artifact, so `--output` does not apply. Remove `--output`, or \
+                 use `--emit=obj`/`--emit=exec` to produce a file.",
+                )
+                .with_suggestion(glyim_diag::Suggestion {
+                    message: "drop --output; run mode's observable output is the \
+                          program's stdout/stderr and its exit code"
+                        .to_string(),
+                    replacements: Vec::new(),
+                    applicability: glyim_diag::Applicability::MaybeIncorrect,
+                }),
+            ]);
+        }
+    }
+    // M2.4: `--backend=interp` names the in-process interpreter. It does
+    // not emit code, so any other emit kind is an explicit error pointing
+    // at the one combination it supports.
+    if args.backend == "interp" && emit != EmitKind::Run {
+        return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(
+            "`--backend=interp` executes through the in-process MIR interpreter and \
+             does not emit code, so it is only valid with `--emit=run`. Use \
+             `--emit=run` to execute, or drop `--backend=interp` for a \
+             code-producing emit kind (llvm is the default backend).",
+        )]);
+    }
 
     let mut db = Database::new(config);
     // §3.5.30 framework: translate `-A/-W/-D <lint>`.
@@ -579,25 +657,86 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             ]
         })?;
         write_profile_outputs(&args, &report.profile)?;
-        return Ok(());
+        return Ok(0);
     }
     if emit == EmitKind::Mir {
         let profile = glyim_pipeline::emit_mir(&mut db, input, &object_path, proc_registry_ref)?;
         write_profile_outputs(&args, &profile)?;
-        return Ok(());
+        return Ok(0);
     } else if emit == EmitKind::Syntax {
         let profile = glyim_pipeline::emit_syntax(&mut db, input, &object_path, proc_registry_ref)?;
         write_profile_outputs(&args, &profile)?;
-        return Ok(());
+        return Ok(0);
     } else if emit == EmitKind::LlvmIr {
         let profile =
             glyim_pipeline::emit_llvm_ir(&mut db, input, &object_path, proc_registry_ref)?;
         write_profile_outputs(&args, &profile)?;
-        return Ok(());
+        return Ok(0);
     } else if emit == EmitKind::Asm {
         let profile = glyim_pipeline::emit_asm(&mut db, input, &object_path, proc_registry_ref)?;
         write_profile_outputs(&args, &profile)?;
-        return Ok(());
+        return Ok(0);
+    } else if emit == EmitKind::Run {
+        // M2.4: in-process execution. Derives from the shared front half
+        // via `compile_file_to_mir_with_proc_registry` (the same
+        // "every mode derives from one prepared compilation" rule the
+        // other emit modes follow), resolves `main` through the same
+        // registry-threaded entry pre-pass the `--emit=exec` path uses,
+        // and hands the monomorphized bodies to the canonical
+        // `glyim_mir_interp::run_program` process contract shared with
+        // the test harness's `InterpRunner`.
+        let entry_main = glyim_pipeline::Pipeline::entry_main_local_id_with_proc_registry(
+            &mut db,
+            input,
+            proc_registry_ref,
+        );
+        let Some(entry_main) = entry_main else {
+            return Err(vec![
+                glyim_diag::GlyimDiagnostic::internal_error(format!(
+                    "--emit=run: no `fn main` found in {}; the interpreter needs an \
+                 entry point to execute",
+                    input.display()
+                ))
+                .with_suggestion(glyim_diag::Suggestion {
+                    message: "define `fn main` in the program, or use another --emit kind \
+                          (obj/exec/mir/…) to compile this file without running it"
+                        .to_string(),
+                    replacements: Vec::new(),
+                    applicability: glyim_diag::Applicability::MaybeIncorrect,
+                }),
+            ]);
+        };
+        let compilation = glyim_pipeline::compile_file_to_mir_with_proc_registry(
+            &mut db,
+            input,
+            proc_registry_ref,
+        )?;
+        // Same warning-rendering rule as the code-producing modes: a
+        // successful compile's non-error diagnostics must reach the user.
+        print_diagnostics(&compilation.warnings, &args.error_format);
+        write_profile_outputs(&args, &compilation.profile)?;
+        let bodies: Vec<_> = compilation.bodies.values().cloned().collect();
+        let outcome =
+            glyim_mir_interp::run_program(&bodies, compilation.ty_ctx.as_ref(), Some(entry_main));
+        tracing::debug!(
+            exit_code = outcome.exit_code,
+            kind = ?outcome.kind,
+            "interpreted program finished"
+        );
+        // Forward the program's streams verbatim, then adopt its exit
+        // code: `glyim --emit=run prog.g` is scriptable like the linked
+        // `--emit=exec` binary. stdout is flushed before stderr so the
+        // two never interleave across buffers.
+        {
+            use std::io::Write as _;
+            let mut out = std::io::stdout();
+            let _ = out.write_all(&outcome.stdout);
+            let _ = out.flush();
+            let mut err_out = std::io::stderr();
+            let _ = err_out.write_all(&outcome.stderr);
+            let _ = err_out.flush();
+        }
+        return Ok(outcome.exit_code);
     }
 
     // Build the LLVM backend concretely so the Thin path can drive per-CGU
@@ -738,7 +877,8 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
                         &object_path,
                         final_output_path.as_deref(),
                         &args,
-                    );
+                    )
+                    .map(|()| 0);
                 }
             }
             cache_key = Some(k);
@@ -897,8 +1037,9 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
             "`--backend=bytecode` cannot produce an executable or cdylib: it emits \
              raw VM opcode bytes, not a relocatable object, so the system linker \
              rejects the result. Use the default (LLVM) backend for `--emit=exec` \
-             or `--emit=cdylib`. (The bytecode backend is available for `--emit=obj` \
-             as a testing tool — see KNOWN_GAPS §6 P1-C10.)",
+             or `--emit=cdylib`, or `--emit=run` to execute in-process through \
+             the interpreter without linking. (The bytecode backend is available \
+             for `--emit=obj` as a testing tool — see KNOWN_GAPS §6 P1-C10.)",
         )]);
     }
 
@@ -944,7 +1085,9 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<(), Vec<glyim_diag::GlyimDi
         })?;
     }
 
-    Ok(())
+    // Code-producing modes exit 0 on success; `--emit=run` returned the
+    // program's own exit code from its early-return branch above.
+    Ok(0)
 }
 
 /// M2.1: emit the phase-profile side outputs after a successful compile.
