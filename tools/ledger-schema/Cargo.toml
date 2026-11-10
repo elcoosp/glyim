@@ -1,6 +1,6 @@
 [package]
 name = "ledger-schema"
-version = "0.1.0"
+version = "0.8.0"
 edition = "2024"
 description = "M1.1 Readiness Ledger registry schema: strict TOML feature/gap entries, load, validate, JSON-Schema export"
 publish = false
