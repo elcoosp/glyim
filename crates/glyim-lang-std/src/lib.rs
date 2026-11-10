@@ -103,221 +103,334 @@ pub fn std_source_all() -> String {
     out
 }
 
-/// Assemble the standard library as a *modular* crate (Option A of the
-/// stdlib-compile plan): each `.g` module becomes an inline `pub mod X { … }`
-/// with its items made `pub`, and the crate root re-exports every public item
-/// via `pub use X::name;` so that both the bare references the stdlib uses
-/// internally (`Read`, `Write`, `Instant`, …) and the qualified `std::`-style
-/// paths (`time::Instant`, `io::Read`) resolve.
-///
-/// This is the structure the language expects: the crate doc comments refer to
-/// `std::io` / `std::time` / `std::net`, and the modules reference each other
-/// both by bare name and by `module::Item` paths. A flat concatenation (what
-/// `std_source_all` produced) cannot satisfy the qualified paths, and wrapping
-/// modules without root re-exports cannot satisfy the bare names — so both
-/// mechanisms are required.
+/// Module→item map for the full assembler — each `.g` module becomes an
+/// inline `pub mod X { … }` with its items made `pub`, and the crate root
+/// re-exports every public item via `pub use X::name;` (see
+/// [`std_source_assembled`]).
 ///
 /// Glob re-exports (`use io::*`) are not supported by the resolver, so each
-/// module's public items are listed explicitly in `MODULE_PUBS`.
-#[must_use]
-pub fn std_source_assembled() -> String {
+/// module's public items are listed explicitly here.
+static FULL_PUBS: &[(&str, &[&str])] = &[
     // (name, [item, ...]) — emitted as `pub mod name { … }` + `pub use name::item;`
     // per item, so bare names resolve at the crate root.
-    let pubs: &[(&str, &[&str])] = &[
-        // Script 259: dependency order. The typeck walker visits modules in
-        // source order and registers an impl method's `body_owner_map`
-        // entry only when it *reaches* that impl's module. `boxed`/`vec`/
-        // `raw_vec`/`string`/`rc` reference `alloc::Layout` methods and
-        // must therefore appear AFTER `alloc` and `raw_vec` in the emitted
-        // source. Before this reorder, `Box::new`'s body ran before
-        // `alloc::Layout::from_size_align` had been registered, producing
-        // cascading `.expect()` "no method" errors on the resulting
-        // `Error` receiver.
-        ("option", &["Option"]),
-        ("result", &["Result"]),
-        (
-            "iter",
-            &[
-                "Iterator",
-                "IntoIterator",
-                "FromIterator",
-                "Map",
-                "Filter",
-                "Enumerate",
-                "Skip",
-                "Take",
-                "Zip",
-                "Chain",
-            ],
-        ),
-        (
-            "ops",
-            &[
-                "Deref", "DerefMut", "Drop", "Fn", "FnMut", "FnOnce", "Add", "Sub", "Mul", "Div",
-                "Rem", "Neg", "Not", "Index", "IndexMut",
-            ],
-        ),
-        ("default", &["Default"]),
-        (
-            "mem",
-            &[
-                "size_of",
-                "size_of_val",
-                "align_of",
-                "align_of_val",
-                "replace",
-                "swap",
-                "take",
-                "forget",
-                "drop",
-            ],
-        ),
-        ("ptr", &["read", "write", "drop_in_place"]),
-        ("cell", &["Cell", "RefCell", "UnsafeCell"]),
-        (
-            "marker",
-            &["Sized", "Send", "Sync", "Unpin", "Copy", "PhantomData"],
-        ),
-        (
-            "convert",
-            &["From", "Into", "TryFrom", "TryInto", "AsRef", "AsMut"],
-        ),
-        ("hint", &["black_box", "spin_loop"]),
-        // --- allocator layer (dependencies of vec/boxed/rc/string) ---
-        (
-            "alloc",
-            &["GlobalAlloc", "Layout", "GLOBAL", "handle_alloc_error"],
-        ),
-        ("raw_vec", &["RawVec"]),
-        // --- allocator consumers ---
-        ("vec", &["Vec"]),
-        ("boxed", &["Box"]),
-        ("rc", &["Rc"]),
-        ("string", &["String"]),
-        (
-            "io",
-            &[
-                "Read",
-                "Write",
-                "BufRead",
-                "Error",
-                "ErrorKind",
-                "Stdin",
-                "Stdout",
-                "Stderr",
-                "empty_reader",
-                "stdin",
-                "stdout",
-                "stderr",
-                "println",
-                "print",
-                "eprintln",
-                "eprint",
-                "RepeatBytes",
-            ],
-        ),
-        (
-            "fs",
-            &[
-                "File",
-                "OpenOption",
-                "read_to_string",
-                "write_to_file",
-                "FileType",
-                "Metadata",
-                "DirEntry",
-                "read_dir",
-            ],
-        ),
-        (
-            "net",
-            &[
-                "TcpStream",
-                "TcpListener",
-                "UdpSocket",
-                "IpAddr",
-                "Ipv4Addr",
-                "Ipv6Addr",
-                "SocketAddr",
-                "SocketAddrV4",
-                "SocketAddrV6",
-                "ToSocketAddrs",
-                "resolve",
-                "connect",
-                "bind",
-            ],
-        ),
-        (
-            "thread",
-            &[
-                "Thread",
-                "ThreadId",
-                "spawn",
-                "sleep",
-                "JoinHandle",
-                "yield_now",
-            ],
-        ),
-        (
-            "sync",
-            &[
-                "Mutex",
-                "RwLock",
-                "Arc",
-                "AtomicBool",
-                "AtomicI32",
-                "AtomicU32",
-                "AtomicUsize",
-                "Condvar",
-                "Barrier",
-                "OnceLock",
-            ],
-        ),
-        (
-            "env",
-            &[
-                "args",
-                "var",
-                "set_var",
-                "current_dir",
-                "temp_dir",
-                "home_dir",
-                "args_os",
-            ],
-        ),
-        ("time", &["Duration", "Instant", "SystemTime", "UNIX_EPOCH"]),
-        ("process", &["Command", "Child", "Stdio", "exit", "id"]),
-        ("future", &["Poll", "Waker", "Context", "Future"]),
-        (
-            "cmp",
-            &[
-                "min",
-                "max",
-                "Ord",
-                "PartialOrd",
-                "Eq",
-                "PartialEq",
-                "Reverse",
-            ],
-        ),
-        ("panic", &["panic_any", "panic_any_str"]),
-        (
-            "int_str",
-            &[
-                "i32_to_string",
-                "u32_to_string",
-                "i64_to_string",
-                "u64_to_string",
-            ],
-        ),
-    ];
-    // `str` and `slice` are emitted FLAT: their `impl str { .. }` /
-    // `impl<T> [T] { .. }` extension blocks must bind to the primitive types,
-    // not a module named `str` / `slice`.
-    let flat_modules: &[&str] = &["str", "slice", "parse"];
+    // Script 259: dependency order. The typeck walker visits modules in
+    // source order and registers an impl method's `body_owner_map`
+    // entry only when it *reaches* that impl's module. `boxed`/`vec`/
+    // `raw_vec`/`string`/`rc` reference `alloc::Layout` methods and
+    // must therefore appear AFTER `alloc` and `raw_vec` in the emitted
+    // source. Before this reorder, `Box::new`'s body ran before
+    // `alloc::Layout::from_size_align` had been registered, producing
+    // cascading `.expect()` "no method" errors on the resulting
+    // `Error` receiver.
+    ("option", &["Option"]),
+    ("result", &["Result"]),
+    (
+        "iter",
+        &[
+            "Iterator",
+            "IntoIterator",
+            "FromIterator",
+            "Map",
+            "Filter",
+            "Enumerate",
+            "Skip",
+            "Take",
+            "Zip",
+            "Chain",
+        ],
+    ),
+    (
+        "ops",
+        &[
+            "Deref", "DerefMut", "Drop", "Fn", "FnMut", "FnOnce", "Add", "Sub", "Mul", "Div",
+            "Rem", "Neg", "Not", "Index", "IndexMut",
+        ],
+    ),
+    ("default", &["Default"]),
+    (
+        "mem",
+        &[
+            "size_of",
+            "size_of_val",
+            "align_of",
+            "align_of_val",
+            "replace",
+            "swap",
+            "take",
+            "forget",
+            "drop",
+        ],
+    ),
+    ("ptr", &["read", "write", "drop_in_place"]),
+    ("cell", &["Cell", "RefCell", "UnsafeCell"]),
+    (
+        "marker",
+        &["Sized", "Send", "Sync", "Unpin", "Copy", "PhantomData"],
+    ),
+    (
+        "convert",
+        &["From", "Into", "TryFrom", "TryInto", "AsRef", "AsMut"],
+    ),
+    ("hint", &["black_box", "spin_loop"]),
+    // --- allocator layer (dependencies of vec/boxed/rc/string) ---
+    (
+        "alloc",
+        &["GlobalAlloc", "Layout", "GLOBAL", "handle_alloc_error"],
+    ),
+    ("raw_vec", &["RawVec"]),
+    // --- allocator consumers ---
+    ("vec", &["Vec"]),
+    ("boxed", &["Box"]),
+    ("rc", &["Rc"]),
+    ("string", &["String"]),
+    (
+        "io",
+        &[
+            "Read",
+            "Write",
+            "BufRead",
+            "Error",
+            "ErrorKind",
+            "Stdin",
+            "Stdout",
+            "Stderr",
+            "empty_reader",
+            "stdin",
+            "stdout",
+            "stderr",
+            "println",
+            "print",
+            "eprintln",
+            "eprint",
+            "RepeatBytes",
+        ],
+    ),
+    (
+        "fs",
+        &[
+            "File",
+            "OpenOption",
+            "read_to_string",
+            "write_to_file",
+            "FileType",
+            "Metadata",
+            "DirEntry",
+            "read_dir",
+        ],
+    ),
+    (
+        "net",
+        &[
+            "TcpStream",
+            "TcpListener",
+            "UdpSocket",
+            "IpAddr",
+            "Ipv4Addr",
+            "Ipv6Addr",
+            "SocketAddr",
+            "SocketAddrV4",
+            "SocketAddrV6",
+            "ToSocketAddrs",
+            "resolve",
+            "connect",
+            "bind",
+        ],
+    ),
+    (
+        "thread",
+        &[
+            "Thread",
+            "ThreadId",
+            "spawn",
+            "sleep",
+            "JoinHandle",
+            "yield_now",
+        ],
+    ),
+    (
+        "sync",
+        &[
+            "Mutex",
+            "RwLock",
+            "Arc",
+            "AtomicBool",
+            "AtomicI32",
+            "AtomicU32",
+            "AtomicUsize",
+            "Condvar",
+            "Barrier",
+            "OnceLock",
+        ],
+    ),
+    (
+        "env",
+        &[
+            "args",
+            "var",
+            "set_var",
+            "current_dir",
+            "temp_dir",
+            "home_dir",
+            "args_os",
+        ],
+    ),
+    ("time", &["Duration", "Instant", "SystemTime", "UNIX_EPOCH"]),
+    ("process", &["Command", "Child", "Stdio", "exit", "id"]),
+    ("future", &["Poll", "Waker", "Context", "Future"]),
+    (
+        "cmp",
+        &[
+            "min",
+            "max",
+            "Ord",
+            "PartialOrd",
+            "Eq",
+            "PartialEq",
+            "Reverse",
+        ],
+    ),
+    ("panic", &["panic_any", "panic_any_str"]),
+    (
+        "int_str",
+        &[
+            "i32_to_string",
+            "u32_to_string",
+            "i64_to_string",
+            "u64_to_string",
+        ],
+    ),
+];
+
+/// Module→item map for the minimal assembler — see
+/// [`std_source_assembled_minimal`].
+static MINIMAL_PUBS: &[(&str, &[&str])] = &[
+    ("option", &["Option"]),
+    ("result", &["Result"]),
+    (
+        "iter",
+        &[
+            "Iterator",
+            "IntoIterator",
+            "FromIterator",
+            "Map",
+            "Filter",
+            "Enumerate",
+            "Skip",
+            "Take",
+            "Zip",
+            "Chain",
+        ],
+    ),
+    (
+        "ops",
+        &[
+            "Deref", "DerefMut", "Drop", "Fn", "FnMut", "FnOnce", "Add", "Sub", "Mul", "Div",
+            "Rem", "Neg", "Not", "Index", "IndexMut",
+        ],
+    ),
+    ("default", &["Default"]),
+    (
+        "mem",
+        &[
+            "size_of",
+            "size_of_val",
+            "align_of",
+            "align_of_val",
+            "replace",
+            "swap",
+            "take",
+            "forget",
+            "drop",
+        ],
+    ),
+    (
+        "ptr",
+        &["read", "write", "drop_in_place", "null", "null_mut"],
+    ),
+    ("cell", &["Cell", "RefCell", "UnsafeCell"]),
+    (
+        "marker",
+        &["Sized", "Send", "Sync", "Unpin", "Copy", "PhantomData"],
+    ),
+    (
+        "convert",
+        &["From", "Into", "TryFrom", "TryInto", "AsRef", "AsMut"],
+    ),
+    ("hint", &["black_box", "spin_loop"]),
+    // Script 434: dependency order — same reorder as the FULL
+    // assembler got in Script 259. `alloc`/`raw_vec` must come before
+    // their consumers (`vec`, `boxed`, `rc`, `string`) or the typeck
+    // walker registers `Layout`'s impl after `Box::new`'s body, which
+    // produces the 7 `no method expect` errors the CLI test hits.
+    (
+        "alloc",
+        &["GlobalAlloc", "Layout", "GLOBAL", "handle_alloc_error"],
+    ),
+    ("raw_vec", &["RawVec"]),
+    ("vec", &["Vec"]),
+    ("boxed", &["Box"]),
+    ("rc", &["Rc"]),
+    ("string", &["String"]),
+    (
+        "io",
+        &[
+            "Read",
+            "Write",
+            "BufRead",
+            "Error",
+            "ErrorKind",
+            "Stdin",
+            "Stdout",
+            "Stderr",
+            "empty_reader",
+            "stdin",
+            "stdout",
+            "stderr",
+            "println",
+            "print",
+            "eprintln",
+            "eprint",
+            "RepeatBytes",
+        ],
+    ),
+    ("future", &["Poll", "Waker", "Context", "Future"]),
+    (
+        "cmp",
+        &[
+            "min",
+            "max",
+            "Ord",
+            "PartialOrd",
+            "Eq",
+            "PartialEq",
+            "Reverse",
+        ],
+    ),
+    ("panic", &["panic_any", "panic_any_str"]),
+    (
+        "int_str",
+        &[
+            "i32_to_string",
+            "u32_to_string",
+            "i64_to_string",
+            "u64_to_string",
+        ],
+    ),
+];
+
+/// Modules emitted FLAT: their `impl str { .. }` / `impl<T> [T] { .. }`
+/// extension blocks must bind to the primitive types, not a module named
+/// `str` / `slice`.
+static FLAT_MODULES: &[&str] = &["str", "slice", "parse"];
+
+/// Emit an assembled stdlib source for `pubs`: flat extension modules
+/// first, then each module wrapped in `pub mod { … }`, then the root
+/// re-exports (per-item `pub use`, plus the `Option`/`Result` variant
+/// re-exports) so bare names resolve crate-wide.
+fn assemble(pubs: &[(&str, &[&str])], header: &str) -> String {
     let mut out = String::new();
-    out.push_str("// Assembled modular glyim standard library (Option A).\n");
-    for name in flat_modules {
+    out.push_str(header);
+    for name in FLAT_MODULES {
         if let Some(src) = std_source(name) {
             let pub_src = make_pub(src);
             out.push_str(&pub_src);
@@ -355,6 +468,27 @@ pub fn std_source_assembled() -> String {
     out
 }
 
+/// Assemble the standard library as a *modular* crate (Option A of the
+/// stdlib-compile plan): each `.g` module becomes an inline `pub mod X { … }`
+/// with its items made `pub`, and the crate root re-exports every public item
+/// via `pub use X::name;` so that both the bare references the stdlib uses
+/// internally (`Read`, `Write`, `Instant`, …) and the qualified `std::`-style
+/// paths (`time::Instant`, `io::Read`) resolve.
+///
+/// This is the structure the language expects: the crate doc comments refer to
+/// `std::io` / `std::time` / `std::net`, and the modules reference each other
+/// both by bare name and by `module::Item` paths. A flat concatenation (what
+/// `std_source_all` produced) cannot satisfy the qualified paths, and wrapping
+/// modules without root re-exports cannot satisfy the bare names — so both
+/// mechanisms are required.
+#[must_use]
+pub fn std_source_assembled() -> String {
+    assemble(
+        FULL_PUBS,
+        "// Assembled modular glyim standard library (Option A).\n",
+    )
+}
+
 /// Assemble a **minimal** standard library crate containing only the modules
 /// required for a "hello world" program (and basic collections + I/O). This
 /// excludes `net`, `fs`, `thread`, `sync`, `env`, `time`, `process`, which
@@ -364,160 +498,10 @@ pub fn std_source_assembled() -> String {
 /// `--with-full-stdlib` until those remaining gaps are closed.
 #[must_use]
 pub fn std_source_assembled_minimal() -> String {
-    let pubs: &[(&str, &[&str])] = &[
-        ("option", &["Option"]),
-        ("result", &["Result"]),
-        (
-            "iter",
-            &[
-                "Iterator",
-                "IntoIterator",
-                "FromIterator",
-                "Map",
-                "Filter",
-                "Enumerate",
-                "Skip",
-                "Take",
-                "Zip",
-                "Chain",
-            ],
-        ),
-        (
-            "ops",
-            &[
-                "Deref", "DerefMut", "Drop", "Fn", "FnMut", "FnOnce", "Add", "Sub", "Mul", "Div",
-                "Rem", "Neg", "Not", "Index", "IndexMut",
-            ],
-        ),
-        ("default", &["Default"]),
-        (
-            "mem",
-            &[
-                "size_of",
-                "size_of_val",
-                "align_of",
-                "align_of_val",
-                "replace",
-                "swap",
-                "take",
-                "forget",
-                "drop",
-            ],
-        ),
-        (
-            "ptr",
-            &["read", "write", "drop_in_place", "null", "null_mut"],
-        ),
-        ("cell", &["Cell", "RefCell", "UnsafeCell"]),
-        (
-            "marker",
-            &["Sized", "Send", "Sync", "Unpin", "Copy", "PhantomData"],
-        ),
-        (
-            "convert",
-            &["From", "Into", "TryFrom", "TryInto", "AsRef", "AsMut"],
-        ),
-        ("hint", &["black_box", "spin_loop"]),
-        // Script 434: dependency order — same reorder as the FULL
-        // assembler got in Script 259. `alloc`/`raw_vec` must come before
-        // their consumers (`vec`, `boxed`, `rc`, `string`) or the typeck
-        // walker registers `Layout`'s impl after `Box::new`'s body, which
-        // produces the 7 `no method expect` errors the CLI test hits.
-        (
-            "alloc",
-            &["GlobalAlloc", "Layout", "GLOBAL", "handle_alloc_error"],
-        ),
-        ("raw_vec", &["RawVec"]),
-        ("vec", &["Vec"]),
-        ("boxed", &["Box"]),
-        ("rc", &["Rc"]),
-        ("string", &["String"]),
-        (
-            "io",
-            &[
-                "Read",
-                "Write",
-                "BufRead",
-                "Error",
-                "ErrorKind",
-                "Stdin",
-                "Stdout",
-                "Stderr",
-                "empty_reader",
-                "stdin",
-                "stdout",
-                "stderr",
-                "println",
-                "print",
-                "eprintln",
-                "eprint",
-                "RepeatBytes",
-            ],
-        ),
-        ("future", &["Poll", "Waker", "Context", "Future"]),
-        (
-            "cmp",
-            &[
-                "min",
-                "max",
-                "Ord",
-                "PartialOrd",
-                "Eq",
-                "PartialEq",
-                "Reverse",
-            ],
-        ),
-        ("panic", &["panic_any", "panic_any_str"]),
-        (
-            "int_str",
-            &[
-                "i32_to_string",
-                "u32_to_string",
-                "i64_to_string",
-                "u64_to_string",
-            ],
-        ),
-    ];
-    // `str` and `slice` emitted FLAT.
-    let flat_modules: &[&str] = &["str", "slice", "parse"];
-    let mut out = String::new();
-    out.push_str("// Assembled MINIMAL glyim standard library (Script 82).\n");
-    for name in flat_modules {
-        if let Some(src) = std_source(name) {
-            let pub_src = make_pub(src);
-            out.push_str(&pub_src);
-            out.push('\n');
-        }
-    }
-    for (name, _items) in pubs {
-        if let Some(src) = std_source(name) {
-            let pub_src = make_pub(src);
-            let _ = writeln!(out, "pub mod {name} {{");
-            out.push_str(&pub_src);
-            out.push_str("\n}\n\n");
-        }
-    }
-    out.push_str("// Root re-exports so bare names resolve crate-wide.\n");
-    for (name, items) in pubs {
-        for item in *items {
-            let _ = writeln!(out, "pub use {name}::{item};");
-        }
-    }
-    // §3.5.36-adjacent: enum variants into the root value namespace so
-    // bare `Some(x)` / `None` / `Ok(x)` / `Err(x)` resolve. `pub use
-    // option::Option;` re-exports only the type; variants live in the
-    // synthetic `option::Option` module, so the re-export path is the
-    // three-segment `option::Option::Some`.
-    for (module, enum_name, variants) in [
-        ("option", "Option", ["Some", "None"]),
-        ("result", "Result", ["Ok", "Err"]),
-    ] {
-        for v in variants {
-            let _ = writeln!(out, "pub use {module}::{enum_name}::{v};");
-        }
-    }
-    out.push('\n');
-    out
+    assemble(
+        MINIMAL_PUBS,
+        "// Assembled MINIMAL glyim standard library (Script 82).\n",
+    )
 }
 
 /// Make every top-level (module-level, brace-depth-0) item declaration in
