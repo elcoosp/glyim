@@ -8,6 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Corpus substrate (M2.3 slice 1)**: `tools/glyim-bench/src/corpus.rs`
+  adds the seven deterministic synthetic generator families the master
+  plan's M2.3 calls for (wide, deep, generic, trait, match, macro,
+  closure) as pure functions of `(family, seed, size)` — no clock, no
+  ambient PRNG — each mirroring a shape proven by an existing run-pass
+  fixture, with the reference exit code derived by construction under
+  documented `i32` overflow bounds. The `glyim.corpus/1` manifest
+  (`deny_unknown_fields`, byte-deterministic rendering) records family,
+  seed, size, exit, compile flags, and the FNV-1a-64 identity of the
+  source; `CorpusManifest::verify` regenerates every row and fails with a
+  typed `CorpusIdentityMismatch` — the machine-checked "corpora committed
+  with hashes" guarantee. New seams carry `tracing` spans
+  (`corpus_generate`, `corpus_manifest_build`) and miette help text
+  (`CorpusPlan`, `CorpusManifestParse`, `CorpusIdentityMismatch`). Tests
+  pin determinism, exit-code contracts, JSON round-trip/strictness, drift
+  detection, and FNV vectors; bench `glyim-bench --bench corpus_gen`
+  pins build/verify/marginal cost; new consumer example
+  `tools/glyim-bench/examples/corpus_walk.rs`; ledger row
+  `TOOL-BENCH-CORPUS-GEN`.
+- **Micro-debt cleanup**: `glyim-test`'s `TestMode: FromStr` now carries a
+  typed `TestModeError` (miette `help()` with the canonical mode list;
+  `Display` text byte-identical to the former string error, so substring
+  assertions keep passing) instead of `Err = String` — the same debt class
+  as the ledger/metrics CLI errors — and `tools/glyim-pilot`'s HTTP
+  control-plane bind degrades to a logged error instead of
+  `unwrap()`-panicking the detached task (constitution C4).
+- **Docs drift fixes**: the README repository map now lists the
+  `glyim-ledger gaps` subcommand (landed with the M1.7 witness-debt
+  report), records the M2.3 slice-1 state, and lists the `corpus_walk`
+  example; the degenerate `/// Struct.` / `/// Variant.` placeholder
+  rustdocs in `crates/glyim-test/src/harness/config.rs` are replaced with
+  real field docs (the workspace-wide placeholder sweep — ~2.6k sites —
+  is tracked as a docs follow-up).
 - **Gap registry migration (M1.7 slice)**: the open `KNOWN_GAPS.md` §§1–8
   entries are now registry rows under `ledger/gaps/known/` — the seed's
   GAP-0001/GAP-0002 join **GAP-0003** (§4, `panic!` does not unwind —

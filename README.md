@@ -138,8 +138,8 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `tools/glyim-metrics` | Repo-health metrics (code lines, tests, doc coverage, inline-allow count) behind the CI metrics ratchet. |
 | `tools/glyim-pilot` | Agent orchestrator with gate bundles (clippy, fmt, contracts, coverage, mutation, ledger). |
 | `tools/ledger-schema` | `deny_unknown_fields` schemas shared by the readiness ledger and inventory extractors. |
-| `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `inventory`, `schema` — registry consistency gates run in CI. |
-| `tools/glyim-bench` | M2.2 measurement harness: `perf stat`/callgrind instruction counts, wall time, child RSS, a counting allocator, and the CoV stability gate. |
+| `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `gaps`, `inventory`, `schema` — registry consistency gates run in CI. |
+| `tools/glyim-bench` | M2.2 measurement harness: `perf stat`/callgrind instruction counts, wall time, child RSS, a counting allocator, the CoV stability gate, and the M2.3 deterministic corpus generators (`glyim.corpus/1` manifest). |
 
 ### Compilation Pipeline
 
@@ -483,6 +483,9 @@ cargo run -p glyim-bench --example measure_alloc
 
 # Render the gap registry's witness-debt report (M1.7 seam).
 cargo run -p glyim-ledger --example gap_report
+
+# Build + verify a corpus manifest over the 7 generator families (M2.3).
+cargo run -p glyim-bench --example corpus_walk
 ```
 
 ---
@@ -627,9 +630,14 @@ session log.
   instrumentation (`tracing` spans, `--time-passes`, `--self-profile`,
   `--emit=stats`) is landed together with the M2.2 measurement harness
   (`tools/glyim-bench`: instruction counts, wall, child RSS, counting
-  allocator, CoV stability gate). The next plan items are the rest of
-  M1.7 (the `HANDOFF.md` §2 and playbook Appendix A sources) and the
-  M2.3 corpora + evidence wiring.
+  allocator, CoV stability gate), and the M2.3 slice 1 corpus substrate is
+  landed (`tools/glyim-bench` `corpus` module: the seven deterministic
+  generator families, the `glyim.corpus/1` manifest, and the
+  identity-verify contract behind "corpora committed with hashes"). The
+  next plan items are the rest of M1.7 (the `HANDOFF.md` §2 and playbook
+  Appendix A sources) and the rest of M2.3 (the committed corpora
+  directory, the real-program set, and the evidence wiring that fills the
+  harness's reserved `instructions`/`rss_kb` columns).
 - `docs/archive/` — historical session documents (`HANDOFF.md`,
   `FIXES.md`) kept for provenance; the root stays navigation-focused.
 - `metrics/baseline.json` — the M0.6 repo-health baseline (file/line/test
