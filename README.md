@@ -480,6 +480,9 @@ cargo run -p glyim-test --example evidence_report
 
 # Measure a workload in-process: counting allocator + CoV gate (M2.2).
 cargo run -p glyim-bench --example measure_alloc
+
+# Render the gap registry's witness-debt report (M1.7 seam).
+cargo run -p glyim-ledger --example gap_report
 ```
 
 ---
@@ -577,13 +580,36 @@ cargo insta review
 
 ### Tracked gaps
 
-The compiler's development is tracked against an internal de-stubbing plan. Notable open items include:
+The compiler's development is tracked against an internal de-stubbing plan.
+Status is a property of the **readiness ledger**, not of prose: the open gaps
+live in `ledger/gaps/known/*.toml` (GAP-0001…GAP-0005), are validated by CI's
+`ledger check` job, and carry strict-xfail witness fixtures under
+`crates/glyim-test/tests/` where one is reproducible. Render the coverage
+report with `cargo run -p glyim-ledger -- gaps`. Notable open items include:
 
-- Cross-frame unwinding in the MIR interpreter — implemented and hardened (plan §1.4; the interpreter executes caller-frame cleanup blocks; see `KNOWN_GAPS.md` for the default-off flag and the runtime-verification status).
-- Multi-await sequential async bodies are implemented and runtime-verified by the Linux CI job; `.await` inside a loop body is a deliberate, diagnosed hard error (`[T0060]`, see `KNOWN_GAPS.md` §1) until the async state-machine v2 lands.
-- Some builtin methods on `Vec`/`String`/`Result`/`Option` lower to synthetic `FnDefId`s whose bodies the LLVM backend must intrinsic-lower; unimplemented ones produce an explicit compiler error rather than wrong code.
+- `.await` inside a loop body is a deliberate, diagnosed hard error
+  (`[T0060]`, GAP-0001, witnessed) until the async state-machine v2 lands.
+- `panic!` does not unwind: `glyim_panic` writes the message to stderr and
+  exits 101 without running destructors (GAP-0003, intentional and
+  documented).
+- A partial move out of a `Drop`-implementing type suppresses the parent
+  destructor entirely — sound (over-retains, never double-frees) but it
+  leaks the still-initialized siblings (GAP-0004, witnessed by a run-pass
+  fixture that will fail loudly when fine-grained guards land).
+- Windows SEH cleanup edges are implemented but structurally unreachable
+  until a lowering site populates `cleanup:` (GAP-0002, Windows-only, so
+  explicit witness debt).
+- Some builtin methods on `Vec`/`String`/`Result`/`Option` lower to
+  synthetic `FnDefId`s whose bodies the LLVM backend must intrinsic-lower;
+  unimplemented ones produce an explicit compiler error rather than wrong
+  code.
 - `--lto=thin` requires `llvm-lto2` from the matching LLVM distribution.
-- Procedural macros are supported via the C-ABI bridge, but the two-stage host compile is still being wired into the default `glyim-cli` flow.
+- Procedural macros are supported via the C-ABI bridge, but the two-stage
+  host compile is still being wired into the default `glyim-cli` flow.
+
+See `KNOWN_GAPS.md` for the full per-entry audit (verification recipes,
+closed-entry history) and `docs/archive/session-log-s16-s18.md` for the raw
+session log.
 
 > [!WARNING]
 > Glyim is not yet self-hosting. The standard library is written in Glyim and consumed by the compiler as a test corpus, but the compiler itself is Rust.
@@ -595,12 +621,15 @@ The compiler's development is tracked against an internal de-stubbing plan. Nota
 - `docs/roadmaps/` — the milestone plans; the current one is
   `glyim-master-plan.md`. The workstream state: M0 (rails + metrics) is
   landed, the M1 readiness-ledger slices (M1.1 registry → M1.6
-  strict-xfail witnesses) are landed, and the M2.1 phase instrumentation
-  (`tracing` spans, `--time-passes`, `--self-profile`, `--emit=stats`) is
-  landed together with the M2.2 measurement harness
+  strict-xfail witnesses) are landed, the M1.7 gap-registry migration is
+  landed for the `KNOWN_GAPS.md` §§1–8 sources (`ledger/gaps/known/*.toml`
+  plus the `glyim-ledger gaps` witness-debt report), and the M2.1 phase
+  instrumentation (`tracing` spans, `--time-passes`, `--self-profile`,
+  `--emit=stats`) is landed together with the M2.2 measurement harness
   (`tools/glyim-bench`: instruction counts, wall, child RSS, counting
-  allocator, CoV stability gate). The next plan items are the M1.7
-  gap-registry migration and the M2.3 corpora + evidence wiring.
+  allocator, CoV stability gate). The next plan items are the rest of
+  M1.7 (the `HANDOFF.md` §2 and playbook Appendix A sources) and the
+  M2.3 corpora + evidence wiring.
 - `docs/archive/` — historical session documents (`HANDOFF.md`,
   `FIXES.md`) kept for provenance; the root stays navigation-focused.
 - `metrics/baseline.json` — the M0.6 repo-health baseline (file/line/test

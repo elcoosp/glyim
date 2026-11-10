@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Gap registry migration (M1.7 slice)**: the open `KNOWN_GAPS.md` §§1–8
+  entries are now registry rows under `ledger/gaps/known/` — the seed's
+  GAP-0001/GAP-0002 join **GAP-0003** (§4, `panic!` does not unwind —
+  intentional, documented), **GAP-0004** (§6, a partial move out of a
+  `Drop`-implementing type suppresses the parent destructor — witnessed) and
+  **GAP-0005** (§6, conservative `needs_drop` for `dyn Trait`/projections).
+  New `glyim-ledger gaps [ROOT]` subcommand renders the witness-debt report
+  (`GapOutcome` / `run_gaps` / `format_gap_report`), with a consumer example
+  (`tools/glyim-ledger/examples/gap_report.rs`), a dependency-free bench
+  (`benches/gap_report.rs`), the `TOOL-LEDGER-GAPS` registry row, and
+  `tracing` spans on the new seam. `KNOWN_GAPS.md` stays the prose audit
+  (verification recipes + closed entries) and points at the registry; the
+  ~6.1k-line raw session log that had accreted after its Verification
+  section moved to `docs/archive/session-log-s16-s18.md`.
 - **Measurement harness (M2.2 slice)**: new `tools/glyim-bench` crate turns
   a command (or an in-process workload) into numbers with a stability
   guarantee — the M2.2 definition of done is a *variance* budget, not a
@@ -352,6 +366,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (MSRV 1.95.0 stays a separate CI job).
 
 ### Fixed
+- **`glyim-opt`'s drop-flag statement inspection re-read the pushed
+  statements through `new_stmts.last().unwrap()`** — provably non-empty,
+  but the re-inspection also saw the optional plain-flag statement pushed
+  one line earlier, so the per-element check's input depended on push
+  order. The per-element flag statement is now computed from the original
+  statement before it is moved (branch is total; emitted order fixed:
+  original stmt, plain flag, per-element flag). Behaviour-preserving; the
+  `COMPILER-OPT-DROP-ELAB` fixtures pin it.
 - **GSX SSR emitter dropped every element's closing `>`** (`</h1` instead of
   `</h1>`) — the crate's own G7 snapshot tests were left red on `main` (the
   ubuntu `Test` job has been failing since); the fix makes all 88 `glyim-gsx`
@@ -362,6 +384,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   build the crate). Found by the M1.3 gate run.
 
 ### Changed
+- **The strict-xfail witness contract covers run modes (M1.7)**:
+  `//@ known-gap: GAP-NNNN` is now accepted on `run-pass`/`run-fail`
+  fixtures (a pinned exit code is a valid gap-open behaviour witness) and a
+  failing run witness sharpens into `FailureReason::KnownGapClosed` instead
+  of a generic exit/output mismatch. `compile-pass`/`ui` witnesses stay
+  rejected at discovery — the discovery error is renamed
+  `WitnessRequiresCompileFail` → `WitnessUnsupportedMode` with updated
+  guidance. First consumer:
+  `tests/run-pass/behavior/partial_move_drop_guard_known_gap.g` witnesses
+  GAP-0004 on the exit-code contract.
 - **`regalloc2` dependency removed** from the workspace (unused).
 - Session documents `HANDOFF.md` and `FIXES.md` moved to `docs/archive/`
   to keep the repo root navigation-focused.
