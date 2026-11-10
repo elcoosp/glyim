@@ -74,7 +74,7 @@ pub struct Interpreter<'tcx> {
     globals:
         std::cell::RefCell<std::collections::HashMap<glyim_core::def_id::StaticDefId, InterpValue>>,
     /// Frames that were popped while their return value still held a
-    /// `Ref { frame: <this depth> }`. §3.9 (`KNOWN_GAPS)`: the stdlib's
+    /// `Ref { frame: <this depth> }`. §3.9 of `KNOWN_GAPS.md`: the stdlib's
     /// `impl Iterator for &[T]` binds the slice to a callee-local (`let cur:
     /// &[T] = *self;`) and returns `&cur[0]` — under LLVM the pointee is the
     /// caller's array and everything works; under the interpreter the

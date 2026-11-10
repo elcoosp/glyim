@@ -13,11 +13,13 @@ default = []
 # `test-linux-runtime` CI job enables this (it sets LLVM_SYS_231_PREFIX and
 # GLYIM_TEST_REAL_LLVM).
 #
-# NOTE (2026-08-28): the native async codegen path is currently broken (the
-# `LlvmBackend` panics in `fn_abi_of` for the monomorphized `block_on<F>` /
-# `poll` types), so these fixtures currently FAIL on the Linux job. That is the
-# intended strict behavior: the job now surfaces the gap instead of passing by
-# tolerance. Fixing the async codegen gap will make this job green.
+# UPDATE (2026-09-21, runtime.rs header): the earlier note here said the
+# native async codegen path was broken (`fn_abi_of` panic on the
+# monomorphized `block_on<F>` / `poll` types) and that the fixtures
+# "currently FAIL on the Linux job". That gap is closed — the
+# `test-linux-runtime` job runs the M5 fixtures strictly (real LLVM codegen
+# + link + run, CompilationFailed is a hard failure) and must stay green
+# (see .github/workflows/ci.yml).
 real-llvm = ["glyim-codegen-llvm"]
 
 [dependencies]

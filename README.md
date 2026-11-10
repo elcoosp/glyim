@@ -88,7 +88,7 @@ The design is heavily inspired by rustc's architecture (arena-allocated IRs, int
 
 ### Tooling
 
-- **`glyim` CLI** — compile with `--emit=obj|exec|mir|llvm-ir|asm|cdylib`, choose a backend, set opt-level, target triple, LTO strategy, and codegen units.
+- **`glyim` CLI** — compile with `--emit=obj|exec|mir|llvm-ir|asm|cdylib|syntax|stats`, choose a backend, set opt-level, target triple, LTO strategy, and codegen units; measure compiles with `--time-passes` and `--self-profile[=FILE]` (Chrome trace), and emit a schema-versioned JSON measurement report with `--emit=stats`.
 - **`glyip` build tool** — Cargo-like project manager with `new`, `build`, `test`, and `run`; dependency resolution with SemVer 2.0 matching, path deps, git deps (branch/tag/rev), lockfiles, and a registry client.
 - **Language Server** (`glyim-lsp`) — diagnostics, goto definition, hover, completion, folding, formatting, rename, workspace symbols, code actions (add missing match arms, generate impl, remove unused imports), and auto-import.
 - **Test harness** (`glyim-test`) — compile-pass / compile-fail / UI / run-pass / run-fail modes with inline annotations (`//~ ERROR`, `//~| …`), snapshot testing (CST, def-map, MIR), mocking utilities for every compiler phase, and property-based type generation.
@@ -131,9 +131,9 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `glyim-cli` | Command-line interface (`clap`) and linker driver. |
 | `glyim-lsp` | Language Server Protocol implementation. |
 | `glyim-test` | Testing framework: discovery, execution, snapshots, mocks, property testing. |
-| `glyim-lang-core` | Core library source (`.g` files): `Option`, `Result`, `iter`, `slice`, `str`, `cell`, `mem`, `ptr`, `ops`, `cmp`, `marker`, `panic`, `hint`, `convert`, `default`, `future`. |
-| `glyim-lang-alloc` | Alloc library source: `Box`, `Vec`, `String`, `Rc`, `RawVec`. |
-| `glyim-lang-std` | Standard library source: `io`, `fs`, `net`, `thread`, `sync`, `env`, `time`, `process`, `task`. |
+| `glyim-lang-core` | Core library source (`.g` files): `Option`, `Result`, `iter`, `slice`, `str`, `cell`, `mem`, `ptr`, `ops`, `cmp`, `marker`, `panic`, `hint`, `convert`, `default`, `future`, `parse`. |
+| `glyim-lang-alloc` | Alloc library source: `Box`, `Vec`, `String`, `Rc`, `RawVec`, plus the shared `alloc` module. |
+| `glyim-lang-std` | Standard library source: `io`, `fs`, `net`, `thread`, `sync`, `env`, `time`, `process`, `task`, plus integer/string formatting (`int_str`). |
 | `glyip` | Package manager / build tool. |
 | `tools/glyim-metrics` | Repo-health metrics (code lines, tests, doc coverage, inline-allow count) behind the CI metrics ratchet. |
 | `tools/glyim-pilot` | Agent orchestrator with gate bundles (clippy, fmt, contracts, coverage, mutation, ledger). |
@@ -263,7 +263,7 @@ glyim input.g --error-format json
 
 | Flag | Description |
 |------|-------------|
-| `--emit <KIND>` | `obj` (default), `exec`, `mir`, `llvm-ir`, `asm`, `cdylib` |
+| `--emit <KIND>` | `obj` (default), `exec`, `mir`, `llvm-ir`, `asm`, `cdylib`, `syntax`, `stats` |
 | `--backend <NAME>` | `llvm` (default) or `bytecode` |
 | `-O, --opt-level <N>` | Optimisation level 0–3 |
 | `--target <TRIPLE>` | Target triple (default: `x86_64-unknown-linux-gnu`) |
@@ -273,6 +273,10 @@ glyim input.g --error-format json
 | `--codegen-units <N>` | Number of CGUs (default: available parallelism, capped at 16) |
 | `--proc-macro-deps <LIST>` | Comma-separated proc-macro dependency source files |
 | `--error-format <FMT>` | `human` (default) or `json` |
+| `--with-stdlib` | Prepend the assembled standard library (+ prelude) so `println`, `Vec`, `Option`, … resolve without `use` statements |
+| `-A/--allow, -W/--warn, -D/--deny <LINT>` | Lint level control (repeatable; `-W help` lists the lints) |
+| `--time-passes` | Print the per-phase wall-clock table to stderr after a successful compile |
+| `--self-profile[=FILE]` | Write the per-phase profile as a Chrome Trace JSON event list (default `./trace.json`; value is `=`-bound) |
 
 > [!IMPORTANT]
 > `--lto=thin` requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution `glyim-codegen-llvm` was built against. Requesting `thin` with `--backend bytecode` is an explicit error rather than a silent no-op.
@@ -286,7 +290,7 @@ glyip new my_project              # Scaffold a new binary project
 glyip new my_lib --lib            # Scaffold a new library project
 
 glyip build                       # Build the project (incremental)
-glyip build --release -O2         # Release build with LTO fat
+glyip build --release --opt-level 2  # Release build with optimisations
 glyip build --backend llvm        # Force the LLVM backend
 
 glyip test                        # Run all tests
@@ -571,7 +575,7 @@ cargo insta review
 
 The compiler's development is tracked against an internal de-stubbing plan. Notable open items include:
 
-- Full cross-frame unwinding in the MIR interpreter (currently single-frame cleanup is supported).
+- Cross-frame unwinding in the MIR interpreter — implemented and hardened (plan §1.4; the interpreter executes caller-frame cleanup blocks; see `KNOWN_GAPS.md` for the default-off flag and the runtime-verification status).
 - Multi-await and loop-await async state machines are implemented but not yet runtime-verified on all hosts (the Linux CI job exercises them).
 - Some builtin methods on `Vec`/`String`/`Result`/`Option` lower to synthetic `FnDefId`s whose bodies the LLVM backend must intrinsic-lower; unimplemented ones produce an explicit compiler error rather than wrong code.
 - `--lto=thin` requires `llvm-lto2` from the matching LLVM distribution.
@@ -585,7 +589,12 @@ The compiler's development is tracked against an internal de-stubbing plan. Nota
 ## Repository Map & Gates
 
 - `docs/roadmaps/` — the milestone plans; the current one is
-  `glyim-master-plan.md` (M0 slice: lint rails + metrics baseline).
+  `glyim-master-plan.md`. The workstream state: M0 (rails + metrics) is
+  landed, the M1 readiness-ledger slices (M1.1 registry → M1.6
+  strict-xfail witnesses) are landed, and the next plan items are the
+  M1.7 gap-registry migration and the M2 performance-measurement slice
+  (per-phase `tracing` spans, `--time-passes`, `--self-profile`, and
+  `--emit=stats` shipped with the latter in this tree).
 - `docs/archive/` — historical session documents (`HANDOFF.md`,
   `FIXES.md`) kept for provenance; the root stays navigation-focused.
 - `metrics/baseline.json` — the M0.6 repo-health baseline (file/line/test

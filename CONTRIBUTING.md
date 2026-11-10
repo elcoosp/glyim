@@ -118,8 +118,10 @@ debugging session; none is obvious from a failing build.
 
 ### `kache` replays stale artifacts — disable it when bisecting
 
-`RUSTC_WRAPPER=kache` is set in the default dev environment. `kache`
-caches compilation artifacts keyed on inputs it computes itself —
+`RUSTC_WRAPPER=kache` is set in the *maintainer's* default dev
+environment (it is not part of this repo's `.cargo/config.toml` — if
+your machine does not have `kache`, this section does not apply).
+`kache` caches compilation artifacts keyed on inputs it computes itself —
 **`cargo clean` does not invalidate it**. If you apply a patch, run a
 test, revert the patch, and run again, the second run may replay the
 *patched* artifact.

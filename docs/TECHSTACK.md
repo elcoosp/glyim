@@ -4,7 +4,7 @@
 **Status:** Updated
 **Date:** 2026-11-09
 **Source of truth:** the root `Cargo.toml` (`[workspace.package]`,
-`[workspace.dependencies]`) at workspace version 0.6.0 (commit `6a798c9d`).
+`[workspace.dependencies]`) at workspace version 0.7.0 (commit `61a0ecbc`).
 
 > The previous revision (1.3.0, dated 2025-04-10) described an aspirational
 > stack that never matched the tree: it listed `salsa`, `chumsky`, `egg`,
@@ -48,15 +48,16 @@ minimums in `[workspace.dependencies]`.
 | `parking_lot` | 0.13 | `glyim-db`, harness | Faster `Mutex`/`RwLock` for interner and caches. |
 | `dashmap` | 6.2.1 | `glyim-lsp` | Concurrent map for LSP state. |
 | `tracing` / `tracing-subscriber` | 0.1.44 / 0.3.23 | typeck, lsp, test harness, codegen-llvm, glyip | Structured spans; subscriber with `env-filter` + `json`. |
-| `miette` | 7.6 | `glyim-diag` (+ `glyim-test` evidence errors) | Structured diagnostics with labels/help; `glyim-diag` re-exports it. |
-| `clap` | 4.6 (derive) | `glyim-cli`, `glyim-ledger` | CLI argument parsing. |
+| `miette` | 7.6 | `glyim-diag`, `glyim-span`, `glyim-test` (evidence + fixture-header errors) | Structured diagnostics with labels/help; `glyim-diag` re-exports it. |
+| `clap` | 4.6 (derive) | `glyim-cli`, `glyip`, `tools/glyim-pilot` | CLI argument parsing. |
 | `serde` / `serde_json` | 1.0 | `glyip`, ledger tools, pilot, harness | Config, lockfiles, evidence/JSON output. |
 | `toml` | 1.2.1 | `glyip`, ledger | Manifest + registry parsing. |
 | `semver` | 1.0 | `glyip` | SemVer 2.0 requirement parsing/matching. |
-| `reqwest` / `flate2` / `tar` | 0.13 | `glyip` (feature `registry`) | Registry client: download + unpack crate archives. |
+| `reqwest` / `flate2` / `tar` | 0.13 / 1 / 0.4 | `glyip` (feature `registry`) | Registry client: download + unpack crate archives. Declared in `glyip`'s own `[dependencies]` (not `[workspace.dependencies]`). |
 | `sha2` | 0.11.1 | `glyim-db` (cache fingerprints), `glyip` (lockfiles), `glyim-test` (evidence fixture hashes) | SHA-256 content addressing. |
 | `tempfile` | 3.27 | test-harness-heavy crates (13 manifests) | Scratch dirs for compile-and-run fixtures. |
 | `tokio` | 1.54 | `glyim-lsp`, `tools/glyim-pilot` | Async runtime for the LSP server and the pilot agent. |
+| `async-lsp` | git (`elcoosp/async-lsp`) | `glyim-lsp` (features `omni-trait`, `stdio`, `tokio`) | LSP server runtime layer on tokio. Git dependency — declared in `glyim-lsp`'s own manifest, not `[workspace.dependencies]`. |
 | `lsp-types` | 0.97 | `glyim-lsp` | LSP wire types. |
 | `libloading` | 0.9 | `glyim-proc-macro` | `dlopen`-based proc-macro cdylib loading. |
 | `rayon` | 1.12 | `glyim-test` (parallel fixture execution) | Data parallelism in the harness. |
@@ -87,7 +88,7 @@ Per-crate extras (declared directly by members): `termcolor`, `similar`,
 
 ## 4. Exclusions & Alternatives
 
-Deliberately **not** in the stack (as of 0.6.0):
+Deliberately **not** in the stack (as of 0.7.0):
 
 *   **`salsa`** — the query engine is planned (M6, master plan); today
     `glyim-db` is an interner + VFS + `TyCtx` handle and the driver is a
@@ -95,13 +96,13 @@ Deliberately **not** in the stack (as of 0.6.0):
 *   **`chumsky`/`lalrpop`/`nom`** — the parser is hand-written (recursive
     descent + Pratt expression parsing in `glyim-frontend`) for error
     recovery control; no parser-combinator or generator framework.
-*   **`egg` / equality saturation** — `glyim-opt` runs five hand-written
-    MIR passes (const-prop, DCE, CFG-simplify, unreachable-elim, slice
-    desugar); verified rewrites are the M10 workstream.
-*   **`regalloc2`** — the MIR interpreter is a value-model interpreter, not
+*   **`egg` / `regalloc2` / equality-saturation machinery** — `glyim-opt`
+    runs five hand-written MIR passes (const-prop, DCE, CFG-simplify,
+    unreachable-elim, slice desugar); verified rewrites are the M10
+    workstream, and the MIR interpreter is a value-model interpreter, not
     a register-allocated VM.
-*   **`async-lsp` / `tower` / `tower_lsp`** — `glyim-lsp` is implemented
-    directly on `tokio` + `lsp-types`.
+*   **`tower` / `tower_lsp`** — `glyim-lsp` builds on the `async-lsp`
+    runtime instead (see below); the tower service stack is not used.
 *   **Cranelift** — a ledger backend *tag* (`//@ backends: cranelift`) and
     a reserved `EvidenceBackend` variant only; there is no
     `glyim-codegen-cranelift` crate. LLVM and the bytecode backend are the
