@@ -8,6 +8,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Measurement harness (M2.2 slice)**: new `tools/glyim-bench` crate turns
+  a command (or an in-process workload) into numbers with a stability
+  guarantee — the M2.2 definition of done is a *variance* budget, not a
+  speed number: instruction-count CoV < 0.1 % over 10 runs.
+  - `glyim-bench run [--iterations N] [--source perf|callgrind|wall]
+    [--json OUT] -- CMD...` executes the command N times and prints the
+    report; `--source perf` wraps the child in `perf stat -x, -e
+    instructions,cycles`, `--source callgrind` in `valgrind --tool=callgrind`,
+    and the default auto-detects `perf`, falling back to wall-only sampling
+    (logged at `info`, never silently). Child RSS comes from
+    `getrusage(RUSAGE_CHILDREN)` (Linux; the running maximum over reaped
+    children). `glyim-bench gate [--max-cov-pct P] REPORT` re-checks a
+    written report against the budget and exits non-zero on failure.
+  - New `glyim_bench` library seams: `runner::run_iterated` (one
+    `BenchSample` per iteration), `source` parsers for `perf stat -x,` CSV
+    and the callgrind `summary:` line, `stats` (min/mean/median/max +
+    population CoV, `DEFAULT_MAX_COV_PCT = 0.1`), `alloc::CountingAllocator`
+    (opt-in `counting_allocator!` macro; gross allocation events/bytes, the
+    columns the M1.5 evidence schema reserved for M2), and `report`
+    (`glyim.bench/1` JSON with `deny_unknown_fields`, no clock/PRNG data,
+    byte-deterministic rendering — same discipline as the M1.5 evidence
+    records).
+  - Errors on the new seams are typed `BenchError` diagnostics with
+    actionable `help()` text (a missing `perf` suggests `--source wall`; a
+    gate failure suggests raising `--iterations`); the runner emits
+    `bench_run` spans and per-sample `debug!` events.
+  - Tests: CoV vectors, gate boundaries, both counter parsers (with
+    `<not counted>` / `<not supported>` handling), report round-trip +
+    unknown-field rejection + determinism, and (unix) runner end-to-end over
+    `sh -c`. New bench `glyim-bench --bench runner_overhead` pins the
+    harness's own cost; new consumer example
+    `tools/glyim-bench/examples/measure_alloc.rs` walks the in-process
+    counting-allocator path.
+  - Ledger: the `tooling.bench` area joins the taxonomy and
+    `ledger/features/tooling/bench.toml` declares the harness surface
+    (`TOOL-BENCH-RUN`, `TOOL-BENCH-COUNTING-ALLOC`, `TOOL-BENCH-STABILITY-GATE`).
+- **Micro-debt cleanup**: `tools/glyim-ledger`'s `parse_args`/`write_schema`
+  return a typed `LedgerCliError` and `tools/glyim-metrics`' CLI a typed
+  `MetricsCliError` (both `miette::Diagnostic` with per-variant `help()`
+  lines) instead of bare `Result<_, String>`; tests now assert on
+  constructors rather than message substrings, and CLI output still carries
+  the usage text plus a `help:` line.
+- **Docs drift fixes**: the README repository map no longer lists the
+  already-shipped M2.1 slice as a "next plan item" (it now records the
+  landed M2.1/M2.2 state and points at M1.7/M2.3 as next), the "Tracked
+  gaps" async bullet no longer claims loop-await state machines are
+  implemented (`.await` in a loop body is the diagnosed `[T0060]` hard
+  error per `KNOWN_GAPS.md` §1), the member count is 39 (34 + 5 tooling)
+  with a `tools/glyim-bench` row, `docs/TECHSTACK.md` re-anchors at
+  workspace 0.7.1 (`ba2a526e`) and records the `miette`/`clap`/`tracing`
+  consumer additions and the `libc` per-crate extra.
 - **Per-phase instrumentation (M2.1 slice)**: every pipeline phase
   (load → parse → expand → defmap → hir → typeck → lower → borrowck →
   opt → mono → codegen) now opens a `tracing` span and accumulates

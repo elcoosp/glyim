@@ -2,13 +2,13 @@
   <img src="docs/logo.png" alt="Glyim Logo" width="300"/>
   <p>
     <strong>A modular, from‑scratch compiler for a Rust‑like systems programming language, written in Rust.</strong><br/>
-    Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference &amp; trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with 38 members — 34 compiler/stdlib crates plus 4 tooling crates — designed for clarity, testability, and incremental development.
+    Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference &amp; trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with 39 members — 34 compiler/stdlib crates plus 5 tooling crates — designed for clarity, testability, and incremental development.
   </p>
   <p>
     <img src="https://img.shields.io/badge/Rust-1.95%20%7C%202024-000000?style=flat-square&logo=rust" alt="Rust"/>
     <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License MIT"/>
     <img src="https://img.shields.io/badge/LLVM-23-262D3A?style=flat-square&logo=llvm" alt="LLVM"/>
-    <img src="https://img.shields.io/badge/Crates-38-6F4E37?style=flat-square" alt="Crates"/>
+    <img src="https://img.shields.io/badge/Crates-39-6F4E37?style=flat-square" alt="Crates"/>
     <img src="https://img.shields.io/badge/Backend-LLVM%20%2B%20Bytecode-6A0DAD?style=flat-square" alt="Backend"/>
     <img src="https://img.shields.io/badge/Language%20Server-LSP-4B32C3?style=flat-square" alt="LSP"/>
     <img src="https://img.shields.io/badge/Testing-Snapshot%20%2B%20UI-00BFFF?style=flat-square" alt="Testing"/>
@@ -139,6 +139,7 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `tools/glyim-pilot` | Agent orchestrator with gate bundles (clippy, fmt, contracts, coverage, mutation, ledger). |
 | `tools/ledger-schema` | `deny_unknown_fields` schemas shared by the readiness ledger and inventory extractors. |
 | `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `inventory`, `schema` — registry consistency gates run in CI. |
+| `tools/glyim-bench` | M2.2 measurement harness: `perf stat`/callgrind instruction counts, wall time, child RSS, a counting allocator, and the CoV stability gate. |
 
 ### Compilation Pipeline
 
@@ -476,6 +477,9 @@ cargo run -p glyim-pipeline --example hello_pipeline
 
 # Round-trip the readiness ledger's evidence JSONL (M1.5 seam).
 cargo run -p glyim-test --example evidence_report
+
+# Measure a workload in-process: counting allocator + CoV gate (M2.2).
+cargo run -p glyim-bench --example measure_alloc
 ```
 
 ---
@@ -576,7 +580,7 @@ cargo insta review
 The compiler's development is tracked against an internal de-stubbing plan. Notable open items include:
 
 - Cross-frame unwinding in the MIR interpreter — implemented and hardened (plan §1.4; the interpreter executes caller-frame cleanup blocks; see `KNOWN_GAPS.md` for the default-off flag and the runtime-verification status).
-- Multi-await and loop-await async state machines are implemented but not yet runtime-verified on all hosts (the Linux CI job exercises them).
+- Multi-await sequential async bodies are implemented and runtime-verified by the Linux CI job; `.await` inside a loop body is a deliberate, diagnosed hard error (`[T0060]`, see `KNOWN_GAPS.md` §1) until the async state-machine v2 lands.
 - Some builtin methods on `Vec`/`String`/`Result`/`Option` lower to synthetic `FnDefId`s whose bodies the LLVM backend must intrinsic-lower; unimplemented ones produce an explicit compiler error rather than wrong code.
 - `--lto=thin` requires `llvm-lto2` from the matching LLVM distribution.
 - Procedural macros are supported via the C-ABI bridge, but the two-stage host compile is still being wired into the default `glyim-cli` flow.
@@ -591,10 +595,12 @@ The compiler's development is tracked against an internal de-stubbing plan. Nota
 - `docs/roadmaps/` — the milestone plans; the current one is
   `glyim-master-plan.md`. The workstream state: M0 (rails + metrics) is
   landed, the M1 readiness-ledger slices (M1.1 registry → M1.6
-  strict-xfail witnesses) are landed, and the next plan items are the
-  M1.7 gap-registry migration and the M2 performance-measurement slice
-  (per-phase `tracing` spans, `--time-passes`, `--self-profile`, and
-  `--emit=stats` shipped with the latter in this tree).
+  strict-xfail witnesses) are landed, and the M2.1 phase instrumentation
+  (`tracing` spans, `--time-passes`, `--self-profile`, `--emit=stats`) is
+  landed together with the M2.2 measurement harness
+  (`tools/glyim-bench`: instruction counts, wall, child RSS, counting
+  allocator, CoV stability gate). The next plan items are the M1.7
+  gap-registry migration and the M2.3 corpora + evidence wiring.
 - `docs/archive/` — historical session documents (`HANDOFF.md`,
   `FIXES.md`) kept for provenance; the root stays navigation-focused.
 - `metrics/baseline.json` — the M0.6 repo-health baseline (file/line/test

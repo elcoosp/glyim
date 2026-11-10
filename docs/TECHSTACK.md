@@ -4,7 +4,7 @@
 **Status:** Updated
 **Date:** 2026-11-09
 **Source of truth:** the root `Cargo.toml` (`[workspace.package]`,
-`[workspace.dependencies]`) at workspace version 0.7.0 (commit `61a0ecbc`).
+`[workspace.dependencies]`) at workspace version 0.7.1 (commit `ba2a526e`).
 
 > The previous revision (1.3.0, dated 2025-04-10) described an aspirational
 > stack that never matched the tree: it listed `salsa`, `chumsky`, `egg`,
@@ -47,9 +47,9 @@ minimums in `[workspace.dependencies]`.
 | `fixedbitset` | 0.5.7 | `glyim-borrowck`, `glyim-lower` | Dense bitsets for dataflow/liveness. |
 | `parking_lot` | 0.13 | `glyim-db`, harness | Faster `Mutex`/`RwLock` for interner and caches. |
 | `dashmap` | 6.2.1 | `glyim-lsp` | Concurrent map for LSP state. |
-| `tracing` / `tracing-subscriber` | 0.1.44 / 0.3.23 | typeck, lsp, test harness, codegen-llvm, glyip | Structured spans; subscriber with `env-filter` + `json`. |
-| `miette` | 7.6 | `glyim-diag`, `glyim-span`, `glyim-test` (evidence + fixture-header errors) | Structured diagnostics with labels/help; `glyim-diag` re-exports it. |
-| `clap` | 4.6 (derive) | `glyim-cli`, `glyip`, `tools/glyim-pilot` | CLI argument parsing. |
+| `tracing` / `tracing-subscriber` | 0.1.44 / 0.3.23 | typeck, lsp, test harness, codegen-llvm, glyip, `tools/glyim-bench` | Structured spans; subscriber with `env-filter` + `json`. |
+| `miette` | 7.6 | `glyim-diag`, `glyim-span`, `glyim-test` (evidence + fixture-header errors), `tools/glyim-ledger` / `tools/glyim-metrics` (typed CLI errors), `tools/glyim-bench` | Structured diagnostics with labels/help; `glyim-diag` re-exports it. |
+| `clap` | 4.6 (derive) | `glyim-cli`, `glyip`, `tools/glyim-pilot`, `tools/glyim-bench` | CLI argument parsing. |
 | `serde` / `serde_json` | 1.0 | `glyip`, ledger tools, pilot, harness | Config, lockfiles, evidence/JSON output. |
 | `toml` | 1.2.1 | `glyip`, ledger | Manifest + registry parsing. |
 | `semver` | 1.0 | `glyip` | SemVer 2.0 requirement parsing/matching. |
@@ -69,7 +69,8 @@ Per-crate extras (declared directly by members): `termcolor`, `similar`,
 `walkdir`, `regex`, `shell-words`, `rand` in `glyim-test`; `notify` 8.2
 (file watching) in `glyim-lsp`; `uuid` v4 in `tools/glyim-pilot`; `syn` in
 `tools/ledger-schema` (inventory extraction); `prometheus` (feature) in
-`tools/glyim-pilot`.
+`tools/glyim-pilot`; `libc` (`getrusage(RUSAGE_CHILDREN)`) in
+`tools/glyim-bench`.
 
 ---
 
@@ -80,6 +81,7 @@ Per-crate extras (declared directly by members): `termcolor`, `similar`,
 | Fixture corpora | `glyim-test` harness: compile-pass / compile-fail / ui / run-pass / run-fail, M1.4 `//@` annotation grammar, ~410 tagged fixtures. |
 | Differential gate | Every run-pass fixture compiled with the LLVM backend *and* run in the MIR interpreter; exit code + stdout must agree. |
 | Metrics ratchet | `tools/glyim-metrics` vs `metrics/baseline.json` (code lines, tests, doc coverage, `inline_allows: 0`). |
+| Bench harness | `tools/glyim-bench` (M2.2): `perf stat`/callgrind instruction counts, wall, child RSS, counting allocator; the CoV < 0.1 % stability gate makes a run comparable or rejects it. |
 | Readiness ledger | `ledger/features/**`, `ledger/gaps/**` checked by `tools/glyim-ledger check` (deny_unknown_fields schemas from `tools/ledger-schema`). |
 | Lint rails | `missing_docs = warn` + `clippy::pedantic` baseline workspace-wide; zero inline allows (relaxations live in `[workspace.lints.clippy]` with rationale). |
 | Miri | Nightly job over the pure-analysis crates (`glyim-type`, `glyim-borrowck`, `glyim-solve`). |
