@@ -4,12 +4,7 @@ import imageZoom from 'starlight-image-zoom';
 import headingBadges from 'starlight-heading-badges';
 
 export default await defineDocsConfig({
-  llmsTxt: { customSets: [
-    { label: 'Tutorials',     paths: ['tutorials/**'] },
-    { label: 'How-to Guides', paths: ['guides/**'] },
-    { label: 'Reference',     paths: ['reference/**'] },
-    { label: 'Explanation',   paths: ['explanation/**'] },
-  ] },
+  llmsTxt: false,
   changelog: { repo: 'elcoosp/glyim' },
   site: 'https://glyim.vercel.app',
   domain: 'glyim.vercel.app',
