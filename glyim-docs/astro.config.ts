@@ -1,10 +1,16 @@
-import starlightLlmsTxt from 'starlight-llms-txt';
 import { defineDocsConfig } from '@elcoosp/docs-toolkit/config';
 import docLinks from 'starlight-links-validator';
 import imageZoom from 'starlight-image-zoom';
 import headingBadges from 'starlight-heading-badges';
 
 export default await defineDocsConfig({
+  llmsTxt: { customSets: [
+    { label: 'Tutorials',     paths: ['tutorials/**'] },
+    { label: 'How-to Guides', paths: ['guides/**'] },
+    { label: 'Reference',     paths: ['reference/**'] },
+    { label: 'Explanation',   paths: ['explanation/**'] },
+  ] },
+  changelog: { repo: 'elcoosp/glyim' },
   site: 'https://glyim.vercel.app',
   domain: 'glyim.vercel.app',
   title: 'Glyim',
@@ -18,14 +24,7 @@ export default await defineDocsConfig({
   },
   locales: { en: { label: 'English' } },
   defaultLocale: 'en',
-  plugins: [docLinks(), imageZoom(), headingBadges(), starlightLlmsTxt({
-      customSets: [
-        { label: 'Tutorials',     paths: ['tutorials/**'] },
-        { label: 'How-to Guides', paths: ['guides/**'] },
-        { label: 'Reference',     paths: ['reference/**'] },
-        { label: 'Explanation',   paths: ['explanation/**'] },
-      ],
-    })],
+  plugins: [docLinks(), imageZoom(), headingBadges()],
   sidebar: [
     { label: 'Overview', link: '/' },
     { label: 'Tutorials', items: [{ autogenerate: { directory: 'tutorials' } }] },
