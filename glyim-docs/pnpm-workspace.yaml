@@ -1,6 +1,11 @@
 packages:
-  - "."
-
+- .
+allowBuilds:
+  esbuild: true
+  sharp: true
+  astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e: true
+  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/aed4c39da3e461b4ce803e7f2845a5e36bb7ed21': true
+  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/366fd96a041b8a5d342913af9c35a1f00d2834eb': true
 minimumReleaseAgeExclude:
 - mdast-util-to-markdown@2.2.3
 - satteri@0.11.7
@@ -27,22 +32,6 @@ minimumReleaseAgeExclude:
 - '@volar/source-map@2.4.31'
 - '@volar/typescript@2.4.31'
 - hast-util-from-html@2.1.0
-allowBuilds:
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/6d76923a7901421615cb3c6673ffd2a096070dfe': true
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/f0806edbf59ed4d73f8258af300632a17b57e516': true
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/42a7a37ffad93506d2433d0cd561fea017ee0707': true
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/61a98c19f6a721205c95531ee8bb8be11a4082e2': true
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/597e376d9faa880af7096bae230caa0b38043a0a': true
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/495dc0287869f42f9ffed64fd918f754378c719f': true
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/f4aaa181941a71cfb98ac186579d5fbfd393a8ef': true
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/837618d49cad58456dae5a2187186949c9237057': true
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/f653391a3c7ea11494a7234ccf7455cc02c9258a': true
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/8af40398cb3c21d5d331a7732e3afebe0f26c048': true
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/cb63ff3540be90c7c393f0980981143dfcec93c8': true
-  esbuild: true
-  sharp: true
-  astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e: true
-  '@elcoosp/docs-toolkit@https://codeload.github.com/elcoosp/docs-toolkit/tar.gz/8084231ffe3841ce1f199644aeb0c0af71b137bb': true
 onlyBuiltDependencies:
 - esbuild
 - sharp
