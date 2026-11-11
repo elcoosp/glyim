@@ -1,6 +1,6 @@
 //! CLI library for the Readiness Ledger tool (plan M1.1).
 //!
-//! Four subcommands:
+//! Six subcommands:
 //!
 //! - `glyim-ledger check [ROOT]` — load `ROOT/ledger`, run the schema and
 //!   semantic validators, cross-check the M1.3 inventory extractors, print
@@ -10,6 +10,14 @@
 //!   coverage per `[[gap]]` entry, with explicit witness debt rendered
 //!   instead of failed. Error-severity diagnostics still fail the exit
 //!   code.
+//! - `glyim-ledger next [ROOT] [--lane L] [--n N]` — the plan §3.9
+//!   deterministic work queue: every open gap and feature ranked into the
+//!   `glyim.ledger-next/1` JSON contract consumed by `glyim-pilot`. See
+//!   [`next`] for the ordering contract.
+//! - `glyim-ledger explain <ID> [ROOT]` — the plan §3.7 per-entry
+//!   explanation: resolve one gap or feature ID and render why it is
+//!   queued and what evidence moves it (the same reason lines the `next`
+//!   queue emits; see [`explain`]).
 //! - `glyim-ledger schema [OUT]` — write the JSON-Schema export document
 //!   for both entry types to `OUT` (pretty-printed), or to stdout.
 //! - `glyim-ledger inventory [ROOT]` — enumerate the source-derived
@@ -25,6 +33,16 @@ use std::path::{Path, PathBuf};
 use ledger_schema::{
     Diagnostic, GapEntry, GapStatus, Severity, Sourced, extract_inventory, inventory_diagnostics,
     load_inventory_ignore, load_project_registry, registry_schema, unmapped_item_keys,
+};
+
+pub mod explain;
+pub mod next;
+
+pub use explain::{ExplainEntry, ExplainOutcome, format_explain_report, run_explain};
+pub use next::{
+    FeatureSource, GapSource, NEXT_SCHEMA, NextOutcome, WorkItem, WorkItemSource, WorkKind,
+    build_queue, feature_depths, filter, format_next_json, format_next_report, parse_lane,
+    run_next,
 };
 
 /// Typed error for the CLI seams (`parse_args`, `write_schema`).
@@ -73,6 +91,32 @@ pub enum LedgerCliError {
         /// The IO error message.
         detail: String,
     },
+    /// `next --n` received a value that is not a positive integer.
+    NextBadCount {
+        /// The offending value.
+        value: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `next --lane` received a letter outside the six registry lanes.
+    NextBadLane {
+        /// The offending lane spelling.
+        lane: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `explain` was called without its `<ID>` positional.
+    ExplainMissingId {
+        /// The usage text.
+        usage: String,
+    },
+    /// `next --lane`/`next --n` was passed without its value.
+    NextMissingValue {
+        /// The flag that was missing its value (`--lane` or `--n`).
+        flag: String,
+        /// The usage text.
+        usage: String,
+    },
 }
 
 impl fmt::Display for LedgerCliError {
@@ -90,6 +134,24 @@ impl fmt::Display for LedgerCliError {
                 write!(f, "cannot serialize ledger schema: {detail}")
             }
             Self::SchemaWrite { path, detail } => write!(f, "cannot write {path}: {detail}"),
+            Self::NextBadCount { value, usage } => {
+                write!(f, "--n expects a positive integer, got {value}\n{usage}")
+            }
+            Self::NextBadLane { lane, usage } => {
+                write!(
+                    f,
+                    "--lane expects one of L, F, T, M, B, Q; got {lane}\n{usage}"
+                )
+            }
+            Self::NextMissingValue { flag, usage } => {
+                write!(
+                    f,
+                    "{flag} expects a value (lane letter or item count)\n{usage}"
+                )
+            }
+            Self::ExplainMissingId { usage } => {
+                write!(f, "explain expects a registry ID (gap or feature)\n{usage}")
+            }
         }
     }
 }
@@ -105,6 +167,10 @@ impl miette::Diagnostic for LedgerCliError {
             Self::ExtraArgument { .. } => "glyim-ledger::extra_argument",
             Self::SchemaSerialize { .. } => "glyim-ledger::schema_serialize",
             Self::SchemaWrite { .. } => "glyim-ledger::schema_write",
+            Self::NextBadCount { .. } => "glyim-ledger::next_bad_count",
+            Self::NextBadLane { .. } => "glyim-ledger::next_bad_lane",
+            Self::NextMissingValue { .. } => "glyim-ledger::next_missing_value",
+            Self::ExplainMissingId { .. } => "glyim-ledger::explain_missing_id",
         }))
     }
 
@@ -131,6 +197,26 @@ impl miette::Diagnostic for LedgerCliError {
             )),
             Self::SchemaWrite { .. } => Some(Box::new(
                 "check that the parent directory of OUT exists and is writable".to_string(),
+            )),
+            Self::NextBadCount { .. } => Some(Box::new(
+                "pass the maximum number of items to print, e.g. `--n 10`; omit the flag \
+                 for the full queue"
+                    .to_string(),
+            )),
+            Self::NextBadLane { .. } => Some(Box::new(
+                "lanes are L (ledger/infra), F (frontend), T (types), M (middle), \
+                 B (backend), Q (quality) — see docs/roadmaps/glyim-master-plan.md §6.0"
+                    .to_string(),
+            )),
+            Self::NextMissingValue { .. } => Some(Box::new(
+                "the flag needs its value on the same command line, e.g. `--lane M` \
+                 or `--n 10`"
+                    .to_string(),
+            )),
+            Self::ExplainMissingId { .. } => Some(Box::new(
+                "pass the registry ID to explain, e.g. `explain GAP-0002` or \
+                 `explain LANG-FOR-VEC-INTOITER`"
+                    .to_string(),
             )),
         }
     }
@@ -162,14 +248,34 @@ pub enum Command {
         /// Project directory to extract from (`.` by default).
         root: PathBuf,
     },
+    /// `next [ROOT] [--lane L] [--n N]` — the plan §3.9 work queue.
+    Next {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// Only items whose suggested lane matches this lane.
+        lane: Option<ledger_schema::Lane>,
+        /// Print at most this many items (of the filtered queue).
+        limit: Option<usize>,
+    },
+    /// `explain <ID> [ROOT]` — the plan §3.7 per-entry explanation.
+    Explain {
+        /// The registry ID to explain (gap or feature).
+        id: String,
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+    },
 }
 
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
-     \x20 is assumed. `schema` writes to OUT or stdout."
+     \x20 is assumed. `schema` writes to OUT or stdout; `next` filters by\n\
+     \x20 lane (L|F|T|M|B|Q) and prints the glyim.ledger-next/1 JSON queue;\n\
+     \x20 `explain` resolves one registry ID against the same queue."
         .into()
 }
 
@@ -189,8 +295,14 @@ where
         None => Ok(Command::Check {
             root: PathBuf::from("."),
         }),
-        Some("check" | "gaps" | "schema" | "inventory") => {
+        Some("check" | "gaps" | "schema" | "inventory" | "next" | "explain") => {
             let rest = &items[1..];
+            if items[0] == "next" {
+                return parse_next(rest);
+            }
+            if items[0] == "explain" {
+                return parse_explain(rest);
+            }
             if rest.len() > 1 {
                 return Err(LedgerCliError::ExtraArgument {
                     arg: rest[1].clone(),
@@ -229,6 +341,95 @@ where
         }),
         Some(subcommand) => Err(LedgerCliError::UnknownSubcommand {
             subcommand: subcommand.to_string(),
+            usage: usage(),
+        }),
+    }
+}
+
+/// Parse the `next` subcommand's arguments: one optional ROOT positional,
+/// then `--lane <L|F|T|M|B|Q>` and `--n <count>` in any order.
+fn parse_next(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut lane: Option<ledger_schema::Lane> = None;
+    let mut limit: Option<usize> = None;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--lane" | "--n" => {
+                let flag = rest[index].as_str();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::NextMissingValue {
+                        flag: flag.to_string(),
+                        usage: usage(),
+                    });
+                };
+                if flag == "--lane" {
+                    let Some(parsed) = next::parse_lane(value) else {
+                        return Err(LedgerCliError::NextBadLane {
+                            lane: value.clone(),
+                            usage: usage(),
+                        });
+                    };
+                    lane = Some(parsed);
+                } else {
+                    let Ok(count) = value.parse::<usize>() else {
+                        return Err(LedgerCliError::NextBadCount {
+                            value: value.clone(),
+                            usage: usage(),
+                        });
+                    };
+                    limit = Some(count);
+                }
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    Ok(Command::Next {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        lane,
+        limit,
+    })
+}
+
+/// Parse the `explain` subcommand's arguments: one required `<ID>`
+/// positional, then one optional ROOT positional.
+fn parse_explain(rest: &[String]) -> Result<Command, LedgerCliError> {
+    // `explain` takes no flags: a leading dash is a usage error, not an
+    // ID, so `explain --wat` reports the flag instead of explaining it.
+    if let Some(flag) = rest.iter().find(|arg| arg.starts_with('-')) {
+        return Err(LedgerCliError::UnknownFlag {
+            flag: flag.clone(),
+            usage: usage(),
+        });
+    }
+    match rest {
+        [] => Err(LedgerCliError::ExplainMissingId { usage: usage() }),
+        [id] => Ok(Command::Explain {
+            id: id.clone(),
+            root: PathBuf::from("."),
+        }),
+        [id, root] => Ok(Command::Explain {
+            id: id.clone(),
+            root: PathBuf::from(root),
+        }),
+        [_, _, extra, ..] => Err(LedgerCliError::ExtraArgument {
+            arg: extra.clone(),
             usage: usage(),
         }),
     }
@@ -711,6 +912,19 @@ mod tests {
                 path: "out.json".into(),
                 detail: "denied".into(),
             },
+            LedgerCliError::NextBadCount {
+                value: "many".into(),
+                usage: usage(),
+            },
+            LedgerCliError::NextBadLane {
+                lane: "X".into(),
+                usage: usage(),
+            },
+            LedgerCliError::NextMissingValue {
+                flag: "--lane".into(),
+                usage: usage(),
+            },
+            LedgerCliError::ExplainMissingId { usage: usage() },
         ];
         for err in errors {
             let help =
