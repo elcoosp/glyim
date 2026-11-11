@@ -49,6 +49,8 @@ jobs:
       # so `Ignored` there is the truthful outcome, not a gap.
       GLYIM_TEST_NO_SKIP: "1"
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - name: Install LLVM 23
         run: |
@@ -75,6 +77,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - name: Install LLVM 23
         run: |
@@ -104,6 +108,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - name: Install LLVM 23
         run: |
@@ -128,12 +134,11 @@ jobs:
 
   test-macos:
     name: Test (macos-latest)
-    steps:
-      - name: Build runtime for macOS tests
-        run: cargo build -p glyim-runtime
     runs-on: macos-latest
     timeout-minutes: 75
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - name: Install LLVM 23
         run: |
@@ -151,6 +156,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -185,6 +192,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - name: Install LLVM 23
         run: |
@@ -204,6 +213,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
@@ -222,6 +233,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -243,6 +256,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-deny
@@ -262,6 +277,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -282,6 +299,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -295,6 +314,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -322,6 +343,8 @@ jobs:
     timeout-minutes: 60
     continue-on-error: true
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -343,6 +366,8 @@ jobs:
     timeout-minutes: 120
     continue-on-error: true
     steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
