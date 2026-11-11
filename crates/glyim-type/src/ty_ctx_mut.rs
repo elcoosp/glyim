@@ -2216,46 +2216,14 @@ impl TyCtxMut {
         self.register_builtin_methods();
 
         // Register builtin/lang TRAITS by name so `impl Future for X`,
-        // `T: Clone`, `impl Drop for Y`, `T: Deref`, etc. resolve. The
-        // `LangItem` enum already declares `Future`/`Drop`/`Deref`/`Clone`/…
-        // but nothing ever registered them, so every builtin-trait reference
-        // was an "unresolved trait" before this. Trait ids are fixed and
-        // disjoint from ADT ids (ADTs use 1000–1040; traits start at 2001).
-        let mut reg_trait = |id: u32, name: &str| {
-            let n = self.resolver.intern(name);
-            let tid = glyim_core::def_id::TraitDefId::from_raw(id);
-            self.trait_defs.insert(
-                tid,
-                crate::TraitDef {
-                    name: n,
-                    methods: Vec::new(),
-                    associated_types: Vec::new(),
-                },
-            );
-            self.trait_by_name.insert(n, tid);
-        };
-        reg_trait(2001, "Future");
-        reg_trait(2002, "Drop");
-        reg_trait(2003, "Deref");
-        reg_trait(2004, "DerefMut");
-        reg_trait(2005, "Clone");
-        reg_trait(2006, "Copy");
-        reg_trait(2007, "Sized");
-        reg_trait(2008, "Send");
-        reg_trait(2009, "Sync");
-        reg_trait(2010, "Unpin");
-        reg_trait(2011, "Fn");
-        reg_trait(2012, "FnMut");
-        reg_trait(2013, "FnOnce");
-        reg_trait(2014, "Iterator");
-        reg_trait(2015, "IntoIterator");
-        reg_trait(2016, "Default");
-        // `Any` (thread.g's `Result<T, Box<dyn Any + Send>>`). Unlike
-        // `Send`/`Sync` it is not declared in the assembled stdlib, so it
-        // must be a builtin trait for `dyn Any` / `dyn Any + Send` to
-        // resolve. (The prior commit's message mentioned this but the diff
-        // only captured the str-table change; the registration was lost.)
-        reg_trait(2017, "Any");
+        // `T: Clone`, `impl Drop for Y`, `T: Deref`, etc. resolve. The table
+        // itself lives in `builtin_traits::BuiltinTraitDef` — the trait-side
+        // mirror of `BuiltinAdt` — and is driven through the sink impl above
+        // so this table and the pipeline's solver bootstrap cannot drift
+        // apart again (the solver's copy had already dropped `Default`/`Any`
+        // once). Trait ids are fixed and disjoint from ADT ids (ADTs use
+        // 1000–1040; traits occupy the reserved 2001..3000 range).
+        crate::builtin_traits::BuiltinTraitDef::register_all(self);
     }
 
     /// Populate the builtin inherent-method table (`builtin_method_fns`) for the
@@ -3000,6 +2968,31 @@ impl TyCtxMut {
         self.primitive_method_fns
             .get(&(recv_ty, name))
             .map(|(id, sig)| (*id, sig.clone()))
+    }
+}
+
+/// [`BuiltinTraitSink`](crate::builtin_traits::BuiltinTraitSink) target for
+/// the builtin trait registry: interns the trait's source-level name and
+/// inserts it under the reserved `TraitDefId` in both `trait_defs` and
+/// `trait_by_name`.
+///
+/// Keeping this impl the only writer of the builtin trait range means the
+/// resolver side of the table *is* the registry — `register_builtin_ranges`
+/// reduces to a single `BuiltinTraitDef::register_all(self)` call; see
+/// [`crate::builtin_traits`] for the parallel-table drift this replaces.
+impl crate::builtin_traits::BuiltinTraitSink for TyCtxMut {
+    fn register_builtin_trait(&mut self, trait_id: u32, name: &'static str) {
+        let n = self.resolver.intern(name);
+        let tid = glyim_core::def_id::TraitDefId::from_raw(trait_id);
+        self.trait_defs.insert(
+            tid,
+            crate::TraitDef {
+                name: n,
+                methods: Vec::new(),
+                associated_types: Vec::new(),
+            },
+        );
+        self.trait_by_name.insert(n, tid);
     }
 }
 
