@@ -29,48 +29,88 @@ use std::sync::Arc;
 
 /// Register the compiler-known builtin traits (`Future`, `Drop`, `Deref`,
 /// `Clone`, `Copy`, `Sized`, `Send`, `Sync`, `Unpin`, `Fn`/`FnMut`/`FnOnce`,
-/// `Iterator`, `IntoIterator`) in the `TraitContext` so the solver can resolve
-/// `impl Future for X` / `T: Clone` / `T: Send` bounds for the standard
-/// library. Trait ids match the ids fixed in `TyCtxMut::register_builtin_ranges`
-/// (traits start at 2001) so the resolver (which returns the builtin id) and
-/// the solver agree on the `TraitDefId`. The five auto/structural traits
-/// (`Copy`/`Sized`/`Send`/`Sync`/`Unpin`) are additionally registered as
-/// lang traits so `prove_trait` can discharge their bounds structurally.
-fn register_builtin_traits(
+/// `Iterator`, `IntoIterator`, `Default`, `Any`) in the `TraitContext` so the
+/// solver can resolve `impl Future for X` / `T: Clone` / `T: Send` bounds for
+/// the standard library.
+///
+/// The table itself lives in
+/// [`glyim_type::builtin_traits::BuiltinTraitDef`](glyim_type::builtin_traits::BuiltinTraitDef)
+/// — the single source of truth shared with the resolver's
+/// `TyCtxMut::register_builtin_ranges` — and is driven into the solver
+/// through [`BuiltinTraitSink`](glyim_type::builtin_traits::BuiltinTraitSink).
+/// This used to be a hand-copied table, and the copy had silently drifted:
+/// `Default` (2016) and `Any` (2017) were registered in the type context but
+/// never reached the solver, so solver-facing rendering saw an unknown trait
+/// id for them. With the registry, a dropped entry fails the parity tests
+/// (`builtin_trait_tests.rs`) instead of diverging silently.
+///
+/// The five auto/structural traits (`Copy`/`Sized`/`Send`/`Sync`/`Unpin`)
+/// are additionally registered as lang traits via
+/// [`structural_builtin_kind`] so `prove_trait` can discharge their bounds
+/// structurally.
+///
+/// Public so out-of-tree harnesses (the test harness, LSP consumers, tooling)
+/// can bootstrap a `TraitContext` that is guaranteed to agree with the
+/// resolver's builtin table.
+pub fn register_builtin_traits(
     trait_ctx: &mut glyim_solve::TraitContext,
     interner: &glyim_core::interner::Interner,
 ) {
-    let mut reg = |id: u32, name: &str| {
-        let n = interner.intern(name);
-        let tid: SolveTraitDefId = SolveTraitDefId::from_raw(id);
-        trait_ctx.register_trait(TraitDef {
-            def_id: tid,
-            name: n,
-            associated_types: Vec::new(),
-            predicates: Vec::new(),
-        });
-        tid
-    };
-    let _future = reg(2001, "Future");
-    let _drop = reg(2002, "Drop");
-    let _deref = reg(2003, "Deref");
-    let _deref_mut = reg(2004, "DerefMut");
-    let _clone = reg(2005, "Clone");
-    let copy = reg(2006, "Copy");
-    let sized = reg(2007, "Sized");
-    let send = reg(2008, "Send");
-    let sync = reg(2009, "Sync");
-    let unpin = reg(2010, "Unpin");
-    let _fn = reg(2011, "Fn");
-    let _fn_mut = reg(2012, "FnMut");
-    let _fn_once = reg(2013, "FnOnce");
-    let _iter = reg(2014, "Iterator");
-    let _into_iter = reg(2015, "IntoIterator");
-    trait_ctx.register_lang_trait(copy, BuiltinTrait::Copy);
-    trait_ctx.register_lang_trait(sized, BuiltinTrait::Sized);
-    trait_ctx.register_lang_trait(send, BuiltinTrait::Send);
-    trait_ctx.register_lang_trait(sync, BuiltinTrait::Sync);
-    trait_ctx.register_lang_trait(unpin, BuiltinTrait::Unpin);
+    struct SolverBootstrapSink<'a> {
+        trait_ctx: &'a mut glyim_solve::TraitContext,
+        interner: &'a glyim_core::interner::Interner,
+    }
+    impl glyim_type::builtin_traits::BuiltinTraitSink for SolverBootstrapSink<'_> {
+        fn register_builtin_trait(&mut self, trait_id: u32, name: &'static str) {
+            let n = self.interner.intern(name);
+            let tid = SolveTraitDefId::from_raw(trait_id);
+            self.trait_ctx.register_trait(TraitDef {
+                def_id: tid,
+                name: n,
+                associated_types: Vec::new(),
+                predicates: Vec::new(),
+            });
+        }
+    }
+
+    glyim_type::builtin_traits::BuiltinTraitDef::register_all(&mut SolverBootstrapSink {
+        trait_ctx,
+        interner,
+    });
+    for t in glyim_type::builtin_traits::BuiltinTraitDef::ALL {
+        if let Some(kind) = structural_builtin_kind(*t) {
+            trait_ctx.register_lang_trait(SolveTraitDefId::from_raw(t.trait_id()), kind);
+        }
+    }
+}
+
+/// Exhaustive mapping from the shared registry's variants to the solver's
+/// structural [`BuiltinTrait`] kinds. Every `BuiltinTraitDef` variant is
+/// matched explicitly (no wildcard) so adding a variant to the registry
+/// breaks this build until it is classified here as structural or not —
+/// the compile-time half of the drift guarantee the registry's tests pin
+/// at run time.
+fn structural_builtin_kind(t: glyim_type::builtin_traits::BuiltinTraitDef) -> Option<BuiltinTrait> {
+    use glyim_type::builtin_traits::BuiltinTraitDef as B;
+    match t {
+        B::Copy => Some(BuiltinTrait::Copy),
+        B::Sized => Some(BuiltinTrait::Sized),
+        B::Send => Some(BuiltinTrait::Send),
+        B::Sync => Some(BuiltinTrait::Sync),
+        B::Unpin => Some(BuiltinTrait::Unpin),
+        B::Future => None,
+        B::Drop => None,
+        B::Deref => None,
+        B::DerefMut => None,
+        B::Clone => None,
+        B::Fn => None,
+        B::FnMut => None,
+        B::FnOnce => None,
+        B::Iterator => None,
+        B::IntoIterator => None,
+        B::Default => None,
+        B::Any => None,
+    }
 }
 
 /// External module loading (`mod foo;` -> `foo.g`).
