@@ -74,3 +74,25 @@ spec          = "README.md"
 target_level  = "L3"
 backends      = ["gam", "llvm"]
 owner_lane    = "L"
+
+[[feature]]
+id            = "TOOL-LEDGER-NEXT"
+title         = "plan §3.9 `ledger next` deterministic work queue over open gaps and the requires DAG"
+area          = "tooling.ledger"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+requires      = ["TOOL-LEDGER-GAPS", "TOOL-LEDGER-REGISTRY"]
+owner_lane    = "L"
+
+[[feature]]
+id            = "TOOL-LEDGER-EXPLAIN"
+title         = "plan §3.7 `ledger explain` per-entry resolution over the §3.9 queue engine"
+area          = "tooling.ledger"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+requires      = ["TOOL-LEDGER-NEXT"]
+owner_lane    = "L"
