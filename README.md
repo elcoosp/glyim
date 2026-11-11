@@ -138,7 +138,7 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `tools/glyim-metrics` | Repo-health metrics (code lines, tests, doc coverage, inline-allow count) behind the CI metrics ratchet. |
 | `tools/glyim-pilot` | Agent orchestrator with gate bundles (clippy, fmt, contracts, coverage, mutation, ledger). |
 | `tools/ledger-schema` | `deny_unknown_fields` schemas shared by the readiness ledger and inventory extractors. |
-| `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `gaps`, `inventory`, `schema` — registry consistency gates run in CI. |
+| `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `gaps`, `next`, `explain`, `inventory`, `schema` — registry consistency gates run in CI; `next` renders the plan §3.9 deterministic work queue (`glyim.ledger-next/1` JSON) for agent consumers and `explain` resolves one registry ID against it. |
 | `tools/glyim-bench` | M2.2 measurement harness: `perf stat`/callgrind instruction counts, wall time, child RSS, a counting allocator, the CoV stability gate, and the M2.3 deterministic corpus generators (`glyim.corpus/1` manifest). |
 
 ### Compilation Pipeline
@@ -494,6 +494,12 @@ cargo run -p glyim-bench --example measure_alloc
 
 # Render the gap registry's witness-debt report (M1.7 seam).
 cargo run -p glyim-ledger --example gap_report
+
+# Rank the plan §3.9 work queue over open gaps + the requires DAG.
+cargo run -p glyim-ledger --example next_queue
+
+# Explain one registry ID: why it is queued, what evidence moves it.
+cargo run -p glyim-ledger --example explain_entry -- GAP-0002
 
 # Build + verify a corpus manifest over the 7 generator families (M2.3).
 cargo run -p glyim-bench --example corpus_walk
