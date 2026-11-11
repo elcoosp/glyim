@@ -1153,6 +1153,7 @@ version = "0.8.0"
 dependencies = [
  "ledger-schema",
  "miette",
+ "serde",
  "serde_json",
  "tempfile",
  "tracing",
