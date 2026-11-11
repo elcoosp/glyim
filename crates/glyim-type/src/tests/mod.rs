@@ -2,6 +2,7 @@ mod auto_trait;
 mod auto_traits;
 mod binder;
 mod builtin_registry;
+mod builtin_trait_registry;
 mod compile_fail;
 mod const_val;
 mod context_api;
