@@ -15,6 +15,12 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 glyim-test = { workspace = true }
+
+[[bench]]
+name = "builtin_trait_registry"
+harness = false
+path = "benches/builtin_trait_registry.rs"
+
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
