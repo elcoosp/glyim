@@ -5,10 +5,12 @@
 //! extractors (plan §3.5), prints every diagnostic sorted, and exits 1 if
 //! any error-severity diagnostic exists. `glyim-ledger gaps [ROOT]`
 //! renders the M1.7 gap-registry witness report (witness debt is printed,
-//! not failed). `glyim-ledger schema [OUT]` exports the JSON-Schema
-//! document for both registry entry types. `glyim-ledger inventory
-//! [ROOT]` reports the source-derived inventory and its claim/ignore
-//! status without full registry validation.
+//! not failed). `glyim-ledger next [ROOT] [--lane L] [--n N]` prints the
+//! plan §3.9 deterministic work queue as the `glyim.ledger-next/1` JSON
+//! contract `glyim-pilot` consumes. `glyim-ledger schema [OUT]` exports
+//! the JSON-Schema document for both registry entry types.
+//! `glyim-ledger inventory [ROOT]` reports the source-derived inventory
+//! and its claim/ignore status without full registry validation.
 
 use std::process::ExitCode;
 
@@ -20,6 +22,18 @@ fn report(err: &LedgerCliError) {
     if let Some(help) = miette::Diagnostic::help(err) {
         eprintln!("  help: {help}");
     }
+}
+
+/// Serialize the built-in schema document, routing any failure through the
+/// typed [`LedgerCliError`] seam so every failure path carries the same
+/// `help:` line and exit contract (the former stdout branch reported an
+/// ad-hoc `eprintln!` instead).
+fn schema_stdout() -> Result<String, LedgerCliError> {
+    serde_json::to_string_pretty(&ledger_schema::registry_schema())
+        .map(|text| text + "\n")
+        .map_err(|err| LedgerCliError::SchemaSerialize {
+            detail: err.to_string(),
+        })
 }
 
 fn main() -> ExitCode {
@@ -50,6 +64,33 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         }
+        Command::Next { root, lane, limit } => {
+            let outcome = glyim_ledger::run_next(&root);
+            if outcome.is_ok() {
+                let selected = glyim_ledger::filter(&outcome, lane, limit);
+                print!("{}", glyim_ledger::format_next_json(&selected));
+                ExitCode::SUCCESS
+            } else {
+                // Registry diagnostics are prose, not queue items: report
+                // them through the text channel and fail like `check`.
+                for diagnostic in &outcome.diagnostics {
+                    eprintln!("{diagnostic}");
+                }
+                ExitCode::FAILURE
+            }
+        }
+        Command::Explain { id, root } => {
+            let outcome = glyim_ledger::run_explain(&root, &id);
+            print!("{}", glyim_ledger::format_explain_report(&outcome));
+            // A registry load failure fails like `check`; an unknown ID
+            // prints the "no registry entry" report and also fails, so a
+            // typo'd ID never exits green in a scripted pipeline.
+            if outcome.is_ok() && outcome.entry.is_some() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
         Command::Inventory { root } => {
             let outcome = glyim_ledger::run_inventory(&root);
             print!("{}", glyim_ledger::format_inventory(&outcome));
@@ -70,13 +111,13 @@ fn main() -> ExitCode {
                     ExitCode::FAILURE
                 }
             },
-            None => match serde_json::to_string_pretty(&ledger_schema::registry_schema()) {
+            None => match schema_stdout() {
                 Ok(text) => {
-                    println!("{text}");
+                    print!("{text}");
                     ExitCode::SUCCESS
                 }
                 Err(err) => {
-                    eprintln!("cannot serialize schema: {err}");
+                    report(&err);
                     ExitCode::FAILURE
                 }
             },
