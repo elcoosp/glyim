@@ -181,7 +181,7 @@ fn create_backups(worktree_root: &Path, ops: &[FileOp]) -> Result<Vec<Backup>, P
             validate_path(worktree_root, rel_path).map_err(|reason| PilotError::PathEscape {
                 path: rel_path.to_string(),
                 root: worktree_root.display().to_string(),
-                reason,
+                reason: reason.to_string(),
             })?;
         let original_content = if abs_path.exists() {
             Some(fs::read_to_string(&abs_path).map_err(|e| {
@@ -256,7 +256,7 @@ fn apply_write_atomic(
         validate_path(worktree_root, rel_path).map_err(|reason| PilotError::PathEscape {
             path: rel_path.to_string(),
             root: worktree_root.display().to_string(),
-            reason,
+            reason: reason.to_string(),
         })?;
     if let Some(parent) = abs_path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
@@ -310,7 +310,7 @@ fn apply_replace_atomic(
         validate_path(worktree_root, rel_path).map_err(|reason| PilotError::PathEscape {
             path: rel_path.to_string(),
             root: worktree_root.display().to_string(),
-            reason,
+            reason: reason.to_string(),
         })?;
     if !abs_path.exists() {
         return Err(PilotError::Apply(ApplyError::FileNotFound(
@@ -370,7 +370,7 @@ fn apply_delete(worktree_root: &Path, rel_path: &str) -> Result<ApplyResult, Pil
         validate_path(worktree_root, rel_path).map_err(|reason| PilotError::PathEscape {
             path: rel_path.to_string(),
             root: worktree_root.display().to_string(),
-            reason,
+            reason: reason.to_string(),
         })?;
     if !abs_path.exists() {
         return Err(PilotError::Apply(ApplyError::FileNotFound(
@@ -397,7 +397,7 @@ fn preview_op(worktree_root: &Path, op: &FileOp) -> Result<PlannedChange, PilotE
                 validate_path(worktree_root, path).map_err(|r| PilotError::PathEscape {
                     path: path.clone(),
                     root: worktree_root.display().to_string(),
-                    reason: r,
+                    reason: r.to_string(),
                 })?;
             let exists = abs_path.exists();
             Ok(PlannedChange {
@@ -417,7 +417,7 @@ fn preview_op(worktree_root: &Path, op: &FileOp) -> Result<PlannedChange, PilotE
                 validate_path(worktree_root, path).map_err(|r| PilotError::PathEscape {
                     path: path.clone(),
                     root: worktree_root.display().to_string(),
-                    reason: r,
+                    reason: r.to_string(),
                 })?;
             if !abs_path.exists() {
                 return Err(PilotError::Apply(ApplyError::FileNotFound(path.clone())));
@@ -433,7 +433,7 @@ fn preview_op(worktree_root: &Path, op: &FileOp) -> Result<PlannedChange, PilotE
                 validate_path(worktree_root, path).map_err(|r| PilotError::PathEscape {
                     path: path.clone(),
                     root: worktree_root.display().to_string(),
-                    reason: r,
+                    reason: r.to_string(),
                 })?;
             if !abs_path.exists() {
                 return Err(PilotError::Apply(ApplyError::FileNotFound(path.clone())));
