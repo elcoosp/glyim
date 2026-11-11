@@ -7,6 +7,8 @@ pub mod auto_trait;
 pub mod binder;
 /// adt_def.
 pub mod builtin_adts;
+/// `builtin_traits` — reserved-id registry for the compiler-known traits.
+pub mod builtin_traits;
 pub mod cast;
 /// deref.
 pub mod deref;
