@@ -156,8 +156,6 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - name: Build runtime for macOS tests
-        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -213,13 +211,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - name: Build runtime for macOS tests
-        run: cargo build -p glyim-runtime
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - name: Install Miri
-        uses: taiki-e/install-action@miri
+        uses: taiki-e/install-action
+        with:
+          tool: miri
       - name: Run Miri on type-checking crates
         # Miri can't run LLVM-heavy crates; exercise the pure-Rust
         # analysis crates (glyim-type, glyim-borrowck, glyim-solve).
