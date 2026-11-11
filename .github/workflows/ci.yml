@@ -128,6 +128,9 @@ jobs:
 
   test-macos:
     name: Test (macos-latest)
+    steps:
+      - name: Build runtime for macOS tests
+        run: cargo build -p glyim-runtime
     runs-on: macos-latest
     timeout-minutes: 75
     steps:

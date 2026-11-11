@@ -22,6 +22,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 
 use mio::{Interest, Token, event::Source};
+#[cfg(unix)]
 use std::os::unix::io::FromRawFd;
 
 use crate::async_runtime::Waker;
@@ -435,7 +436,8 @@ mod tests {
         // readiness when a peer writes to it. On readiness the reactor also calls
         // `glyim_thread_unpark(thread_id)` to wake the `.g` executor — the same
         // wake mechanism `task::block_on` relies on.
-        use std::os::unix::io::IntoRawFd;
+        #[cfg(unix)]
+use std::os::unix::io::IntoRawFd;
 
         let std_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = std_listener.local_addr().unwrap();
