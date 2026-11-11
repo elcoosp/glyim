@@ -1,6 +1,6 @@
 [package]
 name = "glyim-ledger"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 description = "M1.1 Readiness Ledger CLI: `check` registry gate, `gaps` witness report (M1.7), `next` work queue + `explain` (§3.7/§3.9), `inventory`, and JSON-Schema export"
 publish = false
