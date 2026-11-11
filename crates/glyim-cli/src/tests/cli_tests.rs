@@ -374,7 +374,7 @@ fn exec_emit_links_and_runs() {
         self_profile: None,
     };
     let result = run_with_args(args);
-    assert!(result.is_ok(), "glyim-cli --emit=exec failed: {:?}", result);
+    assert!(result.is_ok(), "glyim-cli --emit=exec failed: {result:?}");
     assert!(out.exists(), "executable not produced");
 
     // The binary must actually run to completion with a zero exit code.

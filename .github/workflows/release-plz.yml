@@ -1,9 +1,7 @@
 name: Release Plz
-
 on:
   push:
     branches: [main]
-
 jobs:
   release-plz:
     permissions:
