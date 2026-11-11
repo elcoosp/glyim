@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",
-    "@elcoosp/docs-toolkit": "github:elcoosp/docs-toolkit#6d76923a7901421615cb3c6673ffd2a096070dfe",
+    "@elcoosp/docs-toolkit": "file:../../docs-toolkit",
     "@emnapi/runtime": "1.11.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
