@@ -1,5 +1,6 @@
 [package]
 name = "glyim-pilot"
+publish = false
 version = "0.9.0"
 edition = "2021"
 description = "Autonomous AI agent dispatch for Glyim compiler development"
