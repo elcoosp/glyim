@@ -215,7 +215,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - name: Install Miri
-        uses: taiki-e/install-action
+        uses: taiki-e/install-action@v2
         with:
           tool: miri
       - name: Run Miri on type-checking crates
