@@ -14,6 +14,9 @@ use glyim_bench::report::BenchReport;
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
+    // The diff gate is a verdict, not an error: the outcome renders like a
+    // report, but a regression flips the exit code (the `gate` shape).
+    let mut diff_failed = false;
     let result = match cli.command {
         Command::Run {
             iterations,
@@ -37,10 +40,22 @@ fn main() -> ExitCode {
                 report.display(),
             );
         }),
+        Command::Diff {
+            max_delta_pct,
+            json,
+            baseline,
+            current,
+        } => glyim_bench::cli::execute_diff(max_delta_pct, &baseline, &current, json.as_ref()).map(
+            |outcome| {
+                diff_failed = !outcome.is_ok();
+                print!("{}", outcome.render_text());
+            },
+        ),
     };
 
     match result {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(()) if !diff_failed => ExitCode::SUCCESS,
+        Ok(()) => ExitCode::FAILURE,
         Err(err) => {
             eprint!("{:?}", miette::Report::new(err));
             ExitCode::FAILURE
