@@ -14,13 +14,5 @@ dump.txt
 
 # session-local PR body (delivery artifact consumed by ship.sh, not repo content)
 .github/pr-body.md
-<<<<<<< HEAD
 .vercel
 .env*
-||||||| cfd2c810
-=======
-
-# ship handoff artifacts (untracked deliverables)
-/ship.toml
-/.github/pr-body.md
->>>>>>> ship-temp-ai
