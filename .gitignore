@@ -14,3 +14,5 @@ dump.txt
 
 # session-local PR body (delivery artifact consumed by ship.sh, not repo content)
 .github/pr-body.md
+.vercel
+.env*
