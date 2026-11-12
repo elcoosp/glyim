@@ -234,8 +234,24 @@ pub fn provide_code_actions(
                             let pattern = variant_pattern(v, shape);
                             let _ = writeln!(arms, "    {pattern} => unimplemented!(),");
                         }
-                        let (ins_line, ins_col) =
-                            crate::uri::offset_to_position(source, close).unwrap();
+                        // `close` comes from `find_match_closing_brace` over the
+                        // same `source`, so the conversion holds by construction;
+                        // a failure means the text changed under us — skip this
+                        // one quick-fix instead of panicking the LSP process
+                        // (micro-debt cleanup: the former `unwrap()`).
+                        let (ins_line, ins_col) = match crate::uri::offset_to_position(
+                            source, close,
+                        ) {
+                            Ok(position) => position,
+                            Err(reason) => {
+                                tracing::debug!(
+                                    uri = ?uri,
+                                    reason,
+                                    "match-arm quick-fix skipped: closing-brace offset not convertible"
+                                );
+                                continue;
+                            }
+                        };
                         let insert_pos = Position {
                             line: ins_line as u32,
                             character: ins_col as u32,
