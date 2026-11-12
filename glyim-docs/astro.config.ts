@@ -1,11 +1,11 @@
 import { defineDocsConfig } from '@elcoosp/docs-toolkit/config';
+import starlightChangelogs from 'starlight-changelogs';
 import docLinks from 'starlight-links-validator';
 import imageZoom from 'starlight-image-zoom';
 import headingBadges from 'starlight-heading-badges';
 
 export default await defineDocsConfig({
   llmsTxt: {},
-  changelog: { repo: 'elcoosp/glyim' },
   site: 'https://glyim.vercel.app',
   domain: 'glyim.vercel.app',
   title: 'Glyim',
@@ -18,7 +18,7 @@ export default await defineDocsConfig({
     baseUrl: 'https://github.com/elcoosp/glyim/edit/main/glyim-docs/src/content/docs/',
   },
   locales: { root: { label: 'English', lang: 'en' } },
-    plugins: [docLinks(), imageZoom(), headingBadges()],
+    plugins: [ starlightChangelogs(), docLinks(), imageZoom(), headingBadges()],
   sidebar: [
     { label: 'Overview', link: '/' },
     { label: 'Tutorials', items: [{ autogenerate: { directory: 'tutorials' } }] },
