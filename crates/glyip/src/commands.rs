@@ -334,7 +334,7 @@ pub fn cmd_test(project_dir: &Path, opts: &TestOptions) -> GlyipResult<TestResul
             .entry(discovered_test.file.clone())
             .or_insert_with(|| {
                 let mut db = make_test_db(&config);
-                match glyim_pipeline::compile_file_to_mir(&mut db, &discovered_test.file) {
+                match glyim_pipeline::compile_file_to_mir(&mut db, &discovered_test.file, 0) {
                     Ok(m) => Some(m),
                     Err(diags) => {
                         // P2-F5 (KNOWN_GAPS §8.3): the pre-fix block
@@ -500,6 +500,9 @@ fn compile_and_run_compiled(
         &output_path,
         None,
         None,
+        // Matches this path's `CrateConfig::opt_level` (0) — the run-compiled
+        // helper is a debug-grade executor, not a release pipeline.
+        0,
     ) {
         Ok(()) => {}
         Err(diags) => {
@@ -748,6 +751,7 @@ fn compile_source(
         &object_path,
         None,
         None,
+        opts.opt_level,
     ) {
         Ok(()) => {}
         Err(diags) => return Err(GlyipError::BuildFailed(diags)),
