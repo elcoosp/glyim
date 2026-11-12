@@ -1,0 +1,34 @@
+[[package]]
+name = "glyim-bench"
+release = false
+changelog_update = false
+git_tag_enable = false
+git_release_enable = false
+
+[[package]]
+name = "glyim-ledger"
+release = false
+changelog_update = false
+git_tag_enable = false
+git_release_enable = false
+
+[[package]]
+name = "glyim-metrics"
+release = false
+changelog_update = false
+git_tag_enable = false
+git_release_enable = false
+
+[[package]]
+name = "glyim-pilot"
+release = false
+changelog_update = false
+git_tag_enable = false
+git_release_enable = false
+
+[[package]]
+name = "ledger-schema"
+release = false
+changelog_update = false
+git_tag_enable = false
+git_release_enable = false
