@@ -18,8 +18,7 @@ export default await defineDocsConfig({
     baseUrl: 'https://github.com/elcoosp/glyim/edit/main/docs-site/src/content/docs/',
   },
   locales: { root: { label: 'English', lang: 'en' } },
-  defaultLocale: 'root',
-  plugins: [docLinks(), imageZoom(), headingBadges()],
+    plugins: [docLinks(), imageZoom(), headingBadges()],
   sidebar: [
     { label: 'Overview', link: '/' },
     { label: 'Tutorials', items: [{ autogenerate: { directory: 'tutorials' } }] },

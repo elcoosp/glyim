@@ -1,7 +1,12 @@
 import { defineCollection } from 'astro:content';
-import { docsLoader } from '@astrojs/starlight/loaders';
-import { docsSchema } from '@astrojs/starlight/schema';
+import { docsLoader, i18nLoader } from '@astrojs/starlight/loaders';
+import { docsSchema, i18nSchema } from '@astrojs/starlight/schema';
+import { fileURLToPath } from 'node:url';
+
+// Point the i18n loader directly to the translations inside docs-toolkit
+const toolkitI18nPath = fileURLToPath(new URL('../../node_modules/@elcoosp/docs-toolkit/i18n/', import.meta.url));
 
 export const collections = {
-	docs: defineCollection({ loader: docsLoader(), schema: docsSchema() }),
+  docs: defineCollection({ loader: docsLoader(), schema: docsSchema() }),
+  i18n: defineCollection({ loader: i18nLoader({ base: toolkitI18nPath }), schema: i18nSchema() }),
 };
