@@ -2,7 +2,7 @@
 // Stylistic clippy lints suppressed crate-wide (test-noise lints).
 
 use glyim_mir::Body;
-use glyim_type::{TyCtx, TyCtxMut};
+use glyim_type::TyCtx;
 use std::sync::Arc;
 
 mod cfg_simplify;
@@ -11,6 +11,10 @@ mod dce;
 mod slice_desugar;
 mod unreachable_elim;
 mod validate;
+
+pub mod pass_plan;
+
+pub use pass_plan::{BuiltinMirPass, MirPass, PassPlan};
 
 /// The result of a successful [`optimize`] run: the same body with every
 /// enabled MIR pass applied.
@@ -23,14 +27,12 @@ pub struct Optimized {
 
 /// Run the full MIR optimization pipeline over `body`.
 ///
-/// Pass order is fixed: `slice_desugar` (with its unconditional
-/// post-condition check), `constant_prop`, `dce`, `cfg_simplify`,
-/// `unreachable_elim`. The body is validated *before* the first pass, and
-/// the `Subslice`-elimination invariant is re-checked right after
-/// `slice_desugar`: a violation is a compiler bug (ill-formed MIR handed
-/// over by lowering or by a pass), so it surfaces as a precise ICE panic
-/// naming the [`MirValidationError`] instead of an opaque failure three
-/// passes later (de-stubbing plan §8.7/§8.8).
+/// This is the back-compat entry point: it is exactly
+/// [`optimize_with_plan`] with the plan [`PassPlan::for_opt_level`] picks
+/// for an optimized build, i.e. the pass sequence this crate has always
+/// run (`slice_desugar`, `constant_prop`, `dce`, `cfg_simplify`,
+/// `unreachable_elim`). Compiles that honor the caller's `--opt-level`
+/// go through [`optimize_at_level`] instead.
 ///
 /// # Panics
 ///
@@ -39,6 +41,28 @@ pub struct Optimized {
 /// user-facing errors; the driver's ICE handler renders them.
 #[must_use]
 pub fn optimize(ctx: &TyCtx, body: &Arc<Body>) -> Optimized {
+    optimize_with_plan(ctx, body, &PassPlan::for_opt_level(2))
+}
+
+/// Run `plan` over `body`: validate up front, then run each pass in plan
+/// order, re-checking the codegen-required `Subslice`-elimination
+/// invariant afterwards.
+///
+/// The validation contract is identical to [`optimize`] and is
+/// level-independent by construction: the body is validated *before* the
+/// first pass, and [`validate::validate_no_subslice`] runs *after* the
+/// plan regardless of its contents — a plan without
+/// [`BuiltinMirPass::SliceDesugar`] that meets a body carrying `Subslice`
+/// projections surfaces here as a precise compiler-bug panic instead of
+/// three stages later in codegen as `unreachable!("Subslice")`.
+///
+/// # Panics
+///
+/// Panics when the input body fails [`validate_body`] or when a `Subslice`
+/// projection survives the plan (which, for any plan including
+/// `slice_desugar`, can only mean a pass reintroduced one).
+#[must_use]
+pub fn optimize_with_plan(ctx: &TyCtx, body: &Arc<Body>, plan: &PassPlan) -> Optimized {
     let mut body = (**body).clone();
     // Validate well-formedness up front (de-stubbing plan §8.8). Runs
     // unconditionally so release builds also catch any later pass that
@@ -48,28 +72,31 @@ pub fn optimize(ctx: &TyCtx, body: &Arc<Body>) -> Optimized {
             panic!("MIR failed validation before optimization: {e:?}");
         }
     }
-    // Runs first and unconditionally: every later pass, and codegen after
-    // them, assumes `ConstantIndex`/`Subslice` projections are always
-    // terminal (see slice_desugar's module doc). This is a no-op for the
-    // (overwhelming majority of) bodies that don't contain any such
-    // projection.
-    slice_desugar::run(ctx, &mut body);
-    // Post-condition (de-stubbing plan §8.7): `slice_desugar` must eliminate
-    // every `Subslice` projection. If one survives, codegen's
-    // `unreachable!("Subslice")` would fire — catch it here as a precise
-    // compiler-bug error instead of three passes later as an opaque panic.
-    // Unlike the dev-time `validate_body` check above, this invariant is
-    // unconditionally enforced: codegen (glyim-codegen-llvm) treats a
-    // surviving `Subslice` as `unreachable!`, so a release build must not
-    // silently skip this check and later panic opaquely.
-    if let Err(e) = validate::validate_no_subslice(&body) {
-        panic!("MIR failed validation after slice_desugar: {e:?}");
+    for pass in plan.passes() {
+        pass.run(ctx, &mut body);
     }
-    constant_prop::run(ctx, &mut body);
-    dce::run(ctx, &mut body);
-    cfg_simplify::run(ctx, &mut body);
-    unreachable_elim::run(ctx, &mut body);
+    // Post-condition (de-stubbing plan §8.7): codegen (glyim-codegen-llvm)
+    // treats a surviving `Subslice` as `unreachable!`, so a release build
+    // must never hand one over. For plans that include `slice_desugar`
+    // this is exactly the check `optimize` has always run right after
+    // that pass; for plans that skip it, this is the guard that turns a
+    // would-be codegen ICE into the same precise error here.
+    if let Err(e) = validate::validate_no_subslice(&body) {
+        panic!("MIR failed validation after optimization: {e:?}");
+    }
     Optimized { body }
+}
+
+/// Run the plan [`PassPlan::for_opt_level`] selects for `opt_level` over
+/// `body`.
+///
+/// `-O0` runs only `slice_desugar` (the pass codegen structurally
+/// requires); `-O1`..`-O3` and anything larger run the full pipeline
+/// [`optimize`] runs. See [`PassPlan::for_opt_level`] for the level
+/// semantics and [`optimize_with_plan`] for the panics.
+#[must_use]
+pub fn optimize_at_level(ctx: &TyCtx, body: &Arc<Body>, opt_level: u8) -> Optimized {
+    optimize_with_plan(ctx, body, &PassPlan::for_opt_level(opt_level))
 }
 
 #[cfg(test)]
@@ -82,7 +109,13 @@ mod tests;
 mod drop_elaboration;
 
 /// Run drop elaboration on the MIR body.
-pub fn elaborate_drops(ctx: &mut TyCtxMut, body: &mut Body) {
+///
+/// Also mounted in the pass registry as [`BuiltinMirPass::DropElaboration`]
+/// so explicit [`PassPlan`]s can select it; no default opt level includes
+/// it (see the `pass_plan` module doc). Takes the same read-only `&TyCtx`
+/// receiver every other pass takes — it only queries types and interns
+/// the flag-array types it materializes.
+pub fn elaborate_drops(ctx: &TyCtx, body: &mut Body) {
     drop_elaboration::run(ctx, body);
 }
 
