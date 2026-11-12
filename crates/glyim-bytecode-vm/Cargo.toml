@@ -1,4 +1,6 @@
 [package]
+documentation = "https://glyim.vercel.app"
+
 repository = "https://github.com/elcoosp/glyim"
 readme = "../../README.md"
 name = "glyim-bytecode-vm"

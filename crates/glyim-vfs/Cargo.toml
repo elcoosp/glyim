@@ -1,4 +1,6 @@
 [package]
+documentation = "https://glyim.vercel.app"
+
 description = "The glyim-vfs crate for the glyim ecosystem"
 repository = "https://github.com/elcoosp/glyim"
 readme = "../../README.md"
