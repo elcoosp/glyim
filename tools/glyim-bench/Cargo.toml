@@ -20,6 +20,9 @@ tracing-subscriber = { workspace = true }
 name = "glyim_bench"
 path = "src/lib.rs"
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [[bin]]
 name = "glyim-bench"
 path = "src/main.rs"
@@ -33,6 +36,11 @@ path = "benches/runner_overhead.rs"
 name = "corpus_gen"
 harness = false
 path = "benches/corpus_gen.rs"
+
+[[bench]]
+name = "diff_engine"
+harness = false
+path = "benches/diff_engine.rs"
 
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
