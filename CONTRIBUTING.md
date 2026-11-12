@@ -82,8 +82,10 @@ You need a working `llvm-lto2` for the ThinLTO portion of the diff
 
 ### The `wr1..wr5` recipes
 
-Those are for interactive sessions driven by watchers; ignore them
-unless you are contributing to the dev-loop tooling itself.
+Those are for interactive sessions driven by `watchexec`; the
+`./wr1.sh`..`./wr5.sh` scripts they invoke are **uncommitted local
+tooling**, so the recipes fail on a fresh clone. Ignore them unless you
+are contributing to the dev-loop tooling itself.
 
 ## Coding style
 
@@ -91,8 +93,9 @@ unless you are contributing to the dev-loop tooling itself.
 - `clippy` at `-D warnings` (`just clippy`). The workspace also runs
   `clippy::pedantic` as the review baseline (see `[workspace.lints.clippy]` in
   the root `Cargo.toml`). **Do not add inline `#[allow]`/`#[expect]`** — the
-  metrics ratchet (`metrics/baseline.json`, `inline_allows: 0`) and CI's
-  allow-grep fail any PR that introduces one. If a lint is genuinely wrong
+  metrics ratchet (`metrics/baseline.json`, `inline_allows: 0`) fails any PR
+  that introduces one (`cargo run -p glyim-metrics -- . --check
+  metrics/baseline.json` in CI's `metrics-ratchet` job). If a lint is genuinely wrong
   for this codebase, add a rationale-annotated relaxation to
   `[workspace.lints.clippy]` in the root `Cargo.toml` (one reviewable place;
   gates never weaken, plan C9).
