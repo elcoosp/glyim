@@ -138,7 +138,7 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `tools/glyim-metrics` | Repo-health metrics (code lines, tests, doc coverage, inline-allow count) behind the CI metrics ratchet. |
 | `tools/glyim-pilot` | Agent orchestrator with gate bundles (clippy, fmt, contracts, coverage, mutation, ledger). |
 | `tools/ledger-schema` | `deny_unknown_fields` schemas shared by the readiness ledger and inventory extractors. |
-| `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `gaps`, `next`, `explain`, `inventory`, `schema` — registry consistency gates run in CI; `next` renders the plan §3.9 deterministic work queue (`glyim.ledger-next/1` JSON) for agent consumers and `explain` resolves one registry ID against it. |
+| `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `gaps`, `next`, `explain`, `compute`, `inventory`, `schema` — registry consistency gates run in CI; `next` renders the plan §3.9 deterministic work queue (`glyim.ledger-next/1` JSON) for agent consumers and `explain` resolves one registry ID against it; `compute` runs the plan M1.8 level engine — a pure function of the registry, `glyim.evidence/1` records, and `ledger/policy.toml` (`glyim.ledger-compute/1` JSON with `--format json`); `status` renders the computed status as the marker-delimited Markdown block or the `glyim.status/1` JSON contract (plan M1.9 first slice). |
 | `tools/glyim-bench` | M2.2 measurement harness: `perf stat`/callgrind instruction counts, wall time, child RSS, a counting allocator, the CoV stability gate, and the M2.3 deterministic corpus generators (`glyim.corpus/1` manifest). |
 
 ### Compilation Pipeline
@@ -283,7 +283,7 @@ glyim input.g --error-format json
 > `--lto=thin` requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution `glyim-codegen-llvm` was built against. Requesting `thin` with `--backend bytecode` is an explicit error rather than a silent no-op.
 
 > [!TIP]
-> `--emit=run` executes the program in-process through the MIR interpreter (M2.4) — no LLVM toolchain, no system linker, no `glyim-runtime` staticlib. The program's exit code (masked to `0xff`; panics exit 101) becomes the driver's exit code, so it is scriptable exactly like a linked `--emit=exec` binary:
+> `--emit=run` executes the program in-process through the MIR interpreter (the interpreter run contract, M2.1 era) — no LLVM toolchain, no system linker, no `glyim-runtime` staticlib. The program's exit code (masked to `0xff`; panics exit 101) becomes the driver's exit code, so it is scriptable exactly like a linked `--emit=exec` binary:
 >
 > ```bash
 > glyim input.g --emit=run --with-stdlib   # runs without a linker
@@ -483,7 +483,7 @@ libraries rather than through the CLI:
 # Drive the pipeline in-process: write a .g program, lower it to MIR.
 cargo run -p glyim-pipeline --example hello_pipeline
 
-# Execute in-process via the interpreter run contract (M2.4 seam).
+# Execute in-process via the interpreter run contract.
 cargo run -p glyim-pipeline --example run_interp
 
 # Round-trip the readiness ledger's evidence JSONL (M1.5 seam).
@@ -500,6 +500,12 @@ cargo run -p glyim-ledger --example next_queue
 
 # Explain one registry ID: why it is queued, what evidence moves it.
 cargo run -p glyim-ledger --example explain_entry -- GAP-0002
+
+# Compute per-feature readiness levels from evidence + policy (M1.8 seam).
+cargo run -p glyim-ledger --example compute_levels
+
+# Render the computed status block + JSON contract (M1.9 first slice).
+cargo run -p glyim-ledger --example status_report
 
 # Build + verify a corpus manifest over the 7 generator families (M2.3).
 cargo run -p glyim-bench --example corpus_walk
