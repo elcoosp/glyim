@@ -4,7 +4,7 @@
 **Status:** Updated
 **Date:** 2026-11-09
 **Source of truth:** the root `Cargo.toml` (`[workspace.package]`,
-`[workspace.dependencies]`) at workspace version 0.7.1 (commit `ba2a526e`).
+`[workspace.dependencies]`) at workspace version 0.10.0 (commit `cfd2c810`; re-anchored after the M1.8/M1.9 ledger slices).
 
 > The previous revision (1.3.0, dated 2025-04-10) described an aspirational
 > stack that never matched the tree: it listed `salsa`, `chumsky`, `egg`,
