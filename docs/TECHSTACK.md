@@ -99,10 +99,12 @@ Deliberately **not** in the stack (as of 0.7.0):
     descent + Pratt expression parsing in `glyim-frontend`) for error
     recovery control; no parser-combinator or generator framework.
 *   **`egg` / `regalloc2` / equality-saturation machinery** — `glyim-opt`
-    runs five hand-written MIR passes (const-prop, DCE, CFG-simplify,
-    unreachable-elim, slice desugar); verified rewrites are the M10
-    workstream, and the MIR interpreter is a value-model interpreter, not
-    a register-allocated VM.
+    ships six hand-written MIR passes (const-prop, DCE, CFG-simplify,
+    unreachable-elim, slice desugar, drop elaboration) behind the
+    `BuiltinMirPass` registry and `PassPlan` opt-level plans: `-O0` runs
+    only the codegen-required slice desugaring, `-O1`+ run the full
+    sequence; verified rewrites are the M10 workstream, and the MIR
+    interpreter is a value-model interpreter, not a register-allocated VM.
 *   **`tower` / `tower_lsp`** — `glyim-lsp` builds on the `async-lsp`
     runtime instead (see below); the tower service stack is not used.
 *   **Cranelift** — a ledger backend *tag* (`//@ backends: cranelift`) and
