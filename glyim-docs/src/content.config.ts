@@ -15,6 +15,9 @@ export const collections = {
       },
     ]),
   }),
-  docs: defineCollection({ loader: docsLoader(), schema: docsSchema({ extend: (context) => blogSchema(context).merge(blogSchema(context)) }) }),
+  docs: defineCollection({
+    loader: docsLoader(),
+    schema: docsSchema({ extend: (context) => blogSchema(context) }),
+  }),
   i18n: defineCollection({ loader: i18nLoader(), schema: i18nSchema() }),
 };
