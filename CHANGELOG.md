@@ -8,6 +8,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Status renderers (M1.9 first slice)**: `tools/glyim-ledger/src/status.rs`
+  renders the M1.8 engine's outcome as the two plan-M1.9 artifacts that
+  hang directly off it: the `glyim.status/1` JSON contract (per-level
+  histogram + per-feature summary entries; the compute contract keeps the
+  `missing`-reason prose) and the marker-delimited Markdown block
+  (`<!-- ledger:status:start/end -->`) the "generated content" embedding
+  step needs. Both are pure functions of the engine outcome — no clock,
+  entries already sorted — pinned by golden tests, a summary-vs-entries
+  cross-check, and byte-identical repeat renders. Wired as
+  `glyim-ledger status [ROOT] [--evidence PATH] [--format md|json]`,
+  with the `status_report` example and the dependency-free `status`
+  bench; the "STATUS is up to date" CI gate and the remaining M1.9
+  renderers (`KNOWN_GAPS.md` generation, Astro page) are later slices.
+- **Level-computation engine (M1.8 slice)**: `tools/glyim-ledger/src/compute.rs`
+  implements the plan's `ledger compute` as a pure function of
+  *(registry, evidence, policy)*. Per feature it walks the L0–L4 evidence
+  ladder (level N requires every rule of levels L1..N; a level whose rules
+  are all backend-gated away stops the ladder instead of advancing
+  vacuously), applies every open gap's `caps` ceiling (`capped_by` names
+  the cappers), and reports the `[hardening]` axes (`fuzz_cpu_hours`,
+  `mutation_kill_rate_pct`) as `unmeasured` for L5 targets — no evidence
+  kind records them yet, so nothing silently claims hardening. The
+  policy schema (`glyim.ledger-policy/1`, `ledger/policy.toml`) lives in
+  `tools/ledger-schema/src/policy.rs` beside the other strict registry
+  schemas; evidence enters through the `EvidenceSource` seam
+  (`ProjectEvidenceSource` over `ledger/evidence/*.jsonl`,
+  `JsonlEvidenceSource` for explicit paths, `InMemoryEvidenceSource` for
+  tests), reading the harness's `glyim.evidence/1` wire format strictly
+  (`deny_unknown_fields`, schema-tag check, hash/mode/backend invariants)
+  without a dependency on the test-harness crate. Determinism and
+  monotonicity are pinned by golden tests and a deterministic-PRNG
+  property test (evidence growth never lowers a computed level); the
+  `glyim.ledger-compute/1` JSON contract (`--format json`) and the text
+  report render the same outcome. Wired as `glyim-ledger compute [ROOT]
+  [--evidence PATH] [--format text|json]`, with the
+  `compute_levels` example, the dependency-free `compute` bench, the
+  `TOOL-LEDGER-COMPUTE` registry row, and README/CLI docs.
 - **Corpus substrate (M2.3 slice 1)**: `tools/glyim-bench/src/corpus.rs`
   adds the seven deterministic synthetic generator families the master
   plan's M2.3 calls for (wide, deep, generic, trait, match, macro,
