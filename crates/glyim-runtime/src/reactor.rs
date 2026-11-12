@@ -437,7 +437,7 @@ mod tests {
         // `glyim_thread_unpark(thread_id)` to wake the `.g` executor — the same
         // wake mechanism `task::block_on` relies on.
         #[cfg(unix)]
-use std::os::unix::io::IntoRawFd;
+        use std::os::unix::io::IntoRawFd;
 
         let std_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = std_listener.local_addr().unwrap();
