@@ -99,9 +99,7 @@ fn main() {
         entries += black_box(sink.registered.len());
     }
     let register_all = t.elapsed();
-    println!(
-        "register_all     {register_all:>9.1?} total ({entries} entries delivered)",
-    );
+    println!("register_all     {register_all:>9.1?} total ({entries} entries delivered)");
 
     // Phase 4: the real consumer path — resolver-side bootstrap, which
     // drives register_builtin_ranges (ADTs, methods, and now the
