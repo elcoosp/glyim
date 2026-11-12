@@ -1,8 +1,13 @@
 # Closure support — design
 
-**Status:** design. No implementation yet.
-**Blocking:** the closure-passing builtins (`Option::map`,
-`Result::{map,map_err,map_or}`), and any user code that uses closures.
+**Status:** implemented. Closures land end-to-end on both backends (see
+`ledger/features/lang/closures.toml` and the run-pass fixtures
+`closure_inferred.g`, `closure_ref_param.g`, `closure_capture_basic.g`,
+`closure_fnptr.g`); this document remains the design record, and the
+**Blocking** line below describes the pre-implementation state it was
+written under. The builtins built on closure-passing (`Option::map`,
+`Result::{map,map_err,map_or}`) are likewise implemented — treat the rest
+of this file as the verified rationale, not as a pending plan.
 **Evidence base:** all findings below were verified against the tree at
 commit `be038762`, with the exact file:line shown.
 
