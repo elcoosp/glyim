@@ -4,7 +4,7 @@ import imageZoom from 'starlight-image-zoom';
 import headingBadges from 'starlight-heading-badges';
 
 export default await defineDocsConfig({
-  llmsTxt: false,
+  llmsTxt: {},
   changelog: { repo: 'elcoosp/glyim' },
   site: 'https://glyim.vercel.app',
   domain: 'glyim.vercel.app',
