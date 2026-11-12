@@ -1,4 +1,7 @@
 [package]
+description = "The glyim-core crate for the glyim ecosystem"
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-core"
 keywords = ["compiler", "interpreter", "bytecode", "typeck", "borrowck"]
 license.workspace = true

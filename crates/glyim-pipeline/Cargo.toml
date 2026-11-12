@@ -1,4 +1,7 @@
 [package]
+description = "The glyim-pipeline crate for the glyim ecosystem"
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-pipeline"
 keywords = ["pipeline", "compiler", "codegen", "optimization", "passes"]
 license.workspace = true

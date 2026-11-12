@@ -1,4 +1,7 @@
 [package]
+description = "The glyim-typeck crate for the glyim ecosystem"
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-typeck"
 keywords = ["typeck", "type-checker", "compiler", "inference", "type-system"]
 license.workspace = true

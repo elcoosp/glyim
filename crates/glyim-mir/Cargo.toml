@@ -1,4 +1,7 @@
 [package]
+description = "The glyim-mir crate for the glyim ecosystem"
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-mir"
 keywords = ["mir", "compiler", "codegen", "intermediate-repr", "lowering"]
 license.workspace = true

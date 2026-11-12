@@ -1,4 +1,7 @@
 [package]
+description = "The glyim-lang-std crate for the glyim ecosystem"
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-lang-std"
 keywords = ["stdlib", "standard-library", "language", "runtime", "core"]
 license.workspace = true

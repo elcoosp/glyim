@@ -1,4 +1,6 @@
 [package]
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-lsp"
 keywords = ["lsp", "language-server", "compiler", "editor", "ide"]
 version.workspace = true

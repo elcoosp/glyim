@@ -1,4 +1,7 @@
 [package]
+description = "The glyim-meta crate for the glyim ecosystem"
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-meta"
 keywords = ["meta", "compiler", "macro", "reflection", "proc-macro"]
 license.workspace = true

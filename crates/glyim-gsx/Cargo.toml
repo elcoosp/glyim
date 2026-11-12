@@ -1,4 +1,6 @@
 [package]
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-gsx"
 keywords = ["gsx", "ui", "compiler", "macro", "template"]
 description = "GSX view pipeline: VIR, blueprints, slot analyses, patch generation and host emitters (docs/design/GSX-in-Glyim.md)"

@@ -1,4 +1,6 @@
 [package]
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-bytecode-vm"
 keywords = ["bytecode", "vm", "interpreter", "runtime", "compiler"]
 license.workspace = true

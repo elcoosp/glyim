@@ -1,4 +1,7 @@
 [package]
+description = "The glyim-codegen-llvm crate for the glyim ecosystem"
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-codegen-llvm"
 keywords = ["llvm", "codegen", "compiler", "backend", "opt"]
 license.workspace = true

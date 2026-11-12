@@ -1,4 +1,7 @@
 [package]
+description = "The glyim-cli crate for the glyim ecosystem"
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-cli"
 keywords = ["cli", "compiler", "interpreter", "repl", "terminal"]
 license.workspace = true

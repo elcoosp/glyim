@@ -1,4 +1,7 @@
 [package]
+description = "The glyim-span crate for the glyim ecosystem"
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-span"
 keywords = ["span", "source-code", "compiler", "diagnostics", "ast"]
 license.workspace = true

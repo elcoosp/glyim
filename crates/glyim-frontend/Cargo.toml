@@ -1,4 +1,7 @@
 [package]
+description = "The glyim-frontend crate for the glyim ecosystem"
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-frontend"
 keywords = ["frontend", "parser", "lexer", "compiler", "ast"]
 license.workspace = true

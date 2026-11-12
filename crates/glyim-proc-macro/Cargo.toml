@@ -1,4 +1,6 @@
 [package]
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-proc-macro"
 keywords = ["proc-macro", "macro", "compiler", "codegen", "derive"]
 license.workspace = true

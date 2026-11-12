@@ -1,4 +1,6 @@
 [package]
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-lang-alloc"
 keywords = ["alloc", "memory", "runtime", "language", "heap"]
 license.workspace = true

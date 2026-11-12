@@ -1,4 +1,6 @@
 [package]
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyip"
 keywords = ["cli", "compiler", "interpreter", "repl", "terminal"]
 license.workspace = true

@@ -1,4 +1,7 @@
 [package]
+description = "The glyim-runtime crate for the glyim ecosystem"
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-runtime"
 keywords = ["runtime", "interpreter", "vm", "language", "compiler"]
 license.workspace = true

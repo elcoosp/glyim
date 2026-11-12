@@ -1,4 +1,7 @@
 [package]
+description = "The glyim-vfs crate for the glyim ecosystem"
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
 name = "glyim-vfs"
 keywords = ["vfs", "virtual-filesystem", "compiler", "lsp", "parser"]
 license.workspace = true
