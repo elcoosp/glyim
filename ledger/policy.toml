@@ -1,0 +1,54 @@
+# M1.8 level-computation policy — `ledger/policy.toml`.
+#
+# The third input of the `ledger compute` engine (plan §6 M1.8: "pure
+# function of (registry, evidence, policy)"). Schema: `glyim.ledger-policy/1`
+# (`deny_unknown_fields`; loader in `tools/ledger-schema/src/policy.rs`).
+#
+# Rule semantics: each level lists evidence rules that must ALL hold before
+# the ladder may advance to it (a rule is a minimum count of DISTINCT
+# fixtures — by content hash — whose `glyim.evidence/1` records match the
+# mode/outcome/backend triple). A rule pinned to a backend only applies to
+# features that declare that backend; a level whose rules are all gated away
+# stops the ladder (a gam-only feature is honestly capped below L4 rather
+# than advancing vacuously).
+#
+# Level meanings (plan §3.2): L0 declared, L1 parses, L2 checks (positive +
+# negative), L3 interpreted (GAM run-pass), L4 native-verified (LLVM
+# run-pass; the differential corpus wires -O0/-O2 parity), L5 hardened.
+#
+# L5 is deliberately NOT expressible as evidence rules: no evidence kind
+# records the hardening axes yet, so the engine reports them as `unmeasured`
+# instead of letting a policy claim hardening the store cannot measure
+# (plan C1: status is computed, never typed). The `[hardening]` thresholds
+# shape the reported requirement only.
+
+schema = "glyim.ledger-policy/1"
+
+[levels.L1]
+rules = [{ mode = "compile-pass", outcome = "passed", count = 1 }]
+
+[levels.L2]
+rules = [
+    { mode = "compile-pass", outcome = "passed", count = 1 },
+    { mode = "compile-fail", outcome = "passed", count = 1 },
+]
+
+[levels.L3]
+rules = [{ mode = "run-pass", outcome = "passed", backend = "gam", count = 1 }]
+
+[levels.L4]
+rules = [{ mode = "run-pass", outcome = "passed", backend = "llvm", count = 1 }]
+
+[gap_caps]
+# Every open `[[gap]]` affecting a feature caps it at the gap's `caps`
+# level (plan §3.3). Disable for a diagnostic dry run of uncapped levels.
+enabled = true
+
+[hardening]
+# Plan M1.8 "CPU-hour thresholds": the fuzz budget and the mutation-gate
+# bar an L5 target implies (the pilot's mutation gate uses 75%). Both axes
+# are unmeasured today — no evidence kind carries them (M2's instruction
+# counters are a different axis) — so every target-L5 feature reports
+# `unmeasured: fuzz_cpu_hours, mutation_kill_rate_pct` and caps at L4.
+fuzz_cpu_hours = 24
+mutation_kill_rate_pct = 75
