@@ -40,6 +40,7 @@ mod terminator;
 mod terminators;
 mod tier0;
 mod unary_ops;
+mod uninit_unobservable;
 mod unwind_cleanup;
 mod width_semantics;
 mod xref_probe;
