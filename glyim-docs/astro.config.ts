@@ -17,8 +17,8 @@ export default await defineDocsConfig({
   editLink: {
     baseUrl: 'https://github.com/elcoosp/glyim/edit/main/docs-site/src/content/docs/',
   },
-  locales: { en: { label: 'English' } },
-  defaultLocale: 'en',
+  locales: { root: { label: 'English', lang: 'en' } },
+  defaultLocale: 'root',
   plugins: [docLinks(), imageZoom(), headingBadges()],
   sidebar: [
     { label: 'Overview', link: '/' },

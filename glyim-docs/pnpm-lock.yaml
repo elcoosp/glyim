@@ -1,3 +1,161 @@
+---
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    configDependencies: {}
+    packageManagerDependencies:
+      pnpm:
+        specifier: 12.18.0
+        version: 12.18.0
+
+packages:
+
+  '@pnpm/exe.android-arm64@12.18.0':
+    resolution: {integrity: sha512-fOF6IwgvnUKEmVedGqiAsNPfN2Ry8GvaqzSQOiF3RJFbpBfPKO/6YT54s1GjToyYinRxw9preHHPe4y2N3SzhA==}
+    cpu: [arm64]
+    os: [android]
+
+  '@pnpm/exe.android-x64@12.18.0':
+    resolution: {integrity: sha512-6OiolnaCsB3/GcJ9XNrenbUH3zFHRJ+5QynrMUUEyThbgnnCzWxa199hpQlOmxN4rAXuYQ0IYgWFNUZxyzg31Q==}
+    cpu: [x64]
+    os: [android]
+
+  '@pnpm/exe.darwin-arm64@12.18.0':
+    resolution: {integrity: sha512-zkq+4YzVIX39ETYLyC3W7LY7MpHEU/J3nRhHl4i2yPld2Cf2+rEKRh3ejJ4AmaQ77HHJLCktY4Z3jq0fpcxFXg==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@pnpm/exe.darwin-x64@12.18.0':
+    resolution: {integrity: sha512-qMsL9qx92unOTa6hgkfiTJv8ceZaTx0IQg7InhYDVX2ZrTECujaVEEVypnJK5m3eGUsP1KD7Y4qIgleCwfRsYw==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@pnpm/exe.freebsd-x64@12.18.0':
+    resolution: {integrity: sha512-/9vy/4ms52cU4MjZ5NhHd6N2d9L9W0kARf5/ff2tweAHu0VeUzs/0qp/7ZHFuddm2Wa/m0AKQoPum9AVUCqKsw==}
+    cpu: [x64]
+    os: [freebsd]
+
+  '@pnpm/exe.linux-arm64-musl@12.18.0':
+    resolution: {integrity: sha512-Vp+TIMPPyackVCXkOdEKH/RmAn/r07EcIyrgZYQK7VrkksqZOie0GnWIx+85mPqeFEYCRtXIZAFJ9L4ceTndDg==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@pnpm/exe.linux-arm64@12.18.0':
+    resolution: {integrity: sha512-2dpyVBCHT+FfpuQh9i+7MXAqNWYLCvD5vYr5p6Eimxoga8USLnjbUgyj72AOrO0hjc5ri3TEFP3jiyBHjkSZpQ==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@pnpm/exe.linux-ppc64@12.18.0':
+    resolution: {integrity: sha512-BBOOOfNJ2QwIIya3eKqOjiN4WNTszfRz7HCvw9XggcT7+ftMjNP8XJ/GfW+ltCBeUFR9d8WBVsr2m/NLjX2CZQ==}
+    cpu: [ppc64]
+    os: [linux]
+    libc: [glibc]
+
+  '@pnpm/exe.linux-riscv64@12.18.0':
+    resolution: {integrity: sha512-7kMN77xSOYJX8GPSH5RbNAc5oM61LMmcSUukDDUwllnZPXm8GRPskCNsTWy8SCw01Kr1FB+5SwGNMiTdiziLNQ==}
+    cpu: [riscv64]
+    os: [linux]
+    libc: [glibc]
+
+  '@pnpm/exe.linux-s390x@12.18.0':
+    resolution: {integrity: sha512-htuSCpEcmDzhKoJqXbPkvfr176dBHU0QIF5mWcRiqxRXAB/1JoYiMYotfjWpk+ztgpB9qlx4XnWlLFAf7gzc6g==}
+    cpu: [s390x]
+    os: [linux]
+    libc: [glibc]
+
+  '@pnpm/exe.linux-x64-musl@12.18.0':
+    resolution: {integrity: sha512-Uj+vzfIQ62kDP10x36yHZIXVs5ohdNtiPYwn5FhCLlNScHPo0OAI+ShGDtLofiBXKE7umu71Jmjm7N8a8zVcDw==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@pnpm/exe.linux-x64@12.18.0':
+    resolution: {integrity: sha512-OJ+X2wcraldCwj75pCIerWARQSRpdfj0eBTs/2ODyhfeW46ylOnjTIE/GKra6Mn6E72/gBmXS8igrUioa+F9fQ==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@pnpm/exe.win32-arm64@12.18.0':
+    resolution: {integrity: sha512-wEY6jiACGcbhhi5yD59doHqNTndS7AaujaPmtWAu1DKkHru2hy5fJ9yUGecW72Ypaw2/I3BEprfMOopap2NQtw==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@pnpm/exe.win32-x64@12.18.0':
+    resolution: {integrity: sha512-5FJkghO7RLRkQpWxeVEygW9XsmnNuxzPfXbgwFWCHsFyFhpDn/vOdL88ToQEM0Kt5igdW5s6U0/IDH8Dvkt3pg==}
+    cpu: [x64]
+    os: [win32]
+
+  pnpm@12.18.0:
+    resolution: {integrity: sha512-nXiC1dyCFH7PxOBiqjSDTgrQKWcQoYN6ERWuASEn02txCeMhrBWYod0KZVl2gbHpmRfhLtDXSerpEYeUM2O+sw==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+snapshots:
+
+  '@pnpm/exe.android-arm64@12.18.0':
+    optional: true
+
+  '@pnpm/exe.android-x64@12.18.0':
+    optional: true
+
+  '@pnpm/exe.darwin-arm64@12.18.0':
+    optional: true
+
+  '@pnpm/exe.darwin-x64@12.18.0':
+    optional: true
+
+  '@pnpm/exe.freebsd-x64@12.18.0':
+    optional: true
+
+  '@pnpm/exe.linux-arm64-musl@12.18.0':
+    optional: true
+
+  '@pnpm/exe.linux-arm64@12.18.0':
+    optional: true
+
+  '@pnpm/exe.linux-ppc64@12.18.0':
+    optional: true
+
+  '@pnpm/exe.linux-riscv64@12.18.0':
+    optional: true
+
+  '@pnpm/exe.linux-s390x@12.18.0':
+    optional: true
+
+  '@pnpm/exe.linux-x64-musl@12.18.0':
+    optional: true
+
+  '@pnpm/exe.linux-x64@12.18.0':
+    optional: true
+
+  '@pnpm/exe.win32-arm64@12.18.0':
+    optional: true
+
+  '@pnpm/exe.win32-x64@12.18.0':
+    optional: true
+
+  pnpm@12.18.0:
+    optionalDependencies:
+      '@pnpm/exe.android-arm64': 12.18.0
+      '@pnpm/exe.android-x64': 12.18.0
+      '@pnpm/exe.darwin-arm64': 12.18.0
+      '@pnpm/exe.darwin-x64': 12.18.0
+      '@pnpm/exe.freebsd-x64': 12.18.0
+      '@pnpm/exe.linux-arm64': 12.18.0
+      '@pnpm/exe.linux-arm64-musl': 12.18.0
+      '@pnpm/exe.linux-ppc64': 12.18.0
+      '@pnpm/exe.linux-riscv64': 12.18.0
+      '@pnpm/exe.linux-s390x': 12.18.0
+      '@pnpm/exe.linux-x64': 12.18.0
+      '@pnpm/exe.linux-x64-musl': 12.18.0
+      '@pnpm/exe.win32-arm64': 12.18.0
+      '@pnpm/exe.win32-x64': 12.18.0
+
+---
 lockfileVersion: '9.0'
 
 settings:
@@ -11,6 +169,9 @@ importers:
       '@astrojs/starlight':
         specifier: 0.42.10
         version: 0.42.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(astro@7.4.7(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3)
+      '@elcoosp/docs-toolkit':
+        specifier: ^0.5.5
+        version: 0.5.5(@astrojs/markdown-satteri@0.4.8)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(astro@7.4.7(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(mermaid@11.17.2)(react@19.3.1)(supports-color@10.2.2)
       astro:
         specifier: 7.4.7
         version: 7.4.7(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1)
@@ -36,9 +197,6 @@ importers:
       '@astrojs/check':
         specifier: ^0.9.4
         version: 0.9.12(prettier@3.9.10)(typescript@6.0.3)
-      '@elcoosp/docs-toolkit':
-        specifier: ^0.5.4
-        version: 0.5.4(@astrojs/markdown-satteri@0.4.8)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(astro@7.4.7(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(mermaid@11.17.2)(react@19.3.1)(supports-color@10.2.2)
       '@emnapi/runtime':
         specifier: 1.11.1
         version: 1.11.1
@@ -423,9 +581,9 @@ packages:
     resolution: {integrity: sha512-6V0+8vw/GmH92URQ/Ki12FPhoB3nqaQUJE+5xgbFbB5ok0OXYK5jCQsQQoyR3BzCddHsCpyCFRnIcI1PSOVYkQ==}
     engines: {node: '>=14'}
 
-  '@elcoosp/docs-toolkit@0.5.4':
-    resolution: {integrity: sha512-lPOGTiBH3u7qs/xgiAVmkz1Iuu7IQS89NE22NtovW9TlQZZDbB/jtusYvGQl0PpPeiwL8+EI0aaU91ABZB56DQ==}
-    version: 0.5.4
+  '@elcoosp/docs-toolkit@0.5.5':
+    resolution: {integrity: sha512-+T/nMBkZ8LD+XjGgjTvyDtrgsXWom26t2XByeFbzqa9/rmALUn0cJjPD/Q5BgX1B9GE7LZzOU8Lx+TP/DlzItw==}
+    version: 0.5.5
     engines: {node: '>=22.18.0'}
     hasBin: true
     peerDependencies:
@@ -3740,7 +3898,7 @@ snapshots:
 
   '@ctrl/tinycolor@4.3.0': {}
 
-  '@elcoosp/docs-toolkit@0.5.4(@astrojs/markdown-satteri@0.4.8)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(astro@7.4.7(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(mermaid@11.17.2)(react@19.3.1)(supports-color@10.2.2)':
+  '@elcoosp/docs-toolkit@0.5.5(@astrojs/markdown-satteri@0.4.8)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(astro@7.4.7(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(mermaid@11.17.2)(react@19.3.1)(supports-color@10.2.2)':
     dependencies:
       '@astrojs/rss': 4.0.19
       '@astrojs/starlight': 0.42.10(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(astro@7.4.7(@astrojs/markdown-remark@7.3.7(supports-color@10.2.2))(@types/node@24.19.2)(yaml@2.9.1))(supports-color@10.2.2)(typescript@6.0.3)
