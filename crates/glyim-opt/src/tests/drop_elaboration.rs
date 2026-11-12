@@ -81,7 +81,8 @@ fn array_drop_creates_loop() {
     let mut body = body_with_array_drop(&mut ctx_mut, struct_ty, len);
 
     // Run drop elaboration (needs a mutable context to allocate flag types, §15.2)
-    crate::elaborate_drops(&mut ctx_mut, &mut body);
+    let ctx = ctx_mut.freeze();
+    crate::elaborate_drops(&ctx, &mut body);
 
     // Assert that the Drop terminator is replaced by a loop (SwitchInt + Goto)
     let has_loop = body
@@ -150,7 +151,8 @@ fn drop_on_projected_place_is_not_skipped() {
     };
     body.basic_blocks = IndexVec::from_raw(vec![block0, block1]);
 
-    crate::drop_elaboration::run(&mut ctx_mut, &mut body);
+    let ctx = ctx_mut.freeze();
+    crate::drop_elaboration::run(&ctx, &mut body);
 
     // The elaborated block 0 must still be a Drop (not a Goto that skips it).
     let is_drop = matches!(
@@ -258,7 +260,8 @@ fn loop_built_array_uses_per_element_flags() {
     };
     body.basic_blocks = IndexVec::from_raw(vec![block0, block1]);
 
-    crate::drop_elaboration::run(&mut ctx_mut, &mut body);
+    let ctx = ctx_mut.freeze();
+    crate::drop_elaboration::run(&ctx, &mut body);
 
     // The original whole-array Drop must be gone.
     let has_whole_array_drop = body.basic_blocks.iter().any(|b| {
@@ -326,7 +329,8 @@ fn array_drop_init_edge_is_not_a_self_loop() {
     let struct_ty = ctx_mut.mk_ty(TyKind::Adt(adt_id, subst));
 
     let mut body = body_with_array_drop(&mut ctx_mut, struct_ty, 3);
-    crate::elaborate_drops(&mut ctx_mut, &mut body);
+    let ctx = ctx_mut.freeze();
+    crate::elaborate_drops(&ctx, &mut body);
 
     // Old block 0's terminator (was `Drop(array)`) must now be a `Goto` into
     // the loop init block, which is a *new* block (index >= the original 2).
