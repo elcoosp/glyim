@@ -1,5 +1,6 @@
 [package]
 name = "glyim-cli"
+keywords = ["cli", "compiler", "interpreter", "repl", "terminal"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

@@ -1,5 +1,6 @@
 [package]
 name = "glyim-diag"
+keywords = ["diagnostics", "error-reporting", "compiler", "lsp", "span"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

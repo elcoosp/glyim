@@ -1,5 +1,6 @@
 [package]
 name = "glyim-core"
+keywords = ["compiler", "interpreter", "bytecode", "typeck", "borrowck"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

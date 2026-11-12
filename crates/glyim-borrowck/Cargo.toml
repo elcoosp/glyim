@@ -1,5 +1,6 @@
 [package]
 name = "glyim-borrowck"
+keywords = ["borrowck", "static-analysis", "compiler", "typeck", "mir"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

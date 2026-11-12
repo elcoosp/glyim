@@ -1,5 +1,6 @@
 [package]
 name = "glyim-type"
+keywords = ["type-system", "typeck", "compiler", "inference", "solver"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

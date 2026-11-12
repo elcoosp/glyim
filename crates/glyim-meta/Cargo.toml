@@ -1,5 +1,6 @@
 [package]
 name = "glyim-meta"
+keywords = ["meta", "compiler", "macro", "reflection", "proc-macro"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

@@ -1,5 +1,6 @@
 [package]
 name = "glyim-mir"
+keywords = ["mir", "compiler", "codegen", "intermediate-repr", "lowering"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

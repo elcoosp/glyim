@@ -1,5 +1,6 @@
 [package]
 name = "glyim-codegen-llvm"
+keywords = ["llvm", "codegen", "compiler", "backend", "opt"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

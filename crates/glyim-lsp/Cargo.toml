@@ -1,5 +1,6 @@
 [package]
 name = "glyim-lsp"
+keywords = ["lsp", "language-server", "compiler", "editor", "ide"]
 version.workspace = true
 edition.workspace = true
 license.workspace = true

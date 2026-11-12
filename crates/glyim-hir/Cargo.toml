@@ -1,5 +1,6 @@
 [package]
 name = "glyim-hir"
+keywords = ["hir", "high-level-ir", "compiler", "semantic-analysis", "ast"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

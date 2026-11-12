@@ -1,5 +1,6 @@
 [package]
 name = "glyim-syntax"
+keywords = ["parser", "syntax", "ast", "compiler", "lexer"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

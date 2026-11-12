@@ -1,5 +1,6 @@
 [package]
 name = "glyim-lang-core"
+keywords = ["core", "language", "runtime", "compiler", "stdlib"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

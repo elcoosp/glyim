@@ -1,5 +1,6 @@
 [package]
 name = "glyip"
+keywords = ["cli", "compiler", "interpreter", "repl", "terminal"]
 license.workspace = true
 version.workspace = true
 edition.workspace = true

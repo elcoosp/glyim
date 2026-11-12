@@ -1,5 +1,6 @@
 [package]
 name = "glyim-lower"
+keywords = ["lowering", "compiler", "ast", "mir", "desugaring"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

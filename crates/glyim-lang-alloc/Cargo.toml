@@ -1,5 +1,6 @@
 [package]
 name = "glyim-lang-alloc"
+keywords = ["alloc", "memory", "runtime", "language", "heap"]
 license.workspace = true
 version = "0.10.0"
 edition = "2024"

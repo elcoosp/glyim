@@ -1,5 +1,6 @@
 [package]
 name = "glyim-def-map"
+keywords = ["def-map", "compiler", "symbol-table", "lsp", "ast"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

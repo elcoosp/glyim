@@ -1,5 +1,6 @@
 [package]
 name = "glyim-mir-interp"
+keywords = ["mir", "interpreter", "compiler", "vm", "runtime"]
 license.workspace = true
 version = "0.10.0"
 edition = "2024"

@@ -1,5 +1,6 @@
 [package]
 name = "glyim-bytecode-vm"
+keywords = ["bytecode", "vm", "interpreter", "runtime", "compiler"]
 license.workspace = true
 version = "0.10.0"
 edition = "2024"

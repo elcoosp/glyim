@@ -1,5 +1,6 @@
 [package]
 name = "glyim-frontend"
+keywords = ["frontend", "parser", "lexer", "compiler", "ast"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true

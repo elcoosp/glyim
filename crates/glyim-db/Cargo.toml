@@ -1,5 +1,6 @@
 [package]
 name = "glyim-db"
+keywords = ["database", "compiler", "incremental", "query", "salsa"]
 license.workspace = true
 edition.workspace = true
 version.workspace = true
