@@ -332,6 +332,7 @@ impl Pipeline {
         output_path: &Path,
         codegen_units: Option<usize>,
         proc_registry: Option<&glyim_proc_macro::Registry>,
+        opt_level: u8,
     ) -> CompResult<()> {
         Self::compile_file_with_artifacts(
             db,
@@ -340,6 +341,7 @@ impl Pipeline {
             output_path,
             codegen_units,
             proc_registry,
+            opt_level,
         )
         .map(|_| ())
     }
@@ -406,6 +408,14 @@ impl Pipeline {
         // `false` and keep the pre-P2-A4 fallback behavior, so library
         // crates like stdlib are not forcibly monomorphized.
         emit_object: bool,
+        // The caller's `--opt-level`. Threaded into the Opt phase: the MIR
+        // pass plan (glyim_opt::PassPlan::for_opt_level) depends on it, so
+        // `-O0` skips the semantics-preserving passes (const-prop, DCE,
+        // CFG simplify, unreachable-elim) and runs only the codegen-required
+        // slice desugaring. The compile cache already keys on this value —
+        // before this parameter it invalidated the cache while producing
+        // byte-identical MIR.
+        opt_level: u8,
     ) -> CompResult<PreparedCompilation> {
         // M2.1: every phase below brackets itself with the recorder; the
         // snapshot travels out on `PreparedCompilation` so the CLI (or any
@@ -712,7 +722,7 @@ impl Pipeline {
 
                 let opt_body = {
                     let _guard = recorder.enter(Phase::Opt);
-                    glyim_opt::optimize(ty_ctx_ref, &mir_arc)
+                    glyim_opt::optimize_at_level(ty_ctx_ref, &mir_arc, opt_level)
                 };
                 bodies.insert(owner, Arc::new(opt_body.body));
 
@@ -742,7 +752,7 @@ impl Pipeline {
                     }
                     let c_opt = {
                         let _guard = recorder.enter(Phase::Opt);
-                        glyim_opt::optimize(ty_ctx_ref, &c_mir_arc)
+                        glyim_opt::optimize_at_level(ty_ctx_ref, &c_mir_arc, opt_level)
                     };
                     let c_body = c_opt.body;
                     let c_sym = format!("__glyim_fn_{}", c_body.owner.local_id.to_raw());
@@ -1043,8 +1053,10 @@ impl Pipeline {
         output_path: &Path,
         codegen_units: Option<usize>,
         proc_registry: Option<&glyim_proc_macro::Registry>,
+        opt_level: u8,
     ) -> CompResult<CompileArtifacts> {
-        let prepared = Self::prepare_compilation(db, path, codegen_units, proc_registry, true)?;
+        let prepared =
+            Self::prepare_compilation(db, path, codegen_units, proc_registry, true, opt_level)?;
         let mut profile = prepared.profile;
         let out_path = if output_path.as_os_str().is_empty() {
             Path::new("output.o")
@@ -1161,8 +1173,9 @@ impl MirCompilation {
 pub fn compile_file_to_mir(
     db: &mut Database,
     path: &Path,
+    opt_level: u8,
 ) -> Result<MirCompilation, Vec<GlyimDiagnostic>> {
-    compile_file_to_mir_with_proc_registry(db, path, None)
+    compile_file_to_mir_with_proc_registry(db, path, None, opt_level)
 }
 
 /// Compile a single source file to MIR only, threading the proc-macro
@@ -1182,8 +1195,9 @@ pub fn compile_file_to_mir_with_proc_registry(
     db: &mut Database,
     path: &Path,
     proc_registry: Option<&glyim_proc_macro::Registry>,
+    opt_level: u8,
 ) -> Result<MirCompilation, Vec<GlyimDiagnostic>> {
-    let prepared = Pipeline::prepare_compilation(db, path, None, proc_registry, false)?;
+    let prepared = Pipeline::prepare_compilation(db, path, None, proc_registry, false, opt_level)?;
     let mut bodies = std::collections::HashMap::with_capacity(prepared.all_bodies.len());
     for (_symbol, body) in prepared.all_bodies {
         bodies.insert(body.owner, body);
@@ -1203,6 +1217,7 @@ pub fn emit_mir(
     input: &Path,
     output: &Path,
     proc_registry: Option<&glyim_proc_macro::Registry>,
+    opt_level: u8,
 ) -> Result<PhaseProfile, Vec<GlyimDiagnostic>> {
     // Route through the shared front half (`prepare_compilation`) so the
     // body goes through the same diagnostics, monomorphization, and
@@ -1223,7 +1238,7 @@ pub fn emit_mir(
     // Every other emit mode already routes through
     // `prepare_compilation` for exactly this reason (see
     // `emit_llvm_ir`'s comment).
-    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry, false)?;
+    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry, false, opt_level)?;
 
     // `all_bodies` carries `(symbol, body)` pairs; the MIR dump is keyed
     // by the body's owner `DefId`, and `format_body` prints the owner's
@@ -1279,6 +1294,7 @@ pub fn emit_llvm_ir(
     input: &Path,
     output: &Path,
     proc_registry: Option<&glyim_proc_macro::Registry>,
+    opt_level: u8,
 ) -> Result<PhaseProfile, Vec<GlyimDiagnostic>> {
     // Route through the shared front half (`prepare_compilation`) so the
     // bodies are monomorphized. The previous standalone implementation
@@ -1286,7 +1302,7 @@ pub fn emit_llvm_ir(
     // `MonoCtx::collect` — so generic stdlib definitions reached codegen with
     // `TyKind::Param` in their locals and `fn_abi_of` ICEd with
     // `UnknownType`. Any new emit mode MUST go through `prepare_compilation`.
-    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry, false)?;
+    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry, false, opt_level)?;
 
     // Emit *every* monomorphized body (previously only `mir_bodies[0]` was
     // emitted, silently dropping the rest of the crate from the IR).
@@ -1315,11 +1331,12 @@ pub fn emit_asm(
     input: &Path,
     output: &Path,
     proc_registry: Option<&glyim_proc_macro::Registry>,
+    opt_level: u8,
 ) -> Result<PhaseProfile, Vec<GlyimDiagnostic>> {
     // Route through the shared front half (`prepare_compilation`) — see
     // `emit_llvm_ir` for why the standalone chain was wrong (it skipped
     // monomorphization, so generic bodies ICEd in `fn_abi_of`).
-    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry, false)?;
+    let prepared = Pipeline::prepare_compilation(db, input, None, proc_registry, false, opt_level)?;
     let backend = LlvmBackend::with_db(db).with_debug_info(false);
     backend
         .emit_assembly(&prepared.all_bodies, output)
@@ -1342,8 +1359,9 @@ pub fn compile_stats(
     db: &mut Database,
     path: &Path,
     proc_registry: Option<&glyim_proc_macro::Registry>,
+    opt_level: u8,
 ) -> Result<StatsReport, Vec<GlyimDiagnostic>> {
-    let prepared = Pipeline::prepare_compilation(db, path, None, proc_registry, false)?;
+    let prepared = Pipeline::prepare_compilation(db, path, None, proc_registry, false, opt_level)?;
     Ok(StatsReport {
         profile: prepared.profile,
         mono_bodies: prepared.all_bodies.len(),
