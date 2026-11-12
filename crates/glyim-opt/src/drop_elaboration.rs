@@ -17,7 +17,7 @@ use glyim_core::Mutability;
 use glyim_core::primitives::UintTy;
 use glyim_mir::*;
 use glyim_span::Span;
-use glyim_type::{Const, ConstKind, Ty, TyCtx, TyCtxMut, TyKind};
+use glyim_type::{Const, ConstKind, Ty, TyCtx, TyKind};
 
 // -----------------------------------------------------------------------------
 // Dataflow: which locals are definitely initialized at each program point.
@@ -173,7 +173,7 @@ impl DropFlags {
         }
     }
 
-    fn create_flags(&mut self, ctx: &mut TyCtxMut, body: &mut Body) {
+    fn create_flags(&mut self, ctx: &TyCtx, body: &mut Body) {
         for flag_opt in &mut self.flag_for_local {
             if flag_opt.is_some() {
                 let flag_local = body.locals.push(LocalDecl {
@@ -306,12 +306,13 @@ impl DropFlags {
 // Main transformation
 // -----------------------------------------------------------------------------
 
-pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
-    // `ctx` is mutable (needed for `mk_ty` allocation of flag-array types,
-    // §15.2); `tc` is a frozen snapshot used for all read-only type queries.
-    let tc = ctx.freeze();
+pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
+    // `ctx` is the shared type context: read-only for the queries and
+    // `mk_ty`-interning for the flag-array types (§15.2) — `TyCtx::mk_ty`
+    // interns into the same shared arena the mutable view allocates
+    // through, so no frozen snapshot is needed.
     let analysis = MaybeInitialized::compute(body);
-    let mut flags = DropFlags::new(&tc, body, &analysis);
+    let mut flags = DropFlags::new(ctx, body, &analysis);
     flags.create_flags(ctx, body);
 
     // Insert flag-setting after assignments.
@@ -349,7 +350,7 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
                         {
                             Some(ProjectionElem::Index(idx_local)) => {
                                 Some(DropFlags::set_flag_stmt_indexed(
-                                    *flag_arr, *idx_local, true, span, &tc,
+                                    *flag_arr, *idx_local, true, span, ctx,
                                 ))
                             }
                             _ => None,
@@ -362,7 +363,7 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
             new_stmts.push(stmt);
             if let Some(local) = local {
                 if let Some(flag) = flags.get_flag(local) {
-                    new_stmts.push(DropFlags::set_flag_stmt(flag, true, span, &tc));
+                    new_stmts.push(DropFlags::set_flag_stmt(flag, true, span, ctx));
                 }
             }
             if let Some(flag_stmt) = element_flag {
@@ -409,10 +410,10 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
                 target,
                 cleanup,
             } => {
-                let ty = place.ty(&tc, &body.locals);
-                if !tc.needs_drop(ty) {
+                let ty = place.ty(ctx, &body.locals);
+                if !ctx.needs_drop(ty) {
                     TerminatorKind::Goto { target: *target }
-                } else if let TyKind::Array(_elem_ty, count) = tc.ty_kind(ty) {
+                } else if let TyKind::Array(_elem_ty, count) = ctx.ty_kind(ty) {
                     let len = match &count.kind {
                         ConstKind::Uint(n) => *n as u64,
                         ConstKind::Int(n) if *n >= 0 => *n as u64,
@@ -429,7 +430,7 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
                         });
                         let idx_place = Place::new(idx_local);
                         emit_array_drop_loop(
-                            &tc,
+                            ctx,
                             place,
                             *target,
                             *cleanup,
@@ -459,7 +460,7 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
                             flag_local,
                             false,
                             terminator.source_info.span,
-                            &tc,
+                            ctx,
                         );
                         let drop_block_data = BasicBlockData {
                             statements: vec![clear_flag],
@@ -476,7 +477,7 @@ pub(crate) fn run(ctx: &mut TyCtxMut, body: &mut Body) {
                         new_blocks.push(drop_block_data);
                         TerminatorKind::SwitchInt {
                             discr: Operand::Copy(Place::new(flag_local)),
-                            switch_ty: tc.bool_ty(),
+                            switch_ty: ctx.bool_ty(),
                             targets: SwitchTargets::if_switch(drop_block, *target),
                         }
                     } else {
