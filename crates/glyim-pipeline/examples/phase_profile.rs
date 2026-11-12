@@ -57,7 +57,7 @@ fn main() {
 
     // 3. Measure. `compile_stats` is exactly what `--emit=stats` calls:
     //    the analysis-only front half, no backend, no object file.
-    let report = match glyim_pipeline::compile_stats(&mut db, &source, None) {
+    let report = match glyim_pipeline::compile_stats(&mut db, &source, None, 2) {
         Ok(report) => report,
         Err(diags) => {
             for diag in diags {
