@@ -14,9 +14,16 @@ version.workspace = true
 glyim-span = { workspace = true }
 miette = { workspace = true }
 tracing = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 glyim-test = { workspace = true }
+
+[[bench]]
+name = "json_render"
+harness = false
+path = "benches/json_render.rs"
+
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
