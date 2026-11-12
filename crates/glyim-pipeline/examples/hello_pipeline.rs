@@ -56,7 +56,7 @@ fn main() {
     //    Success also carries the per-phase profile (M2.1): the same
     //    data `glyim --time-passes` prints, free for library consumers.
     let out = dir.join("hello.mir");
-    match glyim_pipeline::emit_mir(&mut db, &source, &out, None) {
+    match glyim_pipeline::emit_mir(&mut db, &source, &out, None, 2) {
         Ok(profile) => {
             let text = std::fs::read_to_string(&out).unwrap_or_default();
             println!("MIR written to {} ({} bytes)\n", out.display(), text.len());
