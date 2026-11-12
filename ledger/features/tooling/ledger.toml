@@ -96,3 +96,25 @@ target_level  = "L3"
 backends      = ["gam", "llvm"]
 requires      = ["TOOL-LEDGER-NEXT"]
 owner_lane    = "L"
+
+[[feature]]
+id            = "TOOL-LEDGER-COMPUTE"
+title         = "plan §6 M1.8 `ledger compute` level engine: pure (registry, evidence, policy) with `ledger/policy.toml`, gap caps, and unmeasured hardening axes"
+area          = "tooling.ledger"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+requires      = ["TOOL-LEDGER-GAPS", "TOOL-LEDGER-REGISTRY"]
+owner_lane    = "L"
+
+[[feature]]
+id            = "TOOL-LEDGER-STATUS"
+title         = "plan §6 M1.9 status renderers (first slice): deterministic glyim.status/1 JSON + marker-delimited Markdown block over the M1.8 engine"
+area          = "tooling.ledger"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L3"
+backends      = ["gam", "llvm"]
+requires      = ["TOOL-LEDGER-COMPUTE"]
+owner_lane    = "L"
