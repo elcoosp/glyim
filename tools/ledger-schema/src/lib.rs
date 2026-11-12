@@ -29,6 +29,13 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 pub mod inventory;
+pub mod policy;
+
+pub use policy::{
+    CANONICAL_BACKENDS, CANONICAL_MODES, CANONICAL_OUTCOMES, CODE_POLICY_LOAD, CODE_POLICY_RULE,
+    CODE_POLICY_SCHEMA, EvidenceRule, HardeningPolicy, LevelPolicy, POLICY_SCHEMA, load_policy,
+    parse_level,
+};
 
 pub use inventory::{
     CODE_INVENTORY_CONFLICT, CODE_INVENTORY_DUP_CLAIM, CODE_INVENTORY_DUP_IGNORE,
