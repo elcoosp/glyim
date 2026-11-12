@@ -11,6 +11,12 @@
 //! the JSON-Schema document for both registry entry types.
 //! `glyim-ledger inventory [ROOT]` reports the source-derived inventory
 //! and its claim/ignore status without full registry validation.
+//! `glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json]`
+//! runs the plan M1.8 level-computation engine and prints per-feature
+//! readiness levels computed from evidence and `ledger/policy.toml`.
+//! `glyim-ledger status [ROOT] [--evidence PATH] [--format md|json]`
+//! renders the computed status as the marker-delimited Markdown block
+//! (plan M1.9 first slice) or the `glyim.status/1` JSON contract.
 
 use std::process::ExitCode;
 
@@ -86,6 +92,46 @@ fn main() -> ExitCode {
             // prints the "no registry entry" report and also fails, so a
             // typo'd ID never exits green in a scripted pipeline.
             if outcome.is_ok() && outcome.entry.is_some() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Command::Compute {
+            root,
+            evidence,
+            format,
+        } => {
+            let outcome = glyim_ledger::run_compute(&root, evidence.as_deref());
+            match format {
+                glyim_ledger::ComputeFormat::Text => {
+                    print!("{}", glyim_ledger::format_compute_report(&outcome));
+                }
+                glyim_ledger::ComputeFormat::Json => {
+                    print!("{}", glyim_ledger::format_compute_json(&outcome));
+                }
+            }
+            if outcome.is_ok() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Command::Status {
+            root,
+            evidence,
+            format,
+        } => {
+            let outcome = glyim_ledger::run_status(&root, evidence.as_deref());
+            match format {
+                glyim_ledger::StatusFormat::Markdown => {
+                    print!("{}", glyim_ledger::format_status_markdown(&outcome.compute));
+                }
+                glyim_ledger::StatusFormat::Json => {
+                    print!("{}", glyim_ledger::format_status_json(&outcome.compute));
+                }
+            }
+            if outcome.is_ok() {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE
