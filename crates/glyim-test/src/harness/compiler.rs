@@ -414,6 +414,11 @@ impl TestCompiler for PipelineCompiler {
             self.proc_registry.as_deref(),
         );
 
+        // Thread the fixture's parsed `--opt-level` (see the `CrateConfig`
+        // above) into the pipeline so the MIR pass plan honors it too —
+        // previously the level reached the LLVM backend and the evidence
+        // report while the MIR optimizer ran the same full pipeline at
+        // every level.
         match glyim_pipeline::Pipeline::compile_file_with_artifacts(
             &mut db,
             &path,
@@ -421,6 +426,7 @@ impl TestCompiler for PipelineCompiler {
             &output_path,
             None,
             None,
+            opt_level,
         ) {
             Ok(artifacts) => {
                 // Tier 7.2: link the produced object file into a real executable
