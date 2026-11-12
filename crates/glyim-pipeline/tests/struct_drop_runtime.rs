@@ -47,7 +47,7 @@ fn compile_and_run_struct_with_drop(src: &str) -> Result<(), String> {
     };
     let mut db = Database::new(config);
 
-    let mir = compile_file_to_mir(&mut db, &path).map_err(|diags| {
+    let mir = compile_file_to_mir(&mut db, &path, 2).map_err(|diags| {
         diags
             .iter()
             .map(|d| format!("{d:?}"))
@@ -178,7 +178,7 @@ fn compile_and_run_for_loop(src: &str) -> Result<i128, String> {
     };
     let mut db = Database::new(config);
 
-    let mir = compile_file_to_mir(&mut db, &path).map_err(|diags| {
+    let mir = compile_file_to_mir(&mut db, &path, 2).map_err(|diags| {
         diags
             .iter()
             .map(|d| format!("{d:?}"))
