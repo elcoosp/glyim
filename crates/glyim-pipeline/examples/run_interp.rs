@@ -60,7 +60,7 @@ fn main() {
         opt_level: 0,
     });
     let compilation =
-        glyim_pipeline::compile_file_to_mir_with_proc_registry(&mut db, &source, None)
+        glyim_pipeline::compile_file_to_mir_with_proc_registry(&mut db, &source, None, 0)
             .expect("the toy program must compile");
     for warning in &compilation.warnings {
         eprintln!("warning: {}", warning.message);
