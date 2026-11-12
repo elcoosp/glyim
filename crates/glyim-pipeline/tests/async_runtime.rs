@@ -58,7 +58,7 @@ fn async_state_machine_runs_via_interpreter() {
     };
     let mut db = Database::new(config);
 
-    let mir = compile_file_to_mir(&mut db, &path)
+    let mir = compile_file_to_mir(&mut db, &path, 2)
         .expect("async fixture must compile to MIR with zero diagnostics");
     let ty_ctx = mir.ty_ctx;
     let bodies: Vec<std::sync::Arc<glyim_mir::Body>> = mir.bodies.values().cloned().collect();
