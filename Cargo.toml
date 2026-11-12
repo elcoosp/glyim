@@ -12,6 +12,7 @@ readme = "README.md"
 [workspace]
 resolver = "3"
 members = [
+    "tools/*",
     "crates/glyim-core",
     "crates/glyim-span",
     "crates/glyim-diag",
