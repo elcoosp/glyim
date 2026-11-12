@@ -50,9 +50,9 @@ fn test_db() -> Database {
 fn registry_variant_and_wrapper_agree_on_bodies() {
     let path = fixture_path("agreement");
     let mut db_a = test_db();
-    let via_wrapper = compile_file_to_mir(&mut db_a, &path).expect("wrapper compiles");
+    let via_wrapper = compile_file_to_mir(&mut db_a, &path, 2).expect("wrapper compiles");
     let mut db_b = test_db();
-    let via_registry = compile_file_to_mir_with_proc_registry(&mut db_b, &path, None)
+    let via_registry = compile_file_to_mir_with_proc_registry(&mut db_b, &path, None, 2)
         .expect("registry variant compiles");
 
     let mut wrapper_keys: Vec<_> = via_wrapper.bodies.keys().collect();
@@ -74,7 +74,7 @@ fn mir_compilation_carries_profile_and_warnings() {
     let path = fixture_path("observability");
     let mut db = test_db();
     let compilation =
-        compile_file_to_mir_with_proc_registry(&mut db, &path, None).expect("fixture compiles");
+        compile_file_to_mir_with_proc_registry(&mut db, &path, None, 2).expect("fixture compiles");
 
     // The profile is recorded unconditionally by the shared front half
     // (one Instant pair + two Cell writes per phase), so a successful
