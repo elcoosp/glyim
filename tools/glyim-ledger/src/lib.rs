@@ -1,6 +1,6 @@
 //! CLI library for the Readiness Ledger tool (plan M1.1).
 //!
-//! Six subcommands:
+//! Seven subcommands:
 //!
 //! - `glyim-ledger check [ROOT]` — load `ROOT/ledger`, run the schema and
 //!   semantic validators, cross-check the M1.3 inventory extractors, print
@@ -18,6 +18,12 @@
 //!   explanation: resolve one gap or feature ID and render why it is
 //!   queued and what evidence moves it (the same reason lines the `next`
 //!   queue emits; see [`explain`]).
+//! - `glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json]` —
+//!   the plan §6 M1.8 level-computation engine: per-feature readiness
+//!   levels L0–L4 computed as a pure function of the registry, the
+//!   `glyim.evidence/1` records, and `ledger/policy.toml` (L5 hardening is
+//!   reported as unmeasured); see [`compute`] for the determinism and
+//!   monotonicity contracts.
 //! - `glyim-ledger schema [OUT]` — write the JSON-Schema export document
 //!   for both entry types to `OUT` (pretty-printed), or to stdout.
 //! - `glyim-ledger inventory [ROOT]` — enumerate the source-derived
@@ -35,14 +41,27 @@ use ledger_schema::{
     load_inventory_ignore, load_project_registry, registry_schema, unmapped_item_keys,
 };
 
+pub mod compute;
 pub mod explain;
 pub mod next;
+pub mod status;
 
+pub use compute::{
+    CODE_EVIDENCE_INVALID, CODE_EVIDENCE_IO, CODE_EVIDENCE_SCHEMA, CODE_EVIDENCE_UNKNOWN_FEATURE,
+    COMPUTE_SCHEMA, ComputeOutcome, EVIDENCE_WIRE_SCHEMA, EvidenceBatch, EvidenceOutcome,
+    EvidenceSource, FeatureLevel, HARDENING_FUZZ_HOURS, HARDENING_MUTATION_RATE,
+    InMemoryEvidenceSource, JsonlEvidenceSource, LedgerEvidence, ProjectEvidenceSource,
+    compute_levels, format_compute_json, format_compute_report, run_compute,
+};
 pub use explain::{ExplainEntry, ExplainOutcome, format_explain_report, run_explain};
 pub use next::{
     FeatureSource, GapSource, NEXT_SCHEMA, NextOutcome, WorkItem, WorkItemSource, WorkKind,
     build_queue, feature_depths, filter, format_next_json, format_next_report, parse_lane,
     run_next,
+};
+pub use status::{
+    STATUS_MD_END, STATUS_MD_START, STATUS_SCHEMA, StatusOutcome, format_status_json,
+    format_status_markdown, run_status,
 };
 
 /// Typed error for the CLI seams (`parse_args`, `write_schema`).
@@ -117,6 +136,34 @@ pub enum LedgerCliError {
         /// The usage text.
         usage: String,
     },
+    /// `compute --format` received a value outside `text|json`.
+    ComputeBadFormat {
+        /// The offending value.
+        value: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `compute --evidence`/`compute --format` was passed without its value.
+    ComputeMissingValue {
+        /// The flag that was missing its value (`--evidence` or `--format`).
+        flag: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `status --format` received a value outside `md|json`.
+    StatusBadFormat {
+        /// The offending value.
+        value: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `status --evidence`/`status --format` was passed without its value.
+    StatusMissingValue {
+        /// The flag that was missing its value (`--evidence` or `--format`).
+        flag: String,
+        /// The usage text.
+        usage: String,
+    },
 }
 
 impl fmt::Display for LedgerCliError {
@@ -149,6 +196,18 @@ impl fmt::Display for LedgerCliError {
                     "{flag} expects a value (lane letter or item count)\n{usage}"
                 )
             }
+            Self::ComputeBadFormat { value, usage } => {
+                write!(f, "--format expects text or json, got {value}\n{usage}")
+            }
+            Self::ComputeMissingValue { flag, usage } => {
+                write!(f, "{flag} expects a value (a path, or text|json)\n{usage}")
+            }
+            Self::StatusBadFormat { value, usage } => {
+                write!(f, "--format expects md or json, got {value}\n{usage}")
+            }
+            Self::StatusMissingValue { flag, usage } => {
+                write!(f, "{flag} expects a value (a path, or md|json)\n{usage}")
+            }
             Self::ExplainMissingId { usage } => {
                 write!(f, "explain expects a registry ID (gap or feature)\n{usage}")
             }
@@ -170,6 +229,10 @@ impl miette::Diagnostic for LedgerCliError {
             Self::NextBadCount { .. } => "glyim-ledger::next_bad_count",
             Self::NextBadLane { .. } => "glyim-ledger::next_bad_lane",
             Self::NextMissingValue { .. } => "glyim-ledger::next_missing_value",
+            Self::ComputeBadFormat { .. } => "glyim-ledger::compute_bad_format",
+            Self::ComputeMissingValue { .. } => "glyim-ledger::compute_missing_value",
+            Self::StatusBadFormat { .. } => "glyim-ledger::status_bad_format",
+            Self::StatusMissingValue { .. } => "glyim-ledger::status_missing_value",
             Self::ExplainMissingId { .. } => "glyim-ledger::explain_missing_id",
         }))
     }
@@ -211,6 +274,26 @@ impl miette::Diagnostic for LedgerCliError {
             Self::NextMissingValue { .. } => Some(Box::new(
                 "the flag needs its value on the same command line, e.g. `--lane M` \
                  or `--n 10`"
+                    .to_string(),
+            )),
+            Self::ComputeBadFormat { .. } => Some(Box::new(
+                "`--format json` renders the glyim.ledger-compute/1 contract; \
+                 plain text is the default"
+                    .to_string(),
+            )),
+            Self::ComputeMissingValue { .. } => Some(Box::new(
+                "the flag needs its value on the same command line, e.g. \
+                 `--evidence run.jsonl` or `--format json`"
+                    .to_string(),
+            )),
+            Self::StatusBadFormat { .. } => Some(Box::new(
+                "`--format json` renders the glyim.status/1 contract; the \
+                 marker-delimited Markdown block is the default"
+                    .to_string(),
+            )),
+            Self::StatusMissingValue { .. } => Some(Box::new(
+                "the flag needs its value on the same command line, e.g. \
+                 `--evidence run.jsonl` or `--format json`"
                     .to_string(),
             )),
             Self::ExplainMissingId { .. } => Some(Box::new(
@@ -266,16 +349,60 @@ pub enum Command {
         /// default).
         root: PathBuf,
     },
+    /// `compute [ROOT] [--evidence PATH] [--format text|json]` — the plan
+    /// §6 M1.8 level-computation engine.
+    Compute {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// Explicit evidence JSONL path (overrides `ledger/evidence/*.jsonl`).
+        evidence: Option<PathBuf>,
+        /// Output format; [`ComputeFormat::Text`] by default.
+        format: ComputeFormat,
+    },
+    /// `status [ROOT] [--evidence PATH] [--format md|json]` — the plan
+    /// §6 M1.9 status renderers (first slice).
+    Status {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// Explicit evidence JSONL path (overrides `ledger/evidence/*.jsonl`).
+        evidence: Option<PathBuf>,
+        /// Output format; [`StatusFormat::Markdown`] by default.
+        format: StatusFormat,
+    },
+}
+
+/// Output format of the `compute` subcommand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComputeFormat {
+    /// The human-readable report ([`format_compute_report`]).
+    Text,
+    /// The `glyim.ledger-compute/1` JSON contract ([`format_compute_json`]).
+    Json,
+}
+
+/// Output format of the `status` subcommand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusFormat {
+    /// The marker-delimited Markdown block ([`format_status_markdown`]).
+    Markdown,
+    /// The `glyim.status/1` JSON contract ([`format_status_json`]).
+    Json,
 }
 
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout; `next` filters by\n\
      \x20 lane (L|F|T|M|B|Q) and prints the glyim.ledger-next/1 JSON queue;\n\
-     \x20 `explain` resolves one registry ID against the same queue."
+     \x20 `explain` resolves one registry ID against the same queue;\n\
+     \x20 `compute` prints per-feature readiness levels from evidence\n\
+     \x20 (`ledger/evidence/*.jsonl` by default, `--evidence` to override);\n\
+     \x20 `status` renders the computed status as the marker-delimited\n\
+     \x20 Markdown block (default) or the glyim.status/1 JSON contract."
         .into()
 }
 
@@ -295,13 +422,21 @@ where
         None => Ok(Command::Check {
             root: PathBuf::from("."),
         }),
-        Some("check" | "gaps" | "schema" | "inventory" | "next" | "explain") => {
+        Some(
+            "check" | "gaps" | "schema" | "inventory" | "next" | "explain" | "compute" | "status",
+        ) => {
             let rest = &items[1..];
             if items[0] == "next" {
                 return parse_next(rest);
             }
             if items[0] == "explain" {
                 return parse_explain(rest);
+            }
+            if items[0] == "compute" {
+                return parse_compute(rest);
+            }
+            if items[0] == "status" {
+                return parse_status(rest);
             }
             if rest.len() > 1 {
                 return Err(LedgerCliError::ExtraArgument {
@@ -433,6 +568,122 @@ fn parse_explain(rest: &[String]) -> Result<Command, LedgerCliError> {
             usage: usage(),
         }),
     }
+}
+
+/// Parse the `compute` subcommand's arguments: one optional ROOT positional,
+/// then `--evidence <PATH>` and `--format <text|json>` in any order.
+fn parse_compute(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut evidence: Option<PathBuf> = None;
+    let mut format = ComputeFormat::Text;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--evidence" | "--format" => {
+                let flag = rest[index].as_str();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::ComputeMissingValue {
+                        flag: flag.to_string(),
+                        usage: usage(),
+                    });
+                };
+                if flag == "--evidence" {
+                    evidence = Some(PathBuf::from(value));
+                } else {
+                    format = match value.as_str() {
+                        "text" => ComputeFormat::Text,
+                        "json" => ComputeFormat::Json,
+                        other => {
+                            return Err(LedgerCliError::ComputeBadFormat {
+                                value: other.to_string(),
+                                usage: usage(),
+                            });
+                        }
+                    };
+                }
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    Ok(Command::Compute {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        evidence,
+        format,
+    })
+}
+
+/// Parse the `status` subcommand's arguments: one optional ROOT positional,
+/// then `--evidence <PATH>` and `--format <md|json>` in any order.
+fn parse_status(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut evidence: Option<PathBuf> = None;
+    let mut format = StatusFormat::Markdown;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--evidence" | "--format" => {
+                let flag = rest[index].as_str();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::StatusMissingValue {
+                        flag: flag.to_string(),
+                        usage: usage(),
+                    });
+                };
+                if flag == "--evidence" {
+                    evidence = Some(PathBuf::from(value));
+                } else {
+                    format = match value.as_str() {
+                        "md" => StatusFormat::Markdown,
+                        "json" => StatusFormat::Json,
+                        other => {
+                            return Err(LedgerCliError::StatusBadFormat {
+                                value: other.to_string(),
+                                usage: usage(),
+                            });
+                        }
+                    };
+                }
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    Ok(Command::Status {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        evidence,
+        format,
+    })
 }
 
 /// Result of a full `ledger check` run.
@@ -861,6 +1112,143 @@ mod tests {
             Command::Schema {
                 out: Some(PathBuf::from("out.json"))
             }
+        );
+    }
+
+    #[test]
+    fn compute_defaults_to_text_format_over_the_project_root() {
+        let cmd = parse_args(args(&["compute"])).expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Compute {
+                root: PathBuf::from("."),
+                evidence: None,
+                format: ComputeFormat::Text,
+            }
+        );
+    }
+
+    #[test]
+    fn compute_accepts_root_evidence_and_format_in_any_order() {
+        let cmd = parse_args(args(&[
+            "compute",
+            "/tmp/reg",
+            "--format",
+            "json",
+            "--evidence",
+            "run.jsonl",
+        ]))
+        .expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Compute {
+                root: PathBuf::from("/tmp/reg"),
+                evidence: Some(PathBuf::from("run.jsonl")),
+                format: ComputeFormat::Json,
+            }
+        );
+    }
+
+    #[test]
+    fn compute_rejects_unknown_format_values() {
+        let err = parse_args(args(&["compute", "--format", "yaml"])).expect_err("reject");
+        assert!(
+            matches!(err, LedgerCliError::ComputeBadFormat { ref value, .. } if value == "yaml"),
+            "{err}"
+        );
+        assert!(err.to_string().contains("--format expects text or json"));
+    }
+
+    #[test]
+    fn compute_rejects_flags_without_values() {
+        for flag in ["--evidence", "--format"] {
+            let err = parse_args(args(&["compute", flag])).expect_err("reject");
+            assert!(
+                matches!(err, LedgerCliError::ComputeMissingValue { flag: ref bound, .. } if *bound == flag),
+                "{err}"
+            );
+        }
+    }
+
+    #[test]
+    fn compute_rejects_extra_positionals() {
+        let err = parse_args(args(&["compute", "a", "b"])).expect_err("reject");
+        assert!(
+            matches!(err, LedgerCliError::ExtraArgument { ref arg, .. } if arg == "b"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn compute_rejects_unknown_flags() {
+        let err = parse_args(args(&["compute", "--json"])).expect_err("reject");
+        assert!(
+            matches!(err, LedgerCliError::UnknownFlag { ref flag, .. } if flag == "--json"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn status_defaults_to_markdown_over_the_project_root() {
+        let cmd = parse_args(args(&["status"])).expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Status {
+                root: PathBuf::from("."),
+                evidence: None,
+                format: StatusFormat::Markdown,
+            }
+        );
+    }
+
+    #[test]
+    fn status_accepts_root_evidence_and_format_in_any_order() {
+        let cmd = parse_args(args(&[
+            "status",
+            "--format",
+            "json",
+            "s",
+            "--evidence",
+            "e.jsonl",
+        ]))
+        .expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Status {
+                root: PathBuf::from("s"),
+                evidence: Some(PathBuf::from("e.jsonl")),
+                format: StatusFormat::Json,
+            }
+        );
+    }
+
+    #[test]
+    fn status_rejects_unknown_format_values() {
+        let err = parse_args(args(&["status", "--format", "html"])).expect_err("reject");
+        assert!(
+            matches!(err, LedgerCliError::StatusBadFormat { ref value, .. } if value == "html"),
+            "{err}"
+        );
+        assert!(err.to_string().contains("--format expects md or json"));
+    }
+
+    #[test]
+    fn status_rejects_flags_without_values() {
+        for flag in ["--evidence", "--format"] {
+            let err = parse_args(args(&["status", flag])).expect_err("reject");
+            assert!(
+                matches!(err, LedgerCliError::StatusMissingValue { flag: ref bound, .. } if bound == flag),
+                "{err}"
+            );
+        }
+    }
+
+    #[test]
+    fn status_rejects_unknown_flags() {
+        let err = parse_args(args(&["status", "--md"])).expect_err("reject");
+        assert!(
+            matches!(err, LedgerCliError::UnknownFlag { ref flag, .. } if flag == "--md"),
+            "{err}"
         );
     }
 
