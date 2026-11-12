@@ -2633,14 +2633,21 @@ impl<'tcx> Interpreter<'tcx> {
                 self.write_place(place, val)?;
             }
             StatementKind::StorageLive(local) => {
-                // Argument locals (indices 1..=arg_count) are already
-                // initialized by the caller at function entry. `StorageLive`
-                // for an argument local would wrongly wipe the passed
-                // argument, so skip those (see for-loop method-call desugar).
-                let idx = local.index();
-                if !(idx >= 1 && idx <= self.current_arg_count) {
-                    self.locals[idx] = None;
-                }
+                // Liveness marker only — never (re-)uninitializes the slot.
+                // The minimal `-O0` pass plan preserves lowering's raw shape,
+                // which re-executes `StorageLive` at loop heads on every
+                // back-edge (`let mut i = 0; loop { if i == 3 { break; } i =
+                // i + 1; }` lowers to a `StorageLive(i)` in the loop header);
+                // wiping there destroys the loop-carried value. Before the
+                // plan seam, the full pipeline's DCE/cfg-simplify erased
+                // those re-lives before the interpreter saw them, and the
+                // LLVM backend ignores `StorageLive` outright. Locals start
+                // `None` at frame entry (see `enter_body`) and `StorageDead`
+                // is already a no-op below, so this completes the "slots are
+                // never reclaimed" model: genuinely uninitialized reads
+                // (first use before first write) are still caught by the
+                // `read_place` guard.
+                let _ = local.index();
             }
             StatementKind::StorageDead(_local) => {}
             StatementKind::Nop => {}
@@ -3355,17 +3362,42 @@ impl<'tcx> Interpreter<'tcx> {
             );
         }
         let idx = place.local.index();
-        let mut val = self
-            .locals
-            .get(idx)
-            .and_then(|opt| opt.as_ref())
-            .cloned()
-            .ok_or_else(|| {
-                let owner = self.current_body_owner;
-                InterpError::Panic(format!(
-                    "read from uninitialized local {idx} (owner={owner:?})"
-                ))
-            })?;
+        let mut val = match self.locals.get(idx).and_then(|opt| opt.as_ref()).cloned() {
+            Some(v) => v,
+            None => {
+                // UNINHABITED-UNINIT: a `()`- or `!`-typed local read before
+                // any write models the dead temp chains lowering emits:
+                //  * `()` — compound-statement result temps (`fails = fails
+                //    + 1;`) copied at a conditional join they only reach
+                //    from one predecessor;
+                //  * `!` — loop-desugar phantom temps (`Assign(_7,
+                //    Move(_5))` on the continue edge of `loop { … break … }`,
+                //    where `_5: !` is never written and `_7` is never read).
+                // Both are dead by construction (the full pipeline's DCE
+                // erased them; LLVM reads unobserved garbage for them), so
+                // the reference executor yields `Unit` instead of panicking
+                // — the same relaxation the frame return already applies to
+                // an uninitialized local 0 (T140-PATCHED-RETURN-NEVER).
+                // Inhabited types still panic: there an uninitialized read
+                // corrupts real data.
+                let unobservable_ty = self.local_decls.get(idx).is_some_and(|d| {
+                    d.ty == Ty::UNIT
+                        || match self.tcx.ty_kind(d.ty) {
+                            TyKind::Unit | TyKind::Never => true,
+                            TyKind::Tuple(t) => t.is_empty(),
+                            _ => false,
+                        }
+                });
+                if unobservable_ty {
+                    InterpValue::Unit
+                } else {
+                    let owner = self.current_body_owner;
+                    return Err(InterpError::Panic(format!(
+                        "read from uninitialized local {idx} (owner={owner:?})"
+                    )));
+                }
+            }
+        };
 
         // Keep track of the current type to compute offsets for ConstantIndex.
         let mut current_ty = self
