@@ -16,7 +16,7 @@ fn assembled_stdlib_compiles() {
         opt_level: 0,
     };
     let mut db = Database::new(config);
-    match compile_file_to_mir(&mut db, &path) {
+    match compile_file_to_mir(&mut db, &path, 2) {
         Ok(_) => {}
         Err(diags) => {
             let mut counts: std::collections::HashMap<String, usize> =
