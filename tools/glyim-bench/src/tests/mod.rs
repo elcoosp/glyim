@@ -4,4 +4,5 @@
 //! its own determinism/verify contract alongside.
 
 mod corpus_determinism;
+mod diff_tests;
 mod harness_round_trip;
