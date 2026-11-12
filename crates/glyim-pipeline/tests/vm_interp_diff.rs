@@ -55,7 +55,7 @@ fn run_dual(src: &str) -> (i64, i64) {
     };
     let mut db = Database::new(config);
 
-    let mir = compile_file_to_mir(&mut db, &path).expect("fixture must compile to MIR");
+    let mir = compile_file_to_mir(&mut db, &path, 2).expect("fixture must compile to MIR");
     let main_local = Pipeline::entry_main_local_id(&mut db, &path).expect("resolve main");
     let main_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(main_local));
     let main_body = mir.bodies.get(&main_id).expect("main body").clone();
