@@ -1,7 +1,7 @@
 //! CLI surface (`clap` derive), mirroring the `glyim-cli` house pattern of
 //! keeping the parser in the library so it stays unit-testable.
 //!
-//! Two subcommands:
+//! Three subcommands:
 //!
 //! - `glyim-bench run [--iterations N] [--source S] [--json OUT] -- CMD...`
 //!   executes the command and prints the report (text to stdout, JSON to
@@ -9,8 +9,11 @@
 //! - `glyim-bench gate [--max-cov-pct P] REPORT` re-checks a written report
 //!   against the stability budget and exits non-zero on failure — the shape
 //!   a CI perf job consumes.
+//! - `glyim-bench diff [--max-delta-pct P] [--json OUT] BASE CURRENT` diffs
+//!   two reports and exits non-zero when a metric regressed beyond the
+//!   budget — the M2.5 perf-history gate.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
 
@@ -60,7 +63,27 @@ pub enum Command {
         /// The report file to check.
         report: PathBuf,
     },
+    /// Diff a baseline report against a current one (M2.5 perf-history
+    /// seam); exits non-zero when a metric regressed beyond the budget.
+    Diff {
+        /// Allowed upward mean delta, in percent.
+        #[arg(long, default_value_t = DEFAULT_MAX_DELTA_PCT)]
+        max_delta_pct: f64,
+        /// Also write the diff as `glyim.bench-diff/1` JSON to this path.
+        #[arg(long)]
+        json: Option<PathBuf>,
+        /// The baseline `glyim.bench/1` report.
+        baseline: PathBuf,
+        /// The current report to compare against the baseline.
+        current: PathBuf,
+    },
 }
+
+/// Default regression budget for `diff`, in percent: a mean wall or
+/// instruction delta above this fails the gate. Deliberately looser than
+/// the M2.2 stability budget (a stable *noisy* run can still be slower);
+/// CI perf jobs pass an explicit `--max-delta-pct`.
+pub const DEFAULT_MAX_DELTA_PCT: f64 = 5.0;
 
 /// Parse a report file into a [`BenchReport`].
 ///
@@ -135,6 +158,41 @@ pub fn execute_gate(max_cov_pct: f64, report_path: &PathBuf) -> Result<BenchRepo
         });
     }
     Ok(report)
+}
+
+/// Execute [`Command::Diff`]: load both reports through the M2.5
+/// [`ReportStore`](crate::diff::ReportStore) seam, diff, and optionally
+/// persist the `glyim.bench-diff/1` outcome on `--json`.
+///
+/// The caller (main) prints the outcome and maps `!outcome.is_ok()` to a
+/// non-zero exit — the shape a CI perf job consumes.
+///
+/// # Errors
+///
+/// Report read/parse failures for either side, or
+/// [`BenchError::InvalidPlan`] when the two reports measure different
+/// programs.
+pub fn execute_diff(
+    max_delta_pct: f64,
+    baseline_path: &Path,
+    current_path: &Path,
+    json: Option<&Path>,
+) -> Result<crate::diff::BenchDiffOutcome, BenchError> {
+    let store = crate::diff::FileReportStore;
+    let outcome = crate::diff::execute_diff(
+        &store,
+        baseline_path,
+        current_path,
+        &crate::diff::DiffThresholds::new(max_delta_pct),
+    )?;
+    if let Some(path) = json {
+        let text = outcome.to_json_pretty()?;
+        std::fs::write(path, text).map_err(|err| BenchError::ReportWrite {
+            path: path.display().to_string(),
+            detail: err.to_string(),
+        })?;
+    }
+    Ok(outcome)
 }
 
 #[cfg(test)]
