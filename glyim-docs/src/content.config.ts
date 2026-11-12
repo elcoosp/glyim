@@ -1,6 +1,7 @@
 import { defineCollection } from 'astro:content';
 import { docsLoader, i18nLoader } from '@astrojs/starlight/loaders';
 import { changelogsLoader } from 'starlight-changelogs/loader';
+import { blogSchema } from 'starlight-blog/schema';
 import { docsSchema, i18nSchema } from '@astrojs/starlight/schema';
 
 export const collections = {
@@ -14,6 +15,6 @@ export const collections = {
       },
     ]),
   }),
-  docs: defineCollection({ loader: docsLoader(), schema: docsSchema() }),
+  docs: defineCollection({ loader: docsLoader(), schema: docsSchema({ extend: (context) => blogSchema(context).merge(blogSchema(context)) }) }),
   i18n: defineCollection({ loader: i18nLoader(), schema: i18nSchema() }),
 };

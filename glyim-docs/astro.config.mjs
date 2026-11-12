@@ -3,6 +3,12 @@ import imageZoom from 'starlight-image-zoom';
 import headingBadges from 'starlight-heading-badges';
 
 export default await defineDocsConfig({
+  extraStarlight: {
+    components: {
+      MarkdownContent: './src/components/MarkdownContent.astro',
+    },
+  },
+  vite: { ssr: { noExternal: true } },
   llmsTxt: {},
   site: 'https://glyim.vercel.app',
   domain: 'glyim.vercel.app',
@@ -16,7 +22,7 @@ export default await defineDocsConfig({
     baseUrl: 'https://github.com/elcoosp/glyim/edit/main/glyim-docs/src/content/docs/',
   },
   locales: { root: { label: 'English', lang: 'en' } },
-    plugins: [ imageZoom(), headingBadges()],
+    plugins: [imageZoom(),  headingBadges()],
   sidebar: [
     { label: 'Overview', link: '/' },
     { label: 'Tutorials', items: [{ autogenerate: { directory: 'tutorials' } }] },
