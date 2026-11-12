@@ -275,71 +275,21 @@ with the input file and the backtrace."
 /// Print `diags` in the requested format (plan §3.4). `human` renders each via
 /// its `Display` impl (miette-styled); `json` emits one JSON object per
 /// diagnostic on its own line, suitable for editor/LSP consumption.
+///
+/// Both formats live in `glyim_diag::renderer` (plan §3.4 seam) so the JSON
+/// diagnostics schema v1 has a single definition and test suite; this site
+/// only routes streams: JSON records to **stdout** (Rust's
+/// `--message-format=json` convention — a consumer piping stdout gets clean,
+/// machine-parseable records; stderr is reserved for human-readable notes and
+/// is empty in JSON mode), human lines to stderr.
 fn print_diagnostics(diags: &[glyim_diag::GlyimDiagnostic], format: &str) {
+    use glyim_diag::{DiagnosticRenderer, HumanDiagnosticRenderer, JsonDiagnosticRenderer};
     if format == "json" {
-        // P1-O5 (KNOWN_GAPS §5): JSON diagnostics schema v1.
-        //
-        // Each diagnostic is emitted as **one JSON object per line** on
-        // **stdout** (Rust's `--message-format=json` convention — a
-        // consumer piping stdout gets clean, machine-parseable records;
-        // stderr is reserved for human-readable notes and is empty in
-        // JSON mode).
-        //
-        // Schema:
-        //   {
-        //     "version": 1,                // bump on incompatible change
-        //     "code": "T0001",             // ErrorCode Display (unchanged)
-        //     "severity": "error",         // lowercase; error/warning/note/help
-        //     "message": "...",
-        //     "spans": [
-        //       {
-        //         "file": 4294967295,      // FileId raw (mirrors the
-        //                                  // compiler's internal id — LSP
-        //                                  // maps it back to a path via
-        //                                  // the file's SourceMap, same as
-        //                                  // `--error-format=human`'s
-        //                                  // `FileId(N)` display)
-        //         "lo": 114788,            // byte offset
-        //         "hi": 114805
-        //       }, ...
-        //     ]
-        //   }
-        //
-        // Previously: no `version`, no `file`, severity was `Debug`
-        // (capital "Error" instead of lowercase — mismatched against
-        // common editor / CI JSON schemas), and the output went to
-        // stderr (Rust puts it on stdout).
-        for d in diags {
-            let spans: Vec<serde_json::Value> = std::iter::once(&d.span.primary)
-                .chain(d.span.secondary.iter().map(|(s, _)| s))
-                .map(|s| {
-                    let r = s.range();
-                    serde_json::json!({
-                        "file": s.file.to_raw(),
-                        "lo": r.start,
-                        "hi": r.end,
-                    })
-                })
-                .collect();
-            let severity_str = match d.severity {
-                glyim_diag::DiagSeverity::Error => "error",
-                glyim_diag::DiagSeverity::Warning => "warning",
-                glyim_diag::DiagSeverity::Note => "note",
-                glyim_diag::DiagSeverity::Help => "help",
-            };
-            let obj = serde_json::json!({
-                "version": 1,
-                "code": format!("{}", d.code),
-                "severity": severity_str,
-                "message": d.message,
-                "spans": spans,
-            });
-            println!("{obj}");
-        }
+        let rendered = JsonDiagnosticRenderer.render(diags);
+        print!("{rendered}");
     } else {
-        for d in diags {
-            eprintln!("{d}");
-        }
+        let rendered = HumanDiagnosticRenderer.render(diags);
+        eprint!("{rendered}");
     }
 }
 
@@ -671,7 +621,8 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
         write_profile_outputs(&args, &profile)?;
         return Ok(0);
     } else if emit == EmitKind::Syntax {
-        let profile = glyim_pipeline::emit_syntax(&mut db, input, &object_path, proc_registry_ref)?;
+        // Parse-only: no db/proc-registry involvement (see `emit_syntax`).
+        let profile = glyim_pipeline::emit_syntax(input, &object_path)?;
         write_profile_outputs(&args, &profile)?;
         return Ok(0);
     } else if emit == EmitKind::LlvmIr {
@@ -745,15 +696,26 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
         // Forward the program's streams verbatim, then adopt its exit
         // code: `glyim --emit=run prog.g` is scriptable like the linked
         // `--emit=exec` binary. stdout is flushed before stderr so the
-        // two never interleave across buffers.
+        // two never interleave across buffers. A failed forward is
+        // surfaced on stderr (it means the consumer saw truncated
+        // output) without changing the program's exit code.
         {
             use std::io::Write as _;
             let mut out = std::io::stdout();
-            let _ = out.write_all(&outcome.stdout);
-            let _ = out.flush();
+            if let Err(e) = out.write_all(&outcome.stdout).and_then(|()| out.flush()) {
+                eprintln!(
+                    "[I0001] run: forwarding program stdout failed: {e} (output may be truncated)"
+                );
+            }
             let mut err_out = std::io::stderr();
-            let _ = err_out.write_all(&outcome.stderr);
-            let _ = err_out.flush();
+            if let Err(e) = err_out
+                .write_all(&outcome.stderr)
+                .and_then(|()| err_out.flush())
+            {
+                eprintln!(
+                    "[I0001] run: forwarding program stderr failed: {e} (output may be truncated)"
+                );
+            }
         }
         return Ok(outcome.exit_code);
     }
