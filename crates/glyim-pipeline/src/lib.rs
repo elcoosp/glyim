@@ -1255,17 +1255,15 @@ pub fn emit_mir(
     Ok(prepared.profile)
 }
 /// Emit the parser's output syntax tree (`--emit=syntax`).
-pub fn emit_syntax(
-    db: &mut Database,
-    input: &Path,
-    output: &Path,
-    proc_registry: Option<&glyim_proc_macro::Registry>,
-) -> Result<PhaseProfile, Vec<GlyimDiagnostic>> {
+///
+/// Parse-only by design: no `Database` and no proc-macro registry are
+/// involved — the dump is the raw parse tree *before* macro expansion, so
+/// callers without a session can call this free of pipeline state.
+pub fn emit_syntax(input: &Path, output: &Path) -> Result<PhaseProfile, Vec<GlyimDiagnostic>> {
     // `--emit=syntax` is a parse-only dump: it does not run the shared front
     // half. Its profile therefore covers exactly the two phases it executes
     // (load + parse) so `--time-passes` stays meaningful in this mode.
     let recorder = phase_prof::PhaseRecorder::new();
-    let _ = (db, proc_registry);
     let source = {
         let _guard = recorder.enter(Phase::Load);
         std::fs::read_to_string(input).map_err(|e| {
