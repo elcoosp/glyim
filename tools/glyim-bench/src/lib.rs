@@ -65,6 +65,8 @@ pub mod alloc;
 pub mod cli;
 /// Deterministic synthetic program corpus + `glyim.corpus/1` manifest (M2.3).
 pub mod corpus;
+/// Report-to-report comparison and the `ReportStore` seam (M2.5 perf history).
+pub mod diff;
 /// Typed errors with `miette` help text for every seam.
 pub mod error;
 /// The `glyim.bench/1` report document and its renderers.
