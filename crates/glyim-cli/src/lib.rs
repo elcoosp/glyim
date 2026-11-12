@@ -639,7 +639,8 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
         // M2.1: analysis-only measurement — run the front half, write the
         // schema-versioned JSON report, and honour --time-passes /
         // --self-profile exactly like the code-producing modes.
-        let report = glyim_pipeline::compile_stats(&mut db, input, proc_registry_ref)?;
+        let report =
+            glyim_pipeline::compile_stats(&mut db, input, proc_registry_ref, args.opt_level)?;
         std::fs::write(&object_path, report.render_json()).map_err(|e| {
             vec![
                 glyim_diag::GlyimDiagnostic::internal_error(format!(
@@ -660,7 +661,13 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
         return Ok(0);
     }
     if emit == EmitKind::Mir {
-        let profile = glyim_pipeline::emit_mir(&mut db, input, &object_path, proc_registry_ref)?;
+        let profile = glyim_pipeline::emit_mir(
+            &mut db,
+            input,
+            &object_path,
+            proc_registry_ref,
+            args.opt_level,
+        )?;
         write_profile_outputs(&args, &profile)?;
         return Ok(0);
     } else if emit == EmitKind::Syntax {
@@ -668,12 +675,23 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
         write_profile_outputs(&args, &profile)?;
         return Ok(0);
     } else if emit == EmitKind::LlvmIr {
-        let profile =
-            glyim_pipeline::emit_llvm_ir(&mut db, input, &object_path, proc_registry_ref)?;
+        let profile = glyim_pipeline::emit_llvm_ir(
+            &mut db,
+            input,
+            &object_path,
+            proc_registry_ref,
+            args.opt_level,
+        )?;
         write_profile_outputs(&args, &profile)?;
         return Ok(0);
     } else if emit == EmitKind::Asm {
-        let profile = glyim_pipeline::emit_asm(&mut db, input, &object_path, proc_registry_ref)?;
+        let profile = glyim_pipeline::emit_asm(
+            &mut db,
+            input,
+            &object_path,
+            proc_registry_ref,
+            args.opt_level,
+        )?;
         write_profile_outputs(&args, &profile)?;
         return Ok(0);
     } else if emit == EmitKind::Run {
@@ -710,6 +728,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             &mut db,
             input,
             proc_registry_ref,
+            args.opt_level,
         )?;
         // Same warning-rendering rule as the code-producing modes: a
         // successful compile's non-error diagnostics must reach the user.
@@ -905,6 +924,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             &object_path,
             args.codegen_units,
             proc_registry.as_ref(),
+            args.opt_level,
         )?;
         print_diagnostics(&artifacts.warnings, &args.error_format);
         write_profile_outputs(&args, &artifacts.profile)?;
@@ -998,6 +1018,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             &object_path,
             args.codegen_units,
             proc_registry.as_ref(),
+            args.opt_level,
         )?;
         print_diagnostics(&artifacts.warnings, &args.error_format);
         write_profile_outputs(&args, &artifacts.profile)?;
@@ -1010,6 +1031,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             &object_path,
             args.codegen_units,
             proc_registry.as_ref(),
+            args.opt_level,
         )?;
         print_diagnostics(&artifacts.warnings, &args.error_format);
         write_profile_outputs(&args, &artifacts.profile)?;
