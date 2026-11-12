@@ -56,7 +56,7 @@ fn compile_async(src: &str) -> Result<Vec<Arc<Body>>, String> {
     };
     let mut db = Database::new(config);
 
-    let mir = compile_file_to_mir(&mut db, &path).map_err(|diags| {
+    let mir = compile_file_to_mir(&mut db, &path, 2).map_err(|diags| {
         diags
             .iter()
             .map(|d| format!("{:?}: {}", d.code, d.message))
@@ -310,7 +310,7 @@ fn compile_async_full(src: &str) -> Result<glyim_pipeline::MirCompilation, Strin
     };
     let mut db = Database::new(config);
 
-    compile_file_to_mir(&mut db, &path).map_err(|diags| {
+    compile_file_to_mir(&mut db, &path, 2).map_err(|diags| {
         diags
             .iter()
             .map(|d| format!("{:?}: {}", d.code, d.message))
