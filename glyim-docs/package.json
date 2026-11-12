@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.10",
-    "@elcoosp/docs-toolkit": "^0.5.28",
+    "@elcoosp/docs-toolkit": "^0.5.29",
     "astro": "7.4.7",
     "linkedom": "^0.18.0",
     "mermaid": "^11.0.0",
@@ -23,11 +23,12 @@
     "starlight-changelogs": "^0.7.1",
     "starlight-heading-badges": "^0.8.0",
     "starlight-image-zoom": "^0.16.2",
-    "starlight-announcement": "^2.0.0"
+    "starlight-announcement": "^2.0.0",
+    "starlight-seo": "^1.0.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",
-    "@elcoosp/docs-toolkit": "^0.5.28",
+    "@elcoosp/docs-toolkit": "^0.5.29",
     "@emnapi/runtime": "1.11.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
