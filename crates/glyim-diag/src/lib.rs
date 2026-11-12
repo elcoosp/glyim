@@ -3,6 +3,10 @@
 pub use glyim_span::{MultiSpan, Span};
 pub use miette::{Diagnostic as MietteDiagnostic, Report, Severity, SourceSpan};
 
+pub mod renderer;
+
+pub use self::renderer::{DiagnosticRenderer, HumanDiagnosticRenderer, JsonDiagnosticRenderer};
+
 use std::fmt;
 use std::sync::Arc;
 
