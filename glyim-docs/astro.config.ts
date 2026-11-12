@@ -15,7 +15,7 @@ export default await defineDocsConfig({
     { icon: 'github', label: 'GitHub', href: 'https://github.com/elcoosp/glyim' },
   ],
   editLink: {
-    baseUrl: 'https://github.com/elcoosp/glyim/edit/main/docs-site/src/content/docs/',
+    baseUrl: 'https://github.com/elcoosp/glyim/edit/main/glyim-docs/src/content/docs/',
   },
   locales: { root: { label: 'English', lang: 'en' } },
     plugins: [docLinks(), imageZoom(), headingBadges()],
