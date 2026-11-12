@@ -90,7 +90,7 @@ Per-crate extras (declared directly by members): `termcolor`, `similar`,
 
 ## 4. Exclusions & Alternatives
 
-Deliberately **not** in the stack (as of 0.7.0):
+Deliberately **not** in the stack (as of 0.10.0):
 
 *   **`salsa`** — the query engine is planned (M6, master plan); today
     `glyim-db` is an interner + VFS + `TyCtx` handle and the driver is a
