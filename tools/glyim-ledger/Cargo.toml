@@ -2,7 +2,7 @@
 name = "glyim-ledger"
 version = "0.10.0"
 edition = "2024"
-description = "M1.1 Readiness Ledger CLI: `check` registry gate, `gaps` witness report (M1.7), `next` work queue + `explain` (§3.7/§3.9), `compute` level engine (M1.8), `inventory`, and JSON-Schema export"
+description = "M1.1 Readiness Ledger CLI: `check` registry gate, `gaps` witness report (M1.7), `next` work queue + `explain` (§3.7/§3.9), `compute` level engine (M1.8), `gates` release-gate report (M1.12), `inventory`, and JSON-Schema export"
 publish = false
 
 [dependencies]
@@ -57,6 +57,16 @@ path = "benches/status.rs"
 name = "diff"
 harness = false
 path = "benches/diff.rs"
+
+[[bench]]
+name = "gates"
+harness = false
+path = "benches/gates.rs"
+
+[[bench]]
+name = "verify"
+harness = false
+path = "benches/verify.rs"
 
 [lints]
 workspace = true
