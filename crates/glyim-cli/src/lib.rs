@@ -38,7 +38,7 @@ pub struct CliArgs {
     /// `Struct`.
     pub link_flags: Option<String>,
     /// Link-time optimization strategy: `off` (default), `fat` (in-compiler
-    /// module merge + optimize), or `thin` (tracked gap — requires linker
+    /// module merge + optimize) is the tracked gap, or `thin` (linked via `llvm-lto2`); `fat` (requires
     /// driver integration; surfaces an explicit error rather than silently
     /// no-op). Phase 10.2.
     #[arg(long = "lto", default_value = "off")]
@@ -464,7 +464,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
     // `x86_64-unknown-linux-gnu` produced an ELF object on every host,
     // so the local `cc`/`ld64` on macOS/Windows refused to link
     // (`ld: unknown file type`). Falls back inside the helper to the
-    // historical default if `rustc -vV` cannot be queried.
+    // historical default if `std::env::consts` cannot classify the platform.
     let target_triple = args.target.clone().unwrap_or_else(host_target_triple);
 
     // Parse the requested LTO strategy (Phase 10.2). `Thin` is a tracked gap
