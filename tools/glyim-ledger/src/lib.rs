@@ -1,6 +1,6 @@
 //! CLI library for the Readiness Ledger tool (plan M1.1).
 //!
-//! Eleven subcommands:
+//! Twelve subcommands:
 //!
 //! - `glyim-ledger check [ROOT]` — load `ROOT/ledger`, run the schema and
 //!   semantic validators, cross-check the M1.3 inventory extractors, print
@@ -41,6 +41,11 @@
 //!   the plan §6 M1.13 determinism self-check (first slice): every ledger
 //!   pipeline runs twice from independent load passes and the rendered
 //!   bytes must match; any drift fails the command (see [`verify`]).
+//! - `glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH]
+//!   [--check]` — the plan §6 M1.9 remainder: generate `KNOWN_GAPS.md`
+//!   (or the `glyim.known-gaps/1` JSON face) as a pure function of the gap
+//!   registry; `--out PATH` writes it, `--check` byte-compares it against
+//!   the committed document and fails on any drift (see [`render`]).
 //! - `glyim-ledger schema [OUT]` — write the JSON-Schema export document
 //!   for both entry types to `OUT` (pretty-printed), or to stdout.
 //! - `glyim-ledger inventory [ROOT]` — enumerate the source-derived
@@ -63,6 +68,7 @@ pub mod diff;
 pub mod explain;
 pub mod gates;
 pub mod next;
+pub mod render;
 pub mod status;
 pub mod verify;
 
@@ -90,6 +96,11 @@ pub use next::{
     FeatureSource, GapSource, NEXT_SCHEMA, NextOutcome, WorkItem, WorkItemSource, WorkKind,
     build_queue, feature_depths, filter, format_next_json, format_next_report, parse_lane,
     run_next,
+};
+pub use render::{
+    JsonGapRenderer, KNOWN_GAPS_MD_END, KNOWN_GAPS_MD_START, KNOWN_GAPS_SCHEMA, KnownGapDoc,
+    KnownGapsDocument, KnownGapsRenderer, MarkdownGapRenderer, RenderGapsFormat, RenderGapsOutcome,
+    run_render_gaps,
 };
 pub use status::{
     STATUS_MD_END, STATUS_MD_START, STATUS_SCHEMA, StatusOutcome, format_status_json,
@@ -254,6 +265,37 @@ pub enum LedgerCliError {
         /// The diagnostic detail (IO or serialization failure).
         detail: String,
     },
+    /// `render-gaps --format` received a value outside `md|json`.
+    RenderBadFormat {
+        /// The offending value.
+        value: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `render-gaps --out`/`render-gaps --format` was passed without its
+    /// value.
+    RenderMissingValue {
+        /// The flag that was missing its value (`--out` or `--format`).
+        flag: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `render-gaps --check` found the committed document drifted from the
+    /// registry render (or unreadable): the file and
+    /// `ledger/gaps/known/*.toml` disagree (plan M1.9 determinism gate).
+    RenderDrift {
+        /// The checked document path.
+        path: String,
+        /// What the comparison (or read) found.
+        detail: String,
+    },
+    /// `render-gaps --out` could not write the rendered document.
+    RenderWrite {
+        /// The output path.
+        path: String,
+        /// The IO error message.
+        detail: String,
+    },
 }
 
 impl fmt::Display for LedgerCliError {
@@ -329,6 +371,19 @@ impl fmt::Display for LedgerCliError {
             Self::ExplainMissingId { usage } => {
                 write!(f, "explain expects a registry ID (gap or feature)\n{usage}")
             }
+            Self::RenderBadFormat { value, usage } => {
+                write!(f, "--format expects md or json, got {value}\n{usage}")
+            }
+            Self::RenderMissingValue { flag, usage } => {
+                write!(f, "{flag} expects a value (a path, or md|json)\n{usage}")
+            }
+            Self::RenderDrift { path, detail } => {
+                write!(
+                    f,
+                    "KNOWN_GAPS document drifted from the registry: {path}: {detail}"
+                )
+            }
+            Self::RenderWrite { path, detail } => write!(f, "cannot write {path}: {detail}"),
         }
     }
 }
@@ -360,6 +415,10 @@ impl miette::Diagnostic for LedgerCliError {
             Self::VerifyMissingValue { .. } => "glyim-ledger::verify_missing_value",
             Self::SnapshotWrite { .. } => "glyim-ledger::snapshot_write",
             Self::ExplainMissingId { .. } => "glyim-ledger::explain_missing_id",
+            Self::RenderBadFormat { .. } => "glyim-ledger::render_bad_format",
+            Self::RenderMissingValue { .. } => "glyim-ledger::render_missing_value",
+            Self::RenderDrift { .. } => "glyim-ledger::render_drift",
+            Self::RenderWrite { .. } => "glyim-ledger::render_write",
         }))
     }
 
@@ -466,6 +525,26 @@ impl miette::Diagnostic for LedgerCliError {
             Self::ExplainMissingId { .. } => Some(Box::new(
                 "pass the registry ID to explain, e.g. `explain GAP-0002` or \
                  `explain LANG-FOR-VEC-INTOITER`"
+                    .to_string(),
+            )),
+            Self::RenderBadFormat { .. } => Some(Box::new(
+                "`--format json` renders the glyim.known-gaps/1 contract; \
+                 the Markdown document is the default"
+                    .to_string(),
+            )),
+            Self::RenderMissingValue { .. } => Some(Box::new(
+                "the flag needs its value on the same command line, e.g. \
+                 `--out KNOWN_GAPS.md` or `--format json`"
+                    .to_string(),
+            )),
+            Self::RenderDrift { .. } => Some(Box::new(
+                "run `cargo run -p glyim-ledger -- render-gaps --out KNOWN_GAPS.md` \
+                 to regenerate the document from the registry"
+                    .to_string(),
+            )),
+            Self::RenderWrite { .. } => Some(Box::new(
+                "check that the --out path is writable; the document is the \
+                 generated KNOWN_GAPS.md face (plan M1.9)"
                     .to_string(),
             )),
         }
@@ -579,6 +658,24 @@ pub enum Command {
         /// Output format; [`VerifyFormat::Text`] by default.
         format: VerifyFormat,
     },
+    /// `render-gaps [ROOT] [--format md|json] [--out PATH] [--check]` —
+    /// the plan §6 M1.9 remainder: generate `KNOWN_GAPS.md` (or the
+    /// `glyim.known-gaps/1` JSON face) from the gap registry; `--check`
+    /// fails on any drift between the committed document and the render.
+    RenderGaps {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// Output face; [`RenderGapsFormat::Markdown`] by default.
+        format: RenderGapsFormat,
+        /// File to write the rendered document to; `None` prints to
+        /// stdout. `--check` compares against this file (default
+        /// `<ROOT>/KNOWN_GAPS.md`).
+        out: Option<PathBuf>,
+        /// Compare the rendered bytes against the target document instead
+        /// of writing it (the determinism gate).
+        check: bool,
+    },
 }
 
 /// Output format of the `compute` subcommand.
@@ -629,7 +726,7 @@ pub enum VerifyFormat {
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout; `next` filters by\n\
      \x20 lane (L|F|T|M|B|Q) and prints the glyim.ledger-next/1 JSON queue;\n\
@@ -645,7 +742,10 @@ pub fn usage() -> String {
      \x20 release-gate verdicts declared in `ledger/gates.toml` —\n\
      \x20 unmeasured gates are displayed, never silently passed; `verify`\n\
      \x20 runs every ledger pipeline twice from independent load passes\n\
-     \x20 and fails on any rendered-byte drift (plan M1.13)."
+     \x20 and fails on any rendered-byte drift (plan M1.13);\n\
+     \x20 `render-gaps` generates KNOWN_GAPS.md (or the glyim.known-gaps/1\n\
+     \x20 JSON face) from the gap registry — `--out PATH` writes it,\n\
+     \x20 `--check` fails on drift (plan M1.9)."
         .into()
 }
 
@@ -667,7 +767,7 @@ where
         }),
         Some(
             "check" | "gaps" | "schema" | "inventory" | "next" | "explain" | "compute" | "status"
-            | "diff" | "gates" | "verify",
+            | "diff" | "gates" | "verify" | "render-gaps",
         ) => {
             let rest = &items[1..];
             if items[0] == "next" {
@@ -690,6 +790,9 @@ where
             }
             if items[0] == "verify" {
                 return parse_verify(rest);
+            }
+            if items[0] == "render-gaps" {
+                return parse_render_gaps(rest);
             }
             if rest.len() > 1 {
                 return Err(LedgerCliError::ExtraArgument {
@@ -1120,6 +1223,65 @@ fn parse_verify(rest: &[String]) -> Result<Command, LedgerCliError> {
         root: root.unwrap_or_else(|| PathBuf::from(".")),
         evidence,
         format,
+    })
+}
+
+/// Parse the `render-gaps` subcommand (plan M1.9 remainder).
+fn parse_render_gaps(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut out: Option<PathBuf> = None;
+    let mut format = RenderGapsFormat::Markdown;
+    let mut check = false;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--out" | "--format" => {
+                let flag = rest[index].as_str();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::RenderMissingValue {
+                        flag: flag.to_string(),
+                        usage: usage(),
+                    });
+                };
+                if flag == "--out" {
+                    out = Some(PathBuf::from(value));
+                } else {
+                    format = RenderGapsFormat::parse(value).ok_or_else(|| {
+                        LedgerCliError::RenderBadFormat {
+                            value: value.clone(),
+                            usage: usage(),
+                        }
+                    })?;
+                }
+                index += 2;
+            }
+            "--check" => {
+                check = true;
+                index += 1;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    Ok(Command::RenderGaps {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        format,
+        out,
+        check,
     })
 }
 
