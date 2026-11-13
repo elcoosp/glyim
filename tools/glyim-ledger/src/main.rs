@@ -419,6 +419,32 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         }
+        Command::EvidenceAudit { root, format } => {
+            // The same store-discovery path `evidence check` uses, so the
+            // two faces cannot disagree about what the store contains;
+            // the file-backed fingerprint digests the real fixture bytes.
+            let outcome = glyim_ledger::run_evidence_audit(
+                &root,
+                &glyim_ledger::ProjectEvidenceSource::new(&root, None),
+                &glyim_ledger::FileFixtureFingerprint,
+            );
+            match format {
+                glyim_ledger::EvidenceFormat::Text => {
+                    print!("{}", glyim_ledger::format_evidence_audit_text(&outcome));
+                }
+                glyim_ledger::EvidenceFormat::Json => {
+                    print!("{}", glyim_ledger::format_evidence_audit_json(&outcome));
+                }
+            }
+            // The audit face is a gate: a store that outlived its fixtures
+            // (missing, drifted, unreadable) fails after reporting every
+            // finding.
+            if outcome.is_ok() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
         Command::Waivers { root, format } => {
             // The file-backed source is the only CLI wiring: the same
             // `load_waivers` loader and diagnostics the `diff` gate uses,
@@ -457,7 +483,7 @@ fn main() -> ExitCode {
                 feature,
                 reason,
                 issue,
-                days: days.unwrap_or(7),
+                days: days.unwrap_or(glyim_ledger::DEFAULT_WAIVER_DAYS),
             };
             match glyim_ledger::run_waivers_grant(
                 &root,
@@ -501,6 +527,44 @@ fn main() -> ExitCode {
                         }
                         glyim_ledger::WaiversFormat::Json => {
                             print!("{}", glyim_ledger::format_waivers_revoke_json(&outcome));
+                        }
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Command::WaiversExtend {
+            root,
+            id,
+            days,
+            format,
+        } => {
+            // The write face routes every rejection through the typed
+            // error seam (a rejected extend is a CLI failure, not a
+            // diagnostic — nothing was rewritten; the revoke-face
+            // dispatch shape). The `--days` default resolves here (the
+            // parser stays flag-optional, the grant-face shape).
+            let request = glyim_ledger::WaiversExtendRequest {
+                id,
+                days: days.unwrap_or(glyim_ledger::DEFAULT_WAIVER_DAYS),
+            };
+            match glyim_ledger::run_waivers_extend(
+                &root,
+                &request,
+                &glyim_ledger::FileWaiverSource,
+                &glyim_ledger::FileWaiverExtender,
+            ) {
+                Ok(outcome) => {
+                    match format {
+                        glyim_ledger::WaiversFormat::Text => {
+                            print!("{}", glyim_ledger::format_waivers_extend_text(&outcome));
+                        }
+                        glyim_ledger::WaiversFormat::Json => {
+                            print!("{}", glyim_ledger::format_waivers_extend_json(&outcome));
                         }
                     }
                     ExitCode::SUCCESS
