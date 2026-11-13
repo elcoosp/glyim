@@ -73,10 +73,21 @@
 //! cargo run -p glyim-bench --example history_baseline
 //! ```
 //!
-//! The M1.5 evidence schema reserved `instructions` / `rss_kb` columns for
-//! exactly this instrumentation; wiring those columns into `glyim-test` is
-//! the next M2.3 slice, after the corpus substrate has been committed with
-//! hashes.
+//! Gate a whole benchmark matrix against the recorded history and catch a
+//! uniform sub-budget drift with the geo-mean budget (plan §6 M2.5
+//! remainder, §325 "fail >2% per benchmark or >0.5% geo-mean"):
+//!
+//! ```text
+//! cargo run -p glyim-bench --example matrix_gate
+//! ```
+//!
+//! Measure the total drift across a program's committed history window —
+//! the accumulated ratchet that per-run diffs never see (plan M2.5
+//! complement):
+//!
+//! ```text
+//! cargo run -p glyim-bench --example history_trend
+//! ```
 
 /// Gross-allocation counting allocator (`counting_allocator!` macro).
 pub mod alloc;
@@ -94,6 +105,9 @@ pub mod error;
 /// The append-only perf-history store and the latest-baseline seam
 /// (plan §6 M2.5 `perf/history/*.jsonl`).
 pub mod history;
+/// The multi-report diff matrix and the geo-mean aggregate gate
+/// (plan §6 M2.5 remainder: "fail >2% per benchmark or >0.5% geo-mean").
+pub mod matrix;
 /// The `glyim.bench/1` report document and its renderers.
 pub mod report;
 /// The iteration runner: N executions of one command.
@@ -104,6 +118,9 @@ pub mod scaling;
 pub mod source;
 /// Sample statistics and the CoV stability gate.
 pub mod stats;
+/// The history trend analyzer: total drift across the committed window
+/// (plan M2.5 complement — the accumulated-drift ratchet detector).
+pub mod trend;
 
 #[cfg(test)]
 mod tests;
