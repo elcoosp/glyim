@@ -47,11 +47,17 @@ impl ReservationAnalysis {
                 let mut bits = BitSet::with_capacity(num_stmts + 1);
                 let mut current = start_current;
                 if start_idx <= num_stmts {
-                    for i in start_idx..num_stmts {
+                    // `bits` indexes statements absolutely, so the offset is
+                    // re-based onto `start_idx` (kept as a range-index loop's
+                    // semantics without the raw index walk).
+                    for (offset, stmt) in body.basic_blocks[block].statements[start_idx..num_stmts]
+                        .iter()
+                        .enumerate()
+                    {
+                        let i = start_idx + offset;
                         if current {
                             bits.insert(i);
                         }
-                        let stmt = &body.basic_blocks[block].statements[i];
                         let mut checker = LocalReadChecker::new(dest_local);
                         if let StatementKind::Assign(_, rvalue) = &stmt.kind {
                             walk_rvalue_reads(rvalue, &mut checker);
