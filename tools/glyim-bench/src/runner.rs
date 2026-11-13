@@ -256,7 +256,13 @@ pub fn run_iterated(plan: &RunPlan) -> Result<BenchReport, BenchError> {
     }
 
     let walls: Vec<u64> = samples.iter().map(|s| s.wall_ns).collect();
-    let wall_stats: SampleStats = stats::summarize(&walls).expect("iterations >= 1");
+    // Unreachable empty: the `iterations == 0` guard above returned early.
+    // The typed fallback keeps the house rule (no `expect` outside tests)
+    // while failing with the same plan error the guard uses.
+    let wall_stats: SampleStats =
+        stats::summarize(&walls).ok_or_else(|| BenchError::InvalidPlan {
+            detail: "at least one iteration is required (empty wall sample)".to_string(),
+        })?;
     let ins_values: Vec<u64> = samples.iter().filter_map(|s| s.instructions).collect();
     let ins_stats = stats::summarize(&ins_values);
 
