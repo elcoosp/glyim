@@ -139,7 +139,7 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `tools/glyim-pilot` | Agent orchestrator with gate bundles (clippy, fmt, contracts, coverage, mutation, ledger). |
 | `tools/ledger-schema` | `deny_unknown_fields` schemas shared by the readiness ledger and inventory extractors. |
 | `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `gaps`, `next`, `explain`, `compute`, `status`, `diff`, `inventory`, `schema` — registry consistency gates run in CI; `next` renders the plan §3.9 deterministic work queue (`glyim.ledger-next/1` JSON) for agent consumers and `explain` resolves one registry ID against it; `compute` runs the plan M1.8 level engine — a pure function of the registry, `glyim.evidence/1` records, and `ledger/policy.toml` (`glyim.ledger-compute/1` JSON with `--format json`; `--snapshot PATH` persists the `glyim.ledger-snapshot/1` document); `status` renders the computed status as the marker-delimited Markdown block or the `glyim.status/1` JSON contract (plan M1.9 first slice); `diff` is the plan M1.10 readiness-regression gate between two snapshots — regressions block unless an unexpired `ledger/waivers.toml` waiver covers them (constitution C9). |
-| `tools/glyim-bench` | M2.2 measurement harness: `perf stat`/callgrind instruction counts, wall time, child RSS, a counting allocator, the CoV stability gate, and the M2.3 deterministic corpus generators (`glyim.corpus/1` manifest); `diff` is the M2.5 perf-history gate between two `glyim.bench/1` reports, `scale` (M2.4) measures a `{size}`-parameterized command across input sizes and gates the fitted log-log scaling exponent, `budget` (M2.6) enforces the committed absolute `glyim.bench-budgets/1` budgets per benchmark — an exceeded mean, an unmeasured instruction bound, or an unbudgeted program fails the gate — and `history record`/`show`/`diff` append runs to the append-only `glyim.bench-history/1` JSONL perf history (plan §6 M2.5) and diff a current report against the latest recorded baseline. |
+| `tools/glyim-bench` | M2.2 measurement harness: `perf stat`/callgrind instruction counts, wall time, child RSS, a counting allocator, the CoV stability gate, and the M2.3 deterministic corpus generators (`glyim.corpus/1` manifest); `diff` is the M2.5 perf-history gate between two `glyim.bench/1` reports, `scale` (M2.4) measures a `{size}`-parameterized command across input sizes and gates the fitted log-log scaling exponent, `budget` (M2.6) enforces the committed absolute `glyim.bench-budgets/1` budgets per benchmark — an exceeded mean, an unmeasured instruction bound, or an unbudgeted program fails the gate — and `history record`/`show`/`diff`/`trend` append runs to the append-only `glyim.bench-history/1` JSONL perf history (plan §6 M2.5), diff a current report against the latest recorded baseline, and measure the total drift across the last N recorded runs of a program (`glyim.bench-trend/1` — the accumulated-ratchet class no per-run diff sees); `matrix` (M2.5 remainder) diffs a whole benchmark set against the latest recorded baseline of each program and gates the per-benchmark deltas **and** their geo-mean (`glyim.bench-matrix/1`, plan §325: fail >2% per benchmark or >0.5% geo-mean — the aggregate clause that catches a uniform sub-budget drift no single row trips). |
 
 ### Compilation Pipeline
 
@@ -522,6 +522,12 @@ cargo run -p glyim-bench --example budget_check
 # Append runs to the perf history; diff against the latest baseline (M2.5).
 cargo run -p glyim-bench --example history_baseline
 
+# Gate a benchmark matrix against the history; catch uniform sub-budget drift with the geo-mean budget (M2.5 remainder).
+cargo run -p glyim-bench --example matrix_gate
+
+# Measure total drift across a program's committed history window (M2.5 complement).
+cargo run -p glyim-bench --example history_trend
+
 # Walk the virtual filesystem seam every driver sits on.
 cargo run -p glyim-vfs --example vfs_walkthrough
 
@@ -687,7 +693,13 @@ session log.
   seam) is landed, and the M2.5 perf-history store (first slice:
   `glyim-bench history record`/`show`/`diff` over append-only
   `glyim.bench-history/1` JSONL files with the latest-record baseline
-  selection) is landed. The next
+  selection) is landed, and the M2.5 remainder — the matrix gate
+  (`glyim-bench matrix` over a `glyim.bench-matrix/1` outcome, the
+  `BaselineSource` seam over the history, and the plan §325 "fail >2% per
+  benchmark or >0.5% geo-mean" aggregate budget) plus its complement, the
+  windowed trend analyzer (`glyim-bench history trend` over a
+  `glyim.bench-trend/1` report, the accumulated-drift ratchet no per-run
+  diff sees) — are landed. The next
   plan items are the M1.9 renderers remainder (generated `KNOWN_GAPS.md`,
   the Astro readiness page), the M1.10 CI wiring (the "STATUS is up to
   date" check, the nightly full-evidence job), and the rest of M2.3 (the
