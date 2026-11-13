@@ -10,4 +10,6 @@ mod corpus_determinism;
 mod diff_tests;
 mod harness_round_trip;
 mod history_tests;
+mod matrix_tests;
 mod scaling_tests;
+mod trend_tests;
