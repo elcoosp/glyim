@@ -1,7 +1,7 @@
 //! CLI surface (`clap` derive), mirroring the `glyim-cli` house pattern of
 //! keeping the parser in the library so it stays unit-testable.
 //!
-//! Three subcommands:
+//! Four subcommands:
 //!
 //! - `glyim-bench run [--iterations N] [--source S] [--json OUT] -- CMD...`
 //!   executes the command and prints the report (text to stdout, JSON to
@@ -12,6 +12,11 @@
 //! - `glyim-bench diff [--max-delta-pct P] [--json OUT] BASE CURRENT` diffs
 //!   two reports and exits non-zero when a metric regressed beyond the
 //!   budget — the M2.5 perf-history gate.
+//! - `glyim-bench scale [--iterations N] [--sizes LIST] [--max-exponent E]
+//!   [--json OUT] -- CMD...` measures the command at every size (one argv
+//!   element must carry the `{size}` placeholder) and fits the log-log
+//!   scaling exponent — the M2.4 analyzer; exits non-zero when the fitted
+//!   exponent exceeds the budget.
 
 use std::path::{Path, PathBuf};
 
@@ -20,6 +25,7 @@ use clap::{Parser, Subcommand};
 use crate::error::BenchError;
 use crate::report::BenchReport;
 use crate::runner::{RunPlan, detect_source, run_iterated};
+use crate::scaling::DEFAULT_MAX_SCALING_EXPONENT;
 use crate::source::MeasurementSource;
 use crate::stats::DEFAULT_MAX_COV_PCT;
 
@@ -76,6 +82,31 @@ pub enum Command {
         baseline: PathBuf,
         /// The current report to compare against the baseline.
         current: PathBuf,
+    },
+    /// Measure COMMAND at every input size and fit the scaling exponent
+    /// (M2.4 analyzer); exits non-zero when the exponent exceeds the
+    /// budget.
+    Scale {
+        /// Iterations per size (the M2.2 gate expects 10).
+        #[arg(long, default_value_t = 10)]
+        iterations: usize,
+        /// Counter source; default auto-detects `perf`, falling back to wall.
+        #[arg(long)]
+        source: Option<MeasurementSource>,
+        /// Comma-separated input sizes, e.g. `100,1000,10000`.
+        #[arg(long)]
+        sizes: String,
+        /// Allowed scaling exponent (1.0 = linear).
+        #[arg(long, default_value_t = DEFAULT_MAX_SCALING_EXPONENT)]
+        max_exponent: f64,
+        /// Also write the outcome as `glyim.bench-scaling/1` JSON to this
+        /// path.
+        #[arg(long)]
+        json: Option<PathBuf>,
+        /// The measured command, after `--`; one argument must carry the
+        /// `{size}` placeholder.
+        #[arg(last = true)]
+        command: Vec<String>,
     },
 }
 
@@ -195,6 +226,72 @@ pub fn execute_diff(
     Ok(outcome)
 }
 
+/// Parses the `--sizes` CSV into a sorted, distinct size list.
+///
+/// # Errors
+///
+/// [`BenchError::InvalidPlan`] for an empty list, a non-integer element, a
+/// zero size, or a duplicate.
+pub fn parse_sizes(sizes: &str) -> Result<Vec<u64>, BenchError> {
+    let parsed: Vec<u64> = sizes
+        .split(',')
+        .map(|element| {
+            element
+                .trim()
+                .parse::<u64>()
+                .map_err(|_| BenchError::InvalidPlan {
+                    detail: format!("`--sizes` element {element:?} is not a positive integer"),
+                })
+        })
+        .collect::<Result<_, _>>()?;
+    let mut sorted = parsed;
+    sorted.sort_unstable();
+    if sorted.windows(2).any(|pair| pair[0] == pair[1]) {
+        return Err(BenchError::InvalidPlan {
+            detail: "`--sizes` elements must be distinct".to_string(),
+        });
+    }
+    if sorted.is_empty() {
+        return Err(BenchError::InvalidPlan {
+            detail: "`--sizes` needs at least one size".to_string(),
+        });
+    }
+    Ok(sorted)
+}
+
+/// Execute [`Command::Scale`]: measure the command at every size through
+/// the M2.4 [`run_scaling`](crate::scaling::run_scaling) wiring and
+/// optionally persist the `glyim.bench-scaling/1` outcome on `--json`.
+///
+/// The caller (main) prints the outcome and maps `!outcome.is_ok()` to a
+/// non-zero exit — the shape a CI perf job consumes.
+///
+/// # Errors
+///
+/// Any [`crate::scaling::run_scaling`] error, or a report-write failure on
+/// the `--json` path.
+pub fn execute_scale(
+    iterations: usize,
+    source: Option<MeasurementSource>,
+    sizes: &str,
+    max_exponent: f64,
+    json: Option<&PathBuf>,
+    command: &[String],
+) -> Result<crate::scaling::ScalingOutcome, BenchError> {
+    let plan = crate::scaling::ScalingPlan::new(iterations, parse_sizes(sizes)?, command.to_vec())
+        .with_max_exponent(max_exponent)
+        .with_source(source.unwrap_or_else(detect_source));
+    let outcome = crate::scaling::run_scaling(&plan)?;
+    if let Some(path) = json {
+        let text = outcome.to_json_pretty()?;
+        std::fs::write(path, text).map_err(|err| BenchError::ReportWrite {
+            path: path.display().to_string(),
+            detail: err.to_string(),
+        })?;
+    }
+    Ok(outcome)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Cli, Command};
@@ -257,5 +354,43 @@ mod tests {
         };
         assert_eq!(max_cov_pct, 0.1);
         assert_eq!(report.display().to_string(), "perf/report.json");
+    }
+
+    #[test]
+    fn scale_defaults_match_the_m2_4_analyzer_shape() {
+        let Command::Scale {
+            iterations,
+            source,
+            sizes,
+            max_exponent,
+            json,
+            command,
+        } = parse(&[
+            "glyim-bench",
+            "scale",
+            "--sizes",
+            "100,1000",
+            "--",
+            "echo",
+            "{size}",
+        ])
+        else {
+            panic!("scale subcommand expected");
+        };
+        assert_eq!(iterations, 10);
+        assert!(source.is_none(), "auto-detect by default");
+        assert_eq!(sizes, "100,1000");
+        assert!((max_exponent - 1.0).abs() < f64::EPSILON, "linear budget");
+        assert!(json.is_none());
+        assert_eq!(command, vec!["echo".to_string(), "{size}".to_string()]);
+    }
+
+    #[test]
+    fn parse_sizes_sorts_distinct_sizes_and_rejects_garbage() {
+        let sizes = super::parse_sizes("1000, 100, 10000").expect("parses");
+        assert_eq!(sizes, [100, 1_000, 10_000], "sorted ascending");
+        assert!(super::parse_sizes("").is_err());
+        assert!(super::parse_sizes("100,abc").is_err());
+        assert!(super::parse_sizes("100,100").is_err(), "duplicates");
     }
 }
