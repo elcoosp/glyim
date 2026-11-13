@@ -20,7 +20,7 @@ The `glyim` compiler driver (built as `glyim-cli`) compiles a single `.g` source
 | `-o`, `--output <PATH>` | path | derived | no | Write the output artifact to this path. |
 | `--emit <KIND>` | enum | `obj` | no | Output artifact kind — see [emit kinds](#emit-kinds). |
 | `-O`, `--opt-level <N>` | 0–3 | `0` | no | Optimization level. |
-| `--target <TRIPLE>` | string | host default | no | Target triple, for example `aarch64-unknown-linux-gnu`. Defaults to `x86_64-unknown-linux-gnu` when unset. |
+| `--target <TRIPLE>` | string | host default | no | Target triple, for example `aarch64-unknown-linux-gnu`. Defaults to the host triple when unset. |
 | `--backend <NAME>` | enum | `llvm` | no | Code generation backend: `llvm`, `bytecode`, or `interp` (the MIR interpreter used by `--emit run`). |
 | `--linker <PATH>` | path | system linker | no | Override the system linker used to link executables. |
 | `--link-flags <FLAGS>` | string | none | no | Extra flags passed to the linker. |
@@ -56,7 +56,7 @@ The `glyim` compiler driver (built as `glyim-cli`) compiles a single `.g` source
 | Value | Behavior |
 |-------|----------|
 | `off` | No link-time optimization (default). |
-| `fat` | In-compiler module merge and optimize. Requires multi-CGU support, which is not yet implemented; requesting it with multiple CGUs errors cleanly rather than silently ignoring the request. |
+| `fat` | In-compiler module merge and optimize. Requires multi-CGU support, which is not yet implemented; requesting it errors cleanly (regardless of CGU count) rather than silently ignoring the request. |
 | `thin` | Requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution the backend was built against. Requesting `thin` with `--backend bytecode` is an explicit error. |
 
 ## Internal compiler errors
