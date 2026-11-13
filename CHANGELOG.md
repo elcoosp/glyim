@@ -8,6 +8,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Readiness-regression gate (M1.10 first slice)**:
+  `tools/glyim-ledger/src/diff.rs` implements the plan's `ledger diff` —
+  a per-feature level diff between two `glyim.ledger-snapshot/1` snapshot
+  documents (produced by `glyim-ledger compute --snapshot PATH`) with the
+  constitution-C9 waiver gate: a computed-level drop (or a feature
+  dropped from the registry) fails the gate unless an unexpired
+  `ledger/waivers.toml` waiver covers it, a waiver expiring beyond the
+  14-day horizon is inert (error diagnostic), and an *expired* waiver that
+  would have covered a regression is itself an error so a stale
+  `waivers.toml` can never mask a real regression. Split exactly like
+  `compute.rs`: the `SnapshotStore` trait (`FileSnapshotStore` on disk,
+  `InMemorySnapshotStore` for tests) abstracts where snapshots come from,
+  `diff_levels` is the pure engine, `execute_diff`/`run_diff` wire it;
+  hand-rolled proleptic-Gregorian date arithmetic (`NaiveDate`,
+  Hinnant's day-number algorithms) keeps the dependency-light convention.
+  Renderers are the text report and the `glyim.ledger-diff/1` JSON
+  contract; wired as
+  `glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]`, with
+  the `readiness_diff` example and the dependency-free `diff` bench.
+- **Scaling analyzer (M2.4 first slice)**:
+  `tools/glyim-bench/src/scaling.rs` implements the plan's M2.4 —
+  measure a `{size}`-parameterized command at every input size and fit
+  the log-log scaling exponent. `fit_scaling` is a pure ordinary
+  least-squares over `(log size, log mean wall time)` (exact recovery of
+  power laws, constant series pinned to exponent 0 by convention),
+  `substitute_size` is the argv contract, `run_scaling` drives the M2.2
+  runner per size, and `execute_scaling` fits a stored report history
+  through the M2.5 `ReportStore` seam — a committed report history
+  doubles as a scaling-history input without a new IO boundary. Budget
+  semantics mirror the M2.5 gate (exponent strictly above the budget is
+  `SUPERLINEAR` and fails); wired as
+  `glyim-bench scale [--sizes LIST] [--max-exponent E] -- CMD...`, with
+  the `scaling_fit` example and the dependency-free `scaling_engine`
+  bench.
+
+### Fixed
+- `tools/glyim-bench/src/main.rs`: the `diff` arm passed
+  `json.as_ref()` (`Option<&PathBuf>`) into `execute_diff`, which takes
+  `Option<&Path>` — the binary did not compile (`E0308`). Fixed with
+  `json.as_deref()`; `cargo check --workspace --all-targets` is green
+  again.
+- `crates/glyim-cli/src/lib.rs` / `crates/glyim-cli/src/linker.rs`: the
+  ICE-report writes and the linked-binary chmod silently swallowed their
+  `io::Error` (`let _ = ...`); both now surface through
+  `tracing::warn!` with the failing path (the write failures decide
+  whether a bug report links to a real artifact; the chmod failure
+  decides whether the linked binary runs at all).
 - **Status renderers (M1.9 first slice)**: `tools/glyim-ledger/src/status.rs`
   renders the M1.8 engine's outcome as the two plan-M1.9 artifacts that
   hang directly off it: the `glyim.status/1` JSON contract (per-level
