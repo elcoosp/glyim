@@ -2,11 +2,15 @@
 name = "glyim-ledger"
 version = "0.10.0"
 edition = "2024"
-description = "M1.1 Readiness Ledger CLI: `check` registry gate, `gaps` witness report (M1.7), `next` work queue + `explain` (§3.7/§3.9), `compute` level engine (M1.8), `status`/`render-gaps` renderers (M1.9), `diff` regression gate (M1.10), `gates` release-gate report (M1.12), `verify` determinism self-check (M1.13), `evidence record`/`evidence check` store curation (§3.4), `waivers` C9 waiver-health report + `waivers grant` write face, `handoff` session-handoff generator (§3.7), `inventory`, and JSON-Schema export"
+description = "M1.1 Readiness Ledger CLI: `check` registry gate, `gaps` witness report (M1.7), `next` work queue + `explain` (§3.7/§3.9), `compute` level engine (M1.8), `status`/`render-gaps` renderers (M1.9), `diff` regression gate (M1.10), `gates` release-gate report (M1.12), `verify` determinism self-check (M1.13), `evidence record`/`evidence check`/`evidence audit` store curation (§3.4), `waivers` C9 waiver-health report + `waivers grant`/`waivers revoke`/`waivers extend` write faces, `handoff` session-handoff generator (§3.7), `inventory`, and JSON-Schema export"
 publish = false
 
 [dependencies]
 ledger-schema = { path = "../ledger-schema" }
+# Fixture-bytes digesting for the `evidence audit` face: the recomputed
+# `fixture_sha256` is what the drift verdict compares against (the same
+# hex spelling the harness evidence emitter records).
+sha2 = { workspace = true }
 # Typed CLI errors (`LedgerCliError`) with `help()` — the same diagnostic
 # seam `glyim-test` uses for evidence/fixture-header failures.
 miette = { workspace = true }
