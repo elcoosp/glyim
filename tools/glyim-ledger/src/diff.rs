@@ -45,6 +45,12 @@ pub const SNAPSHOT_SCHEMA: &str = "glyim.ledger-snapshot/1";
 /// days ahead (thresholds only tighten; long-lived exceptions rot).
 pub const WAIVER_MAX_AGE_DAYS: i64 = 14;
 
+/// The CLI default horizon (`--days` omitted) for the waiver write faces
+/// (`grant` and `extend`): a working default comfortably inside the C9
+/// ceiling, pinned here beside [`WAIVER_MAX_AGE_DAYS`] so the two knobs
+/// cannot drift apart silently.
+pub const DEFAULT_WAIVER_DAYS: i64 = 7;
+
 /// Diagnostic code: a snapshot document could not be read from disk.
 pub const CODE_SNAPSHOT_IO: &str = "LEDGER-SNAPSHOT-IO";
 
