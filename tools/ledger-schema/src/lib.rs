@@ -28,8 +28,14 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+pub mod gates;
 pub mod inventory;
 pub mod policy;
+
+pub use gates::{
+    CODE_GATES_DUP, CODE_GATES_ENTRY, CODE_GATES_LOAD, CODE_GATES_SCHEMA, GATES_SCHEMA, GateEntry,
+    GateEvidence, GateRegistry, load_gates,
+};
 
 pub use policy::{
     CANONICAL_BACKENDS, CANONICAL_MODES, CANONICAL_OUTCOMES, CODE_POLICY_LOAD, CODE_POLICY_RULE,
