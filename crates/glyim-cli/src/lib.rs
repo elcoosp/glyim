@@ -1036,7 +1036,14 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
     }
 
     if emit == EmitKind::Exec || emit == EmitKind::Cdylib {
-        let final_path = final_output_path.expect("emit should have final output");
+        // Invariant: the `match emit` above always sets the final output
+        // path for these arms; fail as a diagnostic (the `finalize_after_object`
+        // convention) instead of a panic if that ever drifts.
+        let final_path = final_output_path.ok_or_else(|| {
+            vec![glyim_diag::GlyimDiagnostic::internal_error(
+                "emit should have a final output path",
+            )]
+        })?;
         // `--emit=exec` binaries need the `glyim-runtime` static library for
         // the stdlib's `extern "C"` hooks (`glyim_stdout_write`,
         // `glyim_errno`, …). Add it as an extra object, before any
