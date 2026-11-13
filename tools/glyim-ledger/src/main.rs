@@ -482,6 +482,104 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Command::WaiversRevoke { root, id, format } => {
+            // The write face routes every rejection through the typed
+            // error seam (a rejected revoke is a CLI failure, not a
+            // diagnostic — nothing was rewritten; the grant-face
+            // dispatch shape).
+            let request = glyim_ledger::WaiversRevokeRequest { id };
+            match glyim_ledger::run_waivers_revoke(
+                &root,
+                &request,
+                &glyim_ledger::FileWaiverSource,
+                &glyim_ledger::FileWaiverRewriter,
+            ) {
+                Ok(outcome) => {
+                    match format {
+                        glyim_ledger::WaiversFormat::Text => {
+                            print!("{}", glyim_ledger::format_waivers_revoke_text(&outcome));
+                        }
+                        glyim_ledger::WaiversFormat::Json => {
+                            print!("{}", glyim_ledger::format_waivers_revoke_json(&outcome));
+                        }
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Command::Handoff {
+            root,
+            items,
+            format,
+            out,
+            check,
+        } => {
+            // The write/check face routes drift and write failures
+            // through the typed error seam (a drifted committed document
+            // is a CLI failure like a failed snapshot write), while the
+            // composed faces' diagnostics fail like `check` after the
+            // document still renders — the debt is displayed, not silent
+            // (plan §3.7; the status-face dispatch shape).
+            match glyim_ledger::run_handoff_out(
+                &root,
+                &glyim_ledger::FileHandoffSource,
+                items.unwrap_or(glyim_ledger::HANDOFF_DEFAULT_ITEMS),
+                format,
+                out.as_deref(),
+                check,
+            ) {
+                Ok(rendered) => {
+                    match (rendered.target.as_deref(), rendered.checked) {
+                        (Some(target), true) => {
+                            println!(
+                                "handoff check OK: {} matches the composed state \
+                                 ({} feature(s), {} queue item(s))",
+                                target.display(),
+                                rendered.outcome.features,
+                                rendered.outcome.queue_total,
+                            );
+                        }
+                        (Some(target), false) => {
+                            println!(
+                                "wrote {} from the composed state ({} feature(s), {} queue item(s))",
+                                target.display(),
+                                rendered.outcome.features,
+                                rendered.outcome.queue_total,
+                            );
+                        }
+                        (None, false) => match format {
+                            glyim_ledger::HandoffFormat::Markdown => {
+                                print!("{}", glyim_ledger::format_handoff_text(&rendered.outcome));
+                            }
+                            glyim_ledger::HandoffFormat::Json => {
+                                print!("{}", glyim_ledger::format_handoff_json(&rendered.outcome));
+                            }
+                        },
+                        (None, true) => {
+                            // Unreachable by construction (`--check` always
+                            // names its target), but stay deterministic.
+                            println!(
+                                "handoff check OK ({} feature(s))",
+                                rendered.outcome.features,
+                            );
+                        }
+                    }
+                    if rendered.outcome.is_ok() {
+                        ExitCode::SUCCESS
+                    } else {
+                        ExitCode::FAILURE
+                    }
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Command::Inventory { root } => {
             let outcome = glyim_ledger::run_inventory(&root);
             print!("{}", glyim_ledger::format_inventory(&outcome));
