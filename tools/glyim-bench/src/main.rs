@@ -14,11 +14,12 @@ use glyim_bench::report::BenchReport;
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    // The diff/scale gates are verdicts, not errors: the outcome renders
-    // like a report, but a regression (or a superlinear fit) flips the
-    // exit code (the `gate` shape).
+    // The diff/scale/budget gates are verdicts, not errors: the outcome
+    // renders like a report, but a regression (or a superlinear fit, or a
+    // breached budget) flips the exit code (the `gate` shape).
     let mut diff_failed = false;
     let mut scale_failed = false;
+    let mut budget_failed = false;
     let result = match cli.command {
         Command::Run {
             iterations,
@@ -71,10 +72,66 @@ fn main() -> ExitCode {
             scale_failed = !outcome.is_ok();
             print!("{}", outcome.render_text());
         }),
+        Command::Budget {
+            budgets,
+            json,
+            reports,
+        } => glyim_bench::cli::execute_budget(&budgets, &reports, json.as_deref()).map(|outcome| {
+            budget_failed = !outcome.is_ok();
+            print!("{}", outcome.render_text());
+        }),
+        Command::History { action } => match action {
+            glyim_bench::cli::HistoryAction::Record { history, report } => {
+                glyim_bench::cli::execute_history_record(&history, &report).map(
+                    |(recorded, len)| {
+                        println!(
+                            "recorded {} into {} ({} record{})",
+                            recorded.program,
+                            history.display(),
+                            len,
+                            if len == 1 { "" } else { "s" },
+                        );
+                    },
+                )
+            }
+            glyim_bench::cli::HistoryAction::Show { history, program } => {
+                glyim_bench::cli::execute_history_show(&history, program.as_deref()).map(
+                    |records| {
+                        println!("glyim-bench history ({})", history.display());
+                        for (index, record) in records.iter().enumerate() {
+                            let instructions = record.report.instructions.as_ref().map_or_else(
+                                || "-".to_string(),
+                                |stats| format!("{:.0}", stats.mean),
+                            );
+                            println!(
+                                "  {:<4} {:<40} wall mean {:>12.0} ns  instructions {:>14}",
+                                index, record.report.program, record.report.wall.mean, instructions,
+                            );
+                        }
+                        println!("  {} record(s)", records.len());
+                    },
+                )
+            }
+            glyim_bench::cli::HistoryAction::Diff {
+                history,
+                max_delta_pct,
+                json,
+                current,
+            } => glyim_bench::cli::execute_history_diff(
+                &history,
+                max_delta_pct,
+                &current,
+                json.as_deref(),
+            )
+            .map(|outcome| {
+                diff_failed = !outcome.is_ok();
+                print!("{}", outcome.render_text());
+            }),
+        },
     };
 
     match result {
-        Ok(()) if !diff_failed && !scale_failed => ExitCode::SUCCESS,
+        Ok(()) if !diff_failed && !scale_failed && !budget_failed => ExitCode::SUCCESS,
         Ok(()) => ExitCode::FAILURE,
         Err(err) => {
             eprint!("{:?}", miette::Report::new(err));
