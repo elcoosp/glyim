@@ -138,8 +138,8 @@ fn walkthrough(root: &Path) {
     .expect("write run");
 
     let store = root.join("ledger/evidence/recorded.jsonl");
-    let outcome =
-        run_evidence_record(root, &[run.clone()], &store, &FileEvidenceStore).expect("record run");
+    let outcome = run_evidence_record(root, std::slice::from_ref(&run), &store, &FileEvidenceStore)
+        .expect("record run");
     print!("{}", glyim_ledger::format_evidence_record_text(&outcome));
 
     // Idempotence (plan C1/M1.13): re-recording the same run changes
