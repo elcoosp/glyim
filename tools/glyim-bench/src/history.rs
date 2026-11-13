@@ -122,7 +122,7 @@ pub fn program_slug(program: &str) -> String {
 ///
 /// # Errors
 ///
-/// [`BenchError::InvalidPlan`] when no recorded report measures the
+/// [`BenchError::BaselineUnavailable`] when no recorded report measures the
 /// program (an empty history is an uncomparable gate, not a pass).
 pub fn latest_baseline(
     records: &[HistoryRecord],
@@ -134,11 +134,8 @@ pub fn latest_baseline(
         .map(|record| &record.report)
         .find(|report| report.program == program)
         .cloned()
-        .ok_or_else(|| BenchError::InvalidPlan {
-            detail: format!(
-                "no recorded history for program `{program}`; record a baseline with \
-                 `glyim-bench history record` before diffing from history"
-            ),
+        .ok_or_else(|| BenchError::BaselineUnavailable {
+            program: program.to_string(),
         })
 }
 
@@ -257,8 +254,8 @@ impl HistoryStore for InMemoryHistoryStore {
 ///
 /// # Errors
 ///
-/// Store load failures, or [`BenchError::InvalidPlan`] when no recorded
-/// history measures the current report's program.
+/// Store load failures, or [`BenchError::BaselineUnavailable`] when no
+/// recorded history measures the current report's program.
 pub fn execute_diff_from_history(
     report_store: &dyn ReportStore,
     history_store: &dyn HistoryStore,
