@@ -175,7 +175,8 @@ file is not rebuilt by `cargo build -p glyim-cli` — it is the
 Five `--emit=exec` tests fail with `undefined reference to
 glyim_stdout_write` after any such clean, and nothing in the failure
 says "rebuild the runtime crate". (`glyim-cli` now annotates this at
-link time — KNOWN_GAPS §3.5.26 — but the fix is:
+link time — see the registry's link-failure diagnostics, validated by
+`ledger check` — but the fix is:
 
 ```bash
 cargo build -p glyim-runtime
