@@ -1,7 +1,7 @@
 //! CLI surface (`clap` derive), mirroring the `glyim-cli` house pattern of
 //! keeping the parser in the library so it stays unit-testable.
 //!
-//! Four subcommands:
+//! Seven subcommands:
 //!
 //! - `glyim-bench run [--iterations N] [--source S] [--json OUT] -- CMD...`
 //!   executes the command and prints the report (text to stdout, JSON to
@@ -25,6 +25,12 @@
 //!   a JSONL perf history (plan §6 M2.5 `perf/history/*.jsonl`), `history
 //!   show --history PATH` lists its records, and `history diff --history
 //!   PATH CURRENT` diffs against the latest recorded baseline.
+//! - `glyim-bench matrix [--history PATH] [--max-delta-pct P]
+//!   [--max-geo-delta-pct G] [--json OUT] REPORT...` diffs every current
+//!   report against the latest recorded baseline of its program and gates
+//!   the per-benchmark deltas **and** their geo-mean (the plan §325 "fail
+//!   >2% per benchmark or >0.5% geo-mean" criterion) — the aggregate gate
+//!   that catches a uniform sub-budget drift no single row trips.
 
 use std::path::{Path, PathBuf};
 
@@ -140,6 +146,31 @@ pub enum Command {
         #[command(subcommand)]
         action: HistoryAction,
     },
+    /// Diff a matrix of current reports against the latest recorded
+    /// baseline of each program and gate the per-benchmark deltas **and**
+    /// their geo-mean (plan §325: "fail >2% per benchmark or >0.5%
+    /// geo-mean"); exits non-zero when any row regressed or a geo-mean
+    /// exceeded its budget.
+    Matrix {
+        /// The history JSONL file the per-program baselines are selected
+        /// from (latest recorded run per program).
+        #[arg(long, default_value = "perf/history.jsonl")]
+        history: PathBuf,
+        /// Allowed upward mean delta per benchmark, in percent.
+        #[arg(long, default_value_t = crate::matrix::DEFAULT_MATRIX_MAX_DELTA_PCT)]
+        max_delta_pct: f64,
+        /// Allowed upward geo-mean delta across the matrix, in percent.
+        #[arg(long, default_value_t = crate::matrix::DEFAULT_MAX_GEO_DELTA_PCT)]
+        max_geo_delta_pct: f64,
+        /// Also write the outcome as `glyim.bench-matrix/1` JSON to this
+        /// path.
+        #[arg(long)]
+        json: Option<PathBuf>,
+        /// The current `glyim.bench/1` reports (one per benchmark; each
+        /// program at most once).
+        #[arg(required = true)]
+        reports: Vec<PathBuf>,
+    },
 }
 
 /// The `history` subcommand's actions.
@@ -181,6 +212,29 @@ pub enum HistoryAction {
         /// The current report to compare against the history baseline.
         current: PathBuf,
     },
+    /// Measure the **total drift** across the last N recorded runs of one
+    /// program (the plan M2.5 complement: the accumulated multi-PR
+    /// regression that latest-baseline diffs never see); exits non-zero
+    /// when the window's drift exceeds the budget.
+    Trend {
+        /// The history JSONL file to read.
+        #[arg(long)]
+        history: PathBuf,
+        /// The program to trend (its recorded runs form the window).
+        #[arg(long)]
+        program: String,
+        /// How many of the program's recorded runs the trend spans (the
+        /// last N in append order).
+        #[arg(long, default_value_t = crate::trend::DEFAULT_TREND_WINDOW)]
+        window: usize,
+        /// Allowed total upward drift over the window, in percent.
+        #[arg(long, default_value_t = crate::trend::DEFAULT_MAX_TREND_DRIFT_PCT)]
+        max_drift_pct: f64,
+        /// Also write the report as `glyim.bench-trend/1` JSON to this
+        /// path.
+        #[arg(long)]
+        json: Option<PathBuf>,
+    },
 }
 
 /// Default regression budget for `diff`, in percent: a mean wall or
@@ -194,14 +248,16 @@ pub const DEFAULT_MAX_DELTA_PCT: f64 = 5.0;
 /// # Errors
 ///
 /// [`BenchError::ReportRead`] / [`BenchError::ReportParse`] with `miette`
-/// help text for unreadable or non-`glyim.bench/1` files.
+/// help text for unreadable or non-`glyim.bench/1` files; the parse detail
+/// names the offending path so a multi-report gate (`budget`, `matrix`)
+/// points at the right file.
 pub fn load_report(path: &PathBuf) -> Result<BenchReport, BenchError> {
     let text = std::fs::read_to_string(path).map_err(|err| BenchError::ReportRead {
         path: path.display().to_string(),
         detail: err.to_string(),
     })?;
     serde_json::from_str(&text).map_err(|err| BenchError::ReportParse {
-        detail: err.to_string(),
+        detail: format!("{}: {err}", path.display()),
     })
 }
 
@@ -375,6 +431,43 @@ pub fn execute_history_show(
         .collect())
 }
 
+/// Execute [`HistoryAction::Trend`]: read the JSONL history through the
+/// [`HistoryStore`](crate::history::HistoryStore) seam and measure the
+/// total drift across the program's last `window` recorded runs, optionally
+/// persisting the `glyim.bench-trend/1` report on `--json`.
+///
+/// The caller (main) prints the report and maps `!report.is_ok()` to a
+/// non-zero exit — the shape a CI drift-ratchet job consumes.
+///
+/// # Errors
+///
+/// History read/parse failures, [`BenchError::BaselineUnavailable`] when
+/// the program was never recorded, or [`BenchError::TrendPlan`] when the
+/// window holds fewer than two runs.
+pub fn execute_history_trend(
+    history_path: &Path,
+    program: &str,
+    window: usize,
+    max_drift_pct: f64,
+    json: Option<&Path>,
+) -> Result<crate::trend::TrendReport, BenchError> {
+    let history = crate::history::JsonlHistoryStore;
+    let trend = crate::trend::execute_trend_from_history(
+        &history,
+        history_path,
+        program,
+        &crate::trend::TrendThresholds::new(window, max_drift_pct),
+    )?;
+    if let Some(path) = json {
+        let text = trend.to_json_pretty()?;
+        std::fs::write(path, text).map_err(|err| BenchError::ReportWrite {
+            path: path.display().to_string(),
+            detail: err.to_string(),
+        })?;
+    }
+    Ok(trend)
+}
+
 /// Parses the `--sizes` CSV into a sorted, distinct size list.
 ///
 /// # Errors
@@ -462,6 +555,46 @@ pub fn execute_budget(
     let report_store = crate::diff::FileReportStore;
     let outcome =
         crate::budget::execute_budget(&budgets_store, &report_store, budgets_path, report_paths)?;
+    if let Some(path) = json {
+        let text = outcome.to_json_pretty()?;
+        std::fs::write(path, text).map_err(|err| BenchError::ReportWrite {
+            path: path.display().to_string(),
+            detail: err.to_string(),
+        })?;
+    }
+    Ok(outcome)
+}
+
+/// Execute [`Command::Matrix`]: load every current report through the M2.5
+/// [`ReportStore`](crate::diff::ReportStore) seam, select each program's
+/// baseline from the JSONL history through the M2.5-remainder
+/// [`BaselineSource`](crate::matrix::BaselineSource) seam, and optionally
+/// persist the `glyim.bench-matrix/1` outcome on `--json`.
+///
+/// The caller (main) prints the outcome and maps `!outcome.is_ok()` to a
+/// non-zero exit — the shape the CI perf-compare job consumes.
+///
+/// # Errors
+///
+/// Report/history read/parse failures,
+/// [`BenchError::BaselineUnavailable`] when a program was never recorded,
+/// or a report-write failure on the `--json` path.
+pub fn execute_matrix(
+    history_path: &Path,
+    max_delta_pct: f64,
+    max_geo_delta_pct: f64,
+    report_paths: &[PathBuf],
+    json: Option<&Path>,
+) -> Result<crate::matrix::MatrixOutcome, BenchError> {
+    let report_store = crate::diff::FileReportStore;
+    let history = crate::history::JsonlHistoryStore;
+    let baselines = crate::matrix::HistoryBaselineSource::new(&history, history_path);
+    let outcome = crate::matrix::execute_diff_matrix(
+        &report_store,
+        &baselines,
+        report_paths,
+        &crate::matrix::MatrixThresholds::new(max_delta_pct, max_geo_delta_pct),
+    )?;
     if let Some(path) = json {
         let text = outcome.to_json_pretty()?;
         std::fs::write(path, text).map_err(|err| BenchError::ReportWrite {
@@ -673,5 +806,70 @@ mod tests {
         assert!(json.is_none());
         assert_eq!(baseline.display().to_string(), "base.json");
         assert_eq!(current.display().to_string(), "cur.json");
+    }
+
+    #[test]
+    fn matrix_defaults_match_the_plan_budgets() {
+        use std::path::PathBuf;
+        let Command::Matrix {
+            history,
+            max_delta_pct,
+            max_geo_delta_pct,
+            json,
+            reports,
+        } = parse(&["glyim-bench", "matrix", "a.json", "b.json"])
+        else {
+            panic!("matrix subcommand expected");
+        };
+        assert_eq!(history.display().to_string(), "perf/history.jsonl");
+        assert_eq!(
+            max_delta_pct,
+            super::super::matrix::DEFAULT_MATRIX_MAX_DELTA_PCT,
+            "the plan's per-benchmark fail criterion"
+        );
+        assert_eq!(
+            max_geo_delta_pct,
+            super::super::matrix::DEFAULT_MAX_GEO_DELTA_PCT,
+            "the plan's geo-mean fail criterion"
+        );
+        assert!(json.is_none());
+        assert_eq!(
+            reports,
+            vec![PathBuf::from("a.json"), PathBuf::from("b.json")]
+        );
+    }
+
+    #[test]
+    fn matrix_requires_at_least_one_report_and_parses_budgets() {
+        assert!(
+            Cli::try_parse_from(["glyim-bench", "matrix"]).is_err(),
+            "no reports given"
+        );
+        let Command::Matrix {
+            history,
+            max_delta_pct,
+            max_geo_delta_pct,
+            json,
+            ..
+        } = parse(&[
+            "glyim-bench",
+            "matrix",
+            "--history",
+            "perf/all.jsonl",
+            "--max-delta-pct",
+            "1.0",
+            "--max-geo-delta-pct",
+            "0.25",
+            "--json",
+            "out.json",
+            "a.json",
+        ])
+        else {
+            panic!("matrix subcommand expected");
+        };
+        assert_eq!(history.display().to_string(), "perf/all.jsonl");
+        assert_eq!(max_delta_pct, 1.0);
+        assert_eq!(max_geo_delta_pct, 0.25);
+        assert_eq!(json.unwrap().display().to_string(), "out.json");
     }
 }
