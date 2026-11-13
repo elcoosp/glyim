@@ -21,13 +21,15 @@ The `glyim` compiler driver (built as `glyim-cli`) compiles a single `.g` source
 | `--emit <KIND>` | enum | `obj` | no | Output artifact kind — see [emit kinds](#emit-kinds). |
 | `-O`, `--opt-level <N>` | 0–3 | `0` | no | Optimization level. |
 | `--target <TRIPLE>` | string | host default | no | Target triple, for example `aarch64-unknown-linux-gnu`. Defaults to `x86_64-unknown-linux-gnu` when unset. |
-| `--backend <NAME>` | enum | `llvm` | no | Code generation backend: `llvm` or `bytecode`. |
+| `--backend <NAME>` | enum | `llvm` | no | Code generation backend: `llvm`, `bytecode`, or `interp` (the MIR interpreter used by `--emit run`). |
 | `--linker <PATH>` | path | system linker | no | Override the system linker used to link executables. |
 | `--link-flags <FLAGS>` | string | none | no | Extra flags passed to the linker. |
 | `--lto <KIND>` | enum | `off` | no | Link-time optimization strategy: `off`, `fat`, or `thin`. |
 | `--codegen-units <N>` | integer | parallelism | no | Number of codegen units (CGUs) for parallel code generation. Defaults to the available parallelism, capped at 16. |
 | `--proc-macro-deps <LIST>` | string | none | no | Comma-separated proc-macro dependency source files, compiled for the host triple to cdylibs and loaded via `dlopen`. |
 | `--error-format <FMT>` | enum | `human` | no | Diagnostic format: `human` (miette-rendered) or `json` (one JSON object per diagnostic). |
+| `--time-passes` | flag | off | no | Print per-pass timing measurements after compilation. |
+| `--self-profile[=FILE]` | path | none | no | Record a Chrome-trace profiling event log (`FILE`, default `trace.json`); opens in Perfetto. |
 | `--with-stdlib` | flag | off | no | Prepend the assembled standard library to the input, so `println`, `Vec`, `Option`, `Result`, `String`, `Box`, `Rc`, and `Iterator` resolve without explicit `use` statements. |
 | `-A`, `--allow <LINT>` | lint name | none | no | Suppress the named lint. Repeatable. |
 | `-W`, `--warn <LINT>` | lint name | none | no | Set the named lint to warning level (the default). Repeatable. `glyim -W help` lists all lints. |
@@ -45,6 +47,9 @@ The `glyim` compiler driver (built as `glyim-cli`) compiles a single `.g` source
 | `llvm-ir` | LLVM IR | Textual `.ll` output of the LLVM backend. |
 | `asm` | Assembly | Target assembly for the selected `--target`. |
 | `cdylib` | Dynamic library | Used for proc-macro crates; compiled for the host when driven by `--proc-macro-deps`. |
+| `syntax` | Syntax tree dump | Human-readable parse tree of the input, useful for debugging the frontend. |
+| `stats` | JSON measurement report | Schema-versioned compilation measurements (time, sizes) — pairs with `--time-passes`. |
+| `run` | Interpreted execution | Runs the program on the MIR interpreter (`--backend interp`) and prints its output; no artifact is written. |
 
 ## LTO behavior
 
