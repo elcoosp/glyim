@@ -247,12 +247,20 @@ pub fn run() -> Result<i32, Vec<glyim_diag::GlyimDiagnostic>> {
                 .ok()
                 .and_then(|f| f.keep().ok().map(|(_, p)| p));
             let path_display = if let Some(p) = &ice_path {
-                let _ = std::fs::write(p, &report);
+                // The ICE report is the crash artifact a bug report links
+                // to; a failed write would point users at an empty or
+                // missing file, so surface it (the CLI keeps going — the
+                // panic message still prints).
+                if let Err(err) = std::fs::write(p, &report) {
+                    tracing::warn!(path = %p.display(), error = %err, "failed to write the ICE report");
+                }
                 p.display().to_string()
             } else {
                 // Fallback if tempfile fails — still try the old path.
                 let p = std::env::temp_dir().join("glyim-ice.txt");
-                let _ = std::fs::write(&p, &report);
+                if let Err(err) = std::fs::write(&p, &report) {
+                    tracing::warn!(path = %p.display(), error = %err, "failed to write the ICE report");
+                }
                 p.display().to_string()
             };
             eprintln!(
