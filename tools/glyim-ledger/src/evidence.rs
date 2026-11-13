@@ -17,10 +17,22 @@
 //!   the committed store itself (schema tag, record invariants, unknown
 //!   feature IDs) and report its coverage; any error diagnostic fails the
 //!   exit code (the CI gate face).
+//! - `glyim-ledger evidence audit [ROOT] [--format text|json]` — audit
+//!   the committed store against the filesystem: recompute every record's
+//!   `fixture_sha256` from the fixture bytes at its resolved path and
+//!   report per-record verdicts (`ok` / `missing` / `drift` /
+//!   `unreadable`). `check` proves what the store *says* is consistent;
+//!   audit proves what the store *points at* still exists and still
+//!   hashes to what was recorded — a store that drifted from its fixtures
+//!   fails the exit code (the trust-loop closure the check face cannot
+//!   express).
 //! - [`EvidenceStore`] — the storage seam (the write counterpart of the
 //!   read-side [`crate::compute::EvidenceSource`]): [`FileEvidenceStore`]
 //!   for the local JSONL layout, [`InMemoryEvidenceStore`] for tests and
 //!   in-process consumers.
+//! - [`FixtureFingerprint`] — the hashing seam: [`FileFixtureFingerprint`]
+//!   reads the fixture bytes and digests them, [`InMemoryFixtureFingerprint`]
+//!   serves precomputed digests for tests and programmatic consumers.
 //!
 //! Determinism contract (plan C1/M1.13): the store is a set of whole
 //! records in canonical (schema-serialized) order — merging is
@@ -29,6 +41,7 @@
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -579,6 +592,360 @@ pub fn run_evidence_check(root: &Path) -> CheckReport {
         by_outcome,
         diagnostics,
     }
+}
+
+// -- audit face --------------------------------------------------------------
+
+/// Schema tag of the `evidence audit` JSON contract.
+pub const EVIDENCE_AUDIT_SCHEMA: &str = "glyim.ledger-evidence-audit/1";
+
+/// Why one fixture's bytes could not be produced: the path does not
+/// exist ([`FingerprintError::NotFound`]) or exists but cannot be read
+/// ([`FingerprintError::Unreadable`]). The engine maps these to verdicts,
+/// so the seam stays IO-shaped (the [`FixtureFingerprint`] counterpart of
+/// the `Result<_, String>` seams).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FingerprintError {
+    /// The fixture path does not exist (an honest finding, not an
+    /// engine failure — the store survived, the tree moved on).
+    NotFound,
+    /// The fixture exists but its bytes could not be read.
+    Unreadable(String),
+}
+
+/// The hashing seam: produce one fixture file's `fixture_sha256` hex
+/// digest. The engine consumes the trait, so tests inject precomputed
+/// digests ([`InMemoryFixtureFingerprint`]) and the CLI wires the
+/// file-backed implementation ([`FileFixtureFingerprint`]). New digest
+/// sources plug in as one more impl, never as outcome fields.
+pub trait FixtureFingerprint {
+    /// Digests the fixture at `path` (64 lowercase hex chars) or reports
+    /// why its bytes could not be produced.
+    fn sha256_hex(&self, path: &Path) -> Result<String, FingerprintError>;
+}
+
+/// Digests fixture files on disk (`sha256` over the raw bytes): the
+/// committed store's fixture paths resolve against the project root, and
+/// the recomputed digest is what the drift verdict compares against.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FileFixtureFingerprint;
+
+impl FixtureFingerprint for FileFixtureFingerprint {
+    fn sha256_hex(&self, path: &Path) -> Result<String, FingerprintError> {
+        use sha2::{Digest, Sha256};
+        use std::fmt::Write as _;
+        let bytes = match fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Err(FingerprintError::NotFound);
+            }
+            Err(err) => return Err(FingerprintError::Unreadable(err.to_string())),
+        };
+        let mut hasher = Sha256::new();
+        hasher.update(&bytes);
+        let digest = hasher.finalize();
+        let mut hex = String::with_capacity(64);
+        for byte in &digest {
+            let _ = write!(hex, "{byte:02x}");
+        }
+        Ok(hex)
+    }
+}
+
+/// Serves caller-pinned digests (tests and programmatic consumers); the
+/// in-memory twin of [`FileFixtureFingerprint`]. A path absent from the
+/// map reports [`FingerprintError::NotFound`] — the same verdict the
+/// file-backed seam produces for a fixture the tree no longer carries.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct InMemoryFixtureFingerprint {
+    /// `resolved fixture path -> digest` (64 lowercase hex chars).
+    pub digests: BTreeMap<PathBuf, String>,
+}
+
+impl FixtureFingerprint for InMemoryFixtureFingerprint {
+    fn sha256_hex(&self, path: &Path) -> Result<String, FingerprintError> {
+        match self.digests.get(path) {
+            Some(digest) => Ok(digest.clone()),
+            None => Err(FingerprintError::NotFound),
+        }
+    }
+}
+
+/// The per-record audit verdict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FixtureVerdict {
+    /// The recomputed digest matches the recorded one.
+    Ok,
+    /// The fixture file no longer exists at its resolved path.
+    Missing,
+    /// The fixture exists but hashes to a different digest — the record
+    /// predates a fixture edit and no longer describes the tree.
+    Drift,
+    /// The fixture exists but its bytes could not be read.
+    Unreadable,
+}
+
+impl FixtureVerdict {
+    /// Canonical wire and table spelling.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Missing => "missing",
+            Self::Drift => "drift",
+            Self::Unreadable => "unreadable",
+        }
+    }
+}
+
+/// One audited record (the JSON contract's row shape).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FixtureRow {
+    /// The audited record's name (echoed verbatim).
+    pub name: String,
+    /// The fixture path as the record carries it (echoed verbatim).
+    pub fixture: String,
+    /// The recorded digest (echoed verbatim).
+    pub expected_sha256: String,
+    /// The recomputed digest; `None` when the fixture produced no bytes.
+    pub actual_sha256: Option<String>,
+    /// The computed verdict.
+    pub verdict: FixtureVerdict,
+    /// Human-readable detail for the non-`ok` verdicts (rendered in the
+    /// text report).
+    pub detail: Option<String>,
+}
+
+/// Result of a full `evidence audit` run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvidenceAuditOutcome {
+    /// Records audited (equal to [`Self::rows`] length).
+    pub records: usize,
+    /// Rows whose verdict is [`FixtureVerdict::Ok`].
+    pub ok: usize,
+    /// Rows whose verdict is [`FixtureVerdict::Missing`].
+    pub missing: usize,
+    /// Rows whose verdict is [`FixtureVerdict::Drift`].
+    pub drift: usize,
+    /// Rows whose verdict is [`FixtureVerdict::Unreadable`].
+    pub unreadable: usize,
+    /// One row per audited record, sorted by (fixture, name).
+    pub rows: Vec<FixtureRow>,
+    /// Load diagnostics (registry + store), sorted and de-duplicated —
+    /// the same diagnostics `evidence check` would emit.
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+impl EvidenceAuditOutcome {
+    /// Number of error-severity load diagnostics.
+    #[must_use]
+    pub fn errors(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .count()
+    }
+
+    /// True when the audit gate passes: no error-severity load diagnostic
+    /// and no row whose verdict is anything but [`FixtureVerdict::Ok`].
+    #[must_use]
+    pub fn is_ok(&self) -> bool {
+        self.errors() == 0 && self.missing == 0 && self.drift == 0 && self.unreadable == 0
+    }
+}
+
+/// Resolves a record's fixture path against the project root: an
+/// absolute path is the recording machine's own spelling and is audited
+/// verbatim, a relative path hangs off `root` (the store's committed
+/// spelling).
+#[must_use]
+pub fn resolve_fixture(root: &Path, fixture: &str) -> PathBuf {
+    let path = Path::new(fixture);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    }
+}
+
+/// Audits triaged records against `fingerprint` (the pure verdict
+/// function the run face consumes). Fixture paths resolve against
+/// `root`; rows render in (fixture, name) order so the face is
+/// deterministic for every input path.
+#[must_use]
+pub fn audit_records(
+    root: &Path,
+    records: &[LedgerEvidence],
+    fingerprint: &dyn FixtureFingerprint,
+) -> EvidenceAuditOutcome {
+    let mut rows = Vec::with_capacity(records.len());
+    let (mut ok, mut missing, mut drift, mut unreadable) = (0usize, 0usize, 0usize, 0usize);
+    for record in records {
+        let path = resolve_fixture(root, &record.fixture);
+        let (verdict, actual, detail) = match fingerprint.sha256_hex(&path) {
+            Ok(digest) => {
+                if digest == record.fixture_sha256 {
+                    (FixtureVerdict::Ok, Some(digest), None)
+                } else {
+                    (
+                        FixtureVerdict::Drift,
+                        Some(digest),
+                        Some(format!(
+                            "recorded {} but the fixture hashes to a different digest",
+                            record.fixture_sha256
+                        )),
+                    )
+                }
+            }
+            Err(FingerprintError::NotFound) => (
+                FixtureVerdict::Missing,
+                None,
+                Some(format!(
+                    "no fixture at {} (the store outlived the tree it described)",
+                    path.display()
+                )),
+            ),
+            Err(FingerprintError::Unreadable(why)) => (
+                FixtureVerdict::Unreadable,
+                None,
+                Some(format!("cannot read {}: {why}", path.display())),
+            ),
+        };
+        match verdict {
+            FixtureVerdict::Ok => ok += 1,
+            FixtureVerdict::Missing => missing += 1,
+            FixtureVerdict::Drift => drift += 1,
+            FixtureVerdict::Unreadable => unreadable += 1,
+        }
+        rows.push(FixtureRow {
+            name: record.name.clone(),
+            fixture: record.fixture.clone(),
+            expected_sha256: record.fixture_sha256.clone(),
+            actual_sha256: actual,
+            verdict,
+            detail,
+        });
+    }
+    rows.sort_by(|a, b| a.fixture.cmp(&b.fixture).then(a.name.cmp(&b.name)));
+    EvidenceAuditOutcome {
+        records: rows.len(),
+        ok,
+        missing,
+        drift,
+        unreadable,
+        rows,
+        diagnostics: Vec::new(),
+    }
+}
+
+/// Runs a full `evidence audit` pass over `root` through `source` and
+/// `fingerprint`: loads the registry and the committed store exactly like
+/// [`run_evidence_check`] (so the two faces can never disagree about what
+/// the store contains), triages the records, and fingerprints every
+/// fixture the surviving records point at.
+#[must_use]
+pub fn run_evidence_audit(
+    root: &Path,
+    source: &dyn EvidenceSource,
+    fingerprint: &dyn FixtureFingerprint,
+) -> EvidenceAuditOutcome {
+    let span = tracing::info_span!("evidence_audit", root = %root.display());
+    let _enter = span.enter();
+
+    let mut diagnostics: Vec<Diagnostic> = Vec::new();
+    let loaded = ledger_schema::load_project_registry(root);
+    diagnostics.extend(loaded.diagnostics);
+    diagnostics.extend(loaded.registry.validate());
+
+    let batch = source.load();
+    diagnostics.extend(batch.diagnostics);
+
+    let unique = dedup_records(&batch.records);
+    let valid = triage_records(
+        &unique.into_iter().cloned().collect::<Vec<_>>(),
+        &loaded.registry,
+        &mut diagnostics,
+    );
+
+    let mut outcome = audit_records(root, &valid, fingerprint);
+    outcome.diagnostics = diagnostics;
+    finish_diagnostics(&mut outcome.diagnostics);
+    tracing::debug!(
+        records = outcome.records,
+        ok = outcome.ok,
+        missing = outcome.missing,
+        drift = outcome.drift,
+        unreadable = outcome.unreadable,
+        diagnostics = outcome.diagnostics.len(),
+        "evidence audit pass finished"
+    );
+    outcome
+}
+
+/// Renders the `glyim.ledger-evidence-audit/1` JSON contract.
+#[must_use]
+pub fn format_evidence_audit_json(outcome: &EvidenceAuditOutcome) -> String {
+    #[derive(Serialize)]
+    struct AuditJson<'a> {
+        schema: &'static str,
+        records: usize,
+        ok: usize,
+        missing: usize,
+        drift: usize,
+        unreadable: usize,
+        passed: bool,
+        rows: &'a [FixtureRow],
+    }
+    let document = AuditJson {
+        schema: EVIDENCE_AUDIT_SCHEMA,
+        records: outcome.records,
+        ok: outcome.ok,
+        missing: outcome.missing,
+        drift: outcome.drift,
+        unreadable: outcome.unreadable,
+        passed: outcome.is_ok(),
+        rows: &outcome.rows,
+    };
+    let mut text = serde_json::to_string_pretty(&document)
+        .expect("the glyim.ledger-evidence-audit/1 document is a serialisation-only struct");
+    text.push('\n');
+    text
+}
+
+/// Renders the audit outcome's text face (the [`format_evidence_check_text`]
+/// shape: summary line, one line per non-`ok` row, diagnostics last).
+#[must_use]
+pub fn format_evidence_audit_text(outcome: &EvidenceAuditOutcome) -> String {
+    let mut text = String::new();
+    let _ = writeln!(
+        text,
+        "audit: {} record(s), {} ok, {} missing, {} drift, {} unreadable, \
+         {} diagnostic(s), {}",
+        outcome.records,
+        outcome.ok,
+        outcome.missing,
+        outcome.drift,
+        outcome.unreadable,
+        outcome.diagnostics.len(),
+        if outcome.is_ok() { "passed" } else { "FAILED" },
+    );
+    for row in &outcome.rows {
+        if row.verdict == FixtureVerdict::Ok {
+            continue;
+        }
+        let _ = writeln!(
+            text,
+            "  {:<28} {:<10} {}",
+            row.name,
+            row.verdict.as_str(),
+            row.detail.as_deref().unwrap_or_default(),
+        );
+    }
+    for diagnostic in &outcome.diagnostics {
+        let _ = writeln!(text, "{diagnostic}");
+    }
+    text
 }
 
 // -- report rendering --------------------------------------------------------
@@ -1420,5 +1787,325 @@ mutation_kill_rate_pct = 75
             .find(|entry| entry.id == "LANG-EVIDENCE-A")
             .expect("feature entry");
         assert_eq!(feature.computed_level, ledger_schema::Level::L3);
+    }
+
+    // -- audit face ---------------------------------------------------------
+
+    use super::{
+        EVIDENCE_AUDIT_SCHEMA, EvidenceAuditOutcome, FileFixtureFingerprint, FixtureFingerprint,
+        FixtureVerdict, InMemoryFixtureFingerprint, resolve_fixture, run_evidence_audit,
+    };
+    use crate::compute::ProjectEvidenceSource as AuditProjectSource;
+    use crate::parse_args;
+    use std::collections::BTreeMap;
+
+    /// Seeds one fixture file under `<root>/tests/` and returns its real
+    /// sha256 digest (the audit compares recomputed bytes, so the test
+    /// fixtures carry real digests, not name-derived ones).
+    fn seed_fixture(root: &Path, name: &str, body: &str) -> String {
+        use sha2::{Digest, Sha256};
+        use std::fmt::Write as _;
+        fs::create_dir_all(root.join("tests")).expect("mkdir tests");
+        fs::write(root.join("tests").join(name), body).expect("write fixture");
+        let mut hasher = Sha256::new();
+        hasher.update(body.as_bytes());
+        let digest = hasher.finalize();
+        let hex = digest
+            .iter()
+            .fold(String::with_capacity(64), |mut out, byte| {
+                let _ = write!(out, "{byte:02x}");
+                out
+            });
+        hex
+    }
+
+    /// A committed store carrying one record per fixture body, digested
+    /// for real (the store the audit face reads).
+    fn audited_root(root: &Path, fixtures: &[(&str, &str)]) -> Vec<super::FixtureRow> {
+        let mut records = Vec::new();
+        for (index, (name, body)) in fixtures.iter().enumerate() {
+            let digest = seed_fixture(root, name, body);
+            let mut entry = record(
+                name,
+                "compile-pass",
+                EvidenceOutcome::Passed,
+                &["LANG-EVIDENCE-A"],
+            );
+            entry.fixture = format!("tests/{name}");
+            entry.fixture_sha256 = digest;
+            entry.opt = index as u8;
+            records.push(entry);
+        }
+        let store = root.join("ledger/evidence/test.jsonl");
+        fs::create_dir_all(store.parent().expect("parent")).expect("mkdir store");
+        fs::write(&store, records.iter().map(line).collect::<String>()).expect("write store");
+        run_evidence_audit(
+            root,
+            &AuditProjectSource::new(root, None),
+            &FileFixtureFingerprint,
+        )
+        .rows
+    }
+
+    #[test]
+    fn audit_verdict_matrix_over_in_memory_digests() {
+        use super::{FingerprintError, resolve_fixture as resolve};
+        let root = Path::new("/proj");
+        let mut digests = BTreeMap::new();
+        digests.insert(
+            resolve(root, "tests/ok.g"),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        );
+        digests.insert(
+            resolve(root, "tests/drift.g"),
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+        );
+        let fingerprint = InMemoryFixtureFingerprint { digests };
+        let mut ok = record(
+            "ok",
+            "compile-pass",
+            EvidenceOutcome::Passed,
+            &["LANG-EVIDENCE-A"],
+        );
+        ok.fixture = "tests/ok.g".to_string();
+        ok.fixture_sha256 =
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        let mut drift = record(
+            "drift",
+            "compile-pass",
+            EvidenceOutcome::Passed,
+            &["LANG-EVIDENCE-A"],
+        );
+        drift.fixture = "tests/drift.g".to_string();
+        drift.fixture_sha256 =
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".to_string();
+        let mut absent = record(
+            "absent",
+            "compile-pass",
+            EvidenceOutcome::Passed,
+            &["LANG-EVIDENCE-A"],
+        );
+        absent.fixture = "tests/gone.g".to_string();
+        absent.fixture_sha256 =
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string();
+
+        let outcome = super::audit_records(root, &[ok, drift, absent], &fingerprint);
+        assert_eq!(outcome.records, 3);
+        assert_eq!(
+            (outcome.ok, outcome.drift, outcome.missing),
+            (1, 1, 1),
+            "one row per verdict class"
+        );
+        assert!(!outcome.is_ok(), "drift and missing fail the gate");
+        let verdicts: BTreeMap<&str, FixtureVerdict> = outcome
+            .rows
+            .iter()
+            .map(|row| (row.name.as_str(), row.verdict))
+            .collect();
+        assert_eq!(verdicts["ok"], FixtureVerdict::Ok);
+        assert_eq!(verdicts["drift"], FixtureVerdict::Drift);
+        assert_eq!(verdicts["absent"], FixtureVerdict::Missing);
+        let absent_row = outcome
+            .rows
+            .iter()
+            .find(|row| row.name == "absent")
+            .expect("the absent row");
+        assert!(
+            absent_row.actual_sha256.is_none(),
+            "a missing fixture produces no digest"
+        );
+    }
+
+    #[test]
+    fn audit_rows_sort_by_fixture_then_name() {
+        let mut digests = BTreeMap::new();
+        digests.insert(
+            resolve_fixture(Path::new("/proj"), "tests/a.g"),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        );
+        let fingerprint = InMemoryFixtureFingerprint { digests };
+        let mut second = record(
+            "zeta",
+            "compile-pass",
+            EvidenceOutcome::Passed,
+            &["LANG-EVIDENCE-A"],
+        );
+        second.fixture = "tests/a.g".to_string();
+        second.fixture_sha256 =
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        let mut first = record(
+            "alpha",
+            "run-pass",
+            EvidenceOutcome::Passed,
+            &["LANG-EVIDENCE-A"],
+        );
+        first.fixture = "tests/a.g".to_string();
+        first.fixture_sha256 =
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        let outcome = super::audit_records(Path::new("/proj"), &[second, first], &fingerprint);
+        let names: Vec<&str> = outcome.rows.iter().map(|row| row.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["alpha", "zeta"],
+            "deterministic (fixture, name) order"
+        );
+    }
+
+    #[test]
+    fn resolve_fixture_hangs_relative_paths_off_root() {
+        assert_eq!(
+            resolve_fixture(Path::new("/proj"), "tests/x.g"),
+            PathBuf::from("/proj/tests/x.g")
+        );
+        assert_eq!(
+            resolve_fixture(Path::new("/proj"), "/abs/y.g"),
+            PathBuf::from("/abs/y.g"),
+            "absolute paths are the recording machine's own spelling"
+        );
+    }
+
+    #[test]
+    fn audit_passes_on_a_store_that_matches_the_tree() {
+        let dir = tempfile::tempdir().expect("tmp");
+        write_project(dir.path());
+        let rows = audited_root(
+            dir.path(),
+            &[
+                ("alpha.g", "// alpha fixture\n"),
+                ("bravo.g", "// bravo fixture\n"),
+            ],
+        );
+        assert_eq!(rows.len(), 2);
+        assert!(
+            rows.iter().all(|row| row.verdict == FixtureVerdict::Ok),
+            "both fixtures hash to their recorded digests"
+        );
+    }
+
+    #[test]
+    fn audit_fails_when_the_tree_drifts_or_a_fixture_vanishes() {
+        let dir = tempfile::tempdir().expect("tmp");
+        write_project(dir.path());
+        let rows = audited_root(
+            dir.path(),
+            &[
+                ("alpha.g", "// alpha fixture\n"),
+                ("bravo.g", "// bravo fixture\n"),
+            ],
+        );
+        // The store survives; the tree moved on: one fixture edited, one
+        // deleted. Both verdicts are findings, not engine failures.
+        fs::write(
+            dir.path().join("tests/alpha.g"),
+            "// alpha fixture, edited\n",
+        )
+        .expect("drift the fixture");
+        fs::remove_file(dir.path().join("tests/bravo.g")).expect("remove the fixture");
+        let outcome = run_evidence_audit(
+            dir.path(),
+            &AuditProjectSource::new(dir.path(), None),
+            &FileFixtureFingerprint,
+        );
+        assert!(!outcome.is_ok(), "drift and missing both fail the gate");
+        assert_eq!(outcome.ok, 0);
+        let verdicts: BTreeMap<&str, FixtureVerdict> = outcome
+            .rows
+            .iter()
+            .map(|row| (row.name.as_str(), row.verdict))
+            .collect();
+        assert_eq!(verdicts["alpha.g"], FixtureVerdict::Drift);
+        assert_eq!(verdicts["bravo.g"], FixtureVerdict::Missing);
+        // The verdict matrix is unchanged from the pre-drift pass except
+        // for the two findings (rows stay one per record).
+        assert_eq!(outcome.records, rows.len());
+    }
+
+    #[test]
+    fn audit_reports_an_absent_store_as_a_honest_zero() {
+        let dir = tempfile::tempdir().expect("tmp");
+        write_project(dir.path());
+        let outcome = run_evidence_audit(
+            dir.path(),
+            &AuditProjectSource::new(dir.path(), None),
+            &FileFixtureFingerprint,
+        );
+        assert_eq!(outcome.records, 0);
+        assert!(outcome.is_ok(), "no store is zero coverage, not a failure");
+    }
+
+    #[test]
+    fn audit_text_and_json_faces_render_deterministically() {
+        let dir = tempfile::tempdir().expect("tmp");
+        write_project(dir.path());
+        audited_root(dir.path(), &[("alpha.g", "// alpha fixture\n")]);
+        fs::write(
+            dir.path().join("tests/alpha.g"),
+            "// alpha fixture, edited\n",
+        )
+        .expect("drift the fixture");
+        let outcome = run_evidence_audit(
+            dir.path(),
+            &AuditProjectSource::new(dir.path(), None),
+            &FileFixtureFingerprint,
+        );
+
+        let text_a = super::format_evidence_audit_text(&outcome);
+        let text_b = super::format_evidence_audit_text(&outcome);
+        assert_eq!(text_a, text_b);
+        assert!(text_a.contains("1 record(s)"));
+        assert!(text_a.contains("0 missing, 1 drift"));
+        assert!(text_a.contains("FAILED"));
+        assert!(text_a.contains("alpha"), "the drifting row is named");
+
+        let json_a = super::format_evidence_audit_json(&outcome);
+        let json_b = super::format_evidence_audit_json(&outcome);
+        assert_eq!(json_a, json_b);
+        let document: serde_json::Value = serde_json::from_str(&json_a).expect("valid JSON");
+        assert_eq!(document["schema"], EVIDENCE_AUDIT_SCHEMA);
+        assert_eq!(document["records"], 1);
+        assert_eq!(document["drift"], 1);
+        assert_eq!(document["passed"], false);
+        assert_eq!(document["rows"][0]["verdict"], "drift");
+        assert!(json_a.ends_with('\n'));
+    }
+
+    #[test]
+    fn parse_args_accepts_evidence_audit_flags() {
+        let command = parse_args(
+            ["evidence", "audit", "/tmp/repo", "--format", "json"]
+                .into_iter()
+                .map(String::from),
+        )
+        .expect("the audit flags parse");
+        assert!(matches!(
+            command,
+            Command::EvidenceAudit {
+                ref root,
+                format: EvidenceFormat::Json,
+            } if root == &PathBuf::from("/tmp/repo")
+        ));
+        let err = parse_args(
+            ["evidence", "audit", "--format", "yaml"]
+                .into_iter()
+                .map(String::from),
+        )
+        .expect_err("unknown format fails");
+        assert!(matches!(
+            err,
+            crate::LedgerCliError::EvidenceBadFormat { .. }
+        ));
+    }
+
+    #[test]
+    fn file_fingerprint_maps_missing_and_unreadable_paths() {
+        use super::FingerprintError;
+        let dir = tempfile::tempdir().expect("tmp");
+        let missing = FileFixtureFingerprint.sha256_hex(&dir.path().join("nope.g"));
+        assert!(matches!(missing, Err(FingerprintError::NotFound)));
+        let seeded = seed_fixture(dir.path(), "real.g", "// bytes\n");
+        let hashed = FileFixtureFingerprint
+            .sha256_hex(&dir.path().join("tests/real.g"))
+            .expect("a readable fixture digests");
+        assert_eq!(hashed, seeded, "the recomputed digest matches sha256");
     }
 }
