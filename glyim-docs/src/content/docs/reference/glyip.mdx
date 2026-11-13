@@ -37,7 +37,7 @@ Compile the project. Builds are incremental — sources and build configuration 
 | `--opt-level <N>` | 0–3 | `0` | Optimization level. |
 | `--lto <KIND>` | `off` \| `thin` \| `fat` | `off` | Link-time optimization. Unknown values are treated as `off`. |
 
-<Code lang="bash" code={`glyip build --release -O2`} />
+<Code lang="bash" code={`glyip build --release --opt-level 2`} />
 
 ### `glyip test`
 
