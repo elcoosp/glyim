@@ -173,8 +173,8 @@ importers:
         specifier: ^0.1.34
         version: 0.1.34
       '@elcoosp/docs-toolkit':
-        specifier: ^0.5.35
-        version: 0.5.35(@astrojs/markdown-satteri@0.4.9)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(mermaid@11.17.2)(playwright@1.65.0)(react@19.3.1)
+        specifier: ^0.5.36
+        version: 0.5.36(@astrojs/markdown-satteri@0.4.9)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(mermaid@11.17.2)(playwright@1.65.0)(react@19.3.1)
       astro:
         specifier: 7.4.7
         version: 7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
@@ -619,9 +619,9 @@ packages:
   '@d2lang/d2@0.1.34':
     resolution: {integrity: sha512-35m2DaRUgeBy1cFbF9XEGIuaN/pMWrqkJtGj/tsq7OrU4N8degbY80Js7Mw7UeuE+fwGpxdZaGckEUVOPAj7CA==}
 
-  '@elcoosp/docs-toolkit@0.5.35':
-    resolution: {integrity: sha512-8TVi0ZZTca/wgjWXTAuGXegSqdO6XIv2uaZ9jZtilIVEz18pzHk3fCWq0u9QRGF5OobDSifyZ2+etUQY58V5zg==}
-    version: 0.5.35
+  '@elcoosp/docs-toolkit@0.5.36':
+    resolution: {integrity: sha512-820RwKVwqGecfj+jMTjckLE7IGn4sboel/7Rl8z7r6dUzuvlO05ZGphQRFJX2VXQu2N9ApHqtopwWHtmrfMGsA==}
+    version: 0.5.36
     engines: {node: '>=22.18.0'}
     hasBin: true
     peerDependencies:
@@ -4131,7 +4131,7 @@ snapshots:
 
   '@d2lang/d2@0.1.34': {}
 
-  '@elcoosp/docs-toolkit@0.5.35(@astrojs/markdown-satteri@0.4.9)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(mermaid@11.17.2)(playwright@1.65.0)(react@19.3.1)':
+  '@elcoosp/docs-toolkit@0.5.36(@astrojs/markdown-satteri@0.4.9)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(mermaid@11.17.2)(playwright@1.65.0)(react@19.3.1)':
     dependencies:
       '@astrojs/rss': 4.0.19
       '@astrojs/starlight': 0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3)
