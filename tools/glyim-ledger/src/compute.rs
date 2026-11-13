@@ -78,7 +78,7 @@ pub const CODE_EVIDENCE_UNKNOWN_FEATURE: &str = "LEDGER-EVIDENCE-UNKNOWN-FEATURE
 /// `ledger-schema`'s policy loader).
 pub use ledger_schema::{CODE_POLICY_LOAD, CODE_POLICY_RULE, CODE_POLICY_SCHEMA};
 
-fn diagnostic(code: &'static str, severity: Severity, message: String) -> Diagnostic {
+pub(crate) fn diagnostic(code: &'static str, severity: Severity, message: String) -> Diagnostic {
     Diagnostic {
         code,
         message,
@@ -533,7 +533,7 @@ fn compute_feature(
 /// Deduplicates identical records (the harness may append across runs);
 /// conflicting records (same fixture, different outcome) both stay, so the
 /// `passed` side still counts toward its rule.
-fn dedup_records(evidence: &[LedgerEvidence]) -> Vec<&LedgerEvidence> {
+pub(crate) fn dedup_records(evidence: &[LedgerEvidence]) -> Vec<&LedgerEvidence> {
     let mut seen: HashSet<&LedgerEvidence> = HashSet::with_capacity(evidence.len());
     evidence
         .iter()
