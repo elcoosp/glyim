@@ -287,20 +287,3 @@ impl SyntaxContext {
         ExpnId::ROOT
     }
 }
-#[cfg(test)]
-impl ExpnId {
-    /// Test-only constructor from a raw expansion id.
-    #[must_use]
-    pub fn test_from_raw(raw: u32) -> Self {
-        Self(raw)
-    }
-}
-
-#[cfg(test)]
-impl SyntaxContext {
-    /// Test-only constructor from a raw syntax-context id.
-    #[must_use]
-    pub fn test_from_raw(raw: u32) -> Self {
-        Self::from_raw(raw)
-    }
-}
