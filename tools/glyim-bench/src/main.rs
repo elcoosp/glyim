@@ -14,15 +14,16 @@ use glyim_bench::report::BenchReport;
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    // The diff/scale/budget/matrix/trend gates are verdicts, not errors:
-    // the outcome renders like a report, but a regression (or a
-    // superlinear fit, or a breached budget, or an accumulated drift)
-    // flips the exit code (the `gate` shape).
+    // The diff/scale/budget/matrix/trend/corpus-check gates are verdicts,
+    // not errors: the outcome renders like a report, but a regression (or
+    // a superlinear fit, or a breached budget, or an accumulated drift, or
+    // a drifted committed corpus) flips the exit code (the `gate` shape).
     let mut diff_failed = false;
     let mut scale_failed = false;
     let mut budget_failed = false;
     let mut matrix_failed = false;
     let mut trend_failed = false;
+    let mut corpus_check_failed = false;
     let result = match cli.command {
         Command::Run {
             iterations,
@@ -165,6 +166,32 @@ fn main() -> ExitCode {
                 print!("{}", trend.render_text());
             }),
         },
+        Command::Corpus { action } => match action {
+            glyim_bench::cli::CorpusAction::Write {
+                dir,
+                families,
+                seeds,
+                size,
+            } => glyim_bench::cli::execute_corpus_write(
+                &dir,
+                families.as_deref(),
+                seeds.as_deref(),
+                size,
+            )
+            .map(|manifest| {
+                println!(
+                    "wrote {} program(s) + corpus.json into {}",
+                    manifest.programs.len(),
+                    dir.display(),
+                );
+            }),
+            glyim_bench::cli::CorpusAction::Check { dir } => {
+                glyim_bench::cli::execute_corpus_check(&dir).map(|check| {
+                    corpus_check_failed = !check.is_ok();
+                    print!("{}", check.render_text());
+                })
+            }
+        },
     };
 
     match result {
@@ -173,7 +200,8 @@ fn main() -> ExitCode {
                 && !scale_failed
                 && !budget_failed
                 && !matrix_failed
-                && !trend_failed =>
+                && !trend_failed
+                && !corpus_check_failed =>
         {
             ExitCode::SUCCESS
         }
