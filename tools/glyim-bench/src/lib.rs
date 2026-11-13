@@ -98,6 +98,10 @@ pub mod budget;
 pub mod cli;
 /// Deterministic synthetic program corpus + `glyim.corpus/1` manifest (M2.3).
 pub mod corpus;
+/// The committed corpora directory: the `CorpusSink` write seam,
+/// `DirCorpusSink`, and the byte-level check gate (M2.3 remainder:
+/// "corpora committed with hashes").
+pub mod corpus_dir;
 /// Report-to-report comparison and the `ReportStore` seam (M2.5 perf history).
 pub mod diff;
 /// Typed errors with `miette` help text for every seam.
