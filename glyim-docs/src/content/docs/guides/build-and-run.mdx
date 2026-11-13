@@ -24,7 +24,7 @@ The build is incremental: `glyip` fingerprints sources and build configuration w
 
 Combine `--release` with an explicit optimization level and LTO strategy when you want a tuned build:
 
-<Code lang="bash" code={`glyip build --release -O2 --lto fat`} />
+<Code lang="bash" code={`glyip build --release --opt-level 2 --lto thin`} />
 
 <Aside type="caution">
 `fat` LTO performs an in-compiler module merge and optimize step. `thin` LTO requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution that `glyim-codegen-llvm` was built against; requesting `thin` with the bytecode backend is an explicit error rather than a silent no-op.
@@ -52,7 +52,7 @@ Pass a target triple to build for another architecture:
 
 <Code lang="bash" code={`glyip run --target aarch64-unknown-linux-gnu`} />
 
-The default triple is `x86_64-unknown-linux-gnu`. The same `--target` flag exists on `glyim` (see the [CLI reference](/reference/cli/)).
+The default triple is the host triple (derived from `std::env::consts`). The same `--target` flag exists on `glyim` (see the [CLI reference](/reference/cli/)).
 
 ## Next steps
 
