@@ -13,17 +13,24 @@
 //! Both are pure functions of a [`ComputeOutcome`]: no clock, no
 //! randomness, entries already sorted by the engine — running twice, on
 //! two machines, gives identical bytes (plan C1/M1.13; pinned by golden
-//! and shuffled-input tests). The CI "STATUS is up to date" gate and the
-//! remaining M1.9 renderers (`KNOWN_GAPS.md` generation, Astro page) are
-//! later slices and deliberately absent here.
+//! and shuffled-input tests). The remaining M1.9 renderers (Astro page)
+//! are later slices and deliberately absent here.
+//!
+//! This module also carries the M1.10 remainder, the "STATUS is up to
+//! date" CI gate: [`run_status_out`] writes a rendered artifact
+//! (`STATUS.md` / `STATUS.json`, `--out` to override) and `--check`
+//! byte-compares the committed file against the pure render — the exact
+//! drift-gate contract `render-gaps --check` established for
+//! `KNOWN_GAPS.md`.
 
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use ledger_schema::{Level, Tier};
 use serde::Serialize;
 
 use crate::compute::{ComputeOutcome, FeatureLevel, run_compute};
+use crate::{LedgerCliError, StatusFormat};
 
 /// Schema tag of the status JSON contract.
 pub const STATUS_SCHEMA: &str = "glyim.status/1";
@@ -66,6 +73,111 @@ pub fn run_status(root: &Path, evidence: Option<&Path>) -> StatusOutcome {
     StatusOutcome {
         compute: run_compute(root, evidence),
     }
+}
+
+// -- write/check face (the M1.10 "STATUS is up to date" gate) ------------------
+
+/// Committed-file default for the Markdown face (`status --check`).
+pub const STATUS_MD_TARGET: &str = "STATUS.md";
+
+/// Committed-file default for the JSON face (`status --check --format json`).
+pub const STATUS_JSON_TARGET: &str = "STATUS.json";
+
+/// Result of the write/check face of `ledger status` (the shape
+/// `run_render_gaps` returns for `KNOWN_GAPS.md`, mirrored here).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatusRendered {
+    /// The underlying engine outcome.
+    pub outcome: StatusOutcome,
+    /// The face that was rendered.
+    pub format: StatusFormat,
+    /// The rendered bytes (with trailing newline).
+    pub rendered: String,
+    /// The file the render was written to or checked against; `None` when
+    /// the caller asked for stdout.
+    pub target: Option<PathBuf>,
+    /// Whether `--check` byte-compared instead of writing.
+    pub checked: bool,
+}
+
+/// Renders the status for `root` and either writes it to `out` (default
+/// `STATUS.md` / `STATUS.json` by face, under `root`) or — with `check` —
+/// byte-compares it against the committed file and fails on any drift.
+///
+/// # Errors
+///
+/// [`LedgerCliError::StatusDrift`] when `--check` cannot read the
+/// committed document or the committed bytes differ from the render;
+/// [`LedgerCliError::StatusWrite`] when the requested document cannot be
+/// written. Registry/evidence diagnostics travel in
+/// [`StatusRendered::outcome`] and fail the exit code like every other
+/// pipeline (the debt is displayed, not silent).
+pub fn run_status_out(
+    root: &Path,
+    evidence: Option<&Path>,
+    format: StatusFormat,
+    out: Option<&Path>,
+    check: bool,
+) -> Result<StatusRendered, LedgerCliError> {
+    let span = tracing::info_span!(
+        "status_out",
+        root = %root.display(),
+        format = format.as_str(),
+        check = check,
+    );
+    let _enter = span.enter();
+
+    let outcome = run_status(root, evidence);
+    let rendered = match format {
+        StatusFormat::Markdown => format_status_markdown(&outcome.compute),
+        StatusFormat::Json => format_status_json(&outcome.compute),
+    };
+
+    let target = out.map(Path::to_path_buf);
+    if check {
+        let target = target.unwrap_or_else(|| {
+            root.join(match format {
+                StatusFormat::Markdown => STATUS_MD_TARGET,
+                StatusFormat::Json => STATUS_JSON_TARGET,
+            })
+        });
+        let committed =
+            std::fs::read_to_string(&target).map_err(|err| LedgerCliError::StatusDrift {
+                path: target.display().to_string(),
+                detail: format!("cannot read the committed document: {err}"),
+            })?;
+        if committed != rendered {
+            return Err(LedgerCliError::StatusDrift {
+                path: target.display().to_string(),
+                detail: format!(
+                    "the committed document drifted from the computed status \
+                     (committed {} bytes, render {} bytes)",
+                    committed.len(),
+                    rendered.len(),
+                ),
+            });
+        }
+        return Ok(StatusRendered {
+            outcome,
+            format,
+            rendered,
+            target: Some(target),
+            checked: true,
+        });
+    }
+    if let Some(target) = &target {
+        std::fs::write(target, &rendered).map_err(|err| LedgerCliError::StatusWrite {
+            path: target.display().to_string(),
+            detail: err.to_string(),
+        })?;
+    }
+    Ok(StatusRendered {
+        outcome,
+        format,
+        rendered,
+        target,
+        checked: false,
+    })
 }
 
 // -- renderers ---------------------------------------------------------------
@@ -232,6 +344,7 @@ pub fn format_status_markdown(outcome: &ComputeOutcome) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Command;
     use crate::compute::ComputeOutcome;
     use ledger_schema::Diagnostic;
 
@@ -409,5 +522,154 @@ mod tests {
         assert_eq!(outcome.compute.entries.len(), 0);
         let text = format_status_json(&outcome.compute);
         assert!(text.contains("\"features\": 0"), "{text}");
+    }
+
+    // -- write/check face (the M1.10 "STATUS is up to date" gate) ----------
+
+    #[test]
+    fn status_out_writes_targets_and_stdout_face_matches() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let md = run_status_out(
+            dir.path(),
+            None,
+            StatusFormat::Markdown,
+            Some(&dir.path().join("STATUS.md")),
+            false,
+        )
+        .expect("write md");
+        assert_eq!(md.target, Some(dir.path().join("STATUS.md")));
+        assert_eq!(
+            std::fs::read_to_string(md.target.expect("target")).expect("read"),
+            md.rendered
+        );
+        let json = run_status_out(
+            dir.path(),
+            None,
+            StatusFormat::Json,
+            Some(&dir.path().join("STATUS.json")),
+            false,
+        )
+        .expect("write json");
+        assert_eq!(json.target, Some(dir.path().join("STATUS.json")));
+        assert!(
+            json.rendered
+                .starts_with("{\n  \"schema\": \"glyim.status/1\"")
+        );
+        // No `--out`: the render goes to stdout (target stays `None`), the
+        // same contract as `render-gaps` without `--out`.
+        let stdout = run_status_out(dir.path(), None, StatusFormat::Markdown, None, false)
+            .expect("render to stdout");
+        assert_eq!(stdout.target, None);
+        assert_eq!(stdout.rendered, md.rendered);
+    }
+
+    #[test]
+    fn status_check_passes_when_the_committed_document_matches() {
+        let dir = tempfile::tempdir().expect("tmp");
+        run_status_out(
+            dir.path(),
+            None,
+            StatusFormat::Markdown,
+            Some(&dir.path().join(STATUS_MD_TARGET)),
+            false,
+        )
+        .expect("write STATUS.md");
+        let checked = run_status_out(dir.path(), None, StatusFormat::Markdown, None, true)
+            .expect("check STATUS.md");
+        assert!(checked.checked);
+        // `--check` without `--out` resolves the face's default target.
+        assert_eq!(checked.target, Some(dir.path().join(STATUS_MD_TARGET)));
+        let json = run_status_out(
+            dir.path(),
+            None,
+            StatusFormat::Json,
+            Some(&dir.path().join(STATUS_JSON_TARGET)),
+            false,
+        )
+        .expect("write STATUS.json");
+        let checked_json = run_status_out(dir.path(), None, StatusFormat::Json, None, true)
+            .expect("check STATUS.json");
+        assert_eq!(
+            checked_json.target,
+            Some(dir.path().join(STATUS_JSON_TARGET))
+        );
+        let _ = json;
+    }
+
+    #[test]
+    fn status_check_fails_on_drift_and_reports_the_remedy() {
+        let dir = tempfile::tempdir().expect("tmp");
+        std::fs::write(dir.path().join(STATUS_MD_TARGET), "<!-- stale -->\n")
+            .expect("write stale document");
+        let err = run_status_out(dir.path(), None, StatusFormat::Markdown, None, true)
+            .expect_err("stale committed document");
+        match &err {
+            LedgerCliError::StatusDrift { path, detail } => {
+                assert!(path.ends_with("STATUS.md"), "{path}");
+                assert!(detail.contains("drifted"), "{detail}");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+        // The help line names the regeneration command (every CLI error
+        // carries one; pinned crate-wide by the meta-test).
+        assert!(miette::Diagnostic::help(&err).is_some());
+    }
+
+    #[test]
+    fn status_check_fails_on_a_missing_committed_document() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let err = run_status_out(dir.path(), None, StatusFormat::Json, None, true)
+            .expect_err("no committed STATUS.json");
+        assert!(matches!(err, LedgerCliError::StatusDrift { .. }));
+    }
+
+    #[test]
+    fn status_out_honors_an_explicit_target() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let target = dir.path().join("status-page.md");
+        let rendered = run_status_out(
+            dir.path(),
+            None,
+            StatusFormat::Markdown,
+            Some(&target),
+            false,
+        )
+        .expect("write explicit target");
+        assert_eq!(rendered.target, Some(target.clone()));
+        assert!(target.is_file(), "explicit target written");
+    }
+
+    #[test]
+    fn parse_status_takes_out_and_check() {
+        let command = crate::parse_args(
+            [
+                "status",
+                "--check",
+                "--format",
+                "json",
+                "--out",
+                "docs/STATUS.json",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+            .into_iter(),
+        )
+        .expect("parses");
+        match command {
+            Command::Status {
+                root,
+                out,
+                check,
+                format,
+                ..
+            } => {
+                assert_eq!(root, PathBuf::from("."));
+                assert!(check);
+                assert_eq!(out, Some(PathBuf::from("docs/STATUS.json")));
+                assert_eq!(format, StatusFormat::Json);
+            }
+            other => panic!("unexpected command: {other:?}"),
+        }
     }
 }
