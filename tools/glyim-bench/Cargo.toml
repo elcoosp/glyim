@@ -60,6 +60,16 @@ name = "history_store"
 harness = false
 path = "benches/history_store.rs"
 
+[[bench]]
+name = "matrix_engine"
+harness = false
+path = "benches/matrix_engine.rs"
+
+[[bench]]
+name = "trend_engine"
+harness = false
+path = "benches/trend_engine.rs"
+
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
