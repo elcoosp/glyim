@@ -16,3 +16,7 @@ dump.txt
 .github/pr-body.md
 .vercel
 .env*
+
+# Handoff artifacts (ship manifest + PR body)
+ship.toml
+.github/pr-body.md
