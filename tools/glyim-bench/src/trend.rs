@@ -255,11 +255,13 @@ pub fn trend_over_history(
     let last_wall_mean = points[points.len() - 1].wall_mean;
     let wall_drift_pct = drift_pct(first_wall_mean, last_wall_mean);
     let instructions_drift_pct = if points.iter().all(|point| point.instructions_mean.is_some()) {
-        let first = points[0].instructions_mean.expect("covered above");
-        let last = points[points.len() - 1]
-            .instructions_mean
-            .expect("covered above");
-        Some(drift_pct(first, last))
+        // The all-guard above makes every point's mean available, so the
+        // endpoint `?`s here are always `Some`; the `and_then` shape keeps
+        // the house rule (no `expect` outside tests) and degrades to "no
+        // instruction drift" (the guard's else branch) instead of panicking.
+        points.first().zip(points.last()).and_then(|(first, last)| {
+            Some(drift_pct(first.instructions_mean?, last.instructions_mean?))
+        })
     } else {
         None
     };
