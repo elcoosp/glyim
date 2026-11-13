@@ -1,24 +1,27 @@
-//! Waiver bench (constitution C9 face).
+//! Waiver bench (constitution C9 faces).
 //!
 //! Dependency-free (`harness = false`), mirroring the `render` bench:
 //! measures the [`glyim_ledger::assess_waivers`] engine, both
 //! [`glyim_ledger::WaiversRenderer`] faces — the text report and the
-//! `glyim.ledger-waivers/1` JSON contract — and the `waivers grant`
-//! validation path over a synthetic 500-waiver set, so CI logs can track
-//! the C9 face costs as the exception inventory grows. Run with:
+//! `glyim.ledger-waivers/1` JSON contract — the `waivers grant`
+//! validation path and the `waivers revoke` retirement path, each over a
+//! synthetic 500-waiver set, so CI logs can track the C9 face costs as
+//! the exception inventory grows. Run with:
 //!
 //! ```text
 //! cargo bench -p glyim-ledger --bench waivers
 //! ```
 
+use std::cell::RefCell;
 use std::fmt::Write as _;
 use std::hint::black_box;
 use std::time::Instant;
 
 use glyim_ledger::{
-    FileWaiverSource, InMemoryWaiverSink, InMemoryWaiverSource, JsonWaiversRenderer, NaiveDate,
-    TextWaiversRenderer, WaiverEntry, WaiverSet, WaiversGrantRequest, WaiversRenderer,
-    assess_waivers, run_waivers, run_waivers_grant,
+    FileWaiverSource, InMemoryWaiverRewriter, InMemoryWaiverSink, InMemoryWaiverSource,
+    JsonWaiversRenderer, NaiveDate, TextWaiversRenderer, WaiverEntry, WaiverSet,
+    WaiversGrantRequest, WaiversRenderer, WaiversRevokeRequest, assess_waivers, run_waivers,
+    run_waivers_grant, run_waivers_revoke,
 };
 
 /// Builds a synthetic 500-waiver set: half inside the horizon (10 days
@@ -71,7 +74,7 @@ fn main() {
 
     // The source seam adds one clone per load; measure it so the run
     // pipeline (source + assess + render) stays visible in CI logs.
-    let source = InMemoryWaiverSource { set };
+    let source = InMemoryWaiverSource { set: set.clone() };
     let started = Instant::now();
     let outcome = black_box(run_waivers(
         black_box(std::path::Path::new(".")),
@@ -149,8 +152,36 @@ fn main() {
     assert!(granted.id.starts_with("WVR-"));
     assert_eq!(sink.written.borrow().len(), 1);
 
+    // The revoke face: the full retirement path (document load with the
+    // duplicate scan over the seeded 500-entry set, exact-ID match,
+    // canonical rewrite of the remaining entries) with the rewrite
+    // captured by the in-memory rewriter, so the measured cost is the
+    // validation work, not the fs write.
+    let rewriter = InMemoryWaiverRewriter {
+        doc: RefCell::new(set.waivers.clone()),
+        removed: RefCell::new(Vec::new()),
+    };
+    let revoke = WaiversRevokeRequest {
+        id: "WVR-0000".to_string(),
+    };
+    let started = Instant::now();
+    let revoked = black_box(run_waivers_revoke(
+        black_box(root),
+        black_box(&revoke),
+        black_box(&FileWaiverSource),
+        black_box(&rewriter),
+    ))
+    .expect("the bench revoke must pass");
+    let revoke_elapsed = started.elapsed();
+    assert_eq!(revoked.id, "WVR-0000");
+    // The committed document carries the 500 seeded entries (the grant
+    // face above appended to the in-memory sink); the rewriter removes
+    // exactly one.
+    assert_eq!(revoked.remaining, 499);
+    assert_eq!(rewriter.removed.borrow().len(), 1);
+
     println!(
-        "waivers bench: 500-waiver set (250 valid, 250 expired)\n  assess    : {assess_elapsed:.1?}\n  text face : {text_elapsed:.1?} ({} bytes)\n  json face : {json_elapsed:.1?} ({} bytes)\n  run (clone+assess+debug span): {run_elapsed:.1?}\n  grant (registry+horizon+dup scan, in-memory sink): {grant_elapsed:.1?}",
+        "waivers bench: 500-waiver set (250 valid, 250 expired)\n  assess    : {assess_elapsed:.1?}\n  text face : {text_elapsed:.1?} ({} bytes)\n  json face : {json_elapsed:.1?} ({} bytes)\n  run (clone+assess+debug span): {run_elapsed:.1?}\n  grant (registry+horizon+dup scan, in-memory sink): {grant_elapsed:.1?}\n  revoke (load+exact-ID scan, in-memory rewrite): {revoke_elapsed:.1?}",
         text.len(),
         json.len(),
     );
