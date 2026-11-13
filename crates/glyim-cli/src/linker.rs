@@ -814,7 +814,11 @@ fn ensure_executable(path: &Path) {
         let mode = perms.mode();
         if mode & 0o111 == 0 {
             perms.set_mode(mode | 0o755);
-            let _ = std::fs::set_permissions(path, perms);
+            // A failed chmod silently produced a non-executable output
+            // before; surface it instead of swallowing the error.
+            if let Err(err) = std::fs::set_permissions(path, perms) {
+                tracing::warn!(path = %path.display(), error = %err, "failed to set the executable bit on the linked binary");
+            }
         }
     }
 }
