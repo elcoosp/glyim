@@ -22,7 +22,15 @@
 //! <CURRENT> [ROOT] [--format text|json]` is the plan M1.10
 //! readiness-regression gate: it compares two snapshot documents and
 //! fails on any computed-level drop that no unexpired waiver in
-//! `ledger/waivers.toml` covers (constitution C9).
+//! `ledger/waivers.toml` covers (constitution C9). `glyim-ledger gates
+//! [ROOT] [--evidence PATH] [--format text|json]` is the plan M1.12
+//! release-gate report: it evaluates every `RG-NN` gate declared in
+//! `ledger/gates.toml` against the current evidence and prints all 24 —
+//! `unmeasured` gates are displayed, never silently passed.
+//! `glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]` is
+//! the plan M1.13 determinism self-check: every ledger pipeline runs
+//! twice from independent load passes and any rendered-byte drift fails
+//! the command.
 
 use std::process::ExitCode;
 
@@ -177,6 +185,53 @@ fn main() -> ExitCode {
                     print!("{}", glyim_ledger::format_diff_json(&outcome));
                 }
             }
+            if outcome.is_ok() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Command::Gates {
+            root,
+            evidence,
+            format,
+        } => {
+            let outcome = glyim_ledger::run_gates(&root, evidence.as_deref());
+            match format {
+                glyim_ledger::GatesFormat::Text => {
+                    print!("{}", glyim_ledger::format_gates_text(&outcome));
+                }
+                glyim_ledger::GatesFormat::Json => {
+                    print!("{}", glyim_ledger::format_gates_json(&outcome));
+                }
+            }
+            // Load/validation diagnostics fail like `check`; gate verdicts
+            // are report content — `unmeasured` must display without
+            // failing (plan M1.12), and a failing release gate is CI's
+            // business, wired through the later RG-gate slices.
+            if outcome.is_ok() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Command::Verify {
+            root,
+            evidence,
+            format,
+        } => {
+            let outcome = glyim_ledger::verify_determinism(&root, evidence.as_deref());
+            match format {
+                glyim_ledger::VerifyFormat::Text => {
+                    print!("{}", glyim_ledger::format_verify_text(&outcome));
+                }
+                glyim_ledger::VerifyFormat::Json => {
+                    print!("{}", glyim_ledger::format_verify_json(&outcome));
+                }
+            }
+            // The self-check *is* a gate: a drifted check or an
+            // error-severity diagnostic fails the command (plan M1.13 —
+            // "run compute twice → identical bytes").
             if outcome.is_ok() {
                 ExitCode::SUCCESS
             } else {
