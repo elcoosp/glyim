@@ -14,9 +14,11 @@ use glyim_bench::report::BenchReport;
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    // The diff gate is a verdict, not an error: the outcome renders like a
-    // report, but a regression flips the exit code (the `gate` shape).
+    // The diff/scale gates are verdicts, not errors: the outcome renders
+    // like a report, but a regression (or a superlinear fit) flips the
+    // exit code (the `gate` shape).
     let mut diff_failed = false;
+    let mut scale_failed = false;
     let result = match cli.command {
         Command::Run {
             iterations,
@@ -45,16 +47,34 @@ fn main() -> ExitCode {
             json,
             baseline,
             current,
-        } => glyim_bench::cli::execute_diff(max_delta_pct, &baseline, &current, json.as_ref()).map(
-            |outcome| {
+        } => glyim_bench::cli::execute_diff(max_delta_pct, &baseline, &current, json.as_deref())
+            .map(|outcome| {
                 diff_failed = !outcome.is_ok();
                 print!("{}", outcome.render_text());
-            },
-        ),
+            }),
+        Command::Scale {
+            iterations,
+            source,
+            sizes,
+            max_exponent,
+            json,
+            command,
+        } => glyim_bench::cli::execute_scale(
+            iterations,
+            source,
+            &sizes,
+            max_exponent,
+            json.as_ref(),
+            &command,
+        )
+        .map(|outcome| {
+            scale_failed = !outcome.is_ok();
+            print!("{}", outcome.render_text());
+        }),
     };
 
     match result {
-        Ok(()) if !diff_failed => ExitCode::SUCCESS,
+        Ok(()) if !diff_failed && !scale_failed => ExitCode::SUCCESS,
         Ok(()) => ExitCode::FAILURE,
         Err(err) => {
             eprint!("{:?}", miette::Report::new(err));
