@@ -138,8 +138,8 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `tools/glyim-metrics` | Repo-health metrics (code lines, tests, doc coverage, inline-allow count) behind the CI metrics ratchet. |
 | `tools/glyim-pilot` | Agent orchestrator with gate bundles (clippy, fmt, contracts, coverage, mutation, ledger). |
 | `tools/ledger-schema` | `deny_unknown_fields` schemas shared by the readiness ledger and inventory extractors. |
-| `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `gaps`, `next`, `explain`, `compute`, `status`, `diff`, `gates`, `verify`, `inventory`, `schema` — registry consistency gates run in CI; `next` renders the plan §3.9 deterministic work queue (`glyim.ledger-next/1` JSON) for agent consumers and `explain` resolves one registry ID against it; `compute` runs the plan M1.8 level engine — a pure function of the registry, `glyim.evidence/1` records, and `ledger/policy.toml` (`glyim.ledger-compute/1` JSON with `--format json`; `--snapshot PATH` persists the `glyim.ledger-snapshot/1` document); `status` renders the computed status as the marker-delimited Markdown block or the `glyim.status/1` JSON contract (plan M1.9 first slice); `diff` is the plan M1.10 readiness-regression gate between two snapshots — regressions block unless an unexpired `ledger/waivers.toml` waiver covers them (constitution C9); `gates` is the plan M1.12 release-gate report — every `RG-NN` gate declared in `ledger/gates.toml` with the `pass`/`fail`/`unmeasured` verdict the current evidence supports (`unmeasured` is displayed, never silently passed; `glyim.ledger-gates/1` JSON with `--format json`); `verify` is the plan M1.13 determinism self-check (first slice) — every ledger pipeline runs twice from independent load passes and any rendered-byte drift fails the command (`glyim.ledger-verify/1` JSON with `--format json`). |
-| `tools/glyim-bench` | M2.2 measurement harness: `perf stat`/callgrind instruction counts, wall time, child RSS, a counting allocator, the CoV stability gate, and the M2.3 deterministic corpus generators (`glyim.corpus/1` manifest); `diff` is the M2.5 perf-history gate between two `glyim.bench/1` reports, `scale` (M2.4) measures a `{size}`-parameterized command across input sizes and gates the fitted log-log scaling exponent, `budget` (M2.6) enforces the committed absolute `glyim.bench-budgets/1` budgets per benchmark — an exceeded mean, an unmeasured instruction bound, or an unbudgeted program fails the gate — and `history record`/`show`/`diff`/`trend` append runs to the append-only `glyim.bench-history/1` JSONL perf history (plan §6 M2.5), diff a current report against the latest recorded baseline, and measure the total drift across the last N recorded runs of a program (`glyim.bench-trend/1` — the accumulated-ratchet class no per-run diff sees); `matrix` (M2.5 remainder) diffs a whole benchmark set against the latest recorded baseline of each program and gates the per-benchmark deltas **and** their geo-mean (`glyim.bench-matrix/1`, plan §325: fail >2% per benchmark or >0.5% geo-mean — the aggregate clause that catches a uniform sub-budget drift no single row trips). |
+| `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `gaps`, `next`, `explain`, `compute`, `status`, `diff`, `gates`, `verify`, `render-gaps`, `inventory`, `schema` — registry consistency gates run in CI; `next` renders the plan §3.9 deterministic work queue (`glyim.ledger-next/1` JSON) for agent consumers and `explain` resolves one registry ID against it; `compute` runs the plan M1.8 level engine — a pure function of the registry, `glyim.evidence/1` records, and `ledger/policy.toml` (`glyim.ledger-compute/1` JSON with `--format json`; `--snapshot PATH` persists the `glyim.ledger-snapshot/1` document); `status` renders the computed status as the marker-delimited Markdown block or the `glyim.status/1` JSON contract (plan M1.9 first slice); `diff` is the plan M1.10 readiness-regression gate between two snapshots — regressions block unless an unexpired `ledger/waivers.toml` waiver covers them (constitution C9); `gates` is the plan M1.12 release-gate report — every `RG-NN` gate declared in `ledger/gates.toml` with the `pass`/`fail`/`unmeasured` verdict the current evidence supports (`unmeasured` is displayed, never silently passed; `glyim.ledger-gates/1` JSON with `--format json`); `verify` is the plan M1.13 determinism self-check (first slice) — every ledger pipeline runs twice from independent load passes and any rendered-byte drift fails the command (`glyim.ledger-verify/1` JSON with `--format json`). |
+| `tools/glyim-bench` | M2.2 measurement harness: `perf stat`/callgrind instruction counts, wall time, child RSS, a counting allocator, the CoV stability gate, and the M2.3 deterministic corpus generators (`glyim.corpus/1` manifest); `diff` is the M2.5 perf-history gate between two `glyim.bench/1` reports, `scale` (M2.4) measures a `{size}`-parameterized command across input sizes and gates the fitted log-log scaling exponent, `budget` (M2.6) enforces the committed absolute `glyim.bench-budgets/1` budgets per benchmark — an exceeded mean, an unmeasured instruction bound, or an unbudgeted program fails the gate — and `history record`/`show`/`diff`/`trend` append runs to the append-only `glyim.bench-history/1` JSONL perf history (plan §6 M2.5), diff a current report against the latest recorded baseline, and measure the total drift across the last N recorded runs of a program (`glyim.bench-trend/1` — the accumulated-ratchet class no per-run diff sees); `matrix` (M2.5 remainder) diffs a whole benchmark set against the latest recorded baseline of each program and gates the per-benchmark deltas **and** their geo-mean (`glyim.bench-matrix/1`, plan §325: fail >2% per benchmark or >0.5% geo-mean — the aggregate clause that catches a uniform sub-budget drift no single row trips); `corpus write`/`check` (M2.3 remainder) materialize the committed corpora directory — one `<family>-<seed>-<size>.g` file per program plus the `glyim.corpus/1` `corpus.json` manifest through the `CorpusSink` seam — and re-hash every committed byte against the manifest on every check. |
 
 ### Compilation Pipeline
 
@@ -516,8 +516,14 @@ cargo run -p glyim-ledger --example release_gates
 # Self-check determinism: every ledger pipeline twice, byte-identical or fail (M1.13).
 cargo run -p glyim-ledger --example verify_determinism
 
+# Generate KNOWN_GAPS.md from the gap registry; verify the committed copy (M1.9 remainder).
+cargo run -p glyim-ledger --example render_known_gaps
+
 # Build + verify a corpus manifest over the 7 generator families (M2.3).
 cargo run -p glyim-bench --example corpus_walk
+
+# Commit a corpus directory + manifest, then catch a hand-edited program (M2.3 remainder).
+cargo run -p glyim-bench --example corpus_commit
 
 # Fit a stored report history + a live run into a scaling exponent (M2.4).
 cargo run -p glyim-bench --example scaling_fit
@@ -705,12 +711,23 @@ session log.
   benchmark or >0.5% geo-mean" aggregate budget) plus its complement, the
   windowed trend analyzer (`glyim-bench history trend` over a
   `glyim.bench-trend/1` report, the accumulated-drift ratchet no per-run
-  diff sees) — are landed. The next
-  plan items are the M1.9 renderers remainder (generated `KNOWN_GAPS.md`,
-  the Astro readiness page), the M1.10 CI wiring (the "STATUS is up to
-  date" check, the nightly full-evidence job), and the rest of M2.3 (the
-  committed corpora directory and the evidence wiring that fills the
-  harness's reserved `instructions`/`rss_kb` columns).
+  diff sees) — are landed, and the M1.12 release-gate report
+  (`glyim-ledger gates` over `ledger/gates.toml`, all 24 `RG-NN` gates
+  with `unmeasured` displayed, never silently passed) and the M1.13
+  determinism self-check (`glyim-ledger verify`) are landed, and the M1.9
+  renderers remainder is landed for the generated `KNOWN_GAPS.md`
+  (`glyim-ledger render-gaps`: the document is a pure function of
+  `ledger/gaps/known/*.toml` through the `KnownGapsRenderer` seam, with
+  the `--check` byte-comparison drift gate and the `glyim.known-gaps/1`
+  JSON face for the readiness page), and the M2.3 remainder is landed for
+  the committed corpora directory (`glyim-bench corpus write`/`check`
+  through the `CorpusSink` seam: one `<family>-<seed>-<size>.g` file per
+  program plus the `glyim.corpus/1` `corpus.json` manifest, re-hashed on
+  every check). The next
+  plan items are the M1.9 Astro readiness page (the `glyim.known-gaps/1`
+  face's consumer), the M1.10 CI wiring (the "STATUS is up to date"
+  check, the nightly full-evidence job), and the evidence wiring that
+  fills the harness's reserved `instructions`/`rss_kb` columns.
 - `docs/archive/` — historical session documents (`HANDOFF.md`,
   `FIXES.md`) kept for provenance; the root stays navigation-focused.
 - `metrics/baseline.json` — the M0.6 repo-health baseline (file/line/test
