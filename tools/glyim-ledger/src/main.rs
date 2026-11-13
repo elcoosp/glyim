@@ -45,7 +45,15 @@
 //! committed store (whole-record dedupe, canonical order).
 //! `glyim-ledger evidence check [ROOT] [--format text|json]` validates
 //! the committed store and reports its coverage; error diagnostics fail
-//! the exit code.
+//! the exit code. `glyim-ledger waivers [ROOT] [--format text|json]`
+//! loads `ledger/waivers.toml` and reports every waiver's expiry verdict
+//! — expired waivers and load diagnostics fail the exit code
+//! (constitution C9: expired exceptions fail CI even when no regression
+//! needs covering yet). `waivers grant [ROOT] --feature <ID> --reason
+//! <TEXT> --issue <URL> [--days N]` is the curated write face: it
+//! validates the request against the registry and the C9 horizon, then
+//! appends the canonical `[[waiver]]` block to `ledger/waivers.toml`
+//! (deterministic `WVR-<date>-<slug>` ID, never a silent overwrite).
 
 use std::process::ExitCode;
 
@@ -409,6 +417,69 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE
+            }
+        }
+        Command::Waivers { root, format } => {
+            // The file-backed source is the only CLI wiring: the same
+            // `load_waivers` loader and diagnostics the `diff` gate uses,
+            // so the health face and the regression gate cannot disagree
+            // about what `ledger/waivers.toml` says.
+            let outcome = glyim_ledger::run_waivers(&root, &glyim_ledger::FileWaiverSource);
+            match format {
+                glyim_ledger::WaiversFormat::Text => {
+                    print!("{}", glyim_ledger::format_waivers_text(&outcome));
+                }
+                glyim_ledger::WaiversFormat::Json => {
+                    print!("{}", glyim_ledger::format_waivers_json(&outcome));
+                }
+            }
+            // The health face is a gate: an expired waiver fails per C9
+            // even when no regression needs covering, and a load
+            // diagnostic fails like `check`.
+            if outcome.is_ok() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Command::WaiversGrant {
+            root,
+            feature,
+            reason,
+            issue,
+            days,
+            format,
+        } => {
+            // The write face routes every rejection through the typed
+            // error seam (a rejected grant is a CLI failure, not a
+            // diagnostic — nothing was written).
+            let request = glyim_ledger::WaiversGrantRequest {
+                feature,
+                reason,
+                issue,
+                days: days.unwrap_or(7),
+            };
+            match glyim_ledger::run_waivers_grant(
+                &root,
+                &request,
+                &glyim_ledger::FileWaiverSource,
+                &glyim_ledger::FileWaiverSink,
+            ) {
+                Ok(outcome) => {
+                    match format {
+                        glyim_ledger::WaiversFormat::Text => {
+                            print!("{}", glyim_ledger::format_waivers_grant_text(&outcome));
+                        }
+                        glyim_ledger::WaiversFormat::Json => {
+                            print!("{}", glyim_ledger::format_waivers_grant_json(&outcome));
+                        }
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
             }
         }
         Command::Inventory { root } => {
