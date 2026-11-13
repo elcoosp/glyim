@@ -1243,7 +1243,7 @@ mutation_kill_rate_pct = 75
         let merged = merge_records(&[a.clone(), a.clone()], &[a.clone(), b.clone()]);
         assert_eq!(merged, vec![a.clone(), b.clone()]);
         // Order-insensitive: swapping the inputs merges to the same set.
-        let swapped = merge_records(&[b.clone()], &[a.clone(), b]);
+        let swapped = merge_records(std::slice::from_ref(&b), &[a.clone(), b.clone()]);
         assert_eq!(swapped, merged);
         let _ = a;
     }
