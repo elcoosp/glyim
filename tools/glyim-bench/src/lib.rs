@@ -60,6 +60,19 @@
 //! cargo run -p glyim-bench --example scaling_fit
 //! ```
 //!
+//! Enforce committed absolute budgets against written reports (M2.6):
+//!
+//! ```text
+//! cargo run -p glyim-bench --example budget_check
+//! ```
+//!
+//! Append runs to the perf history and diff against the latest baseline
+//! (plan §6 M2.5):
+//!
+//! ```text
+//! cargo run -p glyim-bench --example history_baseline
+//! ```
+//!
 //! The M1.5 evidence schema reserved `instructions` / `rss_kb` columns for
 //! exactly this instrumentation; wiring those columns into `glyim-test` is
 //! the next M2.3 slice, after the corpus substrate has been committed with
@@ -67,6 +80,9 @@
 
 /// Gross-allocation counting allocator (`counting_allocator!` macro).
 pub mod alloc;
+/// Absolute per-program budget enforcement and the `BudgetStore` seam
+/// (M2.6 budgets gate).
+pub mod budget;
 /// clap-derived CLI surface, kept in the library for unit tests.
 pub mod cli;
 /// Deterministic synthetic program corpus + `glyim.corpus/1` manifest (M2.3).
@@ -75,6 +91,9 @@ pub mod corpus;
 pub mod diff;
 /// Typed errors with `miette` help text for every seam.
 pub mod error;
+/// The append-only perf-history store and the latest-baseline seam
+/// (plan §6 M2.5 `perf/history/*.jsonl`).
+pub mod history;
 /// The `glyim.bench/1` report document and its renderers.
 pub mod report;
 /// The iteration runner: N executions of one command.
