@@ -17,12 +17,22 @@
 //!   element must carry the `{size}` placeholder) and fits the log-log
 //!   scaling exponent — the M2.4 analyzer; exits non-zero when the fitted
 //!   exponent exceeds the budget.
+//! - `glyim-bench budget [--budgets PATH] [--json OUT] REPORT...` checks
+//!   written reports against the committed absolute budgets (plan M2.6) and
+//!   exits non-zero when a metric exceeds its budget, is unmeasured, or the
+//!   program has no budget entry.
+//! - `glyim-bench history record REPORT --history PATH` appends a report to
+//!   a JSONL perf history (plan §6 M2.5 `perf/history/*.jsonl`), `history
+//!   show --history PATH` lists its records, and `history diff --history
+//!   PATH CURRENT` diffs against the latest recorded baseline.
 
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
 
+use crate::diff::ReportStore;
 use crate::error::BenchError;
+use crate::history::HistoryStore;
 use crate::report::BenchReport;
 use crate::runner::{RunPlan, detect_source, run_iterated};
 use crate::scaling::DEFAULT_MAX_SCALING_EXPONENT;
@@ -107,6 +117,69 @@ pub enum Command {
         /// `{size}` placeholder.
         #[arg(last = true)]
         command: Vec<String>,
+    },
+    /// Check written reports against the committed absolute budgets
+    /// (M2.6 budgets seam); exits non-zero when a metric exceeds its
+    /// budget, is unmeasured, or the program has no budget entry.
+    Budget {
+        /// The budgets file (`glyim.bench-budgets/1` TOML).
+        #[arg(long, default_value = "perf/budgets.toml")]
+        budgets: PathBuf,
+        /// Also write the outcome as `glyim.bench-budget/1` JSON to this
+        /// path.
+        #[arg(long)]
+        json: Option<PathBuf>,
+        /// The `glyim.bench/1` reports to check (one per benchmark).
+        #[arg(required = true)]
+        reports: Vec<PathBuf>,
+    },
+    /// Record reports into the append-only perf history and select
+    /// baselines from it (plan §6 M2.5 `perf/history/*.jsonl`).
+    History {
+        /// What to do with the history file.
+        #[command(subcommand)]
+        action: HistoryAction,
+    },
+}
+
+/// The `history` subcommand's actions.
+#[derive(Subcommand, Debug)]
+pub enum HistoryAction {
+    /// Append a `glyim.bench/1` report to a JSONL history file (creating
+    /// it on first append).
+    Record {
+        /// The history JSONL file to append to; the conventional layout is
+        /// `perf/history/<program_slug>.jsonl`.
+        #[arg(long)]
+        history: PathBuf,
+        /// The `glyim.bench/1` report to record.
+        report: PathBuf,
+    },
+    /// List a history file's records, oldest first (file order is append
+    /// order).
+    Show {
+        /// The history JSONL file to list.
+        #[arg(long)]
+        history: PathBuf,
+        /// Only records of this program.
+        #[arg(long)]
+        program: Option<String>,
+    },
+    /// Diff a current report against the **latest** recorded baseline for
+    /// its program (the plan M2.5 perf-compare over the committed history);
+    /// exits non-zero when a metric regressed beyond the budget.
+    Diff {
+        /// The history JSONL file to select the baseline from.
+        #[arg(long)]
+        history: PathBuf,
+        /// Allowed upward mean delta, in percent.
+        #[arg(long, default_value_t = DEFAULT_MAX_DELTA_PCT)]
+        max_delta_pct: f64,
+        /// Also write the diff as `glyim.bench-diff/1` JSON to this path.
+        #[arg(long)]
+        json: Option<PathBuf>,
+        /// The current report to compare against the history baseline.
+        current: PathBuf,
     },
 }
 
@@ -226,6 +299,82 @@ pub fn execute_diff(
     Ok(outcome)
 }
 
+/// Execute [`HistoryAction::Diff`]: select the baseline as the **latest**
+/// record for the current report's program from the JSONL history, run the
+/// unchanged M2.5 diff engine, and optionally persist the
+/// `glyim.bench-diff/1` outcome on `--json` (the plan M2.5 perf-compare
+/// shape; the outcome's `baseline_path` names the history file with the
+/// `#latest` selector).
+///
+/// # Errors
+///
+/// Report/history read/parse failures, or [`BenchError::InvalidPlan`]
+/// when no recorded history measures the current report's program.
+pub fn execute_history_diff(
+    history_path: &Path,
+    max_delta_pct: f64,
+    current_path: &Path,
+    json: Option<&Path>,
+) -> Result<crate::diff::BenchDiffOutcome, BenchError> {
+    let reports = crate::diff::FileReportStore;
+    let outcome = crate::history::execute_diff_from_history(
+        &reports,
+        &crate::history::JsonlHistoryStore,
+        history_path,
+        current_path,
+        &crate::diff::DiffThresholds::new(max_delta_pct),
+    )?;
+    if let Some(path) = json {
+        let text = outcome.to_json_pretty()?;
+        std::fs::write(path, text).map_err(|err| BenchError::ReportWrite {
+            path: path.display().to_string(),
+            detail: err.to_string(),
+        })?;
+    }
+    Ok(outcome)
+}
+
+/// Execute [`HistoryAction::Record`]: load the report through the M2.5
+/// [`ReportStore`](crate::diff::ReportStore) seam and append it to the
+/// JSONL history. Returns the recorded report and the history's new length.
+///
+/// # Errors
+///
+/// Report read/parse failures, or history append failures.
+pub fn execute_history_record(
+    history_path: &Path,
+    report_path: &Path,
+) -> Result<(BenchReport, usize), BenchError> {
+    let reports = crate::diff::FileReportStore;
+    let report = reports.load(report_path)?;
+    let history = crate::history::JsonlHistoryStore;
+    history.append(
+        history_path,
+        &crate::history::HistoryRecord::new(report.clone()),
+    )?;
+    let len = history.load_all(history_path)?.len();
+    tracing::debug!(report = %report_path.display(), history = %history_path.display(), "report recorded");
+    Ok((report, len))
+}
+
+/// Execute [`HistoryAction::Show`]: list a history file's records (oldest
+/// first), optionally filtered to one program.
+///
+/// # Errors
+///
+/// History read/parse failures.
+pub fn execute_history_show(
+    history_path: &Path,
+    program: Option<&str>,
+) -> Result<Vec<crate::history::HistoryRecord>, BenchError> {
+    let history = crate::history::JsonlHistoryStore;
+    let records = history.load_all(history_path)?;
+    Ok(records
+        .into_iter()
+        .filter(|record| program.is_none_or(|name| record.report.program == name))
+        .collect())
+}
+
 /// Parses the `--sizes` CSV into a sorted, distinct size list.
 ///
 /// # Errors
@@ -282,6 +431,37 @@ pub fn execute_scale(
         .with_max_exponent(max_exponent)
         .with_source(source.unwrap_or_else(detect_source));
     let outcome = crate::scaling::run_scaling(&plan)?;
+    if let Some(path) = json {
+        let text = outcome.to_json_pretty()?;
+        std::fs::write(path, text).map_err(|err| BenchError::ReportWrite {
+            path: path.display().to_string(),
+            detail: err.to_string(),
+        })?;
+    }
+    Ok(outcome)
+}
+
+/// Execute [`Command::Budget`]: load the budgets through the M2.6
+/// [`BudgetStore`](crate::budget::BudgetStore) seam and every report
+/// through the M2.5 [`ReportStore`](crate::diff::ReportStore) seam, and
+/// optionally persist the `glyim.bench-budget/1` outcome on `--json`.
+///
+/// The caller (main) prints the outcome and maps `!outcome.is_ok()` to a
+/// non-zero exit — the shape the CI budget gate consumes.
+///
+/// # Errors
+///
+/// Budgets-file read/parse failures, report read/parse failures, or a
+/// report-write failure on the `--json` path.
+pub fn execute_budget(
+    budgets_path: &Path,
+    report_paths: &[PathBuf],
+    json: Option<&Path>,
+) -> Result<crate::budget::BudgetOutcome, BenchError> {
+    let budgets_store = crate::budget::FileBudgetStore;
+    let report_store = crate::diff::FileReportStore;
+    let outcome =
+        crate::budget::execute_budget(&budgets_store, &report_store, budgets_path, report_paths)?;
     if let Some(path) = json {
         let text = outcome.to_json_pretty()?;
         std::fs::write(path, text).map_err(|err| BenchError::ReportWrite {
@@ -392,5 +572,106 @@ mod tests {
         assert!(super::parse_sizes("").is_err());
         assert!(super::parse_sizes("100,abc").is_err());
         assert!(super::parse_sizes("100,100").is_err(), "duplicates");
+    }
+
+    #[test]
+    fn budget_defaults_match_the_m2_6_gate_shape() {
+        use std::path::PathBuf;
+        let Command::Budget {
+            budgets,
+            json,
+            reports,
+        } = parse(&["glyim-bench", "budget", "perf/report.json"])
+        else {
+            panic!("budget subcommand expected");
+        };
+        assert_eq!(budgets.display().to_string(), "perf/budgets.toml");
+        assert!(json.is_none());
+        assert_eq!(reports, vec![PathBuf::from("perf/report.json")]);
+    }
+
+    #[test]
+    fn budget_requires_at_least_one_report() {
+        assert!(
+            Cli::try_parse_from(["glyim-bench", "budget"]).is_err(),
+            "no reports given"
+        );
+    }
+
+    #[test]
+    fn history_record_show_and_diff_parse_their_flags() {
+        let Command::History {
+            action: super::HistoryAction::Record { history, report },
+        } = parse(&[
+            "glyim-bench",
+            "history",
+            "record",
+            "--history",
+            "perf/history/fib.jsonl",
+            "r.json",
+        ])
+        else {
+            panic!("history record expected");
+        };
+        assert_eq!(history.display().to_string(), "perf/history/fib.jsonl");
+        assert_eq!(report.display().to_string(), "r.json");
+
+        let Command::History {
+            action: super::HistoryAction::Show { history, program },
+        } = parse(&[
+            "glyim-bench",
+            "history",
+            "show",
+            "--history",
+            "perf/history/fib.jsonl",
+            "--program",
+            "fib",
+        ])
+        else {
+            panic!("history show expected");
+        };
+        assert_eq!(history.display().to_string(), "perf/history/fib.jsonl");
+        assert_eq!(program.as_deref(), Some("fib"));
+
+        let Command::History {
+            action:
+                super::HistoryAction::Diff {
+                    history,
+                    max_delta_pct,
+                    current,
+                    json,
+                },
+        } = parse(&[
+            "glyim-bench",
+            "history",
+            "diff",
+            "--history",
+            "perf/history/fib.jsonl",
+            "cur.json",
+        ])
+        else {
+            panic!("history diff expected");
+        };
+        assert_eq!(history.display().to_string(), "perf/history/fib.jsonl");
+        assert_eq!(max_delta_pct, super::DEFAULT_MAX_DELTA_PCT);
+        assert_eq!(current.display().to_string(), "cur.json");
+        assert!(json.is_none());
+    }
+
+    #[test]
+    fn diff_keeps_the_explicit_baseline_positional_shape() {
+        let Command::Diff {
+            max_delta_pct,
+            json,
+            baseline,
+            current,
+        } = parse(&["glyim-bench", "diff", "base.json", "cur.json"])
+        else {
+            panic!("diff expected");
+        };
+        assert_eq!(max_delta_pct, 5.0);
+        assert!(json.is_none());
+        assert_eq!(baseline.display().to_string(), "base.json");
+        assert_eq!(current.display().to_string(), "cur.json");
     }
 }
