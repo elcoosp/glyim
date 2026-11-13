@@ -1,0 +1,169 @@
+# M1.12 release-gate registry — `ledger/gates.toml`.
+#
+# The plan §6 M1.12 exit gate: "Readiness gates RG-01…RG-24 declared in
+# `ledger/gates.toml`; `unmeasured` allowed but displayed — `ledger gates`
+# prints all 24." This file declares *what is measured and from where*
+# (constitution C1: status is computed, never typed — no verdict field
+# exists here); the verdicts are recomputed by `glyim-ledger gates` on
+# every run and rendered as the `glyim.ledger-gates/1` contract.
+#
+# `evidence` names the source the verdict engine may consult today:
+#
+# - `levels` — the M1.8 compute outcome (per-feature readiness levels);
+# - `gaps`   — the M1.7 gap registry (open gaps, classes, witness debt);
+# - `none`   — no evidence source records this gate yet, so the honest
+#   verdict is `unmeasured` (displayed, never silently passed and never
+#   failed by itself). Wiring a new source is a code change that lands
+#   with the source (`tools/ledger-schema/src/gates.rs` + one rule arm in
+#   `tools/glyim-ledger/src/gates.rs`), so a declaration can never claim
+#   an input the engine does not have.
+#
+# The criteria lines are copied from the master plan's RG-01…RG-24 table
+# (docs/roadmaps/glyim-master-plan.md §3.7); `*cal.*` marks thresholds the
+# plan itself defers to a calibration step.
+
+schema = "glyim.ledger-gates-registry/1"
+
+[[gate]]
+id = "RG-01"
+title = "No ICE"
+criterion = "0 ICEs over the full fuzz corpus + generated programs; >= 1000 cumulative CPU-hours of fuzzing, last 100 CPU-hours clean"
+evidence = "none"
+
+[[gate]]
+id = "RG-02"
+title = "Backend agreement"
+criterion = "0 disagreements GAM vs LLVM-O0 vs LLVM-O2 over all fixtures and >= 1M generated programs per release candidate"
+evidence = "none"
+
+[[gate]]
+id = "RG-03"
+title = "Optimizer validity"
+criterion = "0 translation-validation violations on the optimization pipeline over fixtures + >= 1M generated MIR bodies; TV unknown rate <= cal."
+evidence = "none"
+
+[[gate]]
+id = "RG-04"
+title = "Determinism"
+criterion = "Byte-identical outputs across threads {1,2,4,8,16}, hash seeds, path prefixes, two machines"
+evidence = "none"
+
+[[gate]]
+id = "RG-05"
+title = "Incremental soundness"
+criterion = "10k random edit sequences: incremental == clean (diagnostics + object bytes)"
+evidence = "none"
+
+[[gate]]
+id = "RG-06"
+title = "Diagnostics quality"
+criterion = "Every error code documented (--explain), has >= 1 negative fixture, spans valid, ordering deterministic"
+evidence = "none"
+
+[[gate]]
+id = "RG-07"
+title = "Panic/unsafe surface"
+criterion = "unwrap/expect/panic outside allow-list = 0; unsafe only in allow-listed modules, each Miri-clean"
+evidence = "none"
+
+[[gate]]
+id = "RG-08"
+title = "Test strength"
+criterion = "Mutation score >= cal. (start 60%, ratchet to >= 80%) on core crates"
+evidence = "none"
+
+[[gate]]
+id = "RG-09"
+title = "Feature closure"
+criterion = "All core and std features >= L4; core >= L5"
+evidence = "levels"
+
+[[gate]]
+id = "RG-10"
+title = "Gap closure"
+criterion = "0 open class-b gaps; every class-a gap has diagnostic + docs; witness debt = 0"
+evidence = "gaps"
+
+[[gate]]
+id = "RG-11"
+title = "Compile-time budgets"
+criterion = "All benchmarks within budget (instruction count)"
+evidence = "none"
+
+[[gate]]
+id = "RG-12"
+title = "Scaling"
+criterion = "Fitted complexity exponent <= 1.2 on every scaling generator"
+evidence = "none"
+
+[[gate]]
+id = "RG-13"
+title = "Memory"
+criterion = "Peak RSS within budget on corpus"
+evidence = "none"
+
+[[gate]]
+id = "RG-14"
+title = "Incremental latency"
+criterion = "Body-only edit: check <= cal. ms, debug build-to-exe <= cal. s on 50k-LOC crate"
+evidence = "none"
+
+[[gate]]
+id = "RG-15"
+title = "Generated-code performance"
+criterion = "Geo-mean runtime within cal. of reference implementations on the runtime benchmark set"
+evidence = "none"
+
+[[gate]]
+id = "RG-16"
+title = "IDE latency"
+criterion = "LSP p95: diagnostics <= 100 ms (single-body edit), completion <= 50 ms"
+evidence = "none"
+
+[[gate]]
+id = "RG-17"
+title = "Reproducible release"
+criterion = "Bit-identical artifacts from two independent builds"
+evidence = "none"
+
+[[gate]]
+id = "RG-18"
+title = "Supply chain"
+criterion = "cargo deny + cargo vet/audit clean; SBOM produced; signed artifacts"
+evidence = "none"
+
+[[gate]]
+id = "RG-19"
+title = "Platform matrix"
+criterion = "Core features >= L4 on Tier-1 targets (linux-x86_64, linux-aarch64, macos-aarch64); Tier-2 (windows-x86_64) >= L3"
+evidence = "none"
+
+[[gate]]
+id = "RG-20"
+title = "Spec coverage"
+criterion = ">= 95% of GAM and language-reference rules have a positive and a negative test"
+evidence = "none"
+
+[[gate]]
+id = "RG-21"
+title = "Stdlib"
+criterion = "100% public items documented and tested; stdlib benchmark suite has budgets"
+evidence = "none"
+
+[[gate]]
+id = "RG-22"
+title = "Tooling"
+criterion = "glyip, LSP, formatter features at their target_level"
+evidence = "none"
+
+[[gate]]
+id = "RG-23"
+title = "Stability"
+criterion = "Edition policy written; public language surface tagged stable/unstable"
+evidence = "none"
+
+[[gate]]
+id = "RG-24"
+title = "Continuous fuzzing"
+criterion = "Fuzz farm running on main; findings triaged < 7 days"
+evidence = "none"
