@@ -1,0 +1,2160 @@
+{
+  "schema": "glyim.status/1",
+  "features": 225,
+  "records": 56,
+  "summary": {
+    "L0": 212,
+    "L1": 7,
+    "L2": 6,
+    "L3": 0,
+    "L4": 0,
+    "L5": 0
+  },
+  "entries": [
+    {
+      "id": "CODEGEN-BC-EMIT",
+      "tier": "tooling",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "CODEGEN-BC-VM",
+      "tier": "tooling",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "CODEGEN-LLVM-ASM",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "CODEGEN-LLVM-CDYLIB",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "CODEGEN-LLVM-CROSS-AARCH64",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "CODEGEN-LLVM-DEBUGINFO",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "CODEGEN-LLVM-EH-ITANIUM",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "CODEGEN-LLVM-EH-SEH",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "CODEGEN-LLVM-EXEC",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "CODEGEN-LLVM-IR",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "CODEGEN-LLVM-LTO",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "CODEGEN-LLVM-OBJ",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "CODEGEN-LLVM-VTABLES",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-BCK-DROP-FLAGS",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [
+        "GAP-0004"
+      ],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-BCK-LIVENESS",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-BCK-MOVE-ANALYSIS",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-BCK-NLL",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-BCK-TWO-PHASE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-FRONT-CST-ROUNDTRIP",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-FRONT-DEFTABLE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-FRONT-HIR",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-FRONT-LEX",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-FRONT-PARSE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-INCR-FINGERPRINT",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-INTERP-CONST-EVAL",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-INTERP-TEST-EXEC",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-LAYOUT-ABI-PASSING",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-LAYOUT-SIZE-ALIGN",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [
+        "GAP-0005"
+      ],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-MONO-CGU",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-MONO-MONOMORPHIZE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L1",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-MONO-POLYMORPHIZE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L2",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-OPT-CFG-SIMPLIFY",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-OPT-CONST-PROP",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-OPT-DCE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-OPT-DROP-ELAB",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-OPT-SLICE-DEGUGAR",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-OPT-UNREACHABLE-ELIM",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-PROC-MACRO-ABI",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-PROC-MACRO-EXPANSION",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-PROC-MACRO-LOADER",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-SOLVE-AUTO-TRAITS",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-SOLVE-FULFILLMENT",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-SOLVE-HRTB",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-TI-BIDI",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-TI-OCCURS",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "COMPILER-TI-UNIFICATION",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-ASYNC-AWAIT",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [
+        "GAP-0001"
+      ],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-BUILTIN-BOX",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-BUILTIN-OPTION",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-BUILTIN-PHANTOMDATA",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-BUILTIN-RESULT",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-BUILTIN-STRING",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-BUILTIN-UNSAFECELL",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-BUILTIN-VEC",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-CLOSURE-CAPTURE-BYREF",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-CLOSURE-CAPTURE-BYVALUE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-CLOSURE-EXPR",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-CLOSURE-FN-TRAITS",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-CLOSURE-MOVE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-ERR-TRY-OPTION",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-ERR-TRY-RESULT",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-FOR-SLICE-ITER",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-GENERIC-WHERE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-GSX-VIEWS",
+      "tier": "experimental",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "LANG-MACRO-BUILTIN-ENV",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-MACRO-BUILTIN-INCLUDE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-MACRO-BUILTIN-SRC",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-MACRO-BUILTIN-STR",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-MACRO-PROC-DECL",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-MACRO-RULES",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-MATCH-GUARDS",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L1",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SCOPE-ATTR-ALLOW",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L2",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SCOPE-MOD-DECL",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L2",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SCOPE-SHADOWING",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SCOPE-STATIC-ITEM",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SCOPE-VIS-PUB",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-ARRAY-LITERAL",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-COMPOUND-ASSIGN",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-CONST-ITEM",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-ENUM",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L1",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-EXTERN-BLOCK",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-FIELD-ACCESS",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-FN-DEF",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L2",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-IF",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-IF-LET",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-IMPL",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L2",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-INDEX",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-LET",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-LOOP-BREAK",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-MUT",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-NESTED-FN",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-OPERATORS",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-RETURN",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-SELF",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-STRUCT",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L1",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-STRUCT-UPDATE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-TUPLE-EXPR",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-TUPLE-STRUCT",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-UNSAFE-BLOCK",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L2",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-SYN-WHILE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TRAIT-ASSOC-TYPES",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TRAIT-DEF",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TRAIT-DEFAULT-METHODS",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TRAIT-DYN-OBJ",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TRAIT-IMPL",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L1",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TRAIT-STATIC-DISP",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TY-ARRAY",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TY-FN-PTR",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TY-PRIMITIVES",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TY-RAW-PTR",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TY-REF",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L1",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TY-REF-MUT",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TY-SLICE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TY-STR",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-TY-TUPLE",
+      "tier": "core",
+      "target_level": "L5",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": [
+        "fuzz_cpu_hours",
+        "mutation_kill_rate_pct"
+      ]
+    },
+    {
+      "id": "LANG-UNWIND-CLEANUP",
+      "tier": "experimental",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [
+        "GAP-0002",
+        "GAP-0003"
+      ],
+      "unmeasured": []
+    },
+    {
+      "id": "LANG-VIEW-BLUEPRINTS",
+      "tier": "experimental",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "LANG-VIEW-DIRECTIVES",
+      "tier": "experimental",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "LANG-VIEW-ELEMENTS",
+      "tier": "experimental",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "LANG-VIEW-HOLES",
+      "tier": "experimental",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "LANG-VIEW-KEYED-ITER",
+      "tier": "experimental",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "LANG-VIEW-REACTIVITY",
+      "tier": "experimental",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "LANG-VIEW-SSR",
+      "tier": "experimental",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "LANG-VIEW-TEST-HOST",
+      "tier": "experimental",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "LANG-VIEW-VIEWIR",
+      "tier": "experimental",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-ALLOC",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-ATOMIC",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-CONDVAR",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-CSTR",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-ENV",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-ERRNO",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-FS",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-IO",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-NET",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-PANIC",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-PROCESS",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-REACTOR",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-SYNC",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-THREAD",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-TIME",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "RUNTIME-FFI-VECSTR",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-ALLOC-BOX",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-ALLOC-GLOBALALLOC",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-ALLOC-RAWVEC",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-ALLOC-RC",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-ALLOC-STRING",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-ALLOC-VEC",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-CELL",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-CMP",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-CONVERT",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-DEFAULT",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-FUTURE",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-HINT",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-ITER",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-MARKER",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-MEM",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-OPS",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-OPTION",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-PANIC",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-PARSE",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-PTR",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-RESULT",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-SLICE",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-CORE-STR",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-STD-ENV",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-STD-FS",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-STD-INT-STR",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-STD-IO",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-STD-NET",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-STD-PROCESS",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-STD-SYNC",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-STD-TASK",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-STD-THREAD",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "STD-STD-TIME",
+      "tier": "std",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-BENCH-CORPUS-GEN",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-BENCH-COUNTING-ALLOC",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-BENCH-HARNESS",
+      "tier": "tooling",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-BENCH-RUN",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-BENCH-STABILITY-GATE",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-CLI-BACKEND-FLAG",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-CLI-CGU",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-CLI-DIAG-JSON",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-CLI-EMIT-FLAGS",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-CLI-LTO",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-CLI-OPT-LEVEL",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-CLI-TARGET",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-GLYIP-BUILD",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-GLYIP-DEP-GIT",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-GLYIP-DEP-PATH",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-GLYIP-DEP-SEMVER",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-GLYIP-LOCKFILE",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-GLYIP-MANIFEST",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-GLYIP-NEW",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-GLYIP-REGISTRY",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-GLYIP-RUN",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-GLYIP-TEST",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LEDGER-CHECK",
+      "tier": "tooling",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LEDGER-COMPUTE",
+      "tier": "tooling",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LEDGER-EXPLAIN",
+      "tier": "tooling",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LEDGER-GAPS",
+      "tier": "tooling",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LEDGER-NEXT",
+      "tier": "tooling",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LEDGER-REGISTRY",
+      "tier": "tooling",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LEDGER-SCHEMA",
+      "tier": "tooling",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LEDGER-STATUS",
+      "tier": "tooling",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LEDGER-TAXONOMY",
+      "tier": "tooling",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-CODE-ACTIONS",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-COMPLETION",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-DIAG",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-FOLDING",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-FORMAT",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-GOTO-DEF",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-HOVER",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-RENAME",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-SYMBOLS",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-METRICS-RATCHET",
+      "tier": "tooling",
+      "target_level": "L3",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-TEST-COMPILE-FAIL",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-TEST-COMPILE-PASS",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L1",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-TEST-DIFFERENTIAL",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-TEST-MOCKS",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-TEST-NO-ICE",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-TEST-PROP",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-TEST-RUN-FAIL",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-TEST-RUN-PASS",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-TEST-SNAPSHOT",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-TEST-UI",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    }
+  ]
+}
