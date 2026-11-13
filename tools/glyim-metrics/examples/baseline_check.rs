@@ -56,7 +56,10 @@ fn main() {
                 .expect("metrics/baseline.json is a valid RepoMetrics document");
             let regressions = glyim_metrics::Ratchet::check(&metrics, &baseline);
             if regressions.is_empty() {
-                println!("committed baseline {}: OK — no counter regressed", committed.display());
+                println!(
+                    "committed baseline {}: OK — no counter regressed",
+                    committed.display()
+                );
             } else {
                 for regression in &regressions {
                     println!("{regression:?}");
@@ -65,6 +68,6 @@ fn main() {
             }
         }
         // Run outside the repository root: skip the committed face.
-        Err(_) => println!("no committed baseline at {} — skipped"),
+        Err(_) => println!("no committed baseline at {} — skipped", committed.display()),
     }
 }
