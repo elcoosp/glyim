@@ -8,6 +8,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **C9 waiver-retirement face (`glyim-ledger waivers revoke`)**:
+  `waivers grant` is append-only by design — once a waiver's regression
+  fix landed (or its horizon expired and the C9 gate started failing
+  CI), the only way to retire the entry was hand-editing
+  `ledger/waivers.toml`, bypassing the canonical-ID and
+  canonical-serialization discipline every other face enforces. The new
+  `WaiverRewriter` seam (the rewrite counterpart of `WaiverSink`) has
+  two implementations — `FileWaiverRewriter` (parses the committed
+  document, drops the one exact-ID match, re-serializes the remaining
+  entries canonically, and replaces the file; a document that fails to
+  parse is refused, never truncated) and `InMemoryWaiverRewriter`
+  (tests and in-process consumers, with the removal recorded for the
+  audit). `run_waivers_revoke` validates the request (usable ID; the
+  committed document must load with zero error-severity diagnostics —
+  a duplicate-ID file fails here; the ID must be present, and an
+  unknown ID writes nothing and names a few existing candidates),
+  removes exactly one block, and reports the remaining count through
+  the `glyim.ledger-waivers-revoke/1` JSON contract and the one-line
+  text face. Five new typed `LedgerCliError` variants
+  (`WaiversRevokeMissingField`/`WaiversRevokeBadId` for the parser;
+  `WaiversRevokeUnknownId`/`WaiversRevokeLoad`/`WaiversRevokeWrite`
+  for the write face), all carrying their `code()`/`help()` lines.
+- **§3.7 session-handoff face (`glyim-ledger handoff`)**: the master
+  plan's CLI table names a `ledger handoff` face ("generates the (short)
+  session handoff from state") that did not exist — composing the
+  readiness state into one session-opening read meant running four
+  commands (`compute`, `next`, `waivers`, `gaps`) and merging them by
+  hand. The new `HandoffSource` seam (the composition counterpart of
+  `WaiverSource`) has two implementations — `FileHandoffSource` (runs
+  the real compute, `next`, and waiver-health faces over the registry,
+  through the same loaders those faces use, so a handoff can never
+  disagree with them) and `InMemoryHandoffSource` (tests and in-process
+  consumers) — and the `HandoffRenderer` seam (the `WaiversRenderer`
+  pattern) renders the marker-delimited Markdown document face and the
+  `glyim.ledger-handoff/1` JSON contract from one `HandoffOutcome`.
+  The document is short by contract: the readiness histogram (features,
+  evidence records, L0–L5 counts, error diagnostics), the top-N work
+  queue (`--items N`, default 5, max 20 — ranks stay honest so a slice
+  still shows where items stand in the full queue), waiver health with
+  the next expiring waiver, and the witness debt. The gate is
+  `HandoffOutcome::is_ok`: zero error-severity diagnostics across the
+  three composed faces **and** no expired waiver (constitution C9) —
+  the debt is rendered, never silent, and the exit code fails exactly
+  as the composed faces would. `--out PATH` writes the rendered
+  document (default `HANDOFF.md` / `HANDOFF.json` by face) and
+  `--check` byte-compares the committed document against the composed
+  state (the M1.10 drift-gate contract, mirrored from the `status`
+  face; a committed `HANDOFF.md` is not yet wired into CI — wire the
+  job once the face settles). Five new typed `LedgerCliError` variants
+  (`HandoffBadFormat`/`HandoffMissingValue`/`HandoffBadItems` for the
+  parser; `HandoffDrift`/`HandoffWrite` for the write/check face), all
+  carrying their `code()`/`help()` lines. The engine sorts the queue
+  by rank before slicing (input order never leaks into the render) and
+  pins `today` on the waivers outcome (no second clock consult).
 - **C9 waiver-health face (`glyim-ledger waivers`) + curated grant write
   face (`glyim-ledger waivers grant`)**: `ledger/waivers.toml` was read
   only inside the `diff` regression gate — an expired or horizon-violating
