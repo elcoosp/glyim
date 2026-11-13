@@ -16,9 +16,13 @@
 //! prints per-feature readiness levels computed from evidence and
 //! `ledger/policy.toml`; `--snapshot PATH` also persists the
 //! `glyim.ledger-snapshot/1` document of the run. `glyim-ledger status
-//! [ROOT] [--evidence PATH] [--format md|json]` renders the computed
+//! [`PATH`]` renders the computed
 //! status as the marker-delimited Markdown block (plan M1.9 first slice)
-//! or the `glyim.status/1` JSON contract. `glyim-ledger diff <BASE>
+//! or the `glyim.status/1` JSON contract; `--out PATH` writes the
+//! rendered document (default `STATUS.md` / `STATUS.json` by face) and
+//! `--check` fails on any drift between the committed document and the
+//! computed status (the plan M1.10 "STATUS is up to date" gate).
+//! `glyim-ledger diff <BASE>
 //! <CURRENT> [ROOT] [--format text|json]` is the plan M1.10
 //! readiness-regression gate: it compares two snapshot documents and
 //! fails on any computed-level drop that no unexpired waiver in
@@ -35,6 +39,13 @@
 //! `KNOWN_GAPS.md` (or the `glyim.known-gaps/1` JSON face) from the gap
 //! registry — `--out` writes the rendered document, `--check` fails on
 //! any drift between the committed document and the render.
+//! `glyim-ledger evidence record [--out PATH] [--format text|json]
+//! <SRC...>` is the plan §3.4 evidence-store curation face: it validates
+//! harness-emitted records against the registry and merges them into the
+//! committed store (whole-record dedupe, canonical order).
+//! `glyim-ledger evidence check [ROOT] [--format text|json]` validates
+//! the committed store and reports its coverage; error diagnostics fail
+//! the exit code.
 
 use std::process::ExitCode;
 
@@ -158,20 +169,71 @@ fn main() -> ExitCode {
             root,
             evidence,
             format,
+            out,
+            check,
         } => {
-            let outcome = glyim_ledger::run_status(&root, evidence.as_deref());
-            match format {
-                glyim_ledger::StatusFormat::Markdown => {
-                    print!("{}", glyim_ledger::format_status_markdown(&outcome.compute));
+            // The write/check face routes drift and write failures
+            // through the typed error seam (a drifted committed document
+            // is a CLI failure like a failed snapshot write), while
+            // registry/evidence diagnostics fail like `check` after the
+            // document still renders — the debt is displayed, not silent
+            // (plan M1.10).
+            match glyim_ledger::run_status_out(
+                &root,
+                evidence.as_deref(),
+                format,
+                out.as_deref(),
+                check,
+            ) {
+                Ok(rendered) => {
+                    match (rendered.target.as_deref(), rendered.checked) {
+                        (Some(target), true) => {
+                            println!(
+                                "status check OK: {} matches the computed status ({} feature(s))",
+                                target.display(),
+                                rendered.outcome.compute.features,
+                            );
+                        }
+                        (Some(target), false) => {
+                            println!(
+                                "wrote {} from the computed status ({} feature(s))",
+                                target.display(),
+                                rendered.outcome.compute.features,
+                            );
+                        }
+                        (None, false) => match format {
+                            glyim_ledger::StatusFormat::Markdown => {
+                                print!(
+                                    "{}",
+                                    glyim_ledger::format_status_markdown(&rendered.outcome.compute)
+                                );
+                            }
+                            glyim_ledger::StatusFormat::Json => {
+                                print!(
+                                    "{}",
+                                    glyim_ledger::format_status_json(&rendered.outcome.compute)
+                                );
+                            }
+                        },
+                        (None, true) => {
+                            // Unreachable by construction (`--check` always
+                            // names its target), but stay deterministic.
+                            println!(
+                                "status check OK ({} feature(s))",
+                                rendered.outcome.compute.features,
+                            );
+                        }
+                    }
+                    if rendered.outcome.is_ok() {
+                        ExitCode::SUCCESS
+                    } else {
+                        ExitCode::FAILURE
+                    }
                 }
-                glyim_ledger::StatusFormat::Json => {
-                    print!("{}", glyim_ledger::format_status_json(&outcome.compute));
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
                 }
-            }
-            if outcome.is_ok() {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::FAILURE
             }
         }
         Command::Diff {
@@ -292,6 +354,61 @@ fn main() -> ExitCode {
                     report(&err);
                     ExitCode::FAILURE
                 }
+            }
+        }
+        Command::EvidenceRecord {
+            sources,
+            out,
+            format,
+        } => {
+            // The record face operates on the registry at the working
+            // directory (every subcommand's default root; the library
+            // entry point takes an explicit root for tests/examples).
+            match glyim_ledger::run_evidence_record(
+                std::path::Path::new("."),
+                &sources,
+                &out,
+                &glyim_ledger::FileEvidenceStore,
+            ) {
+                Ok(outcome) => {
+                    match format {
+                        glyim_ledger::EvidenceFormat::Text => {
+                            print!("{}", glyim_ledger::format_evidence_record_text(&outcome));
+                        }
+                        glyim_ledger::EvidenceFormat::Json => {
+                            print!("{}", glyim_ledger::format_evidence_record_json(&outcome));
+                        }
+                    }
+                    // Invalid or unknown-feature records are verdicts:
+                    // report every one of them, then fail like `check`.
+                    if outcome.is_ok() {
+                        ExitCode::SUCCESS
+                    } else {
+                        ExitCode::FAILURE
+                    }
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Command::EvidenceCheck { root, format } => {
+            let report = glyim_ledger::run_evidence_check(&root);
+            match format {
+                glyim_ledger::EvidenceFormat::Text => {
+                    print!("{}", glyim_ledger::format_evidence_check_text(&report));
+                }
+                glyim_ledger::EvidenceFormat::Json => {
+                    print!("{}", glyim_ledger::format_evidence_check_json(&report));
+                }
+            }
+            // The check face is a gate: an invalid committed record (or an
+            // unknown feature ID) fails the command after reporting it.
+            if report.is_ok() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
             }
         }
         Command::Inventory { root } => {
