@@ -159,7 +159,7 @@ fn latest_baseline_selects_the_last_matching_record() {
 #[test]
 fn latest_baseline_errors_on_an_empty_history() {
     let err = latest_baseline(&[], "prog").expect_err("no history");
-    assert!(matches!(err, BenchError::InvalidPlan { .. }));
+    assert!(matches!(err, BenchError::BaselineUnavailable { .. }));
     assert!(err.to_string().contains("prog"));
 }
 
@@ -224,7 +224,7 @@ fn execute_diff_from_history_fails_when_the_program_was_never_recorded() {
         &DiffThresholds::new(5.0),
     )
     .expect_err("no baseline for `unknown`");
-    assert!(matches!(err, BenchError::InvalidPlan { .. }));
+    assert!(matches!(err, BenchError::BaselineUnavailable { .. }));
 }
 
 #[test]
