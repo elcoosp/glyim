@@ -26,6 +26,7 @@ use mio::{Interest, Token, event::Source};
 use std::os::unix::io::FromRawFd;
 
 use crate::async_runtime::Waker;
+use crate::lock_recover;
 
 /// A type the reactor can register with `mio::Poll` and drive to readiness.
 ///
@@ -135,10 +136,10 @@ impl Reactor {
         waker: Waker,
         interest: Interest,
     ) -> std::io::Result<usize> {
-        let mut nt = self.next_token.lock().unwrap();
+        let mut nt = lock_recover(&self.next_token);
         *nt += 1;
         let token = *nt;
-        self.slots.lock().unwrap().insert(
+        lock_recover(&self.slots).insert(
             token,
             Slot {
                 waker: waker.clone(),
@@ -167,10 +168,10 @@ impl Reactor {
     /// in `sources` so it stays registered for the reactor's lifetime. This is
     /// the bridge the `.g` async socket futures use.
     pub fn register_fd(&self, fd: i32, interest: Interest, thread_id: usize) -> usize {
-        let mut nt = self.next_token.lock().unwrap();
+        let mut nt = lock_recover(&self.next_token);
         *nt += 1;
         let token = *nt;
-        self.slots.lock().unwrap().insert(
+        lock_recover(&self.slots).insert(
             token,
             Slot {
                 waker: Waker::new(),
@@ -194,8 +195,8 @@ impl Reactor {
     /// Remove a previously registered fd: clears the slot bookkeeping AND drops
     /// the owned source (which deregisters it from kqueue).
     pub fn deregister(&self, token: usize) {
-        self.slots.lock().unwrap().remove(&token);
-        self.sources.lock().unwrap().remove(&token);
+        lock_recover(&self.slots).remove(&token);
+        lock_recover(&self.sources).remove(&token);
     }
 
     /// Has `token`'s fd had a readiness event since the last clear?
@@ -244,7 +245,7 @@ impl Drop for Reactor {
         if let Some(w) = &self.wake {
             let _ = w.wake();
         }
-        if let Some(h) = self.join.lock().unwrap().take() {
+        if let Some(h) = lock_recover(&self.join).take() {
             let _ = h.join();
         }
     }
@@ -284,8 +285,8 @@ fn run_reactor(
                     let mt = Token(token);
                     // Keep the source alive for the reactor's lifetime (dropping a
                     // mio `Source` deregisters its fd from kqueue).
-                    sources.lock().unwrap().insert(token, source);
-                    if let Some(src) = sources.lock().unwrap().get_mut(&token) {
+                    lock_recover(&sources).insert(token, source);
+                    if let Some(src) = lock_recover(&sources).get_mut(&token) {
                         let _ = src.register_with(&mut poll, mt, interest);
                     }
                     mio_to_slot.insert(mt, token);
@@ -301,12 +302,12 @@ fn run_reactor(
                     // `sources` so the fd stays registered. The caller must have
                     // already put the fd in non-blocking mode.
                     let src = unsafe { mio::net::TcpStream::from_raw_fd(fd) };
-                    sources.lock().unwrap().insert(token, Box::new(src));
-                    if let Some(s) = sources.lock().unwrap().get_mut(&token) {
+                    lock_recover(&sources).insert(token, Box::new(src));
+                    if let Some(s) = lock_recover(&sources).get_mut(&token) {
                         let _ = s.register_with(&mut poll, mt, interest);
                     }
                     mio_to_slot.insert(mt, token);
-                    fd_thread.lock().unwrap().insert(token, thread_id);
+                    lock_recover(&fd_thread).insert(token, thread_id);
                 }
             }
         }
@@ -335,13 +336,13 @@ fn run_reactor(
                 continue;
             }
             if let Some(&slot_token) = mio_to_slot.get(&event.token()) {
-                if let Some(slot) = slots.lock().unwrap().get(&slot_token) {
+                if let Some(slot) = lock_recover(&slots).get(&slot_token) {
                     slot.ready.store(true, Ordering::Release);
                     slot.waker.wake();
                 }
                 // For fd-based registrations, wake the executor thread directly
                 // (the `.g` async model resumes by thread id via unpark).
-                if let Some(tid) = fd_thread.lock().unwrap().get(&slot_token).copied() {
+                if let Some(tid) = lock_recover(&fd_thread).get(&slot_token).copied() {
                     unsafe { glyim_thread_unpark(tid) };
                 }
             }
