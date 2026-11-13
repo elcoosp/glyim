@@ -99,6 +99,15 @@ are contributing to the dev-loop tooling itself.
   for this codebase, add a rationale-annotated relaxation to
   `[workspace.lints.clippy]` in the root `Cargo.toml` (one reviewable place;
   gates never weaken, plan C9).
+- **The one inline-allow exception:** inline test modules that assert on
+  panic paths may carry the crate-root
+  `#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used,
+  clippy::panic))]` pattern (used in `glyim-typeck`, `glyim-hir`,
+  `glyim-mir`, `glyim-frontend`, `glyim-solve`, `glyim-meta`, and
+  `glyim-borrowck`). It is `cfg_attr(test, …)`-gated (never compiled into
+  shipped code) and deliberately invisible to the `inline_allows` ratchet,
+  which counts only shipped-code `#[allow(` lines; use it sparingly and
+  never in non-test code.
 - **No `#![allow(missing_docs)]`.** The workspace sets
   `missing_docs = "warn"` and every public item is documented. Add a
   doc comment (even a short one) to each public struct, enum, fn,
