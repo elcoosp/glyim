@@ -31,6 +31,13 @@
 //!   the per-benchmark deltas **and** their geo-mean (the plan §325 "fail
 //!   >2% per benchmark or >0.5% geo-mean" criterion) — the aggregate gate
 //!   that catches a uniform sub-budget drift no single row trips.
+//! - `glyim-bench corpus write [--dir PATH] [--families LIST] [--seeds
+//!   LIST] [--size N]` materializes the committed corpora directory (plan
+//!   M2.3 remainder: "corpora committed with hashes") — one
+//!   `<family>-<seed>-<size>.g` file per program plus the
+//!   `glyim.corpus/1` `corpus.json` manifest; `corpus check [--dir PATH]`
+//!   re-verifies the committed bytes against the manifest and exits
+//!   non-zero on any missing or hand-edited program.
 
 use std::path::{Path, PathBuf};
 
@@ -170,6 +177,44 @@ pub enum Command {
         /// program at most once).
         #[arg(required = true)]
         reports: Vec<PathBuf>,
+    },
+    /// Materialize (`write`) or re-verify (`check`) the committed corpora
+    /// directory (plan M2.3 remainder: "corpora committed with hashes").
+    Corpus {
+        /// What to do with the corpus directory.
+        #[command(subcommand)]
+        action: CorpusAction,
+    },
+}
+
+/// The `corpus` subcommand's actions.
+#[derive(Subcommand, Debug)]
+pub enum CorpusAction {
+    /// Generate the plan's programs and commit them through the
+    /// [`crate::corpus_dir::CorpusSink`] seam (one `.g` file per program
+    /// plus the `glyim.corpus/1` `corpus.json` manifest).
+    Write {
+        /// The directory to materialize (created on demand).
+        #[arg(long, default_value = "perf/corpus")]
+        dir: PathBuf,
+        /// Comma-separated family names (default: all seven).
+        #[arg(long)]
+        families: Option<String>,
+        /// Comma-separated seeds (default: `0,1,2`).
+        #[arg(long)]
+        seeds: Option<String>,
+        /// The programs' `size` parameter.
+        #[arg(long, default_value_t = 64)]
+        size: usize,
+    },
+    /// Re-verify a committed corpora directory: template identities via
+    /// the manifest's own contract, then every committed `.g` file's
+    /// bytes against its recorded identity; exits non-zero when any
+    /// program is missing or drifted.
+    Check {
+        /// The directory to verify.
+        #[arg(long, default_value = "perf/corpus")]
+        dir: PathBuf,
     },
 }
 
@@ -466,6 +511,39 @@ pub fn execute_history_trend(
         })?;
     }
     Ok(trend)
+}
+
+/// Execute [`CorpusAction::Write`]: materialize the plan's programs and
+/// manifest into `dir` through the [`crate::corpus_dir::CorpusSink`] seam.
+///
+/// # Errors
+///
+/// Plan parse failures ([`BenchError::CorpusPlan`]) and sink write
+/// failures.
+pub fn execute_corpus_write(
+    dir: &Path,
+    families: Option<&str>,
+    seeds: Option<&str>,
+    size: usize,
+) -> Result<crate::corpus::CorpusManifest, BenchError> {
+    let plan = crate::corpus_dir::CorpusDirPlan::from_flags(families, seeds, size)?;
+    let mut sink = crate::corpus_dir::DirCorpusSink::new(dir);
+    let manifest = crate::corpus_dir::write_corpus_dir(&mut sink, &plan)?;
+    tracing::debug!(dir = %dir.display(), programs = manifest.programs.len(), "corpus written");
+    Ok(manifest)
+}
+
+/// Execute [`CorpusAction::Check`]: re-verify the committed bytes of a
+/// corpus directory against its `glyim.corpus/1` manifest.
+///
+/// # Errors
+///
+/// Manifest read/parse failures ([`BenchError::CorpusDirRead`]) and
+/// template-drift failures ([`BenchError::CorpusIdentityMismatch`]);
+/// missing/mismatched program files are report content on the returned
+/// [`crate::corpus_dir::CorpusDirCheck`] (the caller flips the exit code).
+pub fn execute_corpus_check(dir: &Path) -> Result<crate::corpus_dir::CorpusDirCheck, BenchError> {
+    crate::corpus_dir::check_corpus_dir(dir)
 }
 
 /// Parses the `--sizes` CSV into a sorted, distinct size list.
