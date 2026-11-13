@@ -902,6 +902,282 @@ pub fn format_waivers_revoke_json(outcome: &WaiversRevokeOutcome) -> String {
     text
 }
 
+// -- extend face ---------------------------------------------------------------
+
+/// Schema tag of the `waivers extend` JSON contract.
+pub const WAIVERS_EXTEND_SCHEMA: &str = "glyim.ledger-waivers-extend/1";
+
+/// The `waivers extend` request (the CLI flags, validated by
+/// [`run_waivers_extend`]): re-pin one existing waiver's expiry to
+/// `today + days`, keeping the entry's identity, reason, and issue — the
+/// sanctioned counterpart of the duplicate-grant rejection, whose help
+/// line already instructs operators to "extend the existing entry's
+/// expiry instead of re-granting it".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WaiversExtendRequest {
+    /// The exact waiver ID (`WVR-...`) whose expiry moves.
+    pub id: String,
+    /// The new horizon in whole days from today
+    /// (`1..=WAIVER_MAX_AGE_DAYS`); the CLI default is
+    /// [`crate::DEFAULT_WAIVER_DAYS`] when `--days` is omitted.
+    pub days: i64,
+}
+
+/// Where an extended `[[waiver]]` block is rewritten. The mutation seam
+/// mirrors [`WaiverRewriter`] on the retirement side: the engine consumes
+/// the trait, so tests drive an in-memory document and the CLI wires the
+/// file-backed implementation.
+pub trait WaiverExtender {
+    /// Moves the `expires` field of the `[[waiver]]` block carrying the
+    /// exact `id` to `expires` and rewrites the remaining entries
+    /// canonically. Returns the updated entry, or `None` when the
+    /// document no longer carries it; the error detail is the IO or
+    /// serialization failure message (the CLI turns it into a typed write
+    /// error).
+    fn extend_expiry(
+        &self,
+        path: &Path,
+        id: &str,
+        expires: &str,
+    ) -> Result<Option<WaiverEntry>, String>;
+}
+
+/// Rewrites `<ROOT>/ledger/waivers.toml` on disk: parse, move the one
+/// matching block's expiry, re-serialize the remaining entries
+/// canonically, and replace the file. The rewrite never silently
+/// reorders or drops other entries — a document that fails to parse is
+/// refused (`Err`), not truncated (the [`FileWaiverRewriter`] contract).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FileWaiverExtender;
+
+impl WaiverExtender for FileWaiverExtender {
+    fn extend_expiry(
+        &self,
+        path: &Path,
+        id: &str,
+        expires: &str,
+    ) -> Result<Option<WaiverEntry>, String> {
+        let text = std::fs::read_to_string(path)
+            .map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+        let doc: RevokeSourceDoc = toml::from_str(&text)
+            .map_err(|err| format!("cannot parse {}: {err}", path.display()))?;
+        let Some(position) = doc.waiver.iter().position(|entry| entry.id == id) else {
+            return Ok(None);
+        };
+        let mut remaining = doc.waiver;
+        remaining[position].expires = expires.to_string();
+        let updated = remaining[position].clone();
+        let rewritten = toml::to_string(&RevokeSourceDoc { waiver: remaining })
+            .map_err(|err| format!("cannot serialize {}: {err}", path.display()))?;
+        std::fs::write(path, &rewritten)
+            .map_err(|err| format!("cannot write {}: {err}", path.display()))?;
+        Ok(Some(updated))
+    }
+}
+
+/// Operates on an owned in-memory document (tests and programmatic
+/// consumers); the in-memory twin of [`FileWaiverExtender`]. Every
+/// successful extension is recorded in [`Self::extended`] for the audit.
+#[derive(Debug, Default)]
+pub struct InMemoryWaiverExtender {
+    /// The document the extender operates on (the file's entries).
+    pub doc: std::cell::RefCell<Vec<WaiverEntry>>,
+    /// Every `(path, extended ID)` performed, in order.
+    pub extended: std::cell::RefCell<Vec<(PathBuf, String)>>,
+}
+
+impl WaiverExtender for InMemoryWaiverExtender {
+    fn extend_expiry(
+        &self,
+        path: &Path,
+        id: &str,
+        expires: &str,
+    ) -> Result<Option<WaiverEntry>, String> {
+        let mut doc = self.doc.borrow_mut();
+        if let Some(position) = doc.iter().position(|entry| entry.id == id) {
+            doc[position].expires = expires.to_string();
+            let updated = doc[position].clone();
+            self.extended
+                .borrow_mut()
+                .push((path.to_path_buf(), id.to_string()));
+            Ok(Some(updated))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+/// Result of a `waivers extend` run (also the
+/// `glyim.ledger-waivers-extend/1` JSON face via
+/// [`format_waivers_extend_json`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WaiversExtendOutcome {
+    /// Schema tag, always [`WAIVERS_EXTEND_SCHEMA`].
+    pub schema: &'static str,
+    /// The extended waiver's ID (unchanged by the extension).
+    pub id: String,
+    /// The registry feature ID the extended waiver covers (unchanged).
+    pub feature: String,
+    /// The expiry the entry carried before the extension
+    /// (`YYYY-MM-DD`, echoed verbatim — the audit trail).
+    pub previous_expires: String,
+    /// The new expiry (`today + days`, ISO spelling).
+    pub expires: String,
+    /// The granted horizon in days.
+    pub days: i64,
+    /// Waivers in the committed document (unchanged by an extension).
+    pub remaining: usize,
+    /// The document the block was rewritten in.
+    pub target: String,
+}
+
+/// Extends one C9 waiver: validates the request, refuses to touch a
+/// document that does not load cleanly, and moves exactly the one
+/// matching block's expiry through `extender` — keeping the entry's ID,
+/// feature, reason, and issue (identity is never rewritten).
+///
+/// # Validation contract
+///
+/// - `days` must be `1..=WAIVER_MAX_AGE_DAYS` (constitution C9: the new
+///   expiry is pinned relative to today, so a horizon violation is
+///   structurally impossible);
+/// - `id` must be usable (non-blank, no control characters);
+/// - the committed document must load with zero error-severity
+///   diagnostics (the extender refuses to rewrite what it cannot fully
+///   parse — a duplicate-ID file fails here, never silently);
+/// - the ID must be present (an unknown ID writes nothing and names a
+///   few existing candidates for the help line).
+///
+/// Nothing is written when validation fails.
+///
+/// # Errors
+///
+/// Typed [`LedgerCliError`] variants for every rejected request
+/// (`WaiversExtendBadDays`, `WaiversExtendBadId`, `WaiversExtendUnknownId`,
+/// `WaiversExtendLoad`) and for a failed rewrite (`WaiversExtendWrite`).
+pub fn run_waivers_extend(
+    root: &Path,
+    request: &WaiversExtendRequest,
+    source: &dyn WaiverSource,
+    extender: &dyn WaiverExtender,
+) -> Result<WaiversExtendOutcome, LedgerCliError> {
+    let span = tracing::info_span!(
+        "waivers_extend",
+        root = %root.display(),
+        id = %request.id,
+        days = request.days,
+    );
+    let _enter = span.enter();
+
+    if request.days < 1 || request.days > WAIVER_MAX_AGE_DAYS {
+        return Err(LedgerCliError::WaiversExtendBadDays {
+            days: request.days.to_string(),
+            horizon: WAIVER_MAX_AGE_DAYS,
+        });
+    }
+    if request.id.trim().is_empty() || request.id.chars().any(char::is_control) {
+        return Err(LedgerCliError::WaiversExtendBadId {
+            id: request.id.clone(),
+        });
+    }
+
+    // `today_iso` renders the `YYYY-MM-DD` spelling `parse_iso` accepts;
+    // the same pinned round-trip the grant and revoke faces rely on.
+    let today =
+        NaiveDate::parse_iso(&today_iso()).expect("today_iso round-trips through parse_iso");
+    let set = source.load(root, today);
+    if set
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        let detail = set
+            .diagnostics
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(LedgerCliError::WaiversExtendLoad { detail });
+    }
+    let previous = set.waivers.iter().find(|w| w.id == request.id).cloned();
+    let Some(previous) = previous else {
+        let candidates = set
+            .waivers
+            .iter()
+            .take(3)
+            .map(|w| w.id.clone())
+            .collect::<Vec<_>>();
+        return Err(LedgerCliError::WaiversExtendUnknownId {
+            id: request.id.clone(),
+            candidates,
+        });
+    };
+
+    let expires = today.plus_days(request.days).to_iso();
+    let path = root.join("ledger/waivers.toml");
+    let extended = extender
+        .extend_expiry(&path, &request.id, &expires)
+        .map_err(|detail| LedgerCliError::WaiversExtendWrite {
+            path: path.display().to_string(),
+            detail,
+        })?;
+    let Some(extended) = extended else {
+        // The loaded set carried the ID but the document no longer does:
+        // the registry drifted between the load pass and the rewrite.
+        // Fail without a partial write.
+        return Err(LedgerCliError::WaiversExtendUnknownId {
+            id: request.id.clone(),
+            candidates: Vec::new(),
+        });
+    };
+    tracing::debug!(
+        id = %extended.id,
+        previous = %previous.expires,
+        expires = %expires,
+        "waiver extended"
+    );
+
+    Ok(WaiversExtendOutcome {
+        schema: WAIVERS_EXTEND_SCHEMA,
+        id: extended.id,
+        feature: extended.feature,
+        previous_expires: previous.expires,
+        expires,
+        days: request.days,
+        remaining: set.waivers.len(),
+        target: path.display().to_string(),
+    })
+}
+
+/// Renders the extend outcome's text face: one summary line (the
+/// extended block's ID, feature, previous and new expiry, and the
+/// remaining count).
+#[must_use]
+pub fn format_waivers_extend_text(outcome: &WaiversExtendOutcome) -> String {
+    let mut text = String::new();
+    let _ = writeln!(
+        text,
+        "extended {} for {} (expires {} -> {}, {} day(s)) -> {} waiver(s) remain at {}",
+        outcome.id,
+        outcome.feature,
+        outcome.previous_expires,
+        outcome.expires,
+        outcome.days,
+        outcome.remaining,
+        outcome.target,
+    );
+    text
+}
+
+/// Renders the `glyim.ledger-waivers-extend/1` JSON contract.
+#[must_use]
+pub fn format_waivers_extend_json(outcome: &WaiversExtendOutcome) -> String {
+    let mut text = serde_json::to_string_pretty(outcome)
+        .expect("the glyim.ledger-waivers-extend/1 document is a serialisation-only struct");
+    text.push('\n');
+    text
+}
+
 #[cfg(test)]
 mod tests {
     //! Tests pin the C9 waiver-health contract: verdicts are pure date
@@ -1926,5 +2202,455 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
     #[test]
     fn usage_lists_waivers_revoke() {
         assert!(usage().contains("waivers revoke"));
+    }
+
+    // -- extend face ------------------------------------------------------------
+
+    use super::{
+        FileWaiverExtender, InMemoryWaiverExtender, WaiverExtender, WaiversExtendRequest,
+        run_waivers_extend,
+    };
+    use crate::diff::DEFAULT_WAIVER_DAYS;
+
+    #[test]
+    fn extend_repins_expiry_and_keeps_identity() {
+        let entries = vec![
+            entry("WVR-20261101-first", "LANG-A", 5),
+            entry("WVR-20261109-third", "LANG-C", 1),
+        ];
+        let source = InMemoryWaiverSource {
+            set: WaiverSet {
+                waivers: entries.clone(),
+                diagnostics: Vec::new(),
+            },
+        };
+        let extender = InMemoryWaiverExtender {
+            doc: std::cell::RefCell::new(entries.clone()),
+            extended: std::cell::RefCell::new(Vec::new()),
+        };
+        let outcome = run_waivers_extend(
+            Path::new("."),
+            &WaiversExtendRequest {
+                id: "WVR-20261101-first".to_string(),
+                days: 10,
+            },
+            &source,
+            &extender,
+        )
+        .expect("extend succeeds");
+        assert_eq!(outcome.schema, "glyim.ledger-waivers-extend/1");
+        assert_eq!(outcome.id, "WVR-20261101-first");
+        assert_eq!(outcome.feature, "LANG-A", "identity is kept");
+        assert_eq!(outcome.previous_expires, today().plus_days(5).to_iso());
+        assert_eq!(
+            outcome.expires,
+            today().plus_days(10).to_iso(),
+            "the new expiry is pinned relative to today"
+        );
+        assert_eq!(outcome.days, 10);
+        assert_eq!(outcome.remaining, 2, "an extension never changes the count");
+        assert_eq!(extender.extended.borrow().len(), 1);
+        assert_eq!(extender.doc.borrow()[0].expires, outcome.expires);
+        assert_eq!(
+            extender.doc.borrow()[0].reason,
+            entries[0].reason,
+            "reason survives the rewrite"
+        );
+        assert_eq!(
+            extender.doc.borrow()[1].expires,
+            today().plus_days(1).to_iso(),
+            "the sibling entry is untouched"
+        );
+    }
+
+    #[test]
+    fn extend_rejects_days_outside_the_c9_horizon() {
+        let entries = vec![entry("WVR-20261101-first", "LANG-A", 5)];
+        let source = InMemoryWaiverSource {
+            set: WaiverSet {
+                waivers: entries,
+                diagnostics: Vec::new(),
+            },
+        };
+        let extender = InMemoryWaiverExtender::default();
+        for days in [0i64, -3, WAIVER_MAX_AGE_DAYS + 1] {
+            let err = run_waivers_extend(
+                Path::new("."),
+                &WaiversExtendRequest {
+                    id: "WVR-20261101-first".to_string(),
+                    days,
+                },
+                &source,
+                &extender,
+            )
+            .expect_err("days outside 1..=14 fail");
+            assert!(
+                matches!(err, LedgerCliError::WaiversExtendBadDays { .. }),
+                "days = {days} fails as WaiversExtendBadDays"
+            );
+        }
+        assert!(
+            extender.extended.borrow().is_empty(),
+            "nothing is written when validation fails"
+        );
+    }
+
+    #[test]
+    fn extend_rejects_blank_or_control_id() {
+        let entries = vec![entry("WVR-20261101-first", "LANG-A", 5)];
+        let source = InMemoryWaiverSource {
+            set: WaiverSet {
+                waivers: entries,
+                diagnostics: Vec::new(),
+            },
+        };
+        let extender = InMemoryWaiverExtender::default();
+        for id in ["", "  ", "bad\nid"] {
+            let err = run_waivers_extend(
+                Path::new("."),
+                &WaiversExtendRequest {
+                    id: id.to_string(),
+                    days: 5,
+                },
+                &source,
+                &extender,
+            )
+            .expect_err("blank or control-character ID fails");
+            assert!(matches!(err, LedgerCliError::WaiversExtendBadId { .. }));
+        }
+        assert!(extender.extended.borrow().is_empty());
+    }
+
+    #[test]
+    fn extend_refuses_a_document_with_load_errors() {
+        let mut set = WaiverSet::empty();
+        set.diagnostics.push(Diagnostic {
+            code: "LEDGER-WAIVER-DUP",
+            message: "waiver id \"WVR-X\" is declared twice".to_string(),
+            severity: Severity::Error,
+        });
+        let source = InMemoryWaiverSource { set };
+        let extender = InMemoryWaiverExtender::default();
+        let err = run_waivers_extend(
+            Path::new("."),
+            &WaiversExtendRequest {
+                id: "WVR-20261101-first".to_string(),
+                days: 5,
+            },
+            &source,
+            &extender,
+        )
+        .expect_err("a dirty document is refused");
+        assert!(matches!(err, LedgerCliError::WaiversExtendLoad { .. }));
+        assert!(
+            extender.extended.borrow().is_empty(),
+            "the extender refuses to rewrite what it cannot fully parse"
+        );
+    }
+
+    #[test]
+    fn extend_unknown_id_lists_candidates_and_writes_nothing() {
+        let entries = vec![
+            entry("WVR-20261101-first", "LANG-A", 5),
+            entry("WVR-20261109-third", "LANG-C", 1),
+        ];
+        let source = InMemoryWaiverSource {
+            set: WaiverSet {
+                waivers: entries,
+                diagnostics: Vec::new(),
+            },
+        };
+        let extender = InMemoryWaiverExtender::default();
+        let err = run_waivers_extend(
+            Path::new("."),
+            &WaiversExtendRequest {
+                id: "WVR-absent".to_string(),
+                days: 5,
+            },
+            &source,
+            &extender,
+        )
+        .expect_err("unknown ID fails");
+        match err {
+            LedgerCliError::WaiversExtendUnknownId { candidates, .. } => {
+                assert_eq!(candidates, vec!["WVR-20261101-first", "WVR-20261109-third"]);
+            }
+            other => panic!("expected WaiversExtendUnknownId, got {other:?}"),
+        }
+        assert!(extender.extended.borrow().is_empty());
+    }
+
+    #[test]
+    fn extend_reports_drift_without_a_partial_write() {
+        // The loaded set carries the ID; the document the extender sees
+        // does not (the load pass and the rewrite drifted apart).
+        let entries = vec![entry("WVR-20261101-first", "LANG-A", 5)];
+        let source = InMemoryWaiverSource {
+            set: WaiverSet {
+                waivers: entries,
+                diagnostics: Vec::new(),
+            },
+        };
+        let extender = InMemoryWaiverExtender {
+            doc: std::cell::RefCell::new(Vec::new()),
+            extended: std::cell::RefCell::new(Vec::new()),
+        };
+        let err = run_waivers_extend(
+            Path::new("."),
+            &WaiversExtendRequest {
+                id: "WVR-20261101-first".to_string(),
+                days: 5,
+            },
+            &source,
+            &extender,
+        )
+        .expect_err("drift between load and rewrite fails");
+        match err {
+            LedgerCliError::WaiversExtendUnknownId { candidates, .. } => {
+                assert!(candidates.is_empty(), "no candidates after drift");
+            }
+            other => panic!("expected WaiversExtendUnknownId, got {other:?}"),
+        }
+        assert!(extender.extended.borrow().is_empty());
+    }
+
+    #[test]
+    fn file_extender_round_trips_the_canonical_document() {
+        let entries = vec![
+            entry("WVR-20261101-first", "LANG-A", 5),
+            entry("WVR-20261109-third", "LANG-C", 1),
+        ];
+        let root = seeded_root(&entries);
+        let outcome = run_waivers_extend(
+            &root,
+            &WaiversExtendRequest {
+                id: "WVR-20261101-first".to_string(),
+                days: 12,
+            },
+            &FileWaiverSource,
+            &FileWaiverExtender,
+        )
+        .expect("extend succeeds against the seeded document");
+
+        // The rewritten document still parses through the same loader the
+        // diff gate uses, carries both entries, and only the target moved.
+        let reloaded = super::load_waivers(&root.join("ledger/waivers.toml"), today());
+        assert!(
+            reloaded.diagnostics.is_empty(),
+            "{:?}",
+            reloaded.diagnostics
+        );
+        assert_eq!(reloaded.waivers.len(), 2);
+        let first = reloaded
+            .waivers
+            .iter()
+            .find(|w| w.id == "WVR-20261101-first")
+            .expect("entry survives the rewrite");
+        assert_eq!(first.expires, outcome.expires);
+        assert_eq!(first.reason, entries[0].reason, "reason survives");
+        let second = reloaded
+            .waivers
+            .iter()
+            .find(|w| w.id == "WVR-20261109-third")
+            .expect("sibling survives the rewrite");
+        assert_eq!(second.expires, entries[1].expires, "sibling untouched");
+    }
+
+    #[test]
+    fn in_memory_extender_records_the_extension() {
+        let entries = vec![
+            entry("WVR-20261101-first", "LANG-A", 5),
+            entry("WVR-20261109-third", "LANG-C", 1),
+        ];
+        let extender = InMemoryWaiverExtender {
+            doc: std::cell::RefCell::new(entries.clone()),
+            extended: std::cell::RefCell::new(Vec::new()),
+        };
+        let new_expires = today().plus_days(10).to_iso();
+        let extended = extender
+            .extend_expiry(
+                std::path::Path::new("ledger/waivers.toml"),
+                "WVR-20261101-first",
+                &new_expires,
+            )
+            .expect("present entry extends");
+        assert_eq!(
+            extended.as_ref().map(|w| w.expires.as_str()),
+            Some(new_expires.as_str())
+        );
+        assert_eq!(
+            extender.extended.borrow().len(),
+            1,
+            "the extension is recorded for the audit"
+        );
+        assert_eq!(extender.doc.borrow().len(), 2);
+        // An absent entry reports None and records nothing.
+        let absent = extender
+            .extend_expiry(
+                std::path::Path::new("ledger/waivers.toml"),
+                "WVR-absent",
+                &new_expires,
+            )
+            .expect("absent entry is a None, not an error");
+        assert!(absent.is_none());
+        assert_eq!(extender.extended.borrow().len(), 1);
+    }
+
+    #[test]
+    fn extend_text_and_json_faces_render_deterministically() {
+        let entries = vec![
+            entry("WVR-20261101-first", "LANG-A", 5),
+            entry("WVR-20261109-third", "LANG-C", 1),
+        ];
+        let root = seeded_root(&entries);
+        let outcome = run_waivers_extend(
+            &root,
+            &WaiversExtendRequest {
+                id: "WVR-20261101-first".to_string(),
+                days: DEFAULT_WAIVER_DAYS,
+            },
+            &FileWaiverSource,
+            &FileWaiverExtender,
+        )
+        .expect("extend succeeds");
+
+        let text_a = super::format_waivers_extend_text(&outcome);
+        let text_b = super::format_waivers_extend_text(&outcome);
+        assert_eq!(text_a, text_b);
+        assert!(text_a.contains("extended WVR-20261101-first"));
+        assert!(text_a.contains("-> 2 waiver(s) remain"));
+
+        let json_a = super::format_waivers_extend_json(&outcome);
+        let json_b = super::format_waivers_extend_json(&outcome);
+        assert_eq!(json_a, json_b);
+        let document: serde_json::Value = serde_json::from_str(&json_a).expect("valid JSON");
+        assert_eq!(document["schema"], "glyim.ledger-waivers-extend/1");
+        assert_eq!(document["id"], "WVR-20261101-first");
+        assert_eq!(
+            document["previous_expires"],
+            today().plus_days(5).to_iso(),
+            "the audit trail carries the previous expiry"
+        );
+        assert_eq!(document["days"], DEFAULT_WAIVER_DAYS);
+        assert_eq!(document["remaining"], 2);
+        assert!(json_a.ends_with('\n'));
+    }
+
+    #[test]
+    fn parse_args_accepts_waivers_extend_flags() {
+        let command = parse_args(
+            [
+                "waivers",
+                "extend",
+                "/tmp/repo",
+                "--id",
+                "WVR-20261101-first",
+                "--days",
+                "5",
+            ]
+            .into_iter()
+            .map(String::from),
+        )
+        .expect("the extend flags parse");
+        assert!(matches!(
+            command,
+            Command::WaiversExtend {
+                ref root,
+                ref id,
+                days: Some(5),
+                format: WaiversFormat::Text,
+            } if root == &PathBuf::from("/tmp/repo")
+                && id == "WVR-20261101-first"
+        ));
+
+        // `--days` is optional: the CLI default resolves in the dispatch
+        // layer (`DEFAULT_WAIVER_DAYS`), never in the parser.
+        let command = parse_args(
+            [
+                "waivers",
+                "extend",
+                "--id",
+                "WVR-20261101-first",
+                "--format",
+                "json",
+            ]
+            .into_iter()
+            .map(String::from),
+        )
+        .expect("the minimal extend flags parse");
+        assert!(matches!(
+            command,
+            Command::WaiversExtend {
+                days: None,
+                format: WaiversFormat::Json,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn parse_args_rejects_incomplete_waivers_extend() {
+        // A missing --id is a parse error, not an engine rejection.
+        let err = parse_args(["waivers", "extend"].into_iter().map(String::from))
+            .expect_err("missing --id fails at parse time");
+        assert!(matches!(
+            err,
+            LedgerCliError::WaiversExtendMissingField { .. }
+        ));
+        // A non-numeric --days is a parse error naming the horizon.
+        let err = parse_args(
+            ["waivers", "extend", "--id", "WVR-X", "--days", "soon"]
+                .into_iter()
+                .map(String::from),
+        )
+        .expect_err("non-numeric --days fails at parse time");
+        assert!(matches!(err, LedgerCliError::WaiversExtendBadDays { .. }));
+        // An unknown format value stays the shared WaiversBadFormat.
+        let err = parse_args(
+            ["waivers", "extend", "--id", "WVR-X", "--format", "yaml"]
+                .into_iter()
+                .map(String::from),
+        )
+        .expect_err("unknown format fails");
+        assert!(matches!(err, LedgerCliError::WaiversBadFormat { .. }));
+    }
+
+    #[test]
+    fn extend_error_variants_carry_code_and_help() {
+        use miette::Diagnostic as _;
+        let variants = [
+            LedgerCliError::WaiversExtendMissingField {
+                field: "--id".to_string(),
+                usage: usage(),
+            },
+            LedgerCliError::WaiversExtendBadDays {
+                days: "15".to_string(),
+                horizon: WAIVER_MAX_AGE_DAYS,
+            },
+            LedgerCliError::WaiversExtendBadId {
+                id: "bad".to_string(),
+            },
+            LedgerCliError::WaiversExtendUnknownId {
+                id: "WVR-absent".to_string(),
+                candidates: vec!["WVR-present".to_string()],
+            },
+            LedgerCliError::WaiversExtendLoad {
+                detail: "duplicate id".to_string(),
+            },
+            LedgerCliError::WaiversExtendWrite {
+                path: "ledger/waivers.toml".to_string(),
+                detail: "readonly".to_string(),
+            },
+        ];
+        for variant in &variants {
+            let code = variant.code().map(|c| c.to_string()).expect("code");
+            assert!(code.starts_with("glyim-ledger::waivers_extend_"));
+            assert!(variant.help().is_some(), "{code} carries a help line");
+        }
+    }
+
+    #[test]
+    fn usage_lists_waivers_extend() {
+        assert!(usage().contains("waivers extend"));
     }
 }
