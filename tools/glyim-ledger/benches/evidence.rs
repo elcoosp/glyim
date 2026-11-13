@@ -153,4 +153,56 @@ fn main() {
     println!("  record (merge 2000 into 2000): {record_elapsed:?}");
     println!("  check  (validate 4000):        {check_elapsed:?}");
     println!("  re-record (idempotence no-op): {rerun_elapsed:?}");
+
+    // The audit face: the full trust-loop path (store discovery + triage
+    // over the 4000-record committed store, then a sha256 recompute per
+    // fixture). Every fixture exists on disk (one file per record,
+    // written below), so the measured cost is the real load + triage +
+    // hashing work.
+    for i in 0..500 {
+        for batch in 0..2 {
+            for face in 0..4 {
+                let path = dir
+                    .path()
+                    .join("bench")
+                    .join(format!("fixture_{i}_{batch}_{face}.g"));
+                std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir bench");
+                std::fs::write(
+                    &path,
+                    format!("// bench fixture {i} batch {batch} face {face}\n"),
+                )
+                .expect("write fixture");
+            }
+        }
+    }
+    // The committed digests were name-derived, not byte-derived: re-write
+    // the store with real digests over the same 4000 records (the audit
+    // compares recomputed bytes), keeping the honest all-`ok` pass.
+    use glyim_ledger::FixtureFingerprint as _;
+    let committed_store = std::fs::read_to_string(&store).expect("read store");
+    let mut rehashed = String::with_capacity(committed_store.len());
+    for record_line_text in committed_store.lines() {
+        let mut record =
+            glyim_ledger::LedgerEvidence::from_jsonl_line(record_line_text).expect("parse record");
+        let path = dir.path().join(&record.fixture);
+        record.fixture_sha256 = glyim_ledger::FileFixtureFingerprint
+            .sha256_hex(&path)
+            .expect("fixture exists");
+        rehashed.push_str(&serde_json::to_string(&record).expect("serialize"));
+        rehashed.push('\n');
+    }
+    std::fs::write(&store, &rehashed).expect("write rehashed store");
+
+    let started = Instant::now();
+    let audit = black_box(glyim_ledger::run_evidence_audit(
+        dir.path(),
+        black_box(&glyim_ledger::ProjectEvidenceSource::new(dir.path(), None)),
+        black_box(&glyim_ledger::FileFixtureFingerprint),
+    ));
+    let audit_elapsed = started.elapsed();
+    assert!(audit.is_ok(), "every fixture hashes to its recorded digest");
+    assert_eq!(audit.records, 4000);
+    assert_eq!(audit.ok, 4000);
+
+    println!("  audit  (load+triage+sha256 4000): {audit_elapsed:?}");
 }
