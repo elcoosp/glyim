@@ -104,6 +104,32 @@ pub enum BenchError {
         /// The identity of the regenerated program.
         actual: u64,
     },
+    /// A budgets file could not be read (or written).
+    BudgetsRead {
+        /// The budgets file path.
+        path: String,
+        /// The underlying IO error message.
+        detail: String,
+    },
+    /// A budgets file's contents are not a valid `glyim.bench-budgets/1`
+    /// document (bad TOML, wrong schema tag, duplicate programs, or a row
+    /// without any bound).
+    BudgetsParse {
+        /// What violates the budgets contract.
+        detail: String,
+    },
+    /// A history file could not be read (or appended to).
+    HistoryRead {
+        /// The history file path.
+        path: String,
+        /// The underlying IO error message.
+        detail: String,
+    },
+    /// A history line is not a valid `glyim.bench-history/1` record.
+    HistoryParse {
+        /// What violates the history contract.
+        detail: String,
+    },
 }
 
 impl fmt::Display for BenchError {
@@ -151,6 +177,14 @@ impl fmt::Display for BenchError {
                 f,
                 "corpus program {family}/{seed} drifted: manifest identity {expected:016x}, regenerated {actual:016x}"
             ),
+            Self::BudgetsRead { path, detail } => {
+                write!(f, "cannot read budgets file {path}: {detail}")
+            }
+            Self::BudgetsParse { detail } => write!(f, "invalid budgets file: {detail}"),
+            Self::HistoryRead { path, detail } => {
+                write!(f, "cannot read history file {path}: {detail}")
+            }
+            Self::HistoryParse { detail } => write!(f, "invalid history record: {detail}"),
         }
     }
 }
@@ -173,6 +207,10 @@ impl miette::Diagnostic for BenchError {
             Self::CorpusPlan { .. } => "glyim-bench::corpus_plan",
             Self::CorpusManifestParse { .. } => "glyim-bench::corpus_manifest_parse",
             Self::CorpusIdentityMismatch { .. } => "glyim-bench::corpus_identity_mismatch",
+            Self::BudgetsRead { .. } => "glyim-bench::budgets_read",
+            Self::BudgetsParse { .. } => "glyim-bench::budgets_parse",
+            Self::HistoryRead { .. } => "glyim-bench::history_read",
+            Self::HistoryParse { .. } => "glyim-bench::history_parse",
         }))
     }
 
@@ -257,6 +295,30 @@ impl miette::Diagnostic for BenchError {
                  with hashes\" contract)"
                     .to_string()
             }
+            Self::BudgetsRead { .. } => {
+                "check the path passed to `glyim-bench budget --budgets` and its \
+                 permissions; seed a starter file with \
+                 `cargo run -p glyim-bench --example budget_check`"
+                    .to_string()
+            }
+            Self::BudgetsParse { .. } => {
+                "budgets files are `glyim.bench-budgets/1` TOML documents with a \
+                 strict (deny_unknown_fields) schema: unique `[[budget]]` rows, \
+                 each naming a `program` and at least one of `max_wall_mean_ns` / \
+                 `max_instructions_mean`"
+                    .to_string()
+            }
+            Self::HistoryRead { .. } => {
+                "check the path passed to `glyim-bench history --history`; the file \
+                 is created by the first `glyim-bench history record` append"
+                    .to_string()
+            }
+            Self::HistoryParse { .. } => {
+                "history files are JSONL: one `glyim.bench-history/1` record per \
+                 line, each wrapping a `glyim.bench/1` report; rebuild a file with \
+                 `glyim-bench history record`"
+                    .to_string()
+            }
         }))
     }
 
@@ -321,6 +383,20 @@ mod tests {
                 seed: 1,
                 expected: 0xab,
                 actual: 0xcd,
+            },
+            BenchError::BudgetsRead {
+                path: "perf/budgets.toml".into(),
+                detail: "missing".into(),
+            },
+            BenchError::BudgetsParse {
+                detail: "duplicate program".into(),
+            },
+            BenchError::HistoryRead {
+                path: "perf/history/fib.jsonl".into(),
+                detail: "denied".into(),
+            },
+            BenchError::HistoryParse {
+                detail: "bad line".into(),
             },
         ];
         for err in errors {
