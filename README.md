@@ -138,8 +138,8 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `tools/glyim-metrics` | Repo-health metrics (code lines, tests, doc coverage, inline-allow count) behind the CI metrics ratchet. |
 | `tools/glyim-pilot` | Agent orchestrator with gate bundles (clippy, fmt, contracts, coverage, mutation, ledger). |
 | `tools/ledger-schema` | `deny_unknown_fields` schemas shared by the readiness ledger and inventory extractors. |
-| `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `gaps`, `next`, `explain`, `compute`, `status`, `inventory`, `schema` — registry consistency gates run in CI; `next` renders the plan §3.9 deterministic work queue (`glyim.ledger-next/1` JSON) for agent consumers and `explain` resolves one registry ID against it; `compute` runs the plan M1.8 level engine — a pure function of the registry, `glyim.evidence/1` records, and `ledger/policy.toml` (`glyim.ledger-compute/1` JSON with `--format json`); `status` renders the computed status as the marker-delimited Markdown block or the `glyim.status/1` JSON contract (plan M1.9 first slice). |
-| `tools/glyim-bench` | M2.2 measurement harness: `perf stat`/callgrind instruction counts, wall time, child RSS, a counting allocator, the CoV stability gate, and the M2.3 deterministic corpus generators (`glyim.corpus/1` manifest). |
+| `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `gaps`, `next`, `explain`, `compute`, `status`, `diff`, `inventory`, `schema` — registry consistency gates run in CI; `next` renders the plan §3.9 deterministic work queue (`glyim.ledger-next/1` JSON) for agent consumers and `explain` resolves one registry ID against it; `compute` runs the plan M1.8 level engine — a pure function of the registry, `glyim.evidence/1` records, and `ledger/policy.toml` (`glyim.ledger-compute/1` JSON with `--format json`; `--snapshot PATH` persists the `glyim.ledger-snapshot/1` document); `status` renders the computed status as the marker-delimited Markdown block or the `glyim.status/1` JSON contract (plan M1.9 first slice); `diff` is the plan M1.10 readiness-regression gate between two snapshots — regressions block unless an unexpired `ledger/waivers.toml` waiver covers them (constitution C9). |
+| `tools/glyim-bench` | M2.2 measurement harness: `perf stat`/callgrind instruction counts, wall time, child RSS, a counting allocator, the CoV stability gate, and the M2.3 deterministic corpus generators (`glyim.corpus/1` manifest); `diff` is the M2.5 perf-history gate between two `glyim.bench/1` reports, and `scale` (M2.4) measures a `{size}`-parameterized command across input sizes and gates the fitted log-log scaling exponent. |
 
 ### Compilation Pipeline
 
@@ -507,8 +507,20 @@ cargo run -p glyim-ledger --example compute_levels
 # Render the computed status block + JSON contract (M1.9 first slice).
 cargo run -p glyim-ledger --example status_report
 
+# Run the readiness-regression gate: unwaived regression fails, waiver passes (M1.10).
+cargo run -p glyim-ledger --example readiness_diff
+
 # Build + verify a corpus manifest over the 7 generator families (M2.3).
 cargo run -p glyim-bench --example corpus_walk
+
+# Fit a stored report history + a live run into a scaling exponent (M2.4).
+cargo run -p glyim-bench --example scaling_fit
+
+# Walk the virtual filesystem seam every driver sits on.
+cargo run -p glyim-vfs --example vfs_walkthrough
+
+# Walk the content-addressed compile cache and the session-state bundle.
+cargo run -p glyim-db --example compile_cache_walkthrough
 ```
 
 ---
@@ -656,10 +668,18 @@ session log.
   allocator, CoV stability gate), and the M2.3 slice 1 corpus substrate is
   landed (`tools/glyim-bench` `corpus` module: the seven deterministic
   generator families, the `glyim.corpus/1` manifest, and the
-  identity-verify contract behind "corpora committed with hashes"). The
-  next plan items are the rest of M1.7 (the `HANDOFF.md` §2 and playbook
-  Appendix A sources) and the rest of M2.3 (the committed corpora
-  directory, the real-program set, and the evidence wiring that fills the
+  identity-verify contract behind "corpora committed with hashes"), the
+  M1.8 level-computation engine and M1.9 status renderers are landed
+  (`tools/glyim-ledger` `compute`/`status`), the M2.5 perf-history diff
+  gate is landed (`tools/glyim-bench` `diff`), and the M1.10
+  readiness-regression gate (first slice: `glyim-ledger diff` over
+  `glyim.ledger-snapshot/1` documents with `ledger/waivers.toml` waivers
+  inside the 14-day C9 horizon) plus the M2.4 scaling analyzer (first
+  slice: `glyim-bench scale` with the log-log fit) are landed. The next
+  plan items are the M1.9 renderers remainder (generated `KNOWN_GAPS.md`,
+  the Astro readiness page), the M1.10 CI wiring (the "STATUS is up to
+  date" check, the nightly full-evidence job), and the rest of M2.3 (the
+  committed corpora directory and the evidence wiring that fills the
   harness's reserved `instructions`/`rss_kb` columns).
 - `docs/archive/` — historical session documents (`HANDOFF.md`,
   `FIXES.md`) kept for provenance; the root stays navigation-focused.
