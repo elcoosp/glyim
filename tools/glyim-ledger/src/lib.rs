@@ -1,6 +1,6 @@
 //! CLI library for the Readiness Ledger tool (plan M1.1).
 //!
-//! Twelve subcommands:
+//! Fourteen subcommands:
 //!
 //! - `glyim-ledger check [ROOT]` — load `ROOT/ledger`, run the schema and
 //!   semantic validators, cross-check the M1.3 inventory extractors, print
@@ -25,8 +25,12 @@
 //!   (L5 hardening is reported as unmeasured); see [`compute`] for the
 //!   determinism and monotonicity contracts. `--snapshot PATH` also
 //!   persists the `glyim.ledger-snapshot/1` document of the run.
-//! - `glyim-ledger status [ROOT] [--evidence PATH] [--format md|json]` —
-//!   the plan §6 M1.9 renderers over the compute outcome (first slice).
+//! - `glyim-ledger status [ROOT] [--evidence PATH] [--format md|json]
+//!   [--out PATH] [--check]` — the plan §6 M1.9 renderers over the
+//!   compute outcome, plus the M1.10 remainder: `--out PATH` writes the
+//!   rendered document (default `STATUS.md` / `STATUS.json` by face) and
+//!   `--check` byte-compares the committed document against the computed
+//!   status ("STATUS is up to date").
 //! - `glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]` —
 //!   the plan §6 M1.10 readiness-regression gate (first slice): per-feature
 //!   level movement between two snapshot documents, with regressions
@@ -46,6 +50,16 @@
 //!   (or the `glyim.known-gaps/1` JSON face) as a pure function of the gap
 //!   registry; `--out PATH` writes it, `--check` byte-compares it against
 //!   the committed document and fails on any drift (see [`render`]).
+//! - `glyim-ledger evidence record [--out PATH] [--format text|json]
+//!   <SRC...>` — the plan §3.4 evidence-store curation face: validate
+//!   harness-emitted `glyim.evidence/1` records against the registry and
+//!   merge them into the committed store (whole-record dedupe, canonical
+//!   order; default target `ledger/evidence/recorded.jsonl`), so the
+//!   engine's `ledger/evidence/*.jsonl` discovery has a first-class
+//!   writer (see [`evidence`]).
+//! - `glyim-ledger evidence check [ROOT] [--format text|json]` — validate
+//!   the committed evidence store against the registry and report its
+//!   coverage; error diagnostics fail the exit code (see [`evidence`]).
 //! - `glyim-ledger schema [OUT]` — write the JSON-Schema export document
 //!   for both entry types to `OUT` (pretty-printed), or to stdout.
 //! - `glyim-ledger inventory [ROOT]` — enumerate the source-derived
@@ -65,6 +79,7 @@ use ledger_schema::{
 
 pub mod compute;
 pub mod diff;
+pub mod evidence;
 pub mod explain;
 pub mod gates;
 pub mod next;
@@ -87,6 +102,13 @@ pub use diff::{
     SnapshotStore, WAIVER_MAX_AGE_DAYS, WaiverEntry, WaiverSet, diff_levels, execute_diff,
     format_diff_json, format_diff_text, load_waivers, run_diff, today_iso,
 };
+pub use evidence::{
+    CODE_EVIDENCE_STORE_IO, CheckReport, DEFAULT_RECORD_TARGET, EVIDENCE_CHECK_SCHEMA,
+    EVIDENCE_RECORD_SCHEMA, EvidenceStore, FileEvidenceStore, InMemoryEvidenceStore,
+    OutcomeHistogram, RecordOutcome, RecordStats, canonical_line, format_evidence_check_json,
+    format_evidence_check_text, format_evidence_record_json, format_evidence_record_text,
+    merge_records, run_evidence_check, run_evidence_record,
+};
 pub use explain::{ExplainEntry, ExplainOutcome, format_explain_report, run_explain};
 pub use gates::{
     GATES_REPORT_SCHEMA, GateVerdict, GateVerdictRow, GatesOutcome, evaluate_gates,
@@ -103,8 +125,9 @@ pub use render::{
     run_render_gaps,
 };
 pub use status::{
-    STATUS_MD_END, STATUS_MD_START, STATUS_SCHEMA, StatusOutcome, format_status_json,
-    format_status_markdown, run_status,
+    STATUS_JSON_TARGET, STATUS_MD_END, STATUS_MD_START, STATUS_MD_TARGET, STATUS_SCHEMA,
+    StatusOutcome, StatusRendered, format_status_json, format_status_markdown, run_status,
+    run_status_out,
 };
 pub use verify::{
     CHECK_NAMES, VERIFY_SCHEMA, VerifyOutcome, format_verify_json, format_verify_text,
@@ -296,6 +319,56 @@ pub enum LedgerCliError {
         /// The IO error message.
         detail: String,
     },
+    /// `evidence record` was called without at least one SRC path.
+    EvidenceMissingSources {
+        /// The usage text.
+        usage: String,
+    },
+    /// `evidence record --out`/`--format` was passed without its value.
+    EvidenceMissingValue {
+        /// The flag that was missing its value (`--out` or `--format`).
+        flag: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `evidence --format` received a value outside `text|json`.
+    EvidenceBadFormat {
+        /// The offending value.
+        value: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `evidence` was followed by something other than `record`/`check`.
+    EvidenceSubcommand {
+        /// The offending subcommand.
+        subcommand: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `evidence record` could not persist the merged store.
+    EvidenceWrite {
+        /// The store path.
+        path: String,
+        /// The diagnostic detail (the store's IO failure message).
+        detail: String,
+    },
+    /// `status --check` found the committed document drifted from the
+    /// computed status (or unreadable): the file and the
+    /// `(registry, evidence, policy)` render disagree (the M1.10
+    /// "STATUS is up to date" gate).
+    StatusDrift {
+        /// The checked document path.
+        path: String,
+        /// What the comparison (or read) found.
+        detail: String,
+    },
+    /// `status --out` could not write the rendered document.
+    StatusWrite {
+        /// The output path.
+        path: String,
+        /// The IO error message.
+        detail: String,
+    },
 }
 
 impl fmt::Display for LedgerCliError {
@@ -384,6 +457,28 @@ impl fmt::Display for LedgerCliError {
                 )
             }
             Self::RenderWrite { path, detail } => write!(f, "cannot write {path}: {detail}"),
+            Self::EvidenceMissingSources { usage } => {
+                write!(f, "evidence record requires at least one SRC path\n{usage}")
+            }
+            Self::EvidenceMissingValue { flag, usage } => {
+                write!(f, "missing value for {flag}\n{usage}")
+            }
+            Self::EvidenceBadFormat { value, usage } => {
+                write!(
+                    f,
+                    "invalid --format {value:?} (expected text|json)\n{usage}"
+                )
+            }
+            Self::EvidenceSubcommand { subcommand, usage } => {
+                write!(f, "unknown evidence subcommand {subcommand:?}\n{usage}")
+            }
+            Self::EvidenceWrite { path, detail } => {
+                write!(f, "cannot write evidence store {path}: {detail}")
+            }
+            Self::StatusDrift { path, detail } => {
+                write!(f, "status drift at {path}: {detail}")
+            }
+            Self::StatusWrite { path, detail } => write!(f, "cannot write {path}: {detail}"),
         }
     }
 }
@@ -419,6 +514,13 @@ impl miette::Diagnostic for LedgerCliError {
             Self::RenderMissingValue { .. } => "glyim-ledger::render_missing_value",
             Self::RenderDrift { .. } => "glyim-ledger::render_drift",
             Self::RenderWrite { .. } => "glyim-ledger::render_write",
+            Self::EvidenceMissingSources { .. } => "glyim-ledger::evidence_missing_sources",
+            Self::EvidenceMissingValue { .. } => "glyim-ledger::evidence_missing_value",
+            Self::EvidenceBadFormat { .. } => "glyim-ledger::evidence_bad_format",
+            Self::EvidenceSubcommand { .. } => "glyim-ledger::evidence_subcommand",
+            Self::EvidenceWrite { .. } => "glyim-ledger::evidence_write",
+            Self::StatusDrift { .. } => "glyim-ledger::status_drift",
+            Self::StatusWrite { .. } => "glyim-ledger::status_write",
         }))
     }
 
@@ -547,6 +649,42 @@ impl miette::Diagnostic for LedgerCliError {
                  generated KNOWN_GAPS.md face (plan M1.9)"
                     .to_string(),
             )),
+            Self::EvidenceMissingSources { .. } => Some(Box::new(
+                "name at least one harness-emitted JSONL file \
+                 (set GLYIM_TEST_EVIDENCE on a corpus run to produce one)"
+                    .to_string(),
+            )),
+            Self::EvidenceMissingValue { .. } => Some(Box::new(
+                "`--out PATH` names the store file (default \
+                 ledger/evidence/recorded.jsonl); `--format` is text|json"
+                    .to_string(),
+            )),
+            Self::EvidenceBadFormat { .. } => Some(Box::new(
+                "`--format text` renders the merge report, `--format json` \
+                 the glyim.ledger-evidence-record/1 contract"
+                    .to_string(),
+            )),
+            Self::EvidenceSubcommand { .. } => Some(Box::new(
+                "`evidence record` curates harness records into the store, \
+                 `evidence check` validates the committed store"
+                    .to_string(),
+            )),
+            Self::EvidenceWrite { .. } => Some(Box::new(
+                "the record face creates missing parent directories; check \
+                 that the --out path's parent is writable (plan §3.4 store)"
+                    .to_string(),
+            )),
+            Self::StatusDrift { .. } => Some(Box::new(
+                "run `cargo run -p glyim-ledger -- status . --out STATUS.md` \
+                 (and `--format json --out STATUS.json`) to regenerate the \
+                 documents from the computed status"
+                    .to_string(),
+            )),
+            Self::StatusWrite { .. } => Some(Box::new(
+                "check that the --out path is writable; the document is the \
+                 generated STATUS face (plan M1.10)"
+                    .to_string(),
+            )),
         }
     }
 }
@@ -609,8 +747,11 @@ pub enum Command {
         /// this run to `PATH` (the input face of the M1.10 `diff` gate).
         snapshot: Option<PathBuf>,
     },
-    /// `status [ROOT] [--evidence PATH] [--format md|json]` — the plan
-    /// §6 M1.9 status renderers (first slice).
+    /// `status [ROOT] [--evidence PATH] [--format md|json] [--out PATH]
+    /// [--check]` — the plan §6 M1.9 status renderers, plus the M1.10
+    /// remainder: `--out PATH` writes the rendered document (default
+    /// `STATUS.md` / `STATUS.json` by face under ROOT) and `--check`
+    /// byte-compares the committed document against the computed status.
     Status {
         /// Project directory containing the `ledger/` registry (`.` by
         /// default).
@@ -619,6 +760,13 @@ pub enum Command {
         evidence: Option<PathBuf>,
         /// Output format; [`StatusFormat::Markdown`] by default.
         format: StatusFormat,
+        /// File to write the rendered document to; `None` prints to
+        /// stdout. `--check` compares against this file (default
+        /// `<ROOT>/STATUS.md` or `<ROOT>/STATUS.json` by face).
+        out: Option<PathBuf>,
+        /// Compare the rendered bytes against the committed document
+        /// instead of writing it (the "STATUS is up to date" gate).
+        check: bool,
     },
     /// `diff <BASE> <CURRENT> [ROOT] [--format text|json]` — the plan §6
     /// M1.10 readiness-regression gate: compares two `glyim.ledger-snapshot/1`
@@ -676,6 +824,30 @@ pub enum Command {
         /// of writing it (the determinism gate).
         check: bool,
     },
+    /// `evidence record [--out PATH] [--format text|json] <SRC...>` — the
+    /// plan §3.4 evidence-store curation face: validate harness-emitted
+    /// records against the registry and merge them into the committed
+    /// store (whole-record dedupe, canonical order).
+    EvidenceRecord {
+        /// Harness-emitted JSONL files to curate (at least one).
+        sources: Vec<PathBuf>,
+        /// Store file to merge into; defaults to
+        /// `ledger/evidence/recorded.jsonl`.
+        out: PathBuf,
+        /// Output format; [`EvidenceFormat::Text`] by default.
+        format: EvidenceFormat,
+    },
+    /// `evidence check [ROOT] [--format text|json]` — validate the
+    /// committed `ledger/evidence/*.jsonl` store against the registry and
+    /// report its coverage; error diagnostics fail the exit code (the CI
+    /// gate face).
+    EvidenceCheck {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// Output format; [`EvidenceFormat::Text`] by default.
+        format: EvidenceFormat,
+    },
 }
 
 /// Output format of the `compute` subcommand.
@@ -694,6 +866,17 @@ pub enum StatusFormat {
     Markdown,
     /// The `glyim.status/1` JSON contract ([`format_status_json`]).
     Json,
+}
+
+impl StatusFormat {
+    /// Canonical flag spelling (used in tracing spans).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Markdown => "md",
+            Self::Json => "json",
+        }
+    }
 }
 
 /// Output format of the `diff` subcommand.
@@ -723,10 +906,35 @@ pub enum VerifyFormat {
     Json,
 }
 
+/// Output format of the `evidence record` / `evidence check` subcommands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvidenceFormat {
+    /// The human-readable report
+    /// ([`format_evidence_record_text`](crate::evidence::format_evidence_record_text) /
+    /// [`format_evidence_check_text`](crate::evidence::format_evidence_check_text)).
+    Text,
+    /// The `glyim.ledger-evidence-record/1` /
+    /// `glyim.ledger-evidence-check/1` JSON contracts
+    /// ([`format_evidence_record_json`](crate::evidence::format_evidence_record_json) /
+    /// [`format_evidence_check_json`](crate::evidence::format_evidence_check_json)).
+    Json,
+}
+
+impl EvidenceFormat {
+    /// Canonical wire spelling (used in tracing spans).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Json => "json",
+        }
+    }
+}
+
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout; `next` filters by\n\
      \x20 lane (L|F|T|M|B|Q) and prints the glyim.ledger-next/1 JSON queue;\n\
@@ -736,7 +944,10 @@ pub fn usage() -> String {
      \x20 `--snapshot PATH` also persists the glyim.ledger-snapshot/1\n\
      \x20 document); `status` renders the computed status as the\n\
      \x20 marker-delimited Markdown block (default) or the glyim.status/1\n\
-     \x20 JSON contract; `diff` compares two snapshot documents and fails\n\
+     \x20 JSON contract — `--out PATH` writes the rendered document\n\
+     \x20 (default STATUS.md / STATUS.json by face) and `--check` fails\n\
+     \x20 on drift (the plan M1.10 \"STATUS is up to date\" gate);\n\
+     \x20 `diff` compares two snapshot documents and fails\n\
      \x20 on any regression not covered by an unexpired waiver in\n\
      \x20 `ledger/waivers.toml` (plan C9); `gates` prints the RG-01..RG-24\n\
      \x20 release-gate verdicts declared in `ledger/gates.toml` —\n\
@@ -745,7 +956,12 @@ pub fn usage() -> String {
      \x20 and fails on any rendered-byte drift (plan M1.13);\n\
      \x20 `render-gaps` generates KNOWN_GAPS.md (or the glyim.known-gaps/1\n\
      \x20 JSON face) from the gap registry — `--out PATH` writes it,\n\
-     \x20 `--check` fails on drift (plan M1.9)."
+     \x20 `--check` fails on drift (plan M1.9); `evidence record` curates\n\
+     \x20 harness-emitted glyim.evidence/1 records into the committed\n\
+     \x20 store (whole-record dedupe, canonical order; `--out PATH`,\n\
+     \x20 default ledger/evidence/recorded.jsonl), and `evidence check`\n\
+     \x20 validates the committed store against the registry and reports\n\
+     \x20 its coverage (plan §3.4 store face)."
         .into()
 }
 
@@ -767,7 +983,7 @@ where
         }),
         Some(
             "check" | "gaps" | "schema" | "inventory" | "next" | "explain" | "compute" | "status"
-            | "diff" | "gates" | "verify" | "render-gaps",
+            | "diff" | "gates" | "verify" | "render-gaps" | "evidence",
         ) => {
             let rest = &items[1..];
             if items[0] == "next" {
@@ -793,6 +1009,9 @@ where
             }
             if items[0] == "render-gaps" {
                 return parse_render_gaps(rest);
+            }
+            if items[0] == "evidence" {
+                return parse_evidence(rest);
             }
             if rest.len() > 1 {
                 return Err(LedgerCliError::ExtraArgument {
@@ -995,10 +1214,12 @@ fn parse_status(rest: &[String]) -> Result<Command, LedgerCliError> {
     let mut root: Option<PathBuf> = None;
     let mut evidence: Option<PathBuf> = None;
     let mut format = StatusFormat::Markdown;
+    let mut out: Option<PathBuf> = None;
+    let mut check = false;
     let mut index = 0;
     while index < rest.len() {
         match rest[index].as_str() {
-            "--evidence" | "--format" => {
+            "--evidence" | "--format" | "--out" => {
                 let flag = rest[index].as_str();
                 let Some(value) = rest.get(index + 1) else {
                     return Err(LedgerCliError::StatusMissingValue {
@@ -1006,21 +1227,27 @@ fn parse_status(rest: &[String]) -> Result<Command, LedgerCliError> {
                         usage: usage(),
                     });
                 };
-                if flag == "--evidence" {
-                    evidence = Some(PathBuf::from(value));
-                } else {
-                    format = match value.as_str() {
-                        "md" => StatusFormat::Markdown,
-                        "json" => StatusFormat::Json,
-                        other => {
-                            return Err(LedgerCliError::StatusBadFormat {
-                                value: other.to_string(),
-                                usage: usage(),
-                            });
-                        }
-                    };
+                match flag {
+                    "--evidence" => evidence = Some(PathBuf::from(value)),
+                    "--out" => out = Some(PathBuf::from(value)),
+                    _ => {
+                        format = match value.as_str() {
+                            "md" => StatusFormat::Markdown,
+                            "json" => StatusFormat::Json,
+                            other => {
+                                return Err(LedgerCliError::StatusBadFormat {
+                                    value: other.to_string(),
+                                    usage: usage(),
+                                });
+                            }
+                        };
+                    }
                 }
                 index += 2;
+            }
+            "--check" => {
+                check = true;
+                index += 1;
             }
             flag if flag.starts_with('-') => {
                 return Err(LedgerCliError::UnknownFlag {
@@ -1044,6 +1271,8 @@ fn parse_status(rest: &[String]) -> Result<Command, LedgerCliError> {
         root: root.unwrap_or_else(|| PathBuf::from(".")),
         evidence,
         format,
+        out,
+        check,
     })
 }
 
@@ -1283,6 +1512,127 @@ fn parse_render_gaps(rest: &[String]) -> Result<Command, LedgerCliError> {
         out,
         check,
     })
+}
+
+/// Parse the `evidence` subcommand's arguments: the second word selects
+/// the face — `record [--out PATH] [--format text|json] <SRC...>` (the
+/// registry root is the working directory, mirroring every other command's
+/// default; the library entry point takes an explicit root) and
+/// `check [ROOT] [--format text|json]`.
+fn parse_evidence(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let Some(kind) = rest.first() else {
+        return Err(LedgerCliError::EvidenceSubcommand {
+            subcommand: "<missing>".to_string(),
+            usage: usage(),
+        });
+    };
+    let body = &rest[1..];
+    match kind.as_str() {
+        "record" => {
+            let mut sources: Vec<PathBuf> = Vec::new();
+            let mut out: Option<PathBuf> = None;
+            let mut format = EvidenceFormat::Text;
+            let mut index = 0;
+            while index < body.len() {
+                match body[index].as_str() {
+                    "--out" | "--format" => {
+                        let flag = body[index].as_str();
+                        let Some(value) = body.get(index + 1) else {
+                            return Err(LedgerCliError::EvidenceMissingValue {
+                                flag: flag.to_string(),
+                                usage: usage(),
+                            });
+                        };
+                        if flag == "--out" {
+                            out = Some(PathBuf::from(value));
+                        } else {
+                            format = match value.as_str() {
+                                "text" => EvidenceFormat::Text,
+                                "json" => EvidenceFormat::Json,
+                                other => {
+                                    return Err(LedgerCliError::EvidenceBadFormat {
+                                        value: other.to_string(),
+                                        usage: usage(),
+                                    });
+                                }
+                            };
+                        }
+                        index += 2;
+                    }
+                    flag if flag.starts_with('-') => {
+                        return Err(LedgerCliError::UnknownFlag {
+                            flag: flag.to_string(),
+                            usage: usage(),
+                        });
+                    }
+                    positional => {
+                        sources.push(PathBuf::from(positional));
+                        index += 1;
+                    }
+                }
+            }
+            if sources.is_empty() {
+                return Err(LedgerCliError::EvidenceMissingSources { usage: usage() });
+            }
+            Ok(Command::EvidenceRecord {
+                sources,
+                out: out.unwrap_or_else(|| PathBuf::from(evidence::DEFAULT_RECORD_TARGET)),
+                format,
+            })
+        }
+        "check" => {
+            let mut root: Option<PathBuf> = None;
+            let mut format = EvidenceFormat::Text;
+            let mut index = 0;
+            while index < body.len() {
+                match body[index].as_str() {
+                    "--format" => {
+                        let Some(value) = body.get(index + 1) else {
+                            return Err(LedgerCliError::EvidenceMissingValue {
+                                flag: "--format".to_string(),
+                                usage: usage(),
+                            });
+                        };
+                        format = match value.as_str() {
+                            "text" => EvidenceFormat::Text,
+                            "json" => EvidenceFormat::Json,
+                            other => {
+                                return Err(LedgerCliError::EvidenceBadFormat {
+                                    value: other.to_string(),
+                                    usage: usage(),
+                                });
+                            }
+                        };
+                        index += 2;
+                    }
+                    flag if flag.starts_with('-') => {
+                        return Err(LedgerCliError::UnknownFlag {
+                            flag: flag.to_string(),
+                            usage: usage(),
+                        });
+                    }
+                    positional => {
+                        if root.is_some() {
+                            return Err(LedgerCliError::ExtraArgument {
+                                arg: positional.to_string(),
+                                usage: usage(),
+                            });
+                        }
+                        root = Some(PathBuf::from(positional));
+                        index += 1;
+                    }
+                }
+            }
+            Ok(Command::EvidenceCheck {
+                root: root.unwrap_or_else(|| PathBuf::from(".")),
+                format,
+            })
+        }
+        other => Err(LedgerCliError::EvidenceSubcommand {
+            subcommand: other.to_string(),
+            usage: usage(),
+        }),
+    }
 }
 
 /// Result of a full `ledger check` run.
@@ -1861,6 +2211,8 @@ mod tests {
                 root: PathBuf::from("."),
                 evidence: None,
                 format: StatusFormat::Markdown,
+                out: None,
+                check: false,
             }
         );
     }
@@ -1882,6 +2234,8 @@ mod tests {
                 root: PathBuf::from("s"),
                 evidence: Some(PathBuf::from("e.jsonl")),
                 format: StatusFormat::Json,
+                out: None,
+                check: false,
             }
         );
     }
