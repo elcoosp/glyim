@@ -8,6 +8,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Matrix gate with the geo-mean aggregate budget (M2.5 remainder)**:
+  `tools/glyim-bench/src/matrix.rs` implements the plan §325 / §6 M2.5
+  perf-compare criterion — "fail >2% on a benchmark **or >0.5%
+  geo-mean**" — the aggregate clause no existing gate could express: a
+  change that slows every benchmark by +1% passes each per-benchmark
+  budget and is caught only by the matrix. The `BaselineSource` trait
+  (`HistoryBaselineSource` selects the latest recorded run of each
+  program from a `HistoryStore`, lazily cached; `InMemoryBaselineSource`
+  backs tests) keeps the engine IO-free and lets the baseline layout
+  evolve; `diff_matrix` reuses the unchanged M2.5 `diff_reports` engine
+  per row (rows in input order, no clock, plan C6), and
+  `execute_diff_matrix` wires the `ReportStore` + `BaselineSource`
+  seams. The instruction geo-mean is measured only when *every* row
+  carried instructions (the budget gate's honesty rule: a geo-mean over
+  a subset is not coverage). Wired as `glyim-bench matrix
+  --history PATH [--max-delta-pct] [--max-geo-delta-pct] REPORT...`
+  over the `glyim.bench-matrix/1` outcome, with the `matrix_gate`
+  example and the dependency-free `matrix_engine` bench (8 programs ×
+  256 history records). A missing baseline is now a typed
+  `BenchError::BaselineUnavailable` with a remedy-naming help line
+  (previously the misleading `InvalidPlan` whose help talked about
+  `--iterations`).
+- **History trend analyzer (M2.5 complement)**:
+  `tools/glyim-bench/src/trend.rs` measures the **total drift** across
+  the last N recorded runs of one program (`glyim.bench-trend/1`) —
+  the accumulated multi-PR regression the latest-baseline diff can
+  never see, because every individual PR stayed within its own budget
+  while the window ratchets +1% per run. `trend_over_history` is the
+  pure engine (append-order window, first-to-last drift, the diff
+  engine's degenerate zero-first-mean rule), `execute_trend_from_history`
+  wires the `HistoryStore` seam, and the instruction drift is measured
+  only when every window point carried instructions. Wired as
+  `glyim-bench history trend --history PATH --program P [--window N]
+  [--max-drift-pct]`, with the `history_trend` example and the
+  `trend_engine` bench (256 records × 2 programs, window 32).
 - **Perf-history store (M2.5 first slice)**:
   `tools/glyim-bench/src/history.rs` implements the plan's
   `perf/history/*.jsonl` seam — the committed memory the M2.5 diff gate
