@@ -49,9 +49,10 @@ The following are **in scope** as security bugs:
 - **Denial of service via a pathological input file** — a file that
   takes N minutes to compile is a bug, but it is not a security
   vulnerability.
-- **Missing language features** — the KNOWN_GAPS file documents
-  dozens of incomplete features. A feature that rejects at compile
-  time is not a security issue.
+- **Missing language features** — the generated `KNOWN_GAPS.md`
+  (from `ledger/gaps/known/*.toml`) documents the 5 open gaps, each
+  capped at a level the registry computes. A feature that rejects at
+  compile time is not a security issue.
 - **Frontend-only bugs** — a parser panic on adversarial input is a
   robustness bug (reportable as an ordinary issue), not a security
   issue, unless it leads to memory unsafety or code execution.
