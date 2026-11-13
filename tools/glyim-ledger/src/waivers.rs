@@ -668,6 +668,240 @@ pub fn format_waivers_grant_json(outcome: &WaiversGrantOutcome) -> String {
     text
 }
 
+// -- revoke face ---------------------------------------------------------------
+
+/// Schema tag of the `waivers revoke` JSON contract.
+pub const WAIVERS_REVOKE_SCHEMA: &str = "glyim.ledger-waivers-revoke/1";
+
+/// The `[[waiver]]` document carrier for the rewriter: parsing the
+/// committed `ledger/waivers.toml` into the entry array and
+/// re-serializing the remaining entries produces the canonical document
+/// (field order = struct order, escaped by the `toml` crate — the same
+/// discipline [`GrantFragmentDoc`] applies on the write side).
+#[derive(serde::Serialize, serde::Deserialize)]
+struct RevokeSourceDoc {
+    waiver: Vec<WaiverEntry>,
+}
+
+/// The `waivers revoke` request (the CLI flags, validated by
+/// [`run_waivers_revoke`]): retire one waiver by its exact ID — the
+/// counterpart of `waivers grant` for exceptions whose regression fix
+/// landed (or whose horizon already expired; constitution C9 keeps the
+/// file clean, and until this face there was no sanctioned way to remove
+/// an entry at all).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WaiversRevokeRequest {
+    /// The exact waiver ID (`WVR-...`) to remove.
+    pub id: String,
+}
+
+/// Where a revoked `[[waiver]]` block is removed from. The rewrite seam
+/// mirrors [`WaiverSink`] on the write side: the engine consumes the
+/// trait, so tests drive an in-memory document and the CLI wires the
+/// file-backed implementation.
+pub trait WaiverRewriter {
+    /// Removes the `[[waiver]]` block carrying the exact `id` from the
+    /// document at `path` and rewrites the remaining entries canonically.
+    /// Returns the removed entry, or `None` when the document no longer
+    /// carries it; the error detail is the IO or serialization failure
+    /// message (the CLI turns it into a typed write error).
+    fn remove(&self, path: &Path, id: &str) -> Result<Option<WaiverEntry>, String>;
+}
+
+/// Rewrites `<ROOT>/ledger/waivers.toml` on disk: parse, drop the one
+/// matching block, re-serialize the remaining entries canonically, and
+/// replace the file. The rewrite never silently reorders or drops other
+/// entries — a document that fails to parse is refused (`Err`), not
+/// truncated.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FileWaiverRewriter;
+
+impl WaiverRewriter for FileWaiverRewriter {
+    fn remove(&self, path: &Path, id: &str) -> Result<Option<WaiverEntry>, String> {
+        let text = std::fs::read_to_string(path)
+            .map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+        let doc: RevokeSourceDoc = toml::from_str(&text)
+            .map_err(|err| format!("cannot parse {}: {err}", path.display()))?;
+        let Some(position) = doc.waiver.iter().position(|entry| entry.id == id) else {
+            return Ok(None);
+        };
+        let removed = doc.waiver[position].clone();
+        let mut remaining = doc.waiver;
+        remaining.remove(position);
+        let rewritten = toml::to_string(&RevokeSourceDoc { waiver: remaining })
+            .map_err(|err| format!("cannot serialize {}: {err}", path.display()))?;
+        std::fs::write(path, &rewritten)
+            .map_err(|err| format!("cannot write {}: {err}", path.display()))?;
+        Ok(Some(removed))
+    }
+}
+
+/// Operates on an owned in-memory document (tests and programmatic
+/// consumers); the in-memory twin of [`FileWaiverRewriter`]. Every
+/// successful removal is recorded in [`Self::removed`] for the audit.
+#[derive(Debug, Default)]
+pub struct InMemoryWaiverRewriter {
+    /// The document the rewriter operates on (the file's entries).
+    pub doc: std::cell::RefCell<Vec<WaiverEntry>>,
+    /// Every `(path, removed ID)` performed, in order.
+    pub removed: std::cell::RefCell<Vec<(PathBuf, String)>>,
+}
+
+impl WaiverRewriter for InMemoryWaiverRewriter {
+    fn remove(&self, path: &Path, id: &str) -> Result<Option<WaiverEntry>, String> {
+        let mut doc = self.doc.borrow_mut();
+        if let Some(position) = doc.iter().position(|entry| entry.id == id) {
+            let removed = doc.remove(position);
+            self.removed
+                .borrow_mut()
+                .push((path.to_path_buf(), id.to_string()));
+            Ok(Some(removed))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+/// Result of a `waivers revoke` run (also the
+/// `glyim.ledger-waivers-revoke/1` JSON face via
+/// [`format_waivers_revoke_json`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WaiversRevokeOutcome {
+    /// Schema tag, always [`WAIVERS_REVOKE_SCHEMA`].
+    pub schema: &'static str,
+    /// The revoked waiver's ID.
+    pub id: String,
+    /// The registry feature ID the revoked waiver covered.
+    pub feature: String,
+    /// The revoked waiver's expiry (`YYYY-MM-DD`, echoed verbatim).
+    pub expires: String,
+    /// Waivers remaining in the committed document after the removal.
+    pub remaining: usize,
+    /// The document the block was removed from.
+    pub target: String,
+}
+
+/// Revokes one C9 waiver: validates the request, refuses to touch a
+/// document that does not load cleanly, and removes exactly the one
+/// matching block through `rewriter`.
+///
+/// # Validation contract
+///
+/// - `id` must be usable (non-blank, no control characters);
+/// - the committed document must load with zero error-severity
+///   diagnostics (the rewriter refuses to rewrite what it cannot fully
+///   parse — a duplicate-ID file fails here, never silently);
+/// - the ID must be present (an unknown ID writes nothing and names a
+///   few existing candidates for the help line).
+///
+/// Nothing is written when validation fails.
+///
+/// # Errors
+///
+/// Typed [`LedgerCliError`] variants for every rejected request
+/// (`WaiversRevokeBadId`, `WaiversRevokeUnknownId`, `WaiversRevokeLoad`)
+/// and for a failed rewrite (`WaiversRevokeWrite`).
+pub fn run_waivers_revoke(
+    root: &Path,
+    request: &WaiversRevokeRequest,
+    source: &dyn WaiverSource,
+    rewriter: &dyn WaiverRewriter,
+) -> Result<WaiversRevokeOutcome, LedgerCliError> {
+    let span = tracing::info_span!(
+        "waivers_revoke",
+        root = %root.display(),
+        id = %request.id,
+    );
+    let _enter = span.enter();
+
+    if request.id.trim().is_empty() || request.id.chars().any(char::is_control) {
+        return Err(LedgerCliError::WaiversRevokeBadId {
+            id: request.id.clone(),
+        });
+    }
+
+    // `today_iso` renders the `YYYY-MM-DD` spelling `parse_iso` accepts;
+    // the same pinned round-trip the grant face relies on.
+    let today =
+        NaiveDate::parse_iso(&today_iso()).expect("today_iso round-trips through parse_iso");
+    let set = source.load(root, today);
+    if set
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        let detail = set
+            .diagnostics
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(LedgerCliError::WaiversRevokeLoad { detail });
+    }
+    if !set.waivers.iter().any(|w| w.id == request.id) {
+        let candidates = set
+            .waivers
+            .iter()
+            .take(3)
+            .map(|w| w.id.clone())
+            .collect::<Vec<_>>();
+        return Err(LedgerCliError::WaiversRevokeUnknownId {
+            id: request.id.clone(),
+            candidates,
+        });
+    }
+
+    let path = root.join("ledger/waivers.toml");
+    let removed = rewriter.remove(&path, &request.id).map_err(|detail| {
+        LedgerCliError::WaiversRevokeWrite {
+            path: path.display().to_string(),
+            detail,
+        }
+    })?;
+    let Some(removed) = removed else {
+        // The loaded set carried the ID but the document no longer does:
+        // the registry drifted between the load pass and the rewrite.
+        // Fail without a partial write.
+        return Err(LedgerCliError::WaiversRevokeUnknownId {
+            id: request.id.clone(),
+            candidates: Vec::new(),
+        });
+    };
+    let remaining = set.waivers.len().saturating_sub(1);
+    tracing::debug!(id = %removed.id, remaining, "waiver revoked");
+
+    Ok(WaiversRevokeOutcome {
+        schema: WAIVERS_REVOKE_SCHEMA,
+        id: removed.id,
+        feature: removed.feature,
+        expires: removed.expires,
+        remaining,
+        target: path.display().to_string(),
+    })
+}
+
+/// Renders the revoke outcome's text face: one summary line (the
+/// removed block's ID, feature, expiry, and the remaining count).
+#[must_use]
+pub fn format_waivers_revoke_text(outcome: &WaiversRevokeOutcome) -> String {
+    let mut text = String::new();
+    let _ = writeln!(
+        text,
+        "revoked {} for {} (expires {}) -> {} waiver(s) remain at {}",
+        outcome.id, outcome.feature, outcome.expires, outcome.remaining, outcome.target,
+    );
+    text
+}
+
+/// Renders the `glyim.ledger-waivers-revoke/1` JSON contract.
+#[must_use]
+pub fn format_waivers_revoke_json(outcome: &WaiversRevokeOutcome) -> String {
+    let mut text = serde_json::to_string_pretty(outcome)
+        .expect("the glyim.ledger-waivers-revoke/1 document is a serialisation-only struct");
+    text.push('\n');
+    text
+}
+
 #[cfg(test)]
 mod tests {
     //! Tests pin the C9 waiver-health contract: verdicts are pure date
@@ -683,8 +917,9 @@ mod tests {
     use ledger_schema::{Diagnostic, Severity};
 
     use super::{
-        FileWaiverSource, InMemoryWaiverSource, JsonWaiversRenderer, TextWaiversRenderer,
-        WaiverSource, WaiverVerdict, WaiversRenderer,
+        FileWaiverRewriter, FileWaiverSource, InMemoryWaiverRewriter, InMemoryWaiverSource,
+        JsonWaiversRenderer, TextWaiversRenderer, WaiverRewriter, WaiverSource, WaiverVerdict,
+        WaiversRenderer, WaiversRevokeRequest,
     };
     use crate::diff::{NaiveDate, WAIVER_MAX_AGE_DAYS, WaiverEntry, WaiverSet};
     use crate::{Command, LedgerCliError, WaiversFormat, parse_args, usage};
@@ -1360,5 +1595,336 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
     #[test]
     fn usage_lists_waivers_grant() {
         assert!(usage().contains("waivers grant"));
+    }
+
+    // -- revoke face ------------------------------------------------------------
+
+    /// Serializes `entries` into the canonical committed document text
+    /// (the exact bytes a grant run would produce, reused to seed the
+    /// file-backed rewriter fixtures).
+    fn canonical_document(entries: &[WaiverEntry]) -> String {
+        toml::to_string(&super::RevokeSourceDoc {
+            waiver: entries.to_vec(),
+        })
+        .expect("the canonical [[waiver]] document serializes")
+    }
+
+    /// A tempdir project whose `ledger/waivers.toml` carries the three
+    /// canonical entries; returns the root path.
+    fn seeded_root(entries: &[WaiverEntry]) -> PathBuf {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().to_path_buf();
+        std::fs::create_dir_all(root.join("ledger")).expect("mkdir ledger");
+        std::fs::write(
+            root.join("ledger/waivers.toml"),
+            canonical_document(entries),
+        )
+        .expect("seed waivers.toml");
+        // Leak the tempdir for the body of the test (`TempDir` deletes on
+        // drop; keeping the guard alive in the caller is equivalent and
+        // cleaner, so callers own the guard instead).
+        std::mem::forget(dir);
+        root
+    }
+
+    #[test]
+    fn revoke_removes_exactly_the_target_block_and_loads_back() {
+        let entries = vec![
+            entry("WVR-20261101-first", "LANG-A", 5),
+            entry("WVR-20261105-second", "LANG-B", 3),
+            entry("WVR-20261109-third", "LANG-C", 1),
+        ];
+        let root = seeded_root(&entries);
+
+        let outcome = super::run_waivers_revoke(
+            &root,
+            &WaiversRevokeRequest {
+                id: "WVR-20261105-second".to_string(),
+            },
+            &FileWaiverSource,
+            &FileWaiverRewriter,
+        )
+        .expect("revoke of a present ID succeeds");
+
+        assert_eq!(outcome.id, "WVR-20261105-second");
+        assert_eq!(outcome.feature, "LANG-B");
+        assert_eq!(outcome.remaining, 2);
+
+        let reloaded = FileWaiverSource.load(&root, today());
+        assert_eq!(reloaded.waivers.len(), 2);
+        assert!(
+            reloaded
+                .waivers
+                .iter()
+                .all(|w| w.id != "WVR-20261105-second"),
+            "the revoked ID is gone from the committed document"
+        );
+        let ids: Vec<&str> = reloaded.waivers.iter().map(|w| w.id.as_str()).collect();
+        assert_eq!(ids, ["WVR-20261101-first", "WVR-20261109-third"]);
+    }
+
+    #[test]
+    fn revoke_keeps_the_remaining_entries_canonical() {
+        let entries = vec![
+            entry("WVR-20261101-first", "LANG-A", 5),
+            entry("WVR-20261105-second", "LANG-B", 3),
+        ];
+        let root = seeded_root(&entries);
+        super::run_waivers_revoke(
+            &root,
+            &WaiversRevokeRequest {
+                id: "WVR-20261105-second".to_string(),
+            },
+            &FileWaiverSource,
+            &FileWaiverRewriter,
+        )
+        .expect("revoke succeeds");
+
+        let text = std::fs::read_to_string(root.join("ledger/waivers.toml")).expect("read back");
+        assert!(!text.contains("WVR-20261105-second"));
+        assert!(
+            text.ends_with('\n'),
+            "the rewritten document ends with a newline"
+        );
+        // Byte-stability: the rewritten document re-serializes to itself
+        // (the canonical round-trip the grant face established).
+        assert_eq!(
+            text,
+            canonical_document(&[entry("WVR-20261101-first", "LANG-A", 5)]),
+        );
+    }
+
+    #[test]
+    fn revoke_rejects_an_unknown_id_and_writes_nothing() {
+        let entries = vec![entry("WVR-20261101-first", "LANG-A", 5)];
+        let root = seeded_root(&entries);
+        let before = std::fs::read_to_string(root.join("ledger/waivers.toml")).expect("read");
+
+        let err = super::run_waivers_revoke(
+            &root,
+            &WaiversRevokeRequest {
+                id: "WVR-20261201-absent".to_string(),
+            },
+            &FileWaiverSource,
+            &FileWaiverRewriter,
+        )
+        .expect_err("unknown ID fails");
+
+        match &err {
+            LedgerCliError::WaiversRevokeUnknownId { id, candidates } => {
+                assert_eq!(id, "WVR-20261201-absent");
+                assert_eq!(candidates.as_slice(), ["WVR-20261101-first".to_string()]);
+            }
+            other => panic!("expected WaiversRevokeUnknownId, got {other:?}"),
+        }
+        let after = std::fs::read_to_string(root.join("ledger/waivers.toml")).expect("read");
+        assert_eq!(before, after, "nothing was written when validation failed");
+    }
+
+    #[test]
+    fn revoke_rejects_an_unloadable_document() {
+        // A duplicate ID is an error-severity load diagnostic: the
+        // rewriter refuses to touch a document it cannot fully parse.
+        let duplicated = vec![
+            entry("WVR-20261101-first", "LANG-A", 5),
+            entry("WVR-20261101-first", "LANG-B", 3),
+        ];
+        let root = seeded_root(&duplicated);
+        let err = super::run_waivers_revoke(
+            &root,
+            &WaiversRevokeRequest {
+                id: "WVR-20261101-first".to_string(),
+            },
+            &FileWaiverSource,
+            &FileWaiverRewriter,
+        )
+        .expect_err("a duplicate-ID document fails the load gate");
+        assert!(matches!(err, LedgerCliError::WaiversRevokeLoad { .. }));
+    }
+
+    #[test]
+    fn revoke_rejects_a_blank_or_control_id() {
+        let root = seeded_root(&[entry("WVR-20261101-first", "LANG-A", 5)]);
+        for id in ["", "   ", "WVR-\tbad"] {
+            let err = super::run_waivers_revoke(
+                &root,
+                &WaiversRevokeRequest { id: id.to_string() },
+                &FileWaiverSource,
+                &FileWaiverRewriter,
+            )
+            .expect_err("blank or control-character ID fails");
+            assert!(matches!(err, LedgerCliError::WaiversRevokeBadId { .. }));
+        }
+    }
+
+    #[test]
+    fn in_memory_rewriter_records_the_removal() {
+        let entries = vec![
+            entry("WVR-20261101-first", "LANG-A", 5),
+            entry("WVR-20261109-third", "LANG-C", 1),
+        ];
+        let rewriter = InMemoryWaiverRewriter {
+            doc: std::cell::RefCell::new(entries.clone()),
+            removed: std::cell::RefCell::new(Vec::new()),
+        };
+        let removed = rewriter
+            .remove(
+                std::path::Path::new("ledger/waivers.toml"),
+                "WVR-20261101-first",
+            )
+            .expect("present entry removes");
+        assert_eq!(
+            removed.map(|w| w.id),
+            Some("WVR-20261101-first".to_string())
+        );
+        assert_eq!(
+            rewriter.removed.borrow().len(),
+            1,
+            "the removal is recorded for the audit"
+        );
+        assert_eq!(rewriter.doc.borrow().len(), 1);
+    }
+
+    #[test]
+    fn revoke_text_and_json_faces_render_deterministically() {
+        let entries = vec![
+            entry("WVR-20261101-first", "LANG-A", 5),
+            entry("WVR-20261109-third", "LANG-C", 1),
+        ];
+        let root = seeded_root(&entries);
+        let outcome = super::run_waivers_revoke(
+            &root,
+            &WaiversRevokeRequest {
+                id: "WVR-20261109-third".to_string(),
+            },
+            &FileWaiverSource,
+            &FileWaiverRewriter,
+        )
+        .expect("revoke succeeds");
+
+        let text_a = super::format_waivers_revoke_text(&outcome);
+        let text_b = super::format_waivers_revoke_text(&outcome);
+        assert_eq!(text_a, text_b);
+        assert!(text_a.contains("revoked WVR-20261109-third"));
+        assert!(text_a.contains("1 waiver(s) remain"));
+
+        let json_a = super::format_waivers_revoke_json(&outcome);
+        let json_b = super::format_waivers_revoke_json(&outcome);
+        assert_eq!(json_a, json_b);
+        let document: serde_json::Value = serde_json::from_str(&json_a).expect("valid JSON");
+        assert_eq!(document["schema"], "glyim.ledger-waivers-revoke/1");
+        assert_eq!(document["id"], "WVR-20261109-third");
+        assert_eq!(document["remaining"], 1);
+        assert!(json_a.ends_with('\n'));
+    }
+
+    #[test]
+    fn parse_args_accepts_waivers_revoke_flags() {
+        let command = parse_args(
+            [
+                "waivers",
+                "revoke",
+                "/tmp/repo",
+                "--id",
+                "WVR-20261101-first",
+            ]
+            .into_iter()
+            .map(String::from),
+        )
+        .expect("revoke with positional root");
+        assert_eq!(
+            command,
+            Command::WaiversRevoke {
+                root: PathBuf::from("/tmp/repo"),
+                id: "WVR-20261101-first".to_string(),
+                format: WaiversFormat::Text,
+            }
+        );
+        let command = parse_args(
+            [
+                "waivers",
+                "revoke",
+                "--id",
+                "WVR-20261101-first",
+                "--format",
+                "json",
+            ]
+            .into_iter()
+            .map(String::from),
+        )
+        .expect("revoke with json format");
+        assert_eq!(
+            command,
+            Command::WaiversRevoke {
+                root: PathBuf::from("."),
+                id: "WVR-20261101-first".to_string(),
+                format: WaiversFormat::Json,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_args_rejects_bad_waivers_revoke_flags() {
+        let err = parse_args(["waivers", "revoke"].iter().map(|s| s.to_string()))
+            .expect_err("missing --id fails");
+        assert!(matches!(
+            err,
+            LedgerCliError::WaiversRevokeMissingField { .. }
+        ));
+        let err = parse_args(["waivers", "revoke", "--id"].iter().map(|s| s.to_string()))
+            .expect_err("a valueless --id fails");
+        assert!(matches!(
+            err,
+            LedgerCliError::WaiversRevokeMissingField { .. }
+        ));
+        let err = parse_args(
+            ["waivers", "revoke", "--id", "X", "--format", "yaml"]
+                .iter()
+                .map(|s| s.to_string()),
+        )
+        .expect_err("bad format fails");
+        assert!(matches!(err, LedgerCliError::WaiversBadFormat { .. }));
+        let err = parse_args(
+            ["waivers", "revoke", "--unknown", "x"]
+                .iter()
+                .map(|s| s.to_string()),
+        )
+        .expect_err("unknown flag fails");
+        assert!(matches!(err, LedgerCliError::UnknownFlag { .. }));
+    }
+
+    #[test]
+    fn revoke_error_variants_carry_code_and_help() {
+        use miette::Diagnostic as _;
+        let variants = [
+            LedgerCliError::WaiversRevokeMissingField {
+                field: "--id".to_string(),
+                usage: usage(),
+            },
+            LedgerCliError::WaiversRevokeBadId {
+                id: "bad".to_string(),
+            },
+            LedgerCliError::WaiversRevokeUnknownId {
+                id: "WVR-absent".to_string(),
+                candidates: vec!["WVR-present".to_string()],
+            },
+            LedgerCliError::WaiversRevokeLoad {
+                detail: "duplicate id".to_string(),
+            },
+            LedgerCliError::WaiversRevokeWrite {
+                path: "ledger/waivers.toml".to_string(),
+                detail: "readonly".to_string(),
+            },
+        ];
+        for variant in &variants {
+            let code = variant.code().map(|c| c.to_string()).expect("code");
+            assert!(code.starts_with("glyim-ledger::waivers_revoke_"));
+            assert!(variant.help().is_some(), "{code} carries a help line");
+        }
+    }
+
+    #[test]
+    fn usage_lists_waivers_revoke() {
+        assert!(usage().contains("waivers revoke"));
     }
 }
