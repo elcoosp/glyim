@@ -148,6 +148,40 @@ pub enum BenchError {
         /// What is wrong with the trend plan.
         detail: String,
     },
+    /// A committed corpora directory's manifest could not be read or is
+    /// not a valid `glyim.corpus/1` document.
+    CorpusDirRead {
+        /// The manifest path.
+        path: String,
+        /// The underlying IO or deserialisation error message.
+        detail: String,
+    },
+    /// A program (or the manifest) could not be written into the
+    /// committed corpora directory.
+    CorpusDirWrite {
+        /// The target path.
+        path: String,
+        /// The underlying IO error message.
+        detail: String,
+    },
+    /// A program file the manifest declares is missing from the committed
+    /// directory.
+    CorpusFileMissing {
+        /// The program file (relative to the corpus directory).
+        file: String,
+        /// The underlying IO error message.
+        detail: String,
+    },
+    /// A committed program file's bytes no longer hash to the identity the
+    /// manifest records (a hand edit after commit).
+    CorpusFileMismatch {
+        /// The program file (relative to the corpus directory).
+        file: String,
+        /// The identity recorded in the manifest.
+        expected: u64,
+        /// The FNV-1a identity of the committed bytes.
+        actual: u64,
+    },
 }
 
 impl fmt::Display for BenchError {
@@ -209,6 +243,26 @@ impl fmt::Display for BenchError {
             ),
             Self::MatrixPlan { detail } => write!(f, "invalid matrix plan: {detail}"),
             Self::TrendPlan { detail } => write!(f, "invalid trend plan: {detail}"),
+            Self::CorpusDirRead { path, detail } => {
+                write!(f, "cannot read corpus manifest {path}: {detail}")
+            }
+            Self::CorpusDirWrite { path, detail } => {
+                write!(f, "cannot write corpus file {path}: {detail}")
+            }
+            Self::CorpusFileMissing { file, detail } => {
+                write!(
+                    f,
+                    "corpus program {file} is missing from the committed directory: {detail}"
+                )
+            }
+            Self::CorpusFileMismatch {
+                file,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "corpus program {file} drifted: manifest identity {expected:016x}, committed {actual:016x}"
+            ),
         }
     }
 }
@@ -238,6 +292,10 @@ impl miette::Diagnostic for BenchError {
             Self::BaselineUnavailable { .. } => "glyim-bench::baseline_unavailable",
             Self::MatrixPlan { .. } => "glyim-bench::matrix_plan",
             Self::TrendPlan { .. } => "glyim-bench::trend_plan",
+            Self::CorpusDirRead { .. } => "glyim-bench::corpus_dir_read",
+            Self::CorpusDirWrite { .. } => "glyim-bench::corpus_dir_write",
+            Self::CorpusFileMissing { .. } => "glyim-bench::corpus_file_missing",
+            Self::CorpusFileMismatch { .. } => "glyim-bench::corpus_file_mismatch",
         }))
     }
 
@@ -365,6 +423,29 @@ impl miette::Diagnostic for BenchError {
                  more with `glyim-bench history record` (or raise `--window`)"
                     .to_string()
             }
+            Self::CorpusDirRead { path, .. } => format!(
+                "materialize the directory first with `glyim-bench corpus write \
+                 --dir {path}`; the check gate reads the glyim.corpus/1 \
+                 manifest the write pass commits"
+            ),
+            Self::CorpusDirWrite { .. } => {
+                "check that the `--dir` target is writable; the write pass \
+                 creates the directory and commits one .g file per program \
+                 plus the glyim.corpus/1 manifest"
+                    .to_string()
+            }
+            Self::CorpusFileMissing { .. } => {
+                "restore the missing program (re-run `glyim-bench corpus write` \
+                 with the same plan) — the committed set must match the \
+                 manifest exactly"
+                    .to_string()
+            }
+            Self::CorpusFileMismatch { .. } => {
+                "the committed bytes were edited after the manifest was \
+                 committed: re-run `glyim-bench corpus write` to regenerate, \
+                 or revert the hand edit — the check gate hashes every file"
+                    .to_string()
+            }
         }))
     }
 
@@ -452,6 +533,23 @@ mod tests {
             },
             BenchError::TrendPlan {
                 detail: "window below two".into(),
+            },
+            BenchError::CorpusDirRead {
+                path: "perf/corpus/corpus.json".into(),
+                detail: "missing".into(),
+            },
+            BenchError::CorpusDirWrite {
+                path: "perf/corpus/wide-0-8.g".into(),
+                detail: "denied".into(),
+            },
+            BenchError::CorpusFileMissing {
+                file: "perf/corpus/wide-0-8.g".into(),
+                detail: "No such file".into(),
+            },
+            BenchError::CorpusFileMismatch {
+                file: "perf/corpus/wide-0-8.g".into(),
+                expected: 0xab,
+                actual: 0xcd,
             },
         ];
         for err in errors {
