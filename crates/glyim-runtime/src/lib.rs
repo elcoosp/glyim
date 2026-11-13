@@ -1164,11 +1164,7 @@ pub unsafe extern "C" fn glyim_net_tcp_bind(addr: *const u8, addr_len: usize, po
         return -1;
     }
     let id = alloc_socket_id();
-    tcp_listeners()
-        .lock()
-        .unwrap()
-        .listeners
-        .insert(id, listener);
+    lock_recover(tcp_listeners()).listeners.insert(id, listener);
     id as i32
 }
 
