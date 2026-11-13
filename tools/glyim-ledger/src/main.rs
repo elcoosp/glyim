@@ -30,7 +30,11 @@
 //! `glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]` is
 //! the plan M1.13 determinism self-check: every ledger pipeline runs
 //! twice from independent load passes and any rendered-byte drift fails
-//! the command.
+//! the command. `glyim-ledger render-gaps [ROOT] [--format md|json]
+//! [--out PATH] [--check]` is the plan M1.9 remainder: it generates
+//! `KNOWN_GAPS.md` (or the `glyim.known-gaps/1` JSON face) from the gap
+//! registry — `--out` writes the rendered document, `--check` fails on
+//! any drift between the committed document and the render.
 
 use std::process::ExitCode;
 
@@ -236,6 +240,58 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE
+            }
+        }
+        Command::RenderGaps {
+            root,
+            format,
+            out,
+            check,
+        } => {
+            // The drift gate fails through the typed error seam (a drifted
+            // committed document is a CLI failure like a failed snapshot
+            // write), while registry diagnostics fail like `check` after
+            // the document still renders — the debt is displayed, not
+            // silent (plan M1.9).
+            match glyim_ledger::run_render_gaps(&root, format, out.as_deref(), check) {
+                Ok(rendered) => {
+                    match (rendered.target.as_deref(), rendered.checked) {
+                        (Some(target), true) => {
+                            println!(
+                                "render-gaps check OK: {} matches the registry ({} gap(s))",
+                                target.display(),
+                                rendered.outcome.gaps.len(),
+                            );
+                        }
+                        (Some(target), false) => {
+                            println!(
+                                "wrote {} from the gap registry ({} gap(s))",
+                                target.display(),
+                                rendered.outcome.gaps.len(),
+                            );
+                        }
+                        (None, false) => {
+                            print!("{}", rendered.rendered);
+                        }
+                        (None, true) => {
+                            // Unreachable by construction (`--check` always
+                            // names its target), but stay deterministic.
+                            println!(
+                                "render-gaps check OK ({} gap(s))",
+                                rendered.outcome.gaps.len(),
+                            );
+                        }
+                    }
+                    if rendered.outcome.is_ok() {
+                        ExitCode::SUCCESS
+                    } else {
+                        ExitCode::FAILURE
+                    }
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
             }
         }
         Command::Inventory { root } => {
