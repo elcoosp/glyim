@@ -8,6 +8,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Generated KNOWN_GAPS.md (M1.9 remainder)**:
+  `tools/glyim-ledger/src/render.rs` closes the drift class the M1.7
+  migration left behind — the machine-checked status lives in
+  `ledger/gaps/known/*.toml` while `KNOWN_GAPS.md` stayed hand-maintained
+  (its own audit note records one stale revision). The document is now a
+  pure function of the gap registry: the `KnownGapsRenderer` seam has a
+  Markdown face (the committed `KNOWN_GAPS.md` — provenance header,
+  witness-debt table, one section per open gap sorted by ID) and a JSON
+  face (`glyim.known-gaps/1`, the readiness page's future input), both
+  consuming the M1.7 `GapOutcome` verbatim so the file can never disagree
+  with `glyim-ledger gaps`. Wired as `glyim-ledger render-gaps [ROOT]
+  [--format md|json] [--out PATH] [--check]`: `--out` writes, `--check`
+  byte-compares the committed document and fails with the typed
+  `glyim-ledger::render_drift` error (plan M1.9 DoD: "outputs
+  deterministic (golden)" — pinned by a full golden fixture and
+  repeat-render byte-equality tests). `KNOWN_GAPS.md` is regenerated from
+  the registry in this change; the closed-entry history retires to git
+  (the registry holds only open gaps, per the RG-10 verdict's contract).
+  Ships the `render_known_gaps` example and the dependency-free `render`
+  bench (both faces over a 500-gap registry).
+- **Committed corpora directory (M2.3 remainder)**:
+  `tools/glyim-bench/src/corpus_dir.rs` lands the slice the master plan's
+  M2.3 exit gate calls "corpora committed with hashes" on top of the
+  slice-1 substrate: the `CorpusSink` write seam, `DirCorpusSink`
+  (conventional `perf/corpus/` layout — one `<family>-<seed>-<size>.g`
+  file per program plus the `glyim.corpus/1` `corpus.json` manifest),
+  `CorpusDirPlan` flag parsing (families × seeds × size, default all
+  seven families), and `check_corpus_dir` — which loads the manifest,
+  runs the substrate's template-verify contract, then re-hashes every
+  committed `.g` file, reporting missing/hand-edited programs as gate
+  rows (exit non-zero, the same verdict-not-error shape as the diff and
+  budget gates). Wired as `glyim-bench corpus write|check [--dir PATH]
+  [--families LIST] [--seeds LIST] [--size N]` with four new typed
+  `BenchError` variants (`CorpusDirRead`/`CorpusDirWrite`/
+  `CorpusFileMissing`/`CorpusFileMismatch`), the `corpus_commit`
+  example, and the `corpus_dir` bench (28-program write + check).
 - **Release-gate report (M1.12)**: `tools/glyim-ledger/src/gates.rs`
   implements the plan §6 M1.12 exit gate — "Readiness gates RG-01…RG-24
   declared in `ledger/gates.toml`; `unmeasured` allowed but displayed;
@@ -156,6 +192,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bench.
 
 ### Fixed
+- `tools/glyim-bench/src/runner.rs` / `tools/glyim-bench/src/trend.rs`:
+  the last two `expect` calls in non-test code (against the
+  CONTRIBUTING no-`unwrap`/`expect` rule) are replaced with typed
+  fallbacks — `run_iterated`'s `summarize(...).expect("iterations >= 1")`
+  becomes an `ok_or_else` into `BenchError::InvalidPlan` behind the
+  existing zero-iteration guard, and `execute_trend_from_history`'s two
+  `.expect("covered above")` endpoint reads become an
+  `and_then`-destructured pair that degrades to the guard's
+  no-instruction-drift branch instead of panicking. Same semantics on
+  every reachable path; `glyim-bench` now has zero `expect`/`unwrap`
+  outside tests.
 - `tools/glyim-bench/src/main.rs`: the `diff` arm passed
   `json.as_ref()` (`Option<&PathBuf>`) into `execute_diff`, which takes
   `Option<&Path>` — the binary did not compile (`E0308`). Fixed with
