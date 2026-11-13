@@ -13,6 +13,9 @@ libc = "0.2"
 miette = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# The M2.6 budgets seam loads the committed `glyim.bench-budgets/1` TOML
+# document (the waivers-loader precedent in glyim-ledger's diff slice).
+toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
@@ -46,6 +49,16 @@ path = "benches/diff_engine.rs"
 name = "scaling_engine"
 harness = false
 path = "benches/scaling_engine.rs"
+
+[[bench]]
+name = "budget_engine"
+harness = false
+path = "benches/budget_engine.rs"
+
+[[bench]]
+name = "history_store"
+harness = false
+path = "benches/history_store.rs"
 
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
