@@ -4,9 +4,10 @@
 //! measures the [`glyim_ledger::assess_waivers`] engine, both
 //! [`glyim_ledger::WaiversRenderer`] faces — the text report and the
 //! `glyim.ledger-waivers/1` JSON contract — the `waivers grant`
-//! validation path and the `waivers revoke` retirement path, each over a
-//! synthetic 500-waiver set, so CI logs can track the C9 face costs as
-//! the exception inventory grows. Run with:
+//! validation path, the `waivers revoke` retirement path, and the
+//! `waivers extend` re-pin path, each over a synthetic 500-waiver set,
+//! so CI logs can track the C9 face costs as the exception inventory
+//! grows. Run with:
 //!
 //! ```text
 //! cargo bench -p glyim-ledger --bench waivers
@@ -18,10 +19,10 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use glyim_ledger::{
-    FileWaiverSource, InMemoryWaiverRewriter, InMemoryWaiverSink, InMemoryWaiverSource,
-    JsonWaiversRenderer, NaiveDate, TextWaiversRenderer, WaiverEntry, WaiverSet,
-    WaiversGrantRequest, WaiversRenderer, WaiversRevokeRequest, assess_waivers, run_waivers,
-    run_waivers_grant, run_waivers_revoke,
+    FileWaiverSource, InMemoryWaiverExtender, InMemoryWaiverRewriter, InMemoryWaiverSink,
+    InMemoryWaiverSource, JsonWaiversRenderer, NaiveDate, TextWaiversRenderer, WaiverEntry,
+    WaiverSet, WaiversExtendRequest, WaiversGrantRequest, WaiversRenderer, WaiversRevokeRequest,
+    assess_waivers, run_waivers, run_waivers_extend, run_waivers_grant, run_waivers_revoke,
 };
 
 /// Builds a synthetic 500-waiver set: half inside the horizon (10 days
@@ -180,8 +181,36 @@ fn main() {
     assert_eq!(revoked.remaining, 499);
     assert_eq!(rewriter.removed.borrow().len(), 1);
 
+    // The extend face: the full re-pin path (document load with the
+    // duplicate scan over the seeded 500-entry set, exact-ID match,
+    // canonical rewrite with only the expiry moved) with the rewrite
+    // captured by the in-memory extender, so the measured cost is the
+    // validation work, not the fs write.
+    let extender = InMemoryWaiverExtender {
+        doc: RefCell::new(set.waivers.clone()),
+        extended: RefCell::new(Vec::new()),
+    };
+    let extend = WaiversExtendRequest {
+        id: "WVR-0001".to_string(),
+        days: 10,
+    };
+    let started = Instant::now();
+    let extended = black_box(run_waivers_extend(
+        black_box(root),
+        black_box(&extend),
+        black_box(&FileWaiverSource),
+        black_box(&extender),
+    ))
+    .expect("the bench extend must pass");
+    let extend_elapsed = started.elapsed();
+    assert_eq!(extended.id, "WVR-0001");
+    // The seeded WVR-0001 carries yesterday's expiry; the re-pin moves it
+    // forward by the requested horizon.
+    assert_ne!(extended.previous_expires, extended.expires);
+    assert_eq!(extender.extended.borrow().len(), 1);
+
     println!(
-        "waivers bench: 500-waiver set (250 valid, 250 expired)\n  assess    : {assess_elapsed:.1?}\n  text face : {text_elapsed:.1?} ({} bytes)\n  json face : {json_elapsed:.1?} ({} bytes)\n  run (clone+assess+debug span): {run_elapsed:.1?}\n  grant (registry+horizon+dup scan, in-memory sink): {grant_elapsed:.1?}\n  revoke (load+exact-ID scan, in-memory rewrite): {revoke_elapsed:.1?}",
+        "waivers bench: 500-waiver set (250 valid, 250 expired)\n  assess    : {assess_elapsed:.1?}\n  text face : {text_elapsed:.1?} ({} bytes)\n  json face : {json_elapsed:.1?} ({} bytes)\n  run (clone+assess+debug span): {run_elapsed:.1?}\n  grant (registry+horizon+dup scan, in-memory sink): {grant_elapsed:.1?}\n  revoke (load+exact-ID scan, in-memory rewrite): {revoke_elapsed:.1?}\n  extend (load+exact-ID scan, in-memory re-pin): {extend_elapsed:.1?}",
         text.len(),
         json.len(),
     );
