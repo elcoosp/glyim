@@ -1,6 +1,6 @@
 //! CLI library for the Readiness Ledger tool (plan M1.1).
 //!
-//! Fifteen subcommands:
+//! Sixteen subcommands:
 //!
 //! - `glyim-ledger check [ROOT]` — load `ROOT/ledger`, run the schema and
 //!   semantic validators, cross-check the M1.3 inventory extractors, print
@@ -67,7 +67,20 @@
 //!   --feature <ID> --reason <TEXT> --issue <URL> [--days N]` is the
 //!   curated write face: it validates the request against the registry
 //!   and the C9 horizon and appends the canonical `[[waiver]]` block
-//!   (deterministic ID, never a silent overwrite).
+//!   (deterministic ID, never a silent overwrite). `waivers revoke
+//!   [ROOT] --id <WVR-ID>` is the retirement write face: it removes
+//!   exactly the one matching block and rewrites the remaining entries
+//!   canonically through the [`crate::WaiverRewriter`] seam (nothing is
+//!   written when the document does not load cleanly).
+//! - `glyim-ledger handoff [ROOT] [--items N] [--format md|json]
+//!   [--out PATH] [--check]` — the plan §3.7 session-handoff generator:
+//!   it composes the compute, `next`, and `waivers` face outcomes into
+//!   one short document (readiness histogram, top-N work queue, waiver
+//!   health, witness debt) as a pure function of the state;
+//!   `--items N` caps the queue slice, `--out PATH` writes the rendered
+//!   document (default `HANDOFF.md` / `HANDOFF.json` by face) and
+//!   `--check` byte-compares the committed document against the render
+//!   (see [`handoff`]).
 //! - `glyim-ledger schema [OUT]` — write the JSON-Schema export document
 //!   for both entry types to `OUT` (pretty-printed), or to stdout.
 //! - `glyim-ledger inventory [ROOT]` — enumerate the source-derived
@@ -90,6 +103,7 @@ pub mod diff;
 pub mod evidence;
 pub mod explain;
 pub mod gates;
+pub mod handoff;
 pub mod next;
 pub mod render;
 pub mod status;
@@ -123,6 +137,13 @@ pub use gates::{
     GATES_REPORT_SCHEMA, GateVerdict, GateVerdictRow, GatesOutcome, evaluate_gates,
     format_gates_json, format_gates_text, run_gates,
 };
+pub use handoff::{
+    FileHandoffSource, HANDOFF_DEFAULT_ITEMS, HANDOFF_JSON_TARGET, HANDOFF_MAX_ITEMS,
+    HANDOFF_MD_END, HANDOFF_MD_START, HANDOFF_MD_TARGET, HANDOFF_SCHEMA, HandoffDocument,
+    HandoffExpiry, HandoffFormat, HandoffItem, HandoffLevels, HandoffOutcome, HandoffRenderer,
+    HandoffSource, HandoffState, InMemoryHandoffSource, JsonHandoffRenderer, TextHandoffRenderer,
+    format_handoff_json, format_handoff_text, render_handoff, run_handoff, run_handoff_out,
+};
 pub use next::{
     FeatureSource, GapSource, NEXT_SCHEMA, NextOutcome, WorkItem, WorkItemSource, WorkKind,
     build_queue, feature_depths, filter, format_next_json, format_next_report, parse_lane,
@@ -143,12 +164,14 @@ pub use verify::{
     verify_determinism,
 };
 pub use waivers::{
-    FileWaiverSink, FileWaiverSource, InMemoryWaiverSink, InMemoryWaiverSource,
-    JsonWaiversRenderer, TextWaiversRenderer, WAIVERS_GRANT_SCHEMA, WAIVERS_SCHEMA, WaiverRow,
+    FileWaiverRewriter, FileWaiverSink, FileWaiverSource, InMemoryWaiverRewriter,
+    InMemoryWaiverSink, InMemoryWaiverSource, JsonWaiversRenderer, TextWaiversRenderer,
+    WAIVERS_GRANT_SCHEMA, WAIVERS_REVOKE_SCHEMA, WAIVERS_SCHEMA, WaiverRewriter, WaiverRow,
     WaiverSink, WaiverSource, WaiverVerdict, WaiversDocument, WaiversGrantOutcome,
-    WaiversGrantRequest, WaiversOutcome, WaiversRenderer, assess_waivers,
-    format_waivers_grant_json, format_waivers_grant_text, format_waivers_json, format_waivers_text,
-    run_waivers, run_waivers_grant,
+    WaiversGrantRequest, WaiversOutcome, WaiversRenderer, WaiversRevokeOutcome,
+    WaiversRevokeRequest, assess_waivers, format_waivers_grant_json, format_waivers_grant_text,
+    format_waivers_json, format_waivers_revoke_json, format_waivers_revoke_text,
+    format_waivers_text, run_waivers, run_waivers_grant, run_waivers_revoke,
 };
 
 /// Typed error for the CLI seams (`parse_args`, `write_schema`).
@@ -452,6 +475,82 @@ pub enum LedgerCliError {
         /// The IO (or serialization) failure message.
         detail: String,
     },
+    /// `handoff --format` received a value outside `md|json`.
+    HandoffBadFormat {
+        /// The offending value.
+        value: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `handoff --items`/`--out`/`--format` was passed without its value.
+    HandoffMissingValue {
+        /// The flag that was missing its value.
+        flag: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `handoff --items` received a value outside `1..=HANDOFF_MAX_ITEMS`
+    /// or not an integer.
+    HandoffBadItems {
+        /// The offending value.
+        value: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `handoff --check` found the committed document drifted from the
+    /// rendered handoff (or unreadable): the file and the composed
+    /// `(compute, next, waivers)` render disagree (the plan §3.7
+    /// determinism gate).
+    HandoffDrift {
+        /// The checked document path.
+        path: String,
+        /// What the comparison (or read) found.
+        detail: String,
+    },
+    /// `handoff --out` could not write the rendered document.
+    HandoffWrite {
+        /// The output path.
+        path: String,
+        /// The IO error message.
+        detail: String,
+    },
+    /// `waivers revoke` was called without its required `--id` flag (or
+    /// with a blank/control-character ID).
+    WaiversRevokeMissingField {
+        /// The missing flag.
+        field: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `waivers revoke --id` was blank or carried control characters (an
+    /// ID can never match a canonical `WVR-...` entry).
+    WaiversRevokeBadId {
+        /// The offending ID.
+        id: String,
+    },
+    /// `waivers revoke --id` named a waiver the committed document does
+    /// not carry (nothing was written); `candidates` lists a few existing
+    /// IDs for the help line.
+    WaiversRevokeUnknownId {
+        /// The offending ID.
+        id: String,
+        /// A few existing waiver IDs (up to three).
+        candidates: Vec<String>,
+    },
+    /// The committed `ledger/waivers.toml` did not load cleanly (schema,
+    /// duplicate ID, horizon violation), so the rewriter refuses to
+    /// rewrite it (no waiver is removed).
+    WaiversRevokeLoad {
+        /// The joined load diagnostics.
+        detail: String,
+    },
+    /// `waivers revoke` could not rewrite the committed document.
+    WaiversRevokeWrite {
+        /// The document path.
+        path: String,
+        /// The IO (or serialization) failure message.
+        detail: String,
+    },
 }
 
 impl fmt::Display for LedgerCliError {
@@ -597,6 +696,43 @@ impl fmt::Display for LedgerCliError {
             Self::WaiversGrantWrite { path, detail } => {
                 write!(f, "cannot append to {path}: {detail}")
             }
+            Self::HandoffBadFormat { value, usage } => {
+                write!(f, "--format expects md or json, got {value}\n{usage}")
+            }
+            Self::HandoffMissingValue { flag, usage } => {
+                write!(
+                    f,
+                    "{flag} expects a value (a count, a path, or md|json)\n{usage}"
+                )
+            }
+            Self::HandoffBadItems { value, usage } => {
+                write!(
+                    f,
+                    "--items expects an integer in 1..={HANDOFF_MAX_ITEMS}, got {value}\n{usage}"
+                )
+            }
+            Self::HandoffDrift { path, detail } => {
+                write!(
+                    f,
+                    "handoff document drifted from the composed state: {path}: {detail}"
+                )
+            }
+            Self::HandoffWrite { path, detail } => write!(f, "cannot write {path}: {detail}"),
+            Self::WaiversRevokeMissingField { field, usage } => {
+                write!(f, "{field} expects a value (the exact WVR-... ID)\n{usage}")
+            }
+            Self::WaiversRevokeBadId { id } => {
+                write!(f, "--id expects a usable waiver ID, got {id:?}")
+            }
+            Self::WaiversRevokeUnknownId { id, .. } => {
+                write!(f, "no waiver carries the ID {id:?} in ledger/waivers.toml")
+            }
+            Self::WaiversRevokeLoad { detail } => {
+                write!(f, "ledger/waivers.toml does not load cleanly: {detail}")
+            }
+            Self::WaiversRevokeWrite { path, detail } => {
+                write!(f, "cannot rewrite {path}: {detail}")
+            }
         }
     }
 }
@@ -650,6 +786,16 @@ impl miette::Diagnostic for LedgerCliError {
             Self::WaiversGrantRegistry { .. } => "glyim-ledger::waivers_grant_registry",
             Self::WaiversGrantDuplicate { .. } => "glyim-ledger::waivers_grant_duplicate",
             Self::WaiversGrantWrite { .. } => "glyim-ledger::waivers_grant_write",
+            Self::HandoffBadFormat { .. } => "glyim-ledger::handoff_bad_format",
+            Self::HandoffMissingValue { .. } => "glyim-ledger::handoff_missing_value",
+            Self::HandoffBadItems { .. } => "glyim-ledger::handoff_bad_items",
+            Self::HandoffDrift { .. } => "glyim-ledger::handoff_drift",
+            Self::HandoffWrite { .. } => "glyim-ledger::handoff_write",
+            Self::WaiversRevokeMissingField { .. } => "glyim-ledger::waivers_revoke_missing_field",
+            Self::WaiversRevokeBadId { .. } => "glyim-ledger::waivers_revoke_bad_id",
+            Self::WaiversRevokeUnknownId { .. } => "glyim-ledger::waivers_revoke_unknown_id",
+            Self::WaiversRevokeLoad { .. } => "glyim-ledger::waivers_revoke_load",
+            Self::WaiversRevokeWrite { .. } => "glyim-ledger::waivers_revoke_write",
         }))
     }
 
@@ -859,6 +1005,58 @@ impl miette::Diagnostic for LedgerCliError {
                  block is the canonical [[waiver]] fragment"
                     .to_string(),
             )),
+            Self::HandoffBadFormat { .. } => Some(Box::new(
+                "`--format json` renders the glyim.ledger-handoff/1 contract; \
+                 the marker-delimited Markdown document is the default"
+                    .to_string(),
+            )),
+            Self::HandoffMissingValue { .. } => Some(Box::new(
+                "the flag needs its value on the same command line, e.g. \
+                 `--items 10`, `--out HANDOFF.md`, or `--format json`"
+                    .to_string(),
+            )),
+            Self::HandoffBadItems { .. } => Some(Box::new(
+                "the handoff is a summary, not the queue: render 1 to 20 \
+                 items (`--items 5` is the default); the full queue is one \
+                 `next` call away"
+                    .to_string(),
+            )),
+            Self::HandoffDrift { .. } => Some(Box::new(
+                "run `cargo run -p glyim-ledger -- handoff . --out HANDOFF.md` \
+                 to regenerate the document from the composed state"
+                    .to_string(),
+            )),
+            Self::HandoffWrite { .. } => Some(Box::new(
+                "check that the --out path is writable; the document is the \
+                 generated HANDOFF face (plan §3.7)"
+                    .to_string(),
+            )),
+            Self::WaiversRevokeMissingField { field, .. } => Some(Box::new(format!(
+                "pass {field} on the same command line with the exact ID, e.g. \
+                 `--id WVR-20261113-lang-grant-demo`; the health face \
+                 (`glyim-ledger waivers`) prints every current ID"
+            ))),
+            Self::WaiversRevokeBadId { .. } => Some(Box::new(
+                "a waiver ID is a canonical WVR-<date>-<slug> token; run \
+                 `glyim-ledger waivers` to list the live inventory"
+                    .to_string(),
+            )),
+            Self::WaiversRevokeUnknownId { candidates, .. } => Some(Box::new(format!(
+                "revoke the exact ID of an existing waiver; current ids \
+                 include {} (see `glyim-ledger waivers` for the full report)",
+                candidates.join(", ")
+            ))),
+            Self::WaiversRevokeLoad { .. } => Some(Box::new(
+                "the rewriter refuses to rewrite a document it cannot fully \
+                 parse; fix the load diagnostics first (`glyim-ledger waivers` \
+                 prints them)"
+                    .to_string(),
+            )),
+            Self::WaiversRevokeWrite { .. } => Some(Box::new(
+                "check that ledger/waivers.toml is writable; the rewrite \
+                 replaces the document with the canonical remaining entries"
+                    .to_string(),
+            )),
         }
     }
 }
@@ -1055,6 +1253,44 @@ pub enum Command {
         /// Output format; [`WaiversFormat::Text`] by default.
         format: WaiversFormat,
     },
+    /// `handoff [ROOT] [--items N] [--format md|json] [--out PATH]
+    /// [--check]` — the plan §3.7 session-handoff generator: composes the
+    /// compute, `next`, and `waivers` face outcomes into one short
+    /// document (readiness histogram, top-N work queue, waiver health,
+    /// witness debt). `--out PATH` writes the rendered document (default
+    /// `HANDOFF.md` / `HANDOFF.json` by face under ROOT) and `--check`
+    /// byte-compares the committed document against the render.
+    Handoff {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// Render at most this many work-queue items; `None` uses the
+        /// 5-item default (`HANDOFF_DEFAULT_ITEMS`).
+        items: Option<usize>,
+        /// Output format; [`HandoffFormat::Markdown`] by default.
+        format: HandoffFormat,
+        /// File to write the rendered document to; `None` prints to
+        /// stdout. `--check` compares against this file (default
+        /// `<ROOT>/HANDOFF.md` or `<ROOT>/HANDOFF.json` by face).
+        out: Option<PathBuf>,
+        /// Compare the rendered bytes against the committed document
+        /// instead of writing it (the handoff drift gate).
+        check: bool,
+    },
+    /// `waivers revoke [ROOT] --id <WVR-ID> [--format text|json]` — the
+    /// curated write face retiring one C9 exception: validates the
+    /// request, refuses a document that does not load cleanly, and
+    /// removes exactly the one matching `[[waiver]]` block, rewriting
+    /// the remaining entries canonically (never a silent partial write).
+    WaiversRevoke {
+        /// Project directory containing `ledger/waivers.toml` (`.` by
+        /// default).
+        root: PathBuf,
+        /// The exact waiver ID (`WVR-...`) to remove.
+        id: String,
+        /// Output format; [`WaiversFormat::Text`] by default.
+        format: WaiversFormat,
+    },
 }
 
 /// Output format of the `compute` subcommand.
@@ -1150,7 +1386,7 @@ pub enum WaiversFormat {
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger waivers revoke [ROOT] --id <WVR-ID> [--format text|json]\n   or: glyim-ledger handoff [ROOT] [--items N] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout; `next` filters by\n\
      \x20 lane (L|F|T|M|B|Q) and prints the glyim.ledger-next/1 JSON queue;\n\
@@ -1182,7 +1418,17 @@ pub fn usage() -> String {
      \x20 expired waivers and load diagnostics fail the exit code (C9);\n\
      \x20 `waivers grant` appends one validated `[[waiver]]` block\n\
      \x20 (--feature/--reason/--issue/--days, deterministic\n\
-     \x20 WVR-<date>-<slug> id, never a silent overwrite)."
+     \x20 WVR-<date>-<slug> id, never a silent overwrite);\n\
+     \x20 `waivers revoke` retires one waiver by its exact ID\n\
+     \x20 (--id, canonical rewrite of the remaining entries,\n\
+     \x20 nothing written when the document does not load cleanly);\n\
+     \x20 `handoff` composes the compute, next, and waivers face\n\
+     \x20 outcomes into one short session document — the readiness\n\
+     \x20 histogram, the top-N work queue (`--items N`, default 5,\n\
+     \x20 max 20), waiver health, and witness debt — `--out PATH`\n\
+     \x20 writes the rendered document (default HANDOFF.md /\n\
+     \x20 HANDOFF.json by face) and `--check` fails on drift\n\
+     \x20 (plan §3.7 session handoff)."
         .into()
 }
 
@@ -1204,7 +1450,7 @@ where
         }),
         Some(
             "check" | "gaps" | "schema" | "inventory" | "next" | "explain" | "compute" | "status"
-            | "diff" | "gates" | "verify" | "render-gaps" | "evidence" | "waivers",
+            | "diff" | "gates" | "verify" | "render-gaps" | "evidence" | "waivers" | "handoff",
         ) => {
             let rest = &items[1..];
             if items[0] == "next" {
@@ -1236,6 +1482,9 @@ where
             }
             if items[0] == "waivers" {
                 return parse_waivers(rest);
+            }
+            if items[0] == "handoff" {
+                return parse_handoff(rest);
             }
             if rest.len() > 1 {
                 return Err(LedgerCliError::ExtraArgument {
@@ -1630,6 +1879,11 @@ fn parse_waivers(rest: &[String]) -> Result<Command, LedgerCliError> {
     if rest.first().map(String::as_str) == Some("grant") {
         return parse_waivers_grant(&rest[1..]);
     }
+    // The `revoke` sub-word routes to the retirement write face (the
+    // same dispatch shape).
+    if rest.first().map(String::as_str) == Some("revoke") {
+        return parse_waivers_revoke(&rest[1..]);
+    }
     let mut root: Option<PathBuf> = None;
     let mut format = WaiversFormat::Text;
     let mut index = 0;
@@ -1772,6 +2026,156 @@ fn parse_waivers_grant(rest: &[String]) -> Result<Command, LedgerCliError> {
         reason,
         issue,
         days,
+        format,
+    })
+}
+
+/// Parse the `handoff` subcommand's arguments: one optional ROOT
+/// positional, then `--items <N>`, `--format <md|json>`, `--out <PATH>`,
+/// and the boolean `--check` in any order (the `status` shape).
+fn parse_handoff(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut items: Option<usize> = None;
+    let mut format = HandoffFormat::Markdown;
+    let mut out: Option<PathBuf> = None;
+    let mut check = false;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--items" | "--out" | "--format" => {
+                let flag = rest[index].clone();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::HandoffMissingValue {
+                        flag,
+                        usage: usage(),
+                    });
+                };
+                match flag.as_str() {
+                    "--items" => {
+                        let parsed: usize =
+                            value.parse().map_err(|_| LedgerCliError::HandoffBadItems {
+                                value: value.clone(),
+                                usage: usage(),
+                            })?;
+                        if parsed == 0 || parsed > handoff::HANDOFF_MAX_ITEMS {
+                            return Err(LedgerCliError::HandoffBadItems {
+                                value: value.clone(),
+                                usage: usage(),
+                            });
+                        }
+                        items = Some(parsed);
+                    }
+                    "--out" => out = Some(PathBuf::from(value)),
+                    // The final branch is exactly --format: no wildcard arm.
+                    _ => {
+                        format = match value.as_str() {
+                            "md" => HandoffFormat::Markdown,
+                            "json" => HandoffFormat::Json,
+                            other => {
+                                return Err(LedgerCliError::HandoffBadFormat {
+                                    value: other.to_string(),
+                                    usage: usage(),
+                                });
+                            }
+                        };
+                    }
+                }
+                index += 2;
+            }
+            "--check" => {
+                check = true;
+                index += 1;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    Ok(Command::Handoff {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        items,
+        format,
+        out,
+        check,
+    })
+}
+
+/// Parse the `waivers revoke` subcommand's arguments: one optional ROOT
+/// positional, the required `--id <WVR-ID>` flag, and `--format
+/// <text|json>` in any order (the `waivers grant` shape).
+fn parse_waivers_revoke(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut id: Option<String> = None;
+    let mut format = WaiversFormat::Text;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--id" | "--format" => {
+                let flag = rest[index].clone();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::WaiversRevokeMissingField {
+                        field: flag,
+                        usage: usage(),
+                    });
+                };
+                match flag.as_str() {
+                    "--id" => id = Some(value.clone()),
+                    // The final branch is exactly --format: no wildcard arm.
+                    _ => {
+                        format = match value.as_str() {
+                            "text" => WaiversFormat::Text,
+                            "json" => WaiversFormat::Json,
+                            other => {
+                                return Err(LedgerCliError::WaiversBadFormat {
+                                    value: other.to_string(),
+                                    usage: usage(),
+                                });
+                            }
+                        };
+                    }
+                }
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    let Some(id) = id else {
+        return Err(LedgerCliError::WaiversRevokeMissingField {
+            field: "--id".to_string(),
+            usage: usage(),
+        });
+    };
+    Ok(Command::WaiversRevoke {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        id,
         format,
     })
 }
