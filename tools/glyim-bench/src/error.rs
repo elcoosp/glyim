@@ -130,6 +130,24 @@ pub enum BenchError {
         /// What violates the history contract.
         detail: String,
     },
+    /// No recorded baseline exists for a program the matrix gate (or the
+    /// latest-baseline selection) was asked to compare against.
+    BaselineUnavailable {
+        /// The program with no recorded baseline.
+        program: String,
+    },
+    /// A matrix plan is invalid (an empty report set, or the same program
+    /// measured twice in one matrix).
+    MatrixPlan {
+        /// What is wrong with the matrix plan.
+        detail: String,
+    },
+    /// A trend plan is invalid (a window below two records, or a history
+    /// with fewer than two recorded runs of the program).
+    TrendPlan {
+        /// What is wrong with the trend plan.
+        detail: String,
+    },
 }
 
 impl fmt::Display for BenchError {
@@ -185,6 +203,12 @@ impl fmt::Display for BenchError {
                 write!(f, "cannot read history file {path}: {detail}")
             }
             Self::HistoryParse { detail } => write!(f, "invalid history record: {detail}"),
+            Self::BaselineUnavailable { program } => write!(
+                f,
+                "no recorded baseline for program `{program}`; the perf history has no run to compare against"
+            ),
+            Self::MatrixPlan { detail } => write!(f, "invalid matrix plan: {detail}"),
+            Self::TrendPlan { detail } => write!(f, "invalid trend plan: {detail}"),
         }
     }
 }
@@ -211,6 +235,9 @@ impl miette::Diagnostic for BenchError {
             Self::BudgetsParse { .. } => "glyim-bench::budgets_parse",
             Self::HistoryRead { .. } => "glyim-bench::history_read",
             Self::HistoryParse { .. } => "glyim-bench::history_parse",
+            Self::BaselineUnavailable { .. } => "glyim-bench::baseline_unavailable",
+            Self::MatrixPlan { .. } => "glyim-bench::matrix_plan",
+            Self::TrendPlan { .. } => "glyim-bench::trend_plan",
         }))
     }
 
@@ -319,6 +346,25 @@ impl miette::Diagnostic for BenchError {
                  `glyim-bench history record`"
                     .to_string()
             }
+            Self::BaselineUnavailable { program } => {
+                format!(
+                    "record a baseline first: `glyim-bench history record --history \
+                     <path> <report.json>` with a report whose `program` is \
+                     `{program}`; the matrix gate refuses to invent a baseline"
+                )
+            }
+            Self::MatrixPlan { .. } => {
+                "a matrix diffs each current report against the latest recorded \
+                 baseline of the *same* program: pass each benchmark's report \
+                 exactly once (`glyim-bench matrix --history <path> a.json b.json …`)"
+                    .to_string()
+            }
+            Self::TrendPlan { .. } => {
+                "a trend measures drift across the committed history, so it needs \
+                 at least two recorded runs of the program in the window: append \
+                 more with `glyim-bench history record` (or raise `--window`)"
+                    .to_string()
+            }
         }))
     }
 
@@ -397,6 +443,15 @@ mod tests {
             },
             BenchError::HistoryParse {
                 detail: "bad line".into(),
+            },
+            BenchError::BaselineUnavailable {
+                program: "fib".into(),
+            },
+            BenchError::MatrixPlan {
+                detail: "duplicate program".into(),
+            },
+            BenchError::TrendPlan {
+                detail: "window below two".into(),
             },
         ];
         for err in errors {
