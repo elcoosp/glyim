@@ -14,12 +14,15 @@ use glyim_bench::report::BenchReport;
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    // The diff/scale/budget gates are verdicts, not errors: the outcome
-    // renders like a report, but a regression (or a superlinear fit, or a
-    // breached budget) flips the exit code (the `gate` shape).
+    // The diff/scale/budget/matrix/trend gates are verdicts, not errors:
+    // the outcome renders like a report, but a regression (or a
+    // superlinear fit, or a breached budget, or an accumulated drift)
+    // flips the exit code (the `gate` shape).
     let mut diff_failed = false;
     let mut scale_failed = false;
     let mut budget_failed = false;
+    let mut matrix_failed = false;
+    let mut trend_failed = false;
     let result = match cli.command {
         Command::Run {
             iterations,
@@ -80,6 +83,23 @@ fn main() -> ExitCode {
             budget_failed = !outcome.is_ok();
             print!("{}", outcome.render_text());
         }),
+        Command::Matrix {
+            history,
+            max_delta_pct,
+            max_geo_delta_pct,
+            json,
+            reports,
+        } => glyim_bench::cli::execute_matrix(
+            &history,
+            max_delta_pct,
+            max_geo_delta_pct,
+            &reports,
+            json.as_deref(),
+        )
+        .map(|outcome| {
+            matrix_failed = !outcome.is_ok();
+            print!("{}", outcome.render_text());
+        }),
         Command::History { action } => match action {
             glyim_bench::cli::HistoryAction::Record { history, report } => {
                 glyim_bench::cli::execute_history_record(&history, &report).map(
@@ -127,11 +147,36 @@ fn main() -> ExitCode {
                 diff_failed = !outcome.is_ok();
                 print!("{}", outcome.render_text());
             }),
+            glyim_bench::cli::HistoryAction::Trend {
+                history,
+                program,
+                window,
+                max_drift_pct,
+                json,
+            } => glyim_bench::cli::execute_history_trend(
+                &history,
+                &program,
+                window,
+                max_drift_pct,
+                json.as_deref(),
+            )
+            .map(|trend| {
+                trend_failed = !trend.is_ok();
+                print!("{}", trend.render_text());
+            }),
         },
     };
 
     match result {
-        Ok(()) if !diff_failed && !scale_failed && !budget_failed => ExitCode::SUCCESS,
+        Ok(())
+            if !diff_failed
+                && !scale_failed
+                && !budget_failed
+                && !matrix_failed
+                && !trend_failed =>
+        {
+            ExitCode::SUCCESS
+        }
         Ok(()) => ExitCode::FAILURE,
         Err(err) => {
             eprint!("{:?}", miette::Report::new(err));
