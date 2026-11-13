@@ -70,6 +70,11 @@ name = "trend_engine"
 harness = false
 path = "benches/trend_engine.rs"
 
+[[bench]]
+name = "corpus_dir"
+harness = false
+path = "benches/corpus_dir.rs"
+
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
