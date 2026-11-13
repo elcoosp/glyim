@@ -42,6 +42,11 @@ name = "diff_engine"
 harness = false
 path = "benches/diff_engine.rs"
 
+[[bench]]
+name = "scaling_engine"
+harness = false
+path = "benches/scaling_engine.rs"
+
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
