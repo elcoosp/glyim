@@ -8,6 +8,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **C9 waiver-health face (`glyim-ledger waivers`) + curated grant write
+  face (`glyim-ledger waivers grant`)**: `ledger/waivers.toml` was read
+  only inside the `diff` regression gate — an expired or horizon-violating
+  waiver stayed invisible until a regression actually needed covering,
+  and there was no way to inspect the live exception inventory at all,
+  so the C9 sentence "expired waivers fail CI" was not directly
+  checkable. The new `WaiverSource` seam (the load counterpart of
+  `SnapshotStore`/`EvidenceSource`) has two implementations —
+  `FileWaiverSource` (reads `<ROOT>/ledger/waivers.toml` through the same
+  `load_waivers` loader and diagnostic codes the `diff` gate uses, so the
+  two faces can never disagree) and `InMemoryWaiverSource` (tests and
+  in-process consumers) — and the `WaiversRenderer` seam (the
+  `KnownGapsRenderer` pattern) renders the text report and the
+  `glyim.ledger-waivers/1` JSON contract from one `WaiversOutcome`. The
+  gate is `WaiversOutcome::is_ok`: no error-severity load diagnostic
+  (schema, duplicate ID, horizon violation) **and** no row whose verdict
+  is `Expired`; a waiver inside its horizon is report content (the
+  remaining-days column is the operator's reminder), never a failure.
+  `waivers grant` is the write counterpart: it validates the request
+  against the registry (`--feature` must name a declared feature,
+  `--issue` must be an `https://` link, `--reason` must be usable,
+  `--days` must stay inside `WAIVER_MAX_AGE_DAYS`, CLI default 7),
+  composes the deterministic `WVR-<YYYYMMDD>-<feature slug>` ID, and
+  appends the canonical `[[waiver]]` block through the `WaiverSink` seam
+  (`FileWaiverSink` appends to the committed document with
+  newline-normalization, `InMemoryWaiverSink` records the fragment for
+  tests; the `toml` crate escapes, never hand-quoting). A same-day
+  re-grant is a duplicate error, never a silent overwrite, and nothing is
+  written when validation fails. Eight new typed `LedgerCliError`
+  variants (`WaiversBadFormat`/`WaiversMissingValue` for the health face;
+  `WaiversGrantMissingField`/`WaiversGrantBadDays`/`WaiversGrantBadIssue`/
+  `WaiversGrantUnknownFeature`/`WaiversGrantRegistry`/`WaiversGrantDuplicate`/
+  `WaiversGrantWrite` for the grant face), each with its `help:` remedy
+  line. Ships the `waiver_health` and `waivers_grant` walkthroughs (the
+  grant walkthrough writes into a throwaway registry, never the live
+  one), the `waivers` bench (assess + both faces + the grant validation
+  path over a 500-waiver set), and README/lib.rs/main.rs/usage docs.
+
+### Fixed
+- Two latent rustc-1.100 clippy breaks (found by the
+  `--all-targets --all-features` gate): `tools/glyim-metrics/examples/
+  baseline_check.rs` printed a `{}` placeholder with no argument
+  (`no committed baseline at {} — skipped`) — a runtime panic on the
+  out-of-repository arm that the newer `format_args` diagnostic rejects
+  at compile time; the committed-baseline path is now the argument. And
+  `tools/glyim-ledger` built two `cloned_ref_to_slice_refs` sites (the
+  `evidence_store` walkthrough and a `merge_records` test) —
+  `&[run.clone()]` slice literals became `std::slice::from_ref(&x)`.
+
 - **Evidence-store curation face (plan §3.4 store remainder)**:
   `tools/glyim-ledger/src/evidence.rs` closes the gap between the M1.5
   evidence *emitter* (`glyim-test` records under `GLYIM_TEST_EVIDENCE`)
