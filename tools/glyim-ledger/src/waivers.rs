@@ -1,0 +1,1364 @@
+//! `ledger waivers` — the constitution-C9 waiver-health face.
+//!
+//! Constitution C9 ("gates never weaken") grants temporary exceptions
+//! through `ledger/waivers.toml`: every waiver carries an issue link and
+//! an expiry inside the 14-day horizon. Until this face existed, that
+//! file was read only inside the [`crate::diff`] regression gate — an
+//! expired or horizon-violating waiver stayed invisible until a
+//! regression actually needed covering, and there was no way to inspect
+//! the live exception inventory at all. This module closes that gap: the
+//! waiver health is its own report, so CI can fail an expired exception
+//! even on a day when nothing regressed (the C9 sentence "expired
+//! waivers fail CI", checkable directly).
+//!
+//! # The seams
+//!
+//! - [`WaiverSource`] abstracts where the [`WaiverSet`] comes from:
+//!   [`FileWaiverSource`] reads `<ROOT>/ledger/waivers.toml` through the
+//!   same [`load_waivers`] loader and diagnostics the `diff` gate uses
+//!   (exactly one definition of "what the waiver file says"), and
+//!   [`InMemoryWaiverSource`] serves a caller-built set for tests and
+//!   programmatic consumers. New sources plug in as one more
+//!   `WaiverSource` impl, never as outcome fields.
+//! - [`WaiversRenderer`] abstracts the document face:
+//!   [`TextWaiversRenderer`] produces the human-readable report and
+//!   [`JsonWaiversRenderer`] the `glyim.ledger-waivers/1` JSON contract.
+//!   Both consume the same [`WaiversOutcome`], so there is exactly one
+//!   definition of "what the waiver inventory says".
+//!
+//! # Determinism (plan C1/M1.13)
+//!
+//! No clock, no environment, no iteration-order dependence: `today` is a
+//! value the caller pins (`run_waivers` consults the wall clock once),
+//! rows render in ID order (the order [`load_waivers`] establishes), and
+//! rendering twice yields identical bytes (pinned by golden tests).
+//!
+//! # Gate semantics
+//!
+//! [`WaiversOutcome::is_ok`] is the C9 gate: no error-severity load
+//! diagnostic (schema, duplicate ID, horizon violation — the same codes
+//! `diff` emits) **and** no row whose verdict is
+//! [`WaiverVerdict::Expired`]. A waiver inside its horizon but close to
+//! expiry is report content, never a failure: the exception is still
+//! live, and the remaining-days column is the operator's reminder.
+
+use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
+
+use ledger_schema::{Diagnostic, Severity, load_project_registry};
+use serde::Serialize;
+
+use crate::diff::{
+    NaiveDate, WAIVER_MAX_AGE_DAYS, WaiverEntry, WaiverSet, load_waivers, today_iso,
+};
+use crate::{LedgerCliError, usage};
+
+/// Schema tag of the waiver-health JSON contract.
+pub const WAIVERS_SCHEMA: &str = "glyim.ledger-waivers/1";
+
+/// The expiry verdict the engine computed for one waiver.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WaiverVerdict {
+    /// The waiver is active: its expiry is today or later.
+    Valid,
+    /// The waiver is past its expiry: it can no longer cover a
+    /// regression (C9: expired waivers fail CI).
+    Expired,
+}
+
+impl WaiverVerdict {
+    /// Canonical wire and table spelling.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Valid => "valid",
+            Self::Expired => "expired",
+        }
+    }
+}
+
+/// One loaded waiver with its computed expiry verdict (the JSON
+/// contract's entry shape).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WaiverRow {
+    /// Unique waiver ID (as declared in `waivers.toml`).
+    pub id: String,
+    /// The registry feature ID whose regressions this waiver covers.
+    pub feature: String,
+    /// Why the exception exists (rendered in reports).
+    pub reason: String,
+    /// Tracking link (the plan requires an issue link per waiver).
+    pub issue: String,
+    /// Expiry date in the `YYYY-MM-DD` ISO spelling (echoed verbatim).
+    pub expires: String,
+    /// The computed expiry verdict.
+    pub verdict: WaiverVerdict,
+    /// Signed whole-day distance from the assessment date: positive when
+    /// days remain, zero on the expiry day, negative when overdue.
+    pub remaining_days: i64,
+}
+
+/// Result of a full `ledger waivers` run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WaiversOutcome {
+    /// The date the assessment ran against (pinned by the caller).
+    pub today: NaiveDate,
+    /// Load diagnostics (schema, duplicate ID, horizon violation), sorted
+    /// and de-duplicated — the same diagnostics `diff` would emit.
+    pub diagnostics: Vec<Diagnostic>,
+    /// One row per loaded, date-valid waiver, sorted by ID.
+    pub rows: Vec<WaiverRow>,
+    /// Waivers loaded and assessed (equal to [`Self::rows`] length).
+    pub waivers: usize,
+    /// Rows whose verdict is [`WaiverVerdict::Valid`].
+    pub valid: usize,
+    /// Rows whose verdict is [`WaiverVerdict::Expired`].
+    pub expired: usize,
+}
+
+impl WaiversOutcome {
+    /// Number of error-severity load diagnostics.
+    #[must_use]
+    pub fn errors(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .count()
+    }
+
+    /// True when the C9 gate passes: no error-severity diagnostic and no
+    /// expired row. A verdict is gate content, not prose — an expired
+    /// exception must fail CI even when no regression needs covering.
+    #[must_use]
+    pub fn is_ok(&self) -> bool {
+        self.errors() == 0 && self.expired == 0
+    }
+}
+
+// -- source seam ------------------------------------------------------------
+
+/// Where the [`WaiverSet`] comes from. The load seam mirrors
+/// [`crate::SnapshotStore`] and [`crate::EvidenceSource`]: the engine
+/// consumes the trait, so tests inject sets directly and the CLI wires
+/// the file-backed implementation.
+pub trait WaiverSource {
+    /// Load the waiver set for the project rooted at `root`, validated
+    /// against the C9 horizon at `today`.
+    fn load(&self, root: &Path, today: NaiveDate) -> WaiverSet;
+}
+
+/// Reads `<ROOT>/ledger/waivers.toml` through [`load_waivers`] — the
+/// same loader and diagnostic codes the `diff` gate uses, so the two
+/// faces can never disagree about what the file says.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FileWaiverSource;
+
+impl WaiverSource for FileWaiverSource {
+    fn load(&self, root: &Path, today: NaiveDate) -> WaiverSet {
+        load_waivers(&root.join("ledger/waivers.toml"), today)
+    }
+}
+
+/// Serves a caller-built [`WaiverSet`] (tests, programmatic consumers);
+/// the in-memory twin of [`crate::InMemorySnapshotStore`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct InMemoryWaiverSource {
+    /// The set every `load` call returns verbatim.
+    pub set: WaiverSet,
+}
+
+impl WaiverSource for InMemoryWaiverSource {
+    fn load(&self, _root: &Path, _today: NaiveDate) -> WaiverSet {
+        self.set.clone()
+    }
+}
+
+// -- engine -------------------------------------------------------------------
+
+/// Computes the expiry verdict per loaded waiver (the pure function the
+/// renderers consume).
+///
+/// Entries whose `expires` spelling does not parse carry no verdict —
+/// they are skipped here and the load diagnostics (which
+/// [`load_waivers`] emits for every unparseable date) are the
+/// operator-facing report, the same contract the `diff` gate applies.
+#[must_use]
+pub fn assess_waivers(set: &WaiverSet, today: NaiveDate) -> WaiversOutcome {
+    let today_days = today.to_days();
+    let mut rows = Vec::with_capacity(set.waivers.len());
+    let mut expired = 0usize;
+    for waiver in &set.waivers {
+        let Some(expires) = NaiveDate::parse_iso(&waiver.expires) else {
+            continue;
+        };
+        let remaining_days = expires.to_days() - today_days;
+        let verdict = if remaining_days >= 0 {
+            WaiverVerdict::Valid
+        } else {
+            WaiverVerdict::Expired
+        };
+        if verdict == WaiverVerdict::Expired {
+            expired += 1;
+        }
+        rows.push(WaiverRow {
+            id: waiver.id.clone(),
+            feature: waiver.feature.clone(),
+            reason: waiver.reason.clone(),
+            issue: waiver.issue.clone(),
+            expires: waiver.expires.clone(),
+            verdict,
+            remaining_days,
+        });
+    }
+    // Rows render in ID order regardless of the set's construction path
+    // (`load_waivers` pre-sorts; hand-built sets via the in-memory source
+    // are normalized here), so the face is deterministic for every source.
+    rows.sort_by(|a, b| a.id.cmp(&b.id));
+    // `load_waivers` already sorts and de-duplicates; the defensive
+    // re-normalization keeps hand-built sets (the in-memory source) on the
+    // same deterministic contract.
+    let mut diagnostics = set.diagnostics.clone();
+    diagnostics.sort_by(|a, b| a.code.cmp(b.code).then(a.message.cmp(&b.message)));
+    diagnostics.dedup();
+    let waivers = rows.len();
+    let valid = waivers - expired;
+    WaiversOutcome {
+        today,
+        diagnostics,
+        rows,
+        waivers,
+        valid,
+        expired,
+    }
+}
+
+// -- executor -----------------------------------------------------------------
+
+/// Runs a full `ledger waivers` pass over `root` through `source`: loads
+/// the waiver set, pins `today` once, and assesses every entry.
+#[must_use]
+pub fn run_waivers(root: &Path, source: &dyn WaiverSource) -> WaiversOutcome {
+    let span = tracing::info_span!("waivers", root = %root.display());
+    let _enter = span.enter();
+
+    // `today_iso` renders the `YYYY-MM-DD` spelling `parse_iso` accepts;
+    // the round-trip is pinned by the diff-engine calendar tests, and an
+    // unreachable fallback would silently shift every verdict to the
+    // epoch, so it is a loud bug instead.
+    let today =
+        NaiveDate::parse_iso(&today_iso()).expect("today_iso round-trips through parse_iso");
+    let set = source.load(root, today);
+    let outcome = assess_waivers(&set, today);
+    tracing::debug!(
+        waivers = outcome.waivers,
+        expired = outcome.expired,
+        diagnostics = outcome.diagnostics.len(),
+        "waiver health assessed"
+    );
+    outcome
+}
+
+// -- renderers ----------------------------------------------------------------
+
+/// Renders a [`WaiversOutcome`] into a document face.
+///
+/// The trait is the renderer seam (the [`crate::KnownGapsRenderer`]
+/// pattern): implement it to add a face without touching the load
+/// pipeline or the CLI wiring.
+pub trait WaiversRenderer {
+    /// Render the outcome into the target document (bytes are a pure
+    /// function of the outcome — deterministic golden output).
+    fn render(&self, outcome: &WaiversOutcome) -> String;
+}
+
+/// The human-readable report face (the [`crate::format_gates_text`]
+/// shape: summary line, one header line plus indented detail lines per
+/// row, diagnostics last).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TextWaiversRenderer;
+
+/// The JSON document rendered by [`JsonWaiversRenderer`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WaiversDocument {
+    /// Schema tag, always [`WAIVERS_SCHEMA`].
+    pub schema: &'static str,
+    /// The assessment date (`YYYY-MM-DD`).
+    pub today: String,
+    /// Waivers loaded and assessed.
+    pub waivers: usize,
+    /// Rows whose verdict is [`WaiverVerdict::Valid`].
+    pub valid: usize,
+    /// Rows whose verdict is [`WaiverVerdict::Expired`].
+    pub expired: usize,
+    /// Whether the C9 gate passed ([`WaiversOutcome::is_ok`]); diagnostics
+    /// are deliberately excluded — they are operator-facing prose (the
+    /// text renderer's job), the same split as the `glyim.ledger-diff/1`
+    /// document.
+    pub passed: bool,
+    /// One row per loaded waiver, sorted by ID.
+    pub rows: Vec<WaiverRow>,
+}
+
+/// The `glyim.ledger-waivers/1` JSON face.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct JsonWaiversRenderer;
+
+impl WaiversRenderer for TextWaiversRenderer {
+    fn render(&self, outcome: &WaiversOutcome) -> String {
+        let mut text = String::new();
+        let _ = writeln!(
+            text,
+            "waivers: {} loaded, {} valid, {} expired, {} diagnostic(s), \
+             assessed at {}",
+            outcome.waivers,
+            outcome.valid,
+            outcome.expired,
+            outcome.diagnostics.len(),
+            outcome.today.to_iso(),
+        );
+        for row in &outcome.rows {
+            let _ = writeln!(
+                text,
+                "  {:<26} {:<10} {:<10} expires {}",
+                row.id,
+                row.verdict.as_str(),
+                format!("{}d", row.remaining_days),
+                row.expires,
+            );
+            let _ = writeln!(text, "         feature: {}", row.feature);
+            let _ = writeln!(text, "         reason: {}", row.reason);
+            let _ = writeln!(text, "         issue: {}", row.issue);
+        }
+        for diagnostic in &outcome.diagnostics {
+            let _ = writeln!(text, "{diagnostic}");
+        }
+        text
+    }
+}
+
+impl WaiversRenderer for JsonWaiversRenderer {
+    fn render(&self, outcome: &WaiversOutcome) -> String {
+        let document = WaiversDocument {
+            schema: WAIVERS_SCHEMA,
+            today: outcome.today.to_iso(),
+            waivers: outcome.waivers,
+            valid: outcome.valid,
+            expired: outcome.expired,
+            passed: outcome.is_ok(),
+            rows: outcome.rows.clone(),
+        };
+        let mut text = serde_json::to_string_pretty(&document)
+            .expect("the glyim.ledger-waivers/1 document is a serialisation-only struct");
+        text.push('\n');
+        text
+    }
+}
+
+/// Renders the text waiver-health report (the [`TextWaiversRenderer`]
+/// face).
+#[must_use]
+pub fn format_waivers_text(outcome: &WaiversOutcome) -> String {
+    TextWaiversRenderer.render(outcome)
+}
+
+/// Renders the `glyim.ledger-waivers/1` JSON contract (the
+/// [`JsonWaiversRenderer`] face).
+#[must_use]
+pub fn format_waivers_json(outcome: &WaiversOutcome) -> String {
+    JsonWaiversRenderer.render(outcome)
+}
+
+// -- grant face ---------------------------------------------------------------
+
+/// Schema tag of the `waivers grant` JSON contract.
+pub const WAIVERS_GRANT_SCHEMA: &str = "glyim.ledger-waivers-grant/1";
+
+/// The `waivers grant` request (the CLI flags, validated by
+/// [`run_waivers_grant`]): a temporary C9 exception for one registry
+/// feature's regressions, with an issue link and a day-bounded expiry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WaiversGrantRequest {
+    /// The registry feature ID whose regressions this waiver covers.
+    pub feature: String,
+    /// Why the exception exists (rendered in reports).
+    pub reason: String,
+    /// Tracking link; the plan requires an `https://` issue link per
+    /// waiver.
+    pub issue: String,
+    /// Horizon in whole days (`1..=WAIVER_MAX_AGE_DAYS`); the CLI default
+    /// is 7 when `--days` is omitted.
+    pub days: i64,
+}
+
+/// Where a granted `[[waiver]]` block lands. The write seam mirrors
+/// [`crate::SnapshotStore`] and [`crate::EvidenceStore`]: the engine
+/// consumes the trait, so tests record fragments in memory and the CLI
+/// wires the file-backed implementation.
+pub trait WaiverSink {
+    /// Append the canonical `[[waiver]]` fragment to the document at
+    /// `path` (created when absent); the error detail is the IO failure
+    /// message (the CLI turns it into a typed write error).
+    fn append(&self, path: &Path, fragment: &str) -> Result<(), String>;
+}
+
+/// Appends to `<ROOT>/ledger/waivers.toml` on disk (creating the `ledger/`
+/// directory when it does not exist yet): the committed exception
+/// registry the `diff` gate and the health face read.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FileWaiverSink;
+
+impl WaiverSink for FileWaiverSink {
+    fn append(&self, path: &Path, fragment: &str) -> Result<(), String> {
+        use std::io::Write as _;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|err| format!("cannot create {}: {err}", parent.display()))?;
+        }
+        // A document that does not end in a newline would glue the
+        // appended block onto the last entry; normalize before writing.
+        let needs_newline = std::fs::read_to_string(path)
+            .map(|text| !text.is_empty() && !text.ends_with('\n'))
+            .unwrap_or(false);
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .map_err(|err| format!("cannot open {}: {err}", path.display()))?;
+        if needs_newline {
+            file.write_all(b"\n")
+                .map_err(|err| format!("cannot write {}: {err}", path.display()))?;
+        }
+        file.write_all(fragment.as_bytes())
+            .map_err(|err| format!("cannot write {}: {err}", path.display()))
+    }
+}
+
+/// Records every appended fragment (path, bytes) for tests and
+/// programmatic consumers; the in-memory twin of
+/// [`crate::FileSnapshotStore`].
+#[derive(Debug, Default)]
+pub struct InMemoryWaiverSink {
+    /// Every `(path, fragment)` the sink was asked to append, in order.
+    pub written: std::cell::RefCell<Vec<(PathBuf, String)>>,
+}
+
+impl WaiverSink for InMemoryWaiverSink {
+    fn append(&self, path: &Path, fragment: &str) -> Result<(), String> {
+        self.written
+            .borrow_mut()
+            .push((path.to_path_buf(), fragment.to_string()));
+        Ok(())
+    }
+}
+
+/// Result of a `waivers grant` run (also the
+/// `glyim.ledger-waivers-grant/1` JSON face via
+/// [`format_waivers_grant_json`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WaiversGrantOutcome {
+    /// Schema tag, always [`WAIVERS_GRANT_SCHEMA`].
+    pub schema: &'static str,
+    /// The granted waiver's deterministic ID
+    /// (`WVR-<YYYYMMDD>-<feature slug>`).
+    pub id: String,
+    /// The registry feature ID the waiver covers.
+    pub feature: String,
+    /// The computed expiry (`today + days`, ISO spelling).
+    pub expires: String,
+    /// The granted horizon in days.
+    pub days: i64,
+    /// The document the fragment landed in.
+    pub target: String,
+    /// The exact canonical bytes appended (the audit trail).
+    pub fragment: String,
+}
+
+/// The `[[waiver]]` fragment carrier: serializing a one-entry array
+/// produces the canonical `[[waiver]]` TOML block (field order = struct
+/// order, escaped by the `toml` crate — never hand-quoted).
+#[derive(serde::Serialize)]
+struct GrantFragmentDoc {
+    waiver: Vec<WaiverEntry>,
+}
+
+/// Maps a registry feature ID to the ID's slug part: lowercase, every
+/// non-alphanumeric run collapsed into a single `-`, no leading or
+/// trailing `-` (`LANG-EVIDENCE-A` → `lang-evidence-a`).
+#[must_use]
+fn waiver_slug(feature: &str) -> String {
+    let mut slug = String::with_capacity(feature.len());
+    let mut pending_dash = false;
+    for ch in feature.chars() {
+        if ch.is_ascii_alphanumeric() {
+            if pending_dash && !slug.is_empty() {
+                slug.push('-');
+            }
+            pending_dash = false;
+            slug.push(ch.to_ascii_lowercase());
+        } else {
+            pending_dash = true;
+        }
+    }
+    slug
+}
+
+/// Grants one C9 waiver: validates the request against the plan's rules,
+/// checks the registry, composes the deterministic ID, and appends the
+/// canonical block through `sink`.
+///
+/// # Validation contract
+///
+/// - `days` must be `1..=WAIVER_MAX_AGE_DAYS` (constitution C9: waivers
+///   expire in ≤ 14 days);
+/// - `reason` must be usable (non-blank, no control characters);
+/// - `issue` must be an `https://` link (the plan requires an issue link
+///   per waiver);
+/// - `feature` must name a registry feature (the exception exists for a
+///   feature's regressions);
+/// - the deterministic ID must not already exist (a same-day re-grant is
+///   a duplicate, never a silent overwrite).
+///
+/// Nothing is written when validation fails.
+///
+/// # Errors
+///
+/// Typed [`LedgerCliError`] variants for every rejected request
+/// (`WaiversGrantBadDays`, `WaiversGrantBadIssue`,
+/// `WaiversGrantMissingField`, `WaiversGrantUnknownFeature`,
+/// `WaiversGrantRegistry`, `WaiversGrantDuplicate`) and for a failed
+/// append (`WaiversGrantWrite`).
+pub fn run_waivers_grant(
+    root: &Path,
+    request: &WaiversGrantRequest,
+    source: &dyn WaiverSource,
+    sink: &dyn WaiverSink,
+) -> Result<WaiversGrantOutcome, LedgerCliError> {
+    let span = tracing::info_span!(
+        "waivers_grant",
+        root = %root.display(),
+        feature = %request.feature,
+        days = request.days,
+    );
+    let _enter = span.enter();
+
+    if request.days < 1 || request.days > WAIVER_MAX_AGE_DAYS {
+        return Err(LedgerCliError::WaiversGrantBadDays {
+            days: request.days.to_string(),
+            horizon: WAIVER_MAX_AGE_DAYS,
+        });
+    }
+    if request.reason.trim().is_empty() || request.reason.chars().any(char::is_control) {
+        return Err(LedgerCliError::WaiversGrantMissingField {
+            field: "--reason".to_string(),
+            usage: usage(),
+        });
+    }
+    if !request.issue.starts_with("https://") || request.issue.len() <= "https://".len() {
+        return Err(LedgerCliError::WaiversGrantBadIssue {
+            issue: request.issue.clone(),
+        });
+    }
+
+    // The exception is about a registry feature's regressions: the ID
+    // must name a declared feature, and a registry that does not load is
+    // a CLI failure (no write happens).
+    let loaded = load_project_registry(root);
+    if loaded
+        .diagnostics
+        .iter()
+        .any(|d| d.severity == Severity::Error)
+    {
+        let detail = loaded
+            .diagnostics
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(LedgerCliError::WaiversGrantRegistry { detail });
+    }
+    if loaded.registry.feature_by_id(&request.feature).is_none() {
+        let candidates = loaded
+            .registry
+            .features()
+            .iter()
+            .take(3)
+            .map(|sourced| sourced.entry.id.clone())
+            .collect::<Vec<_>>();
+        return Err(LedgerCliError::WaiversGrantUnknownFeature {
+            feature: request.feature.clone(),
+            candidates,
+        });
+    }
+
+    // `today_iso` renders the `YYYY-MM-DD` spelling `parse_iso` accepts;
+    // the round-trip is pinned by the diff-engine calendar tests (the
+    // same pin the health face relies on).
+    let today =
+        NaiveDate::parse_iso(&today_iso()).expect("today_iso round-trips through parse_iso");
+    let id = format!(
+        "WVR-{}{:02}{:02}-{}",
+        today.year,
+        today.month,
+        today.day,
+        waiver_slug(&request.feature),
+    );
+    let set = source.load(root, today);
+    if set.waivers.iter().any(|w| w.id == id) {
+        return Err(LedgerCliError::WaiversGrantDuplicate {
+            id: id.clone(),
+            path: root.join("ledger/waivers.toml").display().to_string(),
+        });
+    }
+
+    let entry = WaiverEntry {
+        id: id.clone(),
+        feature: request.feature.clone(),
+        reason: request.reason.clone(),
+        issue: request.issue.clone(),
+        expires: today.plus_days(request.days).to_iso(),
+    };
+    let fragment = toml::to_string(&GrantFragmentDoc {
+        waiver: vec![entry],
+    })
+    .map_err(|err| LedgerCliError::WaiversGrantWrite {
+        path: root.join("ledger/waivers.toml").display().to_string(),
+        detail: err.to_string(),
+    })?;
+    let path = root.join("ledger/waivers.toml");
+    sink.append(&path, &fragment)
+        .map_err(|detail| LedgerCliError::WaiversGrantWrite {
+            path: path.display().to_string(),
+            detail,
+        })?;
+    let expires = today.plus_days(request.days).to_iso();
+    tracing::debug!(id = %id, expires = %expires, "waiver granted");
+
+    Ok(WaiversGrantOutcome {
+        schema: WAIVERS_GRANT_SCHEMA,
+        id,
+        feature: request.feature.clone(),
+        expires,
+        days: request.days,
+        target: path.display().to_string(),
+        fragment,
+    })
+}
+
+/// Renders the grant outcome's text face: one summary line plus the
+/// canonical appended block (the audit trail).
+#[must_use]
+pub fn format_waivers_grant_text(outcome: &WaiversGrantOutcome) -> String {
+    let mut text = String::new();
+    let _ = writeln!(
+        text,
+        "granted {} for {} ({} day(s), expires {}) -> {}",
+        outcome.id, outcome.feature, outcome.days, outcome.expires, outcome.target,
+    );
+    text.push_str(&outcome.fragment);
+    text
+}
+
+/// Renders the `glyim.ledger-waivers-grant/1` JSON contract.
+#[must_use]
+pub fn format_waivers_grant_json(outcome: &WaiversGrantOutcome) -> String {
+    let mut text = serde_json::to_string_pretty(outcome)
+        .expect("the glyim.ledger-waivers-grant/1 document is a serialisation-only struct");
+    text.push('\n');
+    text
+}
+
+#[cfg(test)]
+mod tests {
+    //! Tests pin the C9 waiver-health contract: verdicts are pure date
+    //! arithmetic over the loaded [`WaiverSet`], both renderer faces are
+    //! deterministic (golden), the JSON parses back into the
+    //! `glyim.ledger-waivers/1` contract, the file source reads
+    //! `ledger/waivers.toml` through the same [`load_waivers`] loader the
+    //! `diff` gate uses, and the CLI seam parses/rejects exactly like the
+    //! neighbouring `gates` face.
+
+    use std::path::{Path, PathBuf};
+
+    use ledger_schema::{Diagnostic, Severity};
+
+    use super::{
+        FileWaiverSource, InMemoryWaiverSource, JsonWaiversRenderer, TextWaiversRenderer,
+        WaiverSource, WaiverVerdict, WaiversRenderer,
+    };
+    use crate::diff::{NaiveDate, WAIVER_MAX_AGE_DAYS, WaiverEntry, WaiverSet};
+    use crate::{Command, LedgerCliError, WaiversFormat, parse_args, usage};
+
+    /// Fixed assessment date: no clock in the tests (the determinism
+    /// contract treats `today` as a value).
+    fn today() -> NaiveDate {
+        NaiveDate::new_unchecked(2026, 11, 13)
+    }
+
+    /// One synthetic waiver; `days_ahead` is signed from `today()`
+    /// (negative = already expired, but still inside the C9 horizon).
+    fn entry(id: &str, feature: &str, expires_days_ahead: i64) -> WaiverEntry {
+        WaiverEntry {
+            id: id.to_string(),
+            feature: feature.to_string(),
+            reason: format!("{id}: synthetic exception for the test suite"),
+            issue: "https://github.com/elcoosp/glyim/issues/42".to_string(),
+            expires: today().plus_days(expires_days_ahead).to_iso(),
+        }
+    }
+
+    /// A set with one valid waiver, one expired waiver, and one valid
+    /// waiver with zero days left (the `expires == today` boundary).
+    fn mixed_set() -> WaiverSet {
+        WaiverSet {
+            waivers: vec![
+                entry("WVR-0003", "LANG-FOR-VEC-INTOITER", 6),
+                entry("WVR-0001", "LANG-TEST-SNAPSHOT", -3),
+                entry("WVR-0002", "LANG-ASYNC-AWAIT", 0),
+            ],
+            diagnostics: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn assess_marks_valid_expired_and_boundary_rows() {
+        let outcome = super::assess_waivers(&mixed_set(), today());
+        assert_eq!(outcome.waivers, 3);
+        assert_eq!(outcome.valid, 2);
+        assert_eq!(outcome.expired, 1);
+        // Rows stay sorted by ID (the order `load_waivers` establishes).
+        let ids: Vec<&str> = outcome.rows.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(ids, ["WVR-0001", "WVR-0002", "WVR-0003"]);
+        let first = &outcome.rows[0];
+        assert_eq!(first.verdict, WaiverVerdict::Expired);
+        assert_eq!(first.remaining_days, -3);
+        let boundary = &outcome.rows[1];
+        assert_eq!(boundary.verdict, WaiverVerdict::Valid);
+        assert_eq!(
+            boundary.remaining_days, 0,
+            "expires == today is still valid"
+        );
+        let last = &outcome.rows[2];
+        assert_eq!(last.verdict, WaiverVerdict::Valid);
+        assert_eq!(last.remaining_days, 6);
+    }
+
+    #[test]
+    fn expired_or_errored_sets_fail_the_c9_gate() {
+        // A fully-valid set (the expired entry removed) passes.
+        let mut valid_set = mixed_set();
+        valid_set.waivers.retain(|w| w.id != "WVR-0001");
+        let outcome = super::assess_waivers(&valid_set, today());
+        assert!(outcome.is_ok(), "no expired rows, no diagnostics");
+        // The full set carries one expired row: C9 fails it.
+        let outcome = super::assess_waivers(&mixed_set(), today());
+        assert!(!outcome.is_ok(), "an expired waiver fails per C9");
+        // An error-severity load diagnostic fails like `check`.
+        let mut errored = mixed_set();
+        errored.waivers.clear();
+        errored.diagnostics = vec![Diagnostic {
+            code: crate::diff::CODE_WAIVER_DUP,
+            message: "waiver id \"W\" is declared twice".to_string(),
+            severity: Severity::Error,
+        }];
+        let outcome = super::assess_waivers(&errored, today());
+        assert!(!outcome.is_ok(), "an error diagnostic fails like `check`");
+    }
+
+    #[test]
+    fn both_renderers_render_twice_is_byte_identical() {
+        let outcome = super::assess_waivers(&mixed_set(), today());
+        let first = TextWaiversRenderer.render(&outcome);
+        let second = TextWaiversRenderer.render(&outcome);
+        assert_eq!(first, second, "C1/M1.13: outputs deterministic (golden)");
+        let first = JsonWaiversRenderer.render(&outcome);
+        let second = JsonWaiversRenderer.render(&outcome);
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn text_golden_pins_the_report_face() {
+        let outcome = super::assess_waivers(&mixed_set(), today());
+        let text = TextWaiversRenderer.render(&outcome);
+        let expected = "\
+waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
+  WVR-0001                   expired    -3d        expires 2026-11-10
+         feature: LANG-TEST-SNAPSHOT
+         reason: WVR-0001: synthetic exception for the test suite
+         issue: https://github.com/elcoosp/glyim/issues/42
+  WVR-0002                   valid      0d         expires 2026-11-13
+         feature: LANG-ASYNC-AWAIT
+         reason: WVR-0002: synthetic exception for the test suite
+         issue: https://github.com/elcoosp/glyim/issues/42
+  WVR-0003                   valid      6d         expires 2026-11-19
+         feature: LANG-FOR-VEC-INTOITER
+         reason: WVR-0003: synthetic exception for the test suite
+         issue: https://github.com/elcoosp/glyim/issues/42
+";
+        assert_eq!(text, expected);
+    }
+
+    #[test]
+    fn json_contract_parses_back_with_schema_and_counts() {
+        let outcome = super::assess_waivers(&mixed_set(), today());
+        let text = JsonWaiversRenderer.render(&outcome);
+        let value: serde_json::Value = serde_json::from_str(&text)
+            .expect("the glyim.ledger-waivers/1 face must be valid JSON");
+        assert_eq!(value["schema"], "glyim.ledger-waivers/1");
+        assert_eq!(value["today"], "2026-11-13");
+        assert_eq!(value["waivers"], 3);
+        assert_eq!(value["valid"], 2);
+        assert_eq!(value["expired"], 1);
+        assert_eq!(value["passed"], false, "one expired row fails the C9 gate");
+        let rows = value["rows"].as_array().expect("rows array");
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0]["id"], "WVR-0001");
+        assert_eq!(rows[0]["verdict"], "expired");
+        assert_eq!(rows[0]["remaining_days"], -3);
+        assert_eq!(rows[2]["verdict"], "valid");
+        assert_eq!(rows[2]["remaining_days"], 6);
+        assert_eq!(rows[2]["feature"], "LANG-FOR-VEC-INTOITER");
+    }
+
+    #[test]
+    fn file_source_reads_ledger_waivers_toml_and_absent_file_is_empty() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("ledger")).expect("mkdir");
+        std::fs::write(
+            root.join("ledger/waivers.toml"),
+            "[[waiver]]\n\
+             id = \"WVR-0001\"\n\
+             feature = \"LANG-TEST-SNAPSHOT\"\n\
+             reason = \"expired while the fix lands\"\n\
+             issue = \"https://github.com/elcoosp/glyim/issues/42\"\n\
+             expires = \"2026-11-10\"\n\
+             \n\
+             [[waiver]]\n\
+             id = \"WVR-0002\"\n\
+             feature = \"LANG-ASYNC-AWAIT\"\n\
+             reason = \"fresh grant inside the horizon\"\n\
+             issue = \"https://github.com/elcoosp/glyim/issues/43\"\n\
+             expires = \"2026-11-19\"\n",
+        )
+        .expect("write waivers.toml");
+        let set = FileWaiverSource.load(root, today());
+        let outcome = super::assess_waivers(&set, today());
+        assert_eq!(outcome.waivers, 2, "both entries load");
+        assert_eq!(outcome.expired, 1, "the 2026-11-10 entry is expired");
+        assert!(!outcome.is_ok(), "C9: the expired waiver fails the face");
+
+        let empty = FileWaiverSource.load(Path::new("/nonexistent-root"), today());
+        assert!(
+            empty.waivers.is_empty() && empty.diagnostics.is_empty(),
+            "an absent waivers.toml is the empty baseline, not an error"
+        );
+    }
+
+    #[test]
+    fn in_memory_source_round_trips_the_set() {
+        let set = mixed_set();
+        let source = InMemoryWaiverSource { set: set.clone() };
+        let loaded = source.load(Path::new("."), today());
+        assert_eq!(loaded, set);
+    }
+
+    #[test]
+    fn horizon_violations_surface_through_load_diagnostics() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("ledger")).expect("mkdir");
+        std::fs::write(
+            root.join("ledger/waivers.toml"),
+            format!(
+                "[[waiver]]\n\
+                 id = \"WVR-LONG\"\n\
+                 feature = \"LANG-ASYNC-AWAIT\"\n\
+                 reason = \"granted far too long\"\n\
+                 issue = \"https://github.com/elcoosp/glyim/issues/44\"\n\
+                 expires = \"{}\"\n",
+                today().plus_days(WAIVER_MAX_AGE_DAYS + 1).to_iso()
+            ),
+        )
+        .expect("write waivers.toml");
+        let set = FileWaiverSource.load(root, today());
+        assert!(set.waivers.is_empty(), "the entry is inert (dropped)");
+        let outcome = super::assess_waivers(&set, today());
+        assert!(
+            !outcome.is_ok(),
+            "the horizon diagnostic fails like `check`"
+        );
+        assert!(
+            outcome
+                .diagnostics
+                .iter()
+                .any(|d| d.code == crate::diff::CODE_WAIVER_HORIZON),
+            "the horizon code surfaces verbatim: {:?}",
+            outcome.diagnostics
+        );
+    }
+
+    #[test]
+    fn parse_args_accepts_waivers_flags() {
+        let command = parse_args(
+            ["waivers", "docs", "--format", "json"]
+                .into_iter()
+                .map(String::from),
+        )
+        .expect("parse");
+        assert_eq!(
+            command,
+            Command::Waivers {
+                root: PathBuf::from("docs"),
+                format: WaiversFormat::Json,
+            }
+        );
+        let default = parse_args(["waivers"].into_iter().map(String::from)).expect("parse");
+        assert_eq!(
+            default,
+            Command::Waivers {
+                root: PathBuf::from("."),
+                format: WaiversFormat::Text,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_args_rejects_bad_waivers_flags() {
+        let err = parse_args(
+            ["waivers", "--format", "yaml"]
+                .into_iter()
+                .map(String::from),
+        )
+        .expect_err("bad format");
+        assert!(matches!(err, LedgerCliError::WaiversBadFormat { .. }));
+        let err = parse_args(["waivers", "--format"].into_iter().map(String::from))
+            .expect_err("missing value");
+        assert!(matches!(err, LedgerCliError::WaiversMissingValue { .. }));
+        let err = parse_args(["waivers", "a", "b"].into_iter().map(String::from))
+            .expect_err("extra positional");
+        assert!(matches!(err, LedgerCliError::ExtraArgument { .. }));
+    }
+
+    #[test]
+    fn waivers_error_variants_carry_code_and_help() {
+        for err in [
+            LedgerCliError::WaiversBadFormat {
+                value: "yaml".to_string(),
+                usage: usage(),
+            },
+            LedgerCliError::WaiversMissingValue {
+                flag: "--format".to_string(),
+                usage: usage(),
+            },
+        ] {
+            assert!(
+                miette::Diagnostic::code(&err).is_some(),
+                "{err:?} must carry a code"
+            );
+            assert!(
+                miette::Diagnostic::help(&err).is_some(),
+                "{err:?} must carry help"
+            );
+        }
+    }
+
+    #[test]
+    fn usage_lists_waivers() {
+        assert!(usage().contains("waivers"));
+    }
+
+    // -- grant face -------------------------------------------------------------
+
+    use super::{FileWaiverSink, WaiversGrantRequest, run_waivers_grant};
+    use std::path::Path as GrantPath;
+
+    /// Writes the minimal valid registry the grant face validates against
+    /// (the evidence-store fixture shape: one feature over a spec anchor
+    /// plus the seed policy) and seeds the committed waiver document.
+    fn write_grant_project(root: &GrantPath, seed_waivers: &str) {
+        std::fs::create_dir_all(root.join("ledger/features")).expect("mkdir features");
+        std::fs::create_dir_all(root.join("docs/specs")).expect("mkdir specs");
+        std::fs::write(
+            root.join("docs/specs/v0.1.0.md"),
+            "# spec fixture\n\n## evidence\n",
+        )
+        .expect("write spec");
+        std::fs::write(
+            root.join("ledger/policy.toml"),
+            "[levels]\n\
+             L1 = { min_pass = 1, require_evidence = false }\n\
+             [gap_caps]\n\
+             enabled = true\n\
+             [hardening]\n\
+             fuzz_cpu_hours = 24\n\
+             mutation_kill_rate_pct = 75\n",
+        )
+        .expect("write policy");
+        std::fs::write(
+            root.join("ledger/features/grant.toml"),
+            "[[feature]]\n\
+             id = \"LANG-EVIDENCE-A\"\n\
+             title = \"grant fixture feature\"\n\
+             area = \"lang.control-flow\"\n\
+             tier = \"core\"\n\
+             spec = \"docs/specs/v0.1.0.md\"\n\
+             target_level = \"L5\"\n\
+             backends = [\"gam\"]\n\
+             owner_lane = \"M\"\n",
+        )
+        .expect("write feature");
+        if !seed_waivers.is_empty() {
+            std::fs::create_dir_all(root.join("ledger")).expect("mkdir ledger");
+            std::fs::write(root.join("ledger/waivers.toml"), seed_waivers).expect("seed waivers");
+        }
+    }
+
+    /// The canonical grant request for the fixture feature.
+    fn grant_request() -> WaiversGrantRequest {
+        WaiversGrantRequest {
+            feature: "LANG-EVIDENCE-A".to_string(),
+            reason: "regressions covered while the fix lands".to_string(),
+            issue: "https://github.com/elcoosp/glyim/issues/42".to_string(),
+            days: 7,
+        }
+    }
+
+    #[test]
+    fn grant_appends_a_canonical_block_that_loads_back() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_grant_project(root, "");
+
+        let outcome = run_waivers_grant(root, &grant_request(), &FileWaiverSource, &FileWaiverSink)
+            .expect("grant pass");
+        // Deterministic ID: WVR-<YYYYMMDD>-<feature slug>.
+        assert_eq!(outcome.id, "WVR-20261113-lang-evidence-a");
+        assert_eq!(outcome.feature, "LANG-EVIDENCE-A");
+        assert_eq!(outcome.expires, "2026-11-20");
+        assert_eq!(outcome.days, 7);
+        assert!(
+            outcome.target.ends_with("ledger/waivers.toml"),
+            "the fragment lands in the committed document: {}",
+            outcome.target
+        );
+        assert!(
+            outcome.fragment.starts_with("[[waiver]]\n"),
+            "the fragment is a canonical [[waiver]] block: {:?}",
+            outcome.fragment
+        );
+
+        // The appended document must parse back through the same loader
+        // the health face and the diff gate use.
+        let set = FileWaiverSource.load(root, today());
+        assert_eq!(set.waivers.len(), 1, "the granted entry loads back");
+        assert_eq!(set.waivers[0].id, "WVR-20261113-lang-evidence-a");
+        assert_eq!(set.waivers[0].expires, "2026-11-20");
+        assert!(set.diagnostics.is_empty());
+        let outcome = super::assess_waivers(&set, today());
+        assert!(outcome.is_ok(), "the fresh grant is valid and live");
+    }
+
+    #[test]
+    fn grant_preserves_existing_entries_and_trailing_content() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_grant_project(
+            root,
+            "[[waiver]]\n\
+             id = \"WVR-EXISTING\"\n\
+             feature = \"LANG-EVIDENCE-A\"\n\
+             reason = \"earlier exception\"\n\
+             issue = \"https://github.com/elcoosp/glyim/issues/41\"\n\
+             expires = \"2026-11-19\"\n",
+        );
+        run_waivers_grant(root, &grant_request(), &FileWaiverSource, &FileWaiverSink)
+            .expect("grant pass");
+        let set = FileWaiverSource.load(root, today());
+        assert_eq!(
+            set.waivers.len(),
+            2,
+            "the appended block must not clobber the seeded entry"
+        );
+    }
+
+    #[test]
+    fn grant_rejects_unknown_feature_and_registry_errors() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_grant_project(root, "");
+        let mut request = grant_request();
+        request.feature = "LANG-DOES-NOT-EXIST".to_string();
+        let err = run_waivers_grant(root, &request, &FileWaiverSource, &FileWaiverSink)
+            .expect_err("unknown feature must fail");
+        match &err {
+            LedgerCliError::WaiversGrantUnknownFeature { feature, .. } => {
+                assert_eq!(feature, "LANG-DOES-NOT-EXIST");
+            }
+            other => panic!("expected WaiversGrantUnknownFeature, got {other:?}"),
+        }
+        assert!(miette::Diagnostic::help(&err).is_some());
+
+        // A broken registry (a malformed feature entry) fails before any
+        // write.
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_grant_project(root, "");
+        std::fs::write(
+            root.join("ledger/features/grant.toml"),
+            "[[feature]]\nid = 5\n",
+        )
+        .expect("break feature");
+        let err = run_waivers_grant(root, &grant_request(), &FileWaiverSource, &FileWaiverSink)
+            .expect_err("broken registry must fail");
+        assert!(matches!(err, LedgerCliError::WaiversGrantRegistry { .. }));
+        assert!(
+            !root.join("ledger/waivers.toml").exists(),
+            "no document is written when validation fails"
+        );
+    }
+
+    #[test]
+    fn grant_rejects_bad_issue_link_and_bad_days_and_empty_reason() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_grant_project(root, "");
+
+        let mut request = grant_request();
+        request.issue = "http://insecure.example/issue/42".to_string();
+        let err = run_waivers_grant(root, &request, &FileWaiverSource, &FileWaiverSink)
+            .expect_err("http:// issue must fail");
+        assert!(matches!(err, LedgerCliError::WaiversGrantBadIssue { .. }));
+
+        let mut request = grant_request();
+        request.reason = "   ".to_string();
+        let err = run_waivers_grant(root, &request, &FileWaiverSource, &FileWaiverSink)
+            .expect_err("blank reason must fail");
+        assert!(matches!(
+            err,
+            LedgerCliError::WaiversGrantMissingField { .. }
+        ));
+
+        for days in [0, WAIVER_MAX_AGE_DAYS + 1] {
+            let mut request = grant_request();
+            request.days = days;
+            let err = run_waivers_grant(root, &request, &FileWaiverSource, &FileWaiverSink)
+                .expect_err("out-of-horizon days must fail");
+            match &err {
+                LedgerCliError::WaiversGrantBadDays { horizon, .. } => {
+                    assert_eq!(*horizon, WAIVER_MAX_AGE_DAYS);
+                }
+                other => panic!("expected WaiversGrantBadDays, got {other:?}"),
+            }
+        }
+        assert!(
+            !root.join("ledger/waivers.toml").exists(),
+            "a rejected request writes nothing"
+        );
+    }
+
+    #[test]
+    fn grant_rejects_a_duplicate_deterministic_id() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_grant_project(root, "");
+        run_waivers_grant(root, &grant_request(), &FileWaiverSource, &FileWaiverSink)
+            .expect("first grant");
+        let err = run_waivers_grant(root, &grant_request(), &FileWaiverSource, &FileWaiverSink)
+            .expect_err("second same-day grant must fail");
+        match &err {
+            LedgerCliError::WaiversGrantDuplicate { id, .. } => {
+                assert_eq!(id, "WVR-20261113-lang-evidence-a");
+            }
+            other => panic!("expected WaiversGrantDuplicate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn in_memory_sink_records_the_fragment_for_tests() {
+        let sink = FileWaiverSink;
+        let _ = &sink;
+        let in_memory = super::InMemoryWaiverSink::default();
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_grant_project(root, "");
+        let outcome = run_waivers_grant(root, &grant_request(), &FileWaiverSource, &in_memory)
+            .expect("grant pass");
+        let written = in_memory.written.borrow();
+        assert_eq!(written.len(), 1);
+        assert_eq!(written[0].1, outcome.fragment);
+    }
+
+    #[test]
+    fn grant_outcome_renders_both_faces() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_grant_project(root, "");
+        let outcome = run_waivers_grant(root, &grant_request(), &FileWaiverSource, &FileWaiverSink)
+            .expect("grant pass");
+        let text = super::format_waivers_grant_text(&outcome);
+        assert!(
+            text.contains("granted WVR-20261113-lang-evidence-a"),
+            "{text}"
+        );
+        let json = super::format_waivers_grant_json(&outcome);
+        let value: serde_json::Value = serde_json::from_str(&json)
+            .expect("the glyim.ledger-waivers-grant/1 face must be valid JSON");
+        assert_eq!(value["schema"], "glyim.ledger-waivers-grant/1");
+        assert_eq!(value["id"], "WVR-20261113-lang-evidence-a");
+        assert_eq!(value["expires"], "2026-11-20");
+        assert_eq!(value["days"], 7);
+    }
+
+    #[test]
+    fn parse_args_accepts_waivers_grant_flags() {
+        let command = parse_args(
+            [
+                "waivers",
+                "grant",
+                "docs",
+                "--feature",
+                "LANG-EVIDENCE-A",
+                "--reason",
+                "fix in flight",
+                "--issue",
+                "https://github.com/elcoosp/glyim/issues/42",
+                "--days",
+                "7",
+                "--format",
+                "json",
+            ]
+            .into_iter()
+            .map(String::from),
+        )
+        .expect("parse");
+        assert_eq!(
+            command,
+            Command::WaiversGrant {
+                root: PathBuf::from("docs"),
+                feature: "LANG-EVIDENCE-A".to_string(),
+                reason: "fix in flight".to_string(),
+                issue: "https://github.com/elcoosp/glyim/issues/42".to_string(),
+                days: Some(7),
+                format: WaiversFormat::Json,
+            }
+        );
+        // The default horizon is 7 days when --days is omitted.
+        let default = parse_args(
+            [
+                "waivers",
+                "grant",
+                "--feature",
+                "LANG-EVIDENCE-A",
+                "--reason",
+                "fix in flight",
+                "--issue",
+                "https://github.com/elcoosp/glyim/issues/42",
+            ]
+            .into_iter()
+            .map(String::from),
+        )
+        .expect("parse");
+        assert_eq!(
+            default,
+            Command::WaiversGrant {
+                root: PathBuf::from("."),
+                feature: "LANG-EVIDENCE-A".to_string(),
+                reason: "fix in flight".to_string(),
+                issue: "https://github.com/elcoosp/glyim/issues/42".to_string(),
+                days: None,
+                format: WaiversFormat::Text,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_args_rejects_bad_waivers_grant_flags() {
+        let err = parse_args(
+            ["waivers", "grant", "--feature", "LANG-EVIDENCE-A"]
+                .into_iter()
+                .map(String::from),
+        )
+        .expect_err("missing fields");
+        assert!(matches!(
+            err,
+            LedgerCliError::WaiversGrantMissingField { .. }
+        ));
+
+        let err = parse_args(
+            [
+                "waivers",
+                "grant",
+                "--feature",
+                "LANG-EVIDENCE-A",
+                "--reason",
+                "r",
+                "--issue",
+                "https://github.com/elcoosp/glyim/issues/42",
+                "--days",
+                "later",
+            ]
+            .into_iter()
+            .map(String::from),
+        )
+        .expect_err("bad days");
+        assert!(matches!(err, LedgerCliError::WaiversGrantBadDays { .. }));
+
+        let err = parse_args(["waivers", "grant", "--wat"].into_iter().map(String::from))
+            .expect_err("unknown flag");
+        assert!(matches!(err, LedgerCliError::UnknownFlag { .. }));
+
+        let err = parse_args(["waivers", "grant"].into_iter().map(String::from))
+            .expect_err("missing all fields");
+        assert!(matches!(
+            err,
+            LedgerCliError::WaiversGrantMissingField { .. }
+        ));
+    }
+
+    #[test]
+    fn grant_error_variants_carry_code_and_help() {
+        for err in [
+            LedgerCliError::WaiversGrantMissingField {
+                field: "--feature".to_string(),
+                usage: usage(),
+            },
+            LedgerCliError::WaiversGrantBadDays {
+                days: "15".to_string(),
+                horizon: WAIVER_MAX_AGE_DAYS,
+            },
+            LedgerCliError::WaiversGrantBadIssue {
+                issue: "http://x".to_string(),
+            },
+            LedgerCliError::WaiversGrantUnknownFeature {
+                feature: "LANG-X".to_string(),
+                candidates: vec!["LANG-EVIDENCE-A".to_string()],
+            },
+            LedgerCliError::WaiversGrantRegistry {
+                detail: "policy unreadable".to_string(),
+            },
+            LedgerCliError::WaiversGrantDuplicate {
+                id: "WVR-1".to_string(),
+                path: "ledger/waivers.toml".to_string(),
+            },
+            LedgerCliError::WaiversGrantWrite {
+                path: "ledger/waivers.toml".to_string(),
+                detail: "denied".to_string(),
+            },
+        ] {
+            assert!(
+                miette::Diagnostic::code(&err).is_some(),
+                "{err:?} must carry a code"
+            );
+            assert!(
+                miette::Diagnostic::help(&err).is_some(),
+                "{err:?} must carry help"
+            );
+        }
+    }
+
+    #[test]
+    fn usage_lists_waivers_grant() {
+        assert!(usage().contains("waivers grant"));
+    }
+}
