@@ -68,5 +68,10 @@ name = "verify"
 harness = false
 path = "benches/verify.rs"
 
+[[bench]]
+name = "render"
+harness = false
+path = "benches/render.rs"
+
 [lints]
 workspace = true
