@@ -60,6 +60,12 @@
 //! - `glyim-ledger evidence check [ROOT] [--format text|json]` — validate
 //!   the committed evidence store against the registry and report its
 //!   coverage; error diagnostics fail the exit code (see [`evidence`]).
+//!   `glyim-ledger evidence audit [ROOT] [--format text|json]` is its
+//!   filesystem counterpart: it recomputes every record's
+//!   `fixture_sha256` through the [`crate::FixtureFingerprint`] seam and
+//!   fails on missing, drifted, or unreadable fixtures — `check` proves
+//!   what the store says is consistent, `audit` proves what it points at
+//!   still exists.
 //! - `glyim-ledger waivers [ROOT] [--format text|json]` — the
 //!   constitution-C9 waiver-health report: every `ledger/waivers.toml`
 //!   entry with its expiry verdict; expired waivers and load diagnostics
@@ -71,7 +77,13 @@
 //!   [ROOT] --id <WVR-ID>` is the retirement write face: it removes
 //!   exactly the one matching block and rewrites the remaining entries
 //!   canonically through the [`crate::WaiverRewriter`] seam (nothing is
-//!   written when the document does not load cleanly).
+//!   written when the document does not load cleanly). `waivers extend
+//!   [ROOT] --id <WVR-ID> [--days N]` is the re-pin write face: it moves
+//!   exactly the one matching block's expiry to `today + days` (default
+//!   7, horizon 14) through the [`crate::WaiverExtender`] seam, keeping
+//!   the entry's identity, reason, and issue — the sanctioned counterpart
+//!   the duplicate-grant help line points to (nothing is written when the
+//!   document does not load cleanly).
 //! - `glyim-ledger handoff [ROOT] [--items N] [--format md|json]
 //!   [--out PATH] [--check]` — the plan §3.7 session-handoff generator:
 //!   it composes the compute, `next`, and `waivers` face outcomes into
@@ -117,6 +129,7 @@ pub use compute::{
     InMemoryEvidenceSource, JsonlEvidenceSource, LedgerEvidence, ProjectEvidenceSource,
     compute_levels, format_compute_json, format_compute_report, run_compute,
 };
+pub use diff::DEFAULT_WAIVER_DAYS;
 pub use diff::{
     CODE_SNAPSHOT_IO, CODE_SNAPSHOT_SCHEMA, CODE_WAIVER_DUP, CODE_WAIVER_EXPIRED,
     CODE_WAIVER_HORIZON, CODE_WAIVER_SCHEMA, CODE_WAIVER_UNUSED, ComputeSnapshot, DiffDocument,
@@ -126,11 +139,14 @@ pub use diff::{
     format_diff_json, format_diff_text, load_waivers, run_diff, today_iso,
 };
 pub use evidence::{
-    CODE_EVIDENCE_STORE_IO, CheckReport, DEFAULT_RECORD_TARGET, EVIDENCE_CHECK_SCHEMA,
-    EVIDENCE_RECORD_SCHEMA, EvidenceStore, FileEvidenceStore, InMemoryEvidenceStore,
-    OutcomeHistogram, RecordOutcome, RecordStats, canonical_line, format_evidence_check_json,
-    format_evidence_check_text, format_evidence_record_json, format_evidence_record_text,
-    merge_records, run_evidence_check, run_evidence_record,
+    CODE_EVIDENCE_STORE_IO, CheckReport, DEFAULT_RECORD_TARGET, EVIDENCE_AUDIT_SCHEMA,
+    EVIDENCE_CHECK_SCHEMA, EVIDENCE_RECORD_SCHEMA, EvidenceAuditOutcome, EvidenceStore,
+    FileEvidenceStore, FileFixtureFingerprint, FingerprintError, FixtureFingerprint, FixtureRow,
+    FixtureVerdict, InMemoryEvidenceStore, InMemoryFixtureFingerprint, OutcomeHistogram,
+    RecordOutcome, RecordStats, audit_records, canonical_line, format_evidence_audit_json,
+    format_evidence_audit_text, format_evidence_check_json, format_evidence_check_text,
+    format_evidence_record_json, format_evidence_record_text, merge_records, resolve_fixture,
+    run_evidence_audit, run_evidence_check, run_evidence_record,
 };
 pub use explain::{ExplainEntry, ExplainOutcome, format_explain_report, run_explain};
 pub use gates::{
@@ -164,14 +180,16 @@ pub use verify::{
     verify_determinism,
 };
 pub use waivers::{
-    FileWaiverRewriter, FileWaiverSink, FileWaiverSource, InMemoryWaiverRewriter,
-    InMemoryWaiverSink, InMemoryWaiverSource, JsonWaiversRenderer, TextWaiversRenderer,
-    WAIVERS_GRANT_SCHEMA, WAIVERS_REVOKE_SCHEMA, WAIVERS_SCHEMA, WaiverRewriter, WaiverRow,
-    WaiverSink, WaiverSource, WaiverVerdict, WaiversDocument, WaiversGrantOutcome,
-    WaiversGrantRequest, WaiversOutcome, WaiversRenderer, WaiversRevokeOutcome,
-    WaiversRevokeRequest, assess_waivers, format_waivers_grant_json, format_waivers_grant_text,
+    FileWaiverExtender, FileWaiverRewriter, FileWaiverSink, FileWaiverSource,
+    InMemoryWaiverExtender, InMemoryWaiverRewriter, InMemoryWaiverSink, InMemoryWaiverSource,
+    JsonWaiversRenderer, TextWaiversRenderer, WAIVERS_EXTEND_SCHEMA, WAIVERS_GRANT_SCHEMA,
+    WAIVERS_REVOKE_SCHEMA, WAIVERS_SCHEMA, WaiverExtender, WaiverRewriter, WaiverRow, WaiverSink,
+    WaiverSource, WaiverVerdict, WaiversDocument, WaiversExtendOutcome, WaiversExtendRequest,
+    WaiversGrantOutcome, WaiversGrantRequest, WaiversOutcome, WaiversRenderer,
+    WaiversRevokeOutcome, WaiversRevokeRequest, assess_waivers, format_waivers_extend_json,
+    format_waivers_extend_text, format_waivers_grant_json, format_waivers_grant_text,
     format_waivers_json, format_waivers_revoke_json, format_waivers_revoke_text,
-    format_waivers_text, run_waivers, run_waivers_grant, run_waivers_revoke,
+    format_waivers_text, run_waivers, run_waivers_extend, run_waivers_grant, run_waivers_revoke,
 };
 
 /// Typed error for the CLI seams (`parse_args`, `write_schema`).
@@ -551,6 +569,53 @@ pub enum LedgerCliError {
         /// The IO (or serialization) failure message.
         detail: String,
     },
+    /// `waivers extend` was called without its required `--id` flag (or
+    /// with a non-numeric `--days` value, reported for whichever flag is
+    /// missing or unusable).
+    WaiversExtendMissingField {
+        /// The missing (or unusable) flag.
+        field: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `waivers extend --days` received a value outside the C9 horizon
+    /// (or a non-numeric one at parse time); the new expiry is pinned
+    /// relative to today, so it must sit in `1..=horizon`.
+    WaiversExtendBadDays {
+        /// The offending `--days` value.
+        days: String,
+        /// The C9 horizon (`WAIVER_MAX_AGE_DAYS`).
+        horizon: i64,
+    },
+    /// `waivers extend --id` was blank or carried control characters (an
+    /// ID can never match a canonical `WVR-...` entry).
+    WaiversExtendBadId {
+        /// The offending ID.
+        id: String,
+    },
+    /// `waivers extend --id` named a waiver the committed document does
+    /// not carry (nothing was written); `candidates` lists a few existing
+    /// IDs for the help line.
+    WaiversExtendUnknownId {
+        /// The offending ID.
+        id: String,
+        /// A few existing waiver IDs (up to three).
+        candidates: Vec<String>,
+    },
+    /// The committed `ledger/waivers.toml` did not load cleanly (schema,
+    /// duplicate ID, horizon violation), so the extender refuses to
+    /// rewrite it (no expiry moves).
+    WaiversExtendLoad {
+        /// The joined load diagnostics.
+        detail: String,
+    },
+    /// `waivers extend` could not rewrite the committed document.
+    WaiversExtendWrite {
+        /// The document path.
+        path: String,
+        /// The IO (or serialization) failure message.
+        detail: String,
+    },
 }
 
 impl fmt::Display for LedgerCliError {
@@ -733,6 +798,32 @@ impl fmt::Display for LedgerCliError {
             Self::WaiversRevokeWrite { path, detail } => {
                 write!(f, "cannot rewrite {path}: {detail}")
             }
+            Self::WaiversExtendMissingField { field, usage } => {
+                write!(
+                    f,
+                    "{field} expects a value (the exact WVR-... ID, or a whole-day \
+                     count for --days)\n{usage}"
+                )
+            }
+            Self::WaiversExtendBadDays { days, horizon } => {
+                write!(
+                    f,
+                    "--days expects a whole-day count in 1..={horizon} (constitution C9), \
+                     got {days:?}"
+                )
+            }
+            Self::WaiversExtendBadId { id } => {
+                write!(f, "--id expects a usable waiver ID, got {id:?}")
+            }
+            Self::WaiversExtendUnknownId { id, .. } => {
+                write!(f, "no waiver carries the ID {id:?} in ledger/waivers.toml")
+            }
+            Self::WaiversExtendLoad { detail } => {
+                write!(f, "ledger/waivers.toml does not load cleanly: {detail}")
+            }
+            Self::WaiversExtendWrite { path, detail } => {
+                write!(f, "cannot rewrite {path}: {detail}")
+            }
         }
     }
 }
@@ -796,6 +887,12 @@ impl miette::Diagnostic for LedgerCliError {
             Self::WaiversRevokeUnknownId { .. } => "glyim-ledger::waivers_revoke_unknown_id",
             Self::WaiversRevokeLoad { .. } => "glyim-ledger::waivers_revoke_load",
             Self::WaiversRevokeWrite { .. } => "glyim-ledger::waivers_revoke_write",
+            Self::WaiversExtendMissingField { .. } => "glyim-ledger::waivers_extend_missing_field",
+            Self::WaiversExtendBadDays { .. } => "glyim-ledger::waivers_extend_bad_days",
+            Self::WaiversExtendBadId { .. } => "glyim-ledger::waivers_extend_bad_id",
+            Self::WaiversExtendUnknownId { .. } => "glyim-ledger::waivers_extend_unknown_id",
+            Self::WaiversExtendLoad { .. } => "glyim-ledger::waivers_extend_load",
+            Self::WaiversExtendWrite { .. } => "glyim-ledger::waivers_extend_write",
         }))
     }
 
@@ -1057,6 +1154,39 @@ impl miette::Diagnostic for LedgerCliError {
                  replaces the document with the canonical remaining entries"
                     .to_string(),
             )),
+            Self::WaiversExtendMissingField { field, .. } => Some(Box::new(format!(
+                "pass {field} on the same command line, e.g. \
+                 `--id WVR-20261113-lang-grant-demo --days 7`; the health \
+                 face (`glyim-ledger waivers`) prints every current ID"
+            ))),
+            Self::WaiversExtendBadDays { .. } => Some(Box::new(
+                "the new expiry is pinned relative to today, so the horizon \
+                 is `1..=14` whole days (constitution C9); omit --days for \
+                 the 7-day working default"
+                    .to_string(),
+            )),
+            Self::WaiversExtendBadId { .. } => Some(Box::new(
+                "a waiver ID is a canonical WVR-<date>-<slug> token; run \
+                 `glyim-ledger waivers` to list the live inventory"
+                    .to_string(),
+            )),
+            Self::WaiversExtendUnknownId { candidates, .. } => Some(Box::new(format!(
+                "extend the exact ID of an existing waiver; current ids \
+                 include {} (see `glyim-ledger waivers` for the full report)",
+                candidates.join(", ")
+            ))),
+            Self::WaiversExtendLoad { .. } => Some(Box::new(
+                "the extender refuses to rewrite a document it cannot fully \
+                 parse; fix the load diagnostics first (`glyim-ledger waivers` \
+                 prints them)"
+                    .to_string(),
+            )),
+            Self::WaiversExtendWrite { .. } => Some(Box::new(
+                "check that ledger/waivers.toml is writable; the rewrite \
+                 replaces the document with the canonical entries, only the \
+                 extended block's expiry moved"
+                    .to_string(),
+            )),
         }
     }
 }
@@ -1220,6 +1350,19 @@ pub enum Command {
         /// Output format; [`EvidenceFormat::Text`] by default.
         format: EvidenceFormat,
     },
+    /// `evidence audit [ROOT] [--format text|json]` — audit the committed
+    /// store against the filesystem: recompute every record's
+    /// `fixture_sha256` from the fixture bytes at its resolved path and
+    /// report per-record verdicts; any missing, drifted, or unreadable
+    /// fixture fails the exit code (the trust-loop closure the check
+    /// face cannot express).
+    EvidenceAudit {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// Output format; [`EvidenceFormat::Text`] by default.
+        format: EvidenceFormat,
+    },
     /// `waivers [ROOT] [--format text|json]` — the constitution-C9
     /// waiver-health report: every waiver loaded from
     /// `ledger/waivers.toml` with its expiry verdict; expired waivers and
@@ -1288,6 +1431,24 @@ pub enum Command {
         root: PathBuf,
         /// The exact waiver ID (`WVR-...`) to remove.
         id: String,
+        /// Output format; [`WaiversFormat::Text`] by default.
+        format: WaiversFormat,
+    },
+    /// `waivers extend [ROOT] --id <WVR-ID> [--days <N>] [--format
+    /// text|json]` — the curated write face re-pinning one C9 exception's
+    /// expiry: validates the request, refuses a document that does not
+    /// load cleanly, and moves exactly the one matching `[[waiver]]`
+    /// block's expiry (identity, reason, and issue are never rewritten;
+    /// the counterpart the duplicate-grant help line already points to).
+    WaiversExtend {
+        /// Project directory containing `ledger/waivers.toml` (`.` by
+        /// default).
+        root: PathBuf,
+        /// The exact waiver ID (`WVR-...`) whose expiry moves.
+        id: String,
+        /// New horizon in whole days; [`diff::DEFAULT_WAIVER_DAYS`] when
+        /// `--days` is omitted (resolved by the dispatch layer).
+        days: Option<i64>,
         /// Output format; [`WaiversFormat::Text`] by default.
         format: WaiversFormat,
     },
@@ -1386,7 +1547,7 @@ pub enum WaiversFormat {
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger waivers revoke [ROOT] --id <WVR-ID> [--format text|json]\n   or: glyim-ledger handoff [ROOT] [--items N] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger evidence audit [ROOT] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger waivers revoke [ROOT] --id <WVR-ID> [--format text|json]\n   or: glyim-ledger waivers extend [ROOT] --id <WVR-ID> [--days N] [--format text|json]\n   or: glyim-ledger handoff [ROOT] [--items N] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout; `next` filters by\n\
      \x20 lane (L|F|T|M|B|Q) and prints the glyim.ledger-next/1 JSON queue;\n\
@@ -1413,7 +1574,9 @@ pub fn usage() -> String {
      \x20 store (whole-record dedupe, canonical order; `--out PATH`,\n\
      \x20 default ledger/evidence/recorded.jsonl), and `evidence check`\n\
      \x20 validates the committed store against the registry and reports\n\
-     \x20 its coverage (plan §3.4 store face); `waivers` loads\n\
+     \x20 its coverage (plan §3.4 store face); `evidence audit` recomputes\n\
+     \x20 every record's fixture_sha256 against the tree and fails on\n\
+     \x20 missing, drifted, or unreadable fixtures; `waivers` loads\n\
      \x20 `ledger/waivers.toml` and reports every waiver's expiry verdict —\n\
      \x20 expired waivers and load diagnostics fail the exit code (C9);\n\
      \x20 `waivers grant` appends one validated `[[waiver]]` block\n\
@@ -1422,6 +1585,9 @@ pub fn usage() -> String {
      \x20 `waivers revoke` retires one waiver by its exact ID\n\
      \x20 (--id, canonical rewrite of the remaining entries,\n\
      \x20 nothing written when the document does not load cleanly);\n\
+     \x20 `waivers extend` re-pins one waiver's expiry to\n\
+     \x20 today + --days (default 7, horizon 14) — the sanctioned\n\
+     \x20 counterpart the duplicate-grant help line points to;\n\
      \x20 `handoff` composes the compute, next, and waivers face\n\
      \x20 outcomes into one short session document — the readiness\n\
      \x20 histogram, the top-N work queue (`--items N`, default 5,\n\
@@ -1884,6 +2050,11 @@ fn parse_waivers(rest: &[String]) -> Result<Command, LedgerCliError> {
     if rest.first().map(String::as_str) == Some("revoke") {
         return parse_waivers_revoke(&rest[1..]);
     }
+    // The `extend` sub-word routes to the re-pin write face (the same
+    // dispatch shape).
+    if rest.first().map(String::as_str) == Some("extend") {
+        return parse_waivers_extend(&rest[1..]);
+    }
     let mut root: Option<PathBuf> = None;
     let mut format = WaiversFormat::Text;
     let mut index = 0;
@@ -2180,6 +2351,83 @@ fn parse_waivers_revoke(rest: &[String]) -> Result<Command, LedgerCliError> {
     })
 }
 
+/// Parse the `waivers extend` subcommand's arguments: one optional ROOT
+/// positional, the required `--id <WVR-ID>` flag, the optional
+/// `--days <N>` horizon (resolved to [`diff::DEFAULT_WAIVER_DAYS`] by the
+/// dispatch layer when omitted), and `--format <text|json>` in any order
+/// (the `waivers revoke` shape).
+fn parse_waivers_extend(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut id: Option<String> = None;
+    let mut days: Option<i64> = None;
+    let mut format = WaiversFormat::Text;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--id" | "--days" | "--format" => {
+                let flag = rest[index].clone();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::WaiversExtendMissingField {
+                        field: flag,
+                        usage: usage(),
+                    });
+                };
+                if flag == "--id" {
+                    id = Some(value.clone());
+                } else if flag == "--days" {
+                    let Ok(parsed) = value.parse::<i64>() else {
+                        return Err(LedgerCliError::WaiversExtendBadDays {
+                            days: value.clone(),
+                            horizon: diff::WAIVER_MAX_AGE_DAYS,
+                        });
+                    };
+                    days = Some(parsed);
+                } else {
+                    format = match value.as_str() {
+                        "text" => WaiversFormat::Text,
+                        "json" => WaiversFormat::Json,
+                        other => {
+                            return Err(LedgerCliError::WaiversBadFormat {
+                                value: other.to_string(),
+                                usage: usage(),
+                            });
+                        }
+                    };
+                }
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    let Some(id) = id else {
+        return Err(LedgerCliError::WaiversExtendMissingField {
+            field: "--id".to_string(),
+            usage: usage(),
+        });
+    };
+    Ok(Command::WaiversExtend {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        id,
+        days,
+        format,
+    })
+}
+
 /// Parse the `verify` subcommand's arguments: one optional ROOT positional,
 /// then `--evidence <PATH>` and `--format <text|json>` in any order.
 fn parse_verify(rest: &[String]) -> Result<Command, LedgerCliError> {
@@ -2407,6 +2655,54 @@ fn parse_evidence(rest: &[String]) -> Result<Command, LedgerCliError> {
                 }
             }
             Ok(Command::EvidenceCheck {
+                root: root.unwrap_or_else(|| PathBuf::from(".")),
+                format,
+            })
+        }
+        "audit" => {
+            let mut root: Option<PathBuf> = None;
+            let mut format = EvidenceFormat::Text;
+            let mut index = 0;
+            while index < body.len() {
+                match body[index].as_str() {
+                    "--format" => {
+                        let Some(value) = body.get(index + 1) else {
+                            return Err(LedgerCliError::EvidenceMissingValue {
+                                flag: "--format".to_string(),
+                                usage: usage(),
+                            });
+                        };
+                        format = match value.as_str() {
+                            "text" => EvidenceFormat::Text,
+                            "json" => EvidenceFormat::Json,
+                            other => {
+                                return Err(LedgerCliError::EvidenceBadFormat {
+                                    value: other.to_string(),
+                                    usage: usage(),
+                                });
+                            }
+                        };
+                        index += 2;
+                    }
+                    flag if flag.starts_with('-') => {
+                        return Err(LedgerCliError::UnknownFlag {
+                            flag: flag.to_string(),
+                            usage: usage(),
+                        });
+                    }
+                    positional => {
+                        if root.is_some() {
+                            return Err(LedgerCliError::ExtraArgument {
+                                arg: positional.to_string(),
+                                usage: usage(),
+                            });
+                        }
+                        root = Some(PathBuf::from(positional));
+                        index += 1;
+                    }
+                }
+            }
+            Ok(Command::EvidenceAudit {
                 root: root.unwrap_or_else(|| PathBuf::from(".")),
                 format,
             })
