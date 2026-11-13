@@ -8,6 +8,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Perf-history store (M2.5 first slice)**:
+  `tools/glyim-bench/src/history.rs` implements the plan's
+  `perf/history/*.jsonl` seam — the committed memory the M2.5 diff gate
+  diffs against. The `HistoryStore` trait (`JsonlHistoryStore` appends
+  one self-describing `glyim.bench-history/1` record per line and loads
+  a missing file as an empty history; `InMemoryHistoryStore` backs
+  tests) is path-agnostic (`program_slug` derives the conventional
+  per-benchmark filename), `latest_baseline` is the pure selection —
+  the last record measuring the program, file order = append order, no
+  clock (plan C6) — and `execute_diff_from_history` wires the stores
+  into the unchanged M2.5 diff engine (`baseline_path` names the history
+  file with the `#latest` selector). Wired as
+  `glyim-bench history record|show|diff`, with the `history_baseline`
+  example and the dependency-free `history_store` bench.
+- **Absolute budget gate (M2.6 first slice)**:
+  `tools/glyim-bench/src/budget.rs` implements the plan's budgets seam —
+  constitution C7's absolute half ("budgets are tests"): a committed
+  `glyim.bench-budgets/1` TOML document (`perf/budgets.toml`, one
+  `[[budget]]` row per program with `max_wall_mean_ns` /
+  `max_instructions_mean` bounds) is enforced against written
+  `glyim.bench/1` reports. Split exactly like the M2.5 diff slice: the
+  `BudgetStore` trait (`FileBudgetStore` on disk, `InMemoryBudgetStore`
+  for tests) abstracts where the budgets come from, `check_budgets` is
+  the pure `(reports, budgets) → verdicts` engine, and `execute_budget`
+  wires both stores. Verdicts extend the M2.2 gate's inclusive `<=`
+  boundary with two honesty rules: a bound on a metric the report does
+  not carry is `Unmeasured` (a wall-only run cannot silently satisfy an
+  instruction budget), and a program with no budget row fails outright —
+  a benchmark that never declared a budget cannot be "within" one.
+  Renderers are the deterministic text table and the
+  `glyim.bench-budget/1` JSON contract; wired as
+  `glyim-bench budget [--budgets perf/budgets.toml] [--json OUT]
+  REPORT...`, with the `budget_check` example and the dependency-free
+  `budget_engine` bench.
 - **Readiness-regression gate (M1.10 first slice)**:
   `tools/glyim-ledger/src/diff.rs` implements the plan's `ledger diff` —
   a per-feature level diff between two `glyim.ledger-snapshot/1` snapshot
