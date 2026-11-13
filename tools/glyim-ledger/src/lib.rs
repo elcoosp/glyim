@@ -1,6 +1,6 @@
 //! CLI library for the Readiness Ledger tool (plan M1.1).
 //!
-//! Nine subcommands:
+//! Eleven subcommands:
 //!
 //! - `glyim-ledger check [ROOT]` — load `ROOT/ledger`, run the schema and
 //!   semantic validators, cross-check the M1.3 inventory extractors, print
@@ -32,6 +32,15 @@
 //!   level movement between two snapshot documents, with regressions
 //!   covered only by unexpired `ledger/waivers.toml` waivers (constitution
 //!   C9); see [`diff`] for the gate contract.
+//! - `glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]` —
+//!   the plan §6 M1.12 release-gate report: every `RG-NN` gate declared in
+//!   `ledger/gates.toml` with the verdict (`pass` / `fail` / `unmeasured`)
+//!   the current evidence supports; `unmeasured` is displayed, never
+//!   silently passed, and never failed by itself (see [`gates`]).
+//! - `glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]` —
+//!   the plan §6 M1.13 determinism self-check (first slice): every ledger
+//!   pipeline runs twice from independent load passes and the rendered
+//!   bytes must match; any drift fails the command (see [`verify`]).
 //! - `glyim-ledger schema [OUT]` — write the JSON-Schema export document
 //!   for both entry types to `OUT` (pretty-printed), or to stdout.
 //! - `glyim-ledger inventory [ROOT]` — enumerate the source-derived
@@ -52,8 +61,10 @@ use ledger_schema::{
 pub mod compute;
 pub mod diff;
 pub mod explain;
+pub mod gates;
 pub mod next;
 pub mod status;
+pub mod verify;
 
 pub use compute::{
     CODE_EVIDENCE_INVALID, CODE_EVIDENCE_IO, CODE_EVIDENCE_SCHEMA, CODE_EVIDENCE_UNKNOWN_FEATURE,
@@ -71,6 +82,10 @@ pub use diff::{
     format_diff_json, format_diff_text, load_waivers, run_diff, today_iso,
 };
 pub use explain::{ExplainEntry, ExplainOutcome, format_explain_report, run_explain};
+pub use gates::{
+    GATES_REPORT_SCHEMA, GateVerdict, GateVerdictRow, GatesOutcome, evaluate_gates,
+    format_gates_json, format_gates_text, run_gates,
+};
 pub use next::{
     FeatureSource, GapSource, NEXT_SCHEMA, NextOutcome, WorkItem, WorkItemSource, WorkKind,
     build_queue, feature_depths, filter, format_next_json, format_next_report, parse_lane,
@@ -79,6 +94,10 @@ pub use next::{
 pub use status::{
     STATUS_MD_END, STATUS_MD_START, STATUS_SCHEMA, StatusOutcome, format_status_json,
     format_status_markdown, run_status,
+};
+pub use verify::{
+    CHECK_NAMES, VERIFY_SCHEMA, VerifyOutcome, format_verify_json, format_verify_text,
+    verify_determinism,
 };
 
 /// Typed error for the CLI seams (`parse_args`, `write_schema`).
@@ -200,6 +219,34 @@ pub enum LedgerCliError {
         /// The usage text.
         usage: String,
     },
+    /// `gates --format` received a value outside `text|json`.
+    GatesBadFormat {
+        /// The offending value.
+        value: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `gates --evidence`/`gates --format` was passed without its value.
+    GatesMissingValue {
+        /// The flag that was missing its value (`--evidence` or `--format`).
+        flag: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `verify --format` received a value outside `text|json`.
+    VerifyBadFormat {
+        /// The offending value.
+        value: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `verify --evidence`/`verify --format` was passed without its value.
+    VerifyMissingValue {
+        /// The flag that was missing its value (`--evidence` or `--format`).
+        flag: String,
+        /// The usage text.
+        usage: String,
+    },
     /// `compute --snapshot` could not persist the readiness snapshot.
     SnapshotWrite {
         /// The output path.
@@ -264,6 +311,18 @@ impl fmt::Display for LedgerCliError {
             Self::DiffMissingValue { flag, usage } => {
                 write!(f, "{flag} expects a value (text|json)\n{usage}")
             }
+            Self::GatesBadFormat { value, usage } => {
+                write!(f, "--format expects text or json, got {value}\n{usage}")
+            }
+            Self::GatesMissingValue { flag, usage } => {
+                write!(f, "{flag} expects a value (a path, or text|json)\n{usage}")
+            }
+            Self::VerifyBadFormat { value, usage } => {
+                write!(f, "--format expects text or json, got {value}\n{usage}")
+            }
+            Self::VerifyMissingValue { flag, usage } => {
+                write!(f, "{flag} expects a value (a path, or text|json)\n{usage}")
+            }
             Self::SnapshotWrite { path, detail } => {
                 write!(f, "cannot write compute snapshot {path}: {detail}")
             }
@@ -295,6 +354,10 @@ impl miette::Diagnostic for LedgerCliError {
             Self::DiffMissingPath { .. } => "glyim-ledger::diff_missing_path",
             Self::DiffBadFormat { .. } => "glyim-ledger::diff_bad_format",
             Self::DiffMissingValue { .. } => "glyim-ledger::diff_missing_value",
+            Self::GatesBadFormat { .. } => "glyim-ledger::gates_bad_format",
+            Self::GatesMissingValue { .. } => "glyim-ledger::gates_missing_value",
+            Self::VerifyBadFormat { .. } => "glyim-ledger::verify_bad_format",
+            Self::VerifyMissingValue { .. } => "glyim-ledger::verify_missing_value",
             Self::SnapshotWrite { .. } => "glyim-ledger::snapshot_write",
             Self::ExplainMissingId { .. } => "glyim-ledger::explain_missing_id",
         }))
@@ -373,6 +436,26 @@ impl miette::Diagnostic for LedgerCliError {
             Self::DiffMissingValue { .. } => Some(Box::new(
                 "the flag needs its value on the same command line, e.g. \
                  `--format json`"
+                    .to_string(),
+            )),
+            Self::GatesBadFormat { .. } => Some(Box::new(
+                "`--format json` renders the glyim.ledger-gates/1 contract; \
+                 plain text is the default"
+                    .to_string(),
+            )),
+            Self::GatesMissingValue { .. } => Some(Box::new(
+                "the flag needs its value on the same command line, e.g. \
+                 `--evidence run.jsonl` or `--format json`"
+                    .to_string(),
+            )),
+            Self::VerifyBadFormat { .. } => Some(Box::new(
+                "`--format json` renders the glyim.ledger-verify/1 contract; \
+                 plain text is the default"
+                    .to_string(),
+            )),
+            Self::VerifyMissingValue { .. } => Some(Box::new(
+                "the flag needs its value on the same command line, e.g. \
+                 `--evidence run.jsonl` or `--format json`"
                     .to_string(),
             )),
             Self::SnapshotWrite { .. } => Some(Box::new(
@@ -473,6 +556,29 @@ pub enum Command {
         /// Output format; [`DiffFormat::Text`] by default.
         format: DiffFormat,
     },
+    /// `gates [ROOT] [--evidence PATH] [--format text|json]` — the plan §6
+    /// M1.12 release-gate report over `ledger/gates.toml`.
+    Gates {
+        /// Project directory containing `ledger/gates.toml` (`.` by
+        /// default).
+        root: PathBuf,
+        /// Explicit evidence JSONL path (overrides `ledger/evidence/*.jsonl`).
+        evidence: Option<PathBuf>,
+        /// Output format; [`GatesFormat::Text`] by default.
+        format: GatesFormat,
+    },
+    /// `verify [ROOT] [--evidence PATH] [--format text|json]` — the plan
+    /// §6 M1.13 determinism self-check: every ledger pipeline runs twice
+    /// from independent load passes and the rendered bytes must match.
+    Verify {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// Explicit evidence JSONL path (overrides `ledger/evidence/*.jsonl`).
+        evidence: Option<PathBuf>,
+        /// Output format; [`VerifyFormat::Text`] by default.
+        format: VerifyFormat,
+    },
 }
 
 /// Output format of the `compute` subcommand.
@@ -502,10 +608,28 @@ pub enum DiffFormat {
     Json,
 }
 
+/// Output format of the `gates` subcommand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GatesFormat {
+    /// The human-readable table ([`format_gates_text`]).
+    Text,
+    /// The `glyim.ledger-gates/1` JSON contract ([`format_gates_json`]).
+    Json,
+}
+
+/// Output format of the `verify` subcommand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerifyFormat {
+    /// The human-readable self-check report ([`format_verify_text`]).
+    Text,
+    /// The `glyim.ledger-verify/1` JSON contract ([`format_verify_json`]).
+    Json,
+}
+
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout; `next` filters by\n\
      \x20 lane (L|F|T|M|B|Q) and prints the glyim.ledger-next/1 JSON queue;\n\
@@ -517,7 +641,11 @@ pub fn usage() -> String {
      \x20 marker-delimited Markdown block (default) or the glyim.status/1\n\
      \x20 JSON contract; `diff` compares two snapshot documents and fails\n\
      \x20 on any regression not covered by an unexpired waiver in\n\
-     \x20 `ledger/waivers.toml` (plan C9)."
+     \x20 `ledger/waivers.toml` (plan C9); `gates` prints the RG-01..RG-24\n\
+     \x20 release-gate verdicts declared in `ledger/gates.toml` —\n\
+     \x20 unmeasured gates are displayed, never silently passed; `verify`\n\
+     \x20 runs every ledger pipeline twice from independent load passes\n\
+     \x20 and fails on any rendered-byte drift (plan M1.13)."
         .into()
 }
 
@@ -539,7 +667,7 @@ where
         }),
         Some(
             "check" | "gaps" | "schema" | "inventory" | "next" | "explain" | "compute" | "status"
-            | "diff",
+            | "diff" | "gates" | "verify",
         ) => {
             let rest = &items[1..];
             if items[0] == "next" {
@@ -556,6 +684,12 @@ where
             }
             if items[0] == "diff" {
                 return parse_diff(rest);
+            }
+            if items[0] == "gates" {
+                return parse_gates(rest);
+            }
+            if items[0] == "verify" {
+                return parse_verify(rest);
             }
             if rest.len() > 1 {
                 return Err(LedgerCliError::ExtraArgument {
@@ -869,6 +1003,122 @@ fn parse_diff(rest: &[String]) -> Result<Command, LedgerCliError> {
         baseline,
         current,
         root,
+        format,
+    })
+}
+
+/// Parse the `gates` subcommand's arguments: one optional ROOT positional,
+/// then `--evidence <PATH>` and `--format <text|json>` in any order.
+fn parse_gates(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut evidence: Option<PathBuf> = None;
+    let mut format = GatesFormat::Text;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--evidence" | "--format" => {
+                let flag = rest[index].as_str();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::GatesMissingValue {
+                        flag: flag.to_string(),
+                        usage: usage(),
+                    });
+                };
+                if flag == "--evidence" {
+                    evidence = Some(PathBuf::from(value));
+                } else {
+                    format = match value.as_str() {
+                        "text" => GatesFormat::Text,
+                        "json" => GatesFormat::Json,
+                        other => {
+                            return Err(LedgerCliError::GatesBadFormat {
+                                value: other.to_string(),
+                                usage: usage(),
+                            });
+                        }
+                    };
+                }
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    Ok(Command::Gates {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        evidence,
+        format,
+    })
+}
+
+/// Parse the `verify` subcommand's arguments: one optional ROOT positional,
+/// then `--evidence <PATH>` and `--format <text|json>` in any order.
+fn parse_verify(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut evidence: Option<PathBuf> = None;
+    let mut format = VerifyFormat::Text;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--evidence" | "--format" => {
+                let flag = rest[index].as_str();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::VerifyMissingValue {
+                        flag: flag.to_string(),
+                        usage: usage(),
+                    });
+                };
+                if flag == "--evidence" {
+                    evidence = Some(PathBuf::from(value));
+                } else {
+                    format = match value.as_str() {
+                        "text" => VerifyFormat::Text,
+                        "json" => VerifyFormat::Json,
+                        other => {
+                            return Err(LedgerCliError::VerifyBadFormat {
+                                value: other.to_string(),
+                                usage: usage(),
+                            });
+                        }
+                    };
+                }
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    Ok(Command::Verify {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        evidence,
         format,
     })
 }
@@ -1505,6 +1755,134 @@ mod tests {
     }
 
     #[test]
+    fn gates_defaults_to_text_over_the_project_root() {
+        let cmd = parse_args(args(&["gates"])).expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Gates {
+                root: PathBuf::from("."),
+                evidence: None,
+                format: GatesFormat::Text,
+            }
+        );
+    }
+
+    #[test]
+    fn gates_accepts_root_evidence_and_format_in_any_order() {
+        let cmd = parse_args(args(&[
+            "gates",
+            "--format",
+            "json",
+            "s",
+            "--evidence",
+            "e.jsonl",
+        ]))
+        .expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Gates {
+                root: PathBuf::from("s"),
+                evidence: Some(PathBuf::from("e.jsonl")),
+                format: GatesFormat::Json,
+            }
+        );
+    }
+
+    #[test]
+    fn gates_rejects_unknown_format_values() {
+        let err = parse_args(args(&["gates", "--format", "yaml"])).expect_err("reject");
+        assert!(
+            matches!(err, LedgerCliError::GatesBadFormat { ref value, .. } if value == "yaml"),
+            "{err}"
+        );
+        assert!(err.to_string().contains("--format expects text or json"));
+    }
+
+    #[test]
+    fn gates_rejects_flags_without_values() {
+        for flag in ["--evidence", "--format"] {
+            let err = parse_args(args(&["gates", flag])).expect_err("reject");
+            assert!(
+                matches!(err, LedgerCliError::GatesMissingValue { flag: ref bound, .. } if bound == flag),
+                "{err}"
+            );
+        }
+    }
+
+    #[test]
+    fn gates_rejects_unknown_flags() {
+        let err = parse_args(args(&["gates", "--json"])).expect_err("reject");
+        assert!(
+            matches!(err, LedgerCliError::UnknownFlag { ref flag, .. } if flag == "--json"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn verify_defaults_to_text_over_the_project_root() {
+        let cmd = parse_args(args(&["verify"])).expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Verify {
+                root: PathBuf::from("."),
+                evidence: None,
+                format: VerifyFormat::Text,
+            }
+        );
+    }
+
+    #[test]
+    fn verify_accepts_root_evidence_and_format_in_any_order() {
+        let cmd = parse_args(args(&[
+            "verify",
+            "--evidence",
+            "e.jsonl",
+            "r",
+            "--format",
+            "json",
+        ]))
+        .expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Verify {
+                root: PathBuf::from("r"),
+                evidence: Some(PathBuf::from("e.jsonl")),
+                format: VerifyFormat::Json,
+            }
+        );
+    }
+
+    #[test]
+    fn verify_rejects_unknown_format_values() {
+        let err = parse_args(args(&["verify", "--format", "yaml"])).expect_err("reject");
+        assert!(
+            matches!(err, LedgerCliError::VerifyBadFormat { ref value, .. } if value == "yaml"),
+            "{err}"
+        );
+        assert!(err.to_string().contains("--format expects text or json"));
+    }
+
+    #[test]
+    fn verify_rejects_flags_without_values() {
+        for flag in ["--evidence", "--format"] {
+            let err = parse_args(args(&["verify", flag])).expect_err("reject");
+            assert!(
+                matches!(err, LedgerCliError::VerifyMissingValue { flag: ref bound, .. } if bound == flag),
+                "{err}"
+            );
+        }
+    }
+
+    #[test]
+    fn verify_rejects_unknown_flags() {
+        let err = parse_args(args(&["verify", "--json"])).expect_err("reject");
+        assert!(
+            matches!(err, LedgerCliError::UnknownFlag { ref flag, .. } if flag == "--json"),
+            "{err}"
+        );
+    }
+
+    #[test]
     fn unknown_subcommand_is_rejected_with_usage() {
         let err = parse_args(args(&["frobnicate"])).expect_err("reject");
         assert!(matches!(
@@ -1565,6 +1943,22 @@ mod tests {
                 usage: usage(),
             },
             LedgerCliError::ExplainMissingId { usage: usage() },
+            LedgerCliError::GatesBadFormat {
+                value: "yaml".into(),
+                usage: usage(),
+            },
+            LedgerCliError::GatesMissingValue {
+                flag: "--evidence".into(),
+                usage: usage(),
+            },
+            LedgerCliError::VerifyBadFormat {
+                value: "yaml".into(),
+                usage: usage(),
+            },
+            LedgerCliError::VerifyMissingValue {
+                flag: "--format".into(),
+                usage: usage(),
+            },
         ];
         for err in errors {
             let help =
