@@ -305,6 +305,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: ledger check
         run: cargo run -p glyim-ledger -- check .
+      - name: evidence check (the committed store is well-formed, M1.10)
+        run: cargo run -p glyim-ledger -- evidence check .
+      - name: STATUS is up to date (M1.10 remainder)
+        run: |
+          cargo run -p glyim-ledger -- status . --check
+          cargo run -p glyim-ledger -- status . --check --format json
       - name: Export JSON schemas (determinism smoke)
         run: cargo run -p glyim-ledger -- schema /tmp/ledger-schema.json
 
