@@ -54,6 +54,12 @@
 //! cargo run -p glyim-bench --example corpus_walk
 //! ```
 //!
+//! Fit a committed report history into a scaling exponent (M2.4):
+//!
+//! ```text
+//! cargo run -p glyim-bench --example scaling_fit
+//! ```
+//!
 //! The M1.5 evidence schema reserved `instructions` / `rss_kb` columns for
 //! exactly this instrumentation; wiring those columns into `glyim-test` is
 //! the next M2.3 slice, after the corpus substrate has been committed with
@@ -73,6 +79,8 @@ pub mod error;
 pub mod report;
 /// The iteration runner: N executions of one command.
 pub mod runner;
+/// Input-size scaling analysis and the log-log fit (M2.4 scaling analyzer).
+pub mod scaling;
 /// Counter sources and the `perf stat` / callgrind output parsers.
 pub mod source;
 /// Sample statistics and the CoV stability gate.
