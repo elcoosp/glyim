@@ -296,6 +296,12 @@ pub struct InMemoryReportStore {
 }
 
 impl InMemoryReportStore {
+    /// An empty store.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Number of stored reports.
     #[must_use]
     pub fn len(&self) -> usize {
