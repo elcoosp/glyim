@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`waivers extend` (`glyim-ledger waivers extend`)**: re-pins one C9 exception's expiry to `today + --days` (default 7, horizon 14) — the sanctioned counterpart the `WaiversGrantDuplicate` help line already points to. The new `WaiverExtender` seam (the mutation counterpart of `WaiverRewriter`) has two implementations — `FileWaiverExtender` and `InMemoryWaiverExtender` — and the identity (ID, feature, reason, issue) is never rewritten; only the expiry moves. 6 new typed `LedgerCliError` variants (`WaiversExtend*`), all carrying their `code()`/`help()` lines. Ships the `waivers_extend` walkthrough, the extend bench stage, and README/lib.rs/main.rs/usage docs.
+- **`evidence audit` (`glyim-ledger evidence audit`)**: audits the committed store against the filesystem — recomputes every record's `fixture_sha256` from the fixture bytes and reports `ok`/`missing`/`drift`/`unreadable` verdicts; any finding fails the exit code (the trust-loop closure `evidence check` cannot express). The new `FixtureFingerprint` seam has two implementations — `FileFixtureFingerprint` (sha2 over the raw bytes) and `InMemoryFixtureFingerprint` (precomputed digests). Ships the `evidence_audit` walkthrough, the audit bench stage, and README/lib.rs/main.rs/usage docs.
+
 - **C9 waiver-retirement face (`glyim-ledger waivers revoke`)**:
   `waivers grant` is append-only by design — once a waiver's regression
   fix landed (or its horizon expired and the C9 gate started failing
