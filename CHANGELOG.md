@@ -8,6 +8,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Release-gate report (M1.12)**: `tools/glyim-ledger/src/gates.rs`
+  implements the plan §6 M1.12 exit gate — "Readiness gates RG-01…RG-24
+  declared in `ledger/gates.toml`; `unmeasured` allowed but displayed;
+  `ledger gates` prints all 24". The declaration face is a new strict
+  schema beside the policy loader (`tools/ledger-schema/src/gates.rs`,
+  `glyim.ledger-gates-registry/1`, `deny_unknown_fields`): each `[[gate]]`
+  row carries the plan's `RG-NN` id, title, criterion, and the evidence
+  source the verdict engine may consult today — a closed enum (`none` /
+  `levels` / `gaps`) so a declaration can never claim an input the engine
+  does not have; verdicts have no on-disk field (constitution C1: status
+  is computed, never typed). The engine evaluates every declared gate per
+  source — RG-09 over the M1.8 compute outcome (core/std features below
+  L4, then core below the unmeasurable-L5, reported as fail naming the
+  unmeasured hardening axes), RG-10 over the M1.7 gap registry (open
+  class-b gaps, class-a gaps without a pinned diagnostic, witness debt —
+  the registry holds only open gaps, so every counted entry is open by
+  construction), `none` as the honest `unmeasured` (displayed, never
+  silently passed, never failed by itself: the M1.12 exit gate is "prints
+  all 24", so the command exits non-zero only on load/validation
+  diagnostics; CI blocking stays with the later RG wiring slices).
+  Wired as `glyim-ledger gates [ROOT] [--evidence PATH]
+  [--format text|json]` over the `glyim.ledger-gates/1` contract, with
+  the `release_gates` example and the dependency-free `gates` bench (24
+  gates over a 500-feature registry + gaps). `ledger/gates.toml` declares
+  all 24 plan gates; on today's tree the report prints 0 pass, 2 fail
+  (RG-09, RG-10), 22 unmeasured — the honest release state.
+- **Determinism self-check (M1.13 first slice)**:
+  `tools/glyim-ledger/src/verify.rs` implements the plan §6 M1.13
+  "run `compute` twice → identical bytes" half as a command:
+  `verify_determinism` runs every ledger pipeline — compute
+  (text/JSON/snapshot document), status (Markdown), and the M1.12 gates
+  report (text/JSON) — **twice**, from two independent load passes over
+  the same root, and compares the rendered bytes per check (fixed
+  `CHECK_NAMES` order; the order is part of the `glyim.ledger-verify/1`
+  contract). Unlike the `gates` report, `verify` is a *gate*: a drifted
+  check or an error-severity diagnostic fails the command (exit 1), so
+  CI can wire it directly. The checker reuses the executors verbatim and
+  adds no IO boundary, so future evidence sources participate
+  automatically; the two-machine comparison (committed golden + CI job)
+  is deliberately left to the later M1.13 slices. Wired as
+  `glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]`,
+  with the `verify_determinism` example and the dependency-free `verify`
+  bench (6 double-run checks over the 500-feature synthetic registry).
 - **Matrix gate with the geo-mean aggregate budget (M2.5 remainder)**:
   `tools/glyim-bench/src/matrix.rs` implements the plan §325 / §6 M2.5
   perf-compare criterion — "fail >2% on a benchmark **or >0.5%
