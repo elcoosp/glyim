@@ -173,8 +173,8 @@ importers:
         specifier: ^0.1.34
         version: 0.1.34
       '@elcoosp/docs-toolkit':
-        specifier: ^0.5.31
-        version: 0.5.31(@astrojs/markdown-satteri@0.4.9)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(mermaid@11.17.2)(playwright@1.65.0)(react@19.3.1)
+        specifier: ^0.5.34
+        version: 0.5.34(@astrojs/markdown-satteri@0.4.9)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(mermaid@11.17.2)(playwright@1.65.0)(react@19.3.1)
       astro:
         specifier: 7.4.7
         version: 7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
@@ -211,6 +211,9 @@ importers:
       starlight-seo:
         specifier: ^1.0.0
         version: 1.0.0(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+      starlight-telescope:
+        specifier: ^1.0.0
+        version: 1.0.0(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))
       starlight-view-modes:
         specifier: ^0.15.4
         version: 0.15.4(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))
@@ -616,9 +619,9 @@ packages:
   '@d2lang/d2@0.1.34':
     resolution: {integrity: sha512-35m2DaRUgeBy1cFbF9XEGIuaN/pMWrqkJtGj/tsq7OrU4N8degbY80Js7Mw7UeuE+fwGpxdZaGckEUVOPAj7CA==}
 
-  '@elcoosp/docs-toolkit@0.5.31':
-    resolution: {integrity: sha512-vxBsc9StOhfvqYDYaMa+cq6WhC+RWf6wZmPzcH+C3qdw6PuzmF78OqTytFBUO25TyziK0ffO+fDFbvyWbSNLbA==}
-    version: 0.5.31
+  '@elcoosp/docs-toolkit@0.5.34':
+    resolution: {integrity: sha512-sHtqL8T6Zi57I8cKOpXlNo5yUHUhViS92ZNYGbNugJ5AIYRf+WyIZU8b7OwhoBDHrmgT/HuE+PhF2lTP0BbPtg==}
+    version: 0.5.34
     engines: {node: '>=22.18.0'}
     hasBin: true
     peerDependencies:
@@ -2245,6 +2248,10 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
+  fuse.js@7.5.0:
+    resolution: {integrity: sha512-sQtrEfA+ez/3G0cCZecF70oqpCRttCexYUG4mUrtWL49ULUzUyxokt5kyqwtKzj1270RaKih+hcP3qLcumccow==}
+    engines: {node: '>=10'}
+
   get-caller-file@2.0.5:
     resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==}
     engines: {node: 6.* || 8.* || >= 10.*}
@@ -3229,6 +3236,12 @@ packages:
       '@astrojs/starlight': '>=0.33.0'
       astro: '>=5.1.5'
 
+  starlight-telescope@1.0.0:
+    resolution: {integrity: sha512-GFpxfSbOol5yrtxSuOB8bkBtD36JQcpajy2OV8tvpFG+pu7edGsKgD/CrojE/ggvKNgiuI8tpDkigR/ZjiGbGw==}
+    engines: {node: '>=22.12.0'}
+    peerDependencies:
+      '@astrojs/starlight': '>=0.38.0'
+
   starlight-view-modes@0.15.4:
     resolution: {integrity: sha512-nHVKIOlukt18uHBWGwaNkjUUwTSTIWhBb1AXdGuSSD7Oi1nrGOlXRb2pTaGeFYy/mFCORK/2XI0o1yxTEYdTZg==}
     engines: {node: '>=22.12.0'}
@@ -4118,7 +4131,7 @@ snapshots:
 
   '@d2lang/d2@0.1.34': {}
 
-  '@elcoosp/docs-toolkit@0.5.31(@astrojs/markdown-satteri@0.4.9)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(mermaid@11.17.2)(playwright@1.65.0)(react@19.3.1)':
+  '@elcoosp/docs-toolkit@0.5.34(@astrojs/markdown-satteri@0.4.9)(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))(@types/node@24.19.2)(astro-takumi@https://codeload.github.com/elcoosp/astro-takumi/tar.gz/4bb9e47833c48388b17da9612d77bc9f600d525e(csstype@3.2.3)(linkedom@0.18.15))(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(mermaid@11.17.2)(playwright@1.65.0)(react@19.3.1)':
     dependencies:
       '@astrojs/rss': 4.0.19
       '@astrojs/starlight': 0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3)
@@ -5701,6 +5714,8 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
+
+  fuse.js@7.5.0: {}
 
   get-caller-file@2.0.5: {}
 
@@ -7326,6 +7341,12 @@ snapshots:
     dependencies:
       '@astrojs/starlight': 0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3)
       astro: 7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+
+  starlight-telescope@1.0.0(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3)):
+    dependencies:
+      '@astrojs/starlight': 0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3)
+      fuse.js: 7.5.0
+      zod: 4.6.7
 
   starlight-view-modes@0.15.4(@astrojs/starlight@0.42.10(@astrojs/markdown-remark@7.3.8)(astro@7.4.7(@astrojs/markdown-remark@7.3.8)(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3)):
     dependencies:
