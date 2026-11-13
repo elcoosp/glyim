@@ -1,6 +1,6 @@
 //! CLI library for the Readiness Ledger tool (plan M1.1).
 //!
-//! Seven subcommands:
+//! Nine subcommands:
 //!
 //! - `glyim-ledger check [ROOT]` — load `ROOT/ledger`, run the schema and
 //!   semantic validators, cross-check the M1.3 inventory extractors, print
@@ -18,12 +18,20 @@
 //!   explanation: resolve one gap or feature ID and render why it is
 //!   queued and what evidence moves it (the same reason lines the `next`
 //!   queue emits; see [`explain`]).
-//! - `glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json]` —
-//!   the plan §6 M1.8 level-computation engine: per-feature readiness
-//!   levels L0–L4 computed as a pure function of the registry, the
-//!   `glyim.evidence/1` records, and `ledger/policy.toml` (L5 hardening is
-//!   reported as unmeasured); see [`compute`] for the determinism and
-//!   monotonicity contracts.
+//! - `glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json]
+//!   [--snapshot PATH]` — the plan §6 M1.8 level-computation engine:
+//!   per-feature readiness levels L0–L4 computed as a pure function of the
+//!   registry, the `glyim.evidence/1` records, and `ledger/policy.toml`
+//!   (L5 hardening is reported as unmeasured); see [`compute`] for the
+//!   determinism and monotonicity contracts. `--snapshot PATH` also
+//!   persists the `glyim.ledger-snapshot/1` document of the run.
+//! - `glyim-ledger status [ROOT] [--evidence PATH] [--format md|json]` —
+//!   the plan §6 M1.9 renderers over the compute outcome (first slice).
+//! - `glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]` —
+//!   the plan §6 M1.10 readiness-regression gate (first slice): per-feature
+//!   level movement between two snapshot documents, with regressions
+//!   covered only by unexpired `ledger/waivers.toml` waivers (constitution
+//!   C9); see [`diff`] for the gate contract.
 //! - `glyim-ledger schema [OUT]` — write the JSON-Schema export document
 //!   for both entry types to `OUT` (pretty-printed), or to stdout.
 //! - `glyim-ledger inventory [ROOT]` — enumerate the source-derived
@@ -42,6 +50,7 @@ use ledger_schema::{
 };
 
 pub mod compute;
+pub mod diff;
 pub mod explain;
 pub mod next;
 pub mod status;
@@ -52,6 +61,14 @@ pub use compute::{
     EvidenceSource, FeatureLevel, HARDENING_FUZZ_HOURS, HARDENING_MUTATION_RATE,
     InMemoryEvidenceSource, JsonlEvidenceSource, LedgerEvidence, ProjectEvidenceSource,
     compute_levels, format_compute_json, format_compute_report, run_compute,
+};
+pub use diff::{
+    CODE_SNAPSHOT_IO, CODE_SNAPSHOT_SCHEMA, CODE_WAIVER_DUP, CODE_WAIVER_EXPIRED,
+    CODE_WAIVER_HORIZON, CODE_WAIVER_SCHEMA, CODE_WAIVER_UNUSED, ComputeSnapshot, DiffDocument,
+    FeatureLevelDiff, FileSnapshotStore, InMemorySnapshotStore, LEDGER_DIFF_SCHEMA,
+    LedgerDiffOutcome, LevelVerdict, NaiveDate, SNAPSHOT_SCHEMA, SnapshotBatch, SnapshotEntry,
+    SnapshotStore, WAIVER_MAX_AGE_DAYS, WaiverEntry, WaiverSet, diff_levels, execute_diff,
+    format_diff_json, format_diff_text, load_waivers, run_diff, today_iso,
 };
 pub use explain::{ExplainEntry, ExplainOutcome, format_explain_report, run_explain};
 pub use next::{
@@ -164,6 +181,32 @@ pub enum LedgerCliError {
         /// The usage text.
         usage: String,
     },
+    /// `diff` was called without its two snapshot paths.
+    DiffMissingPath {
+        /// The usage text.
+        usage: String,
+    },
+    /// `diff --format` received a value outside `text|json`.
+    DiffBadFormat {
+        /// The offending value.
+        value: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `diff --format` was passed without its value.
+    DiffMissingValue {
+        /// The flag that was missing its value (`--format`).
+        flag: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `compute --snapshot` could not persist the readiness snapshot.
+    SnapshotWrite {
+        /// The output path.
+        path: String,
+        /// The diagnostic detail (IO or serialization failure).
+        detail: String,
+    },
 }
 
 impl fmt::Display for LedgerCliError {
@@ -208,6 +251,22 @@ impl fmt::Display for LedgerCliError {
             Self::StatusMissingValue { flag, usage } => {
                 write!(f, "{flag} expects a value (a path, or md|json)\n{usage}")
             }
+            Self::DiffMissingPath { usage } => {
+                write!(
+                    f,
+                    "diff expects two snapshot paths (BASE CURRENT) and an \
+                     optional ROOT\n{usage}"
+                )
+            }
+            Self::DiffBadFormat { value, usage } => {
+                write!(f, "--format expects text or json, got {value}\n{usage}")
+            }
+            Self::DiffMissingValue { flag, usage } => {
+                write!(f, "{flag} expects a value (text|json)\n{usage}")
+            }
+            Self::SnapshotWrite { path, detail } => {
+                write!(f, "cannot write compute snapshot {path}: {detail}")
+            }
             Self::ExplainMissingId { usage } => {
                 write!(f, "explain expects a registry ID (gap or feature)\n{usage}")
             }
@@ -233,6 +292,10 @@ impl miette::Diagnostic for LedgerCliError {
             Self::ComputeMissingValue { .. } => "glyim-ledger::compute_missing_value",
             Self::StatusBadFormat { .. } => "glyim-ledger::status_bad_format",
             Self::StatusMissingValue { .. } => "glyim-ledger::status_missing_value",
+            Self::DiffMissingPath { .. } => "glyim-ledger::diff_missing_path",
+            Self::DiffBadFormat { .. } => "glyim-ledger::diff_bad_format",
+            Self::DiffMissingValue { .. } => "glyim-ledger::diff_missing_value",
+            Self::SnapshotWrite { .. } => "glyim-ledger::snapshot_write",
             Self::ExplainMissingId { .. } => "glyim-ledger::explain_missing_id",
         }))
     }
@@ -296,6 +359,27 @@ impl miette::Diagnostic for LedgerCliError {
                  `--evidence run.jsonl` or `--format json`"
                     .to_string(),
             )),
+            Self::DiffMissingPath { .. } => Some(Box::new(
+                "produce the two snapshot documents first, e.g. `compute \
+                 --snapshot baseline.json` on main and on this branch, then \
+                 `diff baseline.json head.json`"
+                    .to_string(),
+            )),
+            Self::DiffBadFormat { .. } => Some(Box::new(
+                "`--format json` renders the glyim.ledger-diff/1 contract; \
+                 plain text is the default"
+                    .to_string(),
+            )),
+            Self::DiffMissingValue { .. } => Some(Box::new(
+                "the flag needs its value on the same command line, e.g. \
+                 `--format json`"
+                    .to_string(),
+            )),
+            Self::SnapshotWrite { .. } => Some(Box::new(
+                "check that the --snapshot path is writable; the document is \
+                 the glyim.ledger-snapshot/1 face that `diff` consumes"
+                    .to_string(),
+            )),
             Self::ExplainMissingId { .. } => Some(Box::new(
                 "pass the registry ID to explain, e.g. `explain GAP-0002` or \
                  `explain LANG-FOR-VEC-INTOITER`"
@@ -349,8 +433,8 @@ pub enum Command {
         /// default).
         root: PathBuf,
     },
-    /// `compute [ROOT] [--evidence PATH] [--format text|json]` — the plan
-    /// §6 M1.8 level-computation engine.
+    /// `compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot
+    /// PATH]` — the plan §6 M1.8 level-computation engine.
     Compute {
         /// Project directory containing the `ledger/` registry (`.` by
         /// default).
@@ -359,6 +443,9 @@ pub enum Command {
         evidence: Option<PathBuf>,
         /// Output format; [`ComputeFormat::Text`] by default.
         format: ComputeFormat,
+        /// When set, also persist the `glyim.ledger-snapshot/1` document of
+        /// this run to `PATH` (the input face of the M1.10 `diff` gate).
+        snapshot: Option<PathBuf>,
     },
     /// `status [ROOT] [--evidence PATH] [--format md|json]` — the plan
     /// §6 M1.9 status renderers (first slice).
@@ -370,6 +457,21 @@ pub enum Command {
         evidence: Option<PathBuf>,
         /// Output format; [`StatusFormat::Markdown`] by default.
         format: StatusFormat,
+    },
+    /// `diff <BASE> <CURRENT> [ROOT] [--format text|json]` — the plan §6
+    /// M1.10 readiness-regression gate: compares two `glyim.ledger-snapshot/1`
+    /// documents, reports per-feature level movement, and fails on any
+    /// regression not covered by an unexpired `ledger/waivers.toml` waiver.
+    Diff {
+        /// Baseline snapshot path (the committed readiness state).
+        baseline: PathBuf,
+        /// Current snapshot path (the state under review).
+        current: PathBuf,
+        /// Project directory containing `ledger/waivers.toml` (`.` by
+        /// default).
+        root: PathBuf,
+        /// Output format; [`DiffFormat::Text`] by default.
+        format: DiffFormat,
     },
 }
 
@@ -391,18 +493,31 @@ pub enum StatusFormat {
     Json,
 }
 
+/// Output format of the `diff` subcommand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiffFormat {
+    /// The human-readable report ([`format_diff_text`]).
+    Text,
+    /// The `glyim.ledger-diff/1` JSON contract ([`format_diff_json`]).
+    Json,
+}
+
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout; `next` filters by\n\
      \x20 lane (L|F|T|M|B|Q) and prints the glyim.ledger-next/1 JSON queue;\n\
      \x20 `explain` resolves one registry ID against the same queue;\n\
      \x20 `compute` prints per-feature readiness levels from evidence\n\
-     \x20 (`ledger/evidence/*.jsonl` by default, `--evidence` to override);\n\
-     \x20 `status` renders the computed status as the marker-delimited\n\
-     \x20 Markdown block (default) or the glyim.status/1 JSON contract."
+     \x20 (`ledger/evidence/*.jsonl` by default, `--evidence` to override;\n\
+     \x20 `--snapshot PATH` also persists the glyim.ledger-snapshot/1\n\
+     \x20 document); `status` renders the computed status as the\n\
+     \x20 marker-delimited Markdown block (default) or the glyim.status/1\n\
+     \x20 JSON contract; `diff` compares two snapshot documents and fails\n\
+     \x20 on any regression not covered by an unexpired waiver in\n\
+     \x20 `ledger/waivers.toml` (plan C9)."
         .into()
 }
 
@@ -423,7 +538,8 @@ where
             root: PathBuf::from("."),
         }),
         Some(
-            "check" | "gaps" | "schema" | "inventory" | "next" | "explain" | "compute" | "status",
+            "check" | "gaps" | "schema" | "inventory" | "next" | "explain" | "compute" | "status"
+            | "diff",
         ) => {
             let rest = &items[1..];
             if items[0] == "next" {
@@ -437,6 +553,9 @@ where
             }
             if items[0] == "status" {
                 return parse_status(rest);
+            }
+            if items[0] == "diff" {
+                return parse_diff(rest);
             }
             if rest.len() > 1 {
                 return Err(LedgerCliError::ExtraArgument {
@@ -571,15 +690,17 @@ fn parse_explain(rest: &[String]) -> Result<Command, LedgerCliError> {
 }
 
 /// Parse the `compute` subcommand's arguments: one optional ROOT positional,
-/// then `--evidence <PATH>` and `--format <text|json>` in any order.
+/// then `--evidence <PATH>`, `--format <text|json>`, and `--snapshot <PATH>`
+/// in any order.
 fn parse_compute(rest: &[String]) -> Result<Command, LedgerCliError> {
     let mut root: Option<PathBuf> = None;
     let mut evidence: Option<PathBuf> = None;
     let mut format = ComputeFormat::Text;
+    let mut snapshot: Option<PathBuf> = None;
     let mut index = 0;
     while index < rest.len() {
         match rest[index].as_str() {
-            "--evidence" | "--format" => {
+            "--evidence" | "--format" | "--snapshot" => {
                 let flag = rest[index].as_str();
                 let Some(value) = rest.get(index + 1) else {
                     return Err(LedgerCliError::ComputeMissingValue {
@@ -587,19 +708,21 @@ fn parse_compute(rest: &[String]) -> Result<Command, LedgerCliError> {
                         usage: usage(),
                     });
                 };
-                if flag == "--evidence" {
-                    evidence = Some(PathBuf::from(value));
-                } else {
-                    format = match value.as_str() {
-                        "text" => ComputeFormat::Text,
-                        "json" => ComputeFormat::Json,
-                        other => {
-                            return Err(LedgerCliError::ComputeBadFormat {
-                                value: other.to_string(),
-                                usage: usage(),
-                            });
-                        }
-                    };
+                match flag {
+                    "--evidence" => evidence = Some(PathBuf::from(value)),
+                    "--snapshot" => snapshot = Some(PathBuf::from(value)),
+                    _ => {
+                        format = match value.as_str() {
+                            "text" => ComputeFormat::Text,
+                            "json" => ComputeFormat::Json,
+                            other => {
+                                return Err(LedgerCliError::ComputeBadFormat {
+                                    value: other.to_string(),
+                                    usage: usage(),
+                                });
+                            }
+                        };
+                    }
                 }
                 index += 2;
             }
@@ -625,6 +748,7 @@ fn parse_compute(rest: &[String]) -> Result<Command, LedgerCliError> {
         root: root.unwrap_or_else(|| PathBuf::from(".")),
         evidence,
         format,
+        snapshot,
     })
 }
 
@@ -682,6 +806,69 @@ fn parse_status(rest: &[String]) -> Result<Command, LedgerCliError> {
     Ok(Command::Status {
         root: root.unwrap_or_else(|| PathBuf::from(".")),
         evidence,
+        format,
+    })
+}
+
+/// Parse the `diff` subcommand's arguments: two required snapshot paths
+/// (`<BASE> <CURRENT>`), then an optional ROOT positional, and
+/// `--format <text|json>` in any order.
+fn parse_diff(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut positionals: Vec<PathBuf> = Vec::with_capacity(3);
+    let mut format = DiffFormat::Text;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--format" => {
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::DiffMissingValue {
+                        flag: "--format".to_string(),
+                        usage: usage(),
+                    });
+                };
+                format = match value.as_str() {
+                    "text" => DiffFormat::Text,
+                    "json" => DiffFormat::Json,
+                    other => {
+                        return Err(LedgerCliError::DiffBadFormat {
+                            value: other.to_string(),
+                            usage: usage(),
+                        });
+                    }
+                };
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if positionals.len() == 3 {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                positionals.push(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    if positionals.len() < 2 {
+        return Err(LedgerCliError::DiffMissingPath { usage: usage() });
+    }
+    let baseline = positionals[0].clone();
+    let current = positionals[1].clone();
+    let root = positionals
+        .get(2)
+        .cloned()
+        .unwrap_or_else(|| PathBuf::from("."));
+    Ok(Command::Diff {
+        baseline,
+        current,
+        root,
         format,
     })
 }
@@ -1124,6 +1311,7 @@ mod tests {
                 root: PathBuf::from("."),
                 evidence: None,
                 format: ComputeFormat::Text,
+                snapshot: None,
             }
         );
     }
@@ -1145,7 +1333,71 @@ mod tests {
                 root: PathBuf::from("/tmp/reg"),
                 evidence: Some(PathBuf::from("run.jsonl")),
                 format: ComputeFormat::Json,
+                snapshot: None,
             }
+        );
+    }
+
+    #[test]
+    fn compute_accepts_a_snapshot_output_path() {
+        let cmd = parse_args(args(&["compute", "--snapshot", "out/snapshot.json"])).expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Compute {
+                root: PathBuf::from("."),
+                evidence: None,
+                format: ComputeFormat::Text,
+                snapshot: Some(PathBuf::from("out/snapshot.json")),
+            }
+        );
+    }
+
+    #[test]
+    fn diff_requires_two_snapshot_paths_and_defaults_the_root() {
+        let err = parse_args(args(&["diff", "only-one.json"])).expect_err("reject");
+        assert!(
+            matches!(err, LedgerCliError::DiffMissingPath { .. }),
+            "{err}"
+        );
+        let cmd = parse_args(args(&["diff", "base.json", "head.json"])).expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Diff {
+                baseline: PathBuf::from("base.json"),
+                current: PathBuf::from("head.json"),
+                root: PathBuf::from("."),
+                format: DiffFormat::Text,
+            }
+        );
+        let cmd = parse_args(args(&[
+            "diff",
+            "base.json",
+            "head.json",
+            "/tmp/reg",
+            "--format",
+            "json",
+        ]))
+        .expect("parse");
+        assert_eq!(
+            cmd,
+            Command::Diff {
+                baseline: PathBuf::from("base.json"),
+                current: PathBuf::from("head.json"),
+                root: PathBuf::from("/tmp/reg"),
+                format: DiffFormat::Json,
+            }
+        );
+        let err = parse_args(args(&[
+            "diff",
+            "base.json",
+            "head.json",
+            "--format",
+            "yaml",
+        ]))
+        .expect_err("reject");
+        assert!(
+            matches!(err, LedgerCliError::DiffBadFormat { ref value, .. } if value == "yaml"),
+            "{err}"
         );
     }
 
