@@ -8,6 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`inventory ignore` / `inventory unignore` (`glyim-ledger inventory
+  ignore [ROOT] --item <KEY> --reason <TEXT> [--format text|json]` /
+  `glyim-ledger inventory unignore [ROOT] --item <KEY>
+  [--format text|json])**: the §3.5 exemption-lifecycle write faces —
+  `ledger/inventory-ignore.toml` was the last hand-edited registry the
+  §3.5 gate reads: the check fails with `LEDGER-INVENTORY-UNMAPPED` when
+  an extracted item is neither claimed nor ignored, but until these faces
+  filing the demanded exemption (or retiring one once the item gains a
+  claiming feature) meant hand-editing the curated TOML file.
+  `inventory ignore` files one `[[ignore]]` block through the new
+  `IgnoreSink` seam (`FileIgnoreSink` / `InMemoryIgnoreSink`): the key
+  must be produced by an extractor *right now* (exact keys, never globs —
+  a pre-registered phantom exemption would silently swallow future
+  drift), must not be claimed by a feature (claimed-and-ignored is the
+  `LEDGER-INVENTORY-CONFLICT` failure), and must not already be ignored;
+  `inventory unignore` removes exactly the one matching block through the
+  new `IgnoreRewriter` seam (`FileIgnoreRewriter` /
+  `InMemoryIgnoreRewriter`), rewriting the remaining entries canonically
+  — the item is unmapped again the moment the rewrite lands, and the
+  §3.5 gate is the loud follow-up that forces a feature claim. Both
+  faces refuse a tree that does not load cleanly and never leave a
+  partial write behind, emit the `glyim.ledger-inventory-ignore/1` /
+  `glyim.ledger-inventory-unignore/1` JSON contracts with `--format
+  json`, and carry typed `LedgerCliError` variants with `help()` remedy
+  lines (`InventoryIgnoreBadItem`, `InventoryIgnoreMissingField`,
+  `InventoryIgnoreLoad`, `InventoryIgnoreUnknownItem`,
+  `InventoryIgnoreClaimed`, `InventoryIgnoreDuplicate`,
+  `InventoryIgnoreWrite`, `InventoryUnignoreBadItem`,
+  `InventoryUnignoreLoad`, `InventoryUnignoreMissingField`,
+  `InventoryUnignoreUnknownItem`, `InventoryUnignoreWrite`); the
+  consumer walkthrough is `cargo run -p glyim-ledger --example
+  inventory_ignore_lifecycle` and the bench is `cargo bench -p
+  glyim-ledger --bench inventory_ignore`.
 - **`gaps unwitness` (`glyim-ledger gaps unwitness [ROOT] --id <GAP-ID>
   [--format text|json])**: the remedy half of the gap trust loop —
   detaches one witnessed gap's witness, restoring honest witness debt.
