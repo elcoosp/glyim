@@ -20,7 +20,7 @@
 use std::path::PathBuf;
 
 use glyim_ledger::{
-    EVIDENCE_AUDIT_SCHEMA, EvidenceOutcome, FileEvidenceStore, FixtureVerdict,
+    EVIDENCE_AUDIT_SCHEMA, EvidenceOutcome, EvidenceStore, FileEvidenceStore, FixtureVerdict,
     format_evidence_audit_text, run_evidence_audit,
 };
 
