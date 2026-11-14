@@ -13,7 +13,6 @@ version.workspace = true
 [dependencies]
 glyim-core = { workspace = true }
 glyim-span = { workspace = true }
-indexmap = { workspace = true }
 smallvec = { workspace = true }
 bitflags = { workspace = true }
 tracing = { workspace = true }
