@@ -340,8 +340,17 @@ async fn run_wave(
 fn compute_waves(streams: &mut [serde_json::Value]) -> Result<Vec<Vec<String>>, anyhow::Error> {
     let mut id_to_wave: HashMap<String, usize> = HashMap::new();
     let mut id_to_upstream: HashMap<String, Vec<String>> = HashMap::new();
-    for stream in streams.iter() {
-        let id = stream["id"].as_str().unwrap().to_string();
+    for (index, stream) in streams.iter().enumerate() {
+        // T200-PATCHED [PILOT-18] shape: a streams.json entry without a
+        // string `id` is a config bug and gets a clear error, not a panic
+        // (the same class the unknown-upstream fix below covers).
+        let id = stream["id"].as_str().ok_or_else(|| {
+            anyhow::anyhow!(
+                "streams.json entry {index} carries no string id (the wave \
+                 planner keys every stream by its id)"
+            )
+        })?;
+        let id = id.to_string();
         let upstream: Vec<String> = stream["upstream"]
             .as_array()
             .unwrap_or(&vec![])
@@ -392,7 +401,13 @@ fn compute_waves(streams: &mut [serde_json::Value]) -> Result<Vec<Vec<String>>, 
     }
 
     for stream in streams.iter_mut() {
-        let id = stream["id"].as_str().unwrap();
+        // Unreachable as a panic path: the first pass already rejected
+        // every id-less entry with a typed error, and this loop walks the
+        // same slice — a `continue` keeps the pass total without a
+        // second validation round.
+        let Some(id) = stream["id"].as_str() else {
+            continue;
+        };
         if let Some(wave) = id_to_wave.get(id) {
             stream["wave"] = serde_json::Value::Number(serde_json::Number::from(*wave));
         }
