@@ -5,8 +5,19 @@ use async_lsp::MainLoop;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-/// `run_server`.
-pub async fn run_server(_log_file: Option<std::path::PathBuf>) {
+/// Runs the language server's main loop over stdio until the client
+/// disconnects (a clean EOF is `Ok(())`).
+///
+/// # Errors
+///
+/// Any fatal stdio failure — the stdin/stdout tokio locks cannot be
+/// taken, or the buffered main loop itself errors (a broken pipe
+/// mid-session, an undecodable message). The binary entry point maps
+/// this to a non-zero exit and a one-line stderr report instead of a
+/// panic (the contract the `glyim-lsp` bin doc already promised).
+pub async fn run_server(
+    _log_file: Option<std::path::PathBuf>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let db = Arc::new(AnalysisDatabase::new());
     let (tx, rx) = mpsc::channel(16);
     let (mainloop, client_socket) =
@@ -21,7 +32,8 @@ pub async fn run_server(_log_file: Option<std::path::PathBuf>) {
     // "LSP with diagnostics" claim was a lie.
     let driver = AnalysisDriver::new(db, rx, tx, Some(client_socket));
     tokio::spawn(driver.run());
-    let stdin = async_lsp::stdio::PipeStdin::lock_tokio().unwrap();
-    let stdout = async_lsp::stdio::PipeStdout::lock_tokio().unwrap();
-    mainloop.run_buffered(stdin, stdout).await.unwrap();
+    let stdin = async_lsp::stdio::PipeStdin::lock_tokio()?;
+    let stdout = async_lsp::stdio::PipeStdout::lock_tokio()?;
+    mainloop.run_buffered(stdin, stdout).await?;
+    Ok(())
 }
