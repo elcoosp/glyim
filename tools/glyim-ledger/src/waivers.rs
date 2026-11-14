@@ -1453,6 +1453,16 @@ mod tests {
         NaiveDate::new_unchecked(2026, 11, 13)
     }
 
+    /// The executor's clock: `run_waivers_grant` and `run_waivers_extend`
+    /// derive their IDs and expiries from `today_iso()` (the wall clock),
+    /// so the executor tests derive the same value instead of hardcoding
+    /// a date — a pinned expectation here would break at every midnight.
+    /// The engine-level tests above keep the pinned [`today()`], whose
+    /// date they pass explicitly.
+    fn executor_today() -> NaiveDate {
+        NaiveDate::parse_iso(&crate::today_iso()).expect("today_iso round-trips through parse_iso")
+    }
+
     /// One synthetic waiver; `days_ahead` is signed from `today()`
     /// (negative = already expired, but still inside the C9 horizon).
     fn entry(id: &str, feature: &str, expires_days_ahead: i64) -> WaiverEntry {
@@ -1790,10 +1800,16 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
 
         let outcome = run_waivers_grant(root, &grant_request(), &FileWaiverSource, &FileWaiverSink)
             .expect("grant pass");
-        // Deterministic ID: WVR-<YYYYMMDD>-<feature slug>.
-        assert_eq!(outcome.id, "WVR-20261113-lang-evidence-a");
+        // Deterministic ID: WVR-<YYYYMMDD>-<feature slug>, pinned to the
+        // executor's clock and derived from it (never a hardcoded date).
+        let expected_id = format!(
+            "WVR-{}-lang-evidence-a",
+            executor_today().to_iso().replace('-', "")
+        );
+        let expected_expires = executor_today().plus_days(7).to_iso();
+        assert_eq!(outcome.id, expected_id);
         assert_eq!(outcome.feature, "LANG-EVIDENCE-A");
-        assert_eq!(outcome.expires, "2026-11-20");
+        assert_eq!(outcome.expires, expected_expires);
         assert_eq!(outcome.days, 7);
         assert!(
             outcome.target.ends_with("ledger/waivers.toml"),
@@ -1810,8 +1826,8 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
         // the health face and the diff gate use.
         let set = FileWaiverSource.load(root, today());
         assert_eq!(set.waivers.len(), 1, "the granted entry loads back");
-        assert_eq!(set.waivers[0].id, "WVR-20261113-lang-evidence-a");
-        assert_eq!(set.waivers[0].expires, "2026-11-20");
+        assert_eq!(set.waivers[0].id, expected_id);
+        assert_eq!(set.waivers[0].expires, expected_expires);
         assert!(set.diagnostics.is_empty());
         let outcome = super::assess_waivers(&set, today());
         assert!(outcome.is_ok(), "the fresh grant is valid and live");
@@ -1926,7 +1942,13 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
             .expect_err("second same-day grant must fail");
         match &err {
             LedgerCliError::WaiversGrantDuplicate { id, .. } => {
-                assert_eq!(id, "WVR-20261113-lang-evidence-a");
+                assert_eq!(
+                    id,
+                    &format!(
+                        "WVR-{}-lang-evidence-a",
+                        executor_today().to_iso().replace('-', "")
+                    )
+                );
             }
             other => panic!("expected WaiversGrantDuplicate, got {other:?}"),
         }
@@ -1954,17 +1976,19 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
         write_grant_project(root, "");
         let outcome = run_waivers_grant(root, &grant_request(), &FileWaiverSource, &FileWaiverSink)
             .expect("grant pass");
-        let text = super::format_waivers_grant_text(&outcome);
-        assert!(
-            text.contains("granted WVR-20261113-lang-evidence-a"),
-            "{text}"
+        let expected_id = format!(
+            "WVR-{}-lang-evidence-a",
+            executor_today().to_iso().replace('-', "")
         );
+        let expected_expires = executor_today().plus_days(7).to_iso();
+        let text = super::format_waivers_grant_text(&outcome);
+        assert!(text.contains(&format!("granted {expected_id}")), "{text}");
         let json = super::format_waivers_grant_json(&outcome);
         let value: serde_json::Value = serde_json::from_str(&json)
             .expect("the glyim.ledger-waivers-grant/1 face must be valid JSON");
         assert_eq!(value["schema"], "glyim.ledger-waivers-grant/1");
-        assert_eq!(value["id"], "WVR-20261113-lang-evidence-a");
-        assert_eq!(value["expires"], "2026-11-20");
+        assert_eq!(value["id"], expected_id);
+        assert_eq!(value["expires"], expected_expires);
         assert_eq!(value["days"], 7);
     }
 
@@ -2491,8 +2515,8 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
         assert_eq!(outcome.previous_expires, today().plus_days(5).to_iso());
         assert_eq!(
             outcome.expires,
-            today().plus_days(10).to_iso(),
-            "the new expiry is pinned relative to today"
+            executor_today().plus_days(10).to_iso(),
+            "the new expiry is pinned relative to the executor's clock"
         );
         assert_eq!(outcome.days, 10);
         assert_eq!(outcome.remaining, 2, "an extension never changes the count");
