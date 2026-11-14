@@ -1,0 +1,7 @@
+order:
+  - build-and-run
+  - manage-dependencies
+  - test-your-code
+  - inspect-compilation
+  - use-the-lsp
+  - write-gsx-views

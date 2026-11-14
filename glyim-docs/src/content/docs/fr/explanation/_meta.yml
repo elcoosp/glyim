@@ -1,0 +1,7 @@
+collapsed: true
+order:
+  - architecture
+  - pipeline
+  - borrow-checking
+  - gsx-reactivity
+  - testing-model
