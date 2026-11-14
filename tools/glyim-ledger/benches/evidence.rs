@@ -1,10 +1,13 @@
 //! Evidence-store bench (plan §3.4 curation face).
 //!
 //! Dependency-free (`harness = false`), mirroring the `status` bench:
-//! measures both evidence faces over a synthetic 500-feature project —
+//! measures the evidence faces over a synthetic 500-feature project —
 //! `record` merging 2000 incoming records into a committed 2000-record
-//! store, then `check` validating the resulting 4000-record store — so CI
-//! logs can track the curation cost as the store grows. Run with:
+//! store, `check` validating the resulting 4000-record store, the
+//! idempotent re-record no-op, `audit` recomputing every fixture digest,
+//! and `retract` removing one fixture's records through the canonical
+//! rewrite — so CI logs can track the curation cost as the store grows.
+//! Run with:
 //!
 //! ```text
 //! cargo bench -p glyim-ledger --bench evidence
@@ -205,4 +208,30 @@ fn main() {
     assert_eq!(audit.ok, 4000);
 
     println!("  audit  (load+triage+sha256 4000): {audit_elapsed:?}");
+
+    // The retract face: one fixture's records removed in a single pass —
+    // load, recompute the digest, partition, and persist the canonical
+    // remainder (the curation counterpart the audit's Drift verdict
+    // feeds). Each bench fixture owns exactly one record, so the measured
+    // cost is the real load + sha256 + canonical rewrite work.
+    let started = Instant::now();
+    let retraction = black_box(glyim_ledger::run_evidence_retract(
+        dir.path(),
+        black_box(&glyim_ledger::EvidenceRetractRequest {
+            fixture: "bench/fixture_0_0_0.g".to_string(),
+            out: store.clone(),
+        }),
+        black_box(&glyim_ledger::FileEvidenceStore),
+        black_box(&glyim_ledger::FileFixtureFingerprint),
+    ))
+    .expect("the retraction lands");
+    let retract_elapsed = started.elapsed();
+    assert_eq!(retraction.schema, glyim_ledger::EVIDENCE_RETRACT_SCHEMA);
+    assert_eq!(retraction.removed, 1, "one fixture, one record");
+    assert_eq!(retraction.remaining, 3999, "the remainder stays canonical");
+
+    println!(
+        "  retract (load+sha256+rewrite)     : {retract_elapsed:?} ({} removed, {} remain)",
+        retraction.removed, retraction.remaining
+    );
 }
