@@ -48,5 +48,13 @@ fn main() {
             std::process::exit(1);
         }
     };
-    rt.block_on(glyim_lsp::server::run_server(log_file));
+    match rt.block_on(glyim_lsp::server::run_server(log_file)) {
+        Ok(()) => {}
+        Err(err) => {
+            // The bin contract: a fatal stdio failure exits non-zero with
+            // a one-line report, never a panic backtrace.
+            eprintln!("glyim-lsp: fatal I/O error: {err}");
+            std::process::exit(1);
+        }
+    }
 }
