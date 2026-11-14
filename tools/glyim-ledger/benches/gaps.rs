@@ -1,4 +1,4 @@
-//! Gaps write-face bench (`gaps open`, `gaps witness`, `gaps retire`).
+//! Gaps face bench (`gaps open`, `gaps witness`, `gaps retire`, `gaps audit`).
 //!
 //! Dependency-free (`harness = false`), mirroring the `release` bench:
 //! measures the [`glyim_ledger::run_gaps_witness`] engine over a seeded
@@ -9,8 +9,11 @@
 //! contract), the in-memory twin of the rewrite seam, the retire face's
 //! whole-block removal path over a fresh registry, and the open face's
 //! canonical-append path (load pass + duplicate-ID guard + affects
-//! cross-reference + one numbered file minted per gap), so CI logs can
-//! track the write-face cost as the gap registry grows. Run with:
+//! cross-reference + one numbered file minted per gap), the audit
+//! face's trust-loop pass over a witnessed registry (once with every
+//! fixture present, once with the fixture tree removed), and the
+//! unwitness face's reverse surgical edit over a witnessed registry, so
+//! CI logs can track the face cost as the gap registry grows. Run with:
 //!
 //! ```text
 //! cargo bench -p glyim-ledger --bench gaps
@@ -22,11 +25,13 @@ use std::path::Path;
 use std::time::Instant;
 
 use glyim_ledger::{
-    FileGapOpener, FileGapRetirer, FileGapWitnessRewriter, GapsOpenOutcome, GapsOpenRequest,
-    GapsRetireOutcome, GapsRetireRequest, GapsWitnessOutcome, GapsWitnessRequest,
-    InMemoryGapWitnessRewriter, format_gaps_open_json, format_gaps_open_text,
-    format_gaps_retire_json, format_gaps_retire_text, format_gaps_witness_json,
-    format_gaps_witness_text, run_gaps_open, run_gaps_retire, run_gaps_witness,
+    FileGapOpener, FileGapRetirer, FileGapWitnessDetacher, FileGapWitnessRewriter, GapsOpenOutcome,
+    GapsOpenRequest, GapsRetireOutcome, GapsRetireRequest, GapsUnwitnessOutcome,
+    GapsUnwitnessRequest, GapsWitnessOutcome, GapsWitnessRequest, InMemoryGapWitnessRewriter,
+    format_gaps_audit_json, format_gaps_audit_text, format_gaps_open_json, format_gaps_open_text,
+    format_gaps_retire_json, format_gaps_retire_text, format_gaps_unwitness_json,
+    format_gaps_unwitness_text, format_gaps_witness_json, format_gaps_witness_text, run_gaps_audit,
+    run_gaps_open, run_gaps_retire, run_gaps_unwitness, run_gaps_witness,
 };
 
 /// How many registry gaps the bench witnesses (and fixtures it seeds).
@@ -266,5 +271,105 @@ fn main() {
          json face  : {} bytes",
         open_text.len(),
         open_json.len(),
+    );
+
+    // The audit face: a fresh registry witnessed end-to-end (every row
+    // `Witnessed`), audited once, then re-audited with the fixture tree
+    // removed (every row `Missing`) — each run is a full load pass plus
+    // one metadata probe per gap, the same shape the CI gate pays.
+    let audit_dir = tempfile::tempdir().expect("bench tmp");
+    let audit_root = audit_dir.path().to_path_buf();
+    seed(&audit_root);
+    for i in 0..GAPS {
+        let request = GapsWitnessRequest {
+            id: format!("GAP-{i:04}"),
+            witness: format!("fixtures/gap-{i:04}.g"),
+        };
+        run_gaps_witness(
+            black_box(&audit_root),
+            black_box(&request),
+            &FileGapWitnessRewriter,
+        )
+        .unwrap_or_else(|err| panic!("bench witness GAP-{i:04} failed: {err}"));
+    }
+    let started = Instant::now();
+    let audit_outcome = run_gaps_audit(black_box(&audit_root));
+    let audit_witnessed_elapsed = started.elapsed();
+    assert_eq!(
+        audit_outcome.witnessed, GAPS,
+        "every seeded gap is witnessed"
+    );
+    assert!(audit_outcome.is_ok(), "the witnessed state passes the gate");
+    std::fs::remove_dir_all(audit_root.join("fixtures")).expect("remove fixtures");
+    let started = Instant::now();
+    let audit_missing = run_gaps_audit(black_box(&audit_root));
+    let audit_missing_elapsed = started.elapsed();
+    assert_eq!(audit_missing.missing, GAPS, "every witness is now gone");
+    assert!(!audit_missing.is_ok(), "the missing state fails the gate");
+    let audit_text = black_box(format_gaps_audit_text(&audit_outcome));
+    let audit_json = black_box(format_gaps_audit_json(&audit_missing));
+
+    println!(
+        "gaps audit bench  : {GAPS} gaps / witnessed + stripped tree (tempdir)\n  \
+         witnessed  : {audit_witnessed_elapsed:.1?} (1 load + {GAPS} probes)\n  \
+         missing    : {audit_missing_elapsed:.1?} (1 load + {GAPS} probes)\n  \
+         text face  : {} bytes\n  \
+         json face  : {} bytes",
+        audit_text.len(),
+        audit_json.len(),
+    );
+
+    // The unwitness face: a fresh registry witnessed end-to-end, every
+    // witness detached in sequence — each run is a load pass plus one
+    // surgical block edit (the reverse of the witness path).
+    let unwitness_dir = tempfile::tempdir().expect("bench tmp");
+    let unwitness_root = unwitness_dir.path().to_path_buf();
+    seed(&unwitness_root);
+    for i in 0..GAPS {
+        let request = GapsWitnessRequest {
+            id: format!("GAP-{i:04}"),
+            witness: format!("fixtures/gap-{i:04}.g"),
+        };
+        run_gaps_witness(
+            black_box(&unwitness_root),
+            black_box(&request),
+            &FileGapWitnessRewriter,
+        )
+        .unwrap_or_else(|err| panic!("bench witness GAP-{i:04} failed: {err}"));
+    }
+    let started = Instant::now();
+    for i in 0..GAPS {
+        let request = GapsUnwitnessRequest {
+            id: format!("GAP-{i:04}"),
+        };
+        run_gaps_unwitness(
+            black_box(&unwitness_root),
+            black_box(&request),
+            &FileGapWitnessDetacher,
+        )
+        .unwrap_or_else(|err| panic!("bench unwitness GAP-{i:04} failed: {err}"));
+    }
+    let unwitness_elapsed = started.elapsed();
+    let unwitnessed = run_gaps_audit(&unwitness_root);
+    assert_eq!(unwitnessed.debt, GAPS, "every gap is honest debt again");
+    let unwitness_outcome = GapsUnwitnessOutcome {
+        schema: glyim_ledger::GAPS_UNWITNESS_SCHEMA,
+        id: "GAP-0000".to_string(),
+        title: "bench gap 0: no lowering site sets cleanup".to_string(),
+        class: "b".to_string(),
+        witness: Some("fixtures/gap-0000.g".to_string()),
+        target: "ledger/gaps/known/0001-bench.toml".to_string(),
+        doc_target: unwitness_root.join("KNOWN_GAPS.md").display().to_string(),
+    };
+    let unwitness_text = black_box(format_gaps_unwitness_text(&unwitness_outcome));
+    let unwitness_json = black_box(format_gaps_unwitness_json(&unwitness_outcome));
+
+    println!(
+        "gaps unwitness    : {GAPS} gaps / witnessed registry (tempdir)\n  \
+         file path  : {unwitness_elapsed:.1?} (40 loads + 40 detach edits)\n  \
+         text face  : {} bytes\n  \
+         json face  : {} bytes",
+        unwitness_text.len(),
+        unwitness_json.len(),
     );
 }
