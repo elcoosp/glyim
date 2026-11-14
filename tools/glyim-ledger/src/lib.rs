@@ -1,6 +1,6 @@
 //! CLI library for the Readiness Ledger tool (plan M1.1).
 //!
-//! Twenty-two subcommands:
+//! Twenty-six subcommands:
 //!
 //! - `glyim-ledger check [ROOT]` — load `ROOT/ledger`, run the schema and
 //!   semantic validators, cross-check the M1.3 inventory extractors, print
@@ -9,7 +9,22 @@
 //! - `glyim-ledger gaps [ROOT]` — the M1.7 gap-registry report: witness
 //!   coverage per `[[gap]]` entry, with explicit witness debt rendered
 //!   instead of failed. Error-severity diagnostics still fail the exit
-//!   code.
+//!   code. The lifecycle write faces on top of it:
+//!   `glyim-ledger gaps open [ROOT] --id <GAP-NNNN> --class <a|b|c>
+//!   --title <TEXT> --affects <ID[,ID...]> --caps <L0..L5> --opened-in
+//!   <TAG> [--file <ledger/gaps/.../FILE.toml>]` files a NEW gap entry
+//!   (canonical block, explicit `status = "unwitnessed"`, the next
+//!   numbered `NNNN-gaps-open.toml` minted unless `--file` names an
+//!   existing registry file; `glyim.ledger-gaps-open/1` JSON with
+//!   `--format json`); `glyim-ledger gaps witness [ROOT] --id <GAP-ID>
+//!   --witness <PATH>` attaches the witness fixture that reproduces one
+//!   unwitnessed gap; `glyim-ledger gaps retire [ROOT] --id <GAP-ID>`
+//!   removes one closed gap's `[[gap]]` block entirely (closed entries
+//!   retire to git history). Every write face validates against the
+//!   loaded registry, refuses to touch anything that does not parse
+//!   cleanly, never leaves a partial write behind, and the dispatch layer
+//!   refreshes the generated `KNOWN_GAPS.md` in the same run so the
+//!   `render-gaps --check` gate stays green.
 //! - `glyim-ledger next [ROOT] [--lane L] [--n N]` — the plan §3.9
 //!   deterministic work queue: every open gap and feature ranked into the
 //!   `glyim.ledger-next/1` JSON contract consumed by `glyim-pilot`. See
@@ -56,7 +71,13 @@
 //!   merge them into the committed store (whole-record dedupe, canonical
 //!   order; default target `ledger/evidence/recorded.jsonl`), so the
 //!   engine's `ledger/evidence/*.jsonl` discovery has a first-class
-//!   writer (see [`evidence`]).
+//!   writer (see [`evidence`]). `glyim-ledger evidence retract [ROOT]
+//!   --fixture <PATH> [--out PATH]` is the curation removal face:
+//!   it removes every committed record whose `fixture_sha256` matches
+//!   the recomputed digest of one fixture (the audit face's `Drift`
+//!   verdict is the finding; this face is the remedy), refusing a
+//!   store that does not load cleanly and treating a fixture with
+//!   nothing committed as a rejection, not a silent no-op.
 //! - `glyim-ledger evidence check [ROOT] [--format text|json]` — validate
 //!   the committed evidence store against the registry and report its
 //!   coverage; error diagnostics fail the exit code (see [`evidence`]).
@@ -153,21 +174,25 @@ pub use diff::{
 };
 pub use evidence::{
     CODE_EVIDENCE_STORE_IO, CheckReport, DEFAULT_RECORD_TARGET, EVIDENCE_AUDIT_SCHEMA,
-    EVIDENCE_CHECK_SCHEMA, EVIDENCE_RECORD_SCHEMA, EvidenceAuditOutcome, EvidenceStore,
-    FileEvidenceStore, FileFixtureFingerprint, FingerprintError, FixtureFingerprint, FixtureRow,
-    FixtureVerdict, InMemoryEvidenceStore, InMemoryFixtureFingerprint, OutcomeHistogram,
-    RecordOutcome, RecordStats, audit_records, canonical_line, format_evidence_audit_json,
+    EVIDENCE_CHECK_SCHEMA, EVIDENCE_RECORD_SCHEMA, EVIDENCE_RETRACT_SCHEMA, EvidenceAuditOutcome,
+    EvidenceRetractOutcome, EvidenceRetractRequest, EvidenceStore, FileEvidenceStore,
+    FileFixtureFingerprint, FingerprintError, FixtureFingerprint, FixtureRow, FixtureVerdict,
+    InMemoryEvidenceStore, InMemoryFixtureFingerprint, OutcomeHistogram, RecordOutcome,
+    RecordStats, audit_records, canonical_line, format_evidence_audit_json,
     format_evidence_audit_text, format_evidence_check_json, format_evidence_check_text,
-    format_evidence_record_json, format_evidence_record_text, merge_records, resolve_fixture,
-    run_evidence_audit, run_evidence_check, run_evidence_record,
+    format_evidence_record_json, format_evidence_record_text, format_evidence_retract_json,
+    format_evidence_retract_text, merge_records, resolve_fixture, run_evidence_audit,
+    run_evidence_check, run_evidence_record, run_evidence_retract,
 };
 pub use explain::{ExplainEntry, ExplainOutcome, format_explain_report, run_explain};
 pub use gaps::{
-    FileGapRetirer, FileGapWitnessRewriter, GAPS_RETIRE_SCHEMA, GAPS_WITNESS_SCHEMA, GapRetirer,
-    GapWitnessRewriter, GapsFormat, GapsRetireOutcome, GapsRetireRequest, GapsWitnessOutcome,
-    GapsWitnessRequest, InMemoryGapRetirer, InMemoryGapWitnessRewriter, format_gaps_retire_json,
-    format_gaps_retire_text, format_gaps_witness_json, format_gaps_witness_text, run_gaps_retire,
-    run_gaps_witness,
+    FileGapOpener, FileGapRetirer, FileGapWitnessRewriter, GAPS_OPEN_SCHEMA, GAPS_RETIRE_SCHEMA,
+    GAPS_WITNESS_SCHEMA, GapOpener, GapRetirer, GapWitnessRewriter, GapsFormat, GapsOpenOutcome,
+    GapsOpenRequest, GapsRetireOutcome, GapsRetireRequest, GapsWitnessOutcome, GapsWitnessRequest,
+    InMemoryGapOpener, InMemoryGapRetirer, InMemoryGapWitnessRewriter, format_gaps_open_json,
+    format_gaps_open_text, format_gaps_retire_json, format_gaps_retire_text,
+    format_gaps_witness_json, format_gaps_witness_text, parse_gap_class, parse_gap_level,
+    run_gaps_open, run_gaps_retire, run_gaps_witness,
 };
 pub use gates::{
     GATES_REPORT_SCHEMA, GateVerdict, GateVerdictRow, GatesOutcome, evaluate_gates,
@@ -438,6 +463,53 @@ pub enum LedgerCliError {
         path: String,
         /// The diagnostic detail (the store's IO failure message).
         detail: String,
+    },
+    /// `evidence retract` was called without its required `--fixture`
+    /// flag.
+    EvidenceRetractMissingField {
+        /// The missing flag.
+        field: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `evidence retract --fixture` was not a usable repo-relative fixture
+    /// path (blank, absolute, backslash, or a `..` escape).
+    EvidenceRetractBadFixture {
+        /// The offending path.
+        fixture: String,
+    },
+    /// `evidence retract --fixture` named a file that does not exist under
+    /// ROOT (the fingerprint needs the fixture's bytes; a phantom fixture
+    /// would silently retract nothing).
+    EvidenceRetractMissingFixture {
+        /// The offending path (as given).
+        fixture: String,
+        /// The resolved path that does not exist.
+        path: String,
+    },
+    /// The fixture's digest could not be recomputed (the audit face's
+    /// fingerprint seam reported the fixture missing or unreadable).
+    EvidenceRetractFingerprint {
+        /// The offending fixture path (as given).
+        fixture: String,
+        /// The fingerprint failure detail.
+        detail: String,
+    },
+    /// The store under `--out` did not load cleanly, so the retraction
+    /// refuses to rewrite it (a corrupt line would be silently destroyed
+    /// by the canonical rewrite otherwise).
+    EvidenceRetractLoad {
+        /// The joined load diagnostics.
+        detail: String,
+    },
+    /// No committed record carries the recomputed digest of `--fixture`
+    /// (the operator probably mistyped the path — a fixture with nothing
+    /// committed is a rejection, not a silent no-op).
+    EvidenceRetractUnknownFixture {
+        /// The offending fixture path (as given).
+        fixture: String,
+        /// The recomputed digest that matched nothing (64 hex chars).
+        sha256: String,
     },
     /// `status --check` found the committed document drifted from the
     /// computed status (or unreadable): the file and the
@@ -790,6 +862,85 @@ pub enum LedgerCliError {
         /// The IO (or shape) failure message.
         detail: String,
     },
+    /// `gaps open` was called without one of its required flags
+    /// (`--id`, `--class`, `--title`, `--affects`, `--caps`,
+    /// `--opened-in`).
+    GapsOpenMissingField {
+        /// The missing (or unusable) flag.
+        field: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `gaps open --id` was not the canonical `GAP-NNNN` shape (the face
+    /// mints IDs, so exactly `GAP-` plus four digits is required).
+    GapsOpenBadId {
+        /// The offending ID.
+        id: String,
+    },
+    /// `gaps open --class` was not one of `a`, `b`, `c`.
+    GapsOpenBadClass {
+        /// The offending value.
+        value: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `gaps open --caps` was not one of `L0`..`L5`.
+    GapsOpenBadCaps {
+        /// The offending value.
+        value: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `gaps open --title` was blank or carried control characters (a
+    /// registry title is a single TOML basic-string line).
+    GapsOpenBadTitle {
+        /// The offending title.
+        title: String,
+    },
+    /// `gaps open --opened-in` was blank or carried control characters.
+    GapsOpenBadOpenedIn {
+        /// The offending value.
+        opened_in: String,
+    },
+    /// `gaps open --file` was not a relative, existing `.toml` under
+    /// `ledger/gaps/` (an absolute path, a `..` escape, a non-`toml`
+    /// suffix, or a missing file).
+    GapsOpenBadFile {
+        /// The offending path (as given).
+        file: String,
+    },
+    /// `gaps open --affects` named a feature the registry does not carry
+    /// (a gap that limits nothing real is silent debt); `known` lists a
+    /// few existing feature IDs for the help line.
+    GapsOpenAffectsUnknown {
+        /// The offending affects list (as given).
+        affects: Vec<String>,
+        /// A few existing feature IDs (up to three).
+        known: Vec<String>,
+    },
+    /// `gaps open --id` named a gap the registry already carries (a
+    /// second entry would be a silent shadow — witness, extend, or retire
+    /// the existing one deliberately).
+    GapsOpenDuplicateId {
+        /// The already-open gap ID.
+        id: String,
+        /// The registry file that carries the existing entry.
+        path: String,
+    },
+    /// The registry under ROOT did not load cleanly, so the opener
+    /// refuses to extend it (no gap is filed).
+    GapsOpenRegistry {
+        /// The joined load diagnostics.
+        detail: String,
+    },
+    /// `gaps open` could not append the canonical block to the registry
+    /// file.
+    GapsOpenWrite {
+        /// The registry file path.
+        path: String,
+        /// The IO failure message.
+        detail: String,
+    },
 }
 
 impl fmt::Display for LedgerCliError {
@@ -895,6 +1046,35 @@ impl fmt::Display for LedgerCliError {
             }
             Self::EvidenceWrite { path, detail } => {
                 write!(f, "cannot write evidence store {path}: {detail}")
+            }
+            Self::EvidenceRetractMissingField { field, usage } => {
+                write!(
+                    f,
+                    "{field} expects a value (the repo-relative fixture whose \
+                     records are retracted)\n{usage}"
+                )
+            }
+            Self::EvidenceRetractBadFixture { fixture } => {
+                write!(
+                    f,
+                    "--fixture expects a repo-relative fixture path (no \
+                     absolute, backslash, or .. escape), got {fixture:?}"
+                )
+            }
+            Self::EvidenceRetractMissingFixture { fixture, path } => {
+                write!(f, "the fixture {fixture:?} does not exist at {path}")
+            }
+            Self::EvidenceRetractFingerprint { fixture, detail } => {
+                write!(f, "cannot digest the fixture {fixture:?}: {detail}")
+            }
+            Self::EvidenceRetractLoad { detail } => {
+                write!(f, "the evidence store does not load cleanly: {detail}")
+            }
+            Self::EvidenceRetractUnknownFixture { fixture, sha256 } => {
+                write!(
+                    f,
+                    "no committed record carries the digest of {fixture:?} ({sha256})"
+                )
             }
             Self::StatusDrift { path, detail } => {
                 write!(f, "status drift at {path}: {detail}")
@@ -1076,6 +1256,61 @@ impl fmt::Display for LedgerCliError {
             Self::GapsRetireWrite { path, detail } => {
                 write!(f, "cannot rewrite {path}: {detail}")
             }
+            Self::GapsOpenMissingField { field, usage } => {
+                write!(
+                    f,
+                    "{field} expects a value (the canonical GAP-NNNN ID, the gap class, \
+                     a one-line title, the affected feature IDs, the level ceiling, and \
+                     the opening tag)\n{usage}"
+                )
+            }
+            Self::GapsOpenBadId { id } => {
+                write!(
+                    f,
+                    "--id expects the canonical GAP-NNNN shape (exactly four digits), \
+                     got {id:?}"
+                )
+            }
+            Self::GapsOpenBadClass { value, usage } => {
+                write!(f, "--class expects one of a, b, c; got {value}\n{usage}")
+            }
+            Self::GapsOpenBadCaps { value, usage } => {
+                write!(f, "--caps expects one of L0..L5; got {value}\n{usage}")
+            }
+            Self::GapsOpenBadTitle { title } => {
+                write!(
+                    f,
+                    "--title expects a non-blank one-line title, got {title:?}"
+                )
+            }
+            Self::GapsOpenBadOpenedIn { opened_in } => {
+                write!(
+                    f,
+                    "--opened-in expects a tag or ref like v0.4.0, got {opened_in:?}"
+                )
+            }
+            Self::GapsOpenBadFile { file } => {
+                write!(
+                    f,
+                    "--file expects a relative, existing .toml path under ledger/gaps/, \
+                     got {file:?}"
+                )
+            }
+            Self::GapsOpenAffectsUnknown { affects, .. } => {
+                write!(
+                    f,
+                    "--affects names features the registry does not carry: {affects:?}"
+                )
+            }
+            Self::GapsOpenDuplicateId { id, path } => {
+                write!(f, "gap {id} is already open in {path}")
+            }
+            Self::GapsOpenRegistry { detail } => {
+                write!(f, "the registry under ROOT does not load cleanly: {detail}")
+            }
+            Self::GapsOpenWrite { path, detail } => {
+                write!(f, "cannot append to {path}: {detail}")
+            }
         }
     }
 }
@@ -1116,6 +1351,18 @@ impl miette::Diagnostic for LedgerCliError {
             Self::EvidenceBadFormat { .. } => "glyim-ledger::evidence_bad_format",
             Self::EvidenceSubcommand { .. } => "glyim-ledger::evidence_subcommand",
             Self::EvidenceWrite { .. } => "glyim-ledger::evidence_write",
+            Self::EvidenceRetractMissingField { .. } => {
+                "glyim-ledger::evidence_retract_missing_field"
+            }
+            Self::EvidenceRetractBadFixture { .. } => "glyim-ledger::evidence_retract_bad_fixture",
+            Self::EvidenceRetractMissingFixture { .. } => {
+                "glyim-ledger::evidence_retract_missing_fixture"
+            }
+            Self::EvidenceRetractFingerprint { .. } => "glyim-ledger::evidence_retract_fingerprint",
+            Self::EvidenceRetractLoad { .. } => "glyim-ledger::evidence_retract_load",
+            Self::EvidenceRetractUnknownFixture { .. } => {
+                "glyim-ledger::evidence_retract_unknown_fixture"
+            }
             Self::StatusDrift { .. } => "glyim-ledger::status_drift",
             Self::StatusWrite { .. } => "glyim-ledger::status_write",
             Self::WaiversBadFormat { .. } => "glyim-ledger::waivers_bad_format",
@@ -1169,6 +1416,17 @@ impl miette::Diagnostic for LedgerCliError {
             Self::GapsRetireUnknownId { .. } => "glyim-ledger::gaps_retire_unknown_id",
             Self::GapsRetireLoad { .. } => "glyim-ledger::gaps_retire_load",
             Self::GapsRetireWrite { .. } => "glyim-ledger::gaps_retire_write",
+            Self::GapsOpenMissingField { .. } => "glyim-ledger::gaps_open_missing_field",
+            Self::GapsOpenBadId { .. } => "glyim-ledger::gaps_open_bad_id",
+            Self::GapsOpenBadClass { .. } => "glyim-ledger::gaps_open_bad_class",
+            Self::GapsOpenBadCaps { .. } => "glyim-ledger::gaps_open_bad_caps",
+            Self::GapsOpenBadTitle { .. } => "glyim-ledger::gaps_open_bad_title",
+            Self::GapsOpenBadOpenedIn { .. } => "glyim-ledger::gaps_open_bad_opened_in",
+            Self::GapsOpenBadFile { .. } => "glyim-ledger::gaps_open_bad_file",
+            Self::GapsOpenAffectsUnknown { .. } => "glyim-ledger::gaps_open_affects_unknown",
+            Self::GapsOpenDuplicateId { .. } => "glyim-ledger::gaps_open_duplicate_id",
+            Self::GapsOpenRegistry { .. } => "glyim-ledger::gaps_open_registry",
+            Self::GapsOpenWrite { .. } => "glyim-ledger::gaps_open_write",
         }))
     }
 
@@ -1320,6 +1578,37 @@ impl miette::Diagnostic for LedgerCliError {
             Self::EvidenceWrite { .. } => Some(Box::new(
                 "the record face creates missing parent directories; check \
                  that the --out path's parent is writable (plan §3.4 store)"
+                    .to_string(),
+            )),
+            Self::EvidenceRetractMissingField { field, .. } => Some(Box::new(format!(
+                "the flag needs its value on the same command line, e.g. \
+                 `evidence retract --fixture tests/example.g` ({field})"
+            ))),
+            Self::EvidenceRetractBadFixture { .. } => Some(Box::new(
+                "use the same repo-relative spelling the committed records \
+                 carry, e.g. `crates/glyim-test/tests/run-pass/x.g`"
+                    .to_string(),
+            )),
+            Self::EvidenceRetractMissingFixture { .. } => Some(Box::new(
+                "the fingerprint needs the fixture's real bytes to match the \
+                 committed records; commit the fixture first or check the path"
+                    .to_string(),
+            )),
+            Self::EvidenceRetractFingerprint { .. } => Some(Box::new(
+                "the digest must be recomputable from the fixture's bytes; \
+                 `evidence audit` reports the same seam's per-fixture verdicts"
+                    .to_string(),
+            )),
+            Self::EvidenceRetractLoad { .. } => Some(Box::new(
+                "fix the store diagnostics first (`evidence check` prints \
+                 every diagnostic); a store that does not parse cleanly is \
+                 never rewritten"
+                    .to_string(),
+            )),
+            Self::EvidenceRetractUnknownFixture { .. } => Some(Box::new(
+                "nothing committed matches that digest — `evidence audit` \
+                 names every record's fixture, so check the spelling before \
+                 retrying"
                     .to_string(),
             )),
             Self::StatusDrift { .. } => Some(Box::new(
@@ -1566,6 +1855,66 @@ impl miette::Diagnostic for LedgerCliError {
                  drops only the matched [[gap]] block's lines"
                     .to_string(),
             )),
+            Self::GapsOpenMissingField { field, .. } => Some(Box::new(format!(
+                "the flag needs its value on the same command line, e.g. \
+                 `gaps open --id GAP-0006 --class b --title \"no lowering site sets \
+                 cleanup\" --affects LANG-UNWIND-CLEANUP --caps L2 --opened-in v0.4.0` \
+                 ({field})"
+            ))),
+            Self::GapsOpenBadId { .. } => Some(Box::new(
+                "the face mints IDs, so the shape is exactly `GAP-` plus four \
+                 digits; `glyim-ledger gaps` prints every open ID already taken"
+                    .to_string(),
+            )),
+            Self::GapsOpenBadClass { .. } => Some(Box::new(
+                "`a` is a diagnosed hard error, `b` a silent wrong behaviour \
+                 (always first in the work queue), `c` a deferred gap with no \
+                 code path"
+                    .to_string(),
+            )),
+            Self::GapsOpenBadCaps { .. } => Some(Box::new(
+                "the ceiling is the readiness level the affected features may \
+                 not exceed while the gap is open; `L2` is the committed gaps' \
+                 spelling"
+                    .to_string(),
+            )),
+            Self::GapsOpenBadTitle { .. } => Some(Box::new(
+                "the title is the registry's one-line prose (double quotes and \
+                 backslashes are escaped for you); keep it to one line"
+                    .to_string(),
+            )),
+            Self::GapsOpenBadOpenedIn { .. } => Some(Box::new(
+                "name the tag or ref where the gap was first recorded, e.g. \
+                 `v0.4.0` or `audit/2026-11`"
+                    .to_string(),
+            )),
+            Self::GapsOpenBadFile { .. } => Some(Box::new(
+                "curated registry files are hand-created with provenance prose; \
+                 append to an existing one or drop `--file` to mint the next \
+                 numbered `ledger/gaps/known/NNNN-gaps-open.toml`"
+                    .to_string(),
+            )),
+            Self::GapsOpenAffectsUnknown { known, .. } => Some(Box::new(format!(
+                "every affected feature must exist in the registry (a gap that \
+                 limits nothing real is silent debt); the open feature IDs \
+                 include {known:?}"
+            ))),
+            Self::GapsOpenDuplicateId { id, .. } => Some(Box::new(format!(
+                "gap {id} is already open in the registry and is never silently \
+                 shadowed; witness it (`gaps witness`), re-pin it, or retire it \
+                 deliberately (`gaps retire`) instead"
+            ))),
+            Self::GapsOpenRegistry { .. } => Some(Box::new(
+                "fix the registry diagnostics first (`glyim-ledger check` \
+                 prints every diagnostic); a registry that does not parse \
+                 cleanly is never extended"
+                    .to_string(),
+            )),
+            Self::GapsOpenWrite { .. } => Some(Box::new(
+                "check that the registry directory is writable; the opener \
+                 appends one canonical [[gap]] block and touches nothing else"
+                    .to_string(),
+            )),
         }
     }
 }
@@ -1623,6 +1972,45 @@ pub enum Command {
         root: PathBuf,
         /// The exact gap ID (`GAP-NNNN`) to remove.
         id: String,
+        /// Output format; [`gaps::GapsFormat::Text`] by default.
+        format: GapsFormat,
+    },
+    /// `gaps open [ROOT] --id <GAP-NNNN> --class <a|b|c> --title <TEXT>
+    /// --affects <ID[,ID...]> --caps <L0..L5> --opened-in <TAG>
+    /// [--file <ledger/gaps/.../*.toml>] [--format text|json]` — the
+    /// opening stage of the gap-lifecycle write face: files a NEW gap
+    /// entry into the registry. Validates the request against the loaded
+    /// registry (canonical ID shape, every `--affects` feature must
+    /// exist, the ID must be free), renders the canonical `[[gap]]` block
+    /// in the committed registry style with the explicit
+    /// `status = "unwitnessed"` line (a fresh gap is witness debt, never
+    /// silent debt), and appends it after one blank separator — minting
+    /// the next numbered `ledger/gaps/known/NNNN-gaps-open.toml` file by
+    /// default, or extending an existing registry file named by `--file`
+    /// (the curated header prose and every sibling block survive
+    /// byte-for-byte). Never leaves a partial write behind. The dispatch
+    /// layer refreshes the generated `KNOWN_GAPS.md` after a successful
+    /// append so the `render-gaps --check` gate stays green.
+    GapsOpen {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// The new gap ID (`GAP-NNNN`, exactly four digits).
+        id: String,
+        /// The gap class (`a` diagnosed, `b` silent, `c` deferred).
+        class: ledger_schema::GapClass,
+        /// The one-line registry title.
+        title: String,
+        /// The affected feature IDs (comma-separated flag values, in
+        /// order, deduplicated).
+        affects: Vec<String>,
+        /// The readiness-level ceiling the gap imposes.
+        caps: ledger_schema::Level,
+        /// The tag or ref the gap was opened in.
+        opened_in: String,
+        /// Explicit registry file to append to; `None` mints the next
+        /// numbered default file.
+        file: Option<String>,
         /// Output format; [`gaps::GapsFormat::Text`] by default.
         format: GapsFormat,
     },
@@ -1780,6 +2168,28 @@ pub enum Command {
         /// Project directory containing the `ledger/` registry (`.` by
         /// default).
         root: PathBuf,
+        /// Output format; [`EvidenceFormat::Text`] by default.
+        format: EvidenceFormat,
+    },
+    /// `evidence retract [ROOT] --fixture <PATH> [--out PATH] [--format
+    /// text|json]` — the store-curation removal face: removes every
+    /// committed record whose `fixture_sha256` matches the recomputed
+    /// digest of one fixture (the audit face's `Drift` verdict is the
+    /// finding; this face is the remedy). Validates the fixture path and
+    /// its bytes through the `FixtureFingerprint` seam, refuses a store
+    /// that does not load cleanly (a corrupt line would be silently
+    /// destroyed by the rewrite otherwise), and rewrites the store
+    /// canonically without the matching records — a fixture with nothing
+    /// committed is a rejection, not a silent no-op.
+    EvidenceRetract {
+        /// Project directory the fixture path resolves against (`.` by
+        /// default).
+        root: PathBuf,
+        /// The fixture whose records are retracted (repo-relative).
+        fixture: String,
+        /// The store file to rewrite; [`evidence::DEFAULT_RECORD_TARGET`]
+        /// by default.
+        out: PathBuf,
         /// Output format; [`EvidenceFormat::Text`] by default.
         format: EvidenceFormat,
     },
@@ -2014,7 +2424,7 @@ pub enum WaiversFormat {
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger gaps witness [ROOT] --id <GAP-ID> --witness <PATH> [--format text|json]\n   or: glyim-ledger gaps retire [ROOT] --id <GAP-ID> [--format text|json]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger evidence audit [ROOT] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger waivers revoke [ROOT] --id <WVR-ID> [--format text|json]\n   or: glyim-ledger waivers extend [ROOT] --id <WVR-ID> [--days N] [--format text|json]\n   or: glyim-ledger waivers prune [ROOT] [--format text|json]\n   or: glyim-ledger handoff [ROOT] [--items N] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger release-check <VERSION> [ROOT] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger gaps open [ROOT] --id <GAP-NNNN> --class <a|b|c> --title <TEXT> --affects <ID[,ID...]> --caps <L0..L5> --opened-in <TAG> [--file ledger/gaps/.../FILE.toml] [--format text|json]\n   or: glyim-ledger gaps witness [ROOT] --id <GAP-ID> --witness <PATH> [--format text|json]\n   or: glyim-ledger gaps retire [ROOT] --id <GAP-ID> [--format text|json]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger evidence audit [ROOT] [--format text|json]\n   or: glyim-ledger evidence retract [ROOT] --fixture <PATH> [--out PATH] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger waivers revoke [ROOT] --id <WVR-ID> [--format text|json]\n   or: glyim-ledger waivers extend [ROOT] --id <WVR-ID> [--days N] [--format text|json]\n   or: glyim-ledger waivers prune [ROOT] [--format text|json]\n   or: glyim-ledger handoff [ROOT] [--items N] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger release-check <VERSION> [ROOT] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout; `next` filters by\n\
      \x20 lane (L|F|T|M|B|Q) and prints the glyim.ledger-next/1 JSON queue;\n\
@@ -2040,7 +2450,13 @@ pub fn usage() -> String {
      \x20 the witness fixture that reproduces one unwitnessed gap\n\
      \x20 (--id GAP-NNNN --witness PATH, fixture must exist, curated\n\
      \x20 registry prose preserved, the generated document refreshed\n\
-     \x20 in the same run); `gaps retire` removes one closed gap's\n\
+     \x20 in the same run); `gaps open` files a new gap entry into the\n\
+     \x20 registry (--id GAP-NNNN --class a|b|c --title TEXT --affects\n\
+     \x20 ID[,ID...] --caps L0..L5 --opened-in TAG, --file to extend an\n\
+     \x20 existing registry file, else the next numbered\n\
+     \x20 NNNN-gaps-open.toml is minted; the canonical block carries the\n\
+     \x20 explicit status = \"unwitnessed\" line, the generated document\n\
+     \x20 refreshed in the same run); `gaps retire` removes one closed gap's\n\
      \x20 [[gap]] block from its registry file (--id, curated prose\n\
      \x20 preserved, the generated document refreshed in the same\n\
      \x20 run — closed entries retire to git history); `evidence record` curates\n\
@@ -2050,7 +2466,12 @@ pub fn usage() -> String {
      \x20 validates the committed store against the registry and reports\n\
      \x20 its coverage (plan §3.4 store face); `evidence audit` recomputes\n\
      \x20 every record's fixture_sha256 against the tree and fails on\n\
-     \x20 missing, drifted, or unreadable fixtures; `waivers` loads\n\
+     \x20 missing, drifted, or unreadable fixtures; `evidence retract`\n\
+     \x20 removes every committed record whose fixture_sha256 matches the\n\
+     \x20 recomputed digest of --fixture (the audit face's Drift verdict is\n\
+     \x20 the finding, this face is the remedy; a store that does not parse\n\
+     \x20 cleanly is never rewritten, and a fixture with no committed\n\
+     \x20 records is a rejection, not a silent no-op); `waivers` loads\n\
      \x20 `ledger/waivers.toml` and reports every waiver's expiry verdict —\n\
      \x20 expired waivers and load diagnostics fail the exit code (C9);\n\
      \x20 `waivers grant` appends one validated `[[waiver]]` block\n\
@@ -2527,6 +2948,7 @@ fn parse_gates(rest: &[String]) -> Result<Command, LedgerCliError> {
 /// shape).
 fn parse_gaps(rest: &[String]) -> Result<Command, LedgerCliError> {
     match rest.first().map(String::as_str) {
+        Some("open") => return parse_gaps_open(&rest[1..]),
         Some("witness") => return parse_gaps_witness(&rest[1..]),
         Some("retire") => return parse_gaps_retire(&rest[1..]),
         _ => {}
@@ -2535,6 +2957,132 @@ fn parse_gaps(rest: &[String]) -> Result<Command, LedgerCliError> {
         .first()
         .map_or_else(|| PathBuf::from("."), PathBuf::from);
     Ok(Command::Gaps { root })
+}
+
+/// Parse the `gaps open` subcommand's arguments: one optional ROOT
+/// positional, the six required flags (`--id`, `--class`, `--title`,
+/// `--affects`, `--caps`, `--opened-in`), the optional `--file`, and
+/// `--format <text|json>` in any order (the `waivers grant` shape).
+/// `--affects` values accept comma-separated feature IDs and may repeat;
+/// the collected list is trimmed, de-duplicated, and order-preserving.
+fn parse_gaps_open(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut id: Option<String> = None;
+    let mut class: Option<ledger_schema::GapClass> = None;
+    let mut title: Option<String> = None;
+    let mut affects: Vec<String> = Vec::new();
+    let mut caps: Option<ledger_schema::Level> = None;
+    let mut opened_in: Option<String> = None;
+    let mut file: Option<String> = None;
+    let mut format = GapsFormat::Text;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--id" | "--class" | "--title" | "--affects" | "--caps" | "--opened-in" | "--file"
+            | "--format" => {
+                let flag = rest[index].clone();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::GapsOpenMissingField {
+                        field: flag,
+                        usage: usage(),
+                    });
+                };
+                // The outer match already narrowed the flag set, so the
+                // final branches are exact — no wildcard arm.
+                if flag == "--id" {
+                    id = Some(value.clone());
+                } else if flag == "--class" {
+                    let Some(parsed) = gaps::parse_gap_class(value) else {
+                        return Err(LedgerCliError::GapsOpenBadClass {
+                            value: value.clone(),
+                            usage: usage(),
+                        });
+                    };
+                    class = Some(parsed);
+                } else if flag == "--title" {
+                    title = Some(value.clone());
+                } else if flag == "--affects" {
+                    for feature in value.split(',') {
+                        let feature = feature.trim();
+                        if !feature.is_empty() && !affects.iter().any(|known| known == feature) {
+                            affects.push(feature.to_string());
+                        }
+                    }
+                } else if flag == "--caps" {
+                    let Some(parsed) = gaps::parse_gap_level(value) else {
+                        return Err(LedgerCliError::GapsOpenBadCaps {
+                            value: value.clone(),
+                            usage: usage(),
+                        });
+                    };
+                    caps = Some(parsed);
+                } else if flag == "--opened-in" {
+                    opened_in = Some(value.clone());
+                } else if flag == "--file" {
+                    file = Some(value.clone());
+                } else {
+                    format = match value.as_str() {
+                        "text" => GapsFormat::Text,
+                        "json" => GapsFormat::Json,
+                        other => {
+                            return Err(LedgerCliError::GapsBadFormat {
+                                value: other.to_string(),
+                                usage: usage(),
+                            });
+                        }
+                    };
+                }
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    for (flag, value) in [
+        ("--id", id.is_none()),
+        ("--class", class.is_none()),
+        ("--title", title.is_none()),
+        ("--caps", caps.is_none()),
+        ("--opened-in", opened_in.is_none()),
+    ] {
+        if value {
+            return Err(LedgerCliError::GapsOpenMissingField {
+                field: flag.to_string(),
+                usage: usage(),
+            });
+        }
+    }
+    if affects.is_empty() {
+        return Err(LedgerCliError::GapsOpenMissingField {
+            field: "--affects".to_string(),
+            usage: usage(),
+        });
+    }
+    Ok(Command::GapsOpen {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        id: id.expect("required flags checked above"),
+        class: class.expect("required flags checked above"),
+        title: title.expect("required flags checked above"),
+        affects,
+        caps: caps.expect("required flags checked above"),
+        opened_in: opened_in.expect("required flags checked above"),
+        file,
+        format,
+    })
 }
 
 /// Parse the `gaps witness` subcommand's arguments: one optional ROOT
@@ -3475,6 +4023,71 @@ fn parse_evidence(rest: &[String]) -> Result<Command, LedgerCliError> {
             }
             Ok(Command::EvidenceAudit {
                 root: root.unwrap_or_else(|| PathBuf::from(".")),
+                format,
+            })
+        }
+        "retract" => {
+            let mut root: Option<PathBuf> = None;
+            let mut fixture: Option<String> = None;
+            let mut out: Option<PathBuf> = None;
+            let mut format = EvidenceFormat::Text;
+            let mut index = 0;
+            while index < body.len() {
+                match body[index].as_str() {
+                    "--fixture" | "--out" | "--format" => {
+                        let flag = body[index].as_str();
+                        let Some(value) = body.get(index + 1) else {
+                            return Err(LedgerCliError::EvidenceRetractMissingField {
+                                field: flag.to_string(),
+                                usage: usage(),
+                            });
+                        };
+                        if flag == "--fixture" {
+                            fixture = Some(value.clone());
+                        } else if flag == "--out" {
+                            out = Some(PathBuf::from(value));
+                        } else {
+                            format = match value.as_str() {
+                                "text" => EvidenceFormat::Text,
+                                "json" => EvidenceFormat::Json,
+                                other => {
+                                    return Err(LedgerCliError::EvidenceBadFormat {
+                                        value: other.to_string(),
+                                        usage: usage(),
+                                    });
+                                }
+                            };
+                        }
+                        index += 2;
+                    }
+                    flag if flag.starts_with('-') => {
+                        return Err(LedgerCliError::UnknownFlag {
+                            flag: flag.to_string(),
+                            usage: usage(),
+                        });
+                    }
+                    positional => {
+                        if root.is_some() {
+                            return Err(LedgerCliError::ExtraArgument {
+                                arg: positional.to_string(),
+                                usage: usage(),
+                            });
+                        }
+                        root = Some(PathBuf::from(positional));
+                        index += 1;
+                    }
+                }
+            }
+            let Some(fixture) = fixture else {
+                return Err(LedgerCliError::EvidenceRetractMissingField {
+                    field: "--fixture".to_string(),
+                    usage: usage(),
+                });
+            };
+            Ok(Command::EvidenceRetract {
+                root: root.unwrap_or_else(|| PathBuf::from(".")),
+                fixture,
+                out: out.unwrap_or_else(|| PathBuf::from(evidence::DEFAULT_RECORD_TARGET)),
                 format,
             })
         }
