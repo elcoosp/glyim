@@ -1,4 +1,8 @@
-//! Gap-lifecycle write faces (`gaps open`, `gaps witness`, `gaps retire`).
+//! Gap-lifecycle faces: the write side (`gaps open`, `gaps witness`,
+//! `gaps retire`) and its trust loop — the `gaps audit` finding face
+//! (every registered gap's witness fixture resolved against the tree)
+//! and the `gaps unwitness` remedy face (one witness detached, honest
+//! witness debt restored).
 //!
 //! The gap registry (`ledger/gaps/known/*.toml`, parsed by
 //! `ledger-schema`) tracks every open gap's witness status, and the
@@ -36,7 +40,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use ledger_schema::{GapStatus, Severity};
+use ledger_schema::{Diagnostic, GapEntry, GapStatus, Severity, Sourced};
 
 use crate::LedgerCliError;
 
@@ -1242,6 +1246,627 @@ pub fn format_gaps_open_json(outcome: &GapsOpenOutcome) -> String {
     text
 }
 
+// -- gaps audit face -----------------------------------------------------------
+
+/// Schema tag of the `gaps audit` JSON contract.
+pub const GAPS_AUDIT_SCHEMA: &str = "glyim.ledger-gaps-audit/1";
+
+/// Verdict of one audited gap's witness (the trust-loop closure over the
+/// write faces: `gaps witness` checks the fixture at attach time, but
+/// nothing re-verified the registry against the tree afterwards — a
+/// fixture that is moved, renamed, or deleted left the registry claiming
+/// a witness that no longer exists, which is exactly the silent debt
+/// plan §3.3 forbids).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub enum GapAuditVerdict {
+    /// The gap is witnessed and its fixture file exists under ROOT.
+    #[serde(rename = "witnessed")]
+    Witnessed,
+    /// The gap is open without a witness — honest witness debt
+    /// (displayed, never failed: the gaps-report rule).
+    #[serde(rename = "debt")]
+    Debt,
+    /// The registry claims a witness the tree no longer carries — silent
+    /// debt surfaced; the audit gate fails on it.
+    #[serde(rename = "missing")]
+    Missing,
+    /// The witness path resolves to something that is not a readable
+    /// regular file (a directory, or a metadata error other than
+    /// not-found).
+    #[serde(rename = "unreadable")]
+    Unreadable,
+}
+
+impl GapAuditVerdict {
+    /// Canonical wire spelling (also the text-face column).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Witnessed => "witnessed",
+            Self::Debt => "debt",
+            Self::Missing => "missing",
+            Self::Unreadable => "unreadable",
+        }
+    }
+}
+
+/// One audited gap (the JSON contract's row shape).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct GapAuditRow {
+    /// The audited gap's ID (echoed verbatim).
+    pub id: String,
+    /// The gap's class (`a` diagnosed, `b` silent, `c` deferred).
+    pub class: String,
+    /// The gap's registry title (echoed for the report line).
+    pub title: String,
+    /// The witness path the registry records (echoed verbatim; `None`
+    /// for unwitnessed debt and for a witnessed block that carries no
+    /// witness line).
+    pub witness: Option<String>,
+    /// The computed verdict.
+    pub verdict: GapAuditVerdict,
+    /// Human-readable detail for the non-`witnessed`/non-`debt` verdicts
+    /// (rendered in the text report).
+    pub detail: Option<String>,
+}
+
+/// Result of a `gaps audit` run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GapAuditOutcome {
+    /// Schema tag, always [`GAPS_AUDIT_SCHEMA`].
+    pub schema: &'static str,
+    /// Gaps audited (equal to [`Self::rows`] length).
+    pub gaps: usize,
+    /// Rows whose verdict is [`GapAuditVerdict::Witnessed`].
+    pub witnessed: usize,
+    /// Rows whose verdict is [`GapAuditVerdict::Debt`].
+    pub debt: usize,
+    /// Rows whose verdict is [`GapAuditVerdict::Missing`].
+    pub missing: usize,
+    /// Rows whose verdict is [`GapAuditVerdict::Unreadable`].
+    pub unreadable: usize,
+    /// One row per audited gap, sorted by gap ID.
+    pub rows: Vec<GapAuditRow>,
+    /// Load diagnostics (registry), sorted and de-duplicated — the same
+    /// diagnostics the `gaps` report face would emit.
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+impl GapAuditOutcome {
+    /// Number of error-severity load diagnostics.
+    #[must_use]
+    pub fn errors(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity == Severity::Error)
+            .count()
+    }
+
+    /// True when the audit gate passes: no error-severity load
+    /// diagnostic and no row whose verdict is [`GapAuditVerdict::Missing`]
+    /// or [`GapAuditVerdict::Unreadable`]. Witness debt does not fail the
+    /// gate — the plan §3.3 rule is "allowed, but never silent", and the
+    /// audit face renders every debt row in the same run.
+    #[must_use]
+    pub fn is_ok(&self) -> bool {
+        self.errors() == 0 && self.missing == 0 && self.unreadable == 0
+    }
+}
+
+/// The pure verdict pass over already-loaded gaps: fixture paths resolve
+/// against `root` (the same repo-relative spelling the write faces
+/// record), rows render in gap-ID order so the face is deterministic for
+/// every input path.
+#[must_use]
+pub fn audit_gaps(root: &Path, gaps: &[Sourced<GapEntry>]) -> Vec<GapAuditRow> {
+    let mut rows = Vec::with_capacity(gaps.len());
+    for sourced in gaps {
+        let entry = &sourced.entry;
+        let (verdict, detail) = match (&entry.status, &entry.witness) {
+            (_, Some(witness)) => {
+                let path = root.join(witness);
+                match std::fs::metadata(&path) {
+                    Ok(metadata) if metadata.is_file() => (GapAuditVerdict::Witnessed, None),
+                    Ok(_) => (
+                        GapAuditVerdict::Unreadable,
+                        Some(format!("{} is not a regular file", path.display())),
+                    ),
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => (
+                        GapAuditVerdict::Missing,
+                        Some(format!("{} is gone", path.display())),
+                    ),
+                    Err(err) => (
+                        GapAuditVerdict::Unreadable,
+                        Some(format!("{} is unreadable: {err}", path.display())),
+                    ),
+                }
+            }
+            (GapStatus::Witnessed, None) => (
+                GapAuditVerdict::Missing,
+                Some(
+                    "no witness path recorded (the serde default for a \
+                      missing status key is witnessed)"
+                        .to_string(),
+                ),
+            ),
+            (GapStatus::Unwitnessed, None) => (GapAuditVerdict::Debt, None),
+        };
+        rows.push(GapAuditRow {
+            id: entry.id.clone(),
+            class: entry.class.as_str().to_string(),
+            title: entry.title.clone(),
+            witness: entry.witness.clone(),
+            verdict,
+            detail,
+        });
+    }
+    rows.sort_by(|a, b| a.id.cmp(&b.id));
+    rows
+}
+
+/// Audits the gap registry under `ROOT`: every registered gap's witness
+/// is resolved against the tree, one row per gap (sorted by ID), load
+/// diagnostics sorted and de-duplicated. A witnessed gap whose fixture
+/// is missing or unreadable fails the gate — the same trust-loop closure
+/// the `evidence audit` face performs over the evidence store, applied
+/// to the witness paths the gap-lifecycle write faces record.
+#[must_use]
+pub fn run_gaps_audit(root: &Path) -> GapAuditOutcome {
+    let span = tracing::info_span!("gaps_audit", root = %root.display());
+    let _enter = span.enter();
+
+    let loaded = ledger_schema::load_project_registry(root);
+    let mut diagnostics = loaded.diagnostics;
+    diagnostics.extend(loaded.registry.validate());
+
+    let mut gaps: Vec<_> = loaded.registry.gaps().to_vec();
+    gaps.sort_by(|a, b| a.id().cmp(b.id()));
+    let rows = audit_gaps(root, &gaps);
+
+    let (mut witnessed, mut debt, mut missing, mut unreadable) = (0usize, 0usize, 0usize, 0usize);
+    for row in &rows {
+        match row.verdict {
+            GapAuditVerdict::Witnessed => witnessed += 1,
+            GapAuditVerdict::Debt => debt += 1,
+            GapAuditVerdict::Missing => missing += 1,
+            GapAuditVerdict::Unreadable => unreadable += 1,
+        }
+    }
+
+    diagnostics.sort_by(|a, b| a.code.cmp(b.code).then(a.message.cmp(&b.message)));
+    diagnostics.dedup();
+    tracing::debug!(
+        gaps = rows.len(),
+        witnessed,
+        debt,
+        missing,
+        unreadable,
+        diagnostics = diagnostics.len(),
+        "gaps audit pass finished"
+    );
+    GapAuditOutcome {
+        schema: GAPS_AUDIT_SCHEMA,
+        gaps: rows.len(),
+        witnessed,
+        debt,
+        missing,
+        unreadable,
+        rows,
+        diagnostics,
+    }
+}
+
+/// Renders the audit outcome's text face (the `evidence audit` shape: a
+/// summary line, one line per non-witnessed/non-debt row, the witness
+/// debt reminder, diagnostics last).
+#[must_use]
+pub fn format_gaps_audit_text(outcome: &GapAuditOutcome) -> String {
+    let mut text = String::new();
+    let _ = writeln!(
+        text,
+        "gaps audit: {} gap(s), {} witnessed, {} debt, {} missing, {} unreadable, \
+         {} diagnostic(s), {}",
+        outcome.gaps,
+        outcome.witnessed,
+        outcome.debt,
+        outcome.missing,
+        outcome.unreadable,
+        outcome.diagnostics.len(),
+        if outcome.is_ok() { "passed" } else { "FAILED" },
+    );
+    for row in &outcome.rows {
+        if matches!(
+            row.verdict,
+            GapAuditVerdict::Witnessed | GapAuditVerdict::Debt
+        ) {
+            continue;
+        }
+        let _ = writeln!(
+            text,
+            "  {:<8} {:<10} {}",
+            row.id,
+            row.verdict.as_str(),
+            row.detail.as_deref().unwrap_or_default(),
+        );
+    }
+    if outcome.debt > 0 {
+        let _ = writeln!(
+            text,
+            "witness debt: {} gap(s) without a strict-xfail witness (plan §3.3); \
+             per-entry reasons live in ledger/gaps/known/*.toml",
+            outcome.debt
+        );
+    }
+    for diagnostic in &outcome.diagnostics {
+        let _ = writeln!(text, "{diagnostic}");
+    }
+    text
+}
+
+/// Renders the `glyim.ledger-gaps-audit/1` JSON contract.
+#[must_use]
+pub fn format_gaps_audit_json(outcome: &GapAuditOutcome) -> String {
+    #[derive(serde::Serialize)]
+    struct AuditJson<'a> {
+        schema: &'static str,
+        gaps: usize,
+        witnessed: usize,
+        debt: usize,
+        missing: usize,
+        unreadable: usize,
+        passed: bool,
+        rows: &'a [GapAuditRow],
+    }
+    let document = AuditJson {
+        schema: GAPS_AUDIT_SCHEMA,
+        gaps: outcome.gaps,
+        witnessed: outcome.witnessed,
+        debt: outcome.debt,
+        missing: outcome.missing,
+        unreadable: outcome.unreadable,
+        passed: outcome.is_ok(),
+        rows: &outcome.rows,
+    };
+    let mut text = serde_json::to_string_pretty(&document)
+        .expect("the glyim.ledger-gaps-audit/1 document is a serialisation-only struct");
+    text.push('\n');
+    text
+}
+
+// -- gaps unwitness face -------------------------------------------------------
+
+/// Schema tag of the `gaps unwitness` JSON contract.
+pub const GAPS_UNWITNESS_SCHEMA: &str = "glyim.ledger-gaps-unwitness/1";
+
+/// The `gaps unwitness` request (the CLI flags, validated by
+/// [`run_gaps_unwitness`]): detach one witnessed gap's witness — the
+/// remedy half of the trust loop. The audit face's `Missing` verdict is
+/// the finding (the registry claims a fixture the tree no longer
+/// carries); until this face the sanctioned remedy did not exist — the
+/// witness face refuses an already-witnessed gap, so fixing a stale or
+/// wrong witness path meant hand-editing the curated TOML block.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GapsUnwitnessRequest {
+    /// The exact gap ID (`GAP-NNNN`) to detach.
+    pub id: String,
+}
+
+/// Where a `[[gap]]` block's witness lines are detached. The seam mirrors
+/// [`GapWitnessRewriter`] on the reverse edit: the engine consumes the
+/// trait, so tests drive an in-memory document and the CLI wires the
+/// file-backed implementation.
+pub trait GapWitnessDetacher {
+    /// Flips the `[[gap]]` block carrying the exact `id` from
+    /// `status = "witnessed"` back to `status = "unwitnessed"` and removes
+    /// the `witness = "..."` line, leaving every other byte of the
+    /// document (the curated header prose included) untouched. Returns
+    /// whether the edit landed (`false` = no witnessed (or
+    /// witness-carrying) block carried the ID: an unknown ID, or one
+    /// whose status drifted after the engine's load pass); the error
+    /// detail is the IO or shape failure message (the CLI turns it into a
+    /// typed write error).
+    fn detach(&self, path: &Path, id: &str) -> Result<bool, String>;
+}
+
+/// Edits the registry file on disk exactly where the loaded registry
+/// says the gap lives: read, edit the matched block, replace the file.
+/// A document whose matched block is not witnessed (and carries no
+/// witness line) is refused (`Ok(false)` / `Err`), never silently
+/// rewritten.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FileGapWitnessDetacher;
+
+impl GapWitnessDetacher for FileGapWitnessDetacher {
+    fn detach(&self, path: &Path, id: &str) -> Result<bool, String> {
+        let text = std::fs::read_to_string(path)
+            .map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+        let Some(edited) = detach_witness_block(&text, id) else {
+            return Ok(false);
+        };
+        std::fs::write(path, edited)
+            .map_err(|err| format!("cannot write {}: {err}", path.display()))?;
+        Ok(true)
+    }
+}
+
+/// Operates on owned in-memory documents (tests and programmatic
+/// consumers); the in-memory twin of [`FileGapWitnessDetacher`]. Every
+/// successful edit is recorded in [`Self::edits`] for the audit.
+#[derive(Debug, Default)]
+pub struct InMemoryGapWitnessDetacher {
+    /// The documents the detacher operates on, keyed by path.
+    pub doc: std::cell::RefCell<std::collections::HashMap<PathBuf, String>>,
+    /// Every `(path, gap ID)` detach performed, in order.
+    pub edits: std::cell::RefCell<Vec<(PathBuf, String)>>,
+}
+
+impl GapWitnessDetacher for InMemoryGapWitnessDetacher {
+    fn detach(&self, path: &Path, id: &str) -> Result<bool, String> {
+        let mut doc = self.doc.borrow_mut();
+        let Some(text) = doc.get_mut(path) else {
+            return Ok(false);
+        };
+        let Some(edited) = detach_witness_block(text, id) else {
+            return Ok(false);
+        };
+        *text = edited;
+        self.edits
+            .borrow_mut()
+            .push((path.to_path_buf(), id.to_string()));
+        Ok(true)
+    }
+}
+
+/// The surgical edit behind both detachers: find the `[[gap]]` block
+/// whose `id` line carries the exact ID, flip its `status` value from
+/// `"witnessed"` to `"unwitnessed"`, and remove the aligned
+/// `witness = "..."` line. Every other line (the curated header prose,
+/// the sibling blocks) passes through byte-for-byte. Returns `None` when
+/// no witnessed (or witness-carrying) block carries the ID — the drift
+/// signal the engine maps to a typed error.
+///
+/// The `status` line's key column is preserved exactly (`status    = "unwitnessed"`
+/// keeps the padded key spelling the registry style carries), so a
+/// `gaps witness` followed by `gaps unwitness` round-trips the registry
+/// bytes.
+fn detach_witness_block(text: &str, id: &str) -> Option<String> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out: Vec<String> = Vec::with_capacity(lines.len());
+    let mut index = 0;
+    let mut edited = false;
+    while index < lines.len() {
+        let line = lines[index];
+        if line.trim() != "[[gap]]" {
+            out.push(line.to_string());
+            index += 1;
+            continue;
+        }
+        // The block runs to the next `[[gap]]` header (or EOF).
+        let mut end = index + 1;
+        while end < lines.len() && lines[end].trim() != "[[gap]]" {
+            end += 1;
+        }
+        let block = &lines[index..end];
+        let matches_id = block
+            .iter()
+            .any(|entry| block_key(entry) == Some("id") && block_value(entry) == Some(id));
+        if matches_id {
+            let witnessed = block.iter().any(|entry| {
+                block_key(entry) == Some("status") && block_value(entry) == Some("witnessed")
+            });
+            let carries_witness = block
+                .iter()
+                .any(|entry| block_key(entry) == Some("witness"));
+            if !witnessed && !carries_witness {
+                // Already unwitnessed (or a malformed status): the
+                // engine's load pass rejects the former and the registry
+                // schema rejects the latter — either way, no silent
+                // rewrite.
+                return None;
+            }
+            for existing in block {
+                if block_key(existing) == Some("witness") {
+                    // The witness line is dropped entirely: the detached
+                    // path retires to the git history of the registry,
+                    // the same contract the retire face states for
+                    // closed entries.
+                    continue;
+                }
+                if block_key(existing) == Some("status")
+                    && block_value(existing) == Some("witnessed")
+                {
+                    let (key_part, _) = existing.split_once('=')?;
+                    out.push(format!("{key_part}= \"unwitnessed\""));
+                    continue;
+                }
+                out.push((*existing).to_string());
+            }
+            edited = true;
+        } else {
+            for existing in block {
+                out.push((*existing).to_string());
+            }
+        }
+        index = end;
+    }
+    if !edited {
+        return None;
+    }
+    let mut result = out.join("\n");
+    if text.ends_with('\n') {
+        result.push('\n');
+    }
+    Some(result)
+}
+
+/// Result of a `gaps unwitness` run (also the
+/// `glyim.ledger-gaps-unwitness/1` JSON face via
+/// [`format_gaps_unwitness_json`]).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct GapsUnwitnessOutcome {
+    /// Schema tag, always [`GAPS_UNWITNESS_SCHEMA`].
+    pub schema: &'static str,
+    /// The detached gap's ID.
+    pub id: String,
+    /// The gap's registry title (echoed for the report line).
+    pub title: String,
+    /// The gap's class (`a` diagnosed, `b` silent, `c` deferred).
+    pub class: String,
+    /// The witness path the block carried (now removed from the
+    /// registry); `None` when the block claimed `status = "witnessed"`
+    /// without a witness line (the audit face's bare-block finding).
+    pub witness: Option<String>,
+    /// The registry file the `[[gap]]` block was edited in.
+    pub target: String,
+    /// The generated document the dispatch layer refreshes after the
+    /// rewrite (`<ROOT>/KNOWN_GAPS.md`) — the face never leaves the
+    /// committed render silently drifted from the registry.
+    pub doc_target: String,
+}
+
+/// Detaches one gap's witness: validates the request, refuses to touch
+/// anything unless the registry loads cleanly, and edits exactly the one
+/// matching `[[gap]]` block through `detacher`.
+///
+/// # Validation contract
+///
+/// - `id` must be usable (non-blank, no control characters);
+/// - the registry must load with zero error-severity diagnostics (a
+///   registry that does not parse is never rewritten);
+/// - the gap must be present and witnessed (an unwitnessed gap has
+///   nothing to detach — the retire-face unknown-ID rule for a no-op
+///   request).
+///
+/// Nothing is written when validation fails.
+///
+/// # Errors
+///
+/// Typed [`LedgerCliError`] variants for every rejected request
+/// (`GapsUnwitnessBadId`, `GapsUnwitnessRegistry`,
+/// `GapsUnwitnessUnknownId`, `GapsUnwitnessNotWitnessed`) and for a
+/// failed rewrite (`GapsUnwitnessWrite`).
+pub fn run_gaps_unwitness(
+    root: &Path,
+    request: &GapsUnwitnessRequest,
+    detacher: &dyn GapWitnessDetacher,
+) -> Result<GapsUnwitnessOutcome, LedgerCliError> {
+    let span = tracing::info_span!(
+        "gaps_unwitness",
+        root = %root.display(),
+        id = %request.id,
+    );
+    let _enter = span.enter();
+
+    if request.id.trim().is_empty() || request.id.chars().any(char::is_control) {
+        return Err(LedgerCliError::GapsUnwitnessBadId {
+            id: request.id.clone(),
+        });
+    }
+
+    // The registry is the source of truth for both the gap lookup and
+    // the file the block lives in; a load that does not parse cleanly is
+    // refused before anything is written (the witness-face load rule).
+    let loaded = ledger_schema::load_project_registry(root);
+    if loaded
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        let detail = loaded
+            .diagnostics
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(LedgerCliError::GapsUnwitnessRegistry { detail });
+    }
+    let Some(sourced) = loaded
+        .registry
+        .gaps()
+        .iter()
+        .find(|sourced| sourced.entry.id == request.id)
+    else {
+        let candidates = loaded
+            .registry
+            .gaps()
+            .iter()
+            .map(|sourced| sourced.entry.id.clone())
+            .take(3)
+            .collect::<Vec<_>>();
+        return Err(LedgerCliError::GapsUnwitnessUnknownId {
+            id: request.id.clone(),
+            candidates,
+        });
+    };
+    if sourced.entry.status != GapStatus::Witnessed && sourced.entry.witness.is_none() {
+        return Err(LedgerCliError::GapsUnwitnessNotWitnessed {
+            id: request.id.clone(),
+            path: sourced.path.display().to_string(),
+        });
+    }
+
+    let target = sourced.path.clone();
+    let detached = detacher.detach(&target, &request.id).map_err(|detail| {
+        LedgerCliError::GapsUnwitnessWrite {
+            path: target.display().to_string(),
+            detail,
+        }
+    })?;
+    if !detached {
+        // The loaded registry carried the gap but the document no longer
+        // matches the witnessed shape: the registry drifted between the
+        // load pass and the rewrite. Fail without a partial write.
+        return Err(LedgerCliError::GapsUnwitnessUnknownId {
+            id: request.id.clone(),
+            candidates: Vec::new(),
+        });
+    }
+    tracing::debug!(
+        id = %request.id,
+        witness = ?sourced.entry.witness,
+        "gap witness detached"
+    );
+
+    Ok(GapsUnwitnessOutcome {
+        schema: GAPS_UNWITNESS_SCHEMA,
+        id: request.id.clone(),
+        title: sourced.entry.title.clone(),
+        class: sourced.entry.class.as_str().to_string(),
+        witness: sourced.entry.witness.clone(),
+        target: target.display().to_string(),
+        doc_target: root
+            .join(crate::render::KNOWN_GAPS_MD_TARGET)
+            .display()
+            .to_string(),
+    })
+}
+
+/// Renders the unwitness outcome's text face: one summary line (the
+/// detached gap, its former fixture, and both touched paths).
+#[must_use]
+pub fn format_gaps_unwitness_text(outcome: &GapsUnwitnessOutcome) -> String {
+    let mut text = String::new();
+    let _ = writeln!(
+        text,
+        "unwitnessed {} ({}) detaching {} -> {} rewritten, refresh {}",
+        outcome.id,
+        outcome.class,
+        outcome.witness.as_deref().unwrap_or("no witness line"),
+        outcome.target,
+        outcome.doc_target,
+    );
+    text
+}
+
+/// Renders the `glyim.ledger-gaps-unwitness/1` JSON contract.
+#[must_use]
+pub fn format_gaps_unwitness_json(outcome: &GapsUnwitnessOutcome) -> String {
+    let mut text = serde_json::to_string_pretty(outcome)
+        .expect("the glyim.ledger-gaps-unwitness/1 document is a serialisation-only struct");
+    text.push('\n');
+    text
+}
+
 #[cfg(test)]
 mod tests {
     //! `gaps witness` contract: the rewriter edits exactly the matched
@@ -1257,11 +1882,14 @@ mod tests {
     use ledger_schema::GapStatus;
 
     use super::{
-        FileGapOpener, FileGapRetirer, FileGapWitnessRewriter, GAPS_OPEN_SCHEMA, GapOpener,
-        GapRetirer, GapWitnessRewriter, GapsFormat, GapsOpenOutcome, GapsOpenRequest,
-        GapsRetireRequest, GapsWitnessRequest, InMemoryGapOpener, InMemoryGapRetirer,
-        format_gaps_open_json, format_gaps_open_text, run_gaps_open, run_gaps_retire,
-        run_gaps_witness,
+        FileGapOpener, FileGapRetirer, FileGapWitnessDetacher, FileGapWitnessRewriter,
+        GAPS_AUDIT_SCHEMA, GAPS_OPEN_SCHEMA, GapAuditVerdict, GapOpener, GapRetirer,
+        GapWitnessDetacher, GapWitnessRewriter, GapsFormat, GapsOpenOutcome, GapsOpenRequest,
+        GapsRetireRequest, GapsUnwitnessRequest, GapsWitnessRequest, InMemoryGapOpener,
+        InMemoryGapRetirer, InMemoryGapWitnessDetacher, format_gaps_audit_json,
+        format_gaps_audit_text, format_gaps_open_json, format_gaps_open_text,
+        format_gaps_unwitness_json, format_gaps_unwitness_text, run_gaps_audit, run_gaps_open,
+        run_gaps_retire, run_gaps_unwitness, run_gaps_witness,
     };
     use crate::{LedgerCliError, parse_args, usage};
 
@@ -1320,6 +1948,32 @@ mod tests {
          status    = \"witnessed\"\n\
          witness   = \"fixtures/cleanup-known-gap.g\"\n";
 
+    /// The exact expected bytes after detaching GAP-0001's witness: the
+    /// matched block's `status` value flipped back and the `witness`
+    /// line removed (GAP-0001 carries honest witness debt again, GAP-0002
+    /// untouched).
+    const CURATED_UNWITNESSED: &str = "# Curated header prose (M1.1 seed) the rewriter must preserve\n\
+         # byte-for-byte: witness debt stays honest — GAP-0002 is\n\
+         # unwitnessed until a fixture reproduces it.\n\
+         \n\
+         [[gap]]\n\
+         id        = \"GAP-0001\"\n\
+         class     = \"a\"\n\
+         title     = \"await in a loop body is diagnosed (T0060)\"\n\
+         affects   = [\"LANG-DEMO-AWAIT\"]\n\
+         caps      = \"L2\"\n\
+         opened_in = \"v0.3.0\"\n\
+         status    = \"unwitnessed\"\n\
+         \n\
+         [[gap]]\n\
+         id        = \"GAP-0002\"\n\
+         class     = \"b\"\n\
+         title     = \"no lowering site sets cleanup\"\n\
+         affects   = [\"LANG-DEMO-CLEANUP\"]\n\
+         caps      = \"L2\"\n\
+         opened_in = \"v0.3.0\"\n\
+         status    = \"unwitnessed\"\n";
+
     fn write_file(root: &Path, rel: &str, contents: &str) {
         let path = root.join(rel);
         std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
@@ -1377,6 +2031,10 @@ mod tests {
             id: id.to_string(),
             witness: witness.to_string(),
         }
+    }
+
+    fn unwitness_request(id: &str) -> GapsUnwitnessRequest {
+        GapsUnwitnessRequest { id: id.to_string() }
     }
 
     // -- rewrite seam ----------------------------------------------------------
@@ -2656,6 +3314,629 @@ mod tests {
         ]))
         .expect_err("yaml is not a face format");
         assert!(matches!(err, LedgerCliError::GapsBadFormat { .. }));
+    }
+
+    // -- gaps audit face -------------------------------------------------------
+
+    /// A witnessed `[[gap]]` entry whose fixture does not exist: the
+    /// silent-debt shape the audit face exists to surface (the registry
+    /// claims a witness the tree no longer carries).
+    const GONE_WITNESS_SEED: &str = "[[gap]]\n\
+         id        = \"GAP-0003\"\n\
+         class     = \"c\"\n\
+         title     = \"witnessed against a fixture the tree no longer carries\"\n\
+         affects   = [\"LANG-DEMO-AWAIT\"]\n\
+         caps      = \"L2\"\n\
+         opened_in = \"v0.3.0\"\n\
+         status    = \"witnessed\"\n\
+         witness   = \"fixtures/gone-known-gap.g\"\n";
+
+    /// Seeds the standard root plus a third, witness-less-on-disk gap in
+    /// a second registry file (the audit face reads the whole registry,
+    /// not one file).
+    fn seeded_root_with_gone_witness() -> tempfile::TempDir {
+        let (dir, _gap_file) = seeded_root();
+        write_file(
+            dir.path(),
+            "ledger/gaps/known/0002-gone.toml",
+            GONE_WITNESS_SEED,
+        );
+        dir
+    }
+
+    #[test]
+    fn run_gaps_audit_classifies_witnessed_debt_and_missing() {
+        let dir = seeded_root_with_gone_witness();
+        let outcome = run_gaps_audit(dir.path());
+        assert_eq!(outcome.schema, GAPS_AUDIT_SCHEMA);
+        assert_eq!(outcome.gaps, 3, "every registered gap is audited");
+        assert_eq!(outcome.witnessed, 1, "GAP-0001's fixture exists");
+        assert_eq!(outcome.debt, 1, "GAP-0002 is honest witness debt");
+        assert_eq!(outcome.missing, 1, "GAP-0003's fixture is gone");
+        assert_eq!(outcome.unreadable, 0);
+        let verdicts: Vec<&str> = outcome
+            .rows
+            .iter()
+            .map(|row| row.verdict.as_str())
+            .collect();
+        assert_eq!(
+            verdicts,
+            vec!["witnessed", "debt", "missing"],
+            "rows are sorted by gap ID: {:?}",
+            outcome.rows
+        );
+        assert!(
+            !outcome.is_ok(),
+            "a missing witness fixture fails the audit gate"
+        );
+    }
+
+    #[test]
+    fn run_gaps_audit_passes_when_witness_debt_is_the_only_finding() {
+        let (dir, _gap_file) = seeded_root();
+        let outcome = run_gaps_audit(dir.path());
+        assert_eq!(outcome.missing, 0);
+        assert_eq!(outcome.unreadable, 0);
+        assert_eq!(outcome.debt, 1, "GAP-0002 is unwitnessed");
+        assert!(
+            outcome.is_ok(),
+            "witness debt is displayed, never failed (the gaps-report rule)"
+        );
+    }
+
+    #[test]
+    fn run_gaps_audit_rows_echo_registry_metadata_and_name_the_gone_path() {
+        let dir = seeded_root_with_gone_witness();
+        let outcome = run_gaps_audit(dir.path());
+        let witnessed = outcome
+            .rows
+            .iter()
+            .find(|row| row.id == "GAP-0001")
+            .expect("GAP-0001 is audited");
+        assert_eq!(witnessed.verdict, GapAuditVerdict::Witnessed);
+        assert_eq!(
+            witnessed.witness.as_deref(),
+            Some("fixtures/await-loop-known-gap.g")
+        );
+        assert!(witnessed.detail.is_none(), "an ok row carries no detail");
+        let debt = outcome
+            .rows
+            .iter()
+            .find(|row| row.id == "GAP-0002")
+            .expect("GAP-0002 is audited");
+        assert_eq!(debt.verdict, GapAuditVerdict::Debt);
+        assert!(debt.witness.is_none(), "an unwitnessed gap has no path");
+        let missing = outcome
+            .rows
+            .iter()
+            .find(|row| row.id == "GAP-0003")
+            .expect("GAP-0003 is audited");
+        assert_eq!(missing.verdict, GapAuditVerdict::Missing);
+        assert_eq!(
+            missing.witness.as_deref(),
+            Some("fixtures/gone-known-gap.g")
+        );
+        let detail = missing
+            .detail
+            .as_deref()
+            .expect("a missing row names the path that vanished");
+        assert!(
+            detail.contains("fixtures/gone-known-gap.g"),
+            "detail names the vanished fixture: {detail}"
+        );
+    }
+
+    #[test]
+    fn run_gaps_audit_surfaces_a_witnessed_status_without_a_witness_line() {
+        // The serde default for a missing `status` key is `witnessed`, so
+        // a block that carries neither a `witness` line nor an explicit
+        // `status` silently claims a witness. The audit face is where
+        // that silent debt becomes visible.
+        let (dir, _gap_file) = seeded_root();
+        write_file(
+            dir.path(),
+            "ledger/gaps/known/0002-bare.toml",
+            "[[gap]]\n\
+                 id        = \"GAP-0004\"\n\
+                 class     = \"c\"\n\
+                 title     = \"claims witnessed with no witness line\"\n\
+                 affects   = [\"LANG-DEMO-AWAIT\"]\n\
+                 caps      = \"L2\"\n\
+                 opened_in = \"v0.3.0\"\n",
+        );
+        let outcome = run_gaps_audit(dir.path());
+        let bare = outcome
+            .rows
+            .iter()
+            .find(|row| row.id == "GAP-0004")
+            .expect("GAP-0004 is audited");
+        assert_eq!(bare.verdict, GapAuditVerdict::Missing);
+        assert!(
+            bare.detail
+                .as_deref()
+                .expect("the bare block is explained")
+                .contains("no witness path recorded"),
+            "detail explains the bare witnessed block: {:?}",
+            bare.detail
+        );
+        assert!(!outcome.is_ok());
+    }
+
+    #[test]
+    fn run_gaps_audit_flags_a_witness_path_that_is_not_a_file() {
+        let (dir, _gap_file) = seeded_root();
+        write_file(
+            dir.path(),
+            "ledger/gaps/known/0002-dir.toml",
+            &GONE_WITNESS_SEED.replace("fixtures/gone-known-gap.g", "fixtures/a-directory"),
+        );
+        write_file(dir.path(), "fixtures/a-directory/keep.txt", "x\n");
+        let outcome = run_gaps_audit(dir.path());
+        let row = outcome
+            .rows
+            .iter()
+            .find(|row| row.id == "GAP-0003")
+            .expect("GAP-0003 is audited");
+        assert_eq!(row.verdict, GapAuditVerdict::Unreadable);
+        assert!(!outcome.is_ok());
+    }
+
+    #[test]
+    fn run_gaps_audit_reports_load_diagnostics_and_fails() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        write_file(
+            dir.path(),
+            "ledger/gaps/broken.toml",
+            "[[gap]]\nid = \"nope\",\n",
+        );
+        let outcome = run_gaps_audit(dir.path());
+        assert!(
+            !outcome.diagnostics.is_empty(),
+            "the load diagnostics surface in the audit face"
+        );
+        assert!(!outcome.is_ok());
+    }
+
+    #[test]
+    fn format_gaps_audit_text_renders_summary_missing_rows_and_debt() {
+        let dir = seeded_root_with_gone_witness();
+        let outcome = run_gaps_audit(dir.path());
+        let text = format_gaps_audit_text(&outcome);
+        assert!(
+            text.contains("gaps audit: 3 gap(s), 1 witnessed, 1 debt, 1 missing"),
+            "summary line: {text}"
+        );
+        assert!(
+            text.contains("FAILED"),
+            "a missing fixture fails the gate: {text}"
+        );
+        assert!(
+            text.contains("GAP-0003") && text.contains("missing"),
+            "the missing row is rendered: {text}"
+        );
+        assert!(
+            text.contains("witness debt"),
+            "debt stays displayed, never silent: {text}"
+        );
+    }
+
+    #[test]
+    fn format_gaps_audit_json_parses_back_with_schema_and_counts() {
+        let dir = seeded_root_with_gone_witness();
+        let outcome = run_gaps_audit(dir.path());
+        let text = format_gaps_audit_json(&outcome);
+        let back: serde_json::Value = serde_json::from_str(&text).expect("json parses");
+        assert_eq!(
+            back["schema"].as_str(),
+            Some("glyim.ledger-gaps-audit/1"),
+            "the contract tag round-trips"
+        );
+        assert_eq!(back["gaps"].as_u64(), Some(3));
+        assert_eq!(back["witnessed"].as_u64(), Some(1));
+        assert_eq!(back["debt"].as_u64(), Some(1));
+        assert_eq!(back["missing"].as_u64(), Some(1));
+        assert_eq!(back["passed"].as_bool(), Some(false));
+        let rows = back["rows"].as_array().expect("rows render");
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[2]["verdict"].as_str(), Some("missing"));
+        let rendered = format_gaps_audit_json(&outcome);
+        assert_eq!(rendered, text, "the JSON face is deterministic");
+    }
+
+    #[test]
+    fn parse_args_accepts_gaps_audit() {
+        let command = parse_args(args(&["gaps", "audit", "/tmp/reg", "--format", "json"]))
+            .expect("the flags parse");
+        assert!(matches!(
+            command,
+            crate::Command::GapsAudit { root, format: GapsFormat::Json }
+            if root.as_path() == Path::new("/tmp/reg")
+        ));
+        let command = parse_args(args(&["gaps", "audit"])).expect("the bare face parses");
+        assert!(matches!(
+            command,
+            crate::Command::GapsAudit { ref root, format: GapsFormat::Text }
+            if root.as_path() == Path::new(".")
+        ));
+    }
+
+    #[test]
+    fn parse_args_rejects_gaps_audit_bad_format() {
+        let err = parse_args(args(&["gaps", "audit", "--format", "yaml"]))
+            .expect_err("yaml is not a face format");
+        assert!(matches!(err, LedgerCliError::GapsBadFormat { .. }));
+    }
+
+    #[test]
+    fn usage_lists_the_gaps_audit_face() {
+        let text = usage();
+        assert!(
+            text.contains("gaps audit [ROOT]"),
+            "usage must list the audit face: {text}"
+        );
+    }
+
+    // -- gaps unwitness face ---------------------------------------------------
+
+    #[test]
+    fn file_detacher_edits_only_the_matched_block_bytes() {
+        let (dir, gap_file) = seeded_root();
+        let _ = dir;
+        let edited = FileGapWitnessDetacher
+            .detach(&gap_file, "GAP-0001")
+            .expect("the rewrite succeeds");
+        assert!(edited, "the witnessed block was edited");
+        let on_disk = std::fs::read_to_string(&gap_file).expect("read back");
+        // The detach is the exact inverse of the witness face on this
+        // seed: GAP-0001 returns to `status = "unwitnessed"` with the
+        // `witness` line removed — honest witness debt again.
+        assert_eq!(on_disk, CURATED_UNWITNESSED, "only the block changed");
+    }
+
+    #[test]
+    fn file_detacher_returns_false_for_an_unknown_id_and_writes_nothing() {
+        let (dir, gap_file) = seeded_root();
+        let before = std::fs::read_to_string(&gap_file).expect("read before");
+        let edited = FileGapWitnessDetacher
+            .detach(&gap_file, "GAP-9999")
+            .expect("an unknown ID is not an IO error");
+        assert!(!edited, "no block carried the ID");
+        assert_eq!(
+            std::fs::read_to_string(&gap_file).expect("read after"),
+            before,
+            "nothing was written"
+        );
+        let _ = dir;
+    }
+
+    #[test]
+    fn file_detacher_returns_false_for_an_already_unwitnessed_block() {
+        let (dir, gap_file) = seeded_root();
+        let before = std::fs::read_to_string(&gap_file).expect("read before");
+        let edited = FileGapWitnessDetacher
+            .detach(&gap_file, "GAP-0002")
+            .expect("an unwitnessed block is not an IO error");
+        assert!(!edited, "the unwitnessed block must not be re-edited");
+        assert_eq!(
+            std::fs::read_to_string(&gap_file).expect("read after"),
+            before,
+            "nothing was written"
+        );
+        let _ = dir;
+    }
+
+    #[test]
+    fn in_memory_detacher_records_edits() {
+        let in_memory = InMemoryGapWitnessDetacher::default();
+        in_memory
+            .doc
+            .borrow_mut()
+            .insert(PathBuf::from("memory.toml"), CURATED_SEED.to_string());
+        let edited = in_memory
+            .detach(Path::new("memory.toml"), "GAP-0001")
+            .expect("the in-memory edit lands");
+        assert!(edited);
+        assert_eq!(
+            in_memory.edits.borrow().len(),
+            1,
+            "the audit trail records the edit"
+        );
+        let detached = in_memory.doc.borrow()[std::path::Path::new("memory.toml")].clone();
+        assert!(
+            detached.contains("status    = \"unwitnessed\""),
+            "the status flipped in the owned document: {detached}"
+        );
+        assert!(
+            !detached.contains("witness   = "),
+            "the witness line is gone from the owned document: {detached}"
+        );
+    }
+
+    #[test]
+    fn run_gaps_unwitness_restores_witness_debt() {
+        let (dir, gap_file) = seeded_root();
+        let root = dir.path().to_path_buf();
+        let outcome = run_gaps_unwitness(
+            &root,
+            &unwitness_request("GAP-0001"),
+            &FileGapWitnessDetacher,
+        )
+        .expect("the detach lands");
+        assert_eq!(outcome.schema, "glyim.ledger-gaps-unwitness/1");
+        assert_eq!(outcome.id, "GAP-0001");
+        assert_eq!(outcome.class, "a");
+        assert_eq!(
+            outcome.witness.as_deref(),
+            Some("fixtures/await-loop-known-gap.g"),
+            "the outcome names the detached witness"
+        );
+        assert_eq!(
+            outcome.target,
+            gap_file.display().to_string(),
+            "the outcome names the registry file that was rewritten"
+        );
+        assert_eq!(
+            outcome.doc_target,
+            root.join("KNOWN_GAPS.md").display().to_string(),
+            "the outcome names the generated document the dispatch refreshes"
+        );
+        let on_disk = std::fs::read_to_string(&gap_file).expect("read back");
+        assert_eq!(on_disk, CURATED_UNWITNESSED, "only the block changed");
+        // The rewritten file re-loads cleanly and reports the gap as
+        // unwitnessed: the remedy restores honest witness debt.
+        let loaded = ledger_schema::load_project_registry(&root);
+        assert!(
+            loaded
+                .diagnostics
+                .iter()
+                .all(|d| !matches!(d.severity, ledger_schema::Severity::Error)),
+            "rewritten registry must load cleanly: {:?}",
+            loaded.diagnostics
+        );
+        let gap = loaded
+            .registry
+            .gaps()
+            .iter()
+            .map(|sourced| &sourced.entry)
+            .find(|gap| gap.id == "GAP-0001")
+            .expect("GAP-0001 still present");
+        assert_eq!(gap.status, GapStatus::Unwitnessed);
+        assert_eq!(gap.witness.as_deref(), None, "the witness line is gone");
+    }
+
+    #[test]
+    fn run_gaps_unwitness_detaches_a_witnessed_status_without_a_witness_line() {
+        let (dir, _gap_file) = seeded_root();
+        write_file(
+            dir.path(),
+            "ledger/gaps/known/0002-bare.toml",
+            "[[gap]]\n\
+                 id        = \"GAP-0004\"\n\
+                 class     = \"c\"\n\
+                 title     = \"claims witnessed with no witness line\"\n\
+                 affects   = [\"LANG-DEMO-AWAIT\"]\n\
+                 caps      = \"L2\"\n\
+                 opened_in = \"v0.3.0\"\n\
+                 status    = \"witnessed\"\n",
+        );
+        let outcome = run_gaps_unwitness(
+            dir.path(),
+            &unwitness_request("GAP-0004"),
+            &FileGapWitnessDetacher,
+        )
+        .expect("the detach lands");
+        assert_eq!(
+            outcome.witness, None,
+            "a bare witnessed block detaches to plain debt"
+        );
+        let loaded = ledger_schema::load_project_registry(dir.path());
+        let gap = loaded
+            .registry
+            .gaps()
+            .iter()
+            .map(|sourced| &sourced.entry)
+            .find(|gap| gap.id == "GAP-0004")
+            .expect("GAP-0004 still present");
+        assert_eq!(gap.status, GapStatus::Unwitnessed);
+    }
+
+    #[test]
+    fn witness_then_unwitness_round_trips_the_registry_bytes() {
+        let (dir, gap_file) = seeded_root();
+        let root = dir.path().to_path_buf();
+        run_gaps_witness(
+            &root,
+            &request("GAP-0002", "fixtures/cleanup-known-gap.g"),
+            &FileGapWitnessRewriter,
+        )
+        .expect("the witness lands");
+        assert_eq!(
+            std::fs::read_to_string(&gap_file).expect("witnessed"),
+            CURATED_WITNESSED,
+            "the witness face rewrote the block"
+        );
+        run_gaps_unwitness(
+            &root,
+            &unwitness_request("GAP-0002"),
+            &FileGapWitnessDetacher,
+        )
+        .expect("the detach lands");
+        assert_eq!(
+            std::fs::read_to_string(&gap_file).expect("detached"),
+            CURATED_SEED,
+            "the two faces are exact inverses on this registry"
+        );
+    }
+
+    #[test]
+    fn run_gaps_unwitness_rejects_unknown_id_without_writing() {
+        let (dir, gap_file) = seeded_root();
+        let before = std::fs::read_to_string(&gap_file).expect("read before");
+        let err = run_gaps_unwitness(
+            dir.path(),
+            &unwitness_request("GAP-9999"),
+            &FileGapWitnessDetacher,
+        )
+        .expect_err("unknown ID is a typed rejection");
+        assert!(matches!(err, LedgerCliError::GapsUnwitnessUnknownId { .. }));
+        assert_eq!(
+            std::fs::read_to_string(&gap_file).expect("read after"),
+            before,
+            "nothing was written"
+        );
+    }
+
+    #[test]
+    fn run_gaps_unwitness_rejects_an_unwitnessed_gap() {
+        let (dir, gap_file) = seeded_root();
+        let before = std::fs::read_to_string(&gap_file).expect("read before");
+        let err = run_gaps_unwitness(
+            dir.path(),
+            &unwitness_request("GAP-0002"),
+            &FileGapWitnessDetacher,
+        )
+        .expect_err("an unwitnessed gap has nothing to detach");
+        assert!(matches!(
+            err,
+            LedgerCliError::GapsUnwitnessNotWitnessed { .. }
+        ));
+        assert_eq!(
+            std::fs::read_to_string(&gap_file).expect("read after"),
+            before,
+            "nothing was written"
+        );
+    }
+
+    #[test]
+    fn run_gaps_unwitness_rejects_a_blank_id() {
+        let (dir, _gap_file) = seeded_root();
+        let err = run_gaps_unwitness(dir.path(), &unwitness_request(""), &FileGapWitnessDetacher)
+            .expect_err("a blank ID can never match");
+        assert!(matches!(err, LedgerCliError::GapsUnwitnessBadId { .. }));
+    }
+
+    #[test]
+    fn run_gaps_unwitness_rejects_a_registry_that_does_not_load() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        write_file(
+            dir.path(),
+            "ledger/gaps/broken.toml",
+            "[[gap]]\nid = \"nope\",\n",
+        );
+        let err = run_gaps_unwitness(
+            dir.path(),
+            &unwitness_request("GAP-0001"),
+            &FileGapWitnessDetacher,
+        )
+        .expect_err("a non-clean registry is refused before any write");
+        assert!(matches!(err, LedgerCliError::GapsUnwitnessRegistry { .. }));
+    }
+
+    #[test]
+    fn format_gaps_unwitness_text_names_the_detached_witness() {
+        let (dir, _gap_file) = seeded_root();
+        let outcome = run_gaps_unwitness(
+            dir.path(),
+            &unwitness_request("GAP-0001"),
+            &FileGapWitnessDetacher,
+        )
+        .expect("the detach lands");
+        let text = format_gaps_unwitness_text(&outcome);
+        assert!(
+            text.contains("unwitnessed GAP-0001"),
+            "text names the gap: {text}"
+        );
+        assert!(
+            text.contains("fixtures/await-loop-known-gap.g"),
+            "text names the detached fixture: {text}"
+        );
+        assert!(
+            text.contains("KNOWN_GAPS.md"),
+            "text names the refreshed document: {text}"
+        );
+    }
+
+    #[test]
+    fn format_gaps_unwitness_json_parses_back_with_schema() {
+        let (dir, _gap_file) = seeded_root();
+        let outcome = run_gaps_unwitness(
+            dir.path(),
+            &unwitness_request("GAP-0001"),
+            &FileGapWitnessDetacher,
+        )
+        .expect("the detach lands");
+        let text = format_gaps_unwitness_json(&outcome);
+        let back: serde_json::Value = serde_json::from_str(&text).expect("json parses");
+        assert_eq!(
+            back["schema"].as_str(),
+            Some("glyim.ledger-gaps-unwitness/1"),
+            "the contract tag round-trips"
+        );
+        assert_eq!(back["id"].as_str(), Some("GAP-0001"));
+        assert_eq!(
+            back["witness"].as_str(),
+            Some("fixtures/await-loop-known-gap.g")
+        );
+        let rendered = format_gaps_unwitness_json(&outcome);
+        assert_eq!(rendered, text, "the JSON face is deterministic");
+    }
+
+    #[test]
+    fn parse_args_accepts_gaps_unwitness() {
+        let command = parse_args(args(&["gaps", "unwitness", "--id", "GAP-0001", "/tmp/reg"]))
+            .expect("the flags parse");
+        assert!(matches!(
+            command,
+            crate::Command::GapsUnwitness { root, id, format: GapsFormat::Text }
+            if root.as_path() == Path::new("/tmp/reg") && id == "GAP-0001"
+        ));
+        let command = parse_args(args(&[
+            "gaps",
+            "unwitness",
+            "--id",
+            "GAP-0002",
+            "--format",
+            "json",
+        ]))
+        .expect("the default root parses");
+        assert!(matches!(
+            command,
+            crate::Command::GapsUnwitness { ref root, format: GapsFormat::Json, .. }
+            if root.as_path() == Path::new(".")
+        ));
+    }
+
+    #[test]
+    fn parse_args_rejects_gaps_unwitness_missing_id() {
+        let err = parse_args(args(&["gaps", "unwitness"]))
+            .expect_err("the required --id flag is missing");
+        assert!(matches!(
+            err,
+            LedgerCliError::GapsUnwitnessMissingField { .. }
+        ));
+    }
+
+    #[test]
+    fn parse_args_rejects_gaps_unwitness_bad_format() {
+        let err = parse_args(args(&[
+            "gaps",
+            "unwitness",
+            "--id",
+            "GAP-0001",
+            "--format",
+            "yaml",
+        ]))
+        .expect_err("yaml is not a face format");
+        assert!(matches!(err, LedgerCliError::GapsBadFormat { .. }));
+    }
+
+    #[test]
+    fn usage_lists_the_gaps_unwitness_face() {
+        let text = usage();
+        assert!(
+            text.contains("gaps unwitness [ROOT]"),
+            "usage must list the unwitness face: {text}"
+        );
     }
 
     /// The parse-args helper every CLI test in the crate shares (the
