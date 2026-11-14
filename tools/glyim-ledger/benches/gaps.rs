@@ -1,4 +1,4 @@
-//! Gaps write-face bench (`gaps witness`, `gaps retire`).
+//! Gaps write-face bench (`gaps open`, `gaps witness`, `gaps retire`).
 //!
 //! Dependency-free (`harness = false`), mirroring the `release` bench:
 //! measures the [`glyim_ledger::run_gaps_witness`] engine over a seeded
@@ -6,8 +6,10 @@
 //! gap lookup + fixture existence check) plus one surgical block edit —
 //! witnessing `GAPS` registry gaps in sequence, both formatter faces
 //! (the text one-liner and the `glyim.ledger-gaps-witness/1` JSON
-//! contract), the in-memory twin of the rewrite seam, and the retire
-//! face's whole-block removal path over a fresh registry, so CI logs can
+//! contract), the in-memory twin of the rewrite seam, the retire face's
+//! whole-block removal path over a fresh registry, and the open face's
+//! canonical-append path (load pass + duplicate-ID guard + affects
+//! cross-reference + one numbered file minted per gap), so CI logs can
 //! track the write-face cost as the gap registry grows. Run with:
 //!
 //! ```text
@@ -20,10 +22,11 @@ use std::path::Path;
 use std::time::Instant;
 
 use glyim_ledger::{
-    FileGapRetirer, FileGapWitnessRewriter, GapsRetireOutcome, GapsRetireRequest,
-    GapsWitnessOutcome, GapsWitnessRequest, InMemoryGapWitnessRewriter, format_gaps_retire_json,
-    format_gaps_retire_text, format_gaps_witness_json, format_gaps_witness_text, run_gaps_retire,
-    run_gaps_witness,
+    FileGapOpener, FileGapRetirer, FileGapWitnessRewriter, GapsOpenOutcome, GapsOpenRequest,
+    GapsRetireOutcome, GapsRetireRequest, GapsWitnessOutcome, GapsWitnessRequest,
+    InMemoryGapWitnessRewriter, format_gaps_open_json, format_gaps_open_text,
+    format_gaps_retire_json, format_gaps_retire_text, format_gaps_witness_json,
+    format_gaps_witness_text, run_gaps_open, run_gaps_retire, run_gaps_witness,
 };
 
 /// How many registry gaps the bench witnesses (and fixtures it seeds).
@@ -211,5 +214,57 @@ fn main() {
          json face  : {} bytes",
         retire_text.len(),
         retire_json.len(),
+    );
+
+    // The open face: a fresh registry, one canonical block appended per
+    // run — each run is a load pass (registry parse + duplicate-ID guard
+    // + affects cross-reference) plus the next numbered default file
+    // resolution and one append. The affects ID is a seeded feature, so
+    // the cross-reference pass exercises the loaded registry.
+    let open_dir = tempfile::tempdir().expect("bench tmp");
+    let open_root = open_dir.path().to_path_buf();
+    seed(&open_root);
+    let started = Instant::now();
+    for i in 0..GAPS {
+        let request = GapsOpenRequest {
+            id: format!("GAP-1{i:03}"),
+            class: ledger_schema::GapClass::B,
+            title: format!("bench gap {i}: opened without a witness"),
+            affects: vec!["LANG-BENCH-CLEANUP".to_string()],
+            caps: ledger_schema::Level::L2,
+            opened_in: "v0.4.0".to_string(),
+            file: None,
+        };
+        run_gaps_open(black_box(&open_root), black_box(&request), &FileGapOpener)
+            .unwrap_or_else(|err| panic!("bench open GAP-1{i:03} failed: {err}"));
+    }
+    let open_elapsed = started.elapsed();
+    let opened_files = open_root
+        .join("ledger/gaps/known")
+        .read_dir()
+        .expect("known dir")
+        .count();
+    assert_eq!(opened_files, GAPS + 1, "one numbered file minted per gap");
+    let open_outcome = GapsOpenOutcome {
+        schema: glyim_ledger::GAPS_OPEN_SCHEMA,
+        id: "GAP-1000".to_string(),
+        class: "b".to_string(),
+        title: "bench gap 0: opened without a witness".to_string(),
+        affects: vec!["LANG-BENCH-CLEANUP".to_string()],
+        caps: "L2".to_string(),
+        opened_in: "v0.4.0".to_string(),
+        target: "ledger/gaps/known/0002-gaps-open.toml".to_string(),
+        doc_target: "KNOWN_GAPS.md".to_string(),
+    };
+    let open_text = black_box(format_gaps_open_text(&open_outcome));
+    let open_json = black_box(format_gaps_open_json(&open_outcome));
+
+    println!(
+        "gaps open bench   : {GAPS} gaps / fresh + curated registry (tempdir)\n  \
+         file path  : {open_elapsed:.1?} (40 loads + 40 canonical appends)\n  \
+         text face  : {} bytes\n  \
+         json face  : {} bytes",
+        open_text.len(),
+        open_json.len(),
     );
 }
