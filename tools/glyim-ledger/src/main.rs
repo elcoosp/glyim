@@ -39,6 +39,25 @@
 //! `KNOWN_GAPS.md` (or the `glyim.known-gaps/1` JSON face) from the gap
 //! registry — `--out` writes the rendered document, `--check` fails on
 //! any drift between the committed document and the render.
+//! `glyim-ledger gaps audit [ROOT] [--format text|json]` is the
+//! trust-loop closure over the gap-lifecycle write faces: it resolves
+//! every registered gap's witness fixture against the tree, one row per
+//! gap — `witnessed` (the fixture exists), `debt` (honest witness debt,
+//! displayed never failed), `missing` (the registry claims a witness the
+//! tree no longer carries — silent debt surfaced), `unreadable` (the
+//! witness path is not a readable regular file) — and any missing or
+//! unreadable row (or error-severity load diagnostic) fails the exit
+//! code after every finding is printed, the same finding gate the
+//! `evidence audit` face runs over the evidence store.
+//! `glyim-ledger gaps unwitness [ROOT] --id <GAP-ID> [--format text|json]`
+//! is the remedy half of that trust loop: it detaches one witnessed
+//! gap's witness — `status` flipped back to `unwitnessed`, the aligned
+//! `witness` line removed, the curated header prose preserved
+//! byte-for-byte — through the `GapWitnessDetacher` seam (the sanctioned
+//! counterpart of the witness face's "an already-witnessed gap is never
+//! silently re-witnessed" rejection), refuses a registry that does not
+//! load cleanly, and the dispatch refreshes the generated `KNOWN_GAPS.md`
+//! in the same run.
 //! `glyim-ledger gaps witness [ROOT] --id <GAP-ID> --witness <PATH>` is
 //! the gap-lifecycle write face: it attaches the witness fixture that
 //! reproduces one unwitnessed gap, editing exactly the matched `[[gap]]`
@@ -127,6 +146,67 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE
+            }
+        }
+        Command::GapsAudit { root, format } => {
+            // The trust-loop closure over the gap-lifecycle write faces,
+            // wired through the same registry-load path the `gaps` report
+            // uses — the audit face reports, it never writes, and a
+            // registry-claimed witness the tree no longer carries fails
+            // the exit code after every finding is printed (the
+            // evidence-audit dispatch shape).
+            let outcome = glyim_ledger::run_gaps_audit(&root);
+            match format {
+                glyim_ledger::GapsFormat::Text => {
+                    print!("{}", glyim_ledger::format_gaps_audit_text(&outcome));
+                }
+                glyim_ledger::GapsFormat::Json => {
+                    print!("{}", glyim_ledger::format_gaps_audit_json(&outcome));
+                }
+            }
+            if outcome.is_ok() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Command::GapsUnwitness { root, id, format } => {
+            // The remedy half of the gap trust loop, wired through the
+            // same typed error seam and the same generated-document
+            // refresh as the witness face (a detached witness never
+            // leaves KNOWN_GAPS.md silently drifted).
+            let request = glyim_ledger::GapsUnwitnessRequest { id };
+            match glyim_ledger::run_gaps_unwitness(
+                &root,
+                &request,
+                &glyim_ledger::FileGapWitnessDetacher,
+            ) {
+                Ok(outcome) => {
+                    match format {
+                        glyim_ledger::GapsFormat::Text => {
+                            print!("{}", glyim_ledger::format_gaps_unwitness_text(&outcome));
+                        }
+                        glyim_ledger::GapsFormat::Json => {
+                            print!("{}", glyim_ledger::format_gaps_unwitness_json(&outcome));
+                        }
+                    }
+                    match glyim_ledger::run_render_gaps(
+                        &root,
+                        glyim_ledger::RenderGapsFormat::Markdown,
+                        Some(&root.join(glyim_ledger::KNOWN_GAPS_MD_TARGET)),
+                        false,
+                    ) {
+                        Ok(_) => ExitCode::SUCCESS,
+                        Err(err) => {
+                            report(&err);
+                            ExitCode::FAILURE
+                        }
+                    }
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
             }
         }
         Command::GapsWitness {
