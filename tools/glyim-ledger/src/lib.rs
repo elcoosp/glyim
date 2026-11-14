@@ -1,6 +1,6 @@
 //! CLI library for the Readiness Ledger tool (plan M1.1).
 //!
-//! Sixteen subcommands:
+//! Twenty-two subcommands:
 //!
 //! - `glyim-ledger check [ROOT]` — load `ROOT/ledger`, run the schema and
 //!   semantic validators, cross-check the M1.3 inventory extractors, print
@@ -83,7 +83,11 @@
 //!   7, horizon 14) through the [`crate::WaiverExtender`] seam, keeping
 //!   the entry's identity, reason, and issue — the sanctioned counterpart
 //!   the duplicate-grant help line points to (nothing is written when the
-//!   document does not load cleanly).
+//!   document does not load cleanly). `waivers prune [ROOT]` is the
+//!   batch-retirement write face: it removes every expired block and
+//!   rewrites the remaining entries canonically through the
+//!   [`crate::WaiverPruner`] seam (a non-clean document is refused; a
+//!   clean document is never rewritten).
 //! - `glyim-ledger handoff [ROOT] [--items N] [--format md|json]
 //!   [--out PATH] [--check]` — the plan §3.7 session-handoff generator:
 //!   it composes the compute, `next`, and `waivers` face outcomes into
@@ -93,6 +97,13 @@
 //!   document (default `HANDOFF.md` / `HANDOFF.json` by face) and
 //!   `--check` byte-compares the committed document against the render
 //!   (see [`handoff`]).
+//! - `glyim-ledger release-check <VERSION> [ROOT] [--format text|json]` —
+//!   the plan §10 final release gate: it composes the M1.12 gate report,
+//!   the M1.13 determinism self-check, and the C9 waiver health into one
+//!   verdict for the named release (every declared gate green —
+//!   `unmeasured` blocks, being displayed, never silently passed —
+//!   evidence reproducible, no waiver active or expired, and no error
+//!   diagnostic across the composed faces); see [`release`].
 //! - `glyim-ledger schema [OUT]` — write the JSON-Schema export document
 //!   for both entry types to `OUT` (pretty-printed), or to stdout.
 //! - `glyim-ledger inventory [ROOT]` — enumerate the source-derived
@@ -117,6 +128,7 @@ pub mod explain;
 pub mod gates;
 pub mod handoff;
 pub mod next;
+pub mod release;
 pub mod render;
 pub mod status;
 pub mod verify;
@@ -165,6 +177,12 @@ pub use next::{
     build_queue, feature_depths, filter, format_next_json, format_next_report, parse_lane,
     run_next,
 };
+pub use release::{
+    FileReleaseCheckSource, InMemoryReleaseCheckSource, JsonReleaseCheckRenderer,
+    RELEASE_CHECK_SCHEMA, ReleaseCheckDocument, ReleaseCheckOutcome, ReleaseCheckRenderer,
+    ReleaseCheckSource, ReleaseCheckState, ReleaseVersion, TextReleaseCheckRenderer,
+    format_release_check_json, format_release_check_text, render_release_check, run_release_check,
+};
 pub use render::{
     JsonGapRenderer, KNOWN_GAPS_MD_END, KNOWN_GAPS_MD_START, KNOWN_GAPS_SCHEMA, KnownGapDoc,
     KnownGapsDocument, KnownGapsRenderer, MarkdownGapRenderer, RenderGapsFormat, RenderGapsOutcome,
@@ -180,16 +198,19 @@ pub use verify::{
     verify_determinism,
 };
 pub use waivers::{
-    FileWaiverExtender, FileWaiverRewriter, FileWaiverSink, FileWaiverSource,
-    InMemoryWaiverExtender, InMemoryWaiverRewriter, InMemoryWaiverSink, InMemoryWaiverSource,
-    JsonWaiversRenderer, TextWaiversRenderer, WAIVERS_EXTEND_SCHEMA, WAIVERS_GRANT_SCHEMA,
-    WAIVERS_REVOKE_SCHEMA, WAIVERS_SCHEMA, WaiverExtender, WaiverRewriter, WaiverRow, WaiverSink,
-    WaiverSource, WaiverVerdict, WaiversDocument, WaiversExtendOutcome, WaiversExtendRequest,
-    WaiversGrantOutcome, WaiversGrantRequest, WaiversOutcome, WaiversRenderer,
-    WaiversRevokeOutcome, WaiversRevokeRequest, assess_waivers, format_waivers_extend_json,
-    format_waivers_extend_text, format_waivers_grant_json, format_waivers_grant_text,
-    format_waivers_json, format_waivers_revoke_json, format_waivers_revoke_text,
-    format_waivers_text, run_waivers, run_waivers_extend, run_waivers_grant, run_waivers_revoke,
+    FileWaiverExtender, FileWaiverPruner, FileWaiverRewriter, FileWaiverSink, FileWaiverSource,
+    InMemoryWaiverExtender, InMemoryWaiverPruner, InMemoryWaiverRewriter, InMemoryWaiverSink,
+    InMemoryWaiverSource, JsonWaiversRenderer, TextWaiversRenderer, WAIVERS_EXTEND_SCHEMA,
+    WAIVERS_GRANT_SCHEMA, WAIVERS_PRUNE_SCHEMA, WAIVERS_REVOKE_SCHEMA, WAIVERS_SCHEMA,
+    WaiverExtender, WaiverPruner, WaiverRewriter, WaiverRow, WaiverSink, WaiverSource,
+    WaiverVerdict, WaiversDocument, WaiversExtendOutcome, WaiversExtendRequest,
+    WaiversGrantOutcome, WaiversGrantRequest, WaiversOutcome, WaiversPruneOutcome, WaiversPruneRow,
+    WaiversRenderer, WaiversRevokeOutcome, WaiversRevokeRequest, assess_waivers,
+    format_waivers_extend_json, format_waivers_extend_text, format_waivers_grant_json,
+    format_waivers_grant_text, format_waivers_json, format_waivers_prune_json,
+    format_waivers_prune_text, format_waivers_revoke_json, format_waivers_revoke_text,
+    format_waivers_text, run_waivers, run_waivers_extend, run_waivers_grant, run_waivers_prune,
+    run_waivers_revoke,
 };
 
 /// Typed error for the CLI seams (`parse_args`, `write_schema`).
@@ -616,6 +637,46 @@ pub enum LedgerCliError {
         /// The IO (or serialization) failure message.
         detail: String,
     },
+    /// `release-check` was called without its required `<VERSION>`
+    /// positional.
+    ReleaseCheckMissingVersion {
+        /// The usage text.
+        usage: String,
+    },
+    /// `release-check <VERSION>` did not parse as `vMAJOR.MINOR.PATCH`
+    /// (or the unprefixed `MAJOR.MINOR.PATCH`).
+    ReleaseCheckBadVersion {
+        /// The offending value.
+        value: String,
+    },
+    /// `release-check --format` received a value outside `text|json`.
+    ReleaseCheckBadFormat {
+        /// The offending value.
+        value: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `release-check --format` was passed without its value.
+    ReleaseCheckMissingValue {
+        /// The flag that was missing its value (`--format`).
+        flag: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// The committed `ledger/waivers.toml` did not load cleanly (schema,
+    /// duplicate ID, horizon violation), so the pruner refuses to
+    /// rewrite it (no waiver is removed).
+    WaiversPruneLoad {
+        /// The joined load diagnostics.
+        detail: String,
+    },
+    /// `waivers prune` could not rewrite the committed document.
+    WaiversPruneWrite {
+        /// The document path.
+        path: String,
+        /// The IO (or serialization) failure message.
+        detail: String,
+    },
 }
 
 impl fmt::Display for LedgerCliError {
@@ -824,6 +885,28 @@ impl fmt::Display for LedgerCliError {
             Self::WaiversExtendWrite { path, detail } => {
                 write!(f, "cannot rewrite {path}: {detail}")
             }
+            Self::ReleaseCheckMissingVersion { usage } => {
+                write!(
+                    f,
+                    "release-check expects a release version (vMAJOR.MINOR.PATCH)\n{usage}"
+                )
+            }
+            Self::ReleaseCheckBadVersion { value } => write!(
+                f,
+                "<VERSION> expects three dot-separated numbers (v1.0.0), got {value:?}"
+            ),
+            Self::ReleaseCheckBadFormat { value, usage } => {
+                write!(f, "--format expects text or json, got {value}\n{usage}")
+            }
+            Self::ReleaseCheckMissingValue { flag, usage } => {
+                write!(f, "{flag} expects a value (text|json)\n{usage}")
+            }
+            Self::WaiversPruneLoad { detail } => {
+                write!(f, "ledger/waivers.toml does not load cleanly: {detail}")
+            }
+            Self::WaiversPruneWrite { path, detail } => {
+                write!(f, "cannot rewrite {path}: {detail}")
+            }
         }
     }
 }
@@ -893,6 +976,14 @@ impl miette::Diagnostic for LedgerCliError {
             Self::WaiversExtendUnknownId { .. } => "glyim-ledger::waivers_extend_unknown_id",
             Self::WaiversExtendLoad { .. } => "glyim-ledger::waivers_extend_load",
             Self::WaiversExtendWrite { .. } => "glyim-ledger::waivers_extend_write",
+            Self::ReleaseCheckMissingVersion { .. } => {
+                "glyim-ledger::release_check_missing_version"
+            }
+            Self::ReleaseCheckBadVersion { .. } => "glyim-ledger::release_check_bad_version",
+            Self::ReleaseCheckBadFormat { .. } => "glyim-ledger::release_check_bad_format",
+            Self::ReleaseCheckMissingValue { .. } => "glyim-ledger::release_check_missing_value",
+            Self::WaiversPruneLoad { .. } => "glyim-ledger::waivers_prune_load",
+            Self::WaiversPruneWrite { .. } => "glyim-ledger::waivers_prune_write",
         }))
     }
 
@@ -1187,6 +1278,39 @@ impl miette::Diagnostic for LedgerCliError {
                  extended block's expiry moved"
                     .to_string(),
             )),
+            Self::ReleaseCheckMissingVersion { .. } => Some(Box::new(
+                "pass the version the verdict names, e.g. `release-check \
+                 v1.0.0` (the `v` prefix is optional)"
+                    .to_string(),
+            )),
+            Self::ReleaseCheckBadVersion { .. } => Some(Box::new(
+                "a release triple is three dot-separated numbers, optionally \
+                 v-prefixed — `v1.0.0` or `1.0.0`; no pre-release tags or \
+                 build metadata on a release gate"
+                    .to_string(),
+            )),
+            Self::ReleaseCheckBadFormat { .. } => Some(Box::new(
+                "`--format json` renders the glyim.ledger-release-check/1 \
+                 contract; plain text is the default"
+                    .to_string(),
+            )),
+            Self::ReleaseCheckMissingValue { .. } => Some(Box::new(
+                "the flag needs its value on the same command line, e.g. \
+                 `--format json`"
+                    .to_string(),
+            )),
+            Self::WaiversPruneLoad { .. } => Some(Box::new(
+                "the pruner refuses to rewrite a document it cannot fully \
+                 parse; fix the load diagnostics first (`glyim-ledger waivers` \
+                 prints them)"
+                    .to_string(),
+            )),
+            Self::WaiversPruneWrite { .. } => Some(Box::new(
+                "check that ledger/waivers.toml is writable; the rewrite \
+                 replaces the document with the canonical remaining entries, \
+                 every expired block removed"
+                    .to_string(),
+            )),
         }
     }
 }
@@ -1452,6 +1576,32 @@ pub enum Command {
         /// Output format; [`WaiversFormat::Text`] by default.
         format: WaiversFormat,
     },
+    /// `release-check <VERSION> [ROOT] [--format text|json]` — the plan
+    /// §10 final release gate: every declared gate green (`unmeasured`
+    /// blocks — it is displayed, never silently passed), evidence
+    /// reproducible (the M1.13 determinism self-check), no waiver active
+    /// or expired, and no error diagnostic across the composed faces.
+    ReleaseCheck {
+        /// The release the verdict names (`vMAJOR.MINOR.PATCH`).
+        version: ReleaseVersion,
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// Output format; [`ReleaseCheckFormat::Text`] by default.
+        format: ReleaseCheckFormat,
+    },
+    /// `waivers prune [ROOT] [--format text|json]` — the batch-retirement
+    /// write face: it removes every expired `[[waiver]]` block from
+    /// `ledger/waivers.toml` and rewrites the remaining entries
+    /// canonically (a document that does not load cleanly is refused; a
+    /// document with no expired waiver is never rewritten).
+    WaiversPrune {
+        /// Project directory containing `ledger/waivers.toml` (`.` by
+        /// default).
+        root: PathBuf,
+        /// Output format; [`WaiversFormat::Text`] by default.
+        format: WaiversFormat,
+    },
 }
 
 /// Output format of the `compute` subcommand.
@@ -1501,6 +1651,27 @@ pub enum GatesFormat {
     Json,
 }
 
+/// Output format of the `release-check` subcommand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReleaseCheckFormat {
+    /// The human-readable report ([`format_release_check_text`]).
+    Text,
+    /// The `glyim.ledger-release-check/1` JSON contract
+    /// ([`format_release_check_json`]).
+    Json,
+}
+
+impl ReleaseCheckFormat {
+    /// Canonical flag spelling (used in tracing spans).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Json => "json",
+        }
+    }
+}
+
 /// Output format of the `verify` subcommand.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerifyFormat {
@@ -1547,7 +1718,7 @@ pub enum WaiversFormat {
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger evidence audit [ROOT] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger waivers revoke [ROOT] --id <WVR-ID> [--format text|json]\n   or: glyim-ledger waivers extend [ROOT] --id <WVR-ID> [--days N] [--format text|json]\n   or: glyim-ledger handoff [ROOT] [--items N] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger evidence audit [ROOT] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger waivers revoke [ROOT] --id <WVR-ID> [--format text|json]\n   or: glyim-ledger waivers extend [ROOT] --id <WVR-ID> [--days N] [--format text|json]\n   or: glyim-ledger waivers prune [ROOT] [--format text|json]\n   or: glyim-ledger handoff [ROOT] [--items N] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger release-check <VERSION> [ROOT] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout; `next` filters by\n\
      \x20 lane (L|F|T|M|B|Q) and prints the glyim.ledger-next/1 JSON queue;\n\
@@ -1588,13 +1759,22 @@ pub fn usage() -> String {
      \x20 `waivers extend` re-pins one waiver's expiry to\n\
      \x20 today + --days (default 7, horizon 14) — the sanctioned\n\
      \x20 counterpart the duplicate-grant help line points to;\n\
+     \x20 `waivers prune` retires every expired waiver at once\n\
+     \x20 (canonical rewrite of the remaining entries, nothing\n\
+     \x20 written when the document does not load cleanly and no\n\
+     \x20 rewrite at all when nothing expired);\n\
      \x20 `handoff` composes the compute, next, and waivers face\n\
      \x20 outcomes into one short session document — the readiness\n\
      \x20 histogram, the top-N work queue (`--items N`, default 5,\n\
      \x20 max 20), waiver health, and witness debt — `--out PATH`\n\
      \x20 writes the rendered document (default HANDOFF.md /\n\
      \x20 HANDOFF.json by face) and `--check` fails on drift\n\
-     \x20 (plan §3.7 session handoff)."
+     \x20 (plan §3.7 session handoff); `release-check <VERSION>` is\n\
+     \x20 the plan §10 final release gate: every declared gate\n\
+     \x20 green (unmeasured blocks — displayed, never silently\n\
+     \x20 passed), evidence reproducible (the M1.13 self-check),\n\
+     \x20 no waiver active or expired, and no error diagnostic\n\
+     \x20 across the composed faces."
         .into()
 }
 
@@ -1616,7 +1796,8 @@ where
         }),
         Some(
             "check" | "gaps" | "schema" | "inventory" | "next" | "explain" | "compute" | "status"
-            | "diff" | "gates" | "verify" | "render-gaps" | "evidence" | "waivers" | "handoff",
+            | "diff" | "gates" | "verify" | "render-gaps" | "evidence" | "waivers" | "handoff"
+            | "release-check",
         ) => {
             let rest = &items[1..];
             if items[0] == "next" {
@@ -1651,6 +1832,9 @@ where
             }
             if items[0] == "handoff" {
                 return parse_handoff(rest);
+            }
+            if items[0] == "release-check" {
+                return parse_release_check(rest);
             }
             if rest.len() > 1 {
                 return Err(LedgerCliError::ExtraArgument {
@@ -2055,6 +2239,11 @@ fn parse_waivers(rest: &[String]) -> Result<Command, LedgerCliError> {
     if rest.first().map(String::as_str) == Some("extend") {
         return parse_waivers_extend(&rest[1..]);
     }
+    // The `prune` sub-word routes to the batch-retirement write face (the
+    // same dispatch shape).
+    if rest.first().map(String::as_str) == Some("prune") {
+        return parse_waivers_prune(&rest[1..]);
+    }
     let mut root: Option<PathBuf> = None;
     let mut format = WaiversFormat::Text;
     let mut index = 0;
@@ -2284,6 +2473,75 @@ fn parse_handoff(rest: &[String]) -> Result<Command, LedgerCliError> {
     })
 }
 
+/// Parse the `release-check` subcommand's arguments: one required
+/// `<VERSION>` positional (validated at parse time), then one optional
+/// ROOT positional and `--format <text|json>` in any order (the `gates`
+/// shape plus the version positional).
+fn parse_release_check(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut version: Option<ReleaseVersion> = None;
+    let mut root: Option<PathBuf> = None;
+    let mut format = ReleaseCheckFormat::Text;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--format" => {
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::ReleaseCheckMissingValue {
+                        flag: "--format".to_string(),
+                        usage: usage(),
+                    });
+                };
+                format = match value.as_str() {
+                    "text" => ReleaseCheckFormat::Text,
+                    "json" => ReleaseCheckFormat::Json,
+                    other => {
+                        return Err(LedgerCliError::ReleaseCheckBadFormat {
+                            value: other.to_string(),
+                            usage: usage(),
+                        });
+                    }
+                };
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                // The first positional is the required release version
+                // (validated here so a typo'd triple never reaches the
+                // engine), the second is ROOT.
+                if version.is_none() {
+                    let Some(parsed) = ReleaseVersion::parse(positional) else {
+                        return Err(LedgerCliError::ReleaseCheckBadVersion {
+                            value: positional.to_string(),
+                        });
+                    };
+                    version = Some(parsed);
+                } else if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                } else {
+                    root = Some(PathBuf::from(positional));
+                }
+                index += 1;
+            }
+        }
+    }
+    let Some(version) = version else {
+        return Err(LedgerCliError::ReleaseCheckMissingVersion { usage: usage() });
+    };
+    Ok(Command::ReleaseCheck {
+        version,
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        format,
+    })
+}
+
 /// Parse the `waivers revoke` subcommand's arguments: one optional ROOT
 /// positional, the required `--id <WVR-ID>` flag, and `--format
 /// <text|json>` in any order (the `waivers grant` shape).
@@ -2424,6 +2682,58 @@ fn parse_waivers_extend(rest: &[String]) -> Result<Command, LedgerCliError> {
         root: root.unwrap_or_else(|| PathBuf::from(".")),
         id,
         days,
+        format,
+    })
+}
+
+/// Parse the `waivers prune` subcommand's arguments: one optional ROOT
+/// positional and `--format <text|json>` in any order (the plain `waivers`
+/// shape — the batch face takes no ID: it retires every expired entry).
+fn parse_waivers_prune(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut format = WaiversFormat::Text;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--format" => {
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::WaiversMissingValue {
+                        flag: rest[index].clone(),
+                        usage: usage(),
+                    });
+                };
+                format = match value.as_str() {
+                    "text" => WaiversFormat::Text,
+                    "json" => WaiversFormat::Json,
+                    other => {
+                        return Err(LedgerCliError::WaiversBadFormat {
+                            value: other.to_string(),
+                            usage: usage(),
+                        });
+                    }
+                };
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    Ok(Command::WaiversPrune {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
         format,
     })
 }
