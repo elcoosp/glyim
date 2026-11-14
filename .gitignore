@@ -20,3 +20,7 @@ dump.txt
 # Handoff artifacts (ship manifest + PR body)
 ship.toml
 .github/pr-body.md
+
+# Ship-ceremony artifacts (delivery manifest + PR description).
+ship.toml
+.github/pr-body.md
