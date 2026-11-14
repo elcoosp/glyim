@@ -5,22 +5,11 @@ mutants.out.old
 vst
 tools/glyim-worktrees
 dump.txt
-
-# local release script (delivery artifact, not repo content)
-/ship.sh
-
-# declarative delivery manifest consumed by ship (delivery artifact, not repo content)
-/ship.toml
-
-# session-local PR body (delivery artifact consumed by ship.sh, not repo content)
-.github/pr-body.md
 .vercel
 .env*
 
-# Handoff artifacts (ship manifest + PR body)
-ship.toml
-.github/pr-body.md
-
-# Ship-ceremony artifacts (delivery manifest + PR description).
-ship.toml
+# Delivery artifacts (declarative ship manifest + PR body): consumed by
+# the ship ceremony, never repo content.
+/ship.sh
+/ship.toml
 .github/pr-body.md
