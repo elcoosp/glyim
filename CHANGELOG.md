@@ -8,6 +8,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`evidence retract` (`glyim-ledger evidence retract [ROOT] --fixture
+  <PATH> [--out PATH] [--format text|json])**: the evidence-store
+  curation removal face — removes every committed record whose
+  `fixture_sha256` matches the recomputed digest of one fixture. The
+  audit face's `Drift` verdict is the finding (a record that predates a
+  fixture edit no longer describes the tree); until this face the remedy
+  was hand-editing the canonical JSONL store. The engine reuses two
+  seams — `FixtureFingerprint` (the digest is recomputed from the real
+  fixture bytes, the same spelling the audit face compares) and
+  `EvidenceStore` (the rewrite persists the canonical remainder, so the
+  surviving records stay byte-deterministic). `run_evidence_retract`
+  validates the request — a relative, `..`-free, backslash-free fixture
+  path naming an existing file under ROOT (the fingerprint needs the
+  fixture's bytes; a phantom fixture would silently retract nothing),
+  a store that loads with zero error-severity diagnostics (a corrupt
+  line would be silently destroyed by the rewrite otherwise — the
+  waiver-face load rule), and at least one matching record (a fixture
+  with nothing committed is a rejection naming the digest, not a silent
+  no-op). Nothing is written when validation fails; the persist failure
+  reuses the record face's typed `EvidenceWrite` seam. The dispatch
+  layer routes every rejection through the typed error seam. 6 new
+  typed `LedgerCliError` variants (`EvidenceRetractMissingField`,
+  `EvidenceRetractBadFixture`, `EvidenceRetractMissingFixture`,
+  `EvidenceRetractFingerprint`, `EvidenceRetractLoad`,
+  `EvidenceRetractUnknownFixture`), all carrying their
+  `code()`/`help()` lines. Ships the `evidence_retract` walkthrough,
+  the `evidence` bench stage, and README/lib.rs/main.rs/usage docs.
+- **`gaps open` (`glyim-ledger gaps open [ROOT] --id <GAP-NNNN>
+  --class <a|b|c> --title <TEXT> --affects <ID[,ID...]> --caps <L0..L5>
+  --opened-in <TAG> [--file ledger/gaps/.../FILE.toml] [--format
+  text|json])**: the opening stage of the gap-lifecycle write face —
+  files a NEW gap entry into the registry. Until this face the witness
+  and retire stages had sanctioned commands, but opening a gap meant
+  hand-writing the curated TOML block and remembering the aligned
+  registry style, the explicit `status = "unwitnessed"` line, and the
+  regenerate-`KNOWN_GAPS.md` step. The new `GapOpener` seam has two
+  implementations — `FileGapOpener` (reads, appends, replaces the
+  registry file; a missing file is an empty document, so the default
+  numbered target is minted on first open) and `InMemoryGapOpener`
+  (tests and in-process consumers, with the appends recorded for the
+  audit). The engine renders the canonical block in the committed
+  registry style (keys padded to the `opened_in` column) and appends it
+  after one blank separator, so the curated header prose and every
+  sibling block survive byte-for-byte; the block always carries the
+  explicit `status = "unwitnessed"` line because the serde default for a
+  missing `status` key is `witnessed` — an omitted line would mint
+  silent debt, which plan §3.3 forbids. `run_gaps_open` validates the
+  request against the loaded registry — the canonical `GAP-NNNN` shape
+  (the face mints IDs, so four digits is enforced, not just matched), a
+  usable one-line title and `opened_in`, every `--affects` feature
+  present in the registry (a gap that limits nothing real is silent
+  debt), the ID free (an open gap is never silently shadowed), and a
+  relative, existing `.toml` path under `ledger/gaps/` when `--file`
+  names one; without `--file` the next numbered
+  `ledger/gaps/known/NNNN-gaps-open.toml` is minted (a pure function of
+  the tree). A registry that does not load cleanly is never extended.
+  The dispatch layer refreshes the generated `KNOWN_GAPS.md` in the same
+  run through the `render-gaps` pipeline, so the `--check` drift gate
+  stays green. 11 new typed `LedgerCliError` variants
+  (`GapsOpenMissingField`, `GapsOpenBadId`, `GapsOpenBadClass`,
+  `GapsOpenBadCaps`, `GapsOpenBadTitle`, `GapsOpenBadOpenedIn`,
+  `GapsOpenBadFile`, `GapsOpenAffectsUnknown`, `GapsOpenDuplicateId`,
+  `GapsOpenRegistry`, `GapsOpenWrite`), all carrying their
+  `code()`/`help()` lines. Ships the `gaps_open` walkthrough, the `gaps`
+  bench stage, and README/lib.rs/main.rs/usage docs.
 - **`gaps witness` (`glyim-ledger gaps witness [ROOT] --id <GAP-ID>
   --witness <PATH>`)**: the gap-lifecycle write face — attaches the
   witness fixture that reproduces one unwitnessed gap, closing the
