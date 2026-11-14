@@ -6,7 +6,7 @@ readme = "../../README.md"
 name = "glyim-bytecode-vm"
 keywords = ["bytecode", "vm", "interpreter", "runtime", "compiler"]
 license.workspace = true
-version = "0.10.0"
+version = "0.10.1"
 edition = "2024"
 description = "Switch-dispatch bytecode virtual machine for the Glyim bytecode backend (Phase 7 production-grade)"
 

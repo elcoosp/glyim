@@ -6,7 +6,7 @@ readme = "../../README.md"
 name = "glyim-lang-alloc"
 keywords = ["alloc", "memory", "runtime", "language", "heap"]
 license.workspace = true
-version = "0.10.0"
+version = "0.10.1"
 edition = "2024"
 description = "Glyim standard library: dynamic allocation and collections"
 
