@@ -1792,8 +1792,8 @@ mutation_kill_rate_pct = 75
     // -- audit face ---------------------------------------------------------
 
     use super::{
-        EVIDENCE_AUDIT_SCHEMA, EvidenceAuditOutcome, FileFixtureFingerprint, FixtureFingerprint,
-        FixtureVerdict, InMemoryFixtureFingerprint, resolve_fixture, run_evidence_audit,
+        EVIDENCE_AUDIT_SCHEMA, FileFixtureFingerprint, FixtureFingerprint, FixtureVerdict,
+        InMemoryFixtureFingerprint, resolve_fixture, run_evidence_audit,
     };
     use crate::compute::ProjectEvidenceSource as AuditProjectSource;
     use crate::parse_args;
@@ -1810,13 +1810,12 @@ mutation_kill_rate_pct = 75
         let mut hasher = Sha256::new();
         hasher.update(body.as_bytes());
         let digest = hasher.finalize();
-        let hex = digest
+        digest
             .iter()
             .fold(String::with_capacity(64), |mut out, byte| {
                 let _ = write!(out, "{byte:02x}");
                 out
-            });
-        hex
+            })
     }
 
     /// A committed store carrying one record per fixture body, digested
@@ -1849,7 +1848,7 @@ mutation_kill_rate_pct = 75
 
     #[test]
     fn audit_verdict_matrix_over_in_memory_digests() {
-        use super::{FingerprintError, resolve_fixture as resolve};
+        use super::resolve_fixture as resolve;
         let root = Path::new("/proj");
         let mut digests = BTreeMap::new();
         digests.insert(
