@@ -1,28 +1,37 @@
-//! Gap-lifecycle write faces (`gaps witness`, `gaps retire`).
+//! Gap-lifecycle write faces (`gaps open`, `gaps witness`, `gaps retire`).
 //!
 //! The gap registry (`ledger/gaps/known/*.toml`, parsed by
 //! `ledger-schema`) tracks every open gap's witness status, and the
 //! `render-gaps` face generates `KNOWN_GAPS.md` from it with a `--check`
 //! drift gate — but until now there was no sanctioned way to *change*
-//! that status: recording a witness or retiring a closed gap meant
-//! hand-editing the curated TOML files and remembering to regenerate the
-//! rendered document. These faces are the write side of that lifecycle,
-//! mirroring the `waivers grant/revoke` shape: a validated request, a
-//! source-of-truth load pass that refuses anything but a clean registry,
-//! a rewrite seam the engine consumes (file-backed in the CLI, in-memory
-//! in tests and walkthroughs), typed [`LedgerCliError`] rejections that
-//! never leave a partial write behind, and text/JSON formatters.
+//! that status: opening a gap, recording a witness, or retiring a closed
+//! gap meant hand-editing the curated TOML files and remembering to
+//! regenerate the rendered document. These faces are the write side of
+//! that lifecycle, mirroring the `waivers grant/revoke` shape: a
+//! validated request, a source-of-truth load pass that refuses anything
+//! but a clean registry, a rewrite seam the engine consumes (file-backed
+//! in the CLI, in-memory in tests and walkthroughs), typed
+//! [`LedgerCliError`] rejections that never leave a partial write behind,
+//! and text/JSON formatters.
 //!
-//! The rewriters are deliberately *surgical* rather than canonical: the
-//! committed gap files carry curated header prose (the M1.1/M1.7 seed
-//! comments) that a full re-serialization would discard, so the rewriters
-//! edit only the matched `[[gap]]` block's lines and leave every other
-//! byte untouched — the opposite tradeoff to the `waivers` faces, where
-//! the document is machine-written and canonicalization is the contract.
-//! The generated `KNOWN_GAPS.md` document is refreshed by the dispatch
-//! layer after a successful rewrite (the same `run_render_gaps` pipeline
-//! the `--check` gate byte-compares against), so the face never leaves
-//! the committed document silently drifted from the registry.
+//! `gaps open` is the one face that *appends* rather than edits: it
+//! renders the canonical `[[gap]]` block in the committed registry style
+//! (keys aligned to the `opened_in` column, explicit
+//! `status = "unwitnessed"` — the serde default for a missing `status`
+//! key is `witnessed`, so an omitted line would mint silent debt) and
+//! appends it after one blank separator, minting the next numbered
+//! `ledger/gaps/known/NNNN-gaps-open.toml` file unless `--file` names an
+//! existing registry file to extend. The other two faces are
+//! deliberately *surgical* rather than canonical: the committed gap
+//! files carry curated header prose (the M1.1/M1.7 seed comments) that a
+//! full re-serialization would discard, so the rewriters edit only the
+//! matched `[[gap]]` block's lines and leave every other byte untouched
+//! — the opposite tradeoff to the `waivers` faces, where the document is
+//! machine-written and canonicalization is the contract. The generated
+//! `KNOWN_GAPS.md` document is refreshed by the dispatch layer after a
+//! successful write (the same `run_render_gaps` pipeline the `--check`
+//! gate byte-compares against), so the faces never leave the committed
+//! document silently drifted from the registry.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -732,6 +741,507 @@ pub fn format_gaps_retire_json(outcome: &GapsRetireOutcome) -> String {
     text
 }
 
+// -- open face -----------------------------------------------------------------
+
+/// Schema tag of the `gaps open` JSON contract.
+pub const GAPS_OPEN_SCHEMA: &str = "glyim.ledger-gaps-open/1";
+
+/// The `gaps open` request (the CLI flags, validated by [`run_gaps_open`]):
+/// file a NEW gap entry into the registry — the opening stage of the gap
+/// lifecycle. Until this face the witness and retire stages had sanctioned
+/// commands, but opening a gap meant hand-writing the curated TOML block
+/// and remembering the aligned registry style, the explicit
+/// `status = "unwitnessed"` line, and the regenerate-`KNOWN_GAPS.md` step.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GapsOpenRequest {
+    /// The new gap ID (`GAP-NNNN`, exactly four digits). The face mints
+    /// IDs, so the canonical shape is enforced here, not just against the
+    /// loaded registry.
+    pub id: String,
+    /// The gap class (`a` diagnosed, `b` silent, `c` deferred) — parsed
+    /// from `--class` by [`parse_gap_class`].
+    pub class: ledger_schema::GapClass,
+    /// Human-readable one-liner (single line: control characters are
+    /// rejected, `"` and `\` are TOML-escaped on render).
+    pub title: String,
+    /// Feature IDs this gap limits — every one must exist in the loaded
+    /// feature registry (a gap that affects nothing real is silent debt).
+    pub affects: Vec<String>,
+    /// The readiness-level ceiling this gap imposes on the affected
+    /// features — parsed from `--caps` by [`parse_gap_level`].
+    pub caps: ledger_schema::Level,
+    /// Tag or ref where the gap was first recorded (`v0.4.0`).
+    pub opened_in: String,
+    /// Explicit registry file to append to, relative to the project root
+    /// (`ledger/gaps/known/0001-seed.toml`, `.toml` only, no `..` escape).
+    /// The file must already exist — curated registry files are
+    /// hand-created with provenance prose, and the face appends blocks, it
+    /// does not mint arbitrary files. `None` resolves the default target:
+    /// the next numbered file `ledger/gaps/known/NNNN-gaps-open.toml`.
+    pub file: Option<String>,
+}
+
+/// Parse a `--class` value (`a` | `b` | `c`) into a [`ledger_schema::GapClass`].
+#[must_use]
+pub fn parse_gap_class(value: &str) -> Option<ledger_schema::GapClass> {
+    match value {
+        "a" => Some(ledger_schema::GapClass::A),
+        "b" => Some(ledger_schema::GapClass::B),
+        "c" => Some(ledger_schema::GapClass::C),
+        _ => None,
+    }
+}
+
+/// Parse a `--caps` value (`L0`..`L5`) into a [`ledger_schema::Level`].
+#[must_use]
+pub fn parse_gap_level(value: &str) -> Option<ledger_schema::Level> {
+    ["L0", "L1", "L2", "L3", "L4", "L5"]
+        .iter()
+        .find(|spelling| **spelling == value)
+        .map(|spelling| match *spelling {
+            "L0" => ledger_schema::Level::L0,
+            "L1" => ledger_schema::Level::L1,
+            "L2" => ledger_schema::Level::L2,
+            "L3" => ledger_schema::Level::L3,
+            "L4" => ledger_schema::Level::L4,
+            _ => ledger_schema::Level::L5,
+        })
+}
+
+/// Where a new `[[gap]]` block is appended. The append seam mirrors
+/// [`GapWitnessRewriter`] and [`GapRetirer`]: the engine consumes the
+/// trait, so tests drive an in-memory document and the CLI wires the
+/// file-backed implementation.
+pub trait GapOpener {
+    /// Appends the canonical `block` (the exact bytes the engine rendered,
+    /// without a trailing newline) to the document at `path`, leaving every
+    /// existing byte untouched. Returns whether the append landed (`false`
+    /// = the document already carries a `[[gap]]` block with the exact ID:
+    /// the drift guard that keeps a load-pass/rewrite race from minting a
+    /// duplicate); the error detail is the IO failure message (the CLI
+    /// turns it into a typed write error).
+    fn open(&self, path: &Path, id: &str, block: &str) -> Result<bool, String>;
+}
+
+/// Appends the block to the registry file on disk: read (a missing file is
+/// an empty document — the default numbered target is minted on first
+/// open), guard the duplicate ID, append after one blank separator,
+/// replace the file. A document that already carries the ID is refused
+/// (`Ok(false)`), never silently extended.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FileGapOpener;
+
+impl GapOpener for FileGapOpener {
+    fn open(&self, path: &Path, id: &str, block: &str) -> Result<bool, String> {
+        let text = std::fs::read_to_string(path).unwrap_or_default();
+        let Some(edited) = append_gap_block(&text, id, block) else {
+            return Ok(false);
+        };
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|err| format!("cannot create {}: {err}", parent.display()))?;
+        }
+        std::fs::write(path, edited)
+            .map_err(|err| format!("cannot write {}: {err}", path.display()))?;
+        Ok(true)
+    }
+}
+
+/// Operates on owned in-memory documents (tests and programmatic
+/// consumers); the in-memory twin of [`FileGapOpener`]. Every successful
+/// append is recorded in [`Self::opened`] for the audit.
+#[derive(Debug, Default)]
+pub struct InMemoryGapOpener {
+    /// The documents the opener operates on, keyed by path.
+    pub doc: std::cell::RefCell<std::collections::HashMap<PathBuf, String>>,
+    /// Every `(path, opened ID)` append performed, in order.
+    pub opened: std::cell::RefCell<Vec<(PathBuf, String)>>,
+}
+
+impl GapOpener for InMemoryGapOpener {
+    fn open(&self, path: &Path, id: &str, block: &str) -> Result<bool, String> {
+        let mut doc = self.doc.borrow_mut();
+        let Some(text) = doc.get_mut(path) else {
+            return Ok(false);
+        };
+        let Some(edited) = append_gap_block(text, id, block) else {
+            return Ok(false);
+        };
+        *text = edited;
+        self.opened
+            .borrow_mut()
+            .push((path.to_path_buf(), id.to_string()));
+        Ok(true)
+    }
+}
+
+/// The canonical append behind both openers: find no `[[gap]]` block
+/// carrying the exact ID (the drift guard), then append the block after
+/// one blank separator — the curated header prose and every sibling block
+/// pass through byte-for-byte. Returns `None` when the document already
+/// carries the ID; the engine maps that to a typed drift error.
+///
+/// A new gap is always written with the explicit `status = "unwitnessed"`
+/// line ([`render_gap_block`] hard-codes it): the serde default for a
+/// missing `status` key is `witnessed`, so an omitted line would mint
+/// silent debt — the exact outcome the plan §3.3 rule forbids.
+fn append_gap_block(text: &str, id: &str, block: &str) -> Option<String> {
+    // The duplicate scan re-uses the block walk the witness edit uses.
+    let lines: Vec<&str> = text.lines().collect();
+    let mut index = 0;
+    while index < lines.len() {
+        if lines[index].trim() != "[[gap]]" {
+            index += 1;
+            continue;
+        }
+        let mut end = index + 1;
+        while end < lines.len() && lines[end].trim() != "[[gap]]" {
+            end += 1;
+        }
+        let matches_id = lines[index..end]
+            .iter()
+            .any(|entry| block_key(entry) == Some("id") && block_value(entry) == Some(id));
+        if matches_id {
+            return None;
+        }
+        index = end;
+    }
+    let mut result = String::with_capacity(text.len() + block.len() + 2);
+    result.push_str(text);
+    if !text.is_empty() && !text.ends_with('\n') {
+        result.push('\n');
+    }
+    if !text.is_empty() {
+        result.push('\n');
+    }
+    result.push_str(block);
+    result.push('\n');
+    Some(result)
+}
+
+/// A registry file an explicit `--file` may target: relative to the
+/// project root, backslash-free, no `..` component, a `.toml` file under
+/// `ledger/gaps/`. The committed entries live under `ledger/gaps/known/`
+/// with `NNNN-slug.toml` names; the face appends to curated files, it
+/// does not mint arbitrary user paths (only the default numbered target
+/// is created).
+fn usable_registry_file(file: &str) -> bool {
+    Path::new(file)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
+        && !file.chars().any(char::is_control)
+        && !file.contains('\\')
+        && !Path::new(file).is_absolute()
+        && Path::new(file)
+            .components()
+            .all(|component| matches!(component, std::path::Component::Normal(_)))
+        && Path::new(file).starts_with("ledger/gaps/")
+}
+
+/// The escape behind [`render_gap_block`]: a TOML basic string safe to
+/// embed in the block (`"`, `\`; control characters were rejected at
+/// validation, so no `\u` escapes are needed).
+fn escape_toml_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+/// Renders one `[[gap]]` block in the committed registry style: keys
+/// padded to the `opened_in` column, the quoted single-line title, the
+/// `affects` array, and the explicit `status = "unwitnessed"` line (a
+/// fresh gap is witness debt, never silent debt). Pure — the same request
+/// always renders the same bytes, which is what the golden bytes in the
+/// tests and the `--check` gates rely on.
+fn render_gap_block(request: &GapsOpenRequest) -> String {
+    let keys = [
+        "id",
+        "class",
+        "title",
+        "affects",
+        "caps",
+        "opened_in",
+        "status",
+    ];
+    let width = keys.iter().map(|key| key.len()).max().unwrap_or_default() + 1;
+    let mut block = String::new();
+    block.push_str("[[gap]]\n");
+    let mut line = |key: &str, value: &str| {
+        let _ = writeln!(
+            block,
+            "{key}{}= {value}",
+            " ".repeat(width.saturating_sub(key.len()))
+        );
+    };
+    line("id", &format!("\"{}\"", request.id));
+    line("class", &format!("\"{}\"", request.class.as_str()));
+    line(
+        "title",
+        &format!("\"{}\"", escape_toml_string(&request.title)),
+    );
+    let affects = request
+        .affects
+        .iter()
+        .map(|id| format!("\"{id}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    line("affects", &format!("[{affects}]"));
+    line("caps", &format!("\"{}\"", request.caps.as_str()));
+    line(
+        "opened_in",
+        &format!("\"{}\"", escape_toml_string(&request.opened_in)),
+    );
+    line("status", "\"unwitnessed\"");
+    block
+}
+
+/// The default open target: the next numbered file under
+/// `ledger/gaps/known/` (`NNNN-gaps-open.toml`, `NNNN` = the largest
+/// leading number across the committed `*.toml` filenames + 1). A pure
+/// function of the tree, so repeated opens mint one file per gap with
+/// deterministic names; `0001-gaps-open.toml` seeds an empty directory.
+fn next_open_registry_file(root: &Path) -> PathBuf {
+    let known = root.join("ledger/gaps/known");
+    let mut max = 0_u64;
+    if let Ok(entries) = std::fs::read_dir(&known) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+            let digits = name.split('.').next().unwrap_or_default();
+            let digits: String = digits.chars().take_while(char::is_ascii_digit).collect();
+            if let Ok(number) = digits.parse::<u64>() {
+                max = max.max(number);
+            }
+        }
+    }
+    known.join(format!("{:04}-gaps-open.toml", max + 1))
+}
+
+/// Result of a `gaps open` run (also the `glyim.ledger-gaps-open/1` JSON
+/// face via [`format_gaps_open_json`]).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct GapsOpenOutcome {
+    /// Schema tag, always [`GAPS_OPEN_SCHEMA`].
+    pub schema: &'static str,
+    /// The opened gap's ID.
+    pub id: String,
+    /// The gap's class (`a` diagnosed, `b` silent, `c` deferred).
+    pub class: String,
+    /// The gap's registry title.
+    pub title: String,
+    /// The feature IDs the gap limits.
+    pub affects: Vec<String>,
+    /// The readiness-level ceiling (`L2`).
+    pub caps: String,
+    /// The tag or ref the gap was opened in (`v0.4.0`).
+    pub opened_in: String,
+    /// The registry file the `[[gap]]` block was appended to.
+    pub target: String,
+    /// The generated document the dispatch layer refreshes after the
+    /// append (`<ROOT>/KNOWN_GAPS.md`) — the face never leaves the
+    /// committed render silently drifted from the registry.
+    pub doc_target: String,
+}
+
+/// Opens one gap: validates the request, refuses to touch anything unless
+/// the registry loads cleanly and the ID is free, and appends the
+/// canonical `[[gap]]` block through `opener`.
+///
+/// # Validation contract
+///
+/// - `id` must match the canonical `GAP-NNNN` shape (exactly four digits —
+///   the face mints IDs, so the shape is enforced here, not just matched);
+/// - `title` and `opened_in` must be usable one-liners (non-blank, no
+///   control characters; `"` and `\` are escaped on render);
+/// - `affects` must be non-empty, and every feature ID must exist in the
+///   loaded registry (a gap that affects nothing real is silent debt);
+/// - the registry must load with zero error-severity diagnostics (a
+///   registry that does not parse is never extended — the load rule);
+/// - the ID must be free (an existing gap is never silently shadowed —
+///   the grant-face duplicate rule);
+/// - an explicit `--file` must be a relative, `.toml` path under
+///   `ledger/gaps/` that already exists; the default target is the next
+///   numbered `ledger/gaps/known/NNNN-gaps-open.toml`.
+///
+/// Nothing is written when validation fails.
+///
+/// # Errors
+///
+/// Typed [`LedgerCliError`] variants for every rejected request
+/// (`GapsOpenBadId`, `GapsOpenBadTitle`, `GapsOpenBadOpenedIn`,
+/// `GapsOpenBadFile`, `GapsOpenAffectsUnknown`, `GapsOpenDuplicateId`,
+/// `GapsOpenRegistry`) and for a failed or drifted append
+/// (`GapsOpenWrite`).
+pub fn run_gaps_open(
+    root: &Path,
+    request: &GapsOpenRequest,
+    opener: &dyn GapOpener,
+) -> Result<GapsOpenOutcome, LedgerCliError> {
+    let span = tracing::info_span!(
+        "gaps_open",
+        root = %root.display(),
+        id = %request.id,
+    );
+    let _enter = span.enter();
+
+    // The face mints IDs, so the canonical GAP-NNNN shape is enforced
+    // here — not just matched against the loaded registry.
+    let id_ok = request.id.len() == 8
+        && request.id.starts_with("GAP-")
+        && request.id[4..].chars().all(|ch| ch.is_ascii_digit());
+    if !id_ok {
+        return Err(LedgerCliError::GapsOpenBadId {
+            id: request.id.clone(),
+        });
+    }
+    if request.title.trim().is_empty() || request.title.chars().any(char::is_control) {
+        return Err(LedgerCliError::GapsOpenBadTitle {
+            title: request.title.clone(),
+        });
+    }
+    if request.opened_in.trim().is_empty() || request.opened_in.chars().any(char::is_control) {
+        return Err(LedgerCliError::GapsOpenBadOpenedIn {
+            opened_in: request.opened_in.clone(),
+        });
+    }
+    if let Some(file) = &request.file {
+        if !usable_registry_file(file) {
+            return Err(LedgerCliError::GapsOpenBadFile { file: file.clone() });
+        }
+    }
+
+    // The load rule: a registry that does not parse cleanly is never
+    // extended, exactly like the witness/retire/waivers faces.
+    let loaded = ledger_schema::load_project_registry(root);
+    if loaded
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        let detail = loaded
+            .diagnostics
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(LedgerCliError::GapsOpenRegistry { detail });
+    }
+
+    // Every affected feature must exist: a gap that limits nothing real
+    // would cap nothing and stay silently undiscoverable in the reports.
+    for feature in &request.affects {
+        if loaded.registry.feature_by_id(feature).is_none() {
+            return Err(LedgerCliError::GapsOpenAffectsUnknown {
+                affects: request.affects.clone(),
+                known: loaded
+                    .registry
+                    .features()
+                    .iter()
+                    .map(|sourced| sourced.entry.id.clone())
+                    .take(3)
+                    .collect::<Vec<_>>(),
+            });
+        }
+    }
+
+    // The duplicate rule: an existing gap is never silently shadowed (the
+    // grant-face rule; extend the gap or retire it deliberately instead).
+    if let Some(sourced) = loaded
+        .registry
+        .gaps()
+        .iter()
+        .find(|sourced| sourced.entry.id == request.id)
+    {
+        return Err(LedgerCliError::GapsOpenDuplicateId {
+            id: request.id.clone(),
+            path: sourced.path.display().to_string(),
+        });
+    }
+
+    let target = match &request.file {
+        Some(file) => {
+            let path = root.join(file);
+            if !path.is_file() {
+                return Err(LedgerCliError::GapsOpenBadFile { file: file.clone() });
+            }
+            path
+        }
+        None => next_open_registry_file(root),
+    };
+
+    let block = render_gap_block(request);
+    let opened = opener
+        .open(&target, &request.id, block.trim_end_matches('\n'))
+        .map_err(|detail| LedgerCliError::GapsOpenWrite {
+            path: target.display().to_string(),
+            detail,
+        })?;
+    if !opened {
+        // The load pass said the ID was free but the document now carries
+        // it: the registry drifted between load and rewrite. Fail without
+        // a partial write.
+        return Err(LedgerCliError::GapsOpenDuplicateId {
+            id: request.id.clone(),
+            path: target.display().to_string(),
+        });
+    }
+    tracing::debug!(
+        id = %request.id,
+        target = %target.display(),
+        "gap opened"
+    );
+
+    Ok(GapsOpenOutcome {
+        schema: GAPS_OPEN_SCHEMA,
+        id: request.id.clone(),
+        class: request.class.as_str().to_string(),
+        title: request.title.clone(),
+        affects: request.affects.clone(),
+        caps: request.caps.as_str().to_string(),
+        opened_in: request.opened_in.clone(),
+        target: target.display().to_string(),
+        doc_target: root
+            .join(crate::render::KNOWN_GAPS_MD_TARGET)
+            .display()
+            .to_string(),
+    })
+}
+
+/// Renders the open outcome's text face: one summary line (the opened
+/// gap, its class, and both touched paths).
+#[must_use]
+pub fn format_gaps_open_text(outcome: &GapsOpenOutcome) -> String {
+    let mut text = String::new();
+    let _ = writeln!(
+        text,
+        "opened {} ({}) capping {} at {} -> {} appended, refresh {}",
+        outcome.id,
+        outcome.class,
+        outcome.affects.join(", "),
+        outcome.caps,
+        outcome.target,
+        outcome.doc_target,
+    );
+    text
+}
+
+/// Renders the `glyim.ledger-gaps-open/1` JSON contract.
+#[must_use]
+pub fn format_gaps_open_json(outcome: &GapsOpenOutcome) -> String {
+    let mut text = serde_json::to_string_pretty(outcome)
+        .expect("the glyim.ledger-gaps-open/1 document is a serialisation-only struct");
+    text.push('\n');
+    text
+}
+
 #[cfg(test)]
 mod tests {
     //! `gaps witness` contract: the rewriter edits exactly the matched
@@ -747,8 +1257,11 @@ mod tests {
     use ledger_schema::GapStatus;
 
     use super::{
-        FileGapRetirer, FileGapWitnessRewriter, GapRetirer, GapWitnessRewriter, GapsRetireRequest,
-        GapsWitnessRequest, InMemoryGapRetirer, run_gaps_retire, run_gaps_witness,
+        FileGapOpener, FileGapRetirer, FileGapWitnessRewriter, GAPS_OPEN_SCHEMA, GapOpener,
+        GapRetirer, GapWitnessRewriter, GapsFormat, GapsOpenOutcome, GapsOpenRequest,
+        GapsRetireRequest, GapsWitnessRequest, InMemoryGapOpener, InMemoryGapRetirer,
+        format_gaps_open_json, format_gaps_open_text, run_gaps_open, run_gaps_retire,
+        run_gaps_witness,
     };
     use crate::{LedgerCliError, parse_args, usage};
 
@@ -1611,6 +2124,535 @@ mod tests {
     fn parse_args_rejects_gaps_retire_bad_format() {
         let err = parse_args(args(&[
             "gaps", "retire", "--id", "GAP-0002", "--format", "yaml",
+        ]))
+        .expect_err("yaml is not a face format");
+        assert!(matches!(err, LedgerCliError::GapsBadFormat { .. }));
+    }
+
+    // -- open face ---------------------------------------------------------------
+
+    /// The canonical `[[gap]]` block the open face appends for a b-class
+    /// gap capping two demo features: keys aligned to the committed
+    /// registry style (`opened_in` sets the column), explicit
+    /// `unwitnessed` status (a fresh gap is never silent debt).
+    const OPEN_BLOCK: &str = "[[gap]]\n\
+         id        = \"GAP-0003\"\n\
+         class     = \"b\"\n\
+         title     = \"no lowering site sets cleanup edges\"\n\
+         affects   = [\"LANG-DEMO-AWAIT\", \"LANG-DEMO-CLEANUP\"]\n\
+         caps      = \"L2\"\n\
+         opened_in = \"v0.4.0\"\n\
+         status    = \"unwitnessed\"\n";
+
+    fn open_request(id: &str, title: &str) -> GapsOpenRequest {
+        GapsOpenRequest {
+            id: id.to_string(),
+            class: ledger_schema::GapClass::B,
+            title: title.to_string(),
+            affects: vec!["LANG-DEMO-AWAIT".to_string()],
+            caps: ledger_schema::Level::L2,
+            opened_in: "v0.4.0".to_string(),
+            file: None,
+        }
+    }
+
+    #[test]
+    fn file_opener_appends_the_canonical_block_bytes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("0001-seed.toml");
+        std::fs::write(&path, CURATED_SEED).expect("write seed");
+        let block = OPEN_BLOCK.trim_end_matches('\n').to_string();
+        let opened = FileGapOpener
+            .open(&path, "GAP-0003", &block)
+            .expect("the append lands");
+        assert!(opened);
+        let text = std::fs::read_to_string(&path).expect("read back");
+        // The curated prose and both sibling blocks pass through
+        // byte-for-byte; the new block lands after one blank separator.
+        assert_eq!(text, format!("{CURATED_SEED}\n{OPEN_BLOCK}"));
+    }
+
+    #[test]
+    fn file_opener_rejects_an_existing_id_and_writes_nothing() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("0001-seed.toml");
+        std::fs::write(&path, CURATED_SEED).expect("write seed");
+        let before = std::fs::read_to_string(&path).expect("read seed");
+        let opened = FileGapOpener
+            .open(&path, "GAP-0002", "irrelevant")
+            .expect("the guard is not an error");
+        assert!(!opened);
+        assert_eq!(std::fs::read_to_string(&path).expect("read back"), before);
+    }
+
+    #[test]
+    fn in_memory_opener_records_the_append() {
+        let in_memory = InMemoryGapOpener::default();
+        in_memory
+            .doc
+            .borrow_mut()
+            .insert(PathBuf::from("memory.toml"), CURATED_SEED.to_string());
+        let opened = in_memory
+            .open(Path::new("memory.toml"), "GAP-0003", "block")
+            .expect("the append lands");
+        assert!(opened);
+        assert_eq!(
+            in_memory.opened.borrow().clone(),
+            vec![(PathBuf::from("memory.toml"), "GAP-0003".to_string())]
+        );
+        // A document that already carries the block (the canonical block
+        // the engine renders always opens with the [[gap]] header and the
+        // id line) is the drift signal, not a second append.
+        let drifted = in_memory
+            .open(
+                Path::new("memory.toml"),
+                "GAP-0001",
+                "[[gap]]\nid        = \"GAP-0001\"\n",
+            )
+            .expect("the guard is not an error");
+        assert!(!drifted);
+        assert_eq!(in_memory.opened.borrow().len(), 1);
+    }
+
+    #[test]
+    fn run_gaps_open_appends_the_gap_and_reports_the_target() {
+        let (dir, _seed) = seeded_root();
+        let root = dir.path().to_path_buf();
+        let request = open_request("GAP-0003", "no lowering site sets cleanup edges");
+        let outcome = run_gaps_open(&root, &request, &FileGapOpener).expect("the open lands");
+        assert_eq!(outcome.schema, GAPS_OPEN_SCHEMA);
+        assert_eq!(outcome.id, "GAP-0003");
+        assert_eq!(outcome.class, "b");
+        assert_eq!(outcome.affects, vec!["LANG-DEMO-AWAIT"]);
+        assert_eq!(outcome.caps, "L2");
+        assert_eq!(outcome.opened_in, "v0.4.0");
+        assert!(
+            outcome
+                .target
+                .ends_with("ledger/gaps/known/0002-gaps-open.toml"),
+            "the default target is the next numbered registry file, got {}",
+            outcome.target
+        );
+        assert_eq!(
+            outcome.doc_target,
+            root.join(crate::render::KNOWN_GAPS_MD_TARGET)
+                .display()
+                .to_string()
+        );
+        // The registry is the source of truth: it re-loads cleanly with
+        // the new entry, still unwitnessed (witness debt is explicit).
+        let loaded = ledger_schema::load_project_registry(&root);
+        assert_eq!(loaded.registry.gap_count(), 3);
+        let opened = loaded
+            .registry
+            .gaps()
+            .iter()
+            .find(|sourced| sourced.entry.id == "GAP-0003")
+            .expect("the opened gap is in the registry");
+        assert_eq!(opened.entry.class, ledger_schema::GapClass::B);
+        assert_eq!(opened.entry.status, GapStatus::Unwitnessed);
+        assert!(opened.entry.witness.is_none());
+        assert_eq!(opened.entry.affects, vec!["LANG-DEMO-AWAIT"]);
+    }
+
+    #[test]
+    fn run_gaps_open_rejects_a_duplicate_id_without_writing() {
+        let (dir, seed) = seeded_root();
+        let root = dir.path().to_path_buf();
+        let before = std::fs::read_to_string(&seed).expect("read seed");
+        let request = open_request("GAP-0001", "duplicate");
+        let err = run_gaps_open(&root, &request, &FileGapOpener).expect_err("duplicate id");
+        assert!(matches!(
+            err,
+            LedgerCliError::GapsOpenDuplicateId { ref id, .. } if id == "GAP-0001"
+        ));
+        if let Some(help) = miette::Diagnostic::help(&err) {
+            assert!(help.to_string().contains("GAP-0001"));
+        }
+        assert_eq!(std::fs::read_to_string(&seed).expect("read back"), before);
+    }
+
+    #[test]
+    fn run_gaps_open_rejects_an_unknown_affects_feature() {
+        let (dir, _seed) = seeded_root();
+        let root = dir.path().to_path_buf();
+        let mut request = open_request("GAP-0003", "phantom affects");
+        request.affects = vec!["LANG-NOPE".to_string()];
+        let err = run_gaps_open(&root, &request, &FileGapOpener).expect_err("unknown affects");
+        assert!(matches!(err, LedgerCliError::GapsOpenAffectsUnknown { .. }));
+    }
+
+    #[test]
+    fn run_gaps_open_rejects_a_bad_id_shape() {
+        let (dir, _seed) = seeded_root();
+        let root = dir.path().to_path_buf();
+        for id in ["GAP-3", "OPEN-0003", "gap-0003", "GAP-00031", ""] {
+            let request = open_request(id, "bad shape");
+            let err = run_gaps_open(&root, &request, &FileGapOpener)
+                .expect_err("a non-canonical ID is rejected");
+            assert!(matches!(err, LedgerCliError::GapsOpenBadId { .. }));
+        }
+    }
+
+    #[test]
+    fn run_gaps_open_rejects_a_blank_or_multiline_title() {
+        let (dir, _seed) = seeded_root();
+        let root = dir.path().to_path_buf();
+        for title in ["", "   ", "line one\nline two"] {
+            let request = open_request("GAP-0003", title);
+            let err = run_gaps_open(&root, &request, &FileGapOpener)
+                .expect_err("a unusable title is rejected");
+            assert!(matches!(err, LedgerCliError::GapsOpenBadTitle { .. }));
+        }
+    }
+
+    #[test]
+    fn run_gaps_open_rejects_a_registry_that_does_not_load() {
+        let (dir, _seed) = seeded_root();
+        let root = dir.path().to_path_buf();
+        write_file(
+            &root,
+            "ledger/gaps/known/0002-broken.toml",
+            "[[gap]]\nunknown_key = 1\n",
+        );
+        let request = open_request("GAP-0003", "broken registry");
+        let err =
+            run_gaps_open(&root, &request, &FileGapOpener).expect_err("broken registry refused");
+        assert!(matches!(err, LedgerCliError::GapsOpenRegistry { .. }));
+    }
+
+    #[test]
+    fn run_gaps_open_appends_to_an_explicit_registry_file() {
+        let (dir, seed) = seeded_root();
+        let root = dir.path().to_path_buf();
+        let mut request = open_request("GAP-0003", "explicit target");
+        request.file = Some("ledger/gaps/known/0001-seed.toml".to_string());
+        let outcome = run_gaps_open(&root, &request, &FileGapOpener).expect("the open lands");
+        assert_eq!(outcome.target, seed.display().to_string());
+        let text = std::fs::read_to_string(&seed).expect("read back");
+        // The curated prose and both sibling blocks survive byte-for-byte;
+        // the new block is appended after one blank separator.
+        assert!(text.starts_with(CURATED_SEED));
+        assert!(text.contains("id        = \"GAP-0003\""));
+        assert!(
+            !root.join("ledger/gaps/known/0002-gaps-open.toml").exists(),
+            "the default numbered file is not minted when --file names one"
+        );
+    }
+
+    #[test]
+    fn run_gaps_open_rejects_an_unusable_explicit_file() {
+        let (dir, _seed) = seeded_root();
+        let root = dir.path().to_path_buf();
+        let cases = [
+            "ledger/features/lang/a.toml",     // outside ledger/gaps/
+            "../escape.toml",                  // .. escape
+            "ledger/gaps/known/missing.toml",  // not an existing file
+            "ledger/gaps/known/0001-seed.txt", // not a .toml
+        ];
+        for file in cases {
+            let mut request = open_request("GAP-0003", "bad file");
+            request.file = Some(file.to_string());
+            let err = run_gaps_open(&root, &request, &FileGapOpener)
+                .expect_err("an unusable --file is rejected");
+            assert!(matches!(err, LedgerCliError::GapsOpenBadFile { .. }));
+        }
+    }
+
+    #[test]
+    fn run_gaps_open_escapes_quotes_in_the_title() {
+        let (dir, _seed) = seeded_root();
+        let root = dir.path().to_path_buf();
+        let request = open_request("GAP-0003", "quotes \" and backslash \\ stay");
+        run_gaps_open(&root, &request, &FileGapOpener).expect("the open lands");
+        let loaded = ledger_schema::load_project_registry(&root);
+        let opened = loaded
+            .registry
+            .gaps()
+            .iter()
+            .find(|sourced| sourced.entry.id == "GAP-0003")
+            .expect("the opened gap re-parses");
+        assert_eq!(opened.entry.title, "quotes \" and backslash \\ stay");
+    }
+
+    #[test]
+    fn format_gaps_open_text_names_the_opened_gap() {
+        let outcome = GapsOpenOutcome {
+            schema: GAPS_OPEN_SCHEMA,
+            id: "GAP-0003".to_string(),
+            class: "b".to_string(),
+            title: "no lowering site sets cleanup edges".to_string(),
+            affects: vec!["LANG-DEMO-AWAIT".to_string()],
+            caps: "L2".to_string(),
+            opened_in: "v0.4.0".to_string(),
+            target: "ledger/gaps/known/0002-gaps-open.toml".to_string(),
+            doc_target: "KNOWN_GAPS.md".to_string(),
+        };
+        let text = format_gaps_open_text(&outcome);
+        assert!(text.contains("opened GAP-0003"));
+        assert!(text.contains("(b)"));
+        assert!(text.contains("0002-gaps-open.toml"));
+        assert!(text.contains("KNOWN_GAPS.md"));
+    }
+
+    #[test]
+    fn format_gaps_open_json_parses_back_with_schema() {
+        let outcome = GapsOpenOutcome {
+            schema: GAPS_OPEN_SCHEMA,
+            id: "GAP-0003".to_string(),
+            class: "b".to_string(),
+            title: "no lowering site sets cleanup edges".to_string(),
+            affects: vec!["LANG-DEMO-AWAIT".to_string()],
+            caps: "L2".to_string(),
+            opened_in: "v0.4.0".to_string(),
+            target: "ledger/gaps/known/0002-gaps-open.toml".to_string(),
+            doc_target: "KNOWN_GAPS.md".to_string(),
+        };
+        let json = format_gaps_open_json(&outcome);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&json).expect("the JSON contract parses");
+        assert_eq!(parsed["schema"].as_str(), Some("glyim.ledger-gaps-open/1"));
+        assert_eq!(parsed["id"].as_str(), Some("GAP-0003"));
+        assert_eq!(parsed["affects"].as_array().map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn both_gaps_open_formatters_render_twice_byte_identical() {
+        let outcome = GapsOpenOutcome {
+            schema: GAPS_OPEN_SCHEMA,
+            id: "GAP-0003".to_string(),
+            class: "b".to_string(),
+            title: "no lowering site sets cleanup edges".to_string(),
+            affects: vec!["LANG-DEMO-AWAIT".to_string()],
+            caps: "L2".to_string(),
+            opened_in: "v0.4.0".to_string(),
+            target: "ledger/gaps/known/0002-gaps-open.toml".to_string(),
+            doc_target: "KNOWN_GAPS.md".to_string(),
+        };
+        assert_eq!(
+            format_gaps_open_text(&outcome),
+            format_gaps_open_text(&outcome)
+        );
+        assert_eq!(
+            format_gaps_open_json(&outcome),
+            format_gaps_open_json(&outcome)
+        );
+    }
+
+    #[test]
+    fn gaps_open_error_variants_carry_code_and_help() {
+        let variants = [
+            LedgerCliError::GapsOpenBadId {
+                id: "GAP-3".to_string(),
+            },
+            LedgerCliError::GapsOpenBadTitle {
+                title: String::new(),
+            },
+            LedgerCliError::GapsOpenBadOpenedIn {
+                opened_in: String::new(),
+            },
+            LedgerCliError::GapsOpenBadFile {
+                file: "../escape.toml".to_string(),
+            },
+            LedgerCliError::GapsOpenAffectsUnknown {
+                affects: vec!["LANG-NOPE".to_string()],
+                known: Vec::new(),
+            },
+            LedgerCliError::GapsOpenDuplicateId {
+                id: "GAP-0001".to_string(),
+                path: "ledger/gaps/known/0001-seed.toml".to_string(),
+            },
+            LedgerCliError::GapsOpenRegistry {
+                detail: "boom".to_string(),
+            },
+            LedgerCliError::GapsOpenWrite {
+                path: "ledger/gaps/known/0002-gaps-open.toml".to_string(),
+                detail: "io".to_string(),
+            },
+        ];
+        for err in &variants {
+            let code = miette::Diagnostic::code(err)
+                .expect("every typed error carries a code")
+                .to_string();
+            assert!(
+                code.starts_with("glyim-ledger::gaps_open_"),
+                "unexpected code {code}"
+            );
+            assert!(
+                miette::Diagnostic::help(err).is_some(),
+                "missing help() on {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn usage_lists_gaps_open() {
+        assert!(usage().contains("gaps open"));
+    }
+
+    #[test]
+    fn parse_args_accepts_gaps_open() {
+        let command = parse_args(args(&[
+            "gaps",
+            "open",
+            "--id",
+            "GAP-0003",
+            "--class",
+            "b",
+            "--title",
+            "no cleanup",
+            "--affects",
+            "LANG-DEMO-AWAIT,LANG-DEMO-CLEANUP",
+            "--caps",
+            "L2",
+            "--opened-in",
+            "v0.4.0",
+        ]))
+        .expect("the flags parse");
+        assert!(matches!(
+            command,
+            crate::Command::GapsOpen {
+                root,
+                ref id,
+                class,
+                ref title,
+                ref affects,
+                caps,
+                ref opened_in,
+                file: None,
+                format: GapsFormat::Text,
+            } if root.as_path() == Path::new(".")
+                && id == "GAP-0003"
+                && class == ledger_schema::GapClass::B
+                && title == "no cleanup"
+                && affects
+                    == &[
+                        "LANG-DEMO-AWAIT".to_string(),
+                        "LANG-DEMO-CLEANUP".to_string()
+                    ]
+                && caps == ledger_schema::Level::L2
+                && opened_in == "v0.4.0"
+        ));
+    }
+
+    #[test]
+    fn parse_args_accepts_gaps_open_with_root_and_file_and_format() {
+        let command = parse_args(args(&[
+            "gaps",
+            "open",
+            "/tmp/root",
+            "--id",
+            "GAP-0003",
+            "--class",
+            "c",
+            "--title",
+            "t",
+            "--affects",
+            "LANG-DEMO-AWAIT",
+            "--caps",
+            "L2",
+            "--opened-in",
+            "v0.4.0",
+            "--file",
+            "known/0001-seed.toml",
+            "--format",
+            "json",
+        ]))
+        .expect("the flags parse");
+        assert!(matches!(
+            command,
+            crate::Command::GapsOpen {
+                root,
+                file: Some(ref file),
+                format: GapsFormat::Json,
+                ..
+            } if root.as_path() == Path::new("/tmp/root") && file == "known/0001-seed.toml"
+        ));
+    }
+
+    #[test]
+    fn parse_args_rejects_gaps_open_missing_flags() {
+        for argv in [
+            vec!["gaps", "open"], // everything missing
+            vec![
+                "gaps",
+                "open",
+                "--id",
+                "GAP-0003",
+                "--class",
+                "b",
+                "--title",
+                "t",
+                "--affects",
+                "LANG-DEMO-AWAIT",
+                "--caps",
+                "L2",
+            ], // --opened-in missing
+        ] {
+            let err = parse_args(args(&argv)).expect_err("a required flag is missing");
+            assert!(matches!(err, LedgerCliError::GapsOpenMissingField { .. }));
+        }
+    }
+
+    #[test]
+    fn parse_args_rejects_gaps_open_bad_class_and_caps() {
+        let err = parse_args(args(&[
+            "gaps",
+            "open",
+            "--id",
+            "GAP-0003",
+            "--class",
+            "d",
+            "--title",
+            "t",
+            "--affects",
+            "LANG-DEMO-AWAIT",
+            "--caps",
+            "L2",
+            "--opened-in",
+            "v0.4.0",
+        ]))
+        .expect_err("d is not a gap class");
+        assert!(matches!(err, LedgerCliError::GapsOpenBadClass { .. }));
+        let err = parse_args(args(&[
+            "gaps",
+            "open",
+            "--id",
+            "GAP-0003",
+            "--class",
+            "b",
+            "--title",
+            "t",
+            "--affects",
+            "LANG-DEMO-AWAIT",
+            "--caps",
+            "L9",
+            "--opened-in",
+            "v0.4.0",
+        ]))
+        .expect_err("L9 is not a readiness level");
+        assert!(matches!(err, LedgerCliError::GapsOpenBadCaps { .. }));
+    }
+
+    #[test]
+    fn parse_args_rejects_gaps_open_bad_format() {
+        let err = parse_args(args(&[
+            "gaps",
+            "open",
+            "--id",
+            "GAP-0003",
+            "--class",
+            "b",
+            "--title",
+            "t",
+            "--affects",
+            "LANG-DEMO-AWAIT",
+            "--caps",
+            "L2",
+            "--opened-in",
+            "v0.4.0",
+            "--format",
+            "yaml",
         ]))
         .expect_err("yaml is not a face format");
         assert!(matches!(err, LedgerCliError::GapsBadFormat { .. }));
