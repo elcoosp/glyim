@@ -1,6 +1,6 @@
 //! CLI library for the Readiness Ledger tool (plan M1.1).
 //!
-//! Twenty-eight subcommands:
+//! Thirty subcommands:
 //!
 //! - `glyim-ledger check [ROOT]` — load `ROOT/ledger`, run the schema and
 //!   semantic validators, cross-check the M1.3 inventory extractors, print
@@ -138,7 +138,20 @@
 //! - `glyim-ledger schema [OUT]` — write the JSON-Schema export document
 //!   for both entry types to `OUT` (pretty-printed), or to stdout.
 //! - `glyim-ledger inventory [ROOT]` — enumerate the source-derived
-//!   inventory items (plan §3.5) with their claim/ignore status.
+//!   inventory items (plan §3.5) with their claim/ignore status. The
+//!   exemption-lifecycle write faces on top of it:
+//!   `glyim-ledger inventory ignore [ROOT] --item <KEY> --reason <TEXT>
+//!   [--format text|json]` files one `[[ignore]]` block into
+//!   `ledger/inventory-ignore.toml` — the sanctioned answer to a failing
+//!   `LEDGER-INVENTORY-UNMAPPED` check: the key must be produced by an
+//!   extractor right now, must not be claimed by a feature, and must not
+//!   already be ignored (nothing is written on a rejected request).
+//!   `glyim-ledger inventory unignore [ROOT] --item <KEY>
+//!   [--format text|json]` is the retirement half: it removes exactly
+//!   the one matching block and rewrites the remaining entries
+//!   canonically through the [`crate::IgnoreRewriter`] seam (the item is
+//!   unmapped again; the §3.5 gate is the loud follow-up that forces a
+//!   feature claim).
 //!
 //! Argument handling mirrors `glyim-metrics`: hand-rolled, no `clap`, so
 //! the tool's own supply chain stays dependency-light.
@@ -159,12 +172,22 @@ pub mod explain;
 pub mod gaps;
 pub mod gates;
 pub mod handoff;
+pub mod inventory;
 pub mod next;
 pub mod release;
 pub mod render;
 pub mod status;
 pub mod verify;
 pub mod waivers;
+
+pub use inventory::{
+    FileIgnoreRewriter, FileIgnoreSink, INVENTORY_IGNORE_SCHEMA, INVENTORY_IGNORE_TARGET,
+    INVENTORY_UNIGNORE_SCHEMA, IgnoreRewriter, IgnoreSink, InMemoryIgnoreRewriter,
+    InMemoryIgnoreSink, InventoryIgnoreOutcome, InventoryIgnoreRequest, InventoryUnignoreOutcome,
+    InventoryUnignoreRequest, format_inventory_ignore_json, format_inventory_ignore_text,
+    format_inventory_unignore_json, format_inventory_unignore_text, run_inventory_ignore,
+    run_inventory_unignore,
+};
 
 pub use compute::{
     CODE_EVIDENCE_INVALID, CODE_EVIDENCE_IO, CODE_EVIDENCE_SCHEMA, CODE_EVIDENCE_UNKNOWN_FEATURE,
@@ -771,6 +794,98 @@ pub enum LedgerCliError {
         /// The IO (or serialization) failure message.
         detail: String,
     },
+    /// `inventory ignore --item` was blank or carried control characters
+    /// (an exemption can only ever name an exact extracted item key).
+    InventoryIgnoreBadItem {
+        /// The offending item key.
+        item: String,
+    },
+    /// `inventory ignore` was called without one of its required flags
+    /// (or with an unusable one).
+    InventoryIgnoreMissingField {
+        /// The missing (or unusable) flag.
+        field: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// The tree under ROOT did not load cleanly (registry, extractors,
+    /// or the committed registry itself), so the face refuses to append.
+    InventoryIgnoreLoad {
+        /// The joined load diagnostics.
+        detail: String,
+    },
+    /// `inventory ignore --item` named a key no extractor produces right
+    /// now (exact keys, never globs — a phantom exemption would silently
+    /// swallow future drift); `candidates` lists a few extracted keys.
+    InventoryIgnoreUnknownItem {
+        /// The offending item key.
+        item: String,
+        /// A few extracted item keys (the candidates to exempt instead).
+        candidates: Vec<String>,
+    },
+    /// `inventory ignore --item` named a key a feature already claims
+    /// (claimed *and* ignored is the LEDGER-INVENTORY-CONFLICT failure);
+    /// `features` lists the claiming registry feature IDs.
+    InventoryIgnoreClaimed {
+        /// The already-claimed item key.
+        item: String,
+        /// The registry feature IDs claiming the item.
+        features: Vec<String>,
+    },
+    /// `inventory ignore --item` named a key the committed registry
+    /// already exempts (a re-file is a duplicate, never a silent
+    /// overwrite).
+    InventoryIgnoreDuplicate {
+        /// The already-ignored item key.
+        item: String,
+        /// The registry path.
+        path: String,
+    },
+    /// `inventory ignore` could not append the canonical block to the
+    /// committed registry.
+    InventoryIgnoreWrite {
+        /// The registry path.
+        path: String,
+        /// The IO (or serialization) failure message.
+        detail: String,
+    },
+    /// `inventory unignore --item` was blank or carried control
+    /// characters (an exemption is retired by its exact item key).
+    InventoryUnignoreBadItem {
+        /// The offending item key.
+        item: String,
+    },
+    /// The committed `ledger/inventory-ignore.toml` did not load cleanly
+    /// (schema), so the rewriter refuses to rewrite it.
+    InventoryUnignoreLoad {
+        /// The joined load diagnostics.
+        detail: String,
+    },
+    /// `inventory unignore` was called without its required `--item` flag
+    /// (or with an unusable one).
+    InventoryUnignoreMissingField {
+        /// The missing (or unusable) flag.
+        field: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `inventory unignore --item` named a key the committed registry
+    /// does not carry (nothing was written); `candidates` lists a few
+    /// registered item keys.
+    InventoryUnignoreUnknownItem {
+        /// The offending item key.
+        item: String,
+        /// A few registered item keys (empty when the registry drifted
+        /// between the load pass and the rewrite).
+        candidates: Vec<String>,
+    },
+    /// `inventory unignore` could not rewrite the committed registry.
+    InventoryUnignoreWrite {
+        /// The registry path.
+        path: String,
+        /// The IO (or serialization) failure message.
+        detail: String,
+    },
     /// `gaps witness` was called without its required `--id`/`--witness`
     /// flags (or with an unusable one).
     GapsWitnessMissingField {
@@ -1265,6 +1380,57 @@ impl fmt::Display for LedgerCliError {
             Self::WaiversPruneWrite { path, detail } => {
                 write!(f, "cannot rewrite {path}: {detail}")
             }
+            Self::InventoryIgnoreBadItem { item } => {
+                write!(f, "--item {item:?} is not a usable item key")
+            }
+            Self::InventoryIgnoreMissingField { field, usage } => {
+                write!(
+                    f,
+                    "inventory ignore expects {field} (an extracted item key and a \
+                     usable reason)\n{usage}"
+                )
+            }
+            Self::InventoryIgnoreLoad { detail } => {
+                write!(f, "the tree under ROOT did not load: {detail}")
+            }
+            Self::InventoryIgnoreUnknownItem { item, .. } => {
+                write!(f, "--item {item:?} is not an extracted inventory item")
+            }
+            Self::InventoryIgnoreClaimed { item, features } => {
+                write!(
+                    f,
+                    "--item {item:?} is claimed by {} (claimed and ignored cannot both hold)",
+                    features.join(", ")
+                )
+            }
+            Self::InventoryIgnoreDuplicate { item, path } => {
+                write!(f, "exemption {item} already exists in {path}")
+            }
+            Self::InventoryIgnoreWrite { path, detail } => {
+                write!(f, "cannot append to {path}: {detail}")
+            }
+            Self::InventoryUnignoreBadItem { item } => {
+                write!(f, "--item {item:?} is not a usable item key")
+            }
+            Self::InventoryUnignoreLoad { detail } => {
+                write!(f, "the registry under ROOT did not load: {detail}")
+            }
+            Self::InventoryUnignoreMissingField { field, usage } => {
+                write!(
+                    f,
+                    "inventory unignore expects {field} (the exact item key of a \
+                     registered exemption)\n{usage}"
+                )
+            }
+            Self::InventoryUnignoreUnknownItem { item, .. } => {
+                write!(
+                    f,
+                    "--item {item:?} is not an exemption ledger/inventory-ignore.toml carries"
+                )
+            }
+            Self::InventoryUnignoreWrite { path, detail } => {
+                write!(f, "cannot rewrite {path}: {detail}")
+            }
             Self::GapsWitnessMissingField { field, usage } => {
                 write!(
                     f,
@@ -1496,6 +1662,26 @@ impl miette::Diagnostic for LedgerCliError {
             Self::ReleaseCheckMissingValue { .. } => "glyim-ledger::release_check_missing_value",
             Self::WaiversPruneLoad { .. } => "glyim-ledger::waivers_prune_load",
             Self::WaiversPruneWrite { .. } => "glyim-ledger::waivers_prune_write",
+            Self::InventoryIgnoreBadItem { .. } => "glyim-ledger::inventory_ignore_bad_item",
+            Self::InventoryIgnoreMissingField { .. } => {
+                "glyim-ledger::inventory_ignore_missing_field"
+            }
+            Self::InventoryIgnoreLoad { .. } => "glyim-ledger::inventory_ignore_load",
+            Self::InventoryIgnoreUnknownItem { .. } => {
+                "glyim-ledger::inventory_ignore_unknown_item"
+            }
+            Self::InventoryIgnoreClaimed { .. } => "glyim-ledger::inventory_ignore_claimed",
+            Self::InventoryIgnoreDuplicate { .. } => "glyim-ledger::inventory_ignore_duplicate",
+            Self::InventoryIgnoreWrite { .. } => "glyim-ledger::inventory_ignore_write",
+            Self::InventoryUnignoreBadItem { .. } => "glyim-ledger::inventory_unignore_bad_item",
+            Self::InventoryUnignoreLoad { .. } => "glyim-ledger::inventory_unignore_load",
+            Self::InventoryUnignoreMissingField { .. } => {
+                "glyim-ledger::inventory_unignore_missing_field"
+            }
+            Self::InventoryUnignoreUnknownItem { .. } => {
+                "glyim-ledger::inventory_unignore_unknown_item"
+            }
+            Self::InventoryUnignoreWrite { .. } => "glyim-ledger::inventory_unignore_write",
             Self::GapsWitnessMissingField { .. } => "glyim-ledger::gaps_witness_missing_field",
             Self::GapsWitnessBadId { .. } => "glyim-ledger::gaps_witness_bad_id",
             Self::GapsWitnessBadWitness { .. } => "glyim-ledger::gaps_witness_bad_witness",
@@ -1888,6 +2074,71 @@ impl miette::Diagnostic for LedgerCliError {
                  every expired block removed"
                     .to_string(),
             )),
+            Self::InventoryIgnoreBadItem { .. } => Some(Box::new(
+                "an exemption names an exact extracted item key, e.g. \
+                 `mir.StatementKind.Nop`; run `glyim-ledger inventory` to \
+                 list every extracted key"
+                    .to_string(),
+            )),
+            Self::InventoryIgnoreMissingField { field, .. } => Some(Box::new(format!(
+                "the flag needs its value on the same command line, e.g. \
+                 `inventory ignore --item runtime.ffi.glyim_new --reason \
+                 \"covered by the parity matrix\"` ({field})"
+            ))),
+            Self::InventoryIgnoreLoad { .. } => Some(Box::new(
+                "nothing is written when the tree does not load cleanly; \
+                 fix the load diagnostics first (`glyim-ledger check` \
+                 prints them)"
+                    .to_string(),
+            )),
+            Self::InventoryIgnoreUnknownItem { candidates, .. } => Some(Box::new(format!(
+                "exempt the exact key of an item an extractor produces right \
+                 now (exact keys, never globs); extracted keys include {} \
+                 (see `glyim-ledger inventory` for the full report)",
+                candidates.join(", ")
+            ))),
+            Self::InventoryIgnoreClaimed { item, .. } => Some(Box::new(format!(
+                "`{item}` is already claimed by a feature — retire the claim \
+                 or the claim's feature instead of ignoring it (the §3.5 \
+                 gate reports claimed-and-ignored as \
+                 LEDGER-INVENTORY-CONFLICT)"
+            ))),
+            Self::InventoryIgnoreDuplicate { path, .. } => Some(Box::new(format!(
+                "the exemption already exists in {path}; edit the entry's \
+                 reason in place instead of re-filing it"
+            ))),
+            Self::InventoryIgnoreWrite { path, .. } => Some(Box::new(format!(
+                "check that {path} is writable; the face appends the \
+                 canonical `[[ignore]]` block, creating the ledger/ \
+                 directory when absent"
+            ))),
+            Self::InventoryUnignoreBadItem { .. } => Some(Box::new(
+                "an exemption is retired by its exact item key; run \
+                 `glyim-ledger inventory` to list every registered exemption"
+                    .to_string(),
+            )),
+            Self::InventoryUnignoreLoad { .. } => Some(Box::new(
+                "the rewriter refuses to rewrite a document it cannot fully \
+                 parse; fix the load diagnostics first (`glyim-ledger \
+                 check` prints them)"
+                    .to_string(),
+            )),
+            Self::InventoryUnignoreMissingField { field, .. } => Some(Box::new(format!(
+                "the flag needs its value on the same command line, e.g. \
+                 `inventory unignore --item runtime.ffi.glyim_new` ({field})"
+            ))),
+            Self::InventoryUnignoreUnknownItem { candidates, .. } => Some(Box::new(format!(
+                "unignore the exact item key of a registered exemption; \
+                 registered keys include {} (empty candidates mean the \
+                 registry drifted mid-run — nothing was written; see \
+                 `glyim-ledger inventory` for the full report)",
+                candidates.join(", ")
+            ))),
+            Self::InventoryUnignoreWrite { path, .. } => Some(Box::new(format!(
+                "check that {path} is writable; the rewrite replaces the \
+                 document with the canonical remaining entries, the one \
+                 matched block removed"
+            ))),
             Self::GapsWitnessMissingField { field, .. } => Some(Box::new(format!(
                 "the flag needs its value on the same command line, e.g. \
                  `gaps witness --id GAP-0002 --witness fixtures/known-gap.g` \
@@ -2208,6 +2459,44 @@ pub enum Command {
     Inventory {
         /// Project directory to extract from (`.` by default).
         root: PathBuf,
+    },
+    /// `inventory ignore [ROOT] --item <KEY> --reason <TEXT> [--format
+    /// text|json]` — the §3.5 exemption write face: file one `[[ignore]]`
+    /// block for an *extracted* item key in
+    /// `ledger/inventory-ignore.toml`. Validates the request against the
+    /// live tree (the key must be produced by an extractor right now,
+    /// must not be claimed by a feature, and must not already be
+    /// ignored) and appends the canonical block through the write seam —
+    /// nothing is written on a rejected request. Until this face the
+    /// exemption registry was hand-edited: there was no sanctioned way to
+    /// answer the `LEDGER-INVENTORY-UNMAPPED` failure the check reports.
+    InventoryIgnore {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// The exact extracted item key to exempt, e.g.
+        /// `runtime.ffi.glyim_new`.
+        item: String,
+        /// Why this item needs no feature (audited prose, never a glob).
+        reason: String,
+        /// Output format; [`IgnoresFormat::Text`] by default.
+        format: IgnoresFormat,
+    },
+    /// `inventory unignore [ROOT] --item <KEY> [--format text|json]` —
+    /// the retirement half of the §3.5 exemption write face: removes one
+    /// `[[ignore]]` block by its exact item key and rewrites the
+    /// remaining entries canonically (the counterpart the duplicate-filing
+    /// help line points to). The item becomes unmapped again the moment
+    /// the rewrite lands — the §3.5 gate is the loud follow-up that
+    /// forces a feature claim before `ledger check` passes.
+    InventoryUnignore {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// The exact item key to retire.
+        item: String,
+        /// Output format; [`IgnoresFormat::Text`] by default.
+        format: IgnoresFormat,
     },
     /// `next [ROOT] [--lane L] [--n N]` — the plan §3.9 work queue.
     Next {
@@ -2605,10 +2894,24 @@ pub enum WaiversFormat {
     Json,
 }
 
+/// Output format of the `inventory ignore` / `inventory unignore` write
+/// faces (the `WaiversFormat` shape — both faces report one outcome).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IgnoresFormat {
+    /// The human-readable report ([`format_inventory_ignore_text`] /
+    /// [`format_inventory_unignore_text`]).
+    Text,
+    /// The `glyim.ledger-inventory-ignore/1` /
+    /// `glyim.ledger-inventory-unignore/1` JSON contracts
+    /// ([`format_inventory_ignore_json`] /
+    /// [`format_inventory_unignore_json`]).
+    Json,
+}
+
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger gaps audit [ROOT] [--format text|json]\n   or: glyim-ledger gaps unwitness [ROOT] --id <GAP-ID> [--format text|json]\n   or: glyim-ledger gaps open [ROOT] --id <GAP-NNNN> --class <a|b|c> --title <TEXT> --affects <ID[,ID...]> --caps <L0..L5> --opened-in <TAG> [--file ledger/gaps/.../FILE.toml] [--format text|json]\n   or: glyim-ledger gaps witness [ROOT] --id <GAP-ID> --witness <PATH> [--format text|json]\n   or: glyim-ledger gaps retire [ROOT] --id <GAP-ID> [--format text|json]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger evidence audit [ROOT] [--format text|json]\n   or: glyim-ledger evidence retract [ROOT] --fixture <PATH> [--out PATH] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger waivers revoke [ROOT] --id <WVR-ID> [--format text|json]\n   or: glyim-ledger waivers extend [ROOT] --id <WVR-ID> [--days N] [--format text|json]\n   or: glyim-ledger waivers prune [ROOT] [--format text|json]\n   or: glyim-ledger handoff [ROOT] [--items N] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger release-check <VERSION> [ROOT] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger gaps audit [ROOT] [--format text|json]\n   or: glyim-ledger gaps unwitness [ROOT] --id <GAP-ID> [--format text|json]\n   or: glyim-ledger gaps open [ROOT] --id <GAP-NNNN> --class <a|b|c> --title <TEXT> --affects <ID[,ID...]> --caps <L0..L5> --opened-in <TAG> [--file ledger/gaps/.../FILE.toml] [--format text|json]\n   or: glyim-ledger gaps witness [ROOT] --id <GAP-ID> --witness <PATH> [--format text|json]\n   or: glyim-ledger gaps retire [ROOT] --id <GAP-ID> [--format text|json]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger evidence audit [ROOT] [--format text|json]\n   or: glyim-ledger evidence retract [ROOT] --fixture <PATH> [--out PATH] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger waivers revoke [ROOT] --id <WVR-ID> [--format text|json]\n   or: glyim-ledger waivers extend [ROOT] --id <WVR-ID> [--days N] [--format text|json]\n   or: glyim-ledger waivers prune [ROOT] [--format text|json]\n   or: glyim-ledger handoff [ROOT] [--items N] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger release-check <VERSION> [ROOT] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n   or: glyim-ledger inventory ignore [ROOT] --item <KEY> --reason <TEXT> [--format text|json]\n   or: glyim-ledger inventory unignore [ROOT] --item <KEY> [--format text|json]\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout; `next` filters by\n\
      \x20 lane (L|F|T|M|B|Q) and prints the glyim.ledger-next/1 JSON queue;\n\
@@ -2678,6 +2981,15 @@ pub fn usage() -> String {
      \x20 (canonical rewrite of the remaining entries, nothing\n\
      \x20 written when the document does not load cleanly and no\n\
      \x20 rewrite at all when nothing expired);\n\
+     \x20 `inventory ignore` files one §3.5 exemption into\n\
+     \x20 ledger/inventory-ignore.toml (--item must be an exact\n\
+     \x20 extracted item key, --reason the audited prose; a key no\n\
+     \x20 extractor produces, a key a feature claims, and an\n\
+     \x20 already-ignored key are rejections, nothing written on a\n\
+     \x20 rejected request); `inventory unignore` retires one\n\
+     \x20 exemption by its exact item key (canonical rewrite of the\n\
+     \x20 remaining entries, the item unmapped again — the §3.5 gate\n\
+     \x20 is the loud follow-up that forces a feature claim);\n\
      \x20 `handoff` composes the compute, next, and waivers face\n\
      \x20 outcomes into one short session document — the readiness\n\
      \x20 histogram, the top-N work queue (`--items N`, default 5,\n\
@@ -2754,6 +3066,16 @@ where
             if items[0] == "gaps" {
                 return parse_gaps(rest);
             }
+            // The `inventory` group routes its §3.5 exemption write faces
+            // before the single-positional guard (the `parse_waivers`
+            // sub-word dispatch shape): the sub-word is the first rest
+            // argument, the optional ROOT positional follows it.
+            if items[0] == "inventory" && rest.first().map(String::as_str) == Some("ignore") {
+                return parse_inventory_ignore(&rest[1..]);
+            }
+            if items[0] == "inventory" && rest.first().map(String::as_str) == Some("unignore") {
+                return parse_inventory_unignore(&rest[1..]);
+            }
             if rest.len() > 1 {
                 return Err(LedgerCliError::ExtraArgument {
                     arg: rest[1].clone(),
@@ -2768,6 +3090,9 @@ where
                     Ok(Command::Check { root })
                 }
                 "inventory" => {
+                    // The `ignore`/`unignore` sub-words were already
+                    // routed before the single-positional guard; this arm
+                    // stays the read face's optional ROOT positional.
                     let root = rest
                         .first()
                         .map_or_else(|| PathBuf::from("."), PathBuf::from);
@@ -3536,6 +3861,152 @@ fn parse_gaps_retire(rest: &[String]) -> Result<Command, LedgerCliError> {
     Ok(Command::GapsRetire {
         root: root.unwrap_or_else(|| PathBuf::from(".")),
         id,
+        format,
+    })
+}
+
+/// Parse the `inventory ignore` write face's arguments: one optional
+/// ROOT positional and `--item <KEY> --reason <TEXT> [--format
+/// text|json]` in any order (the `waivers grant` shape — two required
+/// value flags plus the format switch).
+fn parse_inventory_ignore(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut item: Option<String> = None;
+    let mut reason: Option<String> = None;
+    let mut format = IgnoresFormat::Text;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--item" | "--reason" | "--format" => {
+                let flag = rest[index].clone();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::InventoryIgnoreMissingField {
+                        field: flag,
+                        usage: usage(),
+                    });
+                };
+                // The outer match already narrowed the flag set, so the
+                // final branch is exactly `--format` — no wildcard arm.
+                if flag == "--item" {
+                    item = Some(value.clone());
+                } else if flag == "--reason" {
+                    reason = Some(value.clone());
+                } else {
+                    format = match value.as_str() {
+                        "text" => IgnoresFormat::Text,
+                        "json" => IgnoresFormat::Json,
+                        other => {
+                            return Err(LedgerCliError::WaiversBadFormat {
+                                value: other.to_string(),
+                                usage: usage(),
+                            });
+                        }
+                    };
+                }
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    let Some(item) = item else {
+        return Err(LedgerCliError::InventoryIgnoreMissingField {
+            field: "--item".to_string(),
+            usage: usage(),
+        });
+    };
+    let Some(reason) = reason else {
+        return Err(LedgerCliError::InventoryIgnoreMissingField {
+            field: "--reason".to_string(),
+            usage: usage(),
+        });
+    };
+    Ok(Command::InventoryIgnore {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        item,
+        reason,
+        format,
+    })
+}
+
+/// Parse the `inventory unignore` write face's arguments: one optional
+/// ROOT positional and `--item <KEY> [--format text|json]` in any order
+/// (the `waivers revoke` shape — one required value flag plus the
+/// format switch).
+fn parse_inventory_unignore(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut item: Option<String> = None;
+    let mut format = IgnoresFormat::Text;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--item" | "--format" => {
+                let flag = rest[index].clone();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::InventoryUnignoreMissingField {
+                        field: flag,
+                        usage: usage(),
+                    });
+                };
+                // The outer match already narrowed the flag set, so the
+                // final branch is exactly `--format` — no wildcard arm.
+                if flag == "--item" {
+                    item = Some(value.clone());
+                } else {
+                    format = match value.as_str() {
+                        "text" => IgnoresFormat::Text,
+                        "json" => IgnoresFormat::Json,
+                        other => {
+                            return Err(LedgerCliError::WaiversBadFormat {
+                                value: other.to_string(),
+                                usage: usage(),
+                            });
+                        }
+                    };
+                }
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    let Some(item) = item else {
+        return Err(LedgerCliError::InventoryUnignoreMissingField {
+            field: "--item".to_string(),
+            usage: usage(),
+        });
+    };
+    Ok(Command::InventoryUnignore {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        item,
         format,
     })
 }
