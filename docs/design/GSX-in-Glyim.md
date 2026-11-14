@@ -2,7 +2,7 @@
 
 > **GSX** is Glyim's first-class, typed, host-agnostic view syntax: JSX's ergonomics, but a *compiler-visible structure* instead of a runtime function-call tree. It targets HTML, SSR strings, native widgets, terminals, GPU scenes and headless test hosts from the same source.
 
-This document is grounded in a read of the repository at `github.com/elcoosp/glyim` (shallow clone, ~233k lines of Rust, 33 crates). Section 1 lists what I actually found, because several design decisions below are driven by it. Everything else is design proposal, and I mark confidence and prior art honestly in §14.
+This document is grounded in a read of the repository at `github.com/elcoosp/glyim` (shallow clone, ~233k lines of Rust, 34 crates). Section 1 lists what I actually found, because several design decisions below are driven by it. Everything else is design proposal, and I mark confidence and prior art honestly in §14.
 
 ---
 
