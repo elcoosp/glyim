@@ -8,6 +8,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`waivers prune` (`glyim-ledger waivers prune`)**: retires every
+  expired C9 exception in one call — the batch counterpart of `waivers
+  revoke` (one exact ID at a time) for the moment an operator clears the
+  whole expired-inventory debt. The new `WaiverPruner` seam (the
+  many-expired counterpart of `WaiverRewriter`) has two implementations —
+  `FileWaiverPruner` (parses the committed document, partitions the
+  entries by expiry, re-serializes the remaining entries canonically,
+  and replaces the file; a non-clean document is refused, never
+  truncated) and `InMemoryWaiverPruner` (tests and in-process consumers,
+  with the pruned IDs recorded for the audit). `run_waivers_prune`
+  validates the document (zero error-severity load diagnostics), and a
+  document with no expired waiver is **never rewritten** — the seam is
+  not invoked and the file bytes stay untouched. The outcome rows report
+  ID order regardless of the document's construction path (the
+  `assess_waivers` contract) through the `glyim.ledger-waivers-prune/1`
+  JSON contract and the text face. 2 new typed `LedgerCliError` variants
+  (`WaiversPruneLoad`/`WaiversPruneWrite`), both carrying their
+  `code()`/`help()` lines. Ships the `waivers_prune` walkthrough, the
+  prune bench stage, and README/lib.rs/main.rs/usage docs.
+- **`release-check` (`glyim-ledger release-check <VERSION> [ROOT]`)**:
+  the plan §10 final release gate — the master plan names the face in
+  the CLI table ("`ledger release-check vX.Y.Z` — Final release gate"),
+  defines its contract in the release-criteria section ("passes iff all
+  24 readiness gates are green on the release commit, evidence is
+  reproducible (RG-04/17), and no waiver is active"), and requires it at
+  M12.7, but no command composed the three shipped verdict axes into the
+  one verdict a release commit needs. The new `ReleaseCheckSource` seam
+  (the composition counterpart of `HandoffSource`) has two
+  implementations — `FileReleaseCheckSource` (runs the real M1.12 gate
+  report, M1.13 determinism self-check, and C9 waiver health over the
+  registry, through the same executors those faces use, so a release
+  verdict can never disagree with an individual face run) and
+  `InMemoryReleaseCheckSource` (tests and in-process consumers) — and
+  the `ReleaseCheckRenderer` seam (the `WaiversRenderer` pattern) renders
+  the text report and the `glyim.ledger-release-check/1` JSON contract
+  from one `ReleaseCheckOutcome`. The gate is `is_ok`, clause by clause
+  the plan sentence: every declared gate green — a `fail` blocks and an
+  `unmeasured` verdict blocks too (plan M1.12: displayed, never silently
+  passed — the blocking list names them in declaration order), the
+  self-check reports no drift, no waiver is active or expired (the C9
+  health contract keeps the release gate from ever being greener than
+  the faces it composes), and no error-severity diagnostic across the
+  composed faces (warnings display, not fail). The `<VERSION>` argument
+  is validated at parse time (`vMAJOR.MINOR.PATCH`, `v` optional; no
+  pre-release tags or build metadata — a release gate gates a plain
+  triple) and the verdict names it in both faces. 4 new typed
+  `LedgerCliError` variants (`ReleaseCheck*`), all carrying their
+  `code()`/`help()` lines. Ships the `release_check` walkthrough, the
+  release bench stage, and README/lib.rs/main.rs/usage docs.
 - **`waivers extend` (`glyim-ledger waivers extend`)**: re-pins one C9 exception's expiry to `today + --days` (default 7, horizon 14) — the sanctioned counterpart the `WaiversGrantDuplicate` help line already points to. The new `WaiverExtender` seam (the mutation counterpart of `WaiverRewriter`) has two implementations — `FileWaiverExtender` and `InMemoryWaiverExtender` — and the identity (ID, feature, reason, issue) is never rewritten; only the expiry moves. 6 new typed `LedgerCliError` variants (`WaiversExtend*`), all carrying their `code()`/`help()` lines. Ships the `waivers_extend` walkthrough, the extend bench stage, and README/lib.rs/main.rs/usage docs.
 - **`evidence audit` (`glyim-ledger evidence audit`)**: audits the committed store against the filesystem — recomputes every record's `fixture_sha256` from the fixture bytes and reports `ok`/`missing`/`drift`/`unreadable` verdicts; any finding fails the exit code (the trust-loop closure `evidence check` cannot express). The new `FixtureFingerprint` seam has two implementations — `FileFixtureFingerprint` (sha2 over the raw bytes) and `InMemoryFixtureFingerprint` (precomputed digests). Ships the `evidence_audit` walkthrough, the audit bench stage, and README/lib.rs/main.rs/usage docs.
 
