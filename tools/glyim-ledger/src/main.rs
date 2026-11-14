@@ -211,6 +211,61 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Command::GapsOpen {
+            root,
+            id,
+            class,
+            title,
+            affects,
+            caps,
+            opened_in,
+            file,
+            format,
+        } => {
+            // The opening stage of the gap lifecycle: the engine validates
+            // the request against the loaded registry (canonical ID shape,
+            // every --affects feature must exist, the ID must be free) and
+            // appends the canonical block through the same typed error
+            // seam; the dispatch refreshes the generated KNOWN_GAPS.md in
+            // the same run so the render-gaps --check gate stays green.
+            let request = glyim_ledger::GapsOpenRequest {
+                id,
+                class,
+                title,
+                affects,
+                caps,
+                opened_in,
+                file,
+            };
+            match glyim_ledger::run_gaps_open(&root, &request, &glyim_ledger::FileGapOpener) {
+                Ok(outcome) => {
+                    match format {
+                        glyim_ledger::GapsFormat::Text => {
+                            print!("{}", glyim_ledger::format_gaps_open_text(&outcome));
+                        }
+                        glyim_ledger::GapsFormat::Json => {
+                            print!("{}", glyim_ledger::format_gaps_open_json(&outcome));
+                        }
+                    }
+                    match glyim_ledger::run_render_gaps(
+                        &root,
+                        glyim_ledger::RenderGapsFormat::Markdown,
+                        Some(&root.join(glyim_ledger::KNOWN_GAPS_MD_TARGET)),
+                        false,
+                    ) {
+                        Ok(_) => ExitCode::SUCCESS,
+                        Err(err) => {
+                            report(&err);
+                            ExitCode::FAILURE
+                        }
+                    }
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Command::Next { root, lane, limit } => {
             let outcome = glyim_ledger::run_next(&root);
             if outcome.is_ok() {
@@ -545,6 +600,43 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE
+            }
+        }
+        Command::EvidenceRetract {
+            root,
+            fixture,
+            out,
+            format,
+        } => {
+            // The curation removal face: every rejection routes through
+            // the typed error seam (nothing is written on a rejection —
+            // a store that does not load cleanly is never rewritten, and
+            // a fixture with no committed records is a rejection, not a
+            // silent no-op). The file-backed fingerprint recomputes the
+            // digest from the real fixture bytes, the same spelling the
+            // audit face compares.
+            let request = glyim_ledger::EvidenceRetractRequest { fixture, out };
+            match glyim_ledger::run_evidence_retract(
+                &root,
+                &request,
+                &glyim_ledger::FileEvidenceStore,
+                &glyim_ledger::FileFixtureFingerprint,
+            ) {
+                Ok(outcome) => {
+                    match format {
+                        glyim_ledger::EvidenceFormat::Text => {
+                            print!("{}", glyim_ledger::format_evidence_retract_text(&outcome));
+                        }
+                        glyim_ledger::EvidenceFormat::Json => {
+                            print!("{}", glyim_ledger::format_evidence_retract_json(&outcome));
+                        }
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
             }
         }
         Command::Waivers { root, format } => {
