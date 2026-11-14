@@ -1,0 +1,54 @@
+---
+title: Référence des lints
+description: "Le framework de lint du compilateur — lints disponibles, leurs alias, niveaux de sévérité, et les drapeaux de ligne de commande -A/-W/-D."
+type: reference
+sidebar:
+  order: 4
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+
+Le framework de lint du compilateur (§3.5.30 dans le plan interne) attribue un niveau de sévérité à des vérifications nommées. Cette page documente chaque lint disponible et les drapeaux qui les contrôlent.
+
+## Lints
+
+| Lint | Alias | Niveau par défaut | Se déclenche quand |
+|------|-------|---------------|------------|
+| `unsafe_fn_call` | `unsafe` | warn | Un `unsafe fn` déclaré est appelé hors de tout bloc `unsafe { }` englobant. |
+| `unused_generic_params` | `unused_generics` | warn | Une fonction monomorphisée n'utilise pas un ou plusieurs de ses paramètres génériques. Vérifié post-monomorphisation par `glyim-lower`. |
+
+La liste des lints est petite par conception et grandit délibérément : ajouter un lint signifie ajouter une variante, un nom canonique, la vérification qui émet le diagnostic, et un test de détection de dérive pour que le lint ne devienne pas invisible à `-W help`.
+
+## Niveaux
+
+| Niveau | Drapeau | Comportement |
+|-------|------|----------|
+| allow | `-A`, `--allow` | Supprime le diagnostic entièrement. |
+| warn | `-W`, `--warn` | Émet comme avertissement. C'est le défaut. |
+| deny | `-D`, `--deny` | Émet comme erreur et avorte la compilation à la barrière d'erreur du pipeline. |
+
+Les trois drapeaux sont répétables, et les drapeaux tardifs surchargent les précoces pour le même lint.
+
+## Utilisation
+
+<Code lang="bash" code={`# Promeut le lint unsafe_fn_call en erreur
+glyim input.g -D unsafe
+
+# Le supprime
+glyim input.g -A unsafe_fn_call
+
+# Règle explicitement au niveau warning
+glyim input.g -W unused_generic_params
+
+# Liste chaque nom de lint et alias disponibles
+glyim -W help`} />
+
+`glyim -W help` répond avant que l'analyse d'arguments n'impose le fichier d'entrée requis, donc il fonctionne comme commande autonome.
+
+<Aside type="caution">
+Les noms de lint inconnus sont actuellement ignorés silencieusement par le parseur de drapeaux. Le contrôle par attributs (`#[allow(..)]` et compagnie) n'est pas encore implémenté ; les niveaux se règlent uniquement depuis la ligne de commande.
+</Aside>
+
+## Étapes suivantes
+
+Voir la [référence CLI](/reference/cli/) pour la table complète des drapeaux, et la [référence du langage](/reference/language/#unsafe) pour la sémantique de `unsafe fn`.

@@ -1,0 +1,57 @@
+---
+title: Gérer les dépendances
+description: "Déclarez des dépendances path, registre et git dans Glyip.toml, comprenez le lockfile, et diagnostiquez les conflits de résolution."
+type: how-to
+sidebar:
+  order: 2
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Ce guide montre comment déclarer des dépendances dans `Glyip.toml`, comment `glyip` les résout, et comment lire un échec de résolution.
+
+## Déclarer une dépendance
+
+`glyip` accepte deux syntaxes de dépendance. Utilisez une chaîne nue pour une exigence de registre :
+
+<Code lang="toml" code={`[dependencies]
+serde = "1.0"`} />
+
+Utilisez une table pour les exigences path, git ou mixtes :
+
+<Code lang="toml" code={`[dependencies]
+local_util = { path = "../local_util" }
+my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }`} />
+
+Une dépendance git épingle exactement un ref : `branch`, `tag` ou un hash `rev` exact. Sans aucun, la pointe de la branche par défaut du dépôt est utilisée.
+
+Les dépendances de développement uniquement vont dans `[dev-dependencies]` et utilisent la même syntaxe :
+
+<Code lang="toml" code={`[dev-dependencies]
+test_helpers = { path = "../test_helpers" }`} />
+
+<Aside type="tip">
+Les clés inconnues dans `Glyip.toml` sont rejetées — le parseur de manifeste utilise `deny_unknown_fields`, donc une faute comme `dependecies` échoue bruyamment au lieu d'être ignorée.
+</Aside>
+
+## Comprendre le lockfile
+
+`glyip` maintient un lockfile `Glyip.lock` à côté du manifeste. Les entrées du lockfile sont indexées par `name-version`, et le lockfile enregistre le graphe résolu pour que les builds répétés soient reproductibles.
+
+## Attendre la sémantique du résolveur
+
+Le résolveur de `glyip` est délibérément plus simple que celui de Cargo. Connaître les différences en amont évite de déboguer un échec de résolution qui n'est pas un bug :
+
+- **Breadth-first glouton, sans backtracking.** Le résolveur parcourt le graphe en largeur depuis le manifeste racine. Quand il rencontre `foo = "1.0"`, il choisit la version la plus haute qui satisfait l'exigence à ce moment-là et continue. Si une dépendance transitive ultérieure a besoin d'un `foo` incompatible, le résolveur rapporte un conflit au lieu de réessayer avec une version plus basse.
+- **Une version par nom de crate.** Deux exigences sur la même crate qui divergent sur les versions sont une erreur dure `DependencyConflict`, pas deux copies parallèles.
+- **Sélection de version déterministe.** « La version la plus haute correspondante » est calculée en analysant chaque candidat et en triant par précédence SemVer 2.0 (caret, tilde, wildcard et opérateurs de comparaison sont supportés), pas en faisant confiance à l'ordre de listage du registre. Une exigence insatisfiable fait surface comme `DependencyNotFound` plutôt qu'une montée silencieuse de version.
+- **Détection de cycles.** Un cycle de dépendance path (crate A dépend de B, B dépend de A) est attrapé par la vérification des visités avant récursion infinie. Deux dépendances path avec le même nom de paquet déclaré mais des répertoires différents se résolvent comme des crates distinctes.
+
+## Diagnostiquer un conflit
+
+Quand deux demandeurs divergent, l'erreur `DependencyConflict` nomme la crate, chaque exigence distincte rassemblée, et chaque arête `(demandeur, exigence)`. Par exemple, un diamant où votre crate exige `foo = "1.0"` et une autre dépendance exige `foo = "2.0"` produit une erreur listant les deux arêtes — alignez les deux exigences pour la résoudre.
+
+## Étapes suivantes
+
+<LinkCard title="Référence glyip" href="/reference/glyip/" description="Le schéma complet du manifeste Glyip.toml et les drapeaux de commande." />
+<LinkCard title="Testez votre code" href="/guides/test-your-code/" description="Lancez les tests avec glyip test, les annotations inline et les instantanés." />

@@ -1,0 +1,119 @@
+---
+title: Référence glyip
+description: "Les commandes de l'outil de build glyip et le schéma complet du manifeste Glyip.toml — métadonnées de paquet, cibles et déclarations de dépendances."
+type: reference
+sidebar:
+  order: 2
+---
+
+import { Aside, Badge, Code } from '@astrojs/starlight/components';
+
+`glyip` est l'homologue de Cargo pour les projets Glyim. Il lit un manifeste `Glyip.toml`, résout les dépendances avec une correspondance SemVer 2.0, maintient un lockfile `Glyip.lock` et pilote le compilateur.
+
+## Commandes
+
+### `glyip new`
+
+Échafaude un nouveau projet.
+
+| Argument / drapeau | Type | Défaut | Description |
+|-----------------|------|---------|-------------|
+| `<NAME>` | chaîne | — | Nom du projet. |
+| `--lib` | drapeau | off | Crée un projet bibliothèque au lieu d'un binaire. |
+| `--edition <EDITION>` | chaîne | `2024` | Édition du langage. |
+
+<Code lang="bash" code={`glyip new my_project
+glyip new my_lib --lib`} />
+
+### `glyip build`
+
+Compile le projet. Les builds sont incrémentaux — les sources et la configuration de build sont empreintes avec SHA-256.
+
+| Drapeau | Type | Défaut | Description |
+|------|------|---------|-------------|
+| `--release` | drapeau | off | Compile en mode release. |
+| `--target <TRIPLE>` | chaîne | hôte | Triple cible. |
+| `--backend <NAME>` | `llvm` \| `bytecode` | `llvm` | Backend de codegen. La sortie `bytecode` n'est pas directement exécutable. |
+| `--opt-level <N>` | 0–3 | `0` | Niveau d'optimisation. |
+| `--lto <KIND>` | `off` \| `thin` \| `fat` | `off` | Optimisation à l'édition de liens. Les valeurs inconnues sont traitées comme `off`. |
+
+<Code lang="bash" code={`glyip build --release --opt-level 2`} />
+
+### `glyip test`
+
+Lance les tests du projet.
+
+| Drapeau | Type | Défaut | Description |
+|------|------|---------|-------------|
+| `--release` | drapeau | off | Compile en mode release. |
+| `--filter <SUBSTRING>` | chaîne | tous | Ne lancer que les tests dont le nom contient la sous-chaîne. |
+| `--no-run` | drapeau | off | Compile les tests mais ne les lance pas. |
+| `--compiled` | drapeau | off | Compile chaque fichier de test en exécutable natif et le lance comme un vrai sous-processus au lieu de l'interpréteur MIR in-process. |
+
+<Code lang="bash" code={`glyip test --filter parser --compiled`} />
+
+### `glyip run`
+
+Compile et exécute le binaire du projet. Utilise toujours le backend LLVM, parce qu'exécuter nécessite un exécutable que le système d'exploitation peut démarrer. Sort avec le statut de sortie de l'enfant.
+
+| Drapeau | Type | Défaut | Description |
+|------|------|---------|-------------|
+| `--release` | drapeau | off | Compile en mode release. |
+| `--target <TRIPLE>` | chaîne | hôte | Triple cible. |
+| `--lto <KIND>` | `off` \| `thin` \| `fat` | `off` | Optimisation à l'édition de liens. |
+| `-- <ARGS>` | chaînes | aucun | Tout ce qui suit `--` est passé au programme. |
+
+<Code lang="bash" code={`glyip run -- --flag value`} />
+
+## Le manifeste `Glyip.toml`
+
+Le manifeste est analysé avec rejet des clés inconnues : une clé non reconnue est une erreur.
+
+### `[package]`
+
+| Clé | Type | Défaut | Requis | Description |
+|-----|------|---------|----------|-------------|
+| `name` | chaîne | — | <Badge text="Required" variant="danger" /> | Nom de la crate. |
+| `version` | chaîne | `"0.1.0"` | <Badge text="Optional" variant="note" /> | Version sémantique. |
+| `edition` | chaîne | `"2024"` | <Badge text="Optional" variant="note" /> | Édition du langage. |
+| `authors` | tableau de chaînes | `[]` | <Badge text="Optional" variant="note" /> | Liste des auteurs. |
+| `description` | chaîne | aucun | <Badge text="Optional" variant="note" /> | Description courte. |
+| `bin` | tableau de tables | aucun | <Badge text="Optional" variant="note" /> | Cibles binaires. |
+| `lib` | table | aucun | <Badge text="Optional" variant="note" /> | Cible bibliothèque. |
+
+Chaque entrée `bin` accepte `name` (requis) et `path` (fichier source, relatif à la racine du projet). L'entrée `lib` accepte `path`.
+
+### `[dependencies]` et `[dev-dependencies]`
+
+Les deux sections mappent un nom de crate soit vers une exigence de version nue, soit vers une table de détail :
+
+<Code lang="toml" code={`[dependencies]
+serde = "1.0"
+local_util = { path = "../local_util" }
+my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }
+
+[dev-dependencies]
+test_helpers = { path = "../test_helpers" }`} />
+
+| Clé | Type | Description |
+|-----|------|-------------|
+| `version` | chaîne | Exigence SemVer 2.0 — caret, tilde, wildcard et opérateurs de comparaison sont supportés. |
+| `path` | chemin | Dépendance de système de fichiers local. |
+| `git` | URL | Dépendance de dépôt git. |
+| `branch` | chaîne | Suit une branche nommée (résolue à sa pointe de commit courante). |
+| `tag` | chaîne | Suit un tag nommé (résolu au commit vers lequel le tag pointe). |
+| `rev` | chaîne | Épingle un hash de révision exact. |
+
+Un seul ref git est actif ; sans `branch`, `tag` ou `rev`, la pointe de la branche par défaut du dépôt est utilisée.
+
+### Le lockfile
+
+`glyip` maintient `Glyip.lock` avec des entrées indexées par `name-version`, donc les builds répétés résolvent le même graphe. La vérification de conflit impose une version résolue par nom de crate — voir [gérer les dépendances](/guides/manage-dependencies/) pour la sémantique exacte du résolveur.
+
+<Aside type="tip">
+Une faute dans une chaîne de version est une erreur (`DependencyNotFound`), pas un repli silencieux vers la dernière version.
+</Aside>
+
+## Étapes suivantes
+
+Voir [gérer les dépendances](/guides/manage-dependencies/) pour les flux de travail pratiques, et [tester votre code](/guides/test-your-code/) pour les motifs de test.

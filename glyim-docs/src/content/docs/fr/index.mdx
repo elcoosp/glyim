@@ -1,0 +1,60 @@
+---
+title: Documentation Glyim
+description: "Glyim est un compilateur modulaire écrit de zéro pour un langage de programmation système de type Rust, écrit en Rust, avec un backend LLVM, une VM bytecode, un LSP, et l'outil de build glyip."
+template: splash
+hero:
+  title: "Documentation Glyim"
+
+  tagline: "Un compilateur modulaire écrit de zéro pour un langage de programmation système de type Rust — écrit en Rust."
+  image:
+    file: ../../../assets/logo.png
+    alt: "Logo Glyim"
+  actions:
+    - text: Démarrer en une passe
+      link: /tutorials/getting-started/
+      icon: right-arrow
+    - text: Référence de la ligne de commande
+      link: /reference/cli/
+      icon: external
+      variant: minimal
+---
+
+import { Aside, Badge, Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
+
+Glyim implémente un pipeline de compilation complet : lexing, parsing, résolution de noms, HIR, MIR, inférence de types et résolution de traits, vérification d'emprunts, optimisations, et deux backends de génération de code (LLVM et une VM bytecode personnalisée). Le projet est organisé comme un espace de travail Cargo avec plus de 30 crates, conçu pour la clarté, la testabilité et le développement incrémental. Chaque étage est une crate autonome avec une API publique étroite, donc vous pouvez étudier et tester chaque phase en isolation.
+
+## Choisissez votre chemin
+
+<CardGrid stagger>
+    <Card title="Construire votre premier projet" icon="rocket">
+        Suivez le chemin doré : compilez le compilateur, échafaudez un projet avec `glyip`, et lancez un programme Glyim.
+    </Card>
+    <Card title="Résoudre une tâche précise" icon="hammer">
+        Utilisez un guide pratique pour gérer les dépendances, écrire des tests, inspecter les représentations intermédiaires ou régler le codegen.
+    </Card>
+    <Card title="Consulter quelque chose" icon="document">
+        Consultez la référence pour chaque drapeau CLI, commande `glyip`, clé de manifeste, lint et construction du langage.
+    </Card>
+    <Card title="Comprendre la conception" icon="open-book">
+        Lisez la section des explications pour comprendre pourquoi le pipeline est découpé en crates et comment fonctionne la réactivité pilotée par l'ownership.
+    </Card>
+</CardGrid>
+
+<LinkButton href="/tutorials/getting-started/" icon="right-arrow">Commencer le tutoriel</LinkButton>
+
+## Points forts
+
+- **Langage de type Rust** — génériques, traits avec types associés, correspondance de motifs, closures avec analyse de capture, `async`/`await`, macros déclaratives et procédurales.
+- **Vrai système de types** — inférence avec unification, résolution de traits avec HRTB, calcul d'auto-traits, monomorphisation avec polymorphisation.
+- **Vérificateur d'emprunts NLL** — inférence de régions façon Polonius, liveness inter-blocs, emprunts en deux phases, analyse de déplacement avec déplacements partiels.
+- **Deux backends** — LLVM 23 via `inkwell` avec abaissement ABI réel et LTO, plus un backend bytecode de machine à pile avec sa propre VM.
+- **Chaîne d'outils complète** — le pilote de compilateur `glyim`, l'outil de build `glyip` façon Cargo avec résolution de dépendances et lockfiles, un serveur de langage, et un harnais de test à cinq modes.
+- **Syntaxe de vue GSX** <Badge text="experimental" variant="caution" /> — éléments de vue typés de première classe avec un étage de compilateur dédié, réactivité pilotée par l'ownership, et un émetteur SSR.
+
+<Aside type="note">
+Glyim est un compilateur de niveau recherche en développement actif. Le pipeline est fonctionnel de bout en bout pour un sous-ensemble substantiel du langage, et Glyim n'est pas encore auto-hébergeur : le compilateur est écrit en Rust, tandis que la bibliothèque standard est écrite en Glyim.
+</Aside>
+
+## Étapes suivantes
+
+<LinkCard title="Tutoriel de démarrage" href="/tutorials/getting-started/" description="Compilez le compilateur et lancez votre premier programme Glyim de bout en bout." />

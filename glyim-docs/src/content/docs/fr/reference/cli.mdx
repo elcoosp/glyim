@@ -1,0 +1,98 @@
+---
+title: Référence CLI glyim
+description: "Chaque drapeau du pilote de compilateur glyim — types d'émission, backends, optimisation, LTO, cibles, formats de diagnostic, prélude de bibliothèque standard et niveaux de lint."
+type: reference
+sidebar:
+  order: 1
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+
+Le pilote de compilateur `glyim` (compilé comme `glyim-cli`) compile un seul fichier source `.g`. Cette page documente la surface complète de ligne de commande, vérifiée contre le parseur d'arguments dans `crates/glyim-cli`.
+
+<Code lang="bash" code={`glyim <INPUT> [FLAGS]`} />
+
+## Arguments et drapeaux
+
+| Argument | Type | Défaut | Requis | Description |
+|----------|------|---------|----------|-------------|
+| `<INPUT>` | chemin | — | oui | Le fichier source `.g` à compiler. |
+| `-o`, `--output <PATH>` | chemin | dérivé | non | Écrire l'artefact de sortie à ce chemin. |
+| `--emit <KIND>` | énumération | `obj` | non | Type d'artefact de sortie — voir [types d'émission](#types-demission). |
+| `-O`, `--opt-level <N>` | 0–3 | `0` | non | Niveau d'optimisation. |
+| `--target <TRIPLE>` | chaîne | hôte par défaut | non | Triple cible, par exemple `aarch64-unknown-linux-gnu`. Vaut le triple hôte quand non défini. |
+| `--backend <NAME>` | énumération | `llvm` | non | Backend de génération de code : `llvm`, `bytecode`, ou `interp` (l'interpréteur MIR utilisé par `--emit run`). |
+| `--linker <PATH>` | chemin | éditeur système | non | Surcharge l'éditeur de liens système utilisé pour lier les exécutables. |
+| `--link-flags <FLAGS>` | chaîne | aucun | non | Drapeaux supplémentaires passés à l'éditeur de liens. |
+| `--lto <KIND>` | énumération | `off` | non | Stratégie d'optimisation à l'édition de liens : `off`, `fat`, ou `thin`. |
+| `--codegen-units <N>` | entier | parallélisme | non | Nombre d'unités de codegen (CGUs) pour la génération de code parallèle. Vaut le parallélisme disponible, plafonné à 16. |
+| `--proc-macro-deps <LIST>` | chaîne | aucun | non | Fichiers source de dépendances proc-macro séparés par virgules, compilés pour le triple hôte en cdylibs et chargés via `dlopen`. |
+| `--error-format <FMT>` | énumération | `human` | non | Format de diagnostic : `human` (rendu par miette) ou `json` (un objet JSON par diagnostic). |
+| `--time-passes` | drapeau | off | non | Imprime les mesures de timing par passe après compilation. |
+| `--self-profile[=FILE]` | chemin | aucun | non | Enregistre un journal d'événements de profilage Chrome-trace (`FILE`, défaut `trace.json`) ; s'ouvre dans Perfetto. |
+| `--with-stdlib` | drapeau | off | non | Préfixe la bibliothèque standard assemblée à l'entrée, pour que `println`, `Vec`, `Option`, `Result`, `String`, `Box`, `Rc` et `Iterator` se résolvent sans déclarations `use` explicites. |
+| `-A`, `--allow <LINT>` | nom de lint | aucun | non | Supprime le lint nommé. Répétable. |
+| `-W`, `--warn <LINT>` | nom de lint | aucun | non | Règle le lint nommé au niveau warning (le défaut). Répétable. `glyim -W help` liste tous les lints. |
+| `-D`, `--deny <LINT>` | nom de lint | aucun | non | Promeut le lint nommé en niveau erreur, avortant la compilation. Répétable. |
+| `-h`, `--help` | drapeau | — | non | Imprime l'aide. |
+| `-V`, `--version` | drapeau | — | non | Imprime la version. |
+
+## Types d'émission
+
+| Type | Sortie | Notes |
+|------|--------|-------|
+| `obj` | Fichier objet natif | Le défaut. |
+| `exec` | Exécutable lançable | Exige le backend LLVM ; le pilote lie avec l'éditeur de liens système. |
+| `mir` | Dump MIR | IR de niveau intermédiaire lisible par l'humain, utile pour déboguer l'abaissement. |
+| `llvm-ir` | IR LLVM | Sortie `.ll` textuelle du backend LLVM. |
+| `asm` | Assembleur | Assembleur cible pour la `--target` sélectionnée. |
+| `cdylib` | Bibliothèque dynamique | Utilisée pour les crates proc-macro ; compilée pour l'hôte quand pilotée par `--proc-macro-deps`. |
+| `syntax` | Dump d'arbre de syntaxe | Arbre de parse lisible du fichier d'entrée, utile pour déboguer le frontend. |
+| `stats` | Rapport de mesure JSON | Mesures de compilation à schéma versionné (temps, tailles) — va avec `--time-passes`. |
+| `run` | Exécution interprétée | Lance le programme sur l'interpréteur MIR (`--backend interp`) et imprime sa sortie ; aucun artefact n'est écrit. |
+
+## Comportement du LTO
+
+| Valeur | Comportement |
+|-------|----------|
+| `off` | Pas d'optimisation à l'édition de liens (défaut). |
+| `fat` | Fusion de modules et optimisation dans le compilateur. Exige le support multi-CGU, qui n'est pas encore implémenté ; le demander erreur proprement (indépendamment du nombre de CGUs) au lieu d'ignorer silencieusement la demande. |
+| `thin` | Exige le backend LLVM et l'outil `llvm-lto2` de la même distribution LLVM contre laquelle le backend a été compilé. Demander `thin` avec `--backend bytecode` est une erreur explicite. |
+
+## Erreurs internes du compilateur
+
+Quand le compilateur lui-même panique, le pilote capture le déroulement et imprime un rapport ICE (erreur interne du compilateur) structuré au lieu d'une backtrace Rust brute. Le rapport inclut le message de panique et une backtrace capturée au site de la panique. Une erreur orientée langage n'apparaît jamais comme une ICE ; une ICE est toujours un bogue de compilateur qui vaut un rapport.
+
+## Environnement
+
+| Variable | Objet |
+|----------|---------|
+| `LLVM_SYS_231_PREFIX` | Préfixe d'installation de LLVM 23, requis pour compiler l'espace de travail. Homebrew : `$(brew --prefix llvm@23)` ; Debian/Ubuntu : `/usr/lib/llvm-23`. |
+
+<Aside type="caution">
+Le backend LLVM est une dépendance dure du pipeline — il n'y a pas de drapeau de fonctionnalité pour compiler sans lui.
+</Aside>
+
+## Exemples
+
+<Code lang="bash" code={`# Fichier objet avec le backend LLVM (défauts)
+glyim input.g -o output.o
+
+# IR LLVM pour inspection
+glyim input.g --emit llvm-ir
+
+# Exécutable optimisé avec LTO thin
+glyim input.g --emit exec -O2 --lto thin -o hello
+
+# Compiler en croisé pour AArch64 Linux
+glyim input.g --target aarch64-unknown-linux-gnu
+
+# Diagnostics JSON pour l'outillage d'éditeur
+glyim input.g --error-format json
+
+# Préfixer la bibliothèque standard, dénier le lint unsafe_fn_call
+glyim input.g --with-stdlib -D unsafe`} />
+
+## Étapes suivantes
+
+Voir [inspecter le pipeline de compilation](/guides/inspect-compilation/) pour des visites orientées tâche de ces drapeaux, et la [référence des lints](/reference/lints/) pour le framework de lint.

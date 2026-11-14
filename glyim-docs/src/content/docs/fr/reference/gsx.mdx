@@ -1,0 +1,80 @@
+---
+title: Référence GSX
+description: "La syntaxe de vue GSX et l'API de l'étage glyim-gsx — grammaire, directives, régions, blueprints, hôtes et diagnostics."
+type: reference
+sidebar:
+  order: 6
+---
+
+import { Aside, Badge, LinkCard } from '@astrojs/starlight/components';
+
+GSX est la syntaxe de vue de première classe, typée et agnostique vis-à-vis de l'hôte de Glyim : l'ergonomie de JSX, mais avec une structure visible par le compilateur au lieu d'un arbre d'appels de fonction à l'exécution. Les éléments sont des données décrites par des schémas, et la même source peut cibler HTML, chaînes SSR, widgets natifs, terminaux et hôtes de test sans tête.
+
+<Aside type="caution">
+GSX est expérimental <Badge text="v0.1" variant="note" />. L'analyse, la vérification de types et l'étage `glyim-gsx` sont implémentés et testés, mais le pilote CLI ne fait pas encore tourner l'étage GSX — voir le [guide d'authoring](/guides/write-gsx-views/) pour le chemin d'usage actuel.
+</Aside>
+
+## Grammaire
+
+| Construction | Syntaxe | Notes |
+|-----------|--------|-------|
+| Élément | `<tag attrs> children </tag>` ou `<tag attrs />` | `<` en position de préfixe suivi d'un identifiant. Les tags en minuscules se résolvent via le schéma de dialecte actif ; les tags en majuscules se résolvent via le def-map comme composants. |
+| Fragment | `<> … </>` | Groupement sans élément hôte. |
+| Texte | `"Hello"`, `"Hello {name}"` | Toujours un littéral de chaîne — il n'y a pas de mode texte brut, donc le lexer reste inchangé. Le parseur découpe le littéral en pièces statiques et trous typés à l'analyse. |
+| Enfant dynamique | `{expr}` | Toute expression de type `View` ou d'un type text-able. |
+| Attribut | `name="lit"`, `name={expr}` | Chaîne statique ou expression dynamique. |
+| Attribut nu | `disabled` | Équivalent à `disabled={true}`. |
+| Raccourci | `{name}` | Équivalent à `name={name}`. |
+| Spread | `{..props}` | Typé contre la struct de props de la cible. |
+| Directive d'événement | `on:click={handler}` | Les handlers sont des transformateurs d'état `fn(&mut S, E)`, pas des closures capturantes. |
+| Directive de classe | `class:active={cond}` | Décomposé statiquement en slots. |
+| Directive de style | `style:width={px}` | Décomposé statiquement en slots. |
+| Liaison bidirectionnelle | `bind:value={place}` | `place` est une expression de place (lvalue) ; désucrée avec suppression d'écho. |
+| Flux de contrôle | `if`, `match`, `for` dans `{ }` | Le langage est le langage de template. Le compilateur reconnaît ces formes comme des régions. |
+| Itération à clé | `for x in xs by key { … }` | `by` est un mot-clé contextuel à portée GSX, accepté seulement dans un `for` en position d'enfant. |
+| Dialecte à espace de noms | `<web:canvas/>`, `<native:window/>` | Échappatoire pour les éléments spécifiques à l'hôte. |
+| Échappatoire macro | `gsx! { … }` | Entrée optionnelle par arbre de jetons pour usage dans les macros. |
+
+Les noms d'attributs et de tags avec tirets (tels que `aria-label`) sont acceptés.
+
+## Le modèle de compilation
+
+Une expression GSX voyage dans le pipeline comme structure, jamais comme un arbre d'appels désucré :
+
+1. **CST** — nœuds `Gsx*` dédiés (`GsxElement`, `GsxFragment`, `GsxDirectiveAttr`, `GsxSpread`, `GsxTextLit`, `GsxBlockChild`, `GsxForBy`, …) analysés par `parse_gsx_element` sans aucun changement du lexer.
+2. **HIR** — `Expr::Gsx` préserve la structure des éléments.
+3. **Typeck** — `check_gsx` valide tags, props, événements et enfants contre le schéma de dialecte actif et vérifie chaque expression de trou.
+4. **L'étage `glyim-gsx`** — où les vues deviennent des programmes :
+   - **VIR** (View IR) : squelette statique, slots dynamiques et régions (`if`, `match`, `for` à clé, composant).
+   - **Analyses** : ensembles de lecture et d'écriture par slot, avec détection d'interférence de préfixe.
+   - **MSPs** (patches spécialisés par mutation) : une fonction de patch en ligne droite par ensemble d'écriture distinct.
+   - **Émission** : un `Blueprint` — un tableau plat d'opérations `u32` plus une table de chaînes — et un émetteur de chaînes SSR.
+
+## Surface d'API publique (`glyim-gsx`)
+
+| Élément | Rôle |
+|------|------|
+| Registre schéma / dialecte | Décrit tags, props, événements et enfants par dialecte d'hôte ; le compilateur valide contre les schémas, jamais contre des chaînes de noms de tags. |
+| Trait `Host` | L'interface qu'un backend de rendu implémente : mount, patch, patch-mask, dispatch, SSR. |
+| Hôte sans tête | Une implémentation `Host` à enregistrement d'ops pour les tests ; les assertions énoncent les coûts de mise à jour exacts. |
+| `ViewRuntime::mount` | Monte un blueprint sur un hôte et renvoie un handle de vue vivant. |
+| Blueprint | Ops plats en `u32` plus table de chaînes ; encodable en `static` pour embedding AOT. |
+| Émetteur SSR | Rend un blueprint en une chaîne de type HTML côté serveur. |
+| Réconciliation de listes à clé | Algorithme de plus longue sous-séquence croissante pour les listes `for … by`. |
+
+## Diagnostics
+
+| Code | Signification |
+|------|---------|
+| `G0201` | Une valeur ne peut pas être suivie par l'analyse d'ownership et nécessite l'échappatoire `Signal<T>` ; le diagnostic livre un fix-it, et l'hôte retombe sur des bits de signal pour ce slot. |
+| diagnostic de passation | Un corps contenant du GSX atteint la fin de typeck sans que l'étage GSX ait tourné — un pointeur propre vers l'API de l'étage, pas une erreur interne. |
+
+## Statut et portée :badge[experimental]{variant="caution"}
+
+- Implémenté et testé : syntaxe, préservation HIR, typeck piloté par schéma, VIR, analyses, MSPs, émission blueprint + SSR, réconciliation à clé, désucrage `bind:` avec suppression d'écho, composition comme composition de lentilles pour les composants inline, l'exemple Counter §3.1 de bout en bout (tests phares dans `crates/glyim-gsx/tests/counter.rs`).
+- Non commencé : bibliothèques de dialectes d'hôte en `.g` (`glyim-lang-ui`), arbres de nœuds en arène, layout, styles, émission d'arbre d'accessibilité, protocole d'hôte WASM, hôte de hot-reload basé sur VM, et câblage du pilote CLI.
+
+## Étapes suivantes
+
+<LinkCard title="Écrire des vues GSX" href="/guides/write-gsx-views/" description="Une visite orientée tâche avec l'exemple Counter phare." />
+<LinkCard title="Réactivité pilotée par l'ownership" href="/explanation/gsx-reactivity/" description="Pourquoi les patches spécialisés par mutation remplacent le diffing vdom." />

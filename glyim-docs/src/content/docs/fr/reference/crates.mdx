@@ -1,0 +1,94 @@
+---
+title: Référence des crates
+description: "Chaque crate de l'espace de travail Cargo Glyim et son rôle dans le pipeline de compilation."
+type: reference
+sidebar:
+  order: 5
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Glyim est organisé comme un espace de travail Cargo de petites crates à responsabilité unique. Chaque phase consomme l'IR de la phase précédente et expose une interface minimale basée sur des traits, donc les tests peuvent substituer des mocks pour chaque phase. Toutes les crates vivent sous `crates/`.
+
+## Fondation
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-core` | Types de fondation : vecteurs d'index, IDs de définition, interner, chemins, constantes ABI, registre de lints. |
+| `glyim-span` | Emplacements source (fichier, index d'octet, span), contextes d'hygiène, diagnostics multi-span. |
+| `glyim-diag` | Types de diagnostic, codes d'erreur, `DiagSink`, intégration `miette`. |
+| `glyim-vfs` | Système de fichiers virtuel avec suivi de contenu en mémoire. |
+| `glyim-db` | Base de compilation : interners, VFS, contexte de types, contexte de traits. |
+
+## Frontend
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-syntax` | Définition du CST (basée sur Rowan), énumération `SyntaxKind`, helpers de nœuds AST, y compris les types de nœuds `Gsx*`. |
+| `glyim-frontend` | Lexer et parseur (fusionnés), produit `SyntaxNode`. Le parseur gère les éléments GSX sans aucun changement du lexer. |
+| `glyim-meta` | Expansion de macros : macros déclaratives `macro_rules!` et macros intégrées. |
+| `glyim-proc-macro` | ABI proc-macro compatible C, registre et loader `dlopen`. |
+
+## Analyse
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-def-map` | Graphe de modules, portées d'items, résolution de noms. |
+| `glyim-hir` | IR de haut niveau (non typée), abaissée depuis le CST. Préserve la structure des éléments GSX. |
+| `glyim-type` | Internement de types (`TyCtx`), sortes de types, substitutions, régions, prédicats, auto-traits, object safety, hints de layout, impression. |
+| `glyim-solve` | `InferenceTable`, unification, solveur de traits, contexte de réalisation, support HRTB. |
+| `glyim-typeck` | Vérificateur de types : HIR vers THIR avec inférence et résolution de traits, y compris `check_gsx`. |
+| `glyim-const-eval` | Évaluateur d'expressions constantes sur HIR. |
+
+## Abaissement et MIR
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-mir` | IR de niveau intermédiaire (CFG), types de place, types de déclarations et de terminateurs. |
+| `glyim-lower` | Abaissement THIR vers MIR, monomorphisation, partitionnement en CGUs, polymorphisation, vérifications de lints post-mono. |
+| `glyim-borrowck` | Vérificateur d'emprunts NLL avec emprunts en deux phases, analyse de déplacement et élaboration des drapeaux de drop. |
+| `glyim-opt` | Passes d'optimisation MIR : propagation de constantes, DCE, simplification du CFG, élimination de blocs inaccessibles, désucrage de tranches, élaboration des drops. |
+| `glyim-mir-interp` | Interpréteur pour MIR, utilisé pour l'évaluation des `const fn` et l'exécution des tests. |
+
+## Génération de code et runtime
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-layout` | Calcul de layout de types (taille, alignement, ABI, vtables) avec passage d'arguments conscient de l'ABI (`sret`, `byval`, `Ignore`, `Direct`, `Split`). |
+| `glyim-codegen` | Trait abstrait de backend de génération de code plus le backend bytecode. |
+| `glyim-codegen-llvm` | Backend LLVM (via `inkwell`, LLVM 23) avec gestion ABI complète, infos de debug, gestion d'exceptions et LTO. |
+| `glyim-bytecode-vm` | VM à dispatch par switch exécutant la sortie du backend bytecode. |
+| `glyim-runtime` | FFI de runtime : alloc, dealloc, glue de drop, panique, fs/net/thread/time/process. |
+
+## GSX
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-gsx` | View IR (squelette, slots, régions), blueprints plats en `u32`, analyse de lecture/écriture, patches spécialisés par mutation, émetteur SSR, trait `Host` et hôte de test sans tête, réconciliation LIS de listes à clé. |
+
+## Outillage
+
+| Crate | Description |
+|-------|-------------|
+| `glyim-pipeline` | Pilote de compilation de bout en bout : lex, parse, def-map, HIR, typeck, lower, borrowck, opt, codegen. |
+| `glyim-cli` | Interface de ligne de commande (`clap`) et pilote d'éditeur de liens. Compilé comme `glyim-cli`. |
+| `glyim-lsp` | Implémentation du Language Server Protocol : diagnostics, hover, complétion, navigation, actions de code. |
+| `glyim-test` | Framework de test : découverte, cinq modes de test, instantanés, mocks, tests de propriétés. |
+| `glyip` | Gestionnaire de paquets et outil de build. |
+
+## Source de la bibliothèque standard
+
+| Crate | Contenu |
+|-------|----------|
+| `glyim-lang-core` | Source de la bibliothèque du cœur (fichiers `.g`) : `Option`, `Result`, `iter`, `slice`, `str`, `cell`, `mem`, `ptr`, `ops`, `cmp`, `marker`, `panic`, `hint`, `convert`, `default`, `future`. |
+| `glyim-lang-alloc` | Source de la bibliothèque d'allocation : `Box`, `Vec`, `String`, `Rc`, `RawVec`. |
+| `glyim-lang-std` | Source de la bibliothèque standard : `io`, `fs`, `net`, `thread`, `sync`, `env`, `time`, `process`, `task`. |
+
+<Aside type="note">
+La bibliothèque standard est écrite en Glyim et consommée par le compilateur comme son corpus d'amorçage. Le compilateur lui-même est en Rust — Glyim n'est pas encore auto-hébergeur.
+</Aside>
+
+## Étapes suivantes
+
+<LinkCard title="Architecture, expliquée" href="/explanation/architecture/" description="Pourquoi l'espace de travail est découpé ainsi : traits de contexte, IR en arène, interning." />
+<LinkCard title="Le pipeline, expliqué" href="/explanation/pipeline/" description="Comment les crates se connectent de source.g à un binaire natif." />

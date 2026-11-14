@@ -1,0 +1,111 @@
+---
+title: Premiers pas avec Glyim
+description: "Compilez le compilateur Glyim depuis les sources, échafaudez un projet avec glyip, et lancez votre premier programme Glyim de bout en bout."
+type: tutorial
+sidebar:
+  order: 1
+---
+
+import { Aside, Code, LinkCard, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Dans ce tutoriel vous compilez le compilateur Glyim depuis les sources, créez un nouveau projet avec l'outil de build `glyip`, et lancez un programme Glyim. Vous terminez avec une chaîne d'outils fonctionnelle et un modèle mental du flux de build.
+
+## Prérequis
+
+- **Rust** — dernière chaîne d'outils stable, édition 2024. Rust 1.94 ou plus récent est recommandé ; le MSRV déclaré est 1.85.
+- **LLVM 23** — requis par le backend LLVM. Le backend est une dépendance dure de l'espace de travail ; il n'y a pas de drapeau de fonctionnalité pour compiler sans lui.
+- **`just`** et **`watchexec`** — optionnels, uniquement pour les recettes de commodité dans le `justfile` du dépôt.
+
+Avant de compiler, réglez `LLVM_SYS_231_PREFIX` sur votre préfixe d'installation de LLVM 23 :
+
+<Tabs>
+   <TabItem label="macOS (Homebrew)">
+        <Code lang="bash" code={`export LLVM_SYS_231_PREFIX="$(brew --prefix llvm@23)"`} />
+   </TabItem>
+   <TabItem label="Debian / Ubuntu">
+        <Code lang="bash" code={`export LLVM_SYS_231_PREFIX="/usr/lib/llvm-23"`} />
+   </TabItem>
+</Tabs>
+
+<Aside type="tip">
+Ajoutez la ligne `export` à votre profil shell pour que chaque future session la reprenne. Le pipeline CI installe LLVM 23 avec le script `llvm.sh 23` si vous avez besoin d'une référence reproductible.
+</Aside>
+
+## Compiler le compilateur
+
+<Steps>
+
+1. Clonez le dépôt :
+
+   <Code lang="bash" code={`git clone https://github.com/elcoosp/glyim
+cd glyim`} />
+
+2. Compilez l'espace de travail en mode release :
+
+   <Code lang="bash" code={`cargo build --release`} />
+
+3. Localisez le pilote de compilateur. Le binaire est à `target/release/glyim-cli` — invoquez-le comme `glyim-cli` (renommez-le ou faites un lien symbolique vers `glyim` si vous préférez) :
+
+   <Code lang="bash" code={`./target/release/glyim-cli --version`} />
+
+   Vous pouvez aussi invoquer le pilote via Cargo à chaque appel, ce qui évite les liens symboliques :
+
+   <Code lang="bash" code={`cargo run -p glyim-cli -- --help`} />
+
+</Steps>
+
+## Créer et lancer un projet
+
+`glyip` est l'homologue de Cargo pour les projets Glyim. Il lit un manifeste `Glyip.toml`, résout les dépendances, maintient un lockfile `Glyip.lock` et pilote le compilateur.
+
+<Steps>
+
+1. Échafaudez un nouveau projet binaire :
+
+   <Code lang="bash" code={`cargo run -p glyip -- new hello
+cd hello`} />
+
+2. Inspectez ce que `glyip new` a généré. Le projet contient un manifeste `Glyip.toml` et un fichier source `src/main.g` :
+
+   <Code lang="bash" code={`cat Glyip.toml
+cat src/main.g`} />
+
+3. Compilez le projet :
+
+   <Code lang="bash" code={`cargo run -p glyip -- build`} />
+
+4. Lancez-le :
+
+   <Code lang="bash" code={`cargo run -p glyip -- run`} />
+
+   `glyip run` est un wrapper transparent : il sort avec le code de sortie du programme compilé, donc un programme en échec ne ressemble pas à une commande qui réussit.
+
+</Steps>
+
+## À quoi ressemble l'échafaudage
+
+Le manifeste échafaudé déclare le paquet et ses cibles :
+
+<Code lang="toml" code={`[package]
+name = "hello"
+version = "0.1.0"
+edition = "2024"`} />
+
+Le template par défaut produit un binaire qui imprime un salut. Éditez `src/main.g`, recompilez et lancez encore — `glyip build` utilise des empreintes de source SHA-256, donc il ne recompile que ce qui a changé.
+
+## Compiler un seul fichier directement
+
+Une fois à l'aise avec `glyip`, vous pouvez contourner la gestion de projet et piloter le compilateur directement. L'équivalent du tutoriel jusqu'ici, en une commande :
+
+<Code lang="bash" code={`glyim-cli src/main.g --emit exec -o hello
+./hello`} />
+
+Le drapeau `--emit exec` produit un exécutable lançable ; le défaut `--emit obj` produit un fichier objet. Voir la [référence CLI](/reference/cli/) pour chaque drapeau.
+
+## Étapes suivantes
+
+Vous avez une chaîne d'outils fonctionnelle. D'ici :
+
+<LinkCard title="Compiler et lancer votre projet" href="/guides/build-and-run/" description="Builds release, niveaux d'optimisation, LTO et passage d'arguments à votre programme." />
+<LinkCard title="Gérer les dépendances" href="/guides/manage-dependencies/" description="Dépendances path, registre et git dans Glyip.toml, et comportement du résolveur." />
+<LinkCard title="Comment fonctionne le pipeline" href="/explanation/pipeline/" description="Une visite étage par étage de ce qui se passe entre source.g et un binaire natif." />

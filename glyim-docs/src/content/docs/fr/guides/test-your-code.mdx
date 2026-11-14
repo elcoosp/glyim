@@ -1,0 +1,82 @@
+---
+title: Tester votre code
+description: "Lancez les tests avec glyip test, choisissez entre l'interpréteur MIR et les exécutables natifs compilés, annotez les erreurs attendues inline, et bénissez les changements d'instantanés."
+type: how-to
+sidebar:
+  order: 3
+---
+
+import { Aside, Code, LinkCard, Steps } from '@astrojs/starlight/components';
+
+Ce guide montre comment lancer les tests d'un projet Glyim, comment le harnais du compilateur classifie les tests, et comment annoter les diagnostics attendus inline.
+
+## Lancer les tests de votre projet
+
+Depuis le répertoire qui contient votre `Glyip.toml` :
+
+<Code lang="bash" code={`glyip test`} />
+
+Variations utiles :
+
+<Code lang="bash" code={`glyip test --filter parser    # ne lancer que les tests dont le nom contient "parser"
+glyip test --no-run           # compiler les tests mais ne pas les lancer
+glyip test --compiled         # compiler chaque test en exe natif et le lancer
+glyip test --release          # compiler les tests en mode release`} />
+
+Par défaut les tests tournent in-process sur l'interpréteur MIR. `--compiled` produit un vrai exécutable par test et le lance comme sous-processus, ce qui exerce le chemin de codegen LLVM complet.
+
+## Comprendre les modes de test du harnais
+
+Le harnais de test du compilateur (`glyim-test`) découvre les fichiers `.g` sous `tests/` et les lance dans l'un de cinq modes, sélectionnés par un en-tête inline ou le nom du répertoire contenant :
+
+| Mode | Signification |
+|------|---------|
+| `compile-pass` | La source compile sans erreurs. |
+| `compile-fail` | La source produit des erreurs spécifiques, vérifiées contre les annotations inline. |
+| `ui` | La sortie complète du compilateur (CST, def-map, typeck, diagnostics) correspond à un instantané `.expected`. |
+| `run-pass` | Le programme compilé sort avec succès et correspond à sa stdout/stderr attendue. |
+| `run-fail` | Le programme compilé échoue avec un code de sortie et une sortie spécifiques. |
+
+## Annoter les erreurs attendues inline
+
+Un test `compile-fail` nomme les diagnostics qu'il attend à côté de la ligne fautive :
+
+<Code lang="rust" code={`fn main() {
+    let x: i32 = "hello";
+    //~^ ERROR mismatched types
+    //~| expected i32, found str
+}`} />
+
+La grammaire d'annotation :
+
+- `//~ ERROR <pattern>` — la ligne annotée produit une erreur dont le message contient `<pattern>`.
+- `//~| ERROR <pattern>` — une continuation de l'annotation précédente, pour les blocs de diagnostic multi-lignes.
+- `//~^`, `//~^^`, … — pointent vers les lignes précédentes au lieu de la ligne courante.
+- `//~~` — correspondance floue : le diagnostic peut atterrir à ±1 ligne.
+- `//~? ERROR …` — le diagnostic est optionnel ; le test passe s'il est absent.
+
+## Travailler avec les instantanés
+
+Les tests d'instantanés pour le CST, le def-map et MIR utilisent `insta` dans l'espace de travail du compilateur :
+
+<Code lang="rust" code={`snapshot_cst("my_syntax_case", source);
+snapshot_mir("my_mir_case", &ctx, &body);`} />
+
+Quand un changement intentionnel altère les instantanés, mettez-les à jour :
+
+<Code lang="bash" code={`GLYIM_BLESS=1 cargo test -p glyim-test
+# ou, pour une revue interactive
+cargo insta review`} />
+
+Pour voir la sortie capturée des programmes des tests run-pass/run-fail, réglez `GLYIM_TEST_SHOW_OUTPUT=1` :
+
+<Code lang="bash" code={`GLYIM_TEST_SHOW_OUTPUT=1 cargo test -p glyim-test`} />
+
+<Aside type="note">
+Le harnais livre aussi des utilitaires de mock pour chaque phase du compilateur (`MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen`, `TestDbBuilder`) et un module de propriétés qui génère des types aléatoires pour vérifier des invariants comme « l'unification d'un type avec lui-même réussit ».
+</Aside>
+
+## Étapes suivantes
+
+<LinkCard title="Référence glyip test" href="/reference/glyip/#glyip-test" description="Chaque drapeau que la commande test accepte." />
+<LinkCard title="Pourquoi le compilateur a cinq modes de test" href="/explanation/testing-model/" description="Le raisonnement derrière la classification et les mocks du harnais." />

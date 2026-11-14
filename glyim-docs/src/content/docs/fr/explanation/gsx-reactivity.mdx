@@ -1,0 +1,57 @@
+---
+title: Réactivité pilotée par l'ownership
+description: "Comment GSX utilise les ensembles de lecture/écriture du vérificateur d'emprunts au lieu d'un DOM virtuel — squelettes, slots, patches spécialisés par mutation et modèle de coût."
+type: explanation
+sidebar:
+  order: 4
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+La plupart des frameworks de vues optimisent les mises à jour en diffant un DOM virtuel à l'exécution, ou en câblant des signaux qui notifient les abonnés. GSX prend une troisième voie, disponible parce que Glyim possède le compilateur et le vérificateur d'emprunts : **le compilateur prouve qui peut écrire quoi, et spécialise le code de mise à jour à l'avance.** Cette page explique l'idée et sa machinerie.
+
+## La thèse
+
+L'arrangement de React — une vue est un arbre d'appels de fonction à l'exécution dans lequel le compilateur ne peut pas voir — force chaque optimisation à *récupérer* une structure que la syntaxe a jetée. GSX l'inverse : un élément de vue est une expression typée de première classe qui survit profondément dans le compilateur, donc la structure n'est jamais effacée tôt. Le compilateur voit le squelette statique, les trous dynamiques, et quelles écritures peuvent toucher quels slots.
+
+Trois principes suivent :
+
+1. **La structure n'est jamais effacée tôt.** Une vue reste une `Expr::Gsx` à travers HIR et typeck ; seule une passe dédiée l'abaisse plus loin.
+2. **Le compilateur est agnostique vis-à-vis de l'hôte ; les hôtes sont des bibliothèques.** Les passes connaissent les schémas, les slots, les régions et les classes d'invalidation — jamais le HTML. HTML, widgets natifs, terminaux et hôtes de test sont des dialectes branchés de l'extérieur.
+3. **L'ownership est le système de réactivité.** Là où le vérificateur d'emprunts peut prouver exactement quelles places un handler écrit, aucune machinerie de diffing ou de signaux n'est nécessaire sur le chemin rapide.
+
+## Squelette, slots et régions
+
+L'étage `glyim-gsx` abaisse les vues typées en **View IR (VIR)** avec trois ingrédients :
+
+- **Squelette** — la partie statique de la vue : formes d'éléments, attributs statiques, texte fixe.
+- **Slots** — les trous dynamiques : texte interpolé, attributs dynamiques, handlers d'événements. Chaque slot a un *ensemble de lecture* : les places dont il dépend. Un trou de texte affichant `{s.count}` lit `s.count`.
+- **Régions** — les parties de flot de contrôle : régions `if`/`match` et régions `for` à clé, qui possèdent leurs propres squelettes et peuvent être montées ou démontées comme une unité.
+
+## Patches spécialisés par mutation
+
+Pour chaque handler d'événement, l'analyse calcule un **ensemble d'écriture** : les places que le handler peut écrire, dérivées des mêmes faits à granularité place que le vérificateur d'emprunts utilise. L'étage émet ensuite un **patch spécialisé par mutation (MSP)** par ensemble d'écriture distinct — une fonction en ligne droite qui met à jour exactement les slots affectés par ce handler, sans diffing :
+
+- Un handler qui écrit `s.count` produit un patch qui met à jour les slots lisant `s.count`, et rien d'autre.
+- Quand les ensembles de lecture de deux slots se chevauchent par préfixe (les deux lisent `s` et l'un lit `s.count`), une **interférence de préfixe** est détectée et les slots affectés sont groupés prudemment.
+- Les changements structurels — une région `if` qui bascule, une liste à clé qui se réordonne — routent vers des opérations au niveau région : la région `if` monte son squelette de branche else, et les listes à clé se réconcilient avec un algorithme de plus longue sous-séquence croissante qui minimise les déplacements d'éléments.
+- Les attributs `bind:` à double sens désucrent en une écriture sur la place liée plus une suppression d'écho, donc l'input qui a causé la mise à jour ne se re-rend pas lui-même.
+
+La sortie est un **blueprint** : un tableau plat d'opérations `u32` plus une table de chaînes, encodable en `static`. Le montage l'interprète une fois par hôte ; les patches sont les fonctions spécialisées ci-dessus.
+
+## Le modèle de coût
+
+Parce que les patches sont en ligne droite et choisis par ensemble d'écriture, le coût de mise à jour est connu statiquement. L'hôte sans tête, à enregistrement d'ops, en fait un sujet de test : le test phare Counter affirme la séquence *exacte* et le nombre d'opérations d'hôte pour un montage, un clic et un patch. Une régression du coût de mise à jour échoue au test — le modèle de coût fait partie de la spécification, pas d'une note de bas de page de benchmark.
+
+## Où les signaux apparaissent encore
+
+L'analyse d'ownership couvre les formes courantes : état local, écritures de handler, composants inline composés comme compositions de lentilles. Quand une valeur est réellement aliasée et mutable — une cellule partagée que plusieurs propriétaires peuvent écrire — l'analyse ne peut pas prouver d'ensemble d'écriture. C'est l'échappatoire : le compilateur émet le diagnostic `Signal<T>` (G0201) avec un fix-it, et l'hôte retombe sur des bits de signal pour ce slot. Les signaux sont le chemin d'exception, pas le chemin rapide.
+
+<Aside type="note">
+GSX est expérimental : l'étage est implémenté et testé comme bibliothèque, et le câblage du pilote CLI n'a pas encore atterri. Voir la référence GSX pour la table de statut exacte.
+</Aside>
+
+## Étapes suivantes
+
+<LinkCard title="Référence GSX" href="/reference/gsx/" description="La grammaire, l'API publique de l'étage et les diagnostics." />
+<LinkCard title="Écrire des vues GSX" href="/guides/write-gsx-views/" description="L'exemple Counter phare, pas à pas." />

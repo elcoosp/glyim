@@ -1,0 +1,93 @@
+---
+title: Le pipeline de compilation
+description: "Une visite étage par étage de ce qui se passe entre source.g et un binaire natif ou un programme bytecode."
+type: explanation
+sidebar:
+  order: 2
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Cette page parcourt le pipeline de compilation de Glyim étage par étage — ce que chaque étage consomme, ce qu'il produit, et pourquoi il existe. Le pipeline est fonctionnel de bout en bout pour un sous-ensemble substantiel du langage.
+
+## La carte
+
+<Code lang="text" code={`source.g
+   │
+   ▼
+Lexer → Parser → CST                (glyim-frontend, glyim-syntax)
+                     │
+                     ▼
+HIR (untyped) ← Def-Map ← Macro     (glyim-hir, glyim-def-map, glyim-meta)
+                     │              expansion
+                     ▼
+Typeck (inference) ⇄ Trait solving  (glyim-typeck, glyim-solve)
+   → THIR (typed)
+                     │
+                     ▼
+Lowering → MIR (CFG)                (glyim-lower, glyim-mir)
+   (monomorphization)
+                     │
+         ┌───────────┼───────────┐
+         ▼           ▼           ▼
+   Borrowck (NLL)  Optimizer   MIR interpreter
+                     │           (const-eval, tests)
+                     ▼
+        LLVM IR → .o / exe      or      Bytecode → .gbc
+        (glyim-codegen-llvm)            (glyim-codegen, glyim-bytecode-vm)`} />
+
+## Frontend : des caractères à un arbre sans perte
+
+Le lexer tokenise tout le fichier d'avance — il est eager et sans contexte, sans pile de modes. Le parseur construit ensuite un **arbre de syntaxe concret** avec Rowan : les espaces, les commentaires et même les erreurs de syntaxe sont préservés dans l'arbre. La récupération d'erreur est une fonctionnalité de première classe, donc un fichier avec une faute produit toujours un CST utilisable pour les fonctionnalités IDE comme goto-definition et complétion.
+
+Les éléments de vue GSX sont analysés dans la même passe (`parse_gsx_element`), produisant des nœuds CST `Gsx*` dédiés sans aucun changement du lexer — le texte dans les vues est toujours un littéral de chaîne, ce qui supprime le besoin de modes de lexer.
+
+## Résolution de noms et macros
+
+Le def-map construit le graphe de modules et résout les noms : portées d'items, imports `use` et vérifications de visibilité. L'expansion de macros s'entrelace avec la résolution — les règles `macro_rules!` et les macros intégrées (`file!`, `line!`, `env!`, `include_str!`, etc.) s'étendent sur les arbres de jetons, et les macros procédurales entrent par le pont C-ABI et un loader basé sur `dlopen`.
+
+## HIR : structure sans types
+
+L'IR de haut niveau est une arène de variantes d'expression — `Path`, `Literal`, `Block`, `If`, `While`, `For`, `Match`, `Call`, `MethodCall`, et `Expr::Gsx` pour les vues. HIR garde la structure intacte et diffère la signification à l'étage suivant. Les fonctions async sont désucrées ici en machines à états (corps en ligne droite et multi-await).
+
+## Typeck et résolution de traits
+
+Le vérificateur de types abaisse HIR en **THIR** (HIR typé) tout en exécutant l'inférence : variables d'unification (de types généraux, entiers et flottants), un occurs-check, et vérification bidirectionnelle. Les obligations de traits affluent dans un contexte de réalisation avec une file d'obligations ; le solveur gère les bornes de traits de rang supérieur (`for<'a>`) et calcule les auto-traits (`Send`, `Sync`, `Unpin`).
+
+Les expressions GSX sont vérifiées ici contre les schémas de dialecte — tags, props, événements et enfants sont validés comme données, pas par correspondance de chaînes.
+
+## Abaissement et monomorphisation
+
+`glyim-lower` transforme THIR en **MIR**, un graphe de flot de contrôle de déclarations `Assign(Place, Rvalue)` et de terminateurs, avec des projections de place à granularité champ. Les fonctions génériques sont monomorphisées — spécialisées pour les types concrets — avec deux raffinements : la polymorphisation remplace les paramètres génériques inutilisés par des placeholders canoniques, et les items sont partitionnés en unités de codegen (par défaut la parallélisme disponible, plafonné à 16) pour la génération de code parallèle.
+
+## Vérification d'emprunts : NLL sur le CFG
+
+Le vérificateur d'emprunts tourne sur MIR avec des durées de vie non lexicales : inférence de régions à la Polonius, analyse de liveness inter-blocs, emprunts en deux phases (une réservation qui peut être promue en emprunt actif avant que l'appel n'ait réellement lieu), et analyse de déplacement avec suivi des déplacements partiels. L'élaboration des drops insère les drapeaux de drop qui rendent les déplacements partiels sûrs.
+
+Parce que le vérificateur travaille sur le CFG, un emprunt peut se terminer après son dernier usage plutôt qu'à la fin d'une portée lexicale — c'est ce que « non lexical » signifie, et c'est pourquoi ce motif passe l'emprunt.
+
+## Optimisation
+
+`glyim-opt` exécute des passes MIR par corps : propagation de constantes, élimination de code mort, simplification du CFG, élimination de blocs inaccessibles, désucrage de tranches et élaboration des drops. Il n'y a pas d'inliner au niveau MIR — l'inlining est laissé à LLVM — donc la spécialisation GSX tourne au-dessus de MIR, où la structure reste visible.
+
+## Génération de code
+
+Deux backends consomment la MIR optimisée :
+
+- **LLVM** (`glyim-codegen-llvm`, via `inkwell`) calcule les layouts de types avec passage d'arguments conscient de l'ABI (`sret`, `byval`, `Direct`, `Split`), génère des vtables pour les objets traits, émet les infos de debug et la gestion d'exceptions (Itanium et SEH), et supporte le LTO fat et thin. Le pilote de liaison produit ensuite des exécutables avec l'éditeur de liens du système.
+- **Bytecode** (`glyim-codegen`) émet un format compact de machine à pile, exécuté par `glyim-bytecode-vm` — le backend utilisé pour les tests et l'exécution embarquée.
+
+L'**interpréteur MIR** (`glyim-mir-interp`) exécute MIR directement : il alimente l'évaluation des `const fn` et le lanceur de tests in-process.
+
+## Après le compilateur : édition de liens et exécution
+
+Le pilote CLI lie les fichiers objets produits en exécutables, en honorant `--linker` et `--link-flags`. `glyip run` enveloppe tout le flux — build, puis exécution, puis sortie avec le statut de l'enfant — et la bibliothèque standard (`glyim-lang-core`, `glyim-lang-alloc`, `glyim-lang-std`) fournit la couche `Option`/`Vec`/`io`/`thread` écrite en Glyim elle-même.
+
+<Aside type="note">
+La compilation incrémentale traverse toute cette carte : les empreintes SHA-256 des sources et de la configuration de build décident de ce qui recompile, et le cache de monomorphisation réutilise les items spécialisés à travers les compilations.
+</Aside>
+
+## Étapes suivantes
+
+<LinkCard title="Vérification d'emprunts, expliquée" href="/explanation/borrow-checking/" description="Comment fonctionnent l'inférence de régions NLL et les emprunts en deux phases sur le CFG." />
+<LinkCard title="Inspecter le pipeline depuis la CLI" href="/guides/inspect-compilation/" description="Émettez MIR, IR LLVM et assembleur pour voir les étages vous-même." />

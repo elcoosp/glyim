@@ -1,0 +1,59 @@
+---
+title: Vérification d'emprunts
+description: "Comment fonctionne le vérificateur d'emprunts NLL de Glyim — inférence de régions façon Polonius, liveness inter-blocs, emprunts en deux phases et analyse de déplacement sur le graphe de flot de contrôle MIR."
+type: explanation
+sidebar:
+  order: 3
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Glyim implémente un vérificateur d'emprunts à durées de vie non lexicales (NLL), la même famille de conception que rustc utilise en production. Cette page explique ce que cela signifie pour les programmes que vous écrivez et comment le vérificateur fonctionne en interne.
+
+## Ce que NLL vous apporte
+
+Un emprunt dans Glyim se termine à son **dernier usage**, pas à la fin de la portée lexicale englobante. Parce que le vérificateur travaille sur le graphe de flot de contrôle MIR plutôt que sur la structure des accolades, il suit précisément où chaque emprunt est vivant :
+
+- Un emprunt mutable se termine dès que la valeur n'est plus utilisée, donc un emprunt ultérieur du même emplacement est accepté.
+- Un emprunt peut traverser une conditionnelle et survivre à la branche dans laquelle il a été créé.
+- Les boucles sont traitées comme des cycles de flot de contrôle, avec liveness calculée à travers les frontières de blocs (analyse de liveness inter-blocs).
+
+C'est « non lexical » : les durées de vie sont liées à des points de programme dans le CFG, pas à des portées au niveau source.
+
+## Où se situe le vérificateur
+
+La vérification d'emprunts tourne sur MIR, après vérification de types, abaissement et monomorphisation. À ce stade, chaque type est concret, chaque fonction générique est spécialisée, et chaque drop implicite est explicite — donc le vérificateur raisonne sur un graphe de flot de contrôle plat d'affectations, d'appels et de terminateurs, avec des projections de place à granularité champ (`local.field[i]` est une place).
+
+## Inférence de régions à la Polonius
+
+Le vérificateur formule l'emprunt comme un problème de contraintes :
+
+1. Chaque emprunt crée une région — l'ensemble des points de programme où l'emprunt peut être utilisé.
+2. Les contraintes de liveness ajoutent les points de programme où la valeur empruntée est utilisée plus tard.
+3. Les contraintes d'outlives (`'a: 'b`) viennent des signatures de type et se propagent dans le graphe.
+4. Le solveur calcule un point fixe : si chaque région contient tous les points que ses contraintes exigent, la fonction passe.
+
+C'est la formulation façon Polonius — les régions comme ensembles calculés, vérifiées contre une logique de prêts et d'accès — plutôt qu'une approximation lexicale.
+
+## Emprunts en deux phases
+
+Un emprunt partagé qui devient mutable (la forme `args.push(args.len())`) est une source de fausses erreurs dans les vérificateurs naïfs. Glyim implémente les **emprunts en deux phases** : l'emprunt commence comme une *réservation* qui permet les lectures, et est *activé* seulement à l'usage mutant. Si un accès intermédiaire entre en conflit, l'activation échoue avec un diagnostic au lieu que l'emprunt entier soit rejeté.
+
+## Analyse de déplacement et élaboration des drops
+
+Affecter une valeur non-`Copy` la déplace. L'analyse de déplacement suit cela par place, y compris les **déplacements partiels** — déplacer un champ hors d'une struct laisse les autres champs utilisables, et l'analyse enregistre exactement quelles parties ont bougé. Quand une valeur partiellement déplacée rencontre la fin de sa portée, l'**élaboration des drapeaux de drop** insère les drapeaux qui rendent le comportement à l'exécution précis : seuls les composants encore présents sont abandonnés.
+
+## Comment cela se connecte au reste du pipeline
+
+- Les régions et prédicats du vérificateur de types alimentent les contraintes d'outlives.
+- La demande du vérificateur d'emprunts pour des drapeaux de drop est répondue par l'élaboration des drops dans l'optimiseur.
+- Les diagnostics portent des spans jusqu'à la source, rendus par `miette` dans la CLI et publiés via LSP dans l'éditeur.
+
+<Aside type="note">
+Deux limites connues façonnent le comportement actuel : `panic!` avorte sans déroulement (code de sortie 101), et le déroulement inter-frames dans l'interpréteur MIR ne supporte jusqu'ici que le nettoyage d'une seule frame — les deux sont des manques suivis dans le plan de développement, pas des décisions de conception.
+</Aside>
+
+## Étapes suivantes
+
+<LinkCard title="Le pipeline, expliqué" href="/explanation/pipeline/" description="Où se situe la vérification d'emprunts dans le flux de compilation complet." />
+<LinkCard title="Testez votre code" href="/guides/test-your-code/" description="Écrivez des tests compile-fail qui épinglent les diagnostics du vérificateur d'emprunts." />

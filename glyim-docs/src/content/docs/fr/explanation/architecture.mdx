@@ -1,0 +1,70 @@
+---
+title: Architecture
+description: "Pourquoi Glyim est découpé en plus de 30 crates à responsabilité unique, et comment les traits de contexte, les IR allouées en arène et l'interning rendent chaque phase testable en isolation."
+type: explanation
+sidebar:
+  order: 1
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+L'architecture de Glyim suit une règle : chaque phase de compilation est une crate autonome avec une API publique étroite, donc chaque phase peut être étudiée et testée en isolation — et remplacée sans toucher au reste. Cette page explique les idées derrière cette règle et les mécanismes qui la font fonctionner.
+
+## Pourquoi de petites crates
+
+La plupart des projets compilateurs font grossir un seul binaire avec des modules internes. Glyim prend la voie de l'espace de travail Cargo, avec plus de 30 crates, parce que les frontières entre phases sont là où les compilateurs se troublent : le vérificateur de types atteint les internals du parseur, le vérificateur d'emprunts redérive des faits que le vérificateur de types connaissait déjà, et les tests grandissent en fixtures emmêlées. Une frontière de crate est un mur imposé par le compilateur. `glyim-opt` ne peut pas dépendre des internals du parseur, parce que son `Cargo.toml` ne liste pas `glyim-frontend` comme dépendance.
+
+Le découpage rend aussi la direction des dépendances visible. Chaque phase consomme l'IR de la phase précédente et expose une interface minimale, donc le pipeline se lit comme une ligne droite : frontend → def-map → HIR → typeck → MIR → vérification d'emprunts → codegen. Voir la [visite du pipeline](/explanation/pipeline/) pour la séquence complète.
+
+## Traits de contexte : l'injection de dépendances pour les phases de compilateur
+
+Chaque phase définit un trait étroit qui décrit exactement ce dont elle a besoin du reste du compilateur — `LowerCtx` pour l'abaissement, `BorrowckCtx` pour la vérification d'emprunts, `TypeLookup` pour les requêtes de types, `TraitSolver` pour les obligations de traits. Le pilote du pipeline implémente ces traits contre la vraie base de compilation (`glyim-db`).
+
+Ce découplage a deux bénéfices :
+
+- **La logique du cœur ne peut pas déborder.** Une fonction d'abaissement qui ne reçoit qu'un `LowerCtx` n'a pas accès, disons, aux internals de formatage du puits de diagnostics. La signature du trait est la liste des permissions.
+- **Les tests substituent des mocks.** `glyim-test` livre `MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen` et `TestDbBuilder`. Un test qui vérifie l'analyse de déplacement n'a pas besoin d'un contexte LLVM, parce que le vérificateur d'emprunts consomme un `BorrowckCtx`, et le mock implémente ce trait.
+
+## IR allouées en arène
+
+Les représentations intermédiaires sont allouées en arène : tous les nœuds d'une IR vivent dans un seul vecteur, et les références entre eux sont des indices typés plutôt que des pointeurs. `IndexVec<I, T>` donne à chaque nœud d'IR un ID typé, bon marché à copier — un `DefId` ne peut pas être confondu avec un `LocalId`, parce que les types d'index diffèrent.
+
+Les conséquences :
+
+- **Pas de combats de comptage de références ou d'emprunts** pendant la construction de l'IR. L'allocation est un push dans un vecteur.
+- **Handles bons marché et stables.** Un ID reste valide pour la durée de vie de l'IR et est `Copy`, donc le faire circuler ne coûte rien.
+- **Les réécritures destructives sont sûres.** Les passes d'optimisation mutent les corps en place, indexés, sans danger d'aliasing.
+
+## Types internés
+
+Les types sont internés dans `TyCtx` : chaque type distinct existe une fois, et chaque mention tient le même handle interné. Deux types sont égaux quand leurs handles sont égaux — une comparaison de pointeurs, pas un parcours structurel. L'interning rend aussi les substitutions bon marché, parce qu'une substitution produit un nouveau handle depuis l'arène existante au lieu de reconstruire des arbres de types.
+
+C'est ce qui rend le solveur de traits et le moteur d'unification traitables : variables d'inférence, prédicats et régions sont tous des valeurs internées avec des identités stables.
+
+## Diagnostics comme données
+
+Chaque phase renvoie `Vec<GlyimDiagnostic>` — les diagnostics sont des valeurs, pas des effets de bord. Le pilote les collecte et les rend avec `miette` (lisible par l'humain, avec extraits de source et étiquettes) ou les sérialise en JSON pour les éditeurs et l'outillage.
+
+Parce que les diagnostics sont des données avec des spans source, ils se composent : le harnais de test les compare à des annotations inline `//~ ERROR`, le serveur de langage les publie sur LSP, et la CLI les formate en JSON sur demande. Une représentation sert trois consommateurs.
+
+## Compilation incrémentale
+
+Le pipeline empreinte les sources et la configuration de build avec SHA-256. `glyip build` utilise ces empreintes pour sauter la recompilation des entrées inchangées, et le cache de monomorphisation (`mono_cache` dans `glyim-pipeline` et `glyim-db`) réutilise les items monomorphisés à travers les compilations. La polymorphisation — remplacer les paramètres génériques inutilisés par des placeholders canoniques — augmente les hits de cache, parce qu'une fonction monomorphisée pour `Vec<T>` qui ne touche jamais `T` n'a besoin que d'une instance, pas d'une par `T`.
+
+## Philosophie d'erreur
+
+Le pipeline distingue nettement les erreurs de programme et les bogues du compilateur :
+
+- **Les erreurs de programme** sont des diagnostics avec codes d'erreur, rendus pour les humains ou les machines.
+- **Les erreurs internes du compilateur (ICE)** sont des paniques. Le pilote CLI installe un hook de panique qui capture le message et une backtrace au site de la panique, puis imprime un rapport ICE structuré au lieu d'une backtrace Rust brute. Une ICE est toujours un bogue de compilateur qui vaut un rapport.
+
+Les builds release activent `overflow-checks`, donc un débordement arithmétique dans le compilateur est une ICE, jamais un wrap silencieux.
+
+<Aside type="note">
+La conception est fortement inspirée de l'architecture de rustc — IR allouées en arène, types internés, contextes à la requête, injection de dépendances par traits — mais écrite de zéro avec du code lisible et la testabilité comme priorités.
+</Aside>
+
+## Étapes suivantes
+
+<LinkCard title="Le pipeline, expliqué" href="/explanation/pipeline/" description="Parcourez les étages de source.g à un binaire natif." />
+<LinkCard title="Référence des crates" href="/reference/crates/" description="Quelle crate possède quelle responsabilité." />

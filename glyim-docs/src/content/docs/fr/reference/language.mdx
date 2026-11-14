@@ -1,0 +1,144 @@
+---
+title: Référence du langage
+description: "Le langage Glyim — déclarations, types, traits, correspondance de motifs, closures, async/await, macros et types intégrés connus du compilateur."
+type: reference
+sidebar:
+  order: 3
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+
+Glyim est un langage de programmation système de type Rust avec sa propre extension de fichier, `.g`. Cette page liste les constructions que le compilateur accepte. La grammaire complète évolue encore — les crates `glyim-lang-core`, `glyim-lang-alloc` et `glyim-lang-std` contiennent le source actuel de la bibliothèque standard, écrit en Glyim, et servent de corpus d'amorçage au compilateur.
+
+## Une visite en un seul bloc
+
+<Code lang="rust" code={`// Structs, enums, generics, traits.
+struct Point<T> {
+    x: T,
+    y: T,
+}
+
+enum Shape {
+    Circle(f64),
+    Rectangle(f64, f64),
+    Point,
+}
+
+trait Area {
+    fn area(&self) -> f64;
+}
+
+impl Area for Shape {
+    fn area(&self) -> f64 {
+        match self {
+            Shape::Circle(r) => 3.14159 * r * r,
+            Shape::Rectangle(w, h) => w * h,
+            Shape::Point => 0.0,
+        }
+    }
+}
+
+// Pattern matching, ranges, guards.
+fn classify(n: i32) -> &str {
+    match n {
+        0 => "zero",
+        1 | 2 => "small",
+        x if x < 0 => "negative",
+        _ => "large",
+    }
+}
+
+// Closures and iterators.
+fn sum_of_squares(values: &[i32]) -> i32 {
+    values.iter().map(|x| *x * *x).sum()
+}
+
+// Async / await.
+async fn fetch_twice() -> i32 {
+    let a = fetch_one().await;
+    let b = fetch_one().await;
+    a + b
+}`} />
+
+## Constructions
+
+### Déclarations
+
+| Construction | Syntaxe | Notes |
+|-----------|--------|-------|
+| Fonction | `fn name(params) -> Ret { … }` | Fonctions libres et fonctions associées dans les blocs `impl`. |
+| Struct | `struct Name { field: T, … }` | Formes tuple et unité supportées. Paramètres génériques avec bornes et where-clauses. |
+| Enum | `enum Name { A, B(T), C { x: T } }` | Types de données algébriques. |
+| Trait | `trait Name { fn method(&self); }` | Méthodes par défaut et types associés sont supportés. |
+| Impl | `impl Trait for Type { … }` / `impl Type { … }` | Dispatch statique via le système de traits. |
+| Liaison locale | `let pattern: Type = expr;` | Les types sont généralement inférés. |
+
+### Flux de contrôle
+
+| Construction | Formes |
+|-----------|-------|
+| Conditionnel | `if expr { … } else { … }` |
+| Boucle | `while cond { … }`, `loop { … }`, `for x in iter { … }` |
+| Match | `match expr { pattern => arm, … }` |
+| Async | `async fn …` et `expr.await` — désucrés en machines à états (corps en ligne droite et multi-await). |
+
+### Correspondance de motifs
+
+Les motifs supportent les littéraux, les plages, les ou-patterns (`1 | 2`), les tranches, les structs, les tuples, les enums, les liaisons et les gardes `if`. Le wildcard `_` couvre les cas non matchés. Les bras de match sont vérifiés pour l'exhaustivité par le vérificateur de types.
+
+### Génériques et traits
+
+- Paramètres de type : `struct Point<T>`, `fn f<T: Trait>(…)`, et where-clauses.
+- Les bornes de traits participent au solveur de traits, qui gère les bornes de traits de rang supérieur (`for<'a>`).
+- Les auto-traits (`Send`, `Sync`, `Unpin`) sont calculés automatiquement.
+- Les objets traits utilisent la génération de vtables pour le dispatch dynamique.
+
+### Closures
+
+Les closures capturent leur environnement avec une analyse de capture qui classifie chaque capture comme `ByValue`, `ByRef(Mut)` ou `ByRef(Not)`. La syntaxe des closures reflète Rust : `|x| x + 1`, `|x: i32| -> i32 { x + 1 }`.
+
+### Unsafe
+
+`unsafe fn` déclare une fonction avec des contrats non vérifiés. Les appels à un `unsafe fn` hors d'un bloc `unsafe { }` englobant déclenchent le [lint `unsafe_fn_call`](/reference/lints/), qui avertit par défaut et peut être autorisé ou dénié depuis la CLI.
+
+### Macros
+
+Les macros déclaratives utilisent `macro_rules!` avec des spécificateurs de fragment incluant `:expr`, `:ty`, `:pat` et `:tt`. Macros intégrées :
+
+| Macro | Objet |
+|-------|---------|
+| `file!`, `line!`, `column!` | Rapport d'emplacement source. |
+| `env!`, `option_env!` | Accès aux variables d'environnement (requis / optionnel). |
+| `include!`, `include_str!`, `include_bytes!` | Intègre d'autres fichiers à la compilation. |
+| `concat!`, `concat_idents!` | Concaténation de littéraux et d'identifiants. |
+| `stringify!` | Rend une expression comme littéral de chaîne. |
+
+Les macros procédurales sont supportées via une ABI de flux de jetons compatible C (`glyim-proc-macro`) avec un loader cdylib basé sur `dlopen`, piloté par le drapeau CLI `--proc-macro-deps`.
+
+### Types intégrés connus du compilateur
+
+| Catégorie | Types |
+|----------|-------|
+| Primitives | `i32`, `u32`, `f64`, `bool`, `char`, `str`, `&str` et compagnie |
+| Plages | `Range`, `RangeInclusive`, et la syntaxe `..` / `..=` |
+| Optionnel / faillible | `Option<T>`, `Result<T, E>` |
+| Collections | `Vec<T>`, `String` |
+| Pointeurs intelligents | `Box<T>`, `Rc`, `PhantomData<T>`, `UnsafeCell<T>` |
+
+<Aside type="note">
+Certaines méthodes intégrées sur `Vec`, `String`, `Result` et `Option` s'abaissent en corps de fonction synthétiques que le backend LLVM doit abaisser en intrinsics ; celles qui ne sont pas implémentées produisent une erreur explicite du compilateur plutôt que du code faux.
+</Aside>
+
+## Bibliothèque standard
+
+La bibliothèque standard est écrite en Glyim et livrée en trois crates :
+
+- **`glyim-lang-core`** — `Option`, `Result`, `iter`, `slice`, `str`, `cell`, `mem`, `ptr`, `ops`, `cmp`, `marker`, `panic`, `hint`, `convert`, `default`, `future`.
+- **`glyim-lang-alloc`** — `Box`, `Vec`, `String`, `Rc`, `RawVec`.
+- **`glyim-lang-std`** — `io`, `fs`, `net`, `thread`, `sync`, `env`, `time`, `process`, `task`.
+
+Passez [`--with-stdlib`](/reference/cli/) au compilateur (ou utilisez `glyip`, qui le fait pour vous) pour que ces noms se résolvent sans déclarations `use` explicites.
+
+## Étapes suivantes
+
+Voir la [référence GSX](/reference/gsx/) pour la syntaxe de vue, et [le pipeline expliqué](/explanation/pipeline/) pour la façon dont le compilateur traite ces constructions.

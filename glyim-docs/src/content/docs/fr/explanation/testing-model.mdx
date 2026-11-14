@@ -1,0 +1,69 @@
+---
+title: Le modèle de test
+description: "Pourquoi le compilateur livre cinq modes de test, des mocks de phase, des instantanés et des tests de propriétés — et comment chaque couche attrape une classe de bug différente."
+type: explanation
+sidebar:
+  order: 5
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Le harnais de test de Glyim (`glyim-test`) est une partie de première classe du projet, pas une réflexion après coup. Cette page explique le raisonnement derrière ses couches : pourquoi cinq modes de test, pourquoi chaque phase a un mock, et ce que les tests de propriétés ajoutent.
+
+## Une analyse, plusieurs modes d'échec
+
+Un bug de compilateur peut faire surface n'importe où. Une règle d'emprunt peut être mal appliquée (un programme valide rejeté) ou mal relâchée (un programme invalide accepté) ; une étape d'abaissement peut abandonner un drapeau de drop ; un choix de codegen peut corrompre l'ABI. Aucun style de test unique ne les attrape tous, donc le harnais étage cinq modes complémentaires sur les mêmes sources `.g`, sélectionnés par un en-tête inline ou par le répertoire contenant :
+
+| Mode | Attrape |
+|------|---------|
+| `compile-pass` | Faux rejets : les programmes valides doivent compiler. |
+| `compile-fail` | Faux acceptations : les programmes invalides doivent échouer, avec le *bon* message, épinglé par annotations inline. |
+| `ui` | Changements involontaires n'importe où dans la sortie du compilateur — CST, def-map, typeck, diagnostics — contre des instantanés `.expected`. |
+| `run-pass` | Correction sémantique de bout en bout : le programme doit sortir avec succès avec la bonne stdout/stderr. |
+| `run-fail` | Sémantique du chemin d'erreur : codes de sortie spécifiques et sortie en cas d'échec. |
+
+Les modes sont délibérément grossiers : un fichier de test énonce *ce qui* doit tenir, et le harnais décide *comment* le vérifier. Cela garde le corpus lisible — chaque cas est quelques lignes de Glyim plus des annotations.
+
+## Annotations inline comme spécification exécutable
+
+Un test `compile-fail` épingle les diagnostics à côté du code qui les produit :
+
+<Code lang="rust" code={`fn main() {
+    let x: i32 = "hello";
+    //~^ ERROR mismatched types
+    //~| expected i32, found str
+}`} />
+
+La grammaire d'annotation supporte les continuations (`//~|`), les rétro-références (`//~^`), la correspondance floue à ±1 ligne (`//~~`), et les diagnostics optionnels (`//~?`). L'effet : chaque diagnostic que le compilateur est censé produire est écrit à côté du code qui le déclenche, donc le texte ou le placement d'un diagnostic ne peut pas dériver sans qu'un test échoue.
+
+## Les mocks remplacent le pipeline
+
+Parce que chaque phase communique par un trait de contexte étroit (`LowerCtx`, `BorrowckCtx`, `TraitSolver`, …), le harnais livre des mocks qui implémentent chaque trait en mémoire : `MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen`, et `TestDbBuilder` pour assembler une base de données depuis des chaînes source.
+
+Le bénéfice est la précision. Un test d'analyse de déplacement peut lancer le vérificateur d'emprunts seul contre un corps MIR construit à la main, sans parseur, sans vérificateur de types et sans LLVM dans la boucle. Quand un tel test échoue, le bug est dans la phase testée — pas trois phases en aval.
+
+## Instantanés pour la sortie structurée
+
+Les formes CST, les def-maps et les corps MIR sont comparés en instantanés (`insta`). Les instantanés brillent là où la sortie attendue est trop volumineuse à écrire à la main mais trop importante pour être laissée non épinglée : quand une passe d'optimisation change un corps MIR, le diff d'instantané montre le changement exact au niveau instruction. La bénédiction est explicite — `GLYIM_BLESS=1` ou `cargo insta review` — donc le brassage d'instantanés est toujours une décision revue.
+
+## Tests de propriétés pour le système de types
+
+Les types ont des invariants algébriques que les tests d'exemple ne soulignent qu'accidentellement. Le module de propriétés du harnais génère des types aléatoires (avec et sans variables d'inférence) et vérifie des invariants tels que :
+
+- l'unification d'un type avec lui-même réussit,
+- l'unification de deux types distincts échoue.
+
+Les cas générés atteignent des coins que les tests écrits à la main ratent — substitutions exotiques, types profondément imbriqués, variables d'inférence dans des positions inhabituelles.
+
+## Fuzzer les frontières
+
+Deux cibles cargo-fuzz sondent les frontières où l'entrée malformée rencontre la descente récursive : `fuzz_parse` (aller-retour lexer/parseur/CST) et `fuzz_compile` (un détecteur d'ICE à pipeline complet), avec des graines de corpus et un dictionnaire de jetons. Le fuzzing complète le corpus : le corpus encode le comportement connu, le fuzzing chasse les crashs inconnus.
+
+<Aside type="note">
+Le harnais tourne sur l'interpréteur MIR par défaut (`glyip test`), qui exécute les tests in-process ; `--compiled` fait tourner le même corpus en exécutables natifs via le backend LLVM, exerçant le pipeline complet. La suite différentielle CI compare les deux chemins d'exécution l'un contre l'autre.
+</Aside>
+
+## Étapes suivantes
+
+<LinkCard title="Testez votre code" href="/guides/test-your-code/" description="Comment lancer et annoter des tests en pratique." />
+<LinkCard title="Architecture, expliquée" href="/explanation/architecture/" description="La conception de traits de contexte qui rend possibles les mocks de phase." />

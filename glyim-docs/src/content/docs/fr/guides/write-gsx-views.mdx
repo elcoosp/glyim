@@ -1,0 +1,105 @@
+---
+title: Écrire des vues GSX
+description: "Écrivez des éléments de vue GSX typés avec directives, itération à clé et liaisons bidirectionnelles, et faites-les passer par l'étage glyim-gsx et l'hôte de test sans tête."
+type: how-to
+sidebar:
+  order: 6
+---
+
+import { Aside, Badge, Code, LinkCard } from '@astrojs/starlight/components';
+
+Ce guide montre comment écrire des vues avec la syntaxe GSX de Glyim : éléments, trous de texte, directives d'événement et de liaison, et itération à clé — et comment le compilateur les transforme en blueprints avec patches spécialisés par mutation.
+
+<Aside type="caution">
+GSX est expérimental. Le parseur, le vérificateur de types et l'étage `glyim-gsx` sont implémentés et testés (l'exemple Counter phare tourne de bout en bout via l'API de bibliothèque), mais le pilote `glyim-cli` ne fait pas encore tourner l'étage GSX : un corps contenant du GSX termine la vérification de types avec un diagnostic de passation propre. Tant que le câblage du pilote n'arrive pas, vous exercez GSX via l'API de bibliothèque de `glyim-gsx`, comme le font les tests propres de la crate.
+</Aside>
+
+## Écrire une vue
+
+Les éléments de vue GSX sont des expressions de première classe en Glyim. Un composant complet de l'exemple phare du design :
+
+<Code lang="rust" code={`use ui::{View, Host, Handler};
+
+#[state]
+struct Counter {
+    count: i32,
+    step:  i32,
+    name:  String,
+}
+
+#[component]
+fn CounterView(s: &Counter) -> View {
+    <section class="counter" aria-label="Counter">
+        <h1>"Hello, {s.name}!"</h1>
+
+        <button on:click={|s, _| s.count -= s.step}>"−"</button>
+        <output class:warn={s.count < 0}>"{s.count}"</output>
+        <button on:click={|s, _| s.count += s.step}>"+"</button>
+
+        <input bind:value={s.name} placeholder="Your name" />
+
+        {if s.count > 10 {
+            <p class="big">"That's a lot."</p>
+        } else {
+            <></>
+        }}
+
+        <ul>
+            {for item in s.history.iter() by item.id {
+                <li>"{item.label}"</li>
+            }}
+        </ul>
+    </section>
+}`} />
+
+## Connaître les règles de texte
+
+Le texte est toujours un littéral de chaîne — le texte brut façon JSX ne fait pas partie de la syntaxe, ce qui garde le lexer inchangé et évite les règles de repliement des espaces :
+
+<Code lang="rust" code={`<h1>"Hello, {s.name}!"</h1>`} />
+
+Le parseur GSX découpe le littéral en pièces statiques et trous typés à l'analyse, donc l'ensemble de lecture de chaque trou est syntaxiquement visible et l'échappement est piloté par le type. Les espaces entre frères ne sont pas significatifs ; écrivez `" "` explicitement quand vous en avez besoin.
+
+## Utiliser les attributs, les spreads et les directives
+
+| Construction | Syntaxe | Signification |
+|---|---|---|
+| Attribut | `name="lit"`, `name={expr}` | Chaîne statique ou expression dynamique. |
+| Attribut nu | `disabled` | Équivalent à `disabled={true}`. |
+| Raccourci | `{name}` | Équivalent à `name={name}`. |
+| Spread | `{..props}` | Typé contre la struct de props de la cible. |
+| Handler d'événement | `on:click={handler}` | Les handlers sont des transformateurs d'état `fn(&mut S, E)`. |
+| Bascule de classe | `class:active={cond}` | Décomposé statiquement en slots. |
+| Bascule de style | `style:width={px}` | Décomposé statiquement en slots. |
+| Liaison bidirectionnelle | `bind:value={place}` | `place` est une expression de place (lvalue). |
+
+Les tags en minuscules se résolvent à travers le schéma de dialecte actif — le compilateur valide tags, props, événements et enfants contre le schéma, jamais par correspondance de chaînes. Les tags en majuscules tels que `<Name …/>` se résolvent à travers le def-map comme n'importe quel item. Les échappatoires à espace de noms telles que `<web:canvas/>` et `<native:window/>` sélectionnent des dialectes spécifiques à l'hôte.
+
+## Le flux de contrôle est le langage
+
+Il n'y a pas de directives de template comme `v-if` ou `{#each}` — vous utilisez les `if`, `match` et `for` natifs de Glyim dans `{ }`, et le compilateur reconnaît ces formes comme des régions :
+
+<Code lang="rust" code={`{if s.count > 10 {
+    <p class="big">"That's a lot."</p>
+} else {
+    <></>
+}}`} />
+
+Pour les listes, ajoutez une expression de clé `by` — un mot-clé contextuel à portée GSX accepté seulement dans un `for` en position d'enfant — pour obtenir une réconciliation à clé :
+
+<Code lang="rust" code={`{for item in s.history.iter() by item.id {
+    <li>"{item.label}"</li>
+}}`} />
+
+## Le faire passer par l'étage du compilateur
+
+L'étage `glyim-gsx` est une bibliothèque : il abaisse les expressions GSX typées à travers View IR (squelette + slots + régions), l'analyse de lecture/écriture avec interférence de préfixe, et des fonctions de patch spécialisées par mutation, puis émet des blueprints plats en `u32` plus une chaîne SSR. L'hôte sans tête à enregistrement d'ops monte, patche et dispatche les vues pour que les tests puissent affirmer les coûts de mise à jour exacts — le test Counter dans `crates/glyim-gsx/tests/counter.rs` est la visite de référence.
+
+<Aside type="tip">
+Si une valeur ne peut pas être suivie par l'analyse d'ownership — une cellule mutable partagée derrière un aliasing façon `Rc<RefCell<T>>` — le compilateur émet le diagnostic `Signal<T>` (G0201) avec un fix-it, et l'hôte retombe sur des bits de signal pour ce slot.
+</Aside>
+
+## Étapes suivantes
+
+<LinkCard title="Référence GSX" href="/reference/gsx/" description="La syntaxe complète et l'API publique de glyim-gsx." />
+<LinkCard title="Réactivité pilotée par l'ownership, expliquée" href="/explanation/gsx-reactivity/" description="Pourquoi le compilateur prouve qui peut écrire quoi au lieu de differ un vdom." />

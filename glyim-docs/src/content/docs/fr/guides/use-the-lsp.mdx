@@ -1,0 +1,65 @@
+---
+title: Utiliser le serveur de langage
+description: "Lancez le serveur de langage glyim-lsp et intégrez ses diagnostics, sa navigation et ses actions de code dans votre flux de travail d'éditeur."
+type: how-to
+sidebar:
+  order: 5
+---
+
+import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+
+Ce guide montre comment démarrer le serveur de langage Glyim et le câbler dans un éditeur qui parle le Language Server Protocol.
+
+## Démarrer le serveur
+
+Après avoir compilé l'espace de travail (voir le [tutoriel de démarrage](/tutorials/getting-started/)), le binaire du serveur est disponible à `target/release/glyim-lsp` :
+
+<Code lang="bash" code={`./target/release/glyim-lsp`} />
+
+Le serveur communique sur stdio, le transport LSP standard, et publie les diagnostics avec `textDocument/publishDiagnostics` pendant que vous éditez.
+
+## Configurer votre éditeur
+
+Pointez le client LSP de votre éditeur sur le binaire `glyim-lsp`. La plupart des éditeurs exposent cela comme un réglage « commande de serveur personnalisée ». Un motif de configuration générique :
+
+<Code lang="json" code={`{
+  "languageserver": {
+    "glyim": {
+      "command": "/absolute/path/to/glyim/target/release/glyim-lsp",
+      "args": [],
+      "filetypes": ["glyim"]
+    }
+  }
+}`} />
+
+<Aside type="tip">
+Utilisez un chemin absolu vers le binaire. Le serveur doit trouver les composants du compilateur, et un chemin relatif se résout contre le répertoire de travail de l'éditeur, pas le vôtre.
+</Aside>
+
+## Capacités disponibles
+
+`glyim-lsp` implémente :
+
+- **Diagnostics** — erreurs et avertissements du compilateur poussés pendant que vous tapez, pilotés par le même pipeline que la CLI.
+- **Navigation** — goto definition, find references, symboles d'espace de travail, et plages de pliage de document.
+- **Hover et complétion** — informations de type au survol et suggestions de complétion depuis le def-map.
+- **Formatage** — formatage de document pour une mise en page cohérente.
+- **Renommage** — renommage de symboles à travers l'espace de travail.
+- **Actions de code** — corrections rapides, notamment :
+  - ajouter les bras `match` manquants,
+  - générer un bloc `impl`,
+  - retirer les imports inutilisés,
+  - auto-import pour les noms non résolus.
+
+## Retomber sur les diagnostics JSON
+
+Si vous pilotez l'outillage sans LSP, le compilateur émet un objet JSON par diagnostic :
+
+<Code lang="bash" code={`glyim input.g --error-format json`} />
+
+C'est le même flux que le serveur de langage utilise en interne, ce qui le rend approprié pour les intégrations personnalisées, les vérifications CI et l'analyse de journaux.
+
+## Étapes suivantes
+
+<LinkCard title="Inspecter le pipeline de compilation" href="/guides/inspect-compilation/" description="Émettez MIR, IR LLVM et assembleur depuis la ligne de commande." />
+<LinkCard title="Référence des crates" href="/reference/crates/" description="Quelle crate implémente quelle capacité LSP." />
