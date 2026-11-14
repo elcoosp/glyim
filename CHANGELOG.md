@@ -8,6 +8,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`gaps unwitness` (`glyim-ledger gaps unwitness [ROOT] --id <GAP-ID>
+  [--format text|json])**: the remedy half of the gap trust loop —
+  detaches one witnessed gap's witness, restoring honest witness debt.
+  The audit face's `missing` verdict is the finding (the registry claims
+  a fixture the tree no longer carries); until this face the remedy did
+  not exist as a sanctioned command — the witness face refuses an
+  already-witnessed gap, so fixing a stale or wrong witness path (a
+  fixture moved, renamed, or deleted after `gaps witness` attached it)
+  meant hand-editing the curated TOML block. The new
+  `GapWitnessDetacher` seam has two implementations —
+  `FileGapWitnessDetacher` (reads, edits the matched block, replaces the
+  registry file) and `InMemoryGapWitnessDetacher` (tests and in-process
+  consumers, with the detach edits recorded for the audit). The detachers
+  are deliberately *surgical* like the witness face they invert: only the
+  matched `[[gap]]` block's `status` value flips back to `unwitnessed`
+  and the aligned `witness` line is removed (the detached path retires to
+  the git history of the registry, the retire-face contract), so the
+  curated header prose survives byte-for-byte — `gaps witness` followed
+  by `gaps unwitness` round-trips the registry bytes. `run_gaps_unwitness`
+  validates the request — a usable ID, a registry that loads with zero
+  error-severity diagnostics (the witness-face load rule), and a gap
+  that actually carries a witness (an unwitnessed gap has nothing to
+  detach; the remedy never mints a silent no-op) — and never leaves a
+  partial write behind. The dispatch layer refreshes the generated
+  `KNOWN_GAPS.md` in the same run through the `render-gaps` pipeline, so
+  the `--check` drift gate stays green. 6 new typed `LedgerCliError`
+  variants (`GapsUnwitnessMissingField`, `GapsUnwitnessBadId`,
+  `GapsUnwitnessUnknownId`, `GapsUnwitnessNotWitnessed`,
+  `GapsUnwitnessRegistry`, `GapsUnwitnessWrite`) plus the shared
+  `GapsMissingValue`, all carrying their `code()`/`help()` lines. Ships
+  the `gaps_unwitness` walkthrough, the `gaps` bench stage, and
+  README/lib.rs/main.rs/usage docs.
+- **`gaps audit` (`glyim-ledger gaps audit [ROOT] [--format text|json])**:
+  the trust-loop closure over the gap-lifecycle write faces — resolves
+  every registered gap's witness fixture against the tree, one row per
+  gap sorted by ID. The `gaps witness` face checks the fixture at attach
+  time, but nothing re-verified the registry against the tree
+  afterwards: a fixture that is moved, renamed, or deleted left the
+  registry claiming a witness that no longer exists — exactly the silent
+  debt plan §3.3 forbids, invisible to every existing face (`check`
+  validates registry consistency, the `gaps` report prints the recorded
+  path without probing the tree). The new `audit_gaps` verdict pass
+  classifies each gap — `witnessed` (the fixture resolves to a readable
+  regular file under ROOT), `debt` (honest unwitnessed debt — displayed,
+  never failed, the gaps-report rule), `missing` (a registry-claimed
+  witness the tree no longer carries, including the bare
+  `status = "witnessed"` block that carries no `witness` line at all —
+  the serde default makes that a silent claim), and `unreadable` (the
+  witness path resolves to something that is not a readable regular
+  file). `run_gaps_audit` loads the registry once, reports the same
+  sorted diagnostics the `gaps` report face would, and `is_ok()` fails
+  the gate on any `missing`/`unreadable` row or error-severity
+  diagnostic — the same finding gate `evidence audit` runs over the
+  evidence store, applied to the witness paths the write faces record.
+  The `glyim.ledger-gaps-audit/1` JSON contract carries the counts and
+  the full row list; the text face prints the summary line, every
+  non-passing row with its detail (the vanished path), the witness-debt
+  reminder, and the diagnostics. Ships the `gaps_audit` walkthrough, the
+  `gaps` bench stage, and README/lib.rs/main.rs/usage docs.
 - **`evidence retract` (`glyim-ledger evidence retract [ROOT] --fixture
   <PATH> [--out PATH] [--format text|json])**: the evidence-store
   curation removal face — removes every committed record whose
