@@ -1,6 +1,6 @@
 //! CLI library for the Readiness Ledger tool (plan M1.1).
 //!
-//! Twenty-six subcommands:
+//! Twenty-eight subcommands:
 //!
 //! - `glyim-ledger check [ROOT]` — load `ROOT/ledger`, run the schema and
 //!   semantic validators, cross-check the M1.3 inventory extractors, print
@@ -16,11 +16,21 @@
 //!   (canonical block, explicit `status = "unwitnessed"`, the next
 //!   numbered `NNNN-gaps-open.toml` minted unless `--file` names an
 //!   existing registry file; `glyim.ledger-gaps-open/1` JSON with
-//!   `--format json`); `glyim-ledger gaps witness [ROOT] --id <GAP-ID>
-//!   --witness <PATH>` attaches the witness fixture that reproduces one
-//!   unwitnessed gap; `glyim-ledger gaps retire [ROOT] --id <GAP-ID>`
-//!   removes one closed gap's `[[gap]]` block entirely (closed entries
-//!   retire to git history). Every write face validates against the
+//!   `--format json`); `glyim-ledger gaps audit [ROOT]` is the
+//!   trust-loop closure over those write faces — every registered gap's
+//!   witness fixture is resolved against the tree and a registry-claimed
+//!   witness the tree no longer carries fails the exit code (witness
+//!   debt is displayed, never failed — `glyim.ledger-gaps-audit/1` JSON
+//!   with `--format json`); `glyim-ledger gaps unwitness [ROOT] --id
+//!   <GAP-ID>` is the remedy half of that trust loop — one witnessed
+//!   gap's witness is detached through the `GapWitnessDetacher` seam and
+//!   honest witness debt is restored (`glyim.ledger-gaps-unwitness/1`
+//!   JSON with `--format json`); `glyim-ledger gaps witness [ROOT] --id
+//!   <GAP-ID> --witness <PATH>` attaches the witness fixture that
+//!   reproduces one unwitnessed gap; `glyim-ledger gaps retire [ROOT]
+//!   --id <GAP-ID>` removes one closed gap's `[[gap]]` block entirely
+//!   (closed entries retire to git history). Every write face validates
+//!   against the
 //!   loaded registry, refuses to touch anything that does not parse
 //!   cleanly, never leaves a partial write behind, and the dispatch layer
 //!   refreshes the generated `KNOWN_GAPS.md` in the same run so the
@@ -186,13 +196,17 @@ pub use evidence::{
 };
 pub use explain::{ExplainEntry, ExplainOutcome, format_explain_report, run_explain};
 pub use gaps::{
-    FileGapOpener, FileGapRetirer, FileGapWitnessRewriter, GAPS_OPEN_SCHEMA, GAPS_RETIRE_SCHEMA,
-    GAPS_WITNESS_SCHEMA, GapOpener, GapRetirer, GapWitnessRewriter, GapsFormat, GapsOpenOutcome,
-    GapsOpenRequest, GapsRetireOutcome, GapsRetireRequest, GapsWitnessOutcome, GapsWitnessRequest,
-    InMemoryGapOpener, InMemoryGapRetirer, InMemoryGapWitnessRewriter, format_gaps_open_json,
-    format_gaps_open_text, format_gaps_retire_json, format_gaps_retire_text,
-    format_gaps_witness_json, format_gaps_witness_text, parse_gap_class, parse_gap_level,
-    run_gaps_open, run_gaps_retire, run_gaps_witness,
+    FileGapOpener, FileGapRetirer, FileGapWitnessDetacher, FileGapWitnessRewriter,
+    GAPS_AUDIT_SCHEMA, GAPS_OPEN_SCHEMA, GAPS_RETIRE_SCHEMA, GAPS_UNWITNESS_SCHEMA,
+    GAPS_WITNESS_SCHEMA, GapAuditRow, GapAuditVerdict, GapOpener, GapRetirer, GapWitnessDetacher,
+    GapWitnessRewriter, GapsFormat, GapsOpenOutcome, GapsOpenRequest, GapsRetireOutcome,
+    GapsRetireRequest, GapsUnwitnessOutcome, GapsUnwitnessRequest, GapsWitnessOutcome,
+    GapsWitnessRequest, InMemoryGapOpener, InMemoryGapRetirer, InMemoryGapWitnessDetacher,
+    InMemoryGapWitnessRewriter, audit_gaps, format_gaps_audit_json, format_gaps_audit_text,
+    format_gaps_open_json, format_gaps_open_text, format_gaps_retire_json, format_gaps_retire_text,
+    format_gaps_unwitness_json, format_gaps_unwitness_text, format_gaps_witness_json,
+    format_gaps_witness_text, parse_gap_class, parse_gap_level, run_gaps_audit, run_gaps_open,
+    run_gaps_retire, run_gaps_unwitness, run_gaps_witness,
 };
 pub use gates::{
     GATES_REPORT_SCHEMA, GateVerdict, GateVerdictRow, GatesOutcome, evaluate_gates,
@@ -819,6 +833,57 @@ pub enum LedgerCliError {
         /// The IO (or shape) failure message.
         detail: String,
     },
+    /// `gaps unwitness` was called without its required `--id`.
+    GapsUnwitnessMissingField {
+        /// The flag that was missing its value (`--id`).
+        field: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `gaps unwitness --id` was blank or carried control characters (an ID
+    /// can never match that spelling).
+    GapsUnwitnessBadId {
+        /// The offending ID (as given).
+        id: String,
+    },
+    /// `gaps unwitness --id` named a gap the registry does not carry
+    /// (with the first few open-gap candidates, the retire-face shape).
+    GapsUnwitnessUnknownId {
+        /// The unknown gap ID.
+        id: String,
+        /// Up to three open gap IDs that do exist.
+        candidates: Vec<String>,
+    },
+    /// `gaps unwitness --id` named a gap that carries no witness — an
+    /// unwitnessed gap has nothing to detach (the remedy never mints a
+    /// silent no-op).
+    GapsUnwitnessNotWitnessed {
+        /// The unwitnessed gap ID.
+        id: String,
+        /// The registry file that carries the entry.
+        path: String,
+    },
+    /// The registry under ROOT did not load cleanly, so the unwitness
+    /// face refused before writing anything.
+    GapsUnwitnessRegistry {
+        /// The joined load diagnostics.
+        detail: String,
+    },
+    /// `gaps unwitness` could not rewrite the registry file that carries
+    /// the matched block.
+    GapsUnwitnessWrite {
+        /// The registry file path.
+        path: String,
+        /// The IO (or shape) failure message.
+        detail: String,
+    },
+    /// A `gaps` face's `--format` flag was passed without its value.
+    GapsMissingValue {
+        /// The flag that was missing its value (`--format`).
+        flag: String,
+        /// The usage text.
+        usage: String,
+    },
     /// A `gaps` write face received a `--format` outside `text|json`.
     GapsBadFormat {
         /// The offending value.
@@ -1235,6 +1300,37 @@ impl fmt::Display for LedgerCliError {
             Self::GapsWitnessWrite { path, detail } => {
                 write!(f, "cannot rewrite {path}: {detail}")
             }
+            Self::GapsUnwitnessMissingField { field, usage } => {
+                write!(
+                    f,
+                    "{field} expects a value (the exact GAP-NNNN ID to detach)\n{usage}"
+                )
+            }
+            Self::GapsUnwitnessBadId { id } => {
+                write!(f, "--id expects a usable gap ID, got {id:?}")
+            }
+            Self::GapsUnwitnessUnknownId { id, .. } => {
+                write!(f, "no gap carries the ID {id:?} in ledger/gaps/known/")
+            }
+            Self::GapsUnwitnessNotWitnessed { id, path } => {
+                write!(
+                    f,
+                    "gap {id} carries no witness in {path} (nothing to detach)"
+                )
+            }
+            Self::GapsUnwitnessRegistry { detail } => {
+                write!(
+                    f,
+                    "the registry under ROOT did not load cleanly, so nothing \
+                     was detached:\n{detail}"
+                )
+            }
+            Self::GapsUnwitnessWrite { path, detail } => {
+                write!(f, "cannot rewrite {path}: {detail}")
+            }
+            Self::GapsMissingValue { flag, usage } => {
+                write!(f, "{flag} expects a value (text or json)\n{usage}")
+            }
             Self::GapsBadFormat { value, usage } => {
                 write!(f, "--format expects text or json, got {value}\n{usage}")
             }
@@ -1410,6 +1506,13 @@ impl miette::Diagnostic for LedgerCliError {
             }
             Self::GapsWitnessMissingFixture { .. } => "glyim-ledger::gaps_witness_missing_fixture",
             Self::GapsWitnessWrite { .. } => "glyim-ledger::gaps_witness_write",
+            Self::GapsUnwitnessMissingField { .. } => "glyim-ledger::gaps_unwitness_missing_field",
+            Self::GapsUnwitnessBadId { .. } => "glyim-ledger::gaps_unwitness_bad_id",
+            Self::GapsUnwitnessUnknownId { .. } => "glyim-ledger::gaps_unwitness_unknown_id",
+            Self::GapsUnwitnessNotWitnessed { .. } => "glyim-ledger::gaps_unwitness_not_witnessed",
+            Self::GapsUnwitnessRegistry { .. } => "glyim-ledger::gaps_unwitness_registry",
+            Self::GapsUnwitnessWrite { .. } => "glyim-ledger::gaps_unwitness_write",
+            Self::GapsMissingValue { .. } => "glyim-ledger::gaps_missing_value",
             Self::GapsBadFormat { .. } => "glyim-ledger::gaps_bad_format",
             Self::GapsRetireMissingField { .. } => "glyim-ledger::gaps_retire_missing_field",
             Self::GapsRetireBadId { .. } => "glyim-ledger::gaps_retire_bad_id",
@@ -1826,6 +1929,42 @@ impl miette::Diagnostic for LedgerCliError {
                  edits only the matched [[gap]] block's status/witness lines"
                     .to_string(),
             )),
+            Self::GapsUnwitnessMissingField { .. } => Some(Box::new(
+                "the ID is required, e.g. `gaps unwitness --id GAP-0002`; \
+                 `glyim-ledger gaps` prints every open ID"
+                    .to_string(),
+            )),
+            Self::GapsUnwitnessBadId { .. } => Some(Box::new(
+                "the ID must be a usable non-blank spelling without control \
+                 characters (`glyim-ledger gaps` prints every open ID)"
+                    .to_string(),
+            )),
+            Self::GapsUnwitnessUnknownId { candidates, .. } => Some(Box::new(format!(
+                "the open gap IDs include {candidates:?} (`glyim-ledger \
+                 gaps` prints the full report)"
+            ))),
+            Self::GapsUnwitnessNotWitnessed { .. } => Some(Box::new(
+                "an unwitnessed gap is already honest witness debt — nothing \
+                 to detach; witness it first (`gaps witness`) or retire it \
+                 (`gaps retire`)"
+                    .to_string(),
+            )),
+            Self::GapsUnwitnessRegistry { .. } => Some(Box::new(
+                "the detacher refuses to rewrite a registry it cannot fully \
+                 parse; fix the diagnostics first (`glyim-ledger check` \
+                 prints every diagnostic)"
+                    .to_string(),
+            )),
+            Self::GapsUnwitnessWrite { .. } => Some(Box::new(
+                "check that the registry file is writable; the detacher \
+                 edits only the matched [[gap]] block's status/witness lines"
+                    .to_string(),
+            )),
+            Self::GapsMissingValue { .. } => Some(Box::new(
+                "the flag needs its value on the same command line, e.g. \
+                 `--format json`"
+                    .to_string(),
+            )),
             Self::GapsBadFormat { .. } => Some(Box::new(
                 "`--format json` renders the face's versioned contract; \
                  plain text is the default"
@@ -2011,6 +2150,51 @@ pub enum Command {
         /// Explicit registry file to append to; `None` mints the next
         /// numbered default file.
         file: Option<String>,
+        /// Output format; [`gaps::GapsFormat::Text`] by default.
+        format: GapsFormat,
+    },
+    /// `gaps audit [ROOT] [--format text|json]` — the trust-loop closure
+    /// over the gap-lifecycle write faces: resolves every registered
+    /// gap's witness fixture against the tree, one row per gap sorted by
+    /// ID. `witnessed` means the fixture exists, `debt` is honest
+    /// unwitnessed debt (displayed, never failed — the gaps-report
+    /// rule), `missing` means the registry claims a witness the tree no
+    /// longer carries (a fixture moved, renamed, or deleted after the
+    /// witness face attached it — silent debt surfaced), and
+    /// `unreadable` means the witness path resolves to something that is
+    /// not a readable regular file. Missing and unreadable rows (and any
+    /// error-severity load diagnostic) fail the exit code — the same
+    /// finding gate `evidence audit` runs over the evidence store,
+    /// applied to the witness paths the write faces record
+    /// (`glyim.ledger-gaps-audit/1` JSON with `--format json`).
+    GapsAudit {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// Output format; [`gaps::GapsFormat::Text`] by default.
+        format: GapsFormat,
+    },
+    /// `gaps unwitness [ROOT] --id <GAP-ID> [--format text|json]` — the
+    /// remedy half of the gap trust loop: detaches one witnessed gap's
+    /// witness, restoring honest witness debt. Validates the request
+    /// against the loaded registry, refuses a registry that does not
+    /// load cleanly, and edits exactly the matched `[[gap]]` block
+    /// through the `GapWitnessDetacher` seam (`status` flipped back to
+    /// `unwitnessed`, the aligned `witness` line removed, the curated
+    /// header prose preserved byte-for-byte) — the sanctioned counterpart
+    /// of the witness face's "an already-witnessed gap is never silently
+    /// re-witnessed" rejection, and the remedy for the audit face's
+    /// `Missing` verdict (a stale or wrong witness path is detached, the
+    /// fixture re-witnessed at its new spelling). The dispatch layer
+    /// refreshes the generated `KNOWN_GAPS.md` after a successful
+    /// rewrite so the `render-gaps --check` gate stays green
+    /// (`glyim.ledger-gaps-unwitness/1` JSON with `--format json`).
+    GapsUnwitness {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// The exact gap ID (`GAP-NNNN`) to detach.
+        id: String,
         /// Output format; [`gaps::GapsFormat::Text`] by default.
         format: GapsFormat,
     },
@@ -2424,7 +2608,7 @@ pub enum WaiversFormat {
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger gaps open [ROOT] --id <GAP-NNNN> --class <a|b|c> --title <TEXT> --affects <ID[,ID...]> --caps <L0..L5> --opened-in <TAG> [--file ledger/gaps/.../FILE.toml] [--format text|json]\n   or: glyim-ledger gaps witness [ROOT] --id <GAP-ID> --witness <PATH> [--format text|json]\n   or: glyim-ledger gaps retire [ROOT] --id <GAP-ID> [--format text|json]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger evidence audit [ROOT] [--format text|json]\n   or: glyim-ledger evidence retract [ROOT] --fixture <PATH> [--out PATH] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger waivers revoke [ROOT] --id <WVR-ID> [--format text|json]\n   or: glyim-ledger waivers extend [ROOT] --id <WVR-ID> [--days N] [--format text|json]\n   or: glyim-ledger waivers prune [ROOT] [--format text|json]\n   or: glyim-ledger handoff [ROOT] [--items N] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger release-check <VERSION> [ROOT] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
+    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger gaps audit [ROOT] [--format text|json]\n   or: glyim-ledger gaps unwitness [ROOT] --id <GAP-ID> [--format text|json]\n   or: glyim-ledger gaps open [ROOT] --id <GAP-NNNN> --class <a|b|c> --title <TEXT> --affects <ID[,ID...]> --caps <L0..L5> --opened-in <TAG> [--file ledger/gaps/.../FILE.toml] [--format text|json]\n   or: glyim-ledger gaps witness [ROOT] --id <GAP-ID> --witness <PATH> [--format text|json]\n   or: glyim-ledger gaps retire [ROOT] --id <GAP-ID> [--format text|json]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger evidence audit [ROOT] [--format text|json]\n   or: glyim-ledger evidence retract [ROOT] --fixture <PATH> [--out PATH] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger waivers revoke [ROOT] --id <WVR-ID> [--format text|json]\n   or: glyim-ledger waivers extend [ROOT] --id <WVR-ID> [--days N] [--format text|json]\n   or: glyim-ledger waivers prune [ROOT] [--format text|json]\n   or: glyim-ledger handoff [ROOT] [--items N] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger release-check <VERSION> [ROOT] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout; `next` filters by\n\
      \x20 lane (L|F|T|M|B|Q) and prints the glyim.ledger-next/1 JSON queue;\n\
@@ -2446,7 +2630,14 @@ pub fn usage() -> String {
      \x20 and fails on any rendered-byte drift (plan M1.13);\n\
      \x20 `render-gaps` generates KNOWN_GAPS.md (or the glyim.known-gaps/1\n\
      \x20 JSON face) from the gap registry — `--out PATH` writes it,\n\
-     \x20 `--check` fails on drift (plan M1.9); `gaps witness` records\n\
+     \x20 `--check` fails on drift (plan M1.9); `gaps audit` resolves\n\
+     \x20 every registered gap's witness fixture against the tree and\n\
+     \x20 fails on a registry-claimed witness the tree no longer carries\n\
+     \x20 (witness debt is displayed, never failed); `gaps unwitness`\n\
+     \x20 detaches one witnessed gap's witness (--id, status flipped\n\
+     \x20 back to unwitnessed, the witness line removed, curated prose\n\
+     \x20 preserved, the generated document refreshed in the same run);\n\
+     \x20 `gaps witness` records\n\
      \x20 the witness fixture that reproduces one unwitnessed gap\n\
      \x20 (--id GAP-NNNN --witness PATH, fixture must exist, curated\n\
      \x20 registry prose preserved, the generated document refreshed\n\
@@ -2949,6 +3140,8 @@ fn parse_gates(rest: &[String]) -> Result<Command, LedgerCliError> {
 fn parse_gaps(rest: &[String]) -> Result<Command, LedgerCliError> {
     match rest.first().map(String::as_str) {
         Some("open") => return parse_gaps_open(&rest[1..]),
+        Some("audit") => return parse_gaps_audit(&rest[1..]),
+        Some("unwitness") => return parse_gaps_unwitness(&rest[1..]),
         Some("witness") => return parse_gaps_witness(&rest[1..]),
         Some("retire") => return parse_gaps_retire(&rest[1..]),
         _ => {}
@@ -2957,6 +3150,124 @@ fn parse_gaps(rest: &[String]) -> Result<Command, LedgerCliError> {
         .first()
         .map_or_else(|| PathBuf::from("."), PathBuf::from);
     Ok(Command::Gaps { root })
+}
+
+/// Parse the `gaps unwitness` subcommand's arguments: one optional ROOT
+/// positional, the required `--id <GAP-ID>` flag, and `--format text|json`
+/// (the `gaps retire` parse shape — both faces take exactly an ID and a
+/// face format).
+fn parse_gaps_unwitness(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut id: Option<String> = None;
+    let mut format = GapsFormat::Text;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--id" | "--format" => {
+                let flag = rest[index].clone();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::GapsUnwitnessMissingField {
+                        field: flag,
+                        usage: usage(),
+                    });
+                };
+                if flag == "--id" {
+                    id = Some(value.clone());
+                } else {
+                    format = match value.as_str() {
+                        "text" => GapsFormat::Text,
+                        "json" => GapsFormat::Json,
+                        other => {
+                            return Err(LedgerCliError::GapsBadFormat {
+                                value: other.to_string(),
+                                usage: usage(),
+                            });
+                        }
+                    };
+                }
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    let Some(id) = id else {
+        return Err(LedgerCliError::GapsUnwitnessMissingField {
+            field: "--id".to_string(),
+            usage: usage(),
+        });
+    };
+    Ok(Command::GapsUnwitness {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        id,
+        format,
+    })
+}
+
+/// Parse the `gaps audit` subcommand's arguments: one optional ROOT
+/// positional and `--format text|json` (the `evidence audit` parse
+/// shape — the audit faces report, they never write).
+fn parse_gaps_audit(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut format = GapsFormat::Text;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--format" => {
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::GapsMissingValue {
+                        flag: "--format".to_string(),
+                        usage: usage(),
+                    });
+                };
+                format = match value.as_str() {
+                    "text" => GapsFormat::Text,
+                    "json" => GapsFormat::Json,
+                    other => {
+                        return Err(LedgerCliError::GapsBadFormat {
+                            value: other.to_string(),
+                            usage: usage(),
+                        });
+                    }
+                };
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    Ok(Command::GapsAudit {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        format,
+    })
 }
 
 /// Parse the `gaps open` subcommand's arguments: one optional ROOT
