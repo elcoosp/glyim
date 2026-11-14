@@ -1178,6 +1178,253 @@ pub fn format_waivers_extend_json(outcome: &WaiversExtendOutcome) -> String {
     text
 }
 
+// -- prune face ---------------------------------------------------------------
+
+/// Schema tag of the `waivers prune` JSON contract.
+pub const WAIVERS_PRUNE_SCHEMA: &str = "glyim.ledger-waivers-prune/1";
+
+/// One pruned `[[waiver]]` block, echoed for the report (the identity
+/// the C9 file loses: ID, covered feature, expiry).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WaiversPruneRow {
+    /// The pruned waiver's ID.
+    pub id: String,
+    /// The registry feature ID the pruned waiver covered.
+    pub feature: String,
+    /// The pruned waiver's expiry (`YYYY-MM-DD`, echoed verbatim).
+    pub expires: String,
+}
+
+/// Result of a `waivers prune` run (also the
+/// `glyim.ledger-waivers-prune/1` JSON face via
+/// [`format_waivers_prune_json`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WaiversPruneOutcome {
+    /// Schema tag, always [`WAIVERS_PRUNE_SCHEMA`].
+    pub schema: &'static str,
+    /// The pruned blocks, ID order (the [`assess_waivers`] contract:
+    /// rows render in ID order regardless of the document's order).
+    pub removed: Vec<WaiversPruneRow>,
+    /// Waivers remaining in the committed document after the prune.
+    pub remaining: usize,
+    /// The document the blocks were removed from.
+    pub target: String,
+}
+
+/// Where expired `[[waiver]]` blocks are removed from. The batch
+/// rewrite seam mirrors [`WaiverRewriter`] (one exact ID) on the
+/// many-expired case: the engine consumes the trait, so tests drive an
+/// in-memory document and the CLI wires the file-backed implementation.
+pub trait WaiverPruner {
+    /// Removes every `[[waiver]]` block whose expiry is strictly before
+    /// `today` from the document at `path` and rewrites the remaining
+    /// entries canonically. Returns the removed entries in ID order; an
+    /// empty return means nothing expired (and nothing is written — a
+    /// clean document is never rewritten).
+    fn prune_expired(&self, path: &Path, today: NaiveDate) -> Result<Vec<WaiverEntry>, String>;
+}
+
+/// Rewrites `<ROOT>/ledger/waivers.toml` on disk: parse, partition the
+/// entries by expiry, re-serialize the remaining entries canonically,
+/// and replace the file. A document that fails to parse is refused
+/// (`Err`), not truncated; a document with no expired entry is never
+/// written.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FileWaiverPruner;
+
+impl WaiverPruner for FileWaiverPruner {
+    fn prune_expired(&self, path: &Path, today: NaiveDate) -> Result<Vec<WaiverEntry>, String> {
+        let text = std::fs::read_to_string(path)
+            .map_err(|err| format!("cannot read {}: {err}", path.display()))?;
+        let doc: RevokeSourceDoc = toml::from_str(&text)
+            .map_err(|err| format!("cannot parse {}: {err}", path.display()))?;
+        let today_days = today.to_days();
+        let mut removed: Vec<WaiverEntry> = Vec::new();
+        let mut remaining: Vec<WaiverEntry> = Vec::new();
+        for entry in doc.waiver {
+            // An unparseable expiry never expires here: the loader
+            // diagnostics it before this seam runs, and the engine refuses
+            // a non-clean load, so this arm is defensive only.
+            let expired = NaiveDate::parse_iso(&entry.expires)
+                .is_some_and(|expires| expires.to_days() < today_days);
+            if expired {
+                removed.push(entry);
+            } else {
+                remaining.push(entry);
+            }
+        }
+        if removed.is_empty() {
+            return Ok(removed);
+        }
+        removed.sort_by(|a, b| a.id.cmp(&b.id));
+        let rewritten = toml::to_string(&RevokeSourceDoc { waiver: remaining })
+            .map_err(|err| format!("cannot serialize {}: {err}", path.display()))?;
+        std::fs::write(path, &rewritten)
+            .map_err(|err| format!("cannot write {}: {err}", path.display()))?;
+        Ok(removed)
+    }
+}
+
+/// Operates on an owned in-memory document (tests and programmatic
+/// consumers); the in-memory twin of [`FileWaiverPruner`]. Every prune
+/// is recorded in [`Self::pruned`] for the audit.
+#[derive(Debug, Default)]
+pub struct InMemoryWaiverPruner {
+    /// The document the pruner operates on (the file's entries).
+    pub doc: std::cell::RefCell<Vec<WaiverEntry>>,
+    /// Every `(path, pruned IDs)` performed, in order.
+    pub pruned: std::cell::RefCell<Vec<(PathBuf, Vec<String>)>>,
+}
+
+impl WaiverPruner for InMemoryWaiverPruner {
+    fn prune_expired(&self, path: &Path, today: NaiveDate) -> Result<Vec<WaiverEntry>, String> {
+        let mut doc = self.doc.borrow_mut();
+        let today_days = today.to_days();
+        let (mut expired, remaining): (Vec<WaiverEntry>, Vec<WaiverEntry>) =
+            doc.drain(..).partition(|entry| {
+                NaiveDate::parse_iso(&entry.expires)
+                    .is_some_and(|expires| expires.to_days() < today_days)
+            });
+        *doc = remaining;
+        // ID order for the return and the audit trail both — the same
+        // determinism contract `assess_waivers` applies to its rows.
+        expired.sort_by(|a, b| a.id.cmp(&b.id));
+        let ids: Vec<String> = expired.iter().map(|entry| entry.id.clone()).collect();
+        if !ids.is_empty() {
+            self.pruned.borrow_mut().push((path.to_path_buf(), ids));
+        }
+        Ok(expired)
+    }
+}
+
+/// Prunes every expired C9 waiver: validates the document, refuses to
+/// touch one that does not load cleanly, and removes every expired
+/// block through `pruner` — the batch counterpart of
+/// [`run_waivers_revoke`] (one ID at a time) for the moment an operator
+/// clears the whole C9 debt at once.
+///
+/// # Validation contract
+///
+/// - the committed document must load with zero error-severity
+///   diagnostics (the pruner refuses to rewrite what it cannot fully
+///   parse — a duplicate-ID file fails here, never silently);
+/// - a document with no expired waiver is never rewritten (the seam is
+///   not invoked; the file bytes stay untouched).
+///
+/// Nothing is written when validation fails.
+///
+/// # Errors
+///
+/// Typed [`LedgerCliError`] variants for a refused document
+/// (`WaiversPruneLoad`) and for a failed rewrite (`WaiversPruneWrite`).
+pub fn run_waivers_prune(
+    root: &Path,
+    source: &dyn WaiverSource,
+    pruner: &dyn WaiverPruner,
+) -> Result<WaiversPruneOutcome, LedgerCliError> {
+    let span = tracing::info_span!("waivers_prune", root = %root.display());
+    let _enter = span.enter();
+
+    // `today_iso` renders the `YYYY-MM-DD` spelling `parse_iso` accepts;
+    // the same pinned round-trip the grant/revoke/extend faces rely on.
+    let today =
+        NaiveDate::parse_iso(&today_iso()).expect("today_iso round-trips through parse_iso");
+    let set = source.load(root, today);
+    if set
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        let detail = set
+            .diagnostics
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(LedgerCliError::WaiversPruneLoad { detail });
+    }
+    let path = root.join("ledger/waivers.toml");
+    let expired = assess_waivers(&set, today).expired;
+    if expired == 0 {
+        // The batch face never rewrites a clean document: the seam is not
+        // invoked and the file bytes stay untouched.
+        return Ok(WaiversPruneOutcome {
+            schema: WAIVERS_PRUNE_SCHEMA,
+            removed: Vec::new(),
+            remaining: set.waivers.len(),
+            target: path.display().to_string(),
+        });
+    }
+    let removed =
+        pruner
+            .prune_expired(&path, today)
+            .map_err(|detail| LedgerCliError::WaiversPruneWrite {
+                path: path.display().to_string(),
+                detail,
+            })?;
+    // Rows report in ID order (the `assess_waivers` contract) regardless
+    // of the document's construction path.
+    let mut removed = removed;
+    removed.sort_by(|a, b| a.id.cmp(&b.id));
+    let rows = removed
+        .iter()
+        .map(|entry| WaiversPruneRow {
+            id: entry.id.clone(),
+            feature: entry.feature.clone(),
+            expires: entry.expires.clone(),
+        })
+        .collect();
+    let remaining = set.waivers.len().saturating_sub(removed.len());
+    tracing::debug!(pruned = removed.len(), remaining, "waivers pruned");
+
+    Ok(WaiversPruneOutcome {
+        schema: WAIVERS_PRUNE_SCHEMA,
+        removed: rows,
+        remaining,
+        target: path.display().to_string(),
+    })
+}
+
+/// Renders the prune outcome's text face: one summary line (the pruned
+/// count, the remaining count, and the target document) plus one line
+/// per pruned block.
+#[must_use]
+pub fn format_waivers_prune_text(outcome: &WaiversPruneOutcome) -> String {
+    let mut text = String::new();
+    if outcome.removed.is_empty() {
+        let _ = writeln!(
+            text,
+            "no expired waiver to prune at {} ({} waiver(s) active)",
+            outcome.target, outcome.remaining,
+        );
+        return text;
+    }
+    let _ = writeln!(
+        text,
+        "pruned {} expired waiver(s) -> {} waiver(s) remain at {}",
+        outcome.removed.len(),
+        outcome.remaining,
+        outcome.target,
+    );
+    for row in &outcome.removed {
+        let _ = writeln!(
+            text,
+            "- {} for {} (expires {})",
+            row.id, row.feature, row.expires,
+        );
+    }
+    text
+}
+
+/// Renders the `glyim.ledger-waivers-prune/1` JSON contract.
+#[must_use]
+pub fn format_waivers_prune_json(outcome: &WaiversPruneOutcome) -> String {
+    let mut text = serde_json::to_string_pretty(outcome)
+        .expect("the glyim.ledger-waivers-prune/1 document is a serialisation-only struct");
+    text.push('\n');
+    text
+}
+
 #[cfg(test)]
 mod tests {
     //! Tests pin the C9 waiver-health contract: verdicts are pure date
@@ -2652,5 +2899,312 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
     #[test]
     fn usage_lists_waivers_extend() {
         assert!(usage().contains("waivers extend"));
+    }
+
+    // -- prune face -------------------------------------------------------------
+
+    use std::fmt::Write as _;
+
+    use super::{
+        FileWaiverPruner, InMemoryWaiverPruner, WAIVERS_PRUNE_SCHEMA, format_waivers_prune_json,
+        format_waivers_prune_text, run_waivers_prune,
+    };
+    use crate::diff::load_waivers;
+
+    /// One document entry with an explicit expiry.
+    fn prune_entry(id: &str, feature: &str, expires: &str) -> WaiverEntry {
+        WaiverEntry {
+            id: id.to_string(),
+            feature: feature.to_string(),
+            reason: "prune walkthrough exception".to_string(),
+            issue: "https://github.com/elcoosp/glyim/issues/42".to_string(),
+            expires: expires.to_string(),
+        }
+    }
+
+    /// The prune fixture document: one valid (2026-11-20) and two expired
+    /// (2026-11-11, 2026-11-05) entries, deliberately unsorted.
+    fn prune_doc() -> Vec<WaiverEntry> {
+        vec![
+            prune_entry("WVR-20261110-beta", "LANG-BETA", "2026-11-11"),
+            prune_entry("WVR-20261107-alpha", "LANG-ALPHA", "2026-11-20"),
+            prune_entry("WVR-20261105-gamma", "LANG-GAMMA", "2026-11-05"),
+        ]
+    }
+
+    /// An in-memory source over [`prune_doc`].
+    fn prune_source() -> InMemoryWaiverSource {
+        InMemoryWaiverSource {
+            set: WaiverSet {
+                waivers: prune_doc(),
+                diagnostics: Vec::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn prune_removes_only_expired_blocks_canonically() {
+        let pruner = InMemoryWaiverPruner {
+            doc: std::cell::RefCell::new(prune_doc()),
+            pruned: std::cell::RefCell::new(Vec::new()),
+        };
+        let outcome =
+            run_waivers_prune(Path::new("/proj"), &prune_source(), &pruner).expect("prune");
+        let ids: Vec<&str> = outcome.removed.iter().map(|row| row.id.as_str()).collect();
+        assert_eq!(ids, ["WVR-20261105-gamma", "WVR-20261110-beta"], "ID order");
+        assert_eq!(outcome.remaining, 1, "the one valid entry stays");
+        assert_eq!(outcome.schema, WAIVERS_PRUNE_SCHEMA);
+        let doc = pruner.doc.borrow();
+        assert_eq!(doc.len(), 1);
+        assert_eq!(doc[0].id, "WVR-20261107-alpha", "the valid entry survives");
+        let audit = pruner.pruned.borrow();
+        assert_eq!(audit.len(), 1, "the prune is recorded");
+        assert_eq!(
+            audit[0].1,
+            [
+                "WVR-20261105-gamma".to_string(),
+                "WVR-20261110-beta".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn prune_rows_echo_the_pruned_identity() {
+        let pruner = InMemoryWaiverPruner {
+            doc: std::cell::RefCell::new(prune_doc()),
+            pruned: std::cell::RefCell::new(Vec::new()),
+        };
+        let outcome =
+            run_waivers_prune(Path::new("/proj"), &prune_source(), &pruner).expect("prune");
+        assert_eq!(outcome.removed[0].feature, "LANG-GAMMA");
+        assert_eq!(outcome.removed[0].expires, "2026-11-05");
+        assert_eq!(outcome.target, "/proj/ledger/waivers.toml");
+    }
+
+    #[test]
+    fn prune_with_no_expired_waiver_never_touches_the_document() {
+        let clean = vec![prune_entry(
+            "WVR-20261107-alpha",
+            "LANG-ALPHA",
+            "2026-11-20",
+        )];
+        let pruner = InMemoryWaiverPruner {
+            doc: std::cell::RefCell::new(clean.clone()),
+            pruned: std::cell::RefCell::new(Vec::new()),
+        };
+        let source = InMemoryWaiverSource {
+            set: WaiverSet {
+                waivers: clean,
+                diagnostics: Vec::new(),
+            },
+        };
+        let outcome = run_waivers_prune(Path::new("/proj"), &source, &pruner).expect("clean prune");
+        assert!(
+            outcome.removed.is_empty(),
+            "nothing expired: nothing pruned"
+        );
+        assert_eq!(outcome.remaining, 1);
+        assert!(
+            pruner.pruned.borrow().is_empty(),
+            "the seam is not invoked on a clean document"
+        );
+        assert_eq!(pruner.doc.borrow().len(), 1, "the document is untouched");
+    }
+
+    #[test]
+    fn prune_refuses_a_document_that_does_not_load_cleanly() {
+        let source = InMemoryWaiverSource {
+            set: WaiverSet {
+                waivers: Vec::new(),
+                diagnostics: vec![Diagnostic {
+                    code: "LEDGER-WAIVER-DUP",
+                    message: "waiver id declared twice".to_string(),
+                    severity: Severity::Error,
+                }],
+            },
+        };
+        let pruner = InMemoryWaiverPruner::default();
+        let err = run_waivers_prune(Path::new("/proj"), &source, &pruner)
+            .expect_err("a non-clean load refuses the prune");
+        assert!(matches!(err, LedgerCliError::WaiversPruneLoad { .. }));
+        assert!(pruner.doc.borrow().is_empty(), "nothing was rewritten");
+    }
+
+    #[test]
+    fn file_pruner_rewrites_the_committed_document() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().to_path_buf();
+        std::fs::create_dir_all(root.join("ledger")).expect("mkdir ledger");
+        let mut doc = String::new();
+        for entry in prune_doc() {
+            let _ = write!(
+                &mut doc,
+                "[[waiver]]\n\
+                 id = \"{}\"\n\
+                 feature = \"{}\"\n\
+                 reason = \"{}\"\n\
+                 issue = \"{}\"\n\
+                 expires = \"{}\"\n\n",
+                entry.id, entry.feature, entry.reason, entry.issue, entry.expires,
+            );
+        }
+        let path = root.join("ledger/waivers.toml");
+        std::fs::write(&path, &doc).expect("seed waivers.toml");
+
+        let outcome =
+            run_waivers_prune(&root, &FileWaiverSource, &FileWaiverPruner).expect("file prune");
+        assert_eq!(outcome.removed.len(), 2, "both expired entries pruned");
+        assert_eq!(outcome.remaining, 1);
+
+        // The rewritten document loads cleanly and carries only the valid
+        // entry (the health face sees one valid waiver, no expired one).
+        let reloaded = load_waivers(&path, NaiveDate::new_unchecked(2026, 11, 13));
+        assert!(reloaded.diagnostics.is_empty(), "canonical rewrite loads");
+        assert_eq!(reloaded.waivers.len(), 1);
+        assert_eq!(reloaded.waivers[0].id, "WVR-20261107-alpha");
+    }
+
+    #[test]
+    fn file_pruner_leaves_a_clean_document_byte_identical() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().to_path_buf();
+        std::fs::create_dir_all(root.join("ledger")).expect("mkdir ledger");
+        let entry = prune_entry("WVR-20261107-alpha", "LANG-ALPHA", "2026-11-20");
+        let doc = format!(
+            "[[waiver]]\n\
+             id = \"{}\"\n\
+             feature = \"{}\"\n\
+             reason = \"{}\"\n\
+             issue = \"{}\"\n\
+             expires = \"{}\"\n",
+            entry.id, entry.feature, entry.reason, entry.issue, entry.expires,
+        );
+        let path = root.join("ledger/waivers.toml");
+        std::fs::write(&path, &doc).expect("seed waivers.toml");
+
+        let outcome = run_waivers_prune(&root, &FileWaiverSource, &FileWaiverPruner)
+            .expect("clean file prune");
+        assert!(outcome.removed.is_empty());
+        let after = std::fs::read_to_string(&path).expect("read back");
+        assert_eq!(after, doc, "a clean document is never rewritten");
+    }
+
+    #[test]
+    fn format_waivers_prune_text_names_the_pruned_rows() {
+        let pruner = InMemoryWaiverPruner {
+            doc: std::cell::RefCell::new(prune_doc()),
+            pruned: std::cell::RefCell::new(Vec::new()),
+        };
+        let outcome =
+            run_waivers_prune(Path::new("/proj"), &prune_source(), &pruner).expect("prune");
+        let text = format_waivers_prune_text(&outcome);
+        assert!(text.contains("pruned 2 expired waiver(s)"), "{text}");
+        assert!(text.contains("1 waiver(s) remain"), "{text}");
+        assert!(text.contains("- WVR-20261105-gamma for LANG-GAMMA (expires 2026-11-05)"));
+        assert!(text.contains("- WVR-20261110-beta for LANG-BETA (expires 2026-11-11)"));
+
+        let clean = InMemoryWaiverSource {
+            set: WaiverSet {
+                waivers: vec![prune_entry(
+                    "WVR-20261107-alpha",
+                    "LANG-ALPHA",
+                    "2026-11-20",
+                )],
+                diagnostics: Vec::new(),
+            },
+        };
+        let pruner = InMemoryWaiverPruner::default();
+        let outcome = run_waivers_prune(Path::new("/proj"), &clean, &pruner).expect("clean");
+        let text = format_waivers_prune_text(&outcome);
+        assert!(text.contains("no expired waiver to prune"), "{text}");
+    }
+
+    #[test]
+    fn format_waivers_prune_json_parses_back_with_schema_and_counts() {
+        let pruner = InMemoryWaiverPruner {
+            doc: std::cell::RefCell::new(prune_doc()),
+            pruned: std::cell::RefCell::new(Vec::new()),
+        };
+        let outcome =
+            run_waivers_prune(Path::new("/proj"), &prune_source(), &pruner).expect("prune");
+        let text = format_waivers_prune_json(&outcome);
+        let document: serde_json::Value = serde_json::from_str(&text).expect("valid JSON");
+        assert_eq!(document["schema"], WAIVERS_PRUNE_SCHEMA);
+        assert_eq!(document["removed"].as_array().map(Vec::len), Some(2));
+        assert_eq!(document["removed"][0]["id"], "WVR-20261105-gamma");
+        assert_eq!(document["removed"][0]["feature"], "LANG-GAMMA");
+        assert_eq!(document["remaining"], 1);
+        assert_eq!(document["target"], "/proj/ledger/waivers.toml");
+    }
+
+    #[test]
+    fn parse_args_accepts_waivers_prune() {
+        let command = parse_args(["waivers", "prune"].into_iter().map(String::from))
+            .expect("bare prune face");
+        assert_eq!(
+            command,
+            Command::WaiversPrune {
+                root: PathBuf::from("."),
+                format: WaiversFormat::Text,
+            }
+        );
+        let command = parse_args(
+            ["waivers", "prune", "/tmp/repo", "--format", "json"]
+                .into_iter()
+                .map(String::from),
+        )
+        .expect("root and format");
+        assert_eq!(
+            command,
+            Command::WaiversPrune {
+                root: PathBuf::from("/tmp/repo"),
+                format: WaiversFormat::Json,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_args_rejects_bad_waivers_prune() {
+        let err = parse_args(
+            ["waivers", "prune", "--format", "yaml"]
+                .iter()
+                .map(|s| s.to_string()),
+        )
+        .expect_err("bad format");
+        assert!(matches!(err, LedgerCliError::WaiversBadFormat { .. }));
+        let err = parse_args(
+            ["waivers", "prune", "--format"]
+                .iter()
+                .map(|s| s.to_string()),
+        )
+        .expect_err("missing value");
+        assert!(matches!(err, LedgerCliError::WaiversMissingValue { .. }));
+        let err = parse_args(["waivers", "prune", "a", "b"].iter().map(|s| s.to_string()))
+            .expect_err("two positional roots");
+        assert!(matches!(err, LedgerCliError::ExtraArgument { .. }));
+    }
+
+    #[test]
+    fn waivers_prune_error_variants_carry_code_and_help() {
+        use miette::Diagnostic as _;
+        let variants = [
+            LedgerCliError::WaiversPruneLoad {
+                detail: "duplicate id".to_string(),
+            },
+            LedgerCliError::WaiversPruneWrite {
+                path: "ledger/waivers.toml".to_string(),
+                detail: "readonly".to_string(),
+            },
+        ];
+        for variant in &variants {
+            let code = variant.code().map(|c| c.to_string()).expect("code");
+            assert!(code.starts_with("glyim-ledger::waivers_prune_"));
+            assert!(variant.help().is_some(), "{code} carries a help line");
+        }
+    }
+
+    #[test]
+    fn usage_lists_waivers_prune() {
+        assert!(usage().contains("waivers prune"));
     }
 }
