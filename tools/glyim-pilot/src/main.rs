@@ -1,12 +1,11 @@
 //! `glyim-pilot` CLI entry point: subcommand parsing and tokio runtime setup.
 
-//! `glyim-pilot` CLI entry point: subcommand parsing and tokio runtime setup.
-
 use clap::{Parser, Subcommand};
 use glyim_pilot::cli::agent::{handle_agent_command, AgentCommands};
 use glyim_pilot::cli::session::{handle_session_command, SessionCommands};
 use glyim_pilot::cli::{render_status_table, run_preflight};
 use glyim_pilot::config::{self, PilotConfig};
+use glyim_pilot::error::PilotError;
 use glyim_pilot::metrics::production_metrics;
 use glyim_pilot::protocol::types::PROTOCOL_VERSION;
 use glyim_pilot::server::{CliMessage, ExtensionMessage, ServerEvent, WsServer};
@@ -64,8 +63,22 @@ async fn main() {
     };
 
     match cli.command {
-        Commands::Serve => run_serve(config, cli.project_root).await,
-        Commands::Status => run_status(cli.project_root).await,
+        // The serve/status commands route failures through the same
+        // error seam as the session/agent commands (a corrupt pilot
+        // state file or an unusable bind address is a clean CLI error,
+        // not a panic).
+        Commands::Serve => {
+            if let Err(e) = run_serve(config, cli.project_root).await {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Commands::Status => {
+            if let Err(e) = run_status(cli.project_root).await {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
         Commands::Preflight => run_preflight(&config).await,
         Commands::Session(cmd) => {
             if let Err(e) = handle_session_command(cmd).await {
@@ -82,8 +95,8 @@ async fn main() {
     }
 }
 
-async fn run_serve(config: Arc<PilotConfig>, project_root: PathBuf) {
-    let mut server = WsServer::new(&config.server.host, config.server.port);
+async fn run_serve(config: Arc<PilotConfig>, project_root: PathBuf) -> Result<(), PilotError> {
+    let mut server = WsServer::new(&config.server.host, config.server.port)?;
     let mut event_rx = server.take_event_rx().expect("event rx already taken");
     let cli_sender = server.cli_msg_sender();
     let server = Arc::new(server);
@@ -102,11 +115,7 @@ async fn run_serve(config: Arc<PilotConfig>, project_root: PathBuf) {
         }
     });
 
-    let persistence = Arc::new(
-        StatePersistence::load(&project_root)
-            .await
-            .expect("failed to load state"),
-    );
+    let persistence = Arc::new(StatePersistence::load(&project_root).await?);
     let processing: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
     let metrics: Arc<dyn glyim_pilot::metrics::Metrics> = production_metrics().into();
 
@@ -178,6 +187,7 @@ async fn run_serve(config: Arc<PilotConfig>, project_root: PathBuf) {
             }
         }
     }
+    Ok(())
 }
 
 async fn session_start_handler(
@@ -459,14 +469,13 @@ async fn handle_extension_message(
     }
 }
 
-async fn run_status(project_root: PathBuf) {
-    let persistence = StatePersistence::load(&project_root)
-        .await
-        .expect("failed to load state");
+async fn run_status(project_root: PathBuf) -> Result<(), PilotError> {
+    let persistence = StatePersistence::load(&project_root).await?;
     let sessions = persistence.all_sessions().await;
     if sessions.is_empty() {
         println!("No sessions found.");
     } else {
         println!("{}", render_status_table(&sessions));
     }
+    Ok(())
 }
