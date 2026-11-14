@@ -849,6 +849,64 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Command::InventoryIgnore {
+            root,
+            item,
+            reason,
+            format,
+        } => {
+            // The write face routes every rejection through the typed
+            // error seam (a rejected exemption is a CLI failure, not a
+            // diagnostic — nothing was written; the grant-face
+            // dispatch shape).
+            let request = glyim_ledger::InventoryIgnoreRequest { item, reason };
+            match glyim_ledger::run_inventory_ignore(&root, &request, &glyim_ledger::FileIgnoreSink)
+            {
+                Ok(outcome) => {
+                    match format {
+                        glyim_ledger::IgnoresFormat::Text => {
+                            print!("{}", glyim_ledger::format_inventory_ignore_text(&outcome));
+                        }
+                        glyim_ledger::IgnoresFormat::Json => {
+                            print!("{}", glyim_ledger::format_inventory_ignore_json(&outcome));
+                        }
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Command::InventoryUnignore { root, item, format } => {
+            // The write face routes every rejection through the typed
+            // error seam (a rejected retirement is a CLI failure, not a
+            // diagnostic — nothing was rewritten; the revoke-face
+            // dispatch shape).
+            let request = glyim_ledger::InventoryUnignoreRequest { item };
+            match glyim_ledger::run_inventory_unignore(
+                &root,
+                &request,
+                &glyim_ledger::FileIgnoreRewriter,
+            ) {
+                Ok(outcome) => {
+                    match format {
+                        glyim_ledger::IgnoresFormat::Text => {
+                            print!("{}", glyim_ledger::format_inventory_unignore_text(&outcome));
+                        }
+                        glyim_ledger::IgnoresFormat::Json => {
+                            print!("{}", glyim_ledger::format_inventory_unignore_json(&outcome));
+                        }
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Command::Handoff {
             root,
             items,
