@@ -8,6 +8,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`gaps witness` (`glyim-ledger gaps witness [ROOT] --id <GAP-ID>
+  --witness <PATH>`)**: the gap-lifecycle write face — attaches the
+  witness fixture that reproduces one unwitnessed gap, closing the
+  witness debt the plan §3.3 report prints and the `next` queue ranks.
+  The new `GapWitnessRewriter` seam has two implementations —
+  `FileGapWitnessRewriter` (edits the registry file exactly where the
+  loaded registry says the block lives) and `InMemoryGapWitnessRewriter`
+  (tests and in-process consumers, with the edits recorded for the
+  audit). The rewriters are deliberately *surgical* rather than
+  canonical: only the matched `[[gap]]` block's `status` value flips and
+  the aligned `witness` line is appended, so the curated header prose of
+  the committed seed files survives byte-for-byte (the opposite tradeoff
+  to the waiver faces, whose machine-written document is canonically
+  re-serialized). `run_gaps_witness` validates the request against the
+  registry and the tree — a relative, `..`-free, backslash-free path
+  naming an existing fixture (a phantom witness would trade visible debt
+  for silent debt) — refuses a registry that does not load cleanly, and
+  never silently re-witnesses an already-witnessed gap. The dispatch
+  layer refreshes the generated `KNOWN_GAPS.md` in the same run through
+  the `render-gaps` pipeline, so the `--check` drift gate stays green.
+  8 new typed `LedgerCliError` variants (`GapsWitnessMissingField`,
+  `GapsWitnessBadId`, `GapsWitnessBadWitness`, `GapsWitnessUnknownId`,
+  `GapsWitnessRegistry`, `GapsWitnessAlreadyWitnessed`,
+  `GapsWitnessMissingFixture`, `GapsWitnessWrite`, plus the shared
+  `GapsBadFormat`), all carrying their `code()`/`help()` lines. Ships
+  the `gaps_witness` walkthrough, the `gaps` bench stage, and
+  README/lib.rs/main.rs/usage docs.
+- **`gaps retire` (`glyim-ledger gaps retire [ROOT] --id <GAP-ID>`)**:
+  the closure half of the gap lifecycle — removes one gap's `[[gap]]`
+  block from its registry file entirely. The rendered `KNOWN_GAPS.md`
+  states that closed entries retire to the git history of the file and
+  of the registry; until this face the removal itself had no sanctioned
+  command. The new `GapRetirer` seam has two implementations —
+  `FileGapRetirer` (drops exactly the matched block's lines, swallowing
+  the block's trailing separator when another block follows) and
+  `InMemoryGapRetirer` (tests and in-process consumers, with the
+  removals recorded for the audit). `run_gaps_retire` validates the ID,
+  refuses a registry that does not load cleanly (the revoke-face load
+  rule), and reports the remaining open-gap count through the
+  `glyim.ledger-gaps-retire/1` JSON contract and the text face. The
+  dispatch layer refreshes the generated `KNOWN_GAPS.md` in the same
+  run. 5 new typed `LedgerCliError` variants
+  (`GapsRetireMissingField`/`GapsRetireBadId`/`GapsRetireUnknownId`/
+  `GapsRetireLoad`/`GapsRetireWrite`), all carrying their
+  `code()`/`help()` lines. Ships the `gaps_retire` walkthrough, the
+  retire bench stage, and README/lib.rs/main.rs/usage docs.
+- **French documentation (i18n)**: the `glyim-docs` site ships a
+  complete French translation of 19 content pages under
+  `docs/src/content/docs/fr/`.
 - **`waivers prune` (`glyim-ledger waivers prune`)**: retires every
   expired C9 exception in one call — the batch counterpart of `waivers
   revoke` (one exact ID at a time) for the moment an operator clears the
