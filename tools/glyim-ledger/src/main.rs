@@ -39,6 +39,15 @@
 //! `KNOWN_GAPS.md` (or the `glyim.known-gaps/1` JSON face) from the gap
 //! registry — `--out` writes the rendered document, `--check` fails on
 //! any drift between the committed document and the render.
+//! `glyim-ledger gaps witness [ROOT] --id <GAP-ID> --witness <PATH>` is
+//! the gap-lifecycle write face: it attaches the witness fixture that
+//! reproduces one unwitnessed gap, editing exactly the matched `[[gap]]`
+//! block through the `GapWitnessRewriter` seam (the curated header prose
+//! preserved byte-for-byte) and refreshing the generated document in the
+//! same run. `glyim-ledger gaps retire [ROOT] --id <GAP-ID>` is the
+//! closure half: it removes one gap's block entirely through the
+//! `GapRetirer` seam — closed entries retire to the git history of the
+//! registry — with the same generated-document refresh.
 //! `glyim-ledger evidence record [--out PATH] [--format text|json]
 //! <SRC...>` is the plan §3.4 evidence-store curation face: it validates
 //! harness-emitted records against the registry and merges them into the
@@ -118,6 +127,88 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE
+            }
+        }
+        Command::GapsWitness {
+            root,
+            id,
+            witness,
+            format,
+        } => {
+            // The write face routes every rejection through the typed
+            // error seam (the revoke-face dispatch shape — nothing was
+            // written on a rejection). A successful witness refreshes the
+            // generated KNOWN_GAPS.md in the same run through the same
+            // `run_render_gaps` pipeline the `--check` gate byte-compares
+            // against: the face never leaves the committed document
+            // silently drifted from the registry it just edited.
+            let request = glyim_ledger::GapsWitnessRequest { id, witness };
+            match glyim_ledger::run_gaps_witness(
+                &root,
+                &request,
+                &glyim_ledger::FileGapWitnessRewriter,
+            ) {
+                Ok(outcome) => {
+                    match format {
+                        glyim_ledger::GapsFormat::Text => {
+                            print!("{}", glyim_ledger::format_gaps_witness_text(&outcome));
+                        }
+                        glyim_ledger::GapsFormat::Json => {
+                            print!("{}", glyim_ledger::format_gaps_witness_json(&outcome));
+                        }
+                    }
+                    match glyim_ledger::run_render_gaps(
+                        &root,
+                        glyim_ledger::RenderGapsFormat::Markdown,
+                        Some(&root.join(glyim_ledger::KNOWN_GAPS_MD_TARGET)),
+                        false,
+                    ) {
+                        Ok(_) => ExitCode::SUCCESS,
+                        Err(err) => {
+                            report(&err);
+                            ExitCode::FAILURE
+                        }
+                    }
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Command::GapsRetire { root, id, format } => {
+            // The closure half of the gap lifecycle, wired through the
+            // same typed error seam and the same generated-document
+            // refresh as the witness face (a retired gap never leaves
+            // KNOWN_GAPS.md silently drifted).
+            let request = glyim_ledger::GapsRetireRequest { id };
+            match glyim_ledger::run_gaps_retire(&root, &request, &glyim_ledger::FileGapRetirer) {
+                Ok(outcome) => {
+                    match format {
+                        glyim_ledger::GapsFormat::Text => {
+                            print!("{}", glyim_ledger::format_gaps_retire_text(&outcome));
+                        }
+                        glyim_ledger::GapsFormat::Json => {
+                            print!("{}", glyim_ledger::format_gaps_retire_json(&outcome));
+                        }
+                    }
+                    match glyim_ledger::run_render_gaps(
+                        &root,
+                        glyim_ledger::RenderGapsFormat::Markdown,
+                        Some(&root.join(glyim_ledger::KNOWN_GAPS_MD_TARGET)),
+                        false,
+                    ) {
+                        Ok(_) => ExitCode::SUCCESS,
+                        Err(err) => {
+                            report(&err);
+                            ExitCode::FAILURE
+                        }
+                    }
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
             }
         }
         Command::Next { root, lane, limit } => {
