@@ -3756,7 +3756,6 @@ impl<'tcx> Interpreter<'tcx> {
                     // But we don't have a concrete representation for slices yet.
                     // We'll treat it as a tuple of (data_ptr, len).
                     // Since we don't have heap, we'll just treat as a special value.
-                    // For simplicity, we'll just panic for now? But better to implement.
                     // Let's return an aggregate with two values: address of the first element and length.
                     // We need to compute the data pointer and the new length.
                     let (_base_ptr, base_len) = self.get_slice_base_and_len(&val, current_ty)?;
