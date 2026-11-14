@@ -6,7 +6,7 @@ readme = "../../README.md"
 name = "glyim-proc-macro"
 keywords = ["proc-macro", "macro", "compiler", "codegen", "derive"]
 license.workspace = true
-version = "0.10.0"
+version = "0.10.1"
 edition = "2024"
 description = "Procedural macro bridge: C-compatible TokenStream ABI, in-process registry, and dlopen-based cdylib loader (Phase 9.2 MVP)"
 
