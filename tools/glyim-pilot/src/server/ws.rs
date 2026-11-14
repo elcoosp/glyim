@@ -42,20 +42,21 @@ pub struct WsServer {
 }
 
 impl WsServer {
-    /// new.
-    #[must_use]
-    pub fn new(host: &str, port: u16) -> Self {
-        let addr: SocketAddr = format!("{host}:{port}")
-            .parse()
-            .expect("invalid bind address");
+    /// Builds the server over the `host:port` bind address. A host that
+    /// does not resolve to a socket address is a typed config error (a
+    /// user-supplied value, never a panic at startup).
+    pub fn new(host: &str, port: u16) -> Result<Self, PilotError> {
+        let addr: SocketAddr = format!("{host}:{port}").parse().map_err(|err| {
+            PilotError::Config(format!("invalid bind address {host}:{port}: {err}"))
+        })?;
         let (event_tx, event_rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
         let (cli_msg_tx, _) = broadcast::channel(256);
-        Self {
+        Ok(Self {
             addr,
             event_tx,
             event_rx: Some(event_rx),
             cli_msg_tx,
-        }
+        })
     }
     /// `take_event_rx`.
     pub fn take_event_rx(&mut self) -> Option<mpsc::Receiver<ServerEvent>> {
