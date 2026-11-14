@@ -55,6 +55,11 @@ pub const KNOWN_GAPS_MD_START: &str = "<!-- ledger:known-gaps:start";
 /// Provenance marker that closes the generated Markdown block.
 pub const KNOWN_GAPS_MD_END: &str = "<!-- ledger:known-gaps:end -->";
 
+/// The committed document the Markdown face renders to (and `--check`
+/// byte-compares against), relative to the project root — the same target
+/// the gap-lifecycle write faces refresh after a registry rewrite.
+pub const KNOWN_GAPS_MD_TARGET: &str = "KNOWN_GAPS.md";
+
 /// Which face [`run_render_gaps`] renders.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderGapsFormat {
@@ -332,7 +337,7 @@ pub fn run_render_gaps(
 
     let target = out.map(Path::to_path_buf);
     if check {
-        let target = target.unwrap_or_else(|| root.join("KNOWN_GAPS.md"));
+        let target = target.unwrap_or_else(|| root.join(KNOWN_GAPS_MD_TARGET));
         let committed =
             std::fs::read_to_string(&target).map_err(|err| LedgerCliError::RenderDrift {
                 path: target.display().to_string(),
@@ -386,7 +391,8 @@ mod tests {
     use ledger_schema::{GapClass, GapEntry, GapExpectation, GapStatus, Level, Sourced};
 
     use super::{
-        JsonGapRenderer, KnownGapsRenderer, LedgerCliError, MarkdownGapRenderer, RenderGapsFormat,
+        JsonGapRenderer, KNOWN_GAPS_MD_TARGET, KnownGapsRenderer, LedgerCliError,
+        MarkdownGapRenderer, RenderGapsFormat,
     };
     use crate::{Command, GapOutcome, parse_args, usage};
 
@@ -556,7 +562,7 @@ plan §3.3: allowed, but never silent).
     fn run_render_gaps_writes_then_check_passes_and_drift_fails() {
         let dir = tempfile::tempdir().expect("tmp");
         let root = dir.path();
-        let target = root.join("KNOWN_GAPS.md");
+        let target = root.join(KNOWN_GAPS_MD_TARGET);
 
         // Seed the committed document from the synthetic registry on disk so
         // `run_render_gaps` loads it (the outcome fixture mirrors the file).
