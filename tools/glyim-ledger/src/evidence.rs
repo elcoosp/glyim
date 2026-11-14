@@ -1097,6 +1097,217 @@ pub fn format_evidence_check_text(report: &CheckReport) -> String {
     text
 }
 
+// -- retract face -------------------------------------------------------------
+
+/// Schema tag of the `evidence retract` JSON contract.
+pub const EVIDENCE_RETRACT_SCHEMA: &str = "glyim.ledger-evidence-retract/1";
+
+/// The `evidence retract` request (the CLI flags, validated by
+/// [`run_evidence_retract`]): remove every store record whose
+/// `fixture_sha256` matches the recomputed digest of one fixture — the
+/// curation counterpart of the record face. When a fixture's bytes
+/// change, the audit face reports its committed records as `Drift`;
+/// until this face the remedy was hand-editing the canonical JSONL store.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvidenceRetractRequest {
+    /// The fixture whose records are retracted, relative to the project
+    /// root — the same repo-relative spelling the committed records carry
+    /// (`tests/alpha.g`).
+    pub fixture: String,
+    /// The store file to rewrite (the record face's `--out` shape;
+    /// `DEFAULT_RECORD_TARGET` by default).
+    pub out: PathBuf,
+}
+
+/// Result of an `evidence retract` run (also the
+/// `glyim.ledger-evidence-retract/1` JSON face via
+/// [`format_evidence_retract_json`]).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct EvidenceRetractOutcome {
+    /// Schema tag, always [`EVIDENCE_RETRACT_SCHEMA`].
+    pub schema: &'static str,
+    /// The retracted fixture path (as requested).
+    pub fixture: String,
+    /// The recomputed digest the records were matched by (64 lowercase
+    /// hex chars — the same spelling the audit face compares).
+    pub fixture_sha256: String,
+    /// The store file the retraction rewrote.
+    pub out: PathBuf,
+    /// Records removed.
+    pub removed: usize,
+    /// Records left in the store.
+    pub remaining: usize,
+    /// Bytes persisted (canonical lines plus one newline each).
+    pub bytes: u64,
+}
+
+/// Retracts one fixture's records: validates the request, refuses to
+/// touch a store that does not load cleanly, and rewrites the store
+/// canonically without the matching records.
+///
+/// # Validation contract
+///
+/// - `fixture` must be a relative, backslash-free path that never escapes
+///   the project root (`..`) — the same usable-path rule the witness face
+///   applies, so an absolute or escaping path is a rejection before any
+///   digest is computed;
+/// - the fixture must exist under `root` (the fingerprint needs its
+///   bytes; a phantom fixture would silently retract nothing);
+/// - the recomputed digest must succeed (the CLI wires
+///   [`FileFixtureFingerprint`]; tests inject precomputed digests);
+/// - the store must load with zero error-severity diagnostics — a store
+///   that does not parse is never rewritten (the waiver-face load rule);
+/// - the fixture must have at least one record in the store: a fixture
+///   with nothing committed is a rejection naming the digest, not a
+///   silent no-op (the grant-face duplicate rule's counterpart — the
+///   operator probably mistyped the path).
+///
+/// Nothing is written when validation fails; the surviving records are
+/// persisted in canonical form (the same [`EvidenceStore::save`] the
+/// record face uses), so the rewrite is byte-deterministic.
+///
+/// # Errors
+///
+/// Typed [`LedgerCliError`] variants for every rejected request
+/// (`EvidenceRetractBadFixture`, `EvidenceRetractMissingFixture`,
+/// `EvidenceRetractFingerprint`, `EvidenceRetractLoad`,
+/// `EvidenceRetractUnknownFixture`) and for a failed persist
+/// (`LedgerCliError::EvidenceWrite`, the record face's seam).
+pub fn run_evidence_retract(
+    root: &Path,
+    request: &EvidenceRetractRequest,
+    store: &dyn EvidenceStore,
+    fingerprint: &dyn FixtureFingerprint,
+) -> Result<EvidenceRetractOutcome, LedgerCliError> {
+    let span = tracing::info_span!(
+        "evidence_retract",
+        root = %root.display(),
+        fixture = %request.fixture,
+    );
+    let _enter = span.enter();
+
+    // The same usable-path rule the witness face applies: relative,
+    // backslash-free, no `..` component, no control characters.
+    let usable = !request.fixture.trim().is_empty()
+        && !request.fixture.chars().any(char::is_control)
+        && !request.fixture.contains('\\')
+        && !Path::new(&request.fixture).is_absolute()
+        && Path::new(&request.fixture).components().all(|component| {
+            matches!(
+                component,
+                std::path::Component::Normal(_) | std::path::Component::CurDir
+            )
+        });
+    if !usable {
+        return Err(LedgerCliError::EvidenceRetractBadFixture {
+            fixture: request.fixture.clone(),
+        });
+    }
+    let resolved = resolve_fixture(root, &request.fixture);
+    if !resolved.is_file() {
+        return Err(LedgerCliError::EvidenceRetractMissingFixture {
+            fixture: request.fixture.clone(),
+            path: resolved.display().to_string(),
+        });
+    }
+    let digest = fingerprint.sha256_hex(&resolved).map_err(|failure| {
+        LedgerCliError::EvidenceRetractFingerprint {
+            fixture: request.fixture.clone(),
+            detail: match failure {
+                FingerprintError::NotFound => {
+                    format!("{} not found", resolved.display())
+                }
+                FingerprintError::Unreadable(detail) => detail,
+            },
+        }
+    })?;
+
+    // The load rule: a store that does not parse cleanly is never
+    // rewritten (the waiver-face rule; the corrupt line would be silently
+    // destroyed by the canonical rewrite otherwise).
+    let batch = store.load(&request.out);
+    let failures: Vec<String> = batch
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == Severity::Error)
+        .map(ToString::to_string)
+        .collect();
+    if !failures.is_empty() {
+        return Err(LedgerCliError::EvidenceRetractLoad {
+            detail: failures.join("; "),
+        });
+    }
+
+    let (remaining, removed): (Vec<LedgerEvidence>, Vec<LedgerEvidence>) = batch
+        .records
+        .iter()
+        .cloned()
+        .partition(|record| record.fixture_sha256 != digest);
+    if removed.is_empty() {
+        return Err(LedgerCliError::EvidenceRetractUnknownFixture {
+            fixture: request.fixture.clone(),
+            sha256: digest,
+        });
+    }
+
+    let bytes: u64 = remaining
+        .iter()
+        .map(|record| canonical_line(record).len() as u64 + 1)
+        .sum();
+    store
+        .save(&request.out, &remaining)
+        .map_err(|failure| LedgerCliError::EvidenceWrite {
+            path: request.out.display().to_string(),
+            detail: failure.message,
+        })?;
+    tracing::debug!(
+        removed = removed.len(),
+        remaining = remaining.len(),
+        "evidence retraction finished"
+    );
+
+    Ok(EvidenceRetractOutcome {
+        schema: EVIDENCE_RETRACT_SCHEMA,
+        fixture: request.fixture.clone(),
+        fixture_sha256: digest,
+        out: request.out.clone(),
+        removed: removed.len(),
+        remaining: remaining.len(),
+        bytes,
+    })
+}
+
+/// Renders the retract outcome's text face: one summary line naming the
+/// retracted fixture, its digest, and the store it rewrote.
+#[must_use]
+pub fn format_evidence_retract_text(outcome: &EvidenceRetractOutcome) -> String {
+    use std::fmt::Write as _;
+    let mut text = String::new();
+    let _ = writeln!(
+        text,
+        "evidence retract: retracted {} record(s) for {} (sha256 {}) from {}",
+        outcome.removed,
+        outcome.fixture,
+        outcome.fixture_sha256,
+        outcome.out.display(),
+    );
+    let _ = writeln!(
+        text,
+        "  remaining: {} record(s), {} canonical bytes",
+        outcome.remaining, outcome.bytes,
+    );
+    text
+}
+
+/// Renders the `glyim.ledger-evidence-retract/1` JSON contract.
+#[must_use]
+pub fn format_evidence_retract_json(outcome: &EvidenceRetractOutcome) -> String {
+    let mut text = serde_json::to_string_pretty(outcome)
+        .expect("the glyim.ledger-evidence-retract/1 document is a serialisation-only struct");
+    text.push('\n');
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2106,5 +2317,356 @@ mutation_kill_rate_pct = 75
             .sha256_hex(&dir.path().join("tests/real.g"))
             .expect("a readable fixture digests");
         assert_eq!(hashed, seeded, "the recomputed digest matches sha256");
+    }
+
+    // -- retract face ---------------------------------------------------------
+
+    use super::{
+        EVIDENCE_RETRACT_SCHEMA, EvidenceRetractRequest, FileEvidenceStore,
+        format_evidence_retract_json, format_evidence_retract_text, run_evidence_retract,
+    };
+    use crate::LedgerCliError;
+
+    /// A record whose `fixture_sha256` is the real digest of the seeded
+    /// fixture bytes (the retract face matches records by recomputed
+    /// digest, so the test records carry the same spelling the harness
+    /// emitter writes).
+    fn record_for(
+        root: &Path,
+        name: &str,
+        body: &str,
+        mode: &str,
+        outcome: EvidenceOutcome,
+        features: &[&str],
+    ) -> LedgerEvidence {
+        let digest = seed_fixture(root, name, body);
+        let mut seeded = record(name, mode, outcome, features);
+        seeded.fixture = format!("tests/{name}.g");
+        seeded.fixture_sha256 = digest;
+        seeded
+    }
+
+    fn retract_request(root: &Path, fixture: &str) -> EvidenceRetractRequest {
+        EvidenceRetractRequest {
+            fixture: fixture.to_string(),
+            out: root.join("ledger/evidence/test.jsonl"),
+        }
+    }
+
+    #[test]
+    fn retract_face_removes_exactly_the_matching_records() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_project(root);
+        let out = root.join("ledger/evidence/test.jsonl");
+        fs::create_dir_all(out.parent().expect("parent")).expect("mkdir");
+        let alpha = record_for(
+            root,
+            "alpha.g",
+            "// alpha\n",
+            "compile-pass",
+            EvidenceOutcome::Passed,
+            &["LANG-EVIDENCE-A"],
+        );
+        let charlie = record_for(
+            root,
+            "alpha.g",
+            "// alpha\n",
+            "run-pass",
+            EvidenceOutcome::Passed,
+            &["LANG-EVIDENCE-A"],
+        );
+        let bravo = record(
+            "bravo",
+            "run-pass",
+            EvidenceOutcome::Passed,
+            &["LANG-EVIDENCE-A"],
+        );
+        fs::write(
+            &out,
+            format!("{}{}{}", line(&alpha), line(&charlie), line(&bravo)),
+        )
+        .expect("seed store");
+
+        // alpha and charlie are two records of the same fixture (the
+        // harness emits one record per face), so the retraction removes
+        // both; bravo carries a name-derived digest that matches no
+        // seeded fixture and survives.
+        let outcome = run_evidence_retract(
+            root,
+            &retract_request(root, "tests/alpha.g"),
+            &FileEvidenceStore,
+            &FileFixtureFingerprint,
+        )
+        .expect("the retraction lands");
+        assert_eq!(outcome.schema, EVIDENCE_RETRACT_SCHEMA);
+        assert_eq!(outcome.fixture, "tests/alpha.g");
+        assert_eq!(outcome.fixture_sha256, alpha.fixture_sha256);
+        assert_eq!(outcome.removed, 2);
+        assert_eq!(outcome.remaining, 1);
+
+        // The surviving record is byte-identical in canonical form, and
+        // the reloaded store carries exactly it.
+        assert_eq!(fs::read_to_string(&out).expect("read back"), line(&bravo),);
+        let reloaded = FileEvidenceStore.load(&out);
+        assert_eq!(reloaded.records.len(), 1);
+        assert_eq!(reloaded.records[0], bravo);
+    }
+
+    #[test]
+    fn retract_face_rejects_a_bad_fixture_path_without_writing() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_project(root);
+        for fixture in ["/abs/alpha.g", "../escape.g", "tests\\alpha.g", ""] {
+            let request = retract_request(root, fixture);
+            let err =
+                run_evidence_retract(root, &request, &FileEvidenceStore, &FileFixtureFingerprint)
+                    .expect_err("an unusable fixture path is rejected");
+            assert!(matches!(
+                err,
+                LedgerCliError::EvidenceRetractBadFixture { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn retract_face_rejects_a_missing_fixture_file() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_project(root);
+        let request = retract_request(root, "tests/ghost.g");
+        let err = run_evidence_retract(root, &request, &FileEvidenceStore, &FileFixtureFingerprint)
+            .expect_err("a phantom fixture is rejected");
+        assert!(matches!(
+            err,
+            LedgerCliError::EvidenceRetractMissingFixture { .. }
+        ));
+    }
+
+    #[test]
+    fn retract_face_propagates_fingerprint_failures() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_project(root);
+        fs::create_dir_all(root.join("tests")).expect("mkdir");
+        fs::write(root.join("tests/alpha.g"), "// alpha\n").expect("write fixture");
+        let fingerprint = InMemoryFixtureFingerprint::default();
+        let err = run_evidence_retract(
+            root,
+            &retract_request(root, "tests/alpha.g"),
+            &FileEvidenceStore,
+            &fingerprint,
+        )
+        .expect_err("an absent digest is a fingerprint failure");
+        assert!(matches!(
+            err,
+            LedgerCliError::EvidenceRetractFingerprint { .. }
+        ));
+    }
+
+    #[test]
+    fn retract_face_refuses_a_store_that_does_not_load_cleanly() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_project(root);
+        seed_fixture(root, "alpha.g", "// alpha\n");
+        let out = root.join("ledger/evidence/test.jsonl");
+        fs::create_dir_all(out.parent().expect("parent")).expect("mkdir");
+        fs::write(&out, "not-json-at-all\n").expect("write broken store");
+        let request = retract_request(root, "tests/alpha.g");
+        let err = run_evidence_retract(root, &request, &FileEvidenceStore, &FileFixtureFingerprint)
+            .expect_err("a store that does not parse is refused");
+        assert!(matches!(err, LedgerCliError::EvidenceRetractLoad { .. }));
+        // The broken store is never rewritten.
+        assert_eq!(
+            fs::read_to_string(&out).expect("read back"),
+            "not-json-at-all\n"
+        );
+    }
+
+    #[test]
+    fn retract_face_rejects_an_unknown_fixture_without_writing() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write_project(root);
+        let out = root.join("ledger/evidence/test.jsonl");
+        fs::create_dir_all(out.parent().expect("parent")).expect("mkdir");
+        let bravo = record(
+            "bravo",
+            "run-pass",
+            EvidenceOutcome::Passed,
+            &["LANG-EVIDENCE-A"],
+        );
+        fs::write(&out, line(&bravo)).expect("seed store");
+        seed_fixture(root, "alpha.g", "// alpha\n");
+        let request = retract_request(root, "tests/alpha.g");
+        let err = run_evidence_retract(root, &request, &FileEvidenceStore, &FileFixtureFingerprint)
+            .expect_err("a fixture with no records is a rejection, not a no-op");
+        assert!(matches!(
+            err,
+            LedgerCliError::EvidenceRetractUnknownFixture { .. }
+        ));
+        assert_eq!(fs::read_to_string(&out).expect("read back"), line(&bravo));
+    }
+
+    #[test]
+    fn format_evidence_retract_text_names_the_retracted_fixture() {
+        let outcome = super::EvidenceRetractOutcome {
+            schema: EVIDENCE_RETRACT_SCHEMA,
+            fixture: "tests/alpha.g".to_string(),
+            fixture_sha256: "a".repeat(64),
+            out: PathBuf::from("ledger/evidence/test.jsonl"),
+            removed: 2,
+            remaining: 1,
+            bytes: 128,
+        };
+        let text = format_evidence_retract_text(&outcome);
+        assert!(text.contains("retracted 2 record(s)"));
+        assert!(text.contains("tests/alpha.g"));
+        assert!(text.contains("ledger/evidence/test.jsonl"));
+    }
+
+    #[test]
+    fn format_evidence_retract_json_parses_back_with_schema() {
+        let outcome = super::EvidenceRetractOutcome {
+            schema: EVIDENCE_RETRACT_SCHEMA,
+            fixture: "tests/alpha.g".to_string(),
+            fixture_sha256: "a".repeat(64),
+            out: PathBuf::from("ledger/evidence/test.jsonl"),
+            removed: 2,
+            remaining: 1,
+            bytes: 128,
+        };
+        let json = format_evidence_retract_json(&outcome);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&json).expect("the JSON contract parses");
+        assert_eq!(
+            parsed["schema"].as_str(),
+            Some("glyim.ledger-evidence-retract/1")
+        );
+        assert_eq!(parsed["removed"].as_u64(), Some(2));
+        assert_eq!(parsed["remaining"].as_u64(), Some(1));
+    }
+
+    #[test]
+    fn both_evidence_retract_formatters_render_twice_byte_identical() {
+        let outcome = super::EvidenceRetractOutcome {
+            schema: EVIDENCE_RETRACT_SCHEMA,
+            fixture: "tests/alpha.g".to_string(),
+            fixture_sha256: "a".repeat(64),
+            out: PathBuf::from("ledger/evidence/test.jsonl"),
+            removed: 2,
+            remaining: 1,
+            bytes: 128,
+        };
+        assert_eq!(
+            format_evidence_retract_text(&outcome),
+            format_evidence_retract_text(&outcome)
+        );
+        assert_eq!(
+            format_evidence_retract_json(&outcome),
+            format_evidence_retract_json(&outcome)
+        );
+    }
+
+    #[test]
+    fn evidence_retract_error_variants_carry_code_and_help() {
+        let variants = [
+            LedgerCliError::EvidenceRetractBadFixture {
+                fixture: "../escape.g".to_string(),
+            },
+            LedgerCliError::EvidenceRetractMissingFixture {
+                fixture: "tests/ghost.g".to_string(),
+                path: "/tmp/ghost.g".to_string(),
+            },
+            LedgerCliError::EvidenceRetractFingerprint {
+                fixture: "tests/alpha.g".to_string(),
+                detail: "not found".to_string(),
+            },
+            LedgerCliError::EvidenceRetractLoad {
+                detail: "1: not a record".to_string(),
+            },
+            LedgerCliError::EvidenceRetractUnknownFixture {
+                fixture: "tests/alpha.g".to_string(),
+                sha256: "a".repeat(64),
+            },
+        ];
+        for err in &variants {
+            let code = miette::Diagnostic::code(err)
+                .expect("every typed error carries a code")
+                .to_string();
+            assert!(
+                code.starts_with("glyim-ledger::evidence_retract_"),
+                "unexpected code {code}"
+            );
+            assert!(
+                miette::Diagnostic::help(err).is_some(),
+                "missing help() on {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn usage_lists_evidence_retract() {
+        assert!(crate::usage().contains("evidence retract"));
+    }
+
+    #[test]
+    fn parse_args_accepts_evidence_retract() {
+        let command = crate::parse_args(
+            ["evidence", "retract", "--fixture", "tests/alpha.g"]
+                .into_iter()
+                .map(String::from),
+        )
+        .expect("the flags parse");
+        assert!(matches!(
+            command,
+            Command::EvidenceRetract {
+                ref root,
+                ref fixture,
+                ref out,
+                format: EvidenceFormat::Text,
+            } if root.as_path() == Path::new(".")
+                && fixture == "tests/alpha.g"
+                && out == &PathBuf::from(super::DEFAULT_RECORD_TARGET)
+        ));
+        let command = crate::parse_args(
+            [
+                "evidence",
+                "retract",
+                "/tmp/repo",
+                "--fixture",
+                "tests/alpha.g",
+                "--out",
+                "ledger/evidence/other.jsonl",
+                "--format",
+                "json",
+            ]
+            .into_iter()
+            .map(String::from),
+        )
+        .expect("the flags parse");
+        assert!(matches!(
+            command,
+            Command::EvidenceRetract {
+                ref root,
+                ref fixture,
+                ref out,
+                format: EvidenceFormat::Json,
+            } if root == &PathBuf::from("/tmp/repo")
+                && fixture == "tests/alpha.g"
+                && out == &PathBuf::from("ledger/evidence/other.jsonl")
+        ));
+    }
+
+    #[test]
+    fn parse_args_rejects_evidence_retract_missing_fixture() {
+        let err = crate::parse_args(["evidence", "retract"].into_iter().map(String::from))
+            .expect_err("missing --fixture");
+        assert!(matches!(
+            err,
+            LedgerCliError::EvidenceRetractMissingField { .. }
+        ));
     }
 }
