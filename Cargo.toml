@@ -85,10 +85,7 @@ glyim-codegen-llvm = { path = "crates/glyim-codegen-llvm" }
 glyim-db = { path = "crates/glyim-db" }
 glyim-pipeline = { path = "crates/glyim-pipeline" }
 glyim-cli = { path = "crates/glyim-cli" }
-glyim-lsp = { path = "crates/glyim-lsp" }
-glyim-runtime = { path = "crates/glyim-runtime" }
 glyim-test = { path = "crates/glyim-test" }
-glyim-lang-core = { path = "crates/glyim-lang-core" }
 glyim-lang-std = { path = "crates/glyim-lang-std" }
 lasso = "0.7.3"
 tracing = "0.1.44"
@@ -113,12 +110,9 @@ tokio = "1.54.1"
 bitflags = "2.13.2"
 num_enum = "0.7.6"
 fixedbitset = "0.5.7"
-anyhow = "1.0.104"
-dashmap = "6.2.1"
 toml = "1.2.1"
 sha2 = "0.11.1"
 tempfile = "3.27"
-lsp-types = "0.97.0"
 libloading = "0.9"
 
 # Phase 10.3 (report #30): enforce `missing_docs` for the public API. The
