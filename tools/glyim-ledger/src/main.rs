@@ -54,6 +54,17 @@
 //! validates the request against the registry and the C9 horizon, then
 //! appends the canonical `[[waiver]]` block to `ledger/waivers.toml`
 //! (deterministic `WVR-<date>-<slug>` ID, never a silent overwrite).
+//! `glyim-ledger release-check <VERSION> [ROOT] [--format text|json]` is
+//! the plan §10 final release gate: it composes the M1.12 gate report,
+//! the M1.13 determinism self-check, and the C9 waiver health into one
+//! verdict — every declared gate green (`unmeasured` blocks: displayed,
+//! never silently passed), evidence reproducible, no waiver active or
+//! expired, and no error diagnostic across the composed faces.
+//! `glyim-ledger waivers prune [ROOT] [--format text|json]` is the
+//! batch-retirement write face: it removes every expired `[[waiver]]`
+//! block through the `WaiverPruner` seam and rewrites the remaining
+//! entries canonically (a non-clean document is refused; a document with
+//! no expired waiver is never rewritten).
 
 use std::process::ExitCode;
 
@@ -637,6 +648,62 @@ fn main() -> ExitCode {
                     } else {
                         ExitCode::FAILURE
                     }
+                }
+                Err(err) => {
+                    report(&err);
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Command::ReleaseCheck {
+            version,
+            root,
+            format,
+        } => {
+            // The plan §10 final release gate: the composed faces render
+            // their full report when the verdict is red — the debt is
+            // displayed, never silent — and the exit code carries the
+            // verdict (the `verify` dispatch shape: the gate *is* the
+            // exit code).
+            let outcome = glyim_ledger::run_release_check(
+                &root,
+                version,
+                &glyim_ledger::FileReleaseCheckSource,
+            );
+            match format {
+                glyim_ledger::ReleaseCheckFormat::Text => {
+                    print!("{}", glyim_ledger::format_release_check_text(&outcome));
+                }
+                glyim_ledger::ReleaseCheckFormat::Json => {
+                    print!("{}", glyim_ledger::format_release_check_json(&outcome));
+                }
+            }
+            if outcome.is_ok() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Command::WaiversPrune { root, format } => {
+            // The batch-retirement write face routes every rejection
+            // through the typed error seam (a refused prune is a CLI
+            // failure — nothing was rewritten; the revoke-face dispatch
+            // shape).
+            match glyim_ledger::run_waivers_prune(
+                &root,
+                &glyim_ledger::FileWaiverSource,
+                &glyim_ledger::FileWaiverPruner,
+            ) {
+                Ok(outcome) => {
+                    match format {
+                        glyim_ledger::WaiversFormat::Text => {
+                            print!("{}", glyim_ledger::format_waivers_prune_text(&outcome));
+                        }
+                        glyim_ledger::WaiversFormat::Json => {
+                            print!("{}", glyim_ledger::format_waivers_prune_json(&outcome));
+                        }
+                    }
+                    ExitCode::SUCCESS
                 }
                 Err(err) => {
                     report(&err);
