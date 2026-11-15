@@ -1,3 +1,6 @@
 allowBuilds:
   astro-takumi: true
   esbuild: true
+
+minimumReleaseAgeExclude:
+  - "@elcoosp/docs-toolkit@0.9.10"
