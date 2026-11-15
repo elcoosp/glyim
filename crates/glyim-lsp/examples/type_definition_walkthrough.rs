@@ -113,8 +113,8 @@ fn main() {
                 Position { line, character }
             },
         },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
+        partial_result_params: lsp_types::PartialResultParams::default(),
     };
 
     println!("document: {DOC:?}\n");
