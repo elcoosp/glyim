@@ -11,6 +11,7 @@ use crate::navigation::{document_symbols, find_references, workspace_symbols};
 use crate::prepare_rename::prepare_rename;
 use crate::rename::rename_symbol;
 use crate::selection_range::selection_ranges;
+use crate::semantic_tokens::{semantic_tokens_full, semantic_tokens_range, token_legend};
 use crate::type_definition::type_definition;
 use async_lsp::router::Router;
 use std::ops::ControlFlow;
@@ -19,8 +20,8 @@ use lsp_types::notification::{DidChangeTextDocument, DidCloseTextDocument, DidOp
 use lsp_types::request::{
     CodeActionRequest, Completion, DocumentHighlightRequest, DocumentSymbolRequest,
     FoldingRangeRequest, Formatting, GotoDefinition, GotoTypeDefinition, HoverRequest, Initialize,
-    PrepareRenameRequest, References, Rename, SelectionRangeRequest, Shutdown,
-    WorkspaceSymbolRequest,
+    PrepareRenameRequest, References, Rename, SelectionRangeRequest, SemanticTokensFullRequest,
+    SemanticTokensRangeRequest, Shutdown, WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -72,6 +73,25 @@ pub fn build_router(
                 // now stores in `db.syntaxes`; the conformance test pins
                 // this advertisement to the router registration.
                 selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
+                // LSP-SEMANTIC-TOKENS: the semantic-tokens capability. The
+                // legend below is the same `token_legend()` the response
+                // indices are pinned against (one source of truth), and the
+                // handler walks the same stored parse trees as
+                // selection-range. The conformance test pins this
+                // advertisement to the router registration.
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            work_done_progress_options: WorkDoneProgressOptions::default(),
+                            legend: token_legend(),
+                            // LSP-SEMANTIC-TOKENS: both shapes are served —
+                            // full (startup / full refresh) and range
+                            // (per-scroll), each with its own router entry.
+                            range: Some(true),
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                        },
+                    ),
+                ),
                 references_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 // LSP-PREPARE-RENAME: switch the plain-boolean rename
@@ -175,6 +195,32 @@ pub fn build_router(
             Ok(selection_ranges(&db, &guard, &params))
         }
     });
+
+    // Semantic Tokens (LSP-SEMANTIC-TOKENS): full-document token
+    // classification over the driver's stored parse trees, delta-encoded
+    // against the same `token_legend()` the capability advertises.
+    let db_semantic = db.clone();
+    router.request::<SemanticTokensFullRequest, _>(move |(), params: SemanticTokensParams| {
+        let db = db_semantic.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(semantic_tokens_full(&db, &guard, &params))
+        }
+    });
+
+    // Semantic Tokens range (LSP-SEMANTIC-TOKENS): the same engine
+    // restricted to the tokens intersecting a screen range — the request
+    // editors fire while scrolling.
+    let db_semantic_range = db.clone();
+    router.request::<SemanticTokensRangeRequest, _>(
+        move |(), params: SemanticTokensRangeParams| {
+            let db = db_semantic_range.clone();
+            async move {
+                let guard = db.file_map.read();
+                Ok(semantic_tokens_range(&db, &guard, &params))
+            }
+        },
+    );
 
     // Formatting
     let db_fmt = db.clone();
