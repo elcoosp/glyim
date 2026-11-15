@@ -32,6 +32,12 @@ harness = false
 name = "document_highlight"
 harness = false
 
+# Semantic-tokens request bench (LSP-SEMANTIC-TOKENS; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "semantic_tokens"
+harness = false
+
 [dependencies]
 notify = "8.2"
 crossbeam-channel = "0.5.17"
