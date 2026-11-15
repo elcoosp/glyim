@@ -11,6 +11,16 @@ use url::Url;
 /// panicked ("not a char boundary") on any non-ASCII source and used
 /// `is_alphabetic` (excluding digits).
 pub(crate) fn identifier_at_offset(source: &str, offset: usize) -> Option<String> {
+    let (start, end) = identifier_extent_at_offset(source, offset)?;
+    Some(source[start..end].to_string())
+}
+
+/// Like [`identifier_at_offset`], but returns the identifier's byte
+/// extent instead of its text — callers that map the token to wire
+/// positions (prepare-rename pre-selects the exact token) need both
+/// halves, and re-walking with the same boundaries here guarantees the
+/// extent and the name can never disagree.
+pub(crate) fn identifier_extent_at_offset(source: &str, offset: usize) -> Option<(usize, usize)> {
     if offset > source.len() || !source.is_char_boundary(offset) {
         return None;
     }
@@ -31,7 +41,7 @@ pub(crate) fn identifier_at_offset(source: &str, offset: usize) -> Option<String
     if start == end {
         None
     } else {
-        Some(source[start..end].to_string())
+        Some((start, end))
     }
 }
 
@@ -67,10 +77,12 @@ pub fn goto_definition(
     let symbol = symbol_index.lookup_by_location(file_id, offset)?;
     let def = &symbol.definition;
     let def_sm = source_maps.get(&def.file_id)?;
-    let (start_line, start_col) = def_sm
+    // Exact token extents (LSP-EXACT-EXTENTS): rename-style two-tuple
+    // mapping; the width-1 `col + 1` end made editors underline one
+    // character of any multi-character definition.
+    let ((start_line, start_col), (end_line, end_col)) = def_sm
         .span_to_position(def.span.lo.to_usize(), def.span.hi.to_usize())
-        .unwrap_or(((0, 0), (0, 0)))
-        .0;
+        .unwrap_or(((0, 0), (0, 0)));
     let target_path = file_map.path(def.file_id)?;
     let target_uri = Url::from_file_path(target_path).ok()?;
     Some(GotoDefinitionResponse::Scalar(Location {
@@ -81,8 +93,8 @@ pub fn goto_definition(
                 character: start_col as u32,
             },
             end: Position {
-                line: start_line as u32,
-                character: (start_col + 1) as u32,
+                line: end_line as u32,
+                character: end_col as u32,
             },
         },
     }))
@@ -156,10 +168,10 @@ pub fn find_references(
         let Some(sm) = source_maps.get(&r.file_id) else {
             continue;
         };
-        let (start_line, start_col) = sm
+        // Exact token extents (LSP-EXACT-EXTENTS).
+        let ((start_line, start_col), (end_line, end_col)) = sm
             .span_to_position(r.span.lo.to_usize(), r.span.hi.to_usize())
-            .unwrap_or(((0, 0), (0, 0)))
-            .0;
+            .unwrap_or(((0, 0), (0, 0)));
         let Some(path) = file_map.path(r.file_id) else {
             continue;
         };
@@ -172,8 +184,8 @@ pub fn find_references(
                     character: start_col as u32,
                 },
                 end: Position {
-                    line: start_line as u32,
-                    character: (start_col + 1) as u32,
+                    line: end_line as u32,
+                    character: end_col as u32,
                 },
             },
         });
@@ -196,13 +208,15 @@ pub fn document_symbols(
     let symbols = symbol_index.symbols_in_file(file_id);
     let mut results = Vec::new();
     for sym in symbols {
-        let (start_line, start_col) = sm
+        // Exact token extents (LSP-EXACT-EXTENTS); the symbol's `range`
+        // covers the whole definition span and `selection_range` is the
+        // same extent (it names the identifier, not a zero-width point).
+        let ((start_line, start_col), (end_line, end_col)) = sm
             .span_to_position(
                 sym.definition.span.lo.to_usize(),
                 sym.definition.span.hi.to_usize(),
             )
-            .unwrap_or(((0, 0), (0, 0)))
-            .0;
+            .unwrap_or(((0, 0), (0, 0)));
         let kind = match sym.kind {
             crate::symbol_index::SymbolKind::Function => SymbolKind::FUNCTION,
             crate::symbol_index::SymbolKind::Struct => SymbolKind::STRUCT,
@@ -220,8 +234,8 @@ pub fn document_symbols(
                     character: start_col as u32,
                 },
                 end: Position {
-                    line: start_line as u32,
-                    character: (start_col + 1) as u32,
+                    line: end_line as u32,
+                    character: end_col as u32,
                 },
             },
             selection_range: Range {
@@ -230,8 +244,8 @@ pub fn document_symbols(
                     character: start_col as u32,
                 },
                 end: Position {
-                    line: start_line as u32,
-                    character: start_col as u32,
+                    line: end_line as u32,
+                    character: end_col as u32,
                 },
             },
             children: None,
@@ -260,13 +274,13 @@ pub fn workspace_symbols(
     let mut results = Vec::new();
     for info in matches {
         let sm = source_maps.get(&info.definition.file_id)?;
-        let (start_line, start_col) = sm
+        // Exact token extents (LSP-EXACT-EXTENTS).
+        let ((start_line, start_col), (end_line, end_col)) = sm
             .span_to_position(
                 info.definition.span.lo.to_usize(),
                 info.definition.span.hi.to_usize(),
             )
-            .unwrap_or(((0, 0), (0, 0)))
-            .0;
+            .unwrap_or(((0, 0), (0, 0)));
         let path = file_map.path(info.definition.file_id)?;
         let uri = Url::from_file_path(path).ok()?;
         let kind = match info.kind {
@@ -287,8 +301,8 @@ pub fn workspace_symbols(
                         character: start_col as u32,
                     },
                     end: Position {
-                        line: start_line as u32,
-                        character: (start_col + 1) as u32,
+                        line: end_line as u32,
+                        character: end_col as u32,
                     },
                 },
             },
