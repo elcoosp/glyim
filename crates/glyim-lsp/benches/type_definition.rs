@@ -29,7 +29,7 @@ use url::Url;
 /// One shape per unit: a struct and a function touching it — enough for
 /// the index to carry several same-prefix names the choice policy must
 /// sift.
-const UNIT_SOURCE: &str = "struct Shape { tag: i32 }\nfn use_shape(s: `Shape`) -> i32 { s.tag }\n";
+const UNIT_SOURCE: &str = "struct Shape { tag: i32 }\nfn use_shape(s: Shape) -> i32 { s.tag }\n";
 const UNITS: usize = 64;
 
 fn main() {
