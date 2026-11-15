@@ -6,21 +6,8 @@ import { blogSchema } from 'starlight-blog/schema';
 import { docsSchema, i18nSchema } from '@astrojs/starlight/schema';
 
 
-const docsMetadataCollection = defineCollection({
-  loader: glob({ base: './src/content/docs', pattern: '**/_meta.{yml,yaml}' }),
-  schema: z.object({
-    label: z.string().optional(),
-    order: z.array(z.string()).optional(),
-    sort: z.enum(['label','filename']).optional(),
-    collapsed: z.boolean().optional(),
-    hidden: z.boolean().optional(),
-    depth: z.number().optional(),
-    cascade: z.record(z.string(), z.unknown()).optional(),
-  }).passthrough(),
-});
-
 export const collections = {
-  docsMetadata: docsMetadataCollection,
+  autoSidebar: defineCollection({ loader: autoSidebarLoader(), schema: autoSidebarSchema() }),
   changelogs: defineCollection({
     loader: changelogsLoader([
       {
