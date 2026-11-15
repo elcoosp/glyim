@@ -90,7 +90,7 @@ The design is heavily inspired by rustc's architecture (arena-allocated IRs, int
 
 - **`glyim` CLI** — compile with `--emit=obj|exec|mir|llvm-ir|asm|cdylib|syntax|stats|run`, choose a backend, set opt-level, target triple, LTO strategy, and codegen units; measure compiles with `--time-passes` and `--self-profile[=FILE]` (Chrome trace), and emit a schema-versioned JSON measurement report with `--emit=stats`.
 - **`glyip` build tool** — Cargo-like project manager with `new`, `build`, `test`, and `run`; dependency resolution with SemVer 2.0 matching, path deps, git deps (branch/tag/rev), lockfiles, and a registry client.
-- **Language Server** (`glyim-lsp`) — diagnostics, goto definition, hover, completion, folding, formatting, rename, workspace symbols, code actions (add missing match arms, generate impl, remove unused imports), and auto-import.
+- **Language Server** (`glyim-lsp`) — diagnostics, goto definition, hover, completion, folding, formatting, rename (with `prepareRename`), workspace symbols, document highlight, code actions (add missing match arms, generate impl, remove unused imports), and auto-import.
 - **Test harness** (`glyim-test`) — compile-pass / compile-fail / UI / run-pass / run-fail modes with inline annotations (`//~ ERROR`, `//~| …`), snapshot testing (CST, def-map, MIR), mocking utilities for every compiler phase, and property-based type generation.
 
 ---
