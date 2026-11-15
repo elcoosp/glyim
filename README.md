@@ -90,7 +90,7 @@ The design is heavily inspired by rustc's architecture (arena-allocated IRs, int
 
 - **`glyim` CLI** — compile with `--emit=obj|exec|mir|llvm-ir|asm|cdylib|syntax|stats|run`, choose a backend, set opt-level, target triple, LTO strategy, and codegen units; measure compiles with `--time-passes` and `--self-profile[=FILE]` (Chrome trace), and emit a schema-versioned JSON measurement report with `--emit=stats`.
 - **`glyip` build tool** — Cargo-like project manager with `new`, `build`, `test`, and `run`; dependency resolution with SemVer 2.0 matching, path deps, git deps (branch/tag/rev), lockfiles, and a registry client.
-- **Language Server** (`glyim-lsp`) — diagnostics, goto definition, goto type definition, hover, completion, find references, folding, formatting, rename (with `prepareRename`), workspace symbols, document symbols, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), signature help, inlay hints, code actions (add missing match arms, generate impl, remove unused imports), and auto-import.
+- **Language Server** (`glyim-lsp`) — diagnostics, goto definition, goto type definition, goto declaration, hover, completion, find references, folding, formatting, rename (with `prepareRename`), workspace symbols, document symbols, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), signature help, inlay hints, code actions (add missing match arms, generate impl, remove unused imports), auto-import, and an optional `--log-file` that tees the server's tracing events to a JSON-lines file.
 - **Test harness** (`glyim-test`) — compile-pass / compile-fail / UI / run-pass / run-fail modes with inline annotations (`//~ ERROR`, `//~| …`), snapshot testing (CST, def-map, MIR), mocking utilities for every compiler phase, and property-based type generation.
 
 ---
@@ -491,6 +491,20 @@ cargo run -p glyim-pipeline --example run_interp
 # Round-trip the readiness ledger's evidence JSONL (M1.5 seam).
 cargo run -p glyim-test --example evidence_report
 
+# Drive the language server's request engines in-process — one
+# walkthrough per seam (declaration, inlay hints, call hierarchy,
+# signature help, semantic tokens, selection ranges, document highlight,
+# type definition, and the --log-file sink):
+cargo run -p glyim-lsp --example goto_declaration_walkthrough
+cargo run -p glyim-lsp --example inlay_hint_walkthrough
+cargo run -p glyim-lsp --example call_hierarchy_walkthrough
+cargo run -p glyim-lsp --example signature_help_walkthrough
+cargo run -p glyim-lsp --example semantic_tokens_walkthrough
+cargo run -p glyim-lsp --example selection_range_walkthrough
+cargo run -p glyim-lsp --example document_highlight_walkthrough
+cargo run -p glyim-lsp --example type_definition_walkthrough
+cargo run -p glyim-lsp --example server_log_walkthrough
+
 # Measure a workload in-process: counting allocator + CoV gate (M2.2).
 cargo run -p glyim-bench --example measure_alloc
 
@@ -666,7 +680,7 @@ cargo insta review
 - LLVM codegen for scalar and aggregate types, with real ABI lowering.
 - Bytecode codegen and the bytecode VM.
 - MIR interpreter used for `const fn` evaluation and `run-*` tests.
-- LSP with diagnostics, hover, completion, goto-definition, goto-type-definition, references, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), signature help, inlay hints, rename (with `prepareRename`), folding, formatting, code actions, and workspace/document symbols.
+- LSP with diagnostics, hover, completion, goto-definition, goto-type-definition, goto-declaration, references, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), signature help, inlay hints, rename (with `prepareRename`), folding, formatting, code actions, workspace/document symbols, and an optional JSON-lines server log (`--log-file`).
 - `glyip` build tool: project scaffolding, incremental builds, dependency resolution (path / registry / git), lockfiles, and compiled test execution.
 
 ### Tracked gaps
