@@ -29,12 +29,16 @@ pub mod goto_definition;
 pub mod handler;
 /// hover.
 pub mod hover;
+/// `implementation` (LSP-IMPLEMENTATION).
+pub mod implementation;
 /// `inlay_hint` (LSP-INLAY-HINT).
 pub mod inlay_hint;
 /// navigation.
 pub mod navigation;
 /// `prepare_rename` (LSP-PREPARE-RENAME).
 pub mod prepare_rename;
+/// `pull_diagnostics` (LSP-PULL-DIAG).
+pub mod pull_diagnostics;
 /// `reference_graph`.
 pub mod reference_graph;
 /// rename.
@@ -77,11 +81,17 @@ pub use goto_declaration::{
     import_bindings,
 };
 pub use goto_definition::goto_definition;
+pub use implementation::{
+    HirImplSource, ImplSite, ImplSource, goto_implementation, implementation_targets,
+};
 pub use inlay_hint::{
     BindingTypeSource, HirBindingTypeSource, UnannotatedBinding, compute_inlay_hints, inlay_hints,
     render_type_label,
 };
 pub use prepare_rename::{prepare_rename, rename_target};
+pub use pull_diagnostics::{
+    DiagnosticSource, RecordedDiagnosticSource, pull_diagnostics, pull_report,
+};
 pub use reference_graph::{Reference, ReferenceGraph, ReferenceKind};
 pub use selection_range::{
     AncestorSpanSource, ParseTreeSource, compute_selection_chains, selection_ranges,
