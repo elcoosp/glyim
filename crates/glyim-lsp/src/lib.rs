@@ -21,6 +21,8 @@ pub mod driver;
 pub mod folding;
 /// formatting.
 pub mod formatting;
+/// `goto_declaration` (LSP-DECLARATION).
+pub mod goto_declaration;
 /// `goto_definition`.
 pub mod goto_definition;
 /// handler.
@@ -43,6 +45,8 @@ pub mod selection_range;
 pub mod semantic_tokens;
 /// server.
 pub mod server;
+/// `server_log` (LSP-LOG-FILE).
+pub mod server_log;
 /// `signature_help` (LSP-SIGNATURE-HELP).
 pub mod signature_help;
 /// state.
@@ -68,6 +72,10 @@ pub use document_highlight::{
     HighlightKind, HighlightSpan, OccurrenceSource, ReferenceGraphSource, compute_highlights,
     document_highlights,
 };
+pub use goto_declaration::{
+    DeclarationSource, ParseTreeDeclarationSource, declaration_target, goto_declaration,
+    import_bindings,
+};
 pub use goto_definition::goto_definition;
 pub use inlay_hint::{
     BindingTypeSource, HirBindingTypeSource, UnannotatedBinding, compute_inlay_hints, inlay_hints,
@@ -83,6 +91,7 @@ pub use semantic_tokens::{
     classify_tokens, encode_delta, semantic_tokens_full, semantic_tokens_range, token_legend,
     token_type_for,
 };
+pub use server_log::{FileLog, LogInitError, install_global};
 pub use signature_help::{
     CallSiteSource, CalledFunction, ReferenceGraphCallSiteSource, SignatureData, SignatureHelpPlan,
     SignatureIndexSource, SignatureSource, compute_signature_help, signature_help,
