@@ -48,6 +48,12 @@ pub fn offset_to_position(text: &str, offset: usize) -> Result<(usize, usize), S
     if offset == text.len() {
         Ok((line, col))
     } else {
-        Err("unreachable".into())
+        // Reachable when `offset` lands inside a multi-byte character
+        // (not a char boundary): every char index was compared, none
+        // matched, and the end-of-text case is handled above.
+        Err(format!(
+            "offset {offset} is not a char boundary in text of length {}",
+            text.len()
+        ))
     }
 }
