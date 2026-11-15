@@ -51,7 +51,7 @@ jobs:
       GLYIM_TEST_NO_SKIP: "1"
     steps:
       - uses: actions/checkout@v7
-      - name: Build runtime for macOS tests
+      - name: Build the runtime staticlib
         run: cargo build -p glyim-runtime
       - name: Install LLVM 23
         run: |
@@ -79,7 +79,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - name: Build runtime for macOS tests
+      - name: Build the runtime staticlib
         run: cargo build -p glyim-runtime
       - name: Install LLVM 23
         run: |
@@ -110,7 +110,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - name: Build runtime for macOS tests
+      - name: Build the runtime staticlib
         run: cargo build -p glyim-runtime
       - name: Install LLVM 23
         run: |
@@ -192,7 +192,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - name: Build runtime for macOS tests
+      - name: Build the runtime staticlib
         run: cargo build -p glyim-runtime
       - name: Install LLVM 23
         run: |
@@ -233,7 +233,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - name: Build runtime for macOS tests
+      - name: Build the runtime staticlib
         run: cargo build -p glyim-runtime
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -256,7 +256,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - name: Build runtime for macOS tests
+      - name: Build the runtime staticlib
         run: cargo build -p glyim-runtime
       - uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-deny
@@ -277,7 +277,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Build runtime for macOS tests
+      - name: Build the runtime staticlib
         run: cargo build -p glyim-runtime
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -299,7 +299,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Build runtime for macOS tests
+      - name: Build the runtime staticlib
         run: cargo build -p glyim-runtime
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -320,7 +320,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - name: Build runtime for macOS tests
+      - name: Build the runtime staticlib
         run: cargo build -p glyim-runtime
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -349,7 +349,7 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v7
-      - name: Build runtime for macOS tests
+      - name: Build the runtime staticlib
         run: cargo build -p glyim-runtime
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -372,7 +372,7 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v7
-      - name: Build runtime for macOS tests
+      - name: Build the runtime staticlib
         run: cargo build -p glyim-runtime
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
