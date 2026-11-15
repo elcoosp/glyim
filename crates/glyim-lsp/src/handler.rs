@@ -10,14 +10,17 @@ use crate::hover::provide_hover;
 use crate::navigation::{document_symbols, find_references, workspace_symbols};
 use crate::prepare_rename::prepare_rename;
 use crate::rename::rename_symbol;
+use crate::selection_range::selection_ranges;
+use crate::type_definition::type_definition;
 use async_lsp::router::Router;
 use std::ops::ControlFlow;
 
 use lsp_types::notification::{DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument};
 use lsp_types::request::{
     CodeActionRequest, Completion, DocumentHighlightRequest, DocumentSymbolRequest,
-    FoldingRangeRequest, Formatting, GotoDefinition, HoverRequest, Initialize,
-    PrepareRenameRequest, References, Rename, Shutdown, WorkspaceSymbolRequest,
+    FoldingRangeRequest, Formatting, GotoDefinition, GotoTypeDefinition, HoverRequest, Initialize,
+    PrepareRenameRequest, References, Rename, SelectionRangeRequest, Shutdown,
+    WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -53,11 +56,22 @@ pub fn build_router(
                 }),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
+                // LSP-TYPE-DEF: the type-definition capability. The handler
+                // below reads the Tier 6.4 typeck results through
+                // `db.type_at_offset` and lands on the struct/enum the
+                // cursor's expression carries; the conformance test pins
+                // this advertisement to the router registration.
+                type_definition_provider: Some(TypeDefinitionProviderCapability::Simple(true)),
                 // LSP-HIGHLIGHT: the document-highlight capability. The
                 // handler below reads the same reference graph as
                 // find-references/rename; the conformance test pins this
                 // advertisement to the router registration.
                 document_highlight_provider: Some(OneOf::Left(true)),
+                // LSP-SELECTION: the selection-range capability. The
+                // handler below walks the parse trees the analysis driver
+                // now stores in `db.syntaxes`; the conformance test pins
+                // this advertisement to the router registration.
+                selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
                 references_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 // LSP-PREPARE-RENAME: switch the plain-boolean rename
@@ -118,6 +132,18 @@ pub fn build_router(
         }
     });
 
+    // Goto Type Definition (LSP-TYPE-DEF): same params/response shape as
+    // goto-definition, but the target is the *shape* — the struct or enum
+    // the expression under the cursor resolves to.
+    let db_ty_def = db.clone();
+    router.request::<GotoTypeDefinition, _>(move |(), params: GotoDefinitionParams| {
+        let db = db_ty_def.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(type_definition(&db, &guard, &params))
+        }
+    });
+
     // Find References
     let db_ref = db.clone();
     router.request::<References, _>(move |(), params: ReferenceParams| {
@@ -135,6 +161,18 @@ pub fn build_router(
         async move {
             let guard = db.file_map.read();
             Ok(document_highlights(&db, &guard, &params))
+        }
+    });
+
+    // Selection Range (LSP-SELECTION): walks the driver's stored parse
+    // trees, so expand-selection follows the real token → statement →
+    // item → file nesting instead of character guesses.
+    let db_selection = db.clone();
+    router.request::<SelectionRangeRequest, _>(move |(), params: SelectionRangeParams| {
+        let db = db_selection.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(selection_ranges(&db, &guard, &params))
         }
     });
 
