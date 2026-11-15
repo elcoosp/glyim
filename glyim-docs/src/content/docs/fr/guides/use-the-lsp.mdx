@@ -42,8 +42,10 @@ Utilisez un chemin absolu vers le binaire. Le serveur doit trouver les composant
 
 - **Diagnostics** — erreurs et avertissements du compilateur poussés pendant que vous tapez, pilotés par le même pipeline que la CLI.
 - **Navigation** — goto definition, goto type definition, find references, symboles d'espace de travail, symboles de document, et plages de pliage de document.
+- **Hiérarchie d'appels** — préparez la fonction sous le curseur (site de définition ou appel) et parcourez ses appelants entrants ou ses appelés sortants, servis depuis le même graphe de références que le renommage.
 - **Surlignage** — document highlight du symbole sous le curseur, plages de sélection qui s'étendent du jeton à l'élément, et jetons sémantiques pour colorer déclarations et membres depuis le vrai arbre syntaxique.
 - **Hover et complétion** — informations de type au survol et suggestions de complétion depuis le def-map.
+- **Aide à la signature** — indications de paramètres pendant la saisie d'un appel, avec le paramètre actif calculé depuis la position du curseur.
 - **Formatage** — formatage de document pour une mise en page cohérente.
 - **Renommage** — validation `prepareRename` puis renommage de symboles à travers l'espace de travail.
 - **Actions de code** — corrections rapides, notamment :
