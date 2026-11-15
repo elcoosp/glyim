@@ -72,6 +72,13 @@ pub struct TypeckResult {
     /// will error; the same shape inside a never-instantiated stdlib body
     /// stays silent.
     pub unresolved_ty_var_spans: HashMap<LocalDefId, Vec<glyim_span::Span>>,
+    /// HIR `BodyId` → the `LocalDefId` typeck allocated for that body's
+    /// owner. The two counters are independent (HIR lowers items in
+    /// source order; typeck uses its own `alloc_local_def_id`), so
+    /// consumers holding a HIR `BodyId` must translate through this map
+    /// before querying [`TypeckResult::expr_ty`]. Populated by
+    /// `typeck_crate` from its internal `body_owner_map`.
+    pub body_owners: HashMap<glyim_hir::BodyId, LocalDefId>,
 }
 
 #[derive(Clone, Debug)]
@@ -1218,6 +1225,14 @@ pub fn typeck_crate(
         const_values: all_const_values.clone(),
         expr_types,
         unresolved_ty_var_spans,
+        // Tier 6.4 seam: hand downstream consumers the HIR-BodyId →
+        // typeck-LocalDefId translation. The two id counters are
+        // independent (HIR lowers items in source order; typeck
+        // allocates its own ids, see `body_owner_map`), so any caller
+        // that holds a HIR `BodyId` must translate through this map
+        // before querying `expr_ty` — guessing that the counters align
+        // resolves the wrong body (or none).
+        body_owners: body_owner_map,
     };
     (frozen_ctx, result)
 }
@@ -1537,6 +1552,13 @@ fn check_fn_items_in_module(
                         .zip(sig.param_tys.iter())
                         .map(|(p, ty)| (p.name, *ty, p.span))
                         .collect();
+                    // Tier 6.4 seam: plain top-level functions must
+                    // register their HIR-BodyId → LocalDefId translation
+                    // too — without it, downstream consumers holding a
+                    // HIR BodyId (LSP `type_at_offset`) cannot query
+                    // `expr_ty`, which silently resolved nothing for
+                    // every non-impl body.
+                    body_owner_map.insert(body_id, local_def_id);
                     check_body(
                         ctx,
                         infer,
@@ -2496,6 +2518,17 @@ fn find_trait_default_body(
 mod tests;
 
 impl TypeckResult {
+    /// Translate a HIR `BodyId` to the `LocalDefId` typeck allocated for
+    /// its owner — the key space [`TypeckResult::expr_ty`] queries in.
+    /// `None` when the body was never checked (e.g. it belongs to an item
+    /// typeck skipped). Consumers holding a HIR `BodyId` must go through
+    /// this map: the HIR and typeck id counters are independent, so a
+    /// raw HIR owner id resolves the wrong body or none at all.
+    #[must_use]
+    pub fn body_owner(&self, body_id: glyim_hir::BodyId) -> Option<LocalDefId> {
+        self.body_owners.get(&body_id).copied()
+    }
+
     /// Resolved type of a HIR expression.
     ///
     /// Returns `None` if `body_id`/`expr_id` was not checked (e.g. the body
