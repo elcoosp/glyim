@@ -26,12 +26,14 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "definition_provider",
         "declaration_provider",
         "type_definition_provider",
+        "implementation_provider",
         "document_highlight_provider",
         "selection_range_provider",
         "semantic_tokens_provider",
         "call_hierarchy_provider",
         "signature_help_provider",
         "inlay_hint_provider",
+        "diagnostic_provider",
         "references_provider",
         "document_formatting_provider",
         "rename_provider",
@@ -140,6 +142,28 @@ fn goto_declaration_is_in_the_expected_set() {
     assert!(
         expected_advertised_providers().contains(&"declaration_provider"),
         "declaration_provider must be advertised"
+    );
+}
+
+#[test]
+fn implementation_is_in_the_expected_set() {
+    // Regression pin (LSP-IMPLEMENTATION): the `textDocument/implementation`
+    // capability must be advertised alongside its router registration; a
+    // future removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"implementation_provider"),
+        "implementation_provider must be advertised"
+    );
+}
+
+#[test]
+fn diagnostic_provider_is_in_the_expected_set() {
+    // Regression pin (LSP-PULL-DIAG): the `textDocument/diagnostic` pull
+    // capability must be advertised alongside its router registration; a
+    // future removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"diagnostic_provider"),
+        "diagnostic_provider must be advertised"
     );
 }
 
