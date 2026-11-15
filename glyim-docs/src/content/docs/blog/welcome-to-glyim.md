@@ -2,8 +2,8 @@
 title: Welcome to the Glyim Blog
 date: 2026-11-12T00:00:00Z
 cover:
-  alt: Glyim Logo
-  image: ./logo.png
+  alt: Welcome Cover
+  image: ./welcome-cover.jpg
 image: ./welcome-cover.jpg
 ---
 
