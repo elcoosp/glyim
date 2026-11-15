@@ -1,20 +1,23 @@
 use crate::AnalysisDatabase;
 use crate::code_action::provide_code_actions;
 use crate::completion::provide_completions;
+use crate::document_highlight::document_highlights;
 use crate::driver::AnalysisMessage;
 use crate::folding::provide_folding_ranges;
 use crate::formatting::format_document;
 use crate::goto_definition::goto_definition;
 use crate::hover::provide_hover;
 use crate::navigation::{document_symbols, find_references, workspace_symbols};
+use crate::prepare_rename::prepare_rename;
 use crate::rename::rename_symbol;
 use async_lsp::router::Router;
 use std::ops::ControlFlow;
 
 use lsp_types::notification::{DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument};
 use lsp_types::request::{
-    CodeActionRequest, Completion, DocumentSymbolRequest, FoldingRangeRequest, Formatting,
-    GotoDefinition, HoverRequest, Initialize, References, Rename, Shutdown, WorkspaceSymbolRequest,
+    CodeActionRequest, Completion, DocumentHighlightRequest, DocumentSymbolRequest,
+    FoldingRangeRequest, Formatting, GotoDefinition, HoverRequest, Initialize,
+    PrepareRenameRequest, References, Rename, Shutdown, WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -50,9 +53,22 @@ pub fn build_router(
                 }),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
+                // LSP-HIGHLIGHT: the document-highlight capability. The
+                // handler below reads the same reference graph as
+                // find-references/rename; the conformance test pins this
+                // advertisement to the router registration.
+                document_highlight_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
-                rename_provider: Some(OneOf::Left(true)),
+                // LSP-PREPARE-RENAME: switch the plain-boolean rename
+                // capability to options advertising `prepareProvider`, so
+                // clients consult `textDocument/prepareRename` before
+                // opening the rename input. The handler below shares the
+                // occurrence seam with document highlight.
+                rename_provider: Some(OneOf::Right(RenameOptions {
+                    prepare_provider: Some(true),
+                    work_done_progress_options: WorkDoneProgressOptions::default(),
+                })),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
@@ -112,6 +128,16 @@ pub fn build_router(
         }
     });
 
+    // Document Highlight (LSP-HIGHLIGHT)
+    let db_highlight = db.clone();
+    router.request::<DocumentHighlightRequest, _>(move |(), params: DocumentHighlightParams| {
+        let db = db_highlight.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(document_highlights(&db, &guard, &params))
+        }
+    });
+
     // Formatting
     let db_fmt = db.clone();
     router.request::<Formatting, _>(move |(), params: DocumentFormattingParams| {
@@ -129,6 +155,17 @@ pub fn build_router(
         async move {
             let guard = db.file_map.read();
             Ok(rename_symbol(&db, &guard, &params))
+        }
+    });
+
+    // Prepare Rename (LSP-PREPARE-RENAME): `PrepareRenameRequest` takes the
+    // bare `TextDocumentPositionParams` per the LSP spec.
+    let db_prepare = db.clone();
+    router.request::<PrepareRenameRequest, _>(move |(), params: TextDocumentPositionParams| {
+        let db = db_prepare.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(prepare_rename(&db, &guard, &params))
         }
     });
 
@@ -183,11 +220,17 @@ pub fn build_router(
         let content = params.text_document.text;
         let version = params.text_document.version;
         let _ = db_open.file_map.write().get_or_create(&path);
-        let _ = tx_open.try_send(AnalysisMessage::FileChanged {
-            path,
+        // The channel is bounded (16, see driver) and `try_send` fails when
+        // it is full or the driver is gone; dropping the edit silently
+        // would leave the session analysing stale text with no trace, so
+        // record it (same discipline as `state::did_change`'s warn).
+        if let Err(err) = tx_open.try_send(AnalysisMessage::FileChanged {
+            path: path.clone(),
             content,
             version,
-        });
+        }) {
+            tracing::warn!(?path, %err, "analysis channel dropped the didOpen edit");
+        }
         ControlFlow::Continue(())
     });
 
@@ -199,11 +242,14 @@ pub fn build_router(
         let version = params.text_document.version;
         if let Some(change) = params.content_changes.into_iter().last() {
             let _ = db_change.file_map.write().get_or_create(&path);
-            let _ = tx_change.try_send(AnalysisMessage::FileChanged {
-                path,
+            // Same bounded-channel discipline as didOpen above.
+            if let Err(err) = tx_change.try_send(AnalysisMessage::FileChanged {
+                path: path.clone(),
                 content: change.text,
                 version,
-            });
+            }) {
+                tracing::warn!(?path, %err, "analysis channel dropped the didChange edit");
+            }
         }
         ControlFlow::Continue(())
     });
@@ -213,7 +259,10 @@ pub fn build_router(
     router.notification::<DidCloseTextDocument>(move |(), params: DidCloseTextDocumentParams| {
         let path = path_from_uri(&params.text_document.uri);
         let () = db_close.file_map.write().remove(&path);
-        let _ = tx_close.try_send(AnalysisMessage::FileClosed { path });
+        // Same bounded-channel discipline as didOpen above.
+        if let Err(err) = tx_close.try_send(AnalysisMessage::FileClosed { path: path.clone() }) {
+            tracing::warn!(?path, %err, "analysis channel dropped the didClose notice");
+        }
         ControlFlow::Continue(())
     });
 
