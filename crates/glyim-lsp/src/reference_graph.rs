@@ -816,7 +816,45 @@ impl ReferenceGraph {
             }
         }
 
-        for (_, body) in hir.bodies.iter_enumerated() {
+        // LSP-CALL-HIERARCHY: map each body to the item that owns it, so
+        // the body walk below can attribute its references to the
+        // enclosing item. `current_owner` used to keep the item loop's
+        // LAST value for the whole body walk — every body-owned reference
+        // (local bindings, call sites, field accesses) carried the final
+        // item's `ItemId`, so T129 scope-owner filtering (rename,
+        // document highlight) grouped by the wrong scope on any file with
+        // more than one item, and the call-hierarchy caller join resolved
+        // every caller to the last function in the file. Fn items, trait
+        // default methods, and impl methods all carry bodies.
+        let mut body_owners: HashMap<u32, u32> = HashMap::new();
+        for item in hir.items.iter() {
+            let owner = item.id.to_raw();
+            match &item.kind {
+                ItemKind::Fn(f) => {
+                    if let Some(body) = f.body {
+                        body_owners.insert(body.to_raw(), owner);
+                    }
+                }
+                ItemKind::Trait(t) => {
+                    for m in &t.methods {
+                        if let Some(body) = m.default_body {
+                            body_owners.insert(body.to_raw(), owner);
+                        }
+                    }
+                }
+                ItemKind::Impl(i) => {
+                    for m in &i.methods {
+                        if let Some(body) = m.body {
+                            body_owners.insert(body.to_raw(), owner);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        for (body_id, body) in hir.bodies.iter_enumerated() {
+            current_owner.set(body_owners.get(&body_id.to_raw()).copied());
             for param in &body.params {
                 walk_pattern(*param, body, interner, &mut add_ref, AccessKind::Read);
             }
@@ -866,6 +904,29 @@ impl ReferenceGraph {
             .get(symbol_name)
             .map(std::vec::Vec::as_slice)
             .unwrap_or(&[])
+    }
+
+    /// Whether `name` is a function-item name recorded by the graph (only
+    /// `ItemKind::Fn` items register here — impl methods and trait default
+    /// methods do not). The call-hierarchy source (LSP-CALL-HIERARCHY)
+    /// gates its targets on this: struct/enum items are recorded in the
+    /// same store, but a call hierarchy is function-shaped, and answering
+    /// one for a struct would be a lie.
+    #[must_use]
+    pub fn is_function_name(&self, name: &str) -> bool {
+        self.function_names.contains(name)
+    }
+
+    /// Iterate every recorded reference together with the symbol name it
+    /// is keyed under (the value rows do not carry the key themselves).
+    /// The call-hierarchy engine (LSP-CALL-HIERARCHY) needs the
+    /// owner-keyed (`item_definition_by_owner`) and extent-keyed
+    /// (`item_definition_at`) joins that the name-keyed `find_references`
+    /// cannot answer without the key.
+    pub fn iter_with_names(&self) -> impl Iterator<Item = (&str, &Reference)> {
+        self.references
+            .iter()
+            .flat_map(|(name, refs)| refs.iter().map(move |r| (name.as_str(), r)))
     }
 
     /// Every symbol name that has at least one recorded reference (definition
