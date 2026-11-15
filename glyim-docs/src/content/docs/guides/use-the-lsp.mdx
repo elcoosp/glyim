@@ -42,8 +42,10 @@ Use an absolute path to the binary. The server needs to find the compiler's comp
 
 - **Diagnostics** — compiler errors and warnings pushed as you type, driven by the same pipeline the CLI uses.
 - **Navigation** — goto definition, goto type definition, find references, workspace symbols, document symbols, and document folding ranges.
+- **Call hierarchy** — prepare a function under the cursor (definition site or a call to it) and walk its incoming callers or outgoing callees, served from the same reference graph rename uses.
 - **Highlighting** — document highlight of the symbol under the cursor, selection ranges that expand token → statement → item → file, and semantic tokens so editors color declarations and members from the real parse tree.
 - **Hover and completion** — type information on hover and completion suggestions from the def-map.
+- **Signature help** — parameter hints while typing a call, with the active parameter computed from the cursor's position.
 - **Formatting** — document formatting for consistent layout.
 - **Rename** — `prepareRename` validation followed by symbol renaming across the workspace.
 - **Code actions** — quick fixes, including:
