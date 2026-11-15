@@ -94,3 +94,83 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-GOTO-TYPE-DEF"
+title         = "goto type definition (the shape a value's type is defined at)"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-REFERENCES"
+title         = "find references"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-HIGHLIGHT"
+title         = "document highlight of the symbol under the cursor"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-SELECTION"
+title         = "selection ranges (token → statement → item → file expansion)"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-SEMANTIC-TOKENS"
+title         = "semantic tokens (full and range) over the stored parse trees"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-CALL-HIERARCHY"
+title         = "call hierarchy: prepare + incoming/outgoing calls"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-SIGNATURE-HELP"
+title         = "signature help with cursor-computed active parameter"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-INLAY-HINT"
+title         = "inlay hints: inline types on un-annotated let bindings"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
