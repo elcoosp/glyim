@@ -136,11 +136,18 @@ pub struct BuildResult {
 /// Resolve the project's lockfile: read the existing `Glyip.lock` if it is
 /// still consistent with the manifest; otherwise re-resolve and rewrite it.
 ///
+/// A lockfile that exists but cannot be read or parsed is a hard error —
+/// the read distinguishes "no lockfile yet" (`read_from_dir` answers an
+/// empty one) from "a resolution record that is garbage", and silently
+/// discarding the latter would replace the user's pin record without a
+/// trace. `pub(crate)` so the lockfile-contract tests can drive it
+/// directly.
+///
 /// P0-3 (production-readiness plan §5): the three call sites that used to
 /// do `let _lockfile = resolver.resolve(...)` threw the resolved lockfile
 /// away, so `Glyip.lock` was never read, validated, or refreshed.
-fn resolve_lockfile(config: &GlyipToml, project_dir: &Path) -> GlyipResult<Lockfile> {
-    let existing = Lockfile::read_from_dir(project_dir).unwrap_or_default();
+pub(crate) fn resolve_lockfile(config: &GlyipToml, project_dir: &Path) -> GlyipResult<Lockfile> {
+    let existing = Lockfile::read_from_dir(project_dir)?;
     if !existing.is_empty() {
         let conflicts = existing.validate_against_manifest(config);
         if conflicts.is_empty() {
