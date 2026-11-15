@@ -1,0 +1,76 @@
+---
+title: How we built a 39-crate compiler with two backends
+date: 2026-11-15T00:00:00Z
+cover:
+  alt: Glyim Compiler Architecture
+  image: ./welcome-cover.jpg
+image: ./welcome-cover.jpg
+---
+
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+
+Most toy compilers stop after the parser. Glyim doesn't.
+
+We wanted a Rust-like systems language that goes from lexing to native code, but we didn't want the architecture to become a black box. If you open the type checker, you shouldn't have to mentally parse the borrow checker to understand it.
+
+That constraint drove our first major decision: a strict 39-crate workspace. Thirty-four handle the language and standard library; five handle tooling. The frontend is a sequence of discrete IRs (AST, HIR, THIR, MIR), and every phase has a narrow public API.
+
+## The Goal
+
+We needed generics, traits, pattern matching, closures, and `async`/`await`, all compiling to native object files. We also needed it to be readable. Research-grade compilers are often dense monoliths. We opted for a modular design built on interning and arena allocation, borrowing ideas from `rustc` but writing everything from scratch.
+
+## The Architecture
+
+The pipeline is split into distinct, readable phases. The borrow checker (`glyim-borrow`) implements non-lexical lifetimes with Polonius-style region inference and two-phase borrows. The type inference crate uses unification variables with occurs-checks. Trait solving runs through a fulfillment context with obligation queues and HRTB support.
+
+There's also a MIR interpreter used for `const fn` evaluation, and incremental compilation based on SHA-256 fingerprints of sources and build config.
+
+<CardGrid stagger>
+  <Card title="Lexing to MIR" icon="puzzle">
+    A strict pipeline of AST, HIR, THIR, and MIR. Every phase is isolated so you can study one without getting lost in the others.
+  </Card>
+  <Card title="Borrow Checker" icon="approve-check">
+    `glyim-borrow` handles non-lexical lifetimes, Polonius-style region inference, and two-phase borrows.
+  </Card>
+  <Card title="LLVM Backend" icon="rocket">
+    Using `inkwell`, we emit real object files with ABI lowering, debug info, and exception handling.
+  </Card>
+  <Card title="Bytecode VM" icon="laptop">
+    A compact stack machine verified by its own VM, letting you run Glyim code without a linker or embedding LLVM.
+  </Card>
+</CardGrid>
+
+## Two Backends, One Pipeline
+
+We built two backends for two different use cases.
+
+The primary LLVM backend (powered by `inkwell`) produces production-ready object files. The bytecode backend is a compact stack machine verified by its own VM. It lets you run Glyim code without a linker, which is useful for CI testing, embedding, or environments where shipping a full LLVM toolchain is overkill. You switch between them with a simple `--backend` flag.
+
+## GSX: A First-Class View Syntax
+
+We didn't want the language to be purely for CLI tools. We added GSX: typed, host-agnostic view elements with their own compiler stage and an SSR emitter. View elements are first-class citizens in the AST, handled entirely by the compiler rather than a third-party macro. If you're curious, the design docs in `docs/design/GSX-in-Glyim.md` go into the details.
+
+## The Build Tool: glyip
+
+Because we were building a language, we needed a package manager. `glyip` uses a greedy breadth-first resolver with SemVer 2.0 matching, git and path dependencies, and lockfiles.
+
+<Aside type="caution" title="The Trade-off">
+`glyip` doesn't backtrack. A diamond dependency with incompatible versions is a hard error rather than a Cargo-style search. We chose this to keep the resolver predictable and fast, but it's a constraint you feel in large graphs.
+</Aside>
+
+## What it cost
+
+Building a compiler this way is not cheap. The modularity means more boilerplate for passing context between crates. The two backends mean every new language feature has to be implemented twice: once for MIR-to-LLVM and once for MIR-to-bytecode.
+
+We also have gaps. We track them in a readiness ledger—a set of CLI commands that record unwitnessed gaps, attach witness fixtures, and fail CI if something claims a witness that no longer exists. Currently, `--lto fat` errors cleanly because multi-CGU support isn't implemented yet.
+
+## Getting started
+
+If you want to build it, you'll need LLVM 23 and a recent Rust toolchain.
+
+```bash
+cargo build --release
+glyip new hello
+```
+
+The code is readable. The gaps are written down. You can take it from here.
