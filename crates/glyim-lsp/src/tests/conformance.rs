@@ -28,6 +28,8 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "document_highlight_provider",
         "selection_range_provider",
         "semantic_tokens_provider",
+        "call_hierarchy_provider",
+        "signature_help_provider",
         "references_provider",
         "document_formatting_provider",
         "rename_provider",
@@ -79,6 +81,30 @@ fn semantic_tokens_is_in_the_expected_set() {
     assert!(
         expected_advertised_providers().contains(&"semantic_tokens_provider"),
         "semantic_tokens_provider must be advertised"
+    );
+}
+
+#[test]
+fn call_hierarchy_is_in_the_expected_set() {
+    // Regression pin (LSP-CALL-HIERARCHY): the `textDocument/prepareCallHierarchy`
+    // capability must be advertised alongside its three router
+    // registrations (prepare + incoming + outgoing); a future removal of
+    // either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"call_hierarchy_provider"),
+        "call_hierarchy_provider must be advertised"
+    );
+}
+
+#[test]
+fn signature_help_is_in_the_expected_set() {
+    // Regression pin (LSP-SIGNATURE-HELP): the `textDocument/signatureHelp`
+    // capability must be advertised (with its trigger characters) alongside
+    // its router registration; a future removal of either half surfaces
+    // here first.
+    assert!(
+        expected_advertised_providers().contains(&"signature_help_provider"),
+        "signature_help_provider must be advertised"
     );
 }
 
