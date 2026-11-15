@@ -41,10 +41,11 @@ Use an absolute path to the binary. The server needs to find the compiler's comp
 `glyim-lsp` implements:
 
 - **Diagnostics** — compiler errors and warnings pushed as you type, driven by the same pipeline the CLI uses.
-- **Navigation** — goto definition, find references, workspace symbols, and document folding ranges.
+- **Navigation** — goto definition, goto type definition, find references, workspace symbols, document symbols, and document folding ranges.
+- **Highlighting** — document highlight of the symbol under the cursor, selection ranges that expand token → statement → item → file, and semantic tokens so editors color declarations and members from the real parse tree.
 - **Hover and completion** — type information on hover and completion suggestions from the def-map.
 - **Formatting** — document formatting for consistent layout.
-- **Rename** — symbol renaming across the workspace.
+- **Rename** — `prepareRename` validation followed by symbol renaming across the workspace.
 - **Code actions** — quick fixes, including:
   - add missing `match` arms,
   - generate an `impl` block,
