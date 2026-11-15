@@ -9,7 +9,6 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
 
 #[derive(Clone)]
 /// `SourceMap`.
@@ -184,8 +183,6 @@ pub struct AnalysisDatabase {
     /// `Diagnostic` type cannot carry `structured`, so code actions that need it
     /// (e.g. the §5.1 match-arm skeleton quick-fix) read from here by index.
     pub raw_diagnostics: RwLock<HashMap<FileId, Vec<GlyimDiagnostic>>>,
-    /// `Struct`.
-    pub file_access_times: RwLock<HashMap<FileId, Instant>>,
 }
 
 impl Default for AnalysisDatabase {
@@ -208,14 +205,8 @@ impl AnalysisDatabase {
             typeck: RwLock::new(HashMap::new()),
             diagnostics: RwLock::new(HashMap::new()),
             raw_diagnostics: RwLock::new(HashMap::new()),
-            file_access_times: RwLock::new(HashMap::new()),
         }
     }
-
-    /// touch.
-    pub fn touch(&self, _file_id: FileId) {}
-    /// `evict_stale`.
-    pub fn evict_stale(&self, _max_age: std::time::Duration) {}
 
     /// Resolve the type of the HIR expression that contains `offset` in
     /// `file_id`. Used by completion (Tier 6.4) to filter by receiver type.
