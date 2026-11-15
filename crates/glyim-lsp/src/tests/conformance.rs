@@ -27,6 +27,7 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "type_definition_provider",
         "document_highlight_provider",
         "selection_range_provider",
+        "semantic_tokens_provider",
         "references_provider",
         "document_formatting_provider",
         "rename_provider",
@@ -66,6 +67,18 @@ fn selection_range_is_in_the_expected_set() {
     assert!(
         expected_advertised_providers().contains(&"selection_range_provider"),
         "selection_range_provider must be advertised"
+    );
+}
+
+#[test]
+fn semantic_tokens_is_in_the_expected_set() {
+    // Regression pin (LSP-SEMANTIC-TOKENS): the
+    // `textDocument/semanticTokens/full` capability must be advertised
+    // (with the `token_legend()` legend) alongside its router
+    // registration; a future removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"semantic_tokens_provider"),
+        "semantic_tokens_provider must be advertised"
     );
 }
 
