@@ -13,3 +13,7 @@ dump.txt
 /ship.sh
 /ship.toml
 .github/pr-body.md
+
+# Build-time backups
+*.bak
+*.orig
