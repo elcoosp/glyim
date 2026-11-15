@@ -9,25 +9,29 @@ use crate::formatting::format_document;
 use crate::goto_declaration::goto_declaration;
 use crate::goto_definition::goto_definition;
 use crate::hover::provide_hover;
+use crate::implementation::goto_implementation;
 use crate::inlay_hint::inlay_hints;
 use crate::navigation::{document_symbols, find_references, workspace_symbols};
 use crate::prepare_rename::prepare_rename;
+use crate::pull_diagnostics::pull_diagnostics;
 use crate::rename::rename_symbol;
 use crate::selection_range::selection_ranges;
 use crate::semantic_tokens::{semantic_tokens_full, semantic_tokens_range, token_legend};
 use crate::signature_help::signature_help;
 use crate::type_definition::type_definition;
+use async_lsp::ResponseError;
 use async_lsp::router::Router;
 use std::ops::ControlFlow;
 
 use lsp_types::notification::{DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument};
 use lsp_types::request::{
     CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare,
-    CodeActionRequest, Completion, DocumentHighlightRequest, DocumentSymbolRequest,
-    FoldingRangeRequest, Formatting, GotoDeclaration, GotoDefinition, GotoTypeDefinition,
-    HoverRequest, Initialize, InlayHintRequest, PrepareRenameRequest, References, Rename,
-    SelectionRangeRequest, SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown,
-    SignatureHelpRequest, WorkspaceSymbolRequest,
+    CodeActionRequest, Completion, DocumentDiagnosticRequest, DocumentHighlightRequest,
+    DocumentSymbolRequest, FoldingRangeRequest, Formatting, GotoDeclaration, GotoDefinition,
+    GotoImplementation, GotoImplementationParams, GotoTypeDefinition, HoverRequest, Initialize,
+    InlayHintRequest, PrepareRenameRequest, References, Rename, SelectionRangeRequest,
+    SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest,
+    WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -130,6 +134,30 @@ pub fn build_router(
                 // conformance test pins this advertisement to the router
                 // registration.
                 inlay_hint_provider: Some(OneOf::Left(true)),
+                // LSP-IMPLEMENTATION: the goto-implementation capability.
+                // The handler below walks the driver's stored `CrateHir`s
+                // (each `impl` block records its trait path and self type
+                // with byte-exact spans), so no re-analysis happens on the
+                // request path. The conformance test pins this
+                // advertisement to the router registration.
+                implementation_provider: Some(ImplementationProviderCapability::Simple(true)),
+                // LSP-PULL-DIAG: the pull-diagnostics capability. The
+                // handler below reads the same recorded set the push
+                // path (`publishDiagnostics`) publishes, so a client
+                // mixing both paths sees identical coordinates. The
+                // language has inter-file dependencies (the driver
+                // re-analyses dependents), but no
+                // `workspace/diagnostic` route exists — the capability
+                // says so honestly. The conformance test pins this
+                // advertisement to the router registration.
+                diagnostic_provider: Some(DiagnosticServerCapabilities::Options(
+                    DiagnosticOptions {
+                        identifier: None,
+                        inter_file_dependencies: true,
+                        workspace_diagnostics: false,
+                        work_done_progress_options: WorkDoneProgressOptions::default(),
+                    },
+                )),
                 references_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 // LSP-PREPARE-RENAME: switch the plain-boolean rename
@@ -215,6 +243,41 @@ pub fn build_router(
         async move {
             let guard = db.file_map.read();
             Ok(type_definition(&db, &guard, &params))
+        }
+    });
+
+    // Goto Implementation (LSP-IMPLEMENTATION): same params shape as the
+    // other goto requests, but the target is the *implementations* — the
+    // `impl` blocks whose trait path or self type names the cursor's
+    // symbol, across every file the session analysed. Multiple impls
+    // answer an array in (file, offset) order; none answers `null`.
+    let db_impl = db.clone();
+    router.request::<GotoImplementation, _>(move |(), params: GotoImplementationParams| {
+        let db = db_impl.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(goto_implementation(&db, &guard, &params))
+        }
+    });
+
+    // Pull Diagnostics (LSP-PULL-DIAG): the same recorded set the push
+    // path publishes, answered as a full report on demand — a clean
+    // analysed file answers an empty report. A document the server does
+    // not know (not open, never analysed) answers a JSON-RPC error: the
+    // pull result type is a report, not an optional one, so `null` is not
+    // a legal answer on the wire.
+    let db_pull = db.clone();
+    router.request::<DocumentDiagnosticRequest, _>(move |(), params: DocumentDiagnosticParams| {
+        let db = db_pull.clone();
+        async move {
+            let guard = db.file_map.read();
+            match pull_diagnostics(&db, &guard, &params) {
+                Some(report) => Ok(report),
+                None => Err(ResponseError::new(
+                    async_lsp::ErrorCode::INVALID_PARAMS,
+                    "textDocument/diagnostic: document not open or never analysed",
+                )),
+            }
         }
     });
 
