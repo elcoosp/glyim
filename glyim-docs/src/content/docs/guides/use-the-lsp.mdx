@@ -40,8 +40,8 @@ Use an absolute path to the binary. The server needs to find the compiler's comp
 
 `glyim-lsp` implements:
 
-- **Diagnostics** — compiler errors and warnings pushed as you type, driven by the same pipeline the CLI uses.
-- **Navigation** — goto definition, goto type definition, find references, workspace symbols, document symbols, and document folding ranges.
+- **Diagnostics** — compiler errors and warnings pushed as you type (`publishDiagnostics`), and the same set pulled on demand (`textDocument/diagnostic`), driven by the same pipeline the CLI uses. A clean analysed file answers an empty full report; a file the server never analysed answers null.
+- **Navigation** — goto definition, goto type definition, goto declaration, goto implementation (the `impl` blocks behind a trait or a type, across every analysed file), find references, workspace symbols, document symbols, and document folding ranges.
 - **Call hierarchy** — prepare a function under the cursor (definition site or a call to it) and walk its incoming callers or outgoing callees, served from the same reference graph rename uses.
 - **Highlighting** — document highlight of the symbol under the cursor, selection ranges that expand token → statement → item → file, and semantic tokens so editors color declarations and members from the real parse tree.
 - **Hover and completion** — type information on hover and completion suggestions from the def-map.
