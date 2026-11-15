@@ -50,6 +50,18 @@ harness = false
 name = "type_definition"
 harness = false
 
+# Implementation-request bench (LSP-IMPLEMENTATION; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "implementation"
+harness = false
+
+# Pull-diagnostics bench (LSP-PULL-DIAG; dependency-free, `harness = false`
+# like the other request benches).
+[[bench]]
+name = "document_diagnostics"
+harness = false
+
 # Selection-range request bench (LSP-SELECTION; dependency-free,
 # `harness = false` like the document_highlight bench).
 [[bench]]
@@ -84,7 +96,6 @@ glyim-span = { path = "../glyim-span" }
 async-lsp = { git = "https://github.com/elcoosp/async-lsp", features = ["omni-trait", "stdio", "tokio"] }
 tokio = { version = "1.54", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1.0"
 tracing = "0.1"
 # LSP-LOG-FILE: the --log-file seam installs a JSON-lines tracing
 # subscriber over a file writer; the workspace dep already carries the
@@ -107,6 +118,10 @@ tokio = { workspace = true, features = ["rt", "macros"] }
 glyim-test = { workspace = true }
 # LSP-LOG-FILE: the log-file tests write into throwaway directories.
 tempfile = { workspace = true }
+# JSON round-trips in the tests (server-log probes, semantic-token wire
+# shape): production code stopped needing it when the dead external-
+# diagnostics cluster went away (LSP-DEAD-EXTERNAL-DIAG).
+serde_json = "1.0"
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
