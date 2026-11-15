@@ -26,6 +26,12 @@ harness = false
 name = "signature_help"
 harness = false
 
+# Inlay-hint request bench (LSP-INLAY-HINT; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "inlay_hint"
+harness = false
+
 # Type-definition request bench (LSP-TYPE-DEF; dependency-free,
 # `harness = false` like the other request benches).
 [[bench]]
