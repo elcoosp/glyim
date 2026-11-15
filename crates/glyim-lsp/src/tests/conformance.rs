@@ -24,6 +24,7 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "completion_provider",
         "hover_provider",
         "definition_provider",
+        "declaration_provider",
         "type_definition_provider",
         "document_highlight_provider",
         "selection_range_provider",
@@ -128,6 +129,17 @@ fn type_definition_is_in_the_expected_set() {
     assert!(
         expected_advertised_providers().contains(&"type_definition_provider"),
         "type_definition_provider must be advertised"
+    );
+}
+
+#[test]
+fn goto_declaration_is_in_the_expected_set() {
+    // Regression pin (LSP-DECLARATION): the `textDocument/declaration`
+    // capability must be advertised alongside its router registration; a
+    // future removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"declaration_provider"),
+        "declaration_provider must be advertised"
     );
 }
 
