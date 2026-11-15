@@ -1,3 +1,5 @@
+mod call_hierarchy;
+mod call_hierarchy_tests;
 mod code_action;
 mod code_action_tests;
 mod completion;
@@ -40,6 +42,8 @@ mod selection_range_tests;
 mod semantic_tokens;
 mod semantic_tokens_tests;
 mod server_tests;
+mod signature_help;
+mod signature_help_tests;
 mod symbol_index_tests;
 mod test_utils;
 mod tier6_4_completion_tests;
