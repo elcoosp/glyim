@@ -4,6 +4,8 @@ import { docsLoader, i18nLoader } from '@astrojs/starlight/loaders';
 import { changelogsLoader } from 'starlight-changelogs/loader';
 import { blogSchema } from 'starlight-blog/schema';
 import { docsSchema, i18nSchema } from '@astrojs/starlight/schema';
+import { autoSidebarLoader } from 'starlight-auto-sidebar/loader';
+import { autoSidebarSchema } from 'starlight-auto-sidebar/schema';
 
 
 export const collections = {
