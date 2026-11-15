@@ -358,7 +358,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one), the `waivers` bench (assess + both faces + the grant validation
   path over a 500-waiver set), and README/lib.rs/main.rs/usage docs.
 
+### Added
+- **Goto declaration (`textDocument/declaration`)**: the missing member
+  of the goto family — goto-definition answers the *definition* (the
+  item, wherever it lives), but nothing answered "where is this name
+  declared *for this file*". The new `goto_declaration` engine resolves
+  the cursor's identifier through a `DeclarationSource` seam: a `use`
+  statement binding the name declares it (the import wins over a
+  same-named local item — that is what the user wrote to bring the name
+  into scope), a locally-declared item declares itself, and a name that
+  is neither imported nor declared in the file answers `null` honestly
+  instead of masquerading as a second definition request. The production
+  `ParseTreeDeclarationSource` walks the parse trees the analysis driver
+  already stores (`db.syntaxes`) — glob (`use foo::*`) and `_` aliases
+  bind no single name and are skipped — so no re-analysis happens on the
+  request path and broken files still answer. Ships the policy tests
+  over a mock source, the database-backed request tests, the
+  `goto_declaration` bench, and the `goto_declaration_walkthrough`
+  example.
+- **Server log file (`glyim-lsp --log-file X`)**: the flag was parsed
+  and documented ("tee tracing to X") but `run_server` accepted it as
+  `_log_file` and never used it — every tracing event the engines emit
+  (`debug!` per request, `warn!` per dropped edit) went nowhere. The new
+  `server_log` module closes the seam: `FileLog` opens the target file
+  and implements `tracing_subscriber`'s `MakeWriter` (one `Mutex`
+  writer, line-buffered), `install_global` wires it as the global
+  default subscriber emitting JSON lines, and `run_server` installs it
+  when the flag is present — a file that cannot be opened degrades to a
+  one-line stderr note and a server that still runs, because losing the
+  log must never cost the session. Ships the file-log tests (bytes land,
+  events round-trip as JSON) and the `server_log_walkthrough` example.
+- **Inlay hints (`textDocument/inlayHint`)**: inline `: Ty` annotations
+  on un-annotated `let` bindings, resolved from the Tier 6.4 HIR +
+  typeck state through a `BindingTypeSource` seam (`HirBindingTypeSource`
+  production impl), with an honest skip list (annotated bindings, types
+  with no stable user-facing spelling, bindings outside the requested
+  range). Routed, advertised, conformance-pinned, tested over a mock and
+  over the database, benched (`inlay_hint`), and walked through in
+  `inlay_hint_walkthrough`.
+- **Call hierarchy (`textDocument/prepareCallHierarchy` + incoming and
+  outgoing calls) and signature help (`textDocument/signatureHelp`)**:
+  the call-hierarchy requests answer the function item under the cursor
+  and walk the reference graph's call records for callers and callees;
+  signature help resolves the innermost recorded call containing the
+  cursor and renders the callee's signature with the active parameter
+  counted from the source text. Both read the same reference graph and
+  symbol index the other request engines use (seams `CallGraphSource` /
+  `CallSiteSource` / `SignatureSource`), are routed, advertised,
+  conformance-pinned, tested over mocks and the database, benched, and
+  walked through in dedicated examples.
+
 ### Fixed
+- `glyip` no longer silently swallows a corrupt `Glyip.lock`:
+  `resolve_lockfile` read the lockfile with
+  `Lockfile::read_from_dir(...).unwrap_or_default()`, which conflated
+  "no lockfile yet" (fine — `read_from_dir` already answers an empty one)
+  with "a resolution record that cannot be parsed" — the user's pin
+  record was discarded without a trace and re-resolved as if it had never
+  existed. The read error now propagates, and a regression test pins the
+  contract (`crates/glyip/src/tests/lockfile_advanced.rs`).
+- `STATUS.md` / `STATUS.json` were committed stale after the ledger
+  feature registry gained the newer LSP capability declarations — the
+  committed status said 225 features over 9 `TOOL-LSP-*` rows while the
+  registry carried 233 over 17; the `ledger-check` CI job's
+  `status . --check` byte-compare would fail on every run. Both are
+  regenerated from the registry (and the two new capability entries,
+  `TOOL-LSP-DECLARATION` and `TOOL-LSP-LOG-FILE`, are declared in
+  `ledger/features/tooling/lsp.toml` in the same pass).
 - Two latent rustc-1.100 clippy breaks (found by the
   `--all-targets --all-features` gate): `tools/glyim-metrics/examples/
   baseline_check.rs` printed a `{}` placeholder with no argument
