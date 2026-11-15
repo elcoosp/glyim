@@ -35,6 +35,8 @@ pub mod reference_graph;
 pub mod rename;
 /// `selection_range` (LSP-SELECTION).
 pub mod selection_range;
+/// `semantic_tokens` (LSP-SEMANTIC-TOKENS).
+pub mod semantic_tokens;
 /// server.
 pub mod server;
 /// state.
@@ -60,6 +62,11 @@ pub use prepare_rename::{prepare_rename, rename_target};
 pub use reference_graph::{Reference, ReferenceGraph, ReferenceKind};
 pub use selection_range::{
     AncestorSpanSource, ParseTreeSource, compute_selection_chains, selection_ranges,
+};
+pub use semantic_tokens::{
+    ClassifiedToken, LexedToken, ParseTreeTokenSource, TOKEN_TYPES, TokenLexSource,
+    classify_tokens, encode_delta, semantic_tokens_full, semantic_tokens_range, token_legend,
+    token_type_for,
 };
 pub use state::LspState;
 pub use symbol_index::{DefinitionLocation, SymbolIndex, SymbolInfo, SymbolKind, TypeSignature};
