@@ -205,6 +205,15 @@ impl AnalysisDriver {
             .write()
             .build_from_hir(file_id, &hir, &interner);
         self.db.hirs.write().insert(file_id, hir);
+        // LSP-SELECTION: keep the parse tree (the immutable green form —
+        // cursor nodes are not Send) for syntax-tree-shaped requests
+        // (selection ranges). The tree predates lowering, so it survives
+        // even when HIR/typeck produce diagnostics — expand-selection
+        // must work on broken code too.
+        self.db
+            .syntaxes
+            .write()
+            .insert(file_id, parse_result.green_node);
         self.db
             .typeck
             .write()
@@ -259,16 +268,26 @@ impl AnalysisDriver {
         let Some(client) = self.client.as_ref() else {
             return;
         };
+        // Same bounded-channel discipline as the didOpen/didChange
+        // handlers: a diagnostics publish that cannot name its URI must
+        // not vanish silently — an editor would keep showing stale
+        // diagnostics for a file whose path cannot round-trip.
         let uri_str = match crate::uri::path_to_uri(path) {
             Ok(u) => u,
-            Err(_) => return,
+            Err(err) => {
+                tracing::warn!(path = %path.display(), %err, "publish_diagnostics dropped: path does not convert to a file URI");
+                return;
+            }
         };
         // lsp-types 0.97 uses its own `Uri` newtype (a `fluent_uri` URI),
         // not `url::Url`. Parse from the string form.
         use std::str::FromStr;
         let uri = match lsp_types::Uri::from_str(&uri_str) {
             Ok(u) => u,
-            Err(_) => return,
+            Err(err) => {
+                tracing::warn!(%uri_str, %err, "publish_diagnostics dropped: URI string does not parse as an lsp-types Uri");
+                return;
+            }
         };
         let params = lsp_types::PublishDiagnosticsParams {
             uri,
