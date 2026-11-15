@@ -37,6 +37,8 @@ mod rename;
 mod rename_tests;
 mod selection_range;
 mod selection_range_tests;
+mod semantic_tokens;
+mod semantic_tokens_tests;
 mod server_tests;
 mod symbol_index_tests;
 mod test_utils;
