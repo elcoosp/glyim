@@ -20,7 +20,6 @@ use std::time::Instant;
 use glyim_frontend::parse_to_syntax;
 use glyim_lsp::database::SourceMap;
 use glyim_lsp::selection_range::{ParseTreeSource, compute_selection_chains, selection_ranges};
-use glyim_span::FileId;
 use lsp_types::{Position, SelectionRangeParams, TextDocumentIdentifier};
 use url::Url;
 
@@ -46,8 +45,8 @@ fn bench_params(path: &PathBuf) -> SelectionRangeParams {
             line: X_LINE,
             character: X_COLUMN,
         }],
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
+        partial_result_params: lsp_types::PartialResultParams::default(),
     }
 }
 
