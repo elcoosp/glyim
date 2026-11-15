@@ -8,6 +8,7 @@ use crate::folding::provide_folding_ranges;
 use crate::formatting::format_document;
 use crate::goto_definition::goto_definition;
 use crate::hover::provide_hover;
+use crate::inlay_hint::inlay_hints;
 use crate::navigation::{document_symbols, find_references, workspace_symbols};
 use crate::prepare_rename::prepare_rename;
 use crate::rename::rename_symbol;
@@ -23,8 +24,9 @@ use lsp_types::request::{
     CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare,
     CodeActionRequest, Completion, DocumentHighlightRequest, DocumentSymbolRequest,
     FoldingRangeRequest, Formatting, GotoDefinition, GotoTypeDefinition, HoverRequest, Initialize,
-    PrepareRenameRequest, References, Rename, SelectionRangeRequest, SemanticTokensFullRequest,
-    SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest, WorkspaceSymbolRequest,
+    InlayHintRequest, PrepareRenameRequest, References, Rename, SelectionRangeRequest,
+    SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest,
+    WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -34,7 +36,6 @@ use tokio::sync::mpsc;
 pub fn build_router(
     db: Arc<AnalysisDatabase>,
     _analysis_tx: mpsc::Sender<AnalysisMessage>,
-    _client: async_lsp::ClientSocket,
 ) -> Router<()> {
     let mut router = Router::new(());
     // INF-16: the request handlers read the DRIVER's `db.file_map`
@@ -113,6 +114,14 @@ pub fn build_router(
                     trigger_characters: Some(vec!["(".to_string(), ",".to_string()]),
                     ..Default::default()
                 }),
+                // LSP-INLAY-HINT: the inlay-hint capability. The handler
+                // below reads the same Tier 6.4 HIR + typeck state the
+                // type-definition request reads (un-annotated `let`
+                // bindings and their initializer types), so no
+                // re-analysis happens on the request path. The
+                // conformance test pins this advertisement to the router
+                // registration.
+                inlay_hint_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 // LSP-PREPARE-RENAME: switch the plain-boolean rename
@@ -240,6 +249,21 @@ pub fn build_router(
         async move {
             let guard = db.file_map.read();
             Ok(signature_help(&db, &guard, &params))
+        }
+    });
+
+    // Inlay Hints (LSP-INLAY-HINT): un-annotated `let` bindings answer
+    // `: Ty` inline, resolved from the same Tier 6.4 HIR + typeck state
+    // the type-definition request reads — a walk of recorded facts, no
+    // re-analysis on the request path. Annotated bindings, types with
+    // no stable user-facing spelling, and bindings outside the
+    // requested range are skipped honestly.
+    let db_inlay = db.clone();
+    router.request::<InlayHintRequest, _>(move |(), params: InlayHintParams| {
+        let db = db_inlay.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(inlay_hints(&db, &guard, &params))
         }
     });
 
