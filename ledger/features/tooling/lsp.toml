@@ -174,3 +174,23 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-DECLARATION"
+title         = "goto declaration: the use statement or local item declaring the cursor's name"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-LOG-FILE"
+title         = "server log file: --log-file tees tracing events to a JSON-lines file"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
