@@ -14,6 +14,18 @@ description = "Language Server Protocol implementation for Glyim"
 name = "glyim-lsp"
 path = "src/bin/glyim-lsp.rs"
 
+# Call-hierarchy request bench (LSP-CALL-HIERARCHY; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "call_hierarchy"
+harness = false
+
+# Signature-help request bench (LSP-SIGNATURE-HELP; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "signature_help"
+harness = false
+
 # Type-definition request bench (LSP-TYPE-DEF; dependency-free,
 # `harness = false` like the other request benches).
 [[bench]]
@@ -40,7 +52,10 @@ harness = false
 
 [dependencies]
 notify = "8.2"
-crossbeam-channel = "0.5.17"
+# `crossbeam-channel` and `file_url` were declared here but never imported
+# anywhere in the crate (cargo's unused-dependency lint flagged both);
+# removed with the LSP-CALL-HIERARCHY pass so the manifest reflects the
+# actual dependency set.
 glyim-db = { path = "../glyim-db" }
 glyim-hir = { path = "../glyim-hir" }
 glyim-diag = { path = "../glyim-diag" }
@@ -59,7 +74,6 @@ parking_lot = "0.13"
 # API directly (glyim-syntax re-exports only the node/green types).
 rowan = { workspace = true }
 url = "2.5.8"
-file_url = "0.3.3"
 glyim-def-map = { workspace = true }
 glyim-type = { workspace = true }
 glyim-typeck = { workspace = true }
