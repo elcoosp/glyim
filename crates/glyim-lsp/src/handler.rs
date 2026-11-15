@@ -6,6 +6,7 @@ use crate::document_highlight::document_highlights;
 use crate::driver::AnalysisMessage;
 use crate::folding::provide_folding_ranges;
 use crate::formatting::format_document;
+use crate::goto_declaration::goto_declaration;
 use crate::goto_definition::goto_definition;
 use crate::hover::provide_hover;
 use crate::inlay_hint::inlay_hints;
@@ -23,10 +24,10 @@ use lsp_types::notification::{DidChangeTextDocument, DidCloseTextDocument, DidOp
 use lsp_types::request::{
     CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare,
     CodeActionRequest, Completion, DocumentHighlightRequest, DocumentSymbolRequest,
-    FoldingRangeRequest, Formatting, GotoDefinition, GotoTypeDefinition, HoverRequest, Initialize,
-    InlayHintRequest, PrepareRenameRequest, References, Rename, SelectionRangeRequest,
-    SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest,
-    WorkspaceSymbolRequest,
+    FoldingRangeRequest, Formatting, GotoDeclaration, GotoDefinition, GotoTypeDefinition,
+    HoverRequest, Initialize, InlayHintRequest, PrepareRenameRequest, References, Rename,
+    SelectionRangeRequest, SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown,
+    SignatureHelpRequest, WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -61,6 +62,13 @@ pub fn build_router(
                 }),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
+                // LSP-DECLARATION: the goto-declaration capability. The
+                // handler below walks the parse trees the analysis driver
+                // stores in `db.syntaxes` for `use` declarations and the
+                // same symbol index goto-definition reads, so no
+                // re-analysis happens on the request path. The conformance
+                // test pins this advertisement to the router registration.
+                declaration_provider: Some(DeclarationCapability::Simple(true)),
                 // LSP-TYPE-DEF: the type-definition capability. The handler
                 // below reads the Tier 6.4 typeck results through
                 // `db.type_at_offset` and lands on the struct/enum the
@@ -172,7 +180,7 @@ pub fn build_router(
         }
     });
 
-    // Goto Definition
+    // Goto Declaration
     let db_def = db.clone();
     router.request::<GotoDefinition, _>(move |(), params: GotoDefinitionParams| {
         let db = db_def.clone();
@@ -181,6 +189,22 @@ pub fn build_router(
             Ok(goto_definition(&db, &guard, &params))
         }
     });
+
+    // Goto Declaration (LSP-DECLARATION): same params shape as
+    // goto-definition, but the target is the *declaration* — the `use`
+    // statement that binds the cursor's name in this file, or the local
+    // item that declares it. A name neither imported nor declared here
+    // answers `null` instead of double-serving goto-definition.
+    let db_decl = db.clone();
+    router.request::<GotoDeclaration, _>(
+        move |(), params: lsp_types::request::GotoDeclarationParams| {
+            let db = db_decl.clone();
+            async move {
+                let guard = db.file_map.read();
+                Ok(goto_declaration(&db, &guard, &params))
+            }
+        },
+    );
 
     // Goto Type Definition (LSP-TYPE-DEF): same params/response shape as
     // goto-definition, but the target is the *shape* — the struct or enum
