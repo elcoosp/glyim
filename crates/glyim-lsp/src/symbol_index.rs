@@ -41,7 +41,11 @@ pub enum SymbolKind {
     Module,
 }
 
-#[derive(Debug, Clone)]
+// `PartialEq`/`Eq` (on top of the plain record derives): the
+// implementation-target policy dedupes sites by location identity —
+// an `impl Trait for Trait`-shaped block matches both name filters and
+// must answer once, not twice.
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// `DefinitionLocation`.
 pub struct DefinitionLocation {
     /// `Struct`.
