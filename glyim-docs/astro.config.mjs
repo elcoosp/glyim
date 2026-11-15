@@ -1,5 +1,4 @@
 import { defineDocsConfig } from '@elcoosp/docs-toolkit/config';
-import imageZoom from 'starlight-image-zoom';
 import headingBadges from 'starlight-heading-badges';
 
 export default await defineDocsConfig({
@@ -21,7 +20,7 @@ export default await defineDocsConfig({
     baseUrl: 'https://github.com/elcoosp/glyim/edit/main/glyim-docs/src/content/docs/',
   },
   locales: { root: { label: 'English', lang: 'en' }, fr: { label: 'Français', lang: 'fr' } },
-    plugins: [imageZoom(),  headingBadges()],
+    plugins: [ headingBadges()],
   sidebar: [
     { label: 'Overview', link: '/' },
     { label: 'Tutorials', items: [{ autogenerate: { directory: 'tutorials' } }] },
