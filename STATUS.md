@@ -2,11 +2,11 @@
 
 # Readiness status
 
-Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **225** features over **56** evidence record(s) (0 error(s), 3 warning(s)).
+Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **235** features over **56** evidence record(s) (0 error(s), 3 warning(s)).
 
 | Level | Features |
 |---|---|
-| L0 | 212 |
+| L0 | 222 |
 | L1 | 7 |
 | L2 | 6 |
 | L3 | 0 |
@@ -220,14 +220,24 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `TOOL-LEDGER-SCHEMA` | tooling | L3 | L0 | - | - |
 | `TOOL-LEDGER-STATUS` | tooling | L3 | L0 | - | - |
 | `TOOL-LEDGER-TAXONOMY` | tooling | L3 | L0 | - | - |
+| `TOOL-LSP-CALL-HIERARCHY` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-CODE-ACTIONS` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-COMPLETION` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-DECLARATION` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-DIAG` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-FOLDING` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-FORMAT` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-GOTO-DEF` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-GOTO-TYPE-DEF` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-HIGHLIGHT` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-HOVER` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-INLAY-HINT` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-LOG-FILE` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-REFERENCES` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-RENAME` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-SELECTION` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-SEMANTIC-TOKENS` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-SIGNATURE-HELP` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-SYMBOLS` | tooling | L4 | L0 | - | - |
 | `TOOL-METRICS-RATCHET` | tooling | L3 | L0 | - | - |
 | `TOOL-TEST-COMPILE-FAIL` | tooling | L4 | L0 | - | - |
