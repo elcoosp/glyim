@@ -30,6 +30,7 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "semantic_tokens_provider",
         "call_hierarchy_provider",
         "signature_help_provider",
+        "inlay_hint_provider",
         "references_provider",
         "document_formatting_provider",
         "rename_provider",
@@ -105,6 +106,17 @@ fn signature_help_is_in_the_expected_set() {
     assert!(
         expected_advertised_providers().contains(&"signature_help_provider"),
         "signature_help_provider must be advertised"
+    );
+}
+
+#[test]
+fn inlay_hint_is_in_the_expected_set() {
+    // Regression pin (LSP-INLAY-HINT): the `textDocument/inlayHint`
+    // capability must be advertised alongside its router registration; a
+    // future removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"inlay_hint_provider"),
+        "inlay_hint_provider must be advertised"
     );
 }
 
