@@ -1,4 +1,5 @@
 use crate::AnalysisDatabase;
+use crate::call_hierarchy::{incoming_calls, outgoing_calls, prepare_call_hierarchy};
 use crate::code_action::provide_code_actions;
 use crate::completion::provide_completions;
 use crate::document_highlight::document_highlights;
@@ -12,16 +13,18 @@ use crate::prepare_rename::prepare_rename;
 use crate::rename::rename_symbol;
 use crate::selection_range::selection_ranges;
 use crate::semantic_tokens::{semantic_tokens_full, semantic_tokens_range, token_legend};
+use crate::signature_help::signature_help;
 use crate::type_definition::type_definition;
 use async_lsp::router::Router;
 use std::ops::ControlFlow;
 
 use lsp_types::notification::{DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument};
 use lsp_types::request::{
+    CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare,
     CodeActionRequest, Completion, DocumentHighlightRequest, DocumentSymbolRequest,
     FoldingRangeRequest, Formatting, GotoDefinition, GotoTypeDefinition, HoverRequest, Initialize,
     PrepareRenameRequest, References, Rename, SelectionRangeRequest, SemanticTokensFullRequest,
-    SemanticTokensRangeRequest, Shutdown, WorkspaceSymbolRequest,
+    SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest, WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -92,6 +95,24 @@ pub fn build_router(
                         },
                     ),
                 ),
+                // LSP-CALL-HIERARCHY: the call-hierarchy capability. The
+                // three handlers below read the same reference graph as
+                // find-references/rename (its `ReferenceKind::Call` records
+                // carry the owning item id), so no re-analysis happens on
+                // the request path. The conformance test pins this
+                // advertisement to the router registration.
+                call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
+                // LSP-SIGNATURE-HELP: the signature-help capability. The
+                // handler below reads the same reference graph the
+                // call-hierarchy requests read (call records carry the
+                // callee name and the whole call extent) and renders the
+                // same symbol-index signatures hover renders. `(` and `,`
+                // are the editor trigger characters; the conformance test
+                // pins this advertisement to the router registration.
+                signature_help_provider: Some(SignatureHelpOptions {
+                    trigger_characters: Some(vec!["(".to_string(), ",".to_string()]),
+                    ..Default::default()
+                }),
                 references_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 // LSP-PREPARE-RENAME: switch the plain-boolean rename
@@ -171,6 +192,54 @@ pub fn build_router(
         async move {
             let guard = db.file_map.read();
             Ok(find_references(&db, &guard, &params))
+        }
+    });
+
+    // Call Hierarchy (LSP-CALL-HIERARCHY): prepare answers the function
+    // item under the cursor (definition site, or a call site of the
+    // callee); incoming/outgoing re-resolve the client's echoed item by
+    // its definition extent and walk the reference graph's call records.
+    let db_prepare_ch = db.clone();
+    router.request::<CallHierarchyPrepare, _>(move |(), params: CallHierarchyPrepareParams| {
+        let db = db_prepare_ch.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(prepare_call_hierarchy(&db, &guard, &params))
+        }
+    });
+
+    let db_incoming = db.clone();
+    router.request::<CallHierarchyIncomingCalls, _>(
+        move |(), params: CallHierarchyIncomingCallsParams| {
+            let db = db_incoming.clone();
+            async move {
+                let guard = db.file_map.read();
+                Ok(incoming_calls(&db, &guard, &params))
+            }
+        },
+    );
+
+    let db_outgoing = db.clone();
+    router.request::<CallHierarchyOutgoingCalls, _>(
+        move |(), params: CallHierarchyOutgoingCallsParams| {
+            let db = db_outgoing.clone();
+            async move {
+                let guard = db.file_map.read();
+                Ok(outgoing_calls(&db, &guard, &params))
+            }
+        },
+    );
+
+    // Signature Help (LSP-SIGNATURE-HELP): the innermost recorded call
+    // containing the cursor resolves through the reference graph; the
+    // callee's signature renders from the symbol index, and the active
+    // parameter is counted from the source text.
+    let db_sig = db.clone();
+    router.request::<SignatureHelpRequest, _>(move |(), params: SignatureHelpParams| {
+        let db = db_sig.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(signature_help(&db, &guard, &params))
         }
     });
 
