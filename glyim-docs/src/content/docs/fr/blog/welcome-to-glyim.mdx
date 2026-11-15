@@ -1,0 +1,76 @@
+---
+title: Comment nous avons conçu un compilateur de 39 crates avec deux backends
+date: 2026-11-15
+cover:
+  alt: Architecture du compilateur Glyim
+  image: ../../blog/welcome-cover.jpg
+image: ../../blog/welcome-cover.jpg
+---
+
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+
+La plupart des compilateurs expérimentaux s'arrêtent après l'analyse syntaxique. Pas Glyim.
+
+Nous voulions un langage système proche de Rust qui va de l'analyse lexicale jusqu'au code natif, sans que son architecture ne devienne une boîte noire. Si vous ouvrez le vérificateur de types, vous ne devriez pas avoir à décortiquer mentalement le borrow checker pour le comprendre.
+
+Cette contrainte a dicté notre première décision majeure : un workspace strict de 39 crates. Trente-quatre gèrent le langage et la bibliothèque standard ; cinq gèrent l'outillage. Le frontend s'articule autour d'une séquence de représentations intermédiaires distinctes (AST, HIR, THIR, MIR), chaque phase exposant une API publique restreinte.
+
+## L'objectif
+
+Il nous fallait des génériques, des traits, du filtrage par motif, des fermetures et `async`/`await`, le tout compilé vers des fichiers objets natifs. Nous avions également besoin d'un code lisible. Les compilateurs de recherche sont souvent des monolithes denses. Nous avons opté pour une conception modulaire reposant sur l'interning et l'allocation en arène, en empruntant des idées à `rustc` tout en réécrivant l'ensemble de zéro.
+
+## L'architecture
+
+Le pipeline est découpé en phases distinctes et lisibles. Le borrow checker (`glyim-borrow`) implémente les durées de vie non lexicales avec une inférence de régions de style Polonius et des emprunts en deux phases. La crate d'inférence de types utilise des variables d'unification avec vérification d'occurrence. La résolution des traits passe par un contexte d'acquittement avec files d'obligations et prise en charge des HRTB.
+
+Le compilateur intègre également un interpréteur MIR pour l'évaluation `const fn`, ainsi qu'une compilation incrémentale fondée sur des empreintes SHA-256 des sources et de la configuration de build.
+
+<CardGrid stagger>
+  <Card title="De l'analyse lexicale au MIR" icon="puzzle">
+    Un pipeline strict composé de l'AST, du HIR, du THIR et du MIR. Chaque phase est isolée afin que vous puissiez en étudier une sans vous perdre dans les autres.
+  </Card>
+  <Card title="Borrow Checker" icon="approve-check">
+    `glyim-borrow` gère les durées de vie non lexicales, l'inférence de régions de style Polonius et les emprunts en deux phases.
+  </Card>
+  <Card title="Backend LLVM" icon="rocket">
+    Grâce à `inkwell`, nous générons de véritables fichiers objets avec abaissement ABI, informations de débogage et gestion des exceptions.
+  </Card>
+  <Card title="VM bytecode" icon="laptop">
+    Une machine à pile compacte vérifiée par sa propre VM, permettant d'exécuter du code Glyim sans éditeur de liens ni dépendance LLVM embarquée.
+  </Card>
+</CardGrid>
+
+## Deux backends, un seul pipeline
+
+Nous avons conçu deux backends pour deux cas d'usage distincts.
+
+Le backend principal LLVM (propulsé par `inkwell`) produit des fichiers objets prêts pour la production. Le backend bytecode est une machine à pile compacte vérifiée par sa propre VM. Il permet d'exécuter du code Glyim sans éditeur de liens, ce qui est idéal pour les tests CI, l'embarqué ou les environnements où déployer une chaîne d'outils LLVM complète serait disproportionné. Un simple drapeau `--backend` permet de basculer de l'un à l'autre.
+
+## GSX : une syntaxe de vues de première classe
+
+Nous ne voulions pas limiter le langage aux seuls outils en ligne de commande. Nous avons ajouté GSX : des éléments de vue typés et indépendants de l'hôte, dotés de leur propre étape de compilation et d'un émetteur SSR. Les éléments de vue sont des citoyens de première classe dans l'AST, traités intégralement par le compilateur plutôt que par une macro tierce. Si vous êtes curieux, les documents de conception dans `docs/design/GSX-in-Glyim.md` détaillent l'ensemble.
+
+## L'outil de build : glyip
+
+Puisque nous concevions un langage, il nous fallait un gestionnaire de paquets. `glyip` utilise un résolveur glouton en largeur avec correspondance SemVer 2.0, dépendances git et chemins locaux, ainsi que des fichiers de verrouillage.
+
+<Aside type="caution" title="Le compromis">
+`glyip` n'effectue pas de retour arrière (backtracking). Une dépendance en diamant avec des versions incompatibles provoque une erreur franche plutôt qu'une recherche exhaustive à la manière de Cargo. Nous avons fait ce choix pour garder le résolveur prévisible et rapide, mais c'est une contrainte sensible dans les grands graphes de dépendances.
+</Aside>
+
+## Ce que cela a coûté
+
+Construire un compilateur de cette manière a un prix. La modularité implique davantage de code passe-partout pour transmettre le contexte entre les crates. Les deux backends imposent d'implémenter chaque nouvelle fonctionnalité du langage deux fois : une fois de MIR vers LLVM, et une fois de MIR vers le bytecode.
+
+Il subsiste également des lacunes. Nous les suivons dans un registre de maturité — un ensemble de commandes CLI qui recensent les fonctionnalités non encore couvertes, y associent des fixtures témoins et font échouer la CI si un témoin déclaré cesse d'exister. À ce jour, `--lto fat` renvoie une erreur explicite car la prise en charge multi-CGU n'est pas encore implémentée.
+
+## Démarrer
+
+Si vous souhaitez le compiler, vous aurez besoin de LLVM 23 et d'une chaîne d'outils Rust récente.
+
+```bash
+cargo build --release
+glyip new hello
+```
+
+Le code est lisible. Les limites sont documentées. À vous de jouer.
