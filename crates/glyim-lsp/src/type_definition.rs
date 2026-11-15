@@ -162,10 +162,11 @@ pub fn type_definition(
     let def = &target;
     let def_sm = source_maps.get(&def.file_id)?;
     // Exact token extents (LSP-EXACT-EXTENTS): the same two-tuple
-    // mapping goto-definition answers with.
-    let ((start_line, start_col), (end_line, end_col)) = def_sm
-        .span_to_position(def.span.lo.to_usize(), def.span.hi.to_usize())
-        .unwrap_or(((0, 0), (0, 0)));
+    // mapping goto-definition answers with. An unmappable span answers
+    // `null` (via `?`) rather than the old silent line-0/col-0 fallback,
+    // which would aim every client at the top of the target file.
+    let ((start_line, start_col), (end_line, end_col)) =
+        def_sm.span_to_position(def.span.lo.to_usize(), def.span.hi.to_usize())?;
     let target_path = file_map.path(def.file_id)?;
     let target_uri = Url::from_file_path(target_path).ok()?;
     tracing::debug!(
