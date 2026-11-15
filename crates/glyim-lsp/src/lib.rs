@@ -1,6 +1,8 @@
 //! Language Server Protocol implementation for Glyim compiler.
 // Stylistic clippy lints suppressed crate-wide (test-noise lints).
 
+/// `call_hierarchy` (LSP-CALL-HIERARCHY).
+pub mod call_hierarchy;
 /// `code_action`.
 pub mod code_action;
 /// completion.
@@ -39,6 +41,8 @@ pub mod selection_range;
 pub mod semantic_tokens;
 /// server.
 pub mod server;
+/// `signature_help` (LSP-SIGNATURE-HELP).
+pub mod signature_help;
 /// state.
 pub mod state;
 /// `symbol_index`.
@@ -51,6 +55,11 @@ pub mod uri; // Make database public
 #[cfg(test)]
 mod tests;
 
+pub use call_hierarchy::{
+    CallGraphSource, CallSite, IncomingCall, ItemDefinition, OutgoingCall,
+    ReferenceGraphCallSource, compute_incoming_calls, compute_outgoing_calls, incoming_calls,
+    outgoing_calls, prepare_call_hierarchy, prepare_target,
+};
 pub use database::AnalysisDatabase;
 pub use database::{FileMap, SourceMap};
 pub use document_highlight::{
@@ -67,6 +76,10 @@ pub use semantic_tokens::{
     ClassifiedToken, LexedToken, ParseTreeTokenSource, TOKEN_TYPES, TokenLexSource,
     classify_tokens, encode_delta, semantic_tokens_full, semantic_tokens_range, token_legend,
     token_type_for,
+};
+pub use signature_help::{
+    CallSiteSource, CalledFunction, ReferenceGraphCallSiteSource, SignatureData, SignatureHelpPlan,
+    SignatureIndexSource, SignatureSource, compute_signature_help, signature_help,
 };
 pub use state::LspState;
 pub use symbol_index::{DefinitionLocation, SymbolIndex, SymbolInfo, SymbolKind, TypeSignature};
