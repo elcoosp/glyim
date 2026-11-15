@@ -1,7 +1,7 @@
 //! Database-backed tests for the type-definition request (LSP-TYPE-DEF).
 //!
-//! Mirrors `tier6_4_completion_tests.rs`: the real parser + def-map + HIR
-//! + typeck pipeline populates the database exactly like the analysis
+//! Mirrors `tier6_4_completion_tests.rs`: the real parser, def-map, HIR,
+//! and typeck pipeline populate the database exactly like the analysis
 //! driver does, and the public `type_definition` entry point is exercised
 //! end-to-end (cursor resolution → expression type → `Ty` peeling →
 //! symbol choice → wire location). This is also the regression pin for
@@ -102,8 +102,8 @@ fn params_at(path: &PathBuf, offset: usize) -> lsp_types::GotoDefinitionParams {
             text_document: lsp_types::TextDocumentIdentifier { uri: uri_for(path) },
             position: Position { line, character },
         },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
+        work_done_progress_params: lsp_types::WorkDoneProgressParams::default(),
+        partial_result_params: lsp_types::PartialResultParams::default(),
     }
 }
 
