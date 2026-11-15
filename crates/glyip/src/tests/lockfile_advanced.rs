@@ -1,5 +1,6 @@
 //! Advanced lockfile tests — edge cases.
 
+use crate::config::GlyipToml;
 use crate::lockfile::*;
 use std::collections::BTreeMap;
 
@@ -111,4 +112,29 @@ fn lockfile_multiple_crates_iteration_order() {
     // BTreeMap should give sorted order
     let names: Vec<String> = lf.crates().map(|c| c.name.clone()).collect();
     assert_eq!(names, vec!["aaa", "bbb", "ccc"]);
+}
+
+#[test]
+fn resolve_lockfile_errors_on_a_corrupt_lockfile() {
+    // The lockfile is the user's resolution record: a file that exists
+    // but cannot be parsed must surface as an error, never be silently
+    // discarded and re-resolved as if it had never existed (the caller
+    // used to `unwrap_or_default()` the read, which conflated "no
+    // lockfile yet" — fine — with "a lockfile that is garbage" — a
+    // corrupt resolution record silently replaced).
+    let dir = tempfile::TempDir::new().expect("temp dir");
+    std::fs::write(
+        dir.path().join("Glyip.toml"),
+        "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("write manifest");
+    std::fs::write(dir.path().join("Glyip.lock"), "this is not valid {{{}}")
+        .expect("write corrupt lockfile");
+    let config = GlyipToml::read_from_dir(dir.path()).expect("project config");
+
+    let result = crate::commands::resolve_lockfile(&config, dir.path());
+    assert!(
+        result.is_err(),
+        "a corrupt Glyip.lock is a hard error, not a silent re-resolve"
+    );
 }
