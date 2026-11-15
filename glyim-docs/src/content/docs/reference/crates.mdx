@@ -72,7 +72,7 @@ Glyim is organized as a Cargo workspace of small, single-responsibility crates. 
 |-------|-------------|
 | `glyim-pipeline` | End-to-end compilation driver: lex, parse, def-map, HIR, typeck, lower, borrowck, opt, codegen. |
 | `glyim-cli` | Command-line interface (`clap`) and linker driver. Built as `glyim-cli`. |
-| `glyim-lsp` | Language Server Protocol implementation: diagnostics, hover, completion, navigation, code actions. |
+| `glyim-lsp` | Language Server Protocol implementation: diagnostics, hover, completion, navigation (definition, type definition, declaration, references), call hierarchy, signature help, inlay hints, document highlight, selection ranges, semantic tokens, folding, formatting, rename with prepare, symbols, code actions. |
 | `glyim-test` | Testing framework: discovery, five test modes, snapshots, mocks, property testing. |
 | `glyip` | Package manager and build tool. |
 
