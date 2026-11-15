@@ -2,11 +2,6 @@ import { defineDocsConfig } from '@elcoosp/docs-toolkit/config';
 import headingBadges from 'starlight-heading-badges';
 
 export default await defineDocsConfig({
-  extraStarlight: {
-    components: {
-      MarkdownContent: './src/components/MarkdownContent.astro',
-    },
-  },
     llmsTxt: {},
   site: 'https://glyim.vercel.app',
   domain: 'glyim.vercel.app',
