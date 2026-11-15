@@ -21,7 +21,7 @@ pub async fn run_server(
     let db = Arc::new(AnalysisDatabase::new());
     let (tx, rx) = mpsc::channel(16);
     let (mainloop, client_socket) =
-        MainLoop::new_server(|peer_socket| build_router(db.clone(), tx.clone(), peer_socket));
+        MainLoop::new_server(|_peer_socket| build_router(db.clone(), tx.clone()));
     // T130-PATCHED [LSP-6]: also give the driver the sender so it can
     // enqueue re-analysis of dependent files after a change.
     //
