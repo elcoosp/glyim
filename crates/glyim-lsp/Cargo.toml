@@ -32,6 +32,18 @@ harness = false
 name = "inlay_hint"
 harness = false
 
+# Goto-declaration request bench (LSP-DECLARATION; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "goto_declaration"
+harness = false
+
+# Server-log bench (LSP-LOG-FILE; dependency-free, `harness = false`
+# like the other request benches).
+[[bench]]
+name = "server_log"
+harness = false
+
 # Type-definition request bench (LSP-TYPE-DEF; dependency-free,
 # `harness = false` like the other request benches).
 [[bench]]
@@ -74,6 +86,10 @@ tokio = { version = "1.54", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
 tracing = "0.1"
+# LSP-LOG-FILE: the --log-file seam installs a JSON-lines tracing
+# subscriber over a file writer; the workspace dep already carries the
+# `json` feature the format needs.
+tracing-subscriber = { workspace = true }
 dashmap = "6.2"
 parking_lot = "0.13"
 # LSP-SELECTION: the parse-tree walk needs rowan's TokenAtOffset/TextSize
@@ -89,6 +105,8 @@ lsp-types = "0.97.0"
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }
 glyim-test = { workspace = true }
+# LSP-LOG-FILE: the log-file tests write into throwaway directories.
+tempfile = { workspace = true }
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
