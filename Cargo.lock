@@ -1214,6 +1214,7 @@ dependencies = [
  "lsp-types",
  "notify",
  "parking_lot 0.13.0",
+ "rowan",
  "serde",
  "serde_json",
  "tokio",
