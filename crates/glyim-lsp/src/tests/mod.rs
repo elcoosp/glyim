@@ -33,6 +33,8 @@ mod common;
 mod driver_tests;
 mod goto_definition_tests;
 mod incremental;
+mod inlay_hint;
+mod inlay_hint_tests;
 mod reference_graph_tests;
 mod references_tests;
 mod rename;
