@@ -46,6 +46,7 @@ Use an absolute path to the binary. The server needs to find the compiler's comp
 - **Highlighting** — document highlight of the symbol under the cursor, selection ranges that expand token → statement → item → file, and semantic tokens so editors color declarations and members from the real parse tree.
 - **Hover and completion** — type information on hover and completion suggestions from the def-map.
 - **Signature help** — parameter hints while typing a call, with the active parameter computed from the cursor's position.
+- **Inlay hints** — inline type annotations on un-annotated `let` bindings, rendered from the type checker's inferred types (annotated bindings and types with no stable spelling are skipped).
 - **Formatting** — document formatting for consistent layout.
 - **Rename** — `prepareRename` validation followed by symbol renaming across the workspace.
 - **Code actions** — quick fixes, including:
