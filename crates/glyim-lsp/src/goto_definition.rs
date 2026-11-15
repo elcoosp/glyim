@@ -30,10 +30,12 @@ pub fn goto_definition(
     let def = &symbol.definition;
 
     let def_sm = source_maps.get(&def.file_id)?;
-    let (start_line, start_col) = def_sm
+    // Exact token extents (LSP-EXACT-EXTENTS): two-tuple mapping; the
+    // width-1 `col + 1` end underlined one character of any
+    // multi-character definition.
+    let ((start_line, start_col), (end_line, end_col)) = def_sm
         .span_to_position(def.span.lo.to_usize(), def.span.hi.to_usize())
-        .unwrap_or(((0, 0), (0, 0)))
-        .0;
+        .unwrap_or(((0, 0), (0, 0)));
     let target_path = file_map.path(def.file_id)?;
     let target_uri = Url::from_file_path(target_path).ok()?;
     Some(GotoDefinitionResponse::Scalar(Location {
@@ -44,8 +46,8 @@ pub fn goto_definition(
                 character: start_col as u32,
             },
             end: Position {
-                line: start_line as u32,
-                character: (start_col + 1) as u32,
+                line: end_line as u32,
+                character: end_col as u32,
             },
         },
     }))
