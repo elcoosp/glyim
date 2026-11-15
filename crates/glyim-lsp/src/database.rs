@@ -163,6 +163,14 @@ pub struct AnalysisDatabase {
     pub reference_graph: RwLock<ReferenceGraph>,
     /// `Struct`.
     pub hirs: RwLock<HashMap<FileId, glyim_hir::CrateHir>>,
+    /// Per-file parse trees, stored as the immutable `GreenNode` the
+    /// analysis driver built (rowan's `SyntaxNode` cursor carries raw
+    /// parent pointers and is not `Send`, but the green tree is plain
+    /// shared data — a request materializes its own cursor root with one
+    /// `Arc` clone). Populated next to `hirs` so syntax-tree-shaped
+    /// requests walk real token extents without re-parsing. The
+    /// selection-range engine (LSP-SELECTION) is the first consumer.
+    pub syntaxes: RwLock<HashMap<FileId, glyim_syntax::GreenNode>>,
     /// Per-file type-checking result + the `TyCtx` it was produced with.
     /// Populated by the analysis driver (Tier 6.4) so completions/hover can
     /// resolve the type of any expression via `expr_ty_at` /
@@ -196,6 +204,7 @@ impl AnalysisDatabase {
             symbol_index: RwLock::new(SymbolIndex::new()),
             reference_graph: RwLock::new(ReferenceGraph::new()),
             hirs: RwLock::new(HashMap::new()),
+            syntaxes: RwLock::new(HashMap::new()),
             typeck: RwLock::new(HashMap::new()),
             diagnostics: RwLock::new(HashMap::new()),
             raw_diagnostics: RwLock::new(HashMap::new()),
@@ -242,7 +251,13 @@ impl AnalysisDatabase {
                 if lo <= offset && offset <= hi {
                     let size = hi.saturating_sub(lo);
                     if receiver_best.is_none_or(|(b, _, _)| size < b) {
-                        let owner = hir.body_owners[body_id];
+                        // Translate the HIR BodyId through typeck's own
+                        // counter (TCK-SEAM): the HIR and typeck
+                        // LocalDefId counters are independent, so the raw
+                        // HIR owner would resolve the wrong body.
+                        let Some(owner) = result.body_owner(body_id) else {
+                            continue;
+                        };
                         receiver_best = Some((size, owner, recv_id));
                     }
                 }
@@ -266,7 +281,10 @@ impl AnalysisDatabase {
                 if contains || ends_before {
                     let size = hi.saturating_sub(lo);
                     if best.is_none_or(|(b, _, _)| size < b) {
-                        let owner = hir.body_owners[body_id];
+                        // Same TCK-SEAM translation as the receiver pass.
+                        let Some(owner) = result.body_owner(body_id) else {
+                            continue;
+                        };
                         best = Some((size, owner, expr_id));
                     }
                 }
