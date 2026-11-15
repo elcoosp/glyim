@@ -27,6 +27,8 @@ pub mod goto_definition;
 pub mod handler;
 /// hover.
 pub mod hover;
+/// `inlay_hint` (LSP-INLAY-HINT).
+pub mod inlay_hint;
 /// navigation.
 pub mod navigation;
 /// `prepare_rename` (LSP-PREPARE-RENAME).
@@ -67,6 +69,10 @@ pub use document_highlight::{
     document_highlights,
 };
 pub use goto_definition::goto_definition;
+pub use inlay_hint::{
+    BindingTypeSource, HirBindingTypeSource, UnannotatedBinding, compute_inlay_hints, inlay_hints,
+    render_type_label,
+};
 pub use prepare_rename::{prepare_rename, rename_target};
 pub use reference_graph::{Reference, ReferenceGraph, ReferenceKind};
 pub use selection_range::{
