@@ -24,7 +24,9 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "completion_provider",
         "hover_provider",
         "definition_provider",
+        "type_definition_provider",
         "document_highlight_provider",
+        "selection_range_provider",
         "references_provider",
         "document_formatting_provider",
         "rename_provider",
@@ -53,6 +55,28 @@ fn document_highlight_is_in_the_expected_set() {
     assert!(
         expected_advertised_providers().contains(&"document_highlight_provider"),
         "document_highlight_provider must be advertised"
+    );
+}
+
+#[test]
+fn selection_range_is_in_the_expected_set() {
+    // Regression pin (LSP-SELECTION): the `textDocument/selectionRange`
+    // capability must be advertised alongside its router registration; a
+    // future removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"selection_range_provider"),
+        "selection_range_provider must be advertised"
+    );
+}
+
+#[test]
+fn type_definition_is_in_the_expected_set() {
+    // Regression pin (LSP-TYPE-DEF): the `textDocument/typeDefinition`
+    // capability must be advertised alongside its router registration; a
+    // future removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"type_definition_provider"),
+        "type_definition_provider must be advertised"
     );
 }
 
