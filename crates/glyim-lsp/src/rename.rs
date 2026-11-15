@@ -15,8 +15,8 @@ use std::str::FromStr;
 /// Per Phase 8.2 (unstub-5) this is no longer the *primary* rename path — the
 /// reference graph is authoritative for ordinary expressions. It is retained
 /// as a production safety net for symbols the graph misses (e.g. variables
-/// used only inside a macro call, which `lower_expr` currently drops — tracked
-/// tests.
+/// used only inside a macro call, which `lower_expr` currently drops — the
+/// fallback/graph agreement is pinned by `rename_tests`).
 pub(crate) fn rename_text_fallback(
     sm: &SourceMap,
     file_id: FileId,
