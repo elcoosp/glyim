@@ -98,7 +98,7 @@ fn main() {
         let policy = t0.elapsed();
         println!(
             "policy compute : {:>9.1?}/call (1,000 calls, {hits} hits)",
-            t0.elapsed() / 1_000
+            policy / 1_000
         );
     };
 
