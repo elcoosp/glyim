@@ -1,9 +1,9 @@
 {
   "schema": "glyim.status/1",
-  "features": 225,
+  "features": 235,
   "records": 56,
   "summary": {
-    "L0": 212,
+    "L0": 222,
     "L1": 7,
     "L2": 6,
     "L3": 0,
@@ -1997,6 +1997,14 @@
       "unmeasured": []
     },
     {
+      "id": "TOOL-LSP-CALL-HIERARCHY",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
       "id": "TOOL-LSP-CODE-ACTIONS",
       "tier": "tooling",
       "target_level": "L4",
@@ -2006,6 +2014,14 @@
     },
     {
       "id": "TOOL-LSP-COMPLETION",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-DECLARATION",
       "tier": "tooling",
       "target_level": "L4",
       "computed_level": "L0",
@@ -2045,6 +2061,22 @@
       "unmeasured": []
     },
     {
+      "id": "TOOL-LSP-GOTO-TYPE-DEF",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-HIGHLIGHT",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
       "id": "TOOL-LSP-HOVER",
       "tier": "tooling",
       "target_level": "L4",
@@ -2053,7 +2085,55 @@
       "unmeasured": []
     },
     {
+      "id": "TOOL-LSP-INLAY-HINT",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-LOG-FILE",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-REFERENCES",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
       "id": "TOOL-LSP-RENAME",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-SELECTION",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-SEMANTIC-TOKENS",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-SIGNATURE-HELP",
       "tier": "tooling",
       "target_level": "L4",
       "computed_level": "L0",
