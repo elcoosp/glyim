@@ -270,6 +270,10 @@ fn main() {
         const_values: std::collections::HashMap::new(),
         expr_types,
         unresolved_ty_var_spans: std::collections::HashMap::new(),
+        // TCK-SEAM: the single synthetic body is HIR BodyId 0 and its
+        // typeck-side owner is `main_owner`; `type_at_offset` translates
+        // through this map since the counters are independent.
+        body_owners: HashMap::from([(glyim_hir::BodyId::from_raw(0), main_owner)]),
     };
     db.typeck
         .write()
@@ -452,6 +456,10 @@ fn main() {
         const_values: std::collections::HashMap::new(),
         expr_types,
         unresolved_ty_var_spans: std::collections::HashMap::new(),
+        // TCK-SEAM: the single synthetic body is HIR BodyId 0 and its
+        // typeck-side owner is `main_owner`; `type_at_offset` translates
+        // through this map since the counters are independent.
+        body_owners: HashMap::from([(glyim_hir::BodyId::from_raw(0), main_owner)]),
     };
     db.typeck
         .write()
