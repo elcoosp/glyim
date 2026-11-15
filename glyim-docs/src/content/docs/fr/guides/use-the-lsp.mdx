@@ -40,8 +40,8 @@ Utilisez un chemin absolu vers le binaire. Le serveur doit trouver les composant
 
 `glyim-lsp` implémente :
 
-- **Diagnostics** — erreurs et avertissements du compilateur poussés pendant que vous tapez, pilotés par le même pipeline que la CLI.
-- **Navigation** — goto definition, goto type definition, find references, symboles d'espace de travail, symboles de document, et plages de pliage de document.
+- **Diagnostics** — erreurs et avertissements du compilateur poussés pendant que vous tapez (`publishDiagnostics`), et le même ensemble disponible à la demande (`textDocument/diagnostic`), pilotés par le même pipeline que la CLI. Un fichier analysé sans problème répond avec un rapport complet vide ; un fichier jamais analysé répond null.
+- **Navigation** — goto definition, goto type definition, goto declaration, goto implementation (les blocs `impl` derrière un trait ou un type, sur tous les fichiers analysés), find references, symboles d'espace de travail, symboles de document, et plages de pliage de document.
 - **Hiérarchie d'appels** — préparez la fonction sous le curseur (site de définition ou appel) et parcourez ses appelants entrants ou ses appelés sortants, servis depuis le même graphe de références que le renommage.
 - **Surlignage** — document highlight du symbole sous le curseur, plages de sélection qui s'étendent du jeton à l'élément, et jetons sémantiques pour colorer déclarations et membres depuis le vrai arbre syntaxique.
 - **Hover et complétion** — informations de type au survol et suggestions de complétion depuis le def-map.
