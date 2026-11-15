@@ -194,3 +194,23 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-IMPLEMENTATION"
+title         = "goto implementation: the impl blocks behind a trait or type, across the session's files"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-PULL-DIAG"
+title         = "pull diagnostics: textDocument/diagnostic answers the recorded set on demand"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
