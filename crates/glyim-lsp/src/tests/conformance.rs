@@ -24,6 +24,7 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "completion_provider",
         "hover_provider",
         "definition_provider",
+        "document_highlight_provider",
         "references_provider",
         "document_formatting_provider",
         "rename_provider",
@@ -41,6 +42,32 @@ fn workspace_symbol_is_in_the_expected_set() {
     assert!(
         expected_advertised_providers().contains(&"workspace_symbol_provider"),
         "workspace_symbol_provider must be advertised"
+    );
+}
+
+#[test]
+fn document_highlight_is_in_the_expected_set() {
+    // Regression pin (LSP-HIGHLIGHT): the `textDocument/documentHighlight`
+    // capability must be advertised alongside its router registration; a
+    // future removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"document_highlight_provider"),
+        "document_highlight_provider must be advertised"
+    );
+}
+
+#[test]
+fn rename_provider_advertises_prepare() {
+    // Regression pin (LSP-PREPARE-RENAME): `rename_provider` moved from the
+    // plain-boolean form to `OneOf::Right(RenameProviderCapability::Options)`
+    // with `prepare_provider: Some(true)`. It stays in the expected set
+    // above; this pin documents that the options form is required, so a
+    // revert to `OneOf::Left(true)` (which silently drops prepare-rename)
+    // is caught by the compile in `handler::build_router`'s capability
+    // literal and by this doc anchor.
+    assert!(
+        expected_advertised_providers().contains(&"rename_provider"),
+        "rename_provider must remain advertised (now with prepareProvider)"
     );
 }
 
