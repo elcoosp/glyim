@@ -254,3 +254,23 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-CODE-LENS"
+title         = "code lenses: textDocument/codeLens enumerates item-level definitions and codeLens/resolve attaches the live reference count"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-ON-TYPE-FORMAT"
+title         = "on-type formatting: textDocument/onTypeFormatting dedents a just-typed closing bracket to its matching opener's indentation"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
