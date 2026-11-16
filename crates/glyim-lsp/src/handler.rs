@@ -1,6 +1,7 @@
 use crate::AnalysisDatabase;
 use crate::call_hierarchy::{incoming_calls, outgoing_calls, prepare_call_hierarchy};
 use crate::code_action::provide_code_actions;
+use crate::code_lens::{code_lenses, resolve_code_lens};
 use crate::completion::provide_completions;
 use crate::document_highlight::document_highlights;
 use crate::document_link::document_links;
@@ -14,6 +15,7 @@ use crate::implementation::goto_implementation;
 use crate::inlay_hint::inlay_hints;
 use crate::linked_editing::linked_editing_ranges;
 use crate::navigation::{document_symbols, find_references, workspace_symbols};
+use crate::on_type_formatting::on_type_formatting;
 use crate::prepare_rename::prepare_rename;
 use crate::pull_diagnostics::pull_diagnostics;
 use crate::rename::rename_symbol;
@@ -29,12 +31,13 @@ use std::ops::ControlFlow;
 use lsp_types::notification::{DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument};
 use lsp_types::request::{
     CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare,
-    CodeActionRequest, Completion, DocumentDiagnosticRequest, DocumentHighlightRequest,
-    DocumentLinkRequest, DocumentSymbolRequest, FoldingRangeRequest, Formatting, GotoDeclaration,
-    GotoDefinition, GotoImplementation, GotoImplementationParams, GotoTypeDefinition, HoverRequest,
-    Initialize, InlayHintRequest, LinkedEditingRange, PrepareRenameRequest, References, Rename,
-    SelectionRangeRequest, SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown,
-    SignatureHelpRequest, WorkspaceDiagnosticRequest, WorkspaceSymbolRequest,
+    CodeActionRequest, CodeLensRequest, CodeLensResolve, Completion, DocumentDiagnosticRequest,
+    DocumentHighlightRequest, DocumentLinkRequest, DocumentSymbolRequest, FoldingRangeRequest,
+    Formatting, GotoDeclaration, GotoDefinition, GotoImplementation, GotoImplementationParams,
+    GotoTypeDefinition, HoverRequest, Initialize, InlayHintRequest, LinkedEditingRange,
+    OnTypeFormatting, PrepareRenameRequest, References, Rename, SelectionRangeRequest,
+    SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest,
+    WorkspaceDiagnosticRequest, WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -206,6 +209,30 @@ pub fn build_router(
                 linked_editing_range_provider: Some(LinkedEditingRangeServerCapabilities::Simple(
                     true,
                 )),
+                // LSP-CODE-LENS: the code-lens capability. The two handlers
+                // below read the same shared reference graph
+                // find-references/rename read (item-level definitions,
+                // name-keyed use counts), so no re-analysis happens on the
+                // request path; the resolve re-derives its count at resolve
+                // time. The conformance test pins this advertisement to the
+                // router registration.
+                code_lens_provider: Some(CodeLensOptions {
+                    resolve_provider: Some(true),
+                }),
+                // LSP-ON-TYPE-FORMAT: the on-type-formatting capability.
+                // The handler below walks the driver's stored parse trees
+                // (the same immutable green store document-link and
+                // selection-range read) for the matching opener of a
+                // just-typed closing bracket, so no re-analysis happens
+                // on the request path and the fix answers on broken code
+                // too. `}` is the first trigger; `)` and `]` join it —
+                // the three closing brackets the policy can pair. The
+                // conformance test pins this advertisement to the router
+                // registration.
+                document_on_type_formatting_provider: Some(DocumentOnTypeFormattingOptions {
+                    first_trigger_character: "}".to_string(),
+                    more_trigger_character: Some(vec![")".to_string(), "]".to_string()]),
+                }),
                 ..ServerCapabilities::default()
             };
             Ok(InitializeResult {
@@ -489,6 +516,20 @@ pub fn build_router(
         }
     });
 
+    // On-Type Formatting (LSP-ON-TYPE-FORMAT): a just-typed closing
+    // bracket gets one whitespace-run edit placing its line at the
+    // matching opener's indentation. The walk reads the stored parse
+    // trees (no re-analysis); unbalanced shapes, family mismatches,
+    // openers and already-correct indents answer `null` — never a guess.
+    let db_on_type = db.clone();
+    router.request::<OnTypeFormatting, _>(move |(), params: DocumentOnTypeFormattingParams| {
+        let db = db_on_type.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(on_type_formatting(&db, &guard, &params))
+        }
+    });
+
     // Rename
     let db_rename = db.clone();
     router.request::<Rename, _>(move |(), params: RenameParams| {
@@ -527,16 +568,53 @@ pub fn build_router(
         }
     });
 
+    // Code Lenses (LSP-CODE-LENS): one lens per item-level definition of
+    // the open document, over the same shared reference graph
+    // find-references and rename read. The response carries no commands —
+    // the editor resolves each lens it is about to render; a document
+    // that is not open or has no item-level definitions answers `null`.
+    let db_lens = db.clone();
+    router.request::<CodeLensRequest, _>(move |(), params: CodeLensParams| {
+        let db = db_lens.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(code_lenses(&db, &guard, &params))
+        }
+    });
+
+    // Code Lens Resolve (LSP-CODE-LENS): the echoed lens is re-joined
+    // against the reference graph by definition extent (the call-hierarchy
+    // join) and the live use count is rendered into the command title — a
+    // stale or fabricated echo is a JSON-RPC error (the result type is a
+    // plain `CodeLens`, not an optional one, so `null` is not a legal
+    // answer on the wire), never a guessed count.
+    let db_lens_resolve = db.clone();
+    router.request::<CodeLensResolve, _>(move |(), params: CodeLens| {
+        let db = db_lens_resolve.clone();
+        async move {
+            let guard = db.file_map.read();
+            match resolve_code_lens(&db, &guard, &params) {
+                Some(lens) => Ok(lens),
+                None => Err(ResponseError::new(
+                    async_lsp::ErrorCode::INVALID_PARAMS,
+                    "codeLens/resolve: the echoed lens matches no live item-level definition",
+                )),
+            }
+        }
+    });
+
     // Workspace Symbols (LSP-CONFORMANCE: was dead — advertised nothing,
     // routed nothing; the function and its tests existed but no client could
-    // reach it).
+    // reach it). `workspace_symbols` answers `None` only for a session that
+    // never indexed a workspace; the flat empty list is the honest
+    // answerable-empty here (the workspace-diagnostics convention), not a
+    // swallowed error — the symbol walk has no error case to hide.
     let db_ws = db.clone();
     router.request::<WorkspaceSymbolRequest, _>(move |(), params: WorkspaceSymbolParams| {
         let db = db_ws.clone();
         async move {
-            Ok(Some(WorkspaceSymbolResponse::Flat(
-                workspace_symbols(&db, &params).unwrap_or_default(),
-            )))
+            let symbols = workspace_symbols(&db, &params).unwrap_or_default();
+            Ok(Some(WorkspaceSymbolResponse::Flat(symbols)))
         }
     });
 
