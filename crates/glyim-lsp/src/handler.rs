@@ -19,6 +19,7 @@ use crate::selection_range::selection_ranges;
 use crate::semantic_tokens::{semantic_tokens_full, semantic_tokens_range, token_legend};
 use crate::signature_help::signature_help;
 use crate::type_definition::type_definition;
+use crate::workspace_diagnostics::workspace_diagnostics;
 use async_lsp::ResponseError;
 use async_lsp::router::Router;
 use std::ops::ControlFlow;
@@ -31,7 +32,7 @@ use lsp_types::request::{
     GotoImplementation, GotoImplementationParams, GotoTypeDefinition, HoverRequest, Initialize,
     InlayHintRequest, PrepareRenameRequest, References, Rename, SelectionRangeRequest,
     SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest,
-    WorkspaceSymbolRequest,
+    WorkspaceDiagnosticRequest, WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -146,15 +147,19 @@ pub fn build_router(
                 // path (`publishDiagnostics`) publishes, so a client
                 // mixing both paths sees identical coordinates. The
                 // language has inter-file dependencies (the driver
-                // re-analyses dependents), but no
-                // `workspace/diagnostic` route exists — the capability
-                // says so honestly. The conformance test pins this
-                // advertisement to the router registration.
+                // re-analyses dependents).
+                // LSP-WORKSPACE-DIAG: `workspace_diagnostics` moved to
+                // `true` alongside the `workspace/diagnostic` route
+                // below — the workspace pull composes the same recorded
+                // sets into one answer per analysed file, so the
+                // capability now advertises a route that exists. The
+                // conformance test pins this advertisement to the
+                // router registration.
                 diagnostic_provider: Some(DiagnosticServerCapabilities::Options(
                     DiagnosticOptions {
                         identifier: None,
                         inter_file_dependencies: true,
-                        workspace_diagnostics: false,
+                        workspace_diagnostics: true,
                         work_done_progress_options: WorkDoneProgressOptions::default(),
                     },
                 )),
@@ -280,6 +285,24 @@ pub fn build_router(
             }
         }
     });
+
+    // Workspace Diagnostics (LSP-WORKSPACE-DIAG): one full report per
+    // analysed file, composed from the same recorded sets the push path
+    // publishes and the per-file pull answers. The pull is always
+    // answerable — an empty session answers an empty `items` array, and
+    // the params' echoed `previous_result_ids` are deliberately ignored
+    // (this server never issues result ids) — so unlike the per-file
+    // pull there is no JSON-RPC error case here.
+    let db_ws_diag = db.clone();
+    router.request::<WorkspaceDiagnosticRequest, _>(
+        move |(), params: WorkspaceDiagnosticParams| {
+            let db = db_ws_diag.clone();
+            async move {
+                let guard = db.file_map.read();
+                Ok(workspace_diagnostics(&db, &guard, &params))
+            }
+        },
+    );
 
     // Find References
     let db_ref = db.clone();
