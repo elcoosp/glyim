@@ -21,6 +21,7 @@ use crate::navigation::{document_symbols, find_references, workspace_symbols};
 use crate::on_type_formatting::on_type_formatting;
 use crate::prepare_rename::prepare_rename;
 use crate::pull_diagnostics::pull_diagnostics;
+use crate::range_formatting::range_formatting;
 use crate::rename::rename_symbol;
 use crate::selection_range::selection_ranges;
 use crate::semantic_tokens::{semantic_tokens_full, semantic_tokens_range, token_legend};
@@ -40,7 +41,7 @@ use lsp_types::request::{
     FoldingRangeRequest, Formatting, GotoDeclaration, GotoDefinition, GotoImplementation,
     GotoImplementationParams, GotoTypeDefinition, HoverRequest, Initialize, InlayHintRequest,
     InlineValueRequest, LinkedEditingRange, MonikerRequest, OnTypeFormatting, PrepareRenameRequest,
-    References, Rename, SelectionRangeRequest, SemanticTokensFullRequest,
+    RangeFormatting, References, Rename, SelectionRangeRequest, SemanticTokensFullRequest,
     SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest, TypeHierarchyPrepare,
     TypeHierarchySubtypes, TypeHierarchySupertypes, WorkspaceDiagnosticRequest,
     WorkspaceSymbolRequest,
@@ -201,6 +202,14 @@ pub fn build_router(
                 )),
                 references_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
+                // LSP-RANGE-FORMAT: the range-formatting capability. The
+                // handler below feeds the claimed line span through the
+                // same `format_source` core the full-document request
+                // reads (one formatter, two wire shapes), seeded with the
+                // brace balance of the unselected prefix so the edit
+                // composes with the surrounding file. The conformance test
+                // pins this advertisement to the router registration.
+                document_range_formatting_provider: Some(OneOf::Left(true)),
                 // LSP-PREPARE-RENAME: switch the plain-boolean rename
                 // capability to options advertising `prepareProvider`, so
                 // clients consult `textDocument/prepareRename` before
@@ -627,6 +636,20 @@ pub fn build_router(
             // own read lock for the lookup it performs; a second one held
             // across the whole request would be a dead lock acquisition.
             Ok(format_document(&db, &params))
+        }
+    });
+
+    // Range Formatting (LSP-RANGE-FORMAT): the claimed line span of the
+    // selection re-indents through the same shared formatter core the
+    // full-document request reads, seeded with the unselected prefix's
+    // brace balance. Already-formatted selections answer `null` — never
+    // an edit with no effect.
+    let db_range_fmt = db.clone();
+    router.request::<RangeFormatting, _>(move |(), params: DocumentRangeFormattingParams| {
+        let db = db_range_fmt.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(range_formatting(&db, &guard, &params))
         }
     });
 
