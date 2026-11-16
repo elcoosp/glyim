@@ -8,6 +8,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **LSP document links (`textDocument/documentLink`)**: the string
+  literals of the file-taking builtin macros (`include!`, `include_str!`,
+  `include_bytes!`) become clickable file links, resolved against the
+  containing document's directory (absolute literals as-is). Non-file
+  macros and non-literal arguments answer no link; the capability walks
+  the stored parse trees, so it works on broken code.
+- **LSP linked editing ranges (`textDocument/linkedEditingRange`)**:
+  same-scope occurrences of the cursor's symbol answer as one edit group
+  for multi-cursor editing, composing the document-highlight occurrence
+  seam (the reference graph's T129 scope-owner filter included).
+
+### Fixed
+- Site getting-started tutorial (en/fr) now states the real MSRV (1.95,
+  matching `Cargo.toml` and the CI `msrv` job) instead of the stale
+  1.94/1.85 pair.
+- README + site language reference (en/fr) now list every registered
+  builtin macro (`format!`, `vec!`, `matches!`, the `assert!` family,
+  `write!`/`writeln!`) and note the stdlib's declarative
+  `println!`/`print!`/`eprintln!`/`eprint!`/`panic!`.
+- Site crate reference (en/fr) now covers the `tools/` harnesses
+  (glyim-ledger, glyim-bench, glyim-metrics, glyim-pilot, ledger-schema).
+- `glyim-lsp` no longer silently swallows rejected analysis sends and
+  publish-diagnostics notifications: both surface a `tracing::warn`
+  naming the affected file.
+
+## [0.10.0] - 2026-11-12
+
+### Added
 - **`inventory ignore` / `inventory unignore` (`glyim-ledger inventory
   ignore [ROOT] --item <KEY> --reason <TEXT> [--format text|json]` /
   `glyim-ledger inventory unignore [ROOT] --item <KEY>
