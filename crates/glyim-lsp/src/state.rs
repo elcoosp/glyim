@@ -1,5 +1,6 @@
 use crate::database::AnalysisDatabase;
 use crate::driver::AnalysisMessage;
+use crate::driver::warn_dropped_send;
 use glyim_db::Database;
 use glyim_diag::GlyimDiagnostic;
 use glyim_span::FileId;
@@ -50,11 +51,13 @@ impl LspState {
             .add_file_content(&path, Arc::from(content.clone()));
         self.open_files.insert(path.clone(), (file_id, version));
         if let Some(tx) = &self.driver_tx {
-            let _ = tx.try_send(AnalysisMessage::FileChanged {
+            if let Err(err) = tx.try_send(AnalysisMessage::FileChanged {
                 path,
                 content,
                 version,
-            });
+            }) {
+                warn_dropped_send(err);
+            }
         }
     }
 
@@ -66,11 +69,13 @@ impl LspState {
                 .set_file_content(file_id, Arc::from(content.clone()));
             self.open_files.insert(path.clone(), (file_id, version));
             if let Some(tx) = &self.driver_tx {
-                let _ = tx.try_send(AnalysisMessage::FileChanged {
+                if let Err(err) = tx.try_send(AnalysisMessage::FileChanged {
                     path,
                     content,
                     version,
-                });
+                }) {
+                    warn_dropped_send(err);
+                }
             }
         } else {
             tracing::warn!("did_change for unopened file: {:?}", path);
@@ -80,7 +85,9 @@ impl LspState {
     /// `did_close`.
     pub fn did_close(&mut self, path: &PathBuf) {
         if let Some(tx) = &self.driver_tx {
-            let _ = tx.try_send(AnalysisMessage::FileClosed { path: path.clone() });
+            if let Err(err) = tx.try_send(AnalysisMessage::FileClosed { path: path.clone() }) {
+                warn_dropped_send(err);
+            }
         }
         self.open_files.remove(path);
     }
