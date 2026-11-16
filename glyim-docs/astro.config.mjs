@@ -1,5 +1,4 @@
 import { defineDocsConfig } from '@elcoosp/docs-toolkit/config';
-import headingBadges from 'starlight-heading-badges';
 
 export default await defineDocsConfig({
     llmsTxt: {},
@@ -15,7 +14,7 @@ export default await defineDocsConfig({
     baseUrl: 'https://github.com/elcoosp/glyim/edit/main/glyim-docs/src/content/docs/',
   },
   locales: { root: { label: 'English', lang: 'en' }, fr: { label: 'Français', lang: 'fr' } },
-    plugins: [ headingBadges()],
+    plugins: [],
   sidebar: [
     { label: 'Overview', link: '/' },
     { label: 'Tutorials', items: [{ autogenerate: { directory: 'tutorials' } }] },
