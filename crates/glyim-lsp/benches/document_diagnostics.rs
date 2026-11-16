@@ -1,12 +1,14 @@
-//! Pull-diagnostics bench (LSP-PULL-DIAG).
+//! Pull-diagnostics bench (LSP-PULL-DIAG + LSP-RELATED-DIAG).
 //!
 //! Dependency-free (`harness = false`), mirroring the `server_log` and
 //! `type_definition` benches: measures the pull-diagnostics request path
 //! end-to-end over a synthetic corpus — the report policy (set assembly
-//! through the `DiagnosticSource` seam) and the full wire request (URI →
-//! open-file lookup → recorded set → full report) — so CI logs can track
-//! the per-request cost as the recorded-diagnostics store grows
-//! consumers. Run with:
+//! through the `DiagnosticSource` seam), the full wire request (URI →
+//! open-file lookup → recorded set → full report), and the
+//! related-documents fan-out (the same wire request with a dependency
+//! graph edge attached, so the answer carries the dependent's related
+//! report) — so CI logs can track the per-request cost as the
+//! recorded-diagnostics store grows consumers. Run with:
 //!
 //! ```text
 //! cargo bench -p glyim-lsp --bench document_diagnostics
@@ -24,6 +26,12 @@ use url::Url;
 
 /// One unit with a recorded problem, so the report carries real payload.
 const UNITS: usize = 64;
+
+/// One clean dependent, so the related fan-out composes a related report.
+const DEPENDENT_SOURCE: &str = "fn main() -> i32 {
+    42
+}
+";
 
 fn main() {
     // Build the corpus: one document whose recorded set carries `UNITS`
@@ -58,6 +66,21 @@ fn main() {
         })
         .collect();
     db.diagnostics.write().insert(file_id, recorded);
+
+    // The dependent for the related-documents phase: one clean file that
+    // (like the driver's `extract_dependencies` records) depends on the
+    // pulled file, so pulling the pulled file fans out to it.
+    let dependent_path = PathBuf::from("/bench/pull_dependent.g");
+    let dependent_id = db.file_map.write().get_or_create(&dependent_path);
+    let dependent_caller_id = file_map.get_or_create(&dependent_path);
+    assert_eq!(dependent_id, dependent_caller_id, "file ids must agree");
+    db.source_maps.write().insert(
+        dependent_id,
+        SourceMap::new(dependent_id, DEPENDENT_SOURCE.to_string()),
+    );
+    db.dep_graph
+        .write()
+        .add_dep(dependent_path.clone(), path.clone());
 
     // Policy bench: the report assembly over the recorded set through the
     // seam, no database locks — the unit the policy tests pin. The guard
@@ -110,5 +133,28 @@ fn main() {
         wire / 1_000
     );
 
+    // Related-fan-out bench: the same request with a dependency-graph
+    // edge in place — the answer carries the dependent's related report,
+    // so the delta against the plain wire request is the fan-out cost
+    // (affected-set walk + per-dependent report composition).
+    let t2 = Instant::now();
+    let mut fanout_hits = 0usize;
+    for _ in 0..1_000 {
+        let response = pull_diagnostics(&db, &file_map, &params).expect("request hits the file");
+        if let lsp_types::DocumentDiagnosticReportResult::Report(
+            lsp_types::DocumentDiagnosticReport::Full(full),
+        ) = &response
+        {
+            fanout_hits += full.related_documents.as_ref().map_or(0, |m| m.len());
+        }
+        black_box(&response);
+    }
+    let fanout = t2.elapsed();
+    println!(
+        "wire + related : {:>9.1?}/call (1,000 calls, {fanout_hits} related reports total)",
+        fanout / 1_000
+    );
+
     black_box(wire_hits);
+    black_box(fanout_hits);
 }
