@@ -40,7 +40,7 @@ Use an absolute path to the binary. The server needs to find the compiler's comp
 
 `glyim-lsp` implements:
 
-- **Diagnostics** — compiler errors and warnings pushed as you type (`publishDiagnostics`), and the same set pulled on demand (`textDocument/diagnostic`), driven by the same pipeline the CLI uses. A clean analysed file answers an empty full report; a file the server never analysed answers null.
+- **Diagnostics** — compiler errors and warnings pushed as you type (`publishDiagnostics`), the same set pulled per file on demand (`textDocument/diagnostic`), and the whole session pulled per workspace on demand (`workspace/diagnostic`), all driven by the same pipeline the CLI uses. A per-file pull for a file others import carries `relatedDocuments`: one report per transitive dependent, the files the driver re-analyses when the pulled file changes. A clean analysed file answers an empty full report; a file the server never analysed answers null; the workspace pull is always answerable and reports every analysed file in ascending file id.
 - **Navigation** — goto definition, goto type definition, goto declaration, goto implementation (the `impl` blocks behind a trait or a type, across every analysed file), find references, workspace symbols, document symbols, and document folding ranges.
 - **Call hierarchy** — prepare a function under the cursor (definition site or a call to it) and walk its incoming callers or outgoing callees, served from the same reference graph rename uses.
 - **Highlighting** — document highlight of the symbol under the cursor, selection ranges that expand token → statement → item → file, and semantic tokens so editors color declarations and members from the real parse tree.
