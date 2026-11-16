@@ -1,9 +1,9 @@
 {
   "schema": "glyim.status/1",
-  "features": 239,
+  "features": 241,
   "records": 56,
   "summary": {
-    "L0": 226,
+    "L0": 228,
     "L1": 7,
     "L2": 6,
     "L3": 0,
@@ -2037,6 +2037,14 @@
       "unmeasured": []
     },
     {
+      "id": "TOOL-LSP-DOC-LINK",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
       "id": "TOOL-LSP-FOLDING",
       "tier": "tooling",
       "target_level": "L4",
@@ -2094,6 +2102,14 @@
     },
     {
       "id": "TOOL-LSP-INLAY-HINT",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-LINKED-EDIT",
       "tier": "tooling",
       "target_level": "L4",
       "computed_level": "L0",
