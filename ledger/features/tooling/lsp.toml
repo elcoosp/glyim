@@ -314,3 +314,13 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-RANGE-FORMAT"
+title         = "range formatting: textDocument/rangeFormatting re-indents the whole lines a selection claims at the depth the unselected prefix leaves, through the same formatter core the full-document request reads"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
