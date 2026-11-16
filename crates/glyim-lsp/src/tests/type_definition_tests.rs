@@ -126,21 +126,7 @@ fn expect_point_location(response: GotoDefinitionResponse) {
 
 #[test]
 fn type_definition_jumps_from_a_value_to_its_struct() {
-    let (db, file_map, path, file_id) = populated_db();
-    {
-        let ty = db.type_at_offset(file_id, P_FIELD_READ);
-        eprintln!("DEBUG ty: {}", ty.is_some());
-        if let Some(ty) = ty {
-            let ctx = db.ty_ctx(file_id).unwrap();
-            eprintln!(
-                "DEBUG named: {:?}",
-                crate::type_definition::named_type_of(&ctx, ty)
-            );
-        }
-        let typeck = db.typeck.read();
-        let (_, result) = typeck.get(&file_id).unwrap();
-        eprintln!("DEBUG body_owners entries: {}", result.body_owners.len());
-    }
+    let (db, file_map, path, _file_id) = populated_db();
     let params = params_at(&path, P_FIELD_READ);
 
     let response = type_definition(&db, &file_map, &params).expect("p carries the Point shape");
