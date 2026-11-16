@@ -214,3 +214,23 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-WORKSPACE-DIAG"
+title         = "workspace diagnostics: workspace/diagnostic answers one recorded set per analysed file"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-RELATED-DIAG"
+title         = "related diagnostics: textDocument/diagnostic fans out reports over the dependency graph"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
