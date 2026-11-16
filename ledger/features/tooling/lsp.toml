@@ -274,3 +274,23 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-TYPE-HIERARCHY"
+title         = "type hierarchy: textDocument/prepareTypeHierarchy prepares the recorded trait/struct/enum item and typeHierarchy/supertypes|subtypes walk the recorded impl facts"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-EXEC-CMD"
+title         = "execute command: workspace/executeCommand executes the code-lens resolve's glyim.showReferences command into the reference locations its title promised"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
