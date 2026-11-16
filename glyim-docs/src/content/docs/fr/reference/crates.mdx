@@ -72,9 +72,23 @@ Glyim est organisé comme un espace de travail Cargo de petites crates à respon
 |-------|-------------|
 | `glyim-pipeline` | Pilote de compilation de bout en bout : lex, parse, def-map, HIR, typeck, lower, borrowck, opt, codegen. |
 | `glyim-cli` | Interface de ligne de commande (`clap`) et pilote d'éditeur de liens. Compilé comme `glyim-cli`. |
-| `glyim-lsp` | Implémentation du Language Server Protocol : diagnostics (push, pull par fichier avec documents liés et pull par espace de travail), hover, complétion, navigation (définition, définition de type, déclaration, implémentation, références), hiérarchie d'appels, aide de signature, indices d'inlay, surbrillance de document, plages de sélection, jetons sémantiques, pliage, formatage, renommage avec préparation, symboles, actions de code. |
+| `glyim-lsp` | Implémentation du Language Server Protocol : diagnostics (push, pull par fichier avec documents liés et pull par espace de travail), hover, complétion, navigation (définition, définition de type, déclaration, implémentation, références), hiérarchie d'appels, aide de signature, indices d'inlay, surbrillance de document, plages de sélection, jetons sémantiques, pliage, formatage, renommage avec préparation, symboles, actions de code, liens de document pour les littéraux des macros d'inclusion, plages d'édition liée. |
 | `glyim-test` | Framework de test : découverte, cinq modes de test, instantanés, mocks, tests de propriétés. |
 | `glyip` | Gestionnaire de paquets et outil de build. |
+
+## Outils du dépôt
+
+Le répertoire `tools/` héberge les harnais d'ingénierie propres à l'espace
+de travail — le ledger de préparation et la chaîne de mesure que les jobs
+de CI exécutent :
+
+| Outil | Description |
+|-------|-------------|
+| `glyim-ledger` | CLI du Readiness Ledger : registres de features/gaps, magasin d'evidence, niveaux de préparation, portes de release, rendu de STATUS/KNOWN_GAPS et leurs vérifications de dérive. |
+| `glyim-bench` | Harnais de mesure : rapports de compile/bench, moteurs diff, scaling, matrix, budget, history et trend. |
+| `glyim-metrics` | Métriques de santé du dépôt (lignes de code, nombre de tests, couverture de doc, nombre d'allows inline) vérifiées contre `metrics/baseline.json`. |
+| `glyim-pilot` | Orchestrateur d'agents de codage multi-fournisseurs (waves/streams, portes de commit). |
+| `ledger-schema` | Schéma TOML strict des registres : chargement, validation, export JSON-Schema. |
 
 ## Source de la bibliothèque standard
 
