@@ -2,11 +2,11 @@
 
 # Readiness status
 
-Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **247** features over **56** evidence record(s) (0 error(s), 3 warning(s)).
+Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **248** features over **56** evidence record(s) (0 error(s), 3 warning(s)).
 
 | Level | Features |
 |---|---|
-| L0 | 234 |
+| L0 | 235 |
 | L1 | 7 |
 | L2 | 6 |
 | L3 | 0 |
@@ -242,6 +242,7 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `TOOL-LSP-MONIKER` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-ON-TYPE-FORMAT` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-PULL-DIAG` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-RANGE-FORMAT` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-REFERENCES` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-RELATED-DIAG` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-RENAME` | tooling | L4 | L0 | - | - |
