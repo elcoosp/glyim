@@ -28,7 +28,7 @@ Les modes sont délibérément grossiers : un fichier de test énonce *ce qui* d
 
 Un test `compile-fail` épingle les diagnostics à côté du code qui les produit :
 
-<Code lang="rust" code={`fn main() {
+<Code lang="rust" title="src/main.rs" code={`fn main() {
     let x: i32 = "hello";
     //~^ ERROR mismatched types
     //~| expected i32, found str

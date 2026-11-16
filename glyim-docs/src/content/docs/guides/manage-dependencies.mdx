@@ -14,12 +14,12 @@ This guide shows how to declare dependencies in `Glyip.toml`, how `glyip` resolv
 
 `glyip` accepts two dependency syntaxes. Use a bare string for a registry requirement:
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Glyip.toml" code={`[dependencies]
 serde = "1.0"`} />
 
 Use a table for path, git, or mixed requirements:
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Glyip.toml" code={`[dependencies]
 local_util = { path = "../local_util" }
 my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }`} />
 
@@ -27,7 +27,7 @@ A git dependency pins exactly one ref: `branch`, `tag`, or an exact `rev` hash. 
 
 Development-only dependencies go into `[dev-dependencies]` and use the same syntax:
 
-<Code lang="toml" code={`[dev-dependencies]
+<Code lang="toml" title="Cargo.toml" code={`[dev-dependencies]
 test_helpers = { path = "../test_helpers" }`} />
 
 <Aside type="tip">

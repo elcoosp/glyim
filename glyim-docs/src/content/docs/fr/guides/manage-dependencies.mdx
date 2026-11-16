@@ -14,12 +14,12 @@ Ce guide montre comment déclarer des dépendances dans `Glyip.toml`, comment `g
 
 `glyip` accepte deux syntaxes de dépendance. Utilisez une chaîne nue pour une exigence de registre :
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Glyip.toml" code={`[dependencies]
 serde = "1.0"`} />
 
 Utilisez une table pour les exigences path, git ou mixtes :
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Glyip.toml" code={`[dependencies]
 local_util = { path = "../local_util" }
 my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }`} />
 
@@ -27,7 +27,7 @@ Une dépendance git épingle exactement un ref : `branch`, `tag` ou un hash `rev
 
 Les dépendances de développement uniquement vont dans `[dev-dependencies]` et utilisent la même syntaxe :
 
-<Code lang="toml" code={`[dev-dependencies]
+<Code lang="toml" title="Cargo.toml" code={`[dev-dependencies]
 test_helpers = { path = "../test_helpers" }`} />
 
 <Aside type="tip">

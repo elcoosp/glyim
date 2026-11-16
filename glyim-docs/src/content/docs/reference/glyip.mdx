@@ -87,7 +87,7 @@ Each `bin` entry accepts `name` (required) and `path` (source file, relative to 
 
 Both sections map a crate name to either a bare version requirement or a detail table:
 
-<Code lang="toml" code={`[dependencies]
+<Code lang="toml" title="Glyip.toml" code={`[dependencies]
 serde = "1.0"
 local_util = { path = "../local_util" }
 my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }

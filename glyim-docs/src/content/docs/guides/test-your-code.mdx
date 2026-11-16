@@ -41,7 +41,7 @@ The compiler's own test harness (`glyim-test`) discovers `.g` files under `tests
 
 A `compile-fail` test names the diagnostics it expects next to the offending line:
 
-<Code lang="rust" code={`fn main() {
+<Code lang="rust" title="src/main.rs" code={`fn main() {
     let x: i32 = "hello";
     //~^ ERROR mismatched types
     //~| expected i32, found str

@@ -41,7 +41,7 @@ Le harnais de test du compilateur (`glyim-test`) découvre les fichiers `.g` sou
 
 Un test `compile-fail` nomme les diagnostics qu'il attend à côté de la ligne fautive :
 
-<Code lang="rust" code={`fn main() {
+<Code lang="rust" title="src/main.rs" code={`fn main() {
     let x: i32 = "hello";
     //~^ ERROR mismatched types
     //~| expected i32, found str
