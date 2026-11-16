@@ -2,11 +2,11 @@
 
 # Readiness status
 
-Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **241** features over **56** evidence record(s) (0 error(s), 3 warning(s)).
+Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **243** features over **56** evidence record(s) (0 error(s), 3 warning(s)).
 
 | Level | Features |
 |---|---|
-| L0 | 228 |
+| L0 | 230 |
 | L1 | 7 |
 | L2 | 6 |
 | L3 | 0 |
@@ -222,6 +222,7 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `TOOL-LEDGER-TAXONOMY` | tooling | L3 | L0 | - | - |
 | `TOOL-LSP-CALL-HIERARCHY` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-CODE-ACTIONS` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-CODE-LENS` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-COMPLETION` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-DECLARATION` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-DIAG` | tooling | L4 | L0 | - | - |
@@ -236,6 +237,7 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `TOOL-LSP-INLAY-HINT` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-LINKED-EDIT` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-LOG-FILE` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-ON-TYPE-FORMAT` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-PULL-DIAG` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-REFERENCES` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-RELATED-DIAG` | tooling | L4 | L0 | - | - |
