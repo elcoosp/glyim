@@ -1,9 +1,9 @@
 {
   "schema": "glyim.status/1",
-  "features": 243,
+  "features": 245,
   "records": 56,
   "summary": {
-    "L0": 230,
+    "L0": 232,
     "L1": 7,
     "L2": 6,
     "L3": 0,
@@ -2053,6 +2053,14 @@
       "unmeasured": []
     },
     {
+      "id": "TOOL-LSP-EXEC-CMD",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
       "id": "TOOL-LSP-FOLDING",
       "tier": "tooling",
       "target_level": "L4",
@@ -2198,6 +2206,14 @@
     },
     {
       "id": "TOOL-LSP-SYMBOLS",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-TYPE-HIERARCHY",
       "tier": "tooling",
       "target_level": "L4",
       "computed_level": "L0",
