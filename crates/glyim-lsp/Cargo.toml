@@ -86,6 +86,18 @@ harness = false
 name = "workspace_diagnostics"
 harness = false
 
+# Document-link request bench (LSP-DOC-LINK; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "document_link"
+harness = false
+
+# Linked-editing-range bench (LSP-LINKED-EDIT; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "linked_editing"
+harness = false
+
 [dependencies]
 notify = "8.2"
 # `crossbeam-channel` and `file_url` were declared here but never imported
