@@ -157,3 +157,159 @@ fn pull_diagnostics_positions_match_the_push_mapping() {
         assert_eq!(push.message, pull.message);
     }
 }
+
+// -- Related-document fan-out (LSP-RELATED-DIAG) ------------------------------
+//
+// The dependency graph is populated exactly like the driver populates it
+// (`extract_dependencies` records `dependent depends on dependency`), so a
+// pull for the *dependency* answers with the *dependents* as related
+// documents — the files whose diagnostic sets can change because the pulled
+// file changed. A pull for a file with no dependents answers without a
+// `relatedDocuments` key at all, exactly like before the fan-out existed.
+
+#[test]
+fn pull_diagnostics_fans_out_related_documents_over_the_dependency_graph() {
+    let db = AnalysisDatabase::new();
+    let mut file_map = FileMap::new();
+    let dependency = PathBuf::from("/test/related_dependency.g");
+    let dependent = PathBuf::from("/test/related_dependent.g");
+    populate(&db, &mut file_map, &dependency, BROKEN_DOC);
+    populate(&db, &mut file_map, &dependent, CLEAN_DOC);
+    // The driver's recorded edge shape: `file depends on dep`.
+    db.dep_graph
+        .write()
+        .add_dep(dependent.clone(), dependency.clone());
+
+    let result = pull_diagnostics(&db, &file_map, &params_for(&dependency))
+        .expect("an open analysed file always answers a report");
+    let lsp_types::DocumentDiagnosticReportResult::Report(
+        lsp_types::DocumentDiagnosticReport::Full(full),
+    ) = result
+    else {
+        panic!("pull must answer a full report");
+    };
+    let related = full
+        .related_documents
+        .expect("a pulled dependency carries its dependents as related documents");
+    assert_eq!(related.len(), 1, "one related report per affected file");
+    let (uri, report) = related.iter().next().expect("one entry");
+    assert_eq!(
+        uri.as_str(),
+        uri_for(&dependent).as_str(),
+        "the dependent's URI keys the entry"
+    );
+    let lsp_types::DocumentDiagnosticReportKind::Full(related_full) = report else {
+        panic!("related reports are full reports");
+    };
+    assert!(
+        related_full.items.is_empty(),
+        "the dependent is clean: an empty full report, not null"
+    );
+}
+
+#[test]
+fn pull_diagnostics_related_documents_are_transitive_over_dependents() {
+    // `affected_files` is the transitive reverse-dep closure: a -> b -> c,
+    // so pulling `a` fans out to *both* b and c.
+    let db = AnalysisDatabase::new();
+    let mut file_map = FileMap::new();
+    let a = PathBuf::from("/test/related_a.g");
+    let b = PathBuf::from("/test/related_b.g");
+    let c = PathBuf::from("/test/related_c.g");
+    populate(&db, &mut file_map, &a, BROKEN_DOC);
+    populate(&db, &mut file_map, &b, CLEAN_DOC);
+    populate(&db, &mut file_map, &c, CLEAN_DOC);
+    db.dep_graph.write().add_dep(b.clone(), a.clone());
+    db.dep_graph.write().add_dep(c.clone(), b.clone());
+
+    let result = pull_diagnostics(&db, &file_map, &params_for(&a)).expect("report");
+    let lsp_types::DocumentDiagnosticReportResult::Report(
+        lsp_types::DocumentDiagnosticReport::Full(full),
+    ) = result
+    else {
+        panic!("full report");
+    };
+    let related = full.related_documents.expect("transitive dependents");
+    assert_eq!(related.len(), 2, "b and c are both affected by a");
+    let uris: Vec<&str> = related.keys().map(|uri| uri.as_str()).collect();
+    assert!(uris.contains(&uri_for(&b).as_str()), "direct dependent b");
+    assert!(
+        uris.contains(&uri_for(&c).as_str()),
+        "transitive dependent c"
+    );
+}
+
+#[test]
+fn pull_diagnostics_omits_related_documents_without_dependents() {
+    // Pulling the *top* of the dependency chain (or any file nobody
+    // depends on) answers without a `relatedDocuments` key — the exact
+    // shape the pull path answered before the fan-out existed, so
+    // clients that never opted in see no change.
+    let db = AnalysisDatabase::new();
+    let mut file_map = FileMap::new();
+    let dependency = PathBuf::from("/test/related_top.g");
+    let dependent = PathBuf::from("/test/related_bottom.g");
+    populate(&db, &mut file_map, &dependency, BROKEN_DOC);
+    populate(&db, &mut file_map, &dependent, CLEAN_DOC);
+    db.dep_graph
+        .write()
+        .add_dep(dependent.clone(), dependency.clone());
+
+    let result = pull_diagnostics(&db, &file_map, &params_for(&dependent))
+        .expect("an open analysed file always answers a report");
+    let lsp_types::DocumentDiagnosticReportResult::Report(
+        lsp_types::DocumentDiagnosticReport::Full(full),
+    ) = result
+    else {
+        panic!("pull must answer a full report");
+    };
+    assert_eq!(
+        full.related_documents, None,
+        "a file with no dependents answers without related documents"
+    );
+}
+
+#[test]
+fn pull_diagnostics_related_sets_match_the_dependents_own_pull_answer() {
+    // Cross-path identity, related edition: the related report for a
+    // dependent must carry the identical set the dependent's own pull
+    // answers with, or a client that follows the fan-out shows a
+    // different truth than one that pulls each file.
+    let db = AnalysisDatabase::new();
+    let mut file_map = FileMap::new();
+    let dependency = PathBuf::from("/test/related_parity_dep.g");
+    let dependent = PathBuf::from("/test/related_parity_dependent.g");
+    populate(&db, &mut file_map, &dependency, BROKEN_DOC);
+    populate(&db, &mut file_map, &dependent, BROKEN_DOC);
+    db.dep_graph
+        .write()
+        .add_dep(dependent.clone(), dependency.clone());
+
+    let result = pull_diagnostics(&db, &file_map, &params_for(&dependency)).expect("report");
+    let lsp_types::DocumentDiagnosticReportResult::Report(
+        lsp_types::DocumentDiagnosticReport::Full(full),
+    ) = result
+    else {
+        panic!("full report");
+    };
+    let related = full.related_documents.expect("the dependent is affected");
+    let (_, report) = related.iter().next().expect("one entry");
+    let lsp_types::DocumentDiagnosticReportKind::Full(related_full) = report else {
+        panic!("related reports are full reports");
+    };
+
+    let own = pull_diagnostics(&db, &file_map, &params_for(&dependent)).expect("report");
+    let lsp_types::DocumentDiagnosticReportResult::Report(
+        lsp_types::DocumentDiagnosticReport::Full(own_full),
+    ) = own
+    else {
+        panic!("full report");
+    };
+    let related_items = &related_full.items;
+    let own_items = &own_full.full_document_diagnostic_report.items;
+    assert_eq!(related_items.len(), own_items.len(), "same set");
+    for (related_item, own_item) in related_items.iter().zip(own_items.iter()) {
+        assert_eq!(related_item.range, own_item.range, "same UTF-16 range");
+        assert_eq!(related_item.message, own_item.message);
+    }
+}
