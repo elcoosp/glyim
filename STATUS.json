@@ -1,9 +1,9 @@
 {
   "schema": "glyim.status/1",
-  "features": 245,
+  "features": 247,
   "records": 56,
   "summary": {
-    "L0": 232,
+    "L0": 234,
     "L1": 7,
     "L2": 6,
     "L3": 0,
@@ -2125,6 +2125,14 @@
       "unmeasured": []
     },
     {
+      "id": "TOOL-LSP-INLINE-VALUE",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
       "id": "TOOL-LSP-LINKED-EDIT",
       "tier": "tooling",
       "target_level": "L4",
@@ -2134,6 +2142,14 @@
     },
     {
       "id": "TOOL-LSP-LOG-FILE",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-MONIKER",
       "tier": "tooling",
       "target_level": "L4",
       "computed_level": "L0",
