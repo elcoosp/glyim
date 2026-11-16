@@ -33,6 +33,8 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "call_hierarchy_provider",
         "signature_help_provider",
         "inlay_hint_provider",
+        "moniker_provider",
+        "inline_value_provider",
         "diagnostic_provider",
         "references_provider",
         "document_formatting_provider",
@@ -161,6 +163,57 @@ fn type_hierarchy_has_a_pinned_wire_contract() {
     assert_eq!(
         lsp_types::request::TypeHierarchySubtypes::METHOD,
         "typeHierarchy/subtypes"
+    );
+}
+
+#[test]
+fn moniker_has_a_pinned_wire_contract() {
+    use lsp_types::request::Request;
+    // Regression pin (LSP-MONIKER): like the type-hierarchy requests, the
+    // `textDocument/moniker` request defines no `ServerCapabilities` field
+    // in lsp-types 0.97 (the LSP spec gates monikers on registration, not
+    // on a static capability), so the router registration *is* the
+    // advertisement. The pin is the wire contract: the request type's
+    // METHOD string, so an lsp-types upgrade that reshapes the endpoint
+    // surfaces here and the end-to-end tests in `moniker_tests.rs` pin the
+    // handler.
+    assert_eq!(
+        lsp_types::request::MonikerRequest::METHOD,
+        "textDocument/moniker"
+    );
+}
+
+#[test]
+fn inline_value_is_in_the_expected_set() {
+    // Regression pin (LSP-INLINE-VALUE): the `textDocument/inlineValue`
+    // capability must be advertised alongside its router registration; a
+    // future removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"inline_value_provider"),
+        "inline_value_provider must be advertised"
+    );
+}
+
+#[test]
+fn inline_value_has_a_pinned_wire_contract() {
+    use lsp_types::request::Request;
+    // Regression pin (LSP-INLINE-VALUE): the request type's METHOD string,
+    // so an lsp-types upgrade that reshapes the endpoint surfaces here
+    // and the end-to-end tests in `inline_value_tests.rs` pin the handler.
+    assert_eq!(
+        lsp_types::request::InlineValueRequest::METHOD,
+        "textDocument/inlineValue"
+    );
+}
+
+#[test]
+fn moniker_is_in_the_expected_set() {
+    // Regression pin (LSP-MONIKER): the `textDocument/moniker` capability
+    // must be advertised alongside its router registration; a future
+    // removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"moniker_provider"),
+        "moniker_provider must be advertised"
     );
 }
 
