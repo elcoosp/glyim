@@ -5,6 +5,8 @@
 pub mod call_hierarchy;
 /// `code_action`.
 pub mod code_action;
+/// `code_lens` (LSP-CODE-LENS).
+pub mod code_lens;
 /// completion.
 pub mod completion;
 /// database.
@@ -39,6 +41,8 @@ pub mod inlay_hint;
 pub mod linked_editing;
 /// navigation.
 pub mod navigation;
+/// `on_type_formatting` (LSP-ON-TYPE-FORMAT).
+pub mod on_type_formatting;
 /// `prepare_rename` (LSP-PREPARE-RENAME).
 pub mod prepare_rename;
 /// `pull_diagnostics` (LSP-PULL-DIAG).
@@ -76,6 +80,10 @@ pub use call_hierarchy::{
     ReferenceGraphCallSource, compute_incoming_calls, compute_outgoing_calls, incoming_calls,
     outgoing_calls, prepare_call_hierarchy, prepare_target,
 };
+pub use code_lens::{
+    GraphLensSource, ItemLens, LensItem, LensSource, SHOW_REFERENCES_COMMAND, code_lenses,
+    compute_code_lenses, resolve_code_lens,
+};
 pub use database::AnalysisDatabase;
 pub use database::{FileMap, SourceMap};
 pub use document_highlight::{
@@ -99,6 +107,10 @@ pub use inlay_hint::{
     render_type_label,
 };
 pub use linked_editing::linked_editing_ranges;
+pub use on_type_formatting::{
+    BracketToken, OnTypeIndent, OnTypeTokenSource, ParseTreeOnTypeSource, on_type_formatting,
+    on_type_indent,
+};
 pub use prepare_rename::{prepare_rename, rename_target};
 pub use pull_diagnostics::{
     AffectedFilesSource, DependencyGraphSource, DiagnosticSource, RecordedDiagnosticSource,
