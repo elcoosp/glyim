@@ -1,9 +1,9 @@
 {
   "schema": "glyim.status/1",
-  "features": 237,
+  "features": 239,
   "records": 56,
   "summary": {
-    "L0": 224,
+    "L0": 226,
     "L1": 7,
     "L2": 6,
     "L3": 0,
@@ -2125,6 +2125,14 @@
       "unmeasured": []
     },
     {
+      "id": "TOOL-LSP-RELATED-DIAG",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
       "id": "TOOL-LSP-RENAME",
       "tier": "tooling",
       "target_level": "L4",
@@ -2158,6 +2166,14 @@
     },
     {
       "id": "TOOL-LSP-SYMBOLS",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-WORKSPACE-DIAG",
       "tier": "tooling",
       "target_level": "L4",
       "computed_level": "L0",
