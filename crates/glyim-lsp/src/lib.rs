@@ -15,6 +15,8 @@ pub mod dep_graph;
 pub mod diagnostics;
 /// `document_highlight` (LSP-HIGHLIGHT).
 pub mod document_highlight;
+/// `document_link` (LSP-DOC-LINK).
+pub mod document_link;
 /// driver.
 pub mod driver;
 /// folding.
@@ -33,6 +35,8 @@ pub mod hover;
 pub mod implementation;
 /// `inlay_hint` (LSP-INLAY-HINT).
 pub mod inlay_hint;
+/// `linked_editing` (LSP-LINKED-EDIT).
+pub mod linked_editing;
 /// navigation.
 pub mod navigation;
 /// `prepare_rename` (LSP-PREPARE-RENAME).
@@ -78,6 +82,10 @@ pub use document_highlight::{
     HighlightKind, HighlightSpan, OccurrenceSource, ReferenceGraphSource, compute_highlights,
     document_highlights,
 };
+pub use document_link::{
+    IncludeLink, IncludeMacroKind, LinkLexSource, LinkToken, ParseTreeLinkSource, document_links,
+    link_targets,
+};
 pub use goto_declaration::{
     DeclarationSource, ParseTreeDeclarationSource, declaration_target, goto_declaration,
     import_bindings,
@@ -90,6 +98,7 @@ pub use inlay_hint::{
     BindingTypeSource, HirBindingTypeSource, UnannotatedBinding, compute_inlay_hints, inlay_hints,
     render_type_label,
 };
+pub use linked_editing::linked_editing_ranges;
 pub use prepare_rename::{prepare_rename, rename_target};
 pub use pull_diagnostics::{
     AffectedFilesSource, DependencyGraphSource, DiagnosticSource, RecordedDiagnosticSource,
