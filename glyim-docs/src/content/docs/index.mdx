@@ -26,20 +26,32 @@ Glyim implements a complete compilation pipeline: lexing, parsing, name resoluti
 
 ## Choose your path
 
-<CardGrid stagger>
-    <Card title="Build your first project" icon="rocket">
-        Follow the golden path: build the compiler, scaffold a project with `glyip`, and run a Glyim program.
-    </Card>
-    <Card title="Solve a specific task" icon="hammer">
-        Use a how-to guide to manage dependencies, write tests, inspect intermediate representations, or tune codegen.
-    </Card>
-    <Card title="Look something up" icon="document">
-        Consult the reference for every CLI flag, `glyip` command, manifest key, lint, and language construct.
-    </Card>
-    <Card title="Understand the design" icon="open-book">
-        Read the explanation section to learn why the pipeline is split into crates and how ownership-driven reactivity works.
-    </Card>
-</CardGrid>
+<DiataxisGrid stagger items={[
+  {
+    "title": "Build your first project",
+    "description": "Follow the golden path: build the compiler, scaffold a project with glyip, and run a Glyim program.",
+    "href": "/tutorials/getting-started/",
+    "icon": "rocket"
+  },
+  {
+    "title": "Solve a specific task",
+    "description": "Use a how-to guide to manage dependencies, write tests, inspect intermediate representations, or tune codegen.",
+    "href": "/guides/manage-dependencies/",
+    "icon": "puzzle"
+  },
+  {
+    "title": "Look something up",
+    "description": "Consult the reference for every CLI flag, glyip command, manifest key, lint, and language construct.",
+    "href": "/reference/cli/",
+    "icon": "open-book"
+  },
+  {
+    "title": "Understand the design",
+    "description": "Read the explanation section to learn why the pipeline is split into crates and how ownership-driven reactivity works.",
+    "href": "/explanation/architecture/",
+    "icon": "information"
+  }
+]} />
 
 
 ## Feature highlights
