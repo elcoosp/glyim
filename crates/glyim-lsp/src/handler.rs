@@ -6,6 +6,7 @@ use crate::completion::provide_completions;
 use crate::document_highlight::document_highlights;
 use crate::document_link::document_links;
 use crate::driver::AnalysisMessage;
+use crate::execute_command::execute_command;
 use crate::folding::provide_folding_ranges;
 use crate::formatting::format_document;
 use crate::goto_declaration::goto_declaration;
@@ -23,6 +24,7 @@ use crate::selection_range::selection_ranges;
 use crate::semantic_tokens::{semantic_tokens_full, semantic_tokens_range, token_legend};
 use crate::signature_help::signature_help;
 use crate::type_definition::type_definition;
+use crate::type_hierarchy::{prepare_type_hierarchy, type_subtypes, type_supertypes};
 use crate::workspace_diagnostics::workspace_diagnostics;
 use async_lsp::ResponseError;
 use async_lsp::router::Router;
@@ -32,21 +34,31 @@ use lsp_types::notification::{DidChangeTextDocument, DidCloseTextDocument, DidOp
 use lsp_types::request::{
     CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare,
     CodeActionRequest, CodeLensRequest, CodeLensResolve, Completion, DocumentDiagnosticRequest,
-    DocumentHighlightRequest, DocumentLinkRequest, DocumentSymbolRequest, FoldingRangeRequest,
-    Formatting, GotoDeclaration, GotoDefinition, GotoImplementation, GotoImplementationParams,
-    GotoTypeDefinition, HoverRequest, Initialize, InlayHintRequest, LinkedEditingRange,
-    OnTypeFormatting, PrepareRenameRequest, References, Rename, SelectionRangeRequest,
-    SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest,
+    DocumentHighlightRequest, DocumentLinkRequest, DocumentSymbolRequest, ExecuteCommand,
+    FoldingRangeRequest, Formatting, GotoDeclaration, GotoDefinition, GotoImplementation,
+    GotoImplementationParams, GotoTypeDefinition, HoverRequest, Initialize, InlayHintRequest,
+    LinkedEditingRange, OnTypeFormatting, PrepareRenameRequest, References, Rename,
+    SelectionRangeRequest, SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown,
+    SignatureHelpRequest, TypeHierarchyPrepare, TypeHierarchySubtypes, TypeHierarchySupertypes,
     WorkspaceDiagnosticRequest, WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
+/// The command ids the server advertises for `workspace/executeCommand`
+/// (LSP-EXEC-CMD): the code-lens resolve's command id, and nothing else.
+/// One source of truth — the capability advertisement below renders this
+/// list, and the conformance test pins the resolve's emitted command id
+/// against it.
+pub fn advertised_commands() -> Vec<String> {
+    vec![crate::code_lens::SHOW_REFERENCES_COMMAND.to_string()]
+}
+
 /// `build_router`.
 pub fn build_router(
     db: Arc<AnalysisDatabase>,
-    _analysis_tx: mpsc::Sender<AnalysisMessage>,
+    analysis_tx: mpsc::Sender<AnalysisMessage>,
 ) -> Router<()> {
     let mut router = Router::new(());
     // INF-16: the request handlers read the DRIVER's `db.file_map`
@@ -232,6 +244,22 @@ pub fn build_router(
                 document_on_type_formatting_provider: Some(DocumentOnTypeFormattingOptions {
                     first_trigger_character: "}".to_string(),
                     more_trigger_character: Some(vec![")".to_string(), "]".to_string()]),
+                }),
+                // LSP-EXEC-CMD: the execute-command capability. The
+                // advertised set is exactly the command the code-lens
+                // resolve emits (`glyim.showReferences`, LSP-CODE-LENS) —
+                // before this route existed, the resolve attached a
+                // command no server route could execute, the exact
+                // "advertised but unreachable" shape the conformance
+                // audit exists for. The handler below serves it from the
+                // same shared reference graph the resolve counts, so the
+                // executed locations agree with the rendered title by
+                // construction. `advertised_commands()` is the single
+                // source of truth; the conformance test pins the
+                // advertisement to the resolve's emitted id.
+                execute_command_provider: Some(ExecuteCommandOptions {
+                    commands: advertised_commands(),
+                    work_done_progress_options: WorkDoneProgressOptions::default(),
                 }),
                 ..ServerCapabilities::default()
             };
@@ -430,6 +458,43 @@ pub fn build_router(
         },
     );
 
+    // Type Hierarchy (LSP-TYPE-HIERARCHY): prepare answers the
+    // trait/struct/enum item under the cursor (definition site, whole
+    // item extent); supertypes/subtypes re-resolve the client's echoed
+    // item by its definition extent and walk the recorded impl facts.
+    // lsp-types 0.97 carries no ServerCapabilities field for these
+    // requests (the LSP spec gates them on registration, not on a static
+    // capability), so the router registration *is* the advertisement —
+    // pinned by the conformance and end-to-end tests.
+    let db_prepare_th = db.clone();
+    router.request::<TypeHierarchyPrepare, _>(move |(), params: TypeHierarchyPrepareParams| {
+        let db = db_prepare_th.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(prepare_type_hierarchy(&db, &guard, &params))
+        }
+    });
+
+    let db_supertypes = db.clone();
+    router.request::<TypeHierarchySupertypes, _>(
+        move |(), params: TypeHierarchySupertypesParams| {
+            let db = db_supertypes.clone();
+            async move {
+                let guard = db.file_map.read();
+                Ok(type_supertypes(&db, &guard, &params))
+            }
+        },
+    );
+
+    let db_subtypes = db.clone();
+    router.request::<TypeHierarchySubtypes, _>(move |(), params: TypeHierarchySubtypesParams| {
+        let db = db_subtypes.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(type_subtypes(&db, &guard, &params))
+        }
+    });
+
     // Signature Help (LSP-SIGNATURE-HELP): the innermost recorded call
     // containing the cursor resolves through the reference graph; the
     // callee's signature renders from the symbol index, and the active
@@ -511,7 +576,9 @@ pub fn build_router(
     router.request::<Formatting, _>(move |(), params: DocumentFormattingParams| {
         let db = db_fmt.clone();
         async move {
-            let _guard = db.file_map.read();
+            // No outer `file_map` guard here: `format_document` takes its
+            // own read lock for the lookup it performs; a second one held
+            // across the whole request would be a dead lock acquisition.
             Ok(format_document(&db, &params))
         }
     });
@@ -603,6 +670,41 @@ pub fn build_router(
         }
     });
 
+    // Execute Command (LSP-EXEC-CMD): the code-lens resolve's
+    // `glyim.showReferences` command executes here. The echoed argument
+    // payload re-joins against the shared reference graph by definition
+    // extent (the resolve's own join) and answers the name-keyed
+    // reference locations — the count the resolve's title rendered is
+    // exactly what this walk re-derives. Every failure mode is a JSON-RPC
+    // error naming the failed step; a never-advertised command id is
+    // rejected before any fact is consulted.
+    let db_exec = db.clone();
+    router.request::<ExecuteCommand, _>(move |(), params: ExecuteCommandParams| {
+        let db = db_exec.clone();
+        async move {
+            let guard = db.file_map.read();
+            match execute_command(&db, &guard, &params) {
+                Ok(locations) => {
+                    // `Location` serializes to the wire shape the LSP spec
+                    // defines; the conversion is total (no fallible
+                    // maps) and cannot fail.
+                    Ok(Some(serde_json::to_value(locations).map_err(|err| {
+                        ResponseError::new(
+                            async_lsp::ErrorCode::INTERNAL_ERROR,
+                            format!(
+                                "workspace/executeCommand: response serialization failed: {err}"
+                            ),
+                        )
+                    })?))
+                }
+                Err(err) => Err(ResponseError::new(
+                    async_lsp::ErrorCode::INVALID_PARAMS,
+                    err.to_string(),
+                )),
+            }
+        }
+    });
+
     // Workspace Symbols (LSP-CONFORMANCE: was dead — advertised nothing,
     // routed nothing; the function and its tests existed but no client could
     // reach it). `workspace_symbols` answers `None` only for a session that
@@ -633,7 +735,7 @@ pub fn build_router(
     // The analysis driver is the single writer: didOpen/didChange forward the
     // full text (this server negotiates FULL sync) via `analysis_tx`.
     let db_open = db.clone();
-    let tx_open = _analysis_tx.clone();
+    let tx_open = analysis_tx.clone();
     router.notification::<DidOpenTextDocument>(move |(), params: DidOpenTextDocumentParams| {
         let path = path_from_uri(&params.text_document.uri);
         let content = params.text_document.text;
@@ -654,7 +756,7 @@ pub fn build_router(
     });
 
     let db_change = db.clone();
-    let tx_change = _analysis_tx.clone();
+    let tx_change = analysis_tx.clone();
     router.notification::<DidChangeTextDocument>(move |(), params: DidChangeTextDocumentParams| {
         // FULL sync: the last content change carries the whole document.
         let path = path_from_uri(&params.text_document.uri);
@@ -674,7 +776,7 @@ pub fn build_router(
     });
 
     let db_close = db.clone();
-    let tx_close = _analysis_tx.clone();
+    let tx_close = analysis_tx.clone();
     router.notification::<DidCloseTextDocument>(move |(), params: DidCloseTextDocumentParams| {
         let path = path_from_uri(&params.text_document.uri);
         let () = db_close.file_map.write().remove(&path);
