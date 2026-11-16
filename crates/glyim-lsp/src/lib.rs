@@ -21,6 +21,8 @@ pub mod document_highlight;
 pub mod document_link;
 /// driver.
 pub mod driver;
+/// `execute_command` (LSP-EXEC-CMD).
+pub mod execute_command;
 /// folding.
 pub mod folding;
 /// formatting.
@@ -67,6 +69,8 @@ pub mod state;
 pub mod symbol_index;
 /// `type_definition` (LSP-TYPE-DEF).
 pub mod type_definition;
+/// `type_hierarchy` (LSP-TYPE-HIERARCHY).
+pub mod type_hierarchy;
 /// uri.
 pub mod uri; // Make database public
 /// `workspace_diagnostics` (LSP-WORKSPACE-DIAG).
@@ -93,6 +97,10 @@ pub use document_highlight::{
 pub use document_link::{
     IncludeLink, IncludeMacroKind, LinkLexSource, LinkToken, ParseTreeLinkSource, document_links,
     link_targets,
+};
+pub use execute_command::{
+    ExecuteCommandError, GraphReferenceLookup, ReferenceLookup, ShowReferencesArgs,
+    compute_reference_targets, execute_command, parse_show_references_args,
 };
 pub use goto_declaration::{
     DeclarationSource, ParseTreeDeclarationSource, declaration_target, goto_declaration,
@@ -134,6 +142,11 @@ pub use state::LspState;
 pub use symbol_index::{DefinitionLocation, SymbolIndex, SymbolInfo, SymbolKind, TypeSignature};
 pub use type_definition::{
     SymbolIndexSource, TypeSymbolSource, named_type_of, type_definition, type_target,
+};
+pub use type_hierarchy::{
+    HierarchyItemKind, HierarchyMember, HirTypeHierarchySource, NamedItem, TypeHierarchySource,
+    compute_subtypes, compute_supertypes, hierarchy_target, prepare_type_hierarchy, type_subtypes,
+    type_supertypes,
 };
 pub use workspace_diagnostics::{
     AnalysedFile, AnalysedSetSource, RecordedAnalysedSource, workspace_diagnostics,
