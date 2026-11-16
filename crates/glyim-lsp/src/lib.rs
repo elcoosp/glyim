@@ -39,8 +39,12 @@ pub mod hover;
 pub mod implementation;
 /// `inlay_hint` (LSP-INLAY-HINT).
 pub mod inlay_hint;
+/// `inline_value` (LSP-INLINE-VALUE).
+pub mod inline_value;
 /// `linked_editing` (LSP-LINKED-EDIT).
 pub mod linked_editing;
+/// `moniker` (LSP-MONIKER).
+pub mod moniker;
 /// navigation.
 pub mod navigation;
 /// `on_type_formatting` (LSP-ON-TYPE-FORMAT).
@@ -114,7 +118,15 @@ pub use inlay_hint::{
     BindingTypeSource, HirBindingTypeSource, UnannotatedBinding, compute_inlay_hints, inlay_hints,
     render_type_label,
 };
+pub use inline_value::{
+    HirInlineValueSource, InlineValueFact, InlineValueSource, RecordedBinding,
+    compute_inline_values, inline_values, wire_inline_value,
+};
 pub use linked_editing::linked_editing_ranges;
+pub use moniker::{
+    FactKind, MONIKER_SCHEME, MonikerFact, MonikerSource, RecordedSymbol, SessionMonikerSource,
+    SpelledImport, monikers, monikers_at, wire_moniker,
+};
 pub use on_type_formatting::{
     BracketToken, OnTypeIndent, OnTypeTokenSource, ParseTreeOnTypeSource, on_type_formatting,
     on_type_indent,
