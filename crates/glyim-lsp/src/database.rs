@@ -183,6 +183,23 @@ pub struct AnalysisDatabase {
     /// `Diagnostic` type cannot carry `structured`, so code actions that need it
     /// (e.g. the §5.1 match-arm skeleton quick-fix) read from here by index.
     pub raw_diagnostics: RwLock<HashMap<FileId, Vec<GlyimDiagnostic>>>,
+    /// Per-file client version (`textDocument.version` from `didOpen` /
+    /// `didChange`, widened to `i64`) the analysis driver last analysed
+    /// the file at. Populated by the driver next to the analysis
+    /// artifacts and removed on close, so the workspace-diagnostics
+    /// engine (LSP-WORKSPACE-DIAG) can answer each report with the
+    /// honest `version` field: the recorded version, or `None` when the
+    /// file was never opened by the client — never a fabricated 0.
+    pub versions: RwLock<HashMap<FileId, i64>>,
+    /// The inter-file dependency graph (path-keyed forward and reverse
+    /// edges, `dep_graph::DependencyGraph`). This used to live as a
+    /// private field on the analysis *driver* — the writer — which made
+    /// it unreachable from the request path: the re-analysis enqueuing
+    /// worked, but no request engine could ask "which files are affected
+    /// by this one". The related-documents fan-out (LSP-RELATED-DIAG) is
+    /// the first consumer; the driver still writes every edge and clears
+    /// on close/re-analysis, exactly as before.
+    pub dep_graph: RwLock<crate::dep_graph::DependencyGraph>,
 }
 
 impl Default for AnalysisDatabase {
@@ -205,6 +222,8 @@ impl AnalysisDatabase {
             typeck: RwLock::new(HashMap::new()),
             diagnostics: RwLock::new(HashMap::new()),
             raw_diagnostics: RwLock::new(HashMap::new()),
+            versions: RwLock::new(HashMap::new()),
+            dep_graph: RwLock::new(crate::dep_graph::DependencyGraph::new()),
         }
     }
 
