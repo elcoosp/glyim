@@ -134,6 +134,12 @@ harness = false
 name = "inline_value"
 harness = false
 
+# Range-formatting request bench (LSP-RANGE-FORMAT; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "range_formatting"
+harness = false
+
 [dependencies]
 notify = "8.2"
 # `crossbeam-channel` and `file_url` were declared here but never imported
