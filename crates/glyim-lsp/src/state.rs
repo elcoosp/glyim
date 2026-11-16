@@ -2,7 +2,6 @@ use crate::database::AnalysisDatabase;
 use crate::driver::AnalysisMessage;
 use crate::driver::warn_dropped_send;
 use glyim_db::Database;
-use glyim_diag::GlyimDiagnostic;
 use glyim_span::FileId;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -96,21 +95,6 @@ impl LspState {
     pub fn file_content(&self, path: &PathBuf) -> Option<String> {
         let &(file_id, _) = self.open_files.get(path)?;
         self.db.vfs().file_content(file_id).map(|s| s.to_string())
-    }
-
-    /// `diagnostics_for_file`.
-    pub fn diagnostics_for_file(&self, path: &PathBuf) -> Vec<GlyimDiagnostic> {
-        let file_id = self.file_id(path);
-        if let Some(file_id) = file_id {
-            let guard = self.analysis.diagnostics.read();
-            if let Some(lsp_diags) = guard.get(&file_id) {
-                return lsp_diags
-                    .iter()
-                    .map(|d| GlyimDiagnostic::internal_error(d.message.clone()))
-                    .collect();
-            }
-        }
-        Vec::new()
     }
 
     /// `file_id`.
