@@ -72,9 +72,22 @@ Glyim is organized as a Cargo workspace of small, single-responsibility crates. 
 |-------|-------------|
 | `glyim-pipeline` | End-to-end compilation driver: lex, parse, def-map, HIR, typeck, lower, borrowck, opt, codegen. |
 | `glyim-cli` | Command-line interface (`clap`) and linker driver. Built as `glyim-cli`. |
-| `glyim-lsp` | Language Server Protocol implementation: diagnostics (push, per-file pull with related documents, and workspace pull), hover, completion, navigation (definition, type definition, declaration, implementation, references), call hierarchy, signature help, inlay hints, document highlight, selection ranges, semantic tokens, folding, formatting, rename with prepare, symbols, code actions. |
+| `glyim-lsp` | Language Server Protocol implementation: diagnostics (push, per-file pull with related documents, and workspace pull), hover, completion, navigation (definition, type definition, declaration, implementation, references), call hierarchy, signature help, inlay hints, document highlight, selection ranges, semantic tokens, folding, formatting, rename with prepare, symbols, code actions, document links for include-macro literals, linked editing ranges. |
 | `glyim-test` | Testing framework: discovery, five test modes, snapshots, mocks, property testing. |
 | `glyip` | Package manager and build tool. |
+
+## Repository tools
+
+The `tools/` directory holds the workspace's own engineering harnesses —
+the readiness ledger and measurement toolchain the CI jobs run:
+
+| Tool | Description |
+|------|-------------|
+| `glyim-ledger` | Readiness Ledger CLI: feature/gap registries, evidence store, readiness levels, release gates, STATUS/KNOWN_GAPS rendering and their drift checks. |
+| `glyim-bench` | Measurement harness: compile/bench reports, diff, scaling, matrix, budget, history, and trend engines. |
+| `glyim-metrics` | Repo-health metrics (code lines, test count, doc coverage, inline-allow count) checked against `metrics/baseline.json`. |
+| `glyim-pilot` | Multi-provider overnight coding-agent orchestrator (waves/streams, commit gates). |
+| `ledger-schema` | Strict TOML registry schema: load, validate, JSON-Schema export. |
 
 ## Standard library source
 
