@@ -31,6 +31,8 @@ mod pull_diagnostics_tests;
 mod reference_graph;
 mod symbol_index;
 mod uri_tests;
+mod workspace_diagnostics;
+mod workspace_diagnostics_tests;
 mod workspace_symbol_tests;
 // New test modules for M10
 mod common;
