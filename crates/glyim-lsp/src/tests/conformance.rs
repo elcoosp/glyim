@@ -38,6 +38,7 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "diagnostic_provider",
         "references_provider",
         "document_formatting_provider",
+        "document_range_formatting_provider",
         "rename_provider",
         "folding_range_provider",
         "code_action_provider",
@@ -191,6 +192,31 @@ fn inline_value_is_in_the_expected_set() {
     assert!(
         expected_advertised_providers().contains(&"inline_value_provider"),
         "inline_value_provider must be advertised"
+    );
+}
+
+#[test]
+fn range_formatting_is_in_the_expected_set() {
+    // Regression pin (LSP-RANGE-FORMAT): the
+    // `textDocument/rangeFormatting` capability must be advertised
+    // alongside its router registration; a future removal of either half
+    // surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"document_range_formatting_provider"),
+        "document_range_formatting_provider must be advertised"
+    );
+}
+
+#[test]
+fn range_formatting_has_a_pinned_wire_contract() {
+    use lsp_types::request::Request;
+    // Regression pin (LSP-RANGE-FORMAT): the request type's METHOD string,
+    // so an lsp-types upgrade that reshapes the endpoint surfaces here
+    // and the end-to-end tests in `range_formatting_tests.rs` pin the
+    // handler.
+    assert_eq!(
+        lsp_types::request::RangeFormatting::METHOD,
+        "textDocument/rangeFormatting"
     );
 }
 
