@@ -1,6 +1,7 @@
 import { defineDocsConfig } from '@elcoosp/docs-toolkit/config';
 
 export default await defineDocsConfig({
+  topics: true,
     llmsTxt: {},
   site: 'https://glyim.vercel.app',
   domain: 'glyim.vercel.app',
