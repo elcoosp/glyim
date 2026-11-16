@@ -1,6 +1,5 @@
 use crate::AnalysisDatabase;
 use crate::database::SourceMap;
-use crate::dep_graph::DependencyGraph;
 use glyim_core::{CrateId, Interner};
 use glyim_def_map::build_def_map;
 use glyim_frontend::{lex, parse_to_syntax};
@@ -40,7 +39,6 @@ pub struct AnalysisDriver {
     /// cross-file hover/completions/references stay fresh after a
     /// signature change.
     analysis_tx: tokio::sync::mpsc::Sender<AnalysisMessage>,
-    dep_graph: Arc<parking_lot::RwLock<DependencyGraph>>,
     _watcher: Option<RecommendedWatcher>, // kept for drop
     /// P0-4 (production-readiness plan §5): client socket so `analyze_file`
     /// can publish `textDocument/publishDiagnostics` after each analysis
@@ -65,7 +63,6 @@ impl AnalysisDriver {
             db,
             rx,
             analysis_tx,
-            dep_graph: Arc::new(parking_lot::RwLock::new(DependencyGraph::new())),
             _watcher,
             client,
         }
@@ -129,8 +126,15 @@ impl AnalysisDriver {
                 // showing the last diagnostics for a file the user closed
                 // and re-opened elsewhere.
                 self.publish_diagnostics(&path, None, Vec::new());
+                let file_id = self.db.file_map.write().get_by_path(&path);
                 self.db.file_map.write().remove(&path);
-                self.dep_graph.write().clear_deps(&path);
+                // LSP-WORKSPACE-DIAG: the version dies with the file, so
+                // a later re-open starts from a clean "never opened" state
+                // instead of replaying the previous session's version.
+                if let Some(id) = file_id {
+                    self.db.versions.write().remove(&id);
+                }
+                self.db.dep_graph.write().clear_deps(&path);
             }
             for (path, (content, version)) in latest_changes {
                 self.analyze_file(&path, &content, Some(version));
@@ -139,11 +143,19 @@ impl AnalysisDriver {
     }
 
     fn analyze_file(&self, path: &PathBuf, content: &str, version: Option<i32>) {
-        self.dep_graph.write().clear_deps(path);
+        self.db.dep_graph.write().clear_deps(path);
 
         let file_id = { self.db.file_map.write().get_or_create(path) };
         let sm = SourceMap::new(file_id, content.to_string());
         self.db.source_maps.write().insert(file_id, sm.clone());
+        // LSP-WORKSPACE-DIAG: record the client version this analysis was
+        // computed at, next to the analysis artifacts, so the workspace
+        // pull answers each report with its honest `version` field. An
+        // analysis without a client version (the legacy `LspState` path)
+        // leaves no version behind — `None`, never a fabricated 0.
+        if let Some(v) = version {
+            self.db.versions.write().insert(file_id, i64::from(v));
+        }
 
         let crate_id = CrateId::from_raw(0);
         let lex_result = lex(content, file_id);
@@ -175,7 +187,7 @@ impl AnalysisDriver {
         // beyond the first pass (the driver coalesces duplicates).
         {
             let affected = {
-                let graph = self.dep_graph.read();
+                let graph = self.db.dep_graph.read();
                 graph.affected_files(path)
             };
             let source_maps = self.db.source_maps.read();
@@ -364,7 +376,7 @@ impl AnalysisDriver {
         drop(file_map);
         drop(symbol_index);
 
-        let mut graph = self.dep_graph.write();
+        let mut graph = self.db.dep_graph.write();
         for dep in deps {
             graph.add_dep(path.to_path_buf(), dep);
         }
