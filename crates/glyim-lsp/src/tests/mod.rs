@@ -56,6 +56,8 @@ mod inlay_hint_tests;
 mod inline_value;
 mod inline_value_tests;
 mod linked_editing_tests;
+mod range_formatting;
+mod range_formatting_tests;
 mod reference_graph_tests;
 mod references_tests;
 mod rename;
