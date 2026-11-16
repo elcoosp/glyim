@@ -20,6 +20,18 @@ path = "src/bin/glyim-lsp.rs"
 name = "call_hierarchy"
 harness = false
 
+# Code-lens request bench (LSP-CODE-LENS; dependency-free, `harness =
+# false` like the other request benches).
+[[bench]]
+name = "code_lens"
+harness = false
+
+# On-type-formatting request bench (LSP-ON-TYPE-FORMAT; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "on_type_formatting"
+harness = false
+
 # Signature-help request bench (LSP-SIGNATURE-HELP; dependency-free,
 # `harness = false` like the other request benches).
 [[bench]]
@@ -131,6 +143,10 @@ glyim-typeck = { workspace = true }
 glyim-solve = { workspace = true }
 
 lsp-types = "0.97.0"
+# LSP-CODE-LENS: the `CodeLens.data` resolve payload is a wire-contract
+# JSON value (lsp-types carries `serde_json::Value`), and the resolve
+# builds the command arguments out of the same type.
+serde_json = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }
 glyim-test = { workspace = true }
