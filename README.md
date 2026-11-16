@@ -90,7 +90,7 @@ The design is heavily inspired by rustc's architecture (arena-allocated IRs, int
 
 - **`glyim` CLI** — compile with `--emit=obj|exec|mir|llvm-ir|asm|cdylib|syntax|stats|run`, choose a backend, set opt-level, target triple, LTO strategy, and codegen units; measure compiles with `--time-passes` and `--self-profile[=FILE]` (Chrome trace), and emit a schema-versioned JSON measurement report with `--emit=stats`.
 - **`glyip` build tool** — Cargo-like project manager with `new`, `build`, `test`, and `run`; dependency resolution with SemVer 2.0 matching, path deps, git deps (branch/tag/rev), lockfiles, and a registry client.
-- **Language Server** (`glyim-lsp`) — diagnostics (pushed; pulled per file, with related documents over the dependency graph; and pulled per workspace on demand), goto definition, goto type definition, goto declaration, goto implementation, hover, completion, find references, folding, formatting, on-type formatting (a just-typed closing bracket dedents to its matching opener's indentation), rename (with `prepareRename`), workspace symbols, document symbols, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), type hierarchy (prepare a trait/struct/enum item and walk the traits implemented for it or the impls that implement it, over the recorded impl facts), signature help, inlay hints, code actions (add missing match arms, generate impl, remove unused imports), auto-import, code lenses (item-level definitions enumerate `textDocument/codeLens`, resolved with the live reference count, executable through `workspace/executeCommand`), document links (include-macro literals link to the files they name), linked editing ranges (same-scope occurrences edit together), and an optional `--log-file` that tees the server's tracing events to a JSON-lines file.
+- **Language Server** (`glyim-lsp`) — diagnostics (pushed; pulled per file, with related documents over the dependency graph; and pulled per workspace on demand), goto definition, goto type definition, goto declaration, goto implementation, hover, completion, find references, folding, formatting, on-type formatting (a just-typed closing bracket dedents to its matching opener's indentation), rename (with `prepareRename`), workspace symbols, document symbols, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), type hierarchy (prepare a trait/struct/enum item and walk the traits implemented for it or the impls that implement it, over the recorded impl facts), signature help, inlay hints, code actions (add missing match arms, generate impl, remove unused imports), auto-import, code lenses (item-level definitions enumerate `textDocument/codeLens`, resolved with the live reference count, executable through `workspace/executeCommand`), document links (include-macro literals link to the files they name), linked editing ranges (same-scope occurrences edit together), monikers (`textDocument/moniker` answers the recorded identity of the cursor's symbol — the spelled use-path it sits on, the qualified module path of the definition it sits on, or the name-only resolution of a bare usage), inline values (`textDocument/inlineValue` answers the recorded `let` bindings of a requested range as variable lookups, for a debug adapter's inline rendering), and an optional `--log-file` that tees the server's tracing events to a JSON-lines file.
 - **Test harness** (`glyim-test`) — compile-pass / compile-fail / UI / run-pass / run-fail modes with inline annotations (`//~ ERROR`, `//~| …`), snapshot testing (CST, def-map, MIR), mocking utilities for every compiler phase, and property-based type generation.
 
 ---
@@ -496,7 +496,8 @@ cargo run -p glyim-test --example evidence_report
 # workspace diagnostics, related diagnostics,
 # inlay hints, call hierarchy, signature help, semantic tokens, selection
 # ranges, document highlight, document links, linked editing, type
-# definition, code lenses, on-type formatting, and the --log-file sink):
+# definition, code lenses, on-type formatting, type hierarchy, execute
+# command, monikers, inline values, and the --log-file sink):
 cargo run -p glyim-lsp --example goto_declaration_walkthrough
 cargo run -p glyim-lsp --example implementation_walkthrough
 cargo run -p glyim-lsp --example pull_diagnostics_walkthrough
@@ -513,6 +514,10 @@ cargo run -p glyim-lsp --example linked_editing_walkthrough
 cargo run -p glyim-lsp --example type_definition_walkthrough
 cargo run -p glyim-lsp --example code_lens_walkthrough
 cargo run -p glyim-lsp --example on_type_formatting_walkthrough
+cargo run -p glyim-lsp --example type_hierarchy_walkthrough
+cargo run -p glyim-lsp --example execute_command_walkthrough
+cargo run -p glyim-lsp --example moniker_walkthrough
+cargo run -p glyim-lsp --example inline_value_walkthrough
 cargo run -p glyim-lsp --example server_log_walkthrough
 
 # Measure a workload in-process: counting allocator + CoV gate (M2.2).
@@ -690,7 +695,7 @@ cargo insta review
 - LLVM codegen for scalar and aggregate types, with real ABI lowering.
 - Bytecode codegen and the bytecode VM.
 - MIR interpreter used for `const fn` evaluation and `run-*` tests.
-- LSP with pushed, per-file-pull (with related documents), and workspace-pull diagnostics, hover, completion, goto-definition, goto-type-definition, goto-declaration, goto-implementation, references, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), signature help, inlay hints, rename (with `prepareRename`), folding, formatting, on-type formatting, code actions (add missing match arms, generate impl, remove unused imports), auto-import, code lenses (with a live-count resolve), document links, linked editing ranges, workspace/document symbols, and an optional JSON-lines server log (`--log-file`).
+- LSP with pushed, per-file-pull (with related documents), and workspace-pull diagnostics, hover, completion, goto-definition, goto-type-definition, goto-declaration, goto-implementation, references, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), type hierarchy (prepare a trait/struct/enum item and walk the recorded impl facts), signature help, inlay hints, inline values, rename (with `prepareRename`), folding, formatting, on-type formatting, code actions (add missing match arms, generate impl, remove unused imports), auto-import, code lenses (with a live-count resolve, executable through `workspace/executeCommand`), document links, linked editing ranges, monikers, workspace/document symbols, and an optional JSON-lines server log (`--log-file`).
 - `glyip` build tool: project scaffolding, incremental builds, dependency resolution (path / registry / git), lockfiles, and compiled test execution.
 
 ### Tracked gaps
