@@ -112,6 +112,14 @@ Les macros déclaratives utilisent `macro_rules!` avec des spécificateurs de fr
 | `include!`, `include_str!`, `include_bytes!` | Intègre d'autres fichiers à la compilation. |
 | `concat!`, `concat_idents!` | Concaténation de littéraux et d'identifiants. |
 | `stringify!` | Rend une expression comme littéral de chaîne. |
+| `format!` | Formate une chaîne à partir de valeurs et de spécificateurs d'affichage. |
+| `vec!` | Construit un `Vec` à partir d'éléments ou d'une valeur de remplissage. |
+| `matches!` | Teste si une expression correspond à un motif. |
+| `assert!`, `assert_eq!`, `assert_ne!` | Assertions à l'exécution (vérifiées en debug comme en release). |
+| `debug_assert!`, `debug_assert_eq!`, `debug_assert_ne!` | Assertions vérifiées uniquement dans les builds de debug. |
+| `write!`, `writeln!` | Écrit une sortie formatée dans un sink. |
+
+La bibliothèque standard définit en outre `println!`, `print!`, `eprintln!`, `eprint!` et `panic!` comme macros déclaratives dans ses sources `.g` ; elles se résolvent par le chemin usuel des macros utilisateur plutôt que par la table des intégrées.
 
 Les macros procédurales sont supportées via une ABI de flux de jetons compatible C (`glyim-proc-macro`) avec un loader cdylib basé sur `dlopen`, piloté par le drapeau CLI `--proc-macro-deps`.
 
