@@ -22,5 +22,4 @@ export default await defineDocsConfig({
     { label: 'Reference', items: [{ autogenerate: { directory: 'reference' } }] },
     { label: 'Explanation', items: [{ autogenerate: { directory: 'explanation' } }] },
   ],
-  vite: { ssr: { noExternal: ['starlight-changelogs'] } },
 });

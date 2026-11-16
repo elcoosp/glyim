@@ -10,6 +10,18 @@ import { Aside, LinkCard } from '@astrojs/starlight/components';
 
 Glyim's architecture follows one rule: every compilation phase is a self-contained crate with a narrow public API, so each phase can be studied and tested in isolation — and replaced without touching the rest. This page explains the ideas behind that rule and the mechanisms that make it work.
 
+```mermaid
+flowchart LR
+    SRC["Source (.gly)"] --> FE["glyim-frontend<br/><i>lex & parse</i>"]
+    FE --> DEF["glyim-def-map<br/><i>name resolution</i>"]
+    DEF --> HIR["glyim-hir<br/><i>arena HIR</i>"]
+    HIR --> TY["glyim-typeck<br/><i>type inference</i>"]
+    TY --> MIR["glyim-mir<br/><i>control-flow MIR</i>"]
+    MIR --> BC["glyim-borrowck<br/><i>borrow & move check</i>"]
+    BC --> CG["glyim-codegen<br/><i>native / LLVM</i>"]
+    DB[("glyim-db<br/><i>context traits</i>")] -.-> HIR & TY & BC
+```
+
 ## Why small crates
 
 Most compiler projects grow a single binary with internal modules. Glyim takes the Cargo-workspace route, with more than 30 crates, because the boundaries between phases are where compilers get muddy: the type checker reaches into the parser's internals, the borrow checker re-derives facts the type checker already knew, and tests grow tangled fixtures. A crate boundary is a compiler-enforced wall. `glyim-opt` cannot depend on parser internals, because its `Cargo.toml` does not list `glyim-frontend` as a dependency.
