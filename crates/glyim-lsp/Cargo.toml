@@ -32,6 +32,18 @@ harness = false
 name = "on_type_formatting"
 harness = false
 
+# Type-hierarchy request bench (LSP-TYPE-HIERARCHY; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "type_hierarchy"
+harness = false
+
+# Execute-command request bench (LSP-EXEC-CMD; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "execute_command"
+harness = false
+
 # Signature-help request bench (LSP-SIGNATURE-HELP; dependency-free,
 # `harness = false` like the other request benches).
 [[bench]]
