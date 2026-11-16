@@ -2696,7 +2696,7 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
             &root,
             &WaiversExtendRequest {
                 id: "WVR-20261101-first".to_string(),
-                days: 12,
+                days: 10,
             },
             &FileWaiverSource,
             &FileWaiverExtender,
