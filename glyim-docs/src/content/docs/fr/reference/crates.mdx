@@ -72,7 +72,7 @@ Glyim est organisé comme un espace de travail Cargo de petites crates à respon
 |-------|-------------|
 | `glyim-pipeline` | Pilote de compilation de bout en bout : lex, parse, def-map, HIR, typeck, lower, borrowck, opt, codegen. |
 | `glyim-cli` | Interface de ligne de commande (`clap`) et pilote d'éditeur de liens. Compilé comme `glyim-cli`. |
-| `glyim-lsp` | Implémentation du Language Server Protocol : diagnostics (push et pull), hover, complétion, navigation (définition, définition de type, déclaration, implémentation, références), hiérarchie d'appels, aide de signature, indices d'inlay, surbrillance de document, plages de sélection, jetons sémantiques, pliage, formatage, renommage avec préparation, symboles, actions de code. |
+| `glyim-lsp` | Implémentation du Language Server Protocol : diagnostics (push, pull par fichier avec documents liés et pull par espace de travail), hover, complétion, navigation (définition, définition de type, déclaration, implémentation, références), hiérarchie d'appels, aide de signature, indices d'inlay, surbrillance de document, plages de sélection, jetons sémantiques, pliage, formatage, renommage avec préparation, symboles, actions de code. |
 | `glyim-test` | Framework de test : découverte, cinq modes de test, instantanés, mocks, tests de propriétés. |
 | `glyip` | Gestionnaire de paquets et outil de build. |
 
