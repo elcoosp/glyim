@@ -63,7 +63,7 @@ The design is heavily inspired by rustc's architecture (arena-allocated IRs, int
 - **Pattern matching** with literals, ranges, or-patterns, slices, structs, tuples, enums, and `if` guards.
 - **`async`/`await`** with state-machine desugaring (straight-line and multi-await bodies).
 - **Closures** with capture analysis (`ByValue` / `ByRef(Mut)` / `ByRef(Not)`).
-- **Macros**: declarative `macro_rules!` with fragment specifiers (`:expr`, `:ty`, `:pat`, `:tt`, …), plus built-in `file!`, `line!`, `column!`, `env!`, `option_env!`, `include!`, `include_str!`, `include_bytes!`, `concat!`, `concat_idents!`, `stringify!`.
+- **Macros**: declarative `macro_rules!` with fragment specifiers (`:expr`, `:ty`, `:pat`, `:tt`, …), plus built-in `file!`, `line!`, `column!`, `env!`, `option_env!`, `include!`, `include_str!`, `include_bytes!`, `concat!`, `concat_idents!`, `stringify!`, `format!`, `vec!`, `matches!`, `assert!`, `assert_eq!`, `assert_ne!`, `debug_assert!`, `debug_assert_eq!`, `debug_assert_ne!`, `write!`, `writeln!`; the stdlib additionally defines `println!`/`print!`/`eprintln!`/`eprint!`/`panic!` as declarative macros.
 - **Procedural macros** through a C-compatible token-stream ABI (`glyim-proc-macro`), with a `dlopen`-based cdylib loader.
 - **Ranges**, `Option`/`Result`/`Vec`/`String`/`Box`/`PhantomData`/`UnsafeCell` as compiler-known builtins.
 - **GSX view syntax**: first-class, typed, host-agnostic view elements (`<button on:click={…}>…</button>`) with a dedicated compiler stage — View IR, flat-`u32` blueprints, ownership-driven reactivity (mutation-specialized patches, no vdom/signals on the fast path), SSR emitter and a headless test host. See `docs/design/GSX-in-Glyim.md` and `docs/design/gsx-implementation.md`.
@@ -90,7 +90,7 @@ The design is heavily inspired by rustc's architecture (arena-allocated IRs, int
 
 - **`glyim` CLI** — compile with `--emit=obj|exec|mir|llvm-ir|asm|cdylib|syntax|stats|run`, choose a backend, set opt-level, target triple, LTO strategy, and codegen units; measure compiles with `--time-passes` and `--self-profile[=FILE]` (Chrome trace), and emit a schema-versioned JSON measurement report with `--emit=stats`.
 - **`glyip` build tool** — Cargo-like project manager with `new`, `build`, `test`, and `run`; dependency resolution with SemVer 2.0 matching, path deps, git deps (branch/tag/rev), lockfiles, and a registry client.
-- **Language Server** (`glyim-lsp`) — diagnostics (pushed; pulled per file, with related documents over the dependency graph; and pulled per workspace on demand), goto definition, goto type definition, goto declaration, goto implementation, hover, completion, find references, folding, formatting, rename (with `prepareRename`), workspace symbols, document symbols, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), signature help, inlay hints, code actions (add missing match arms, generate impl, remove unused imports), auto-import, and an optional `--log-file` that tees the server's tracing events to a JSON-lines file.
+- **Language Server** (`glyim-lsp`) — diagnostics (pushed; pulled per file, with related documents over the dependency graph; and pulled per workspace on demand), goto definition, goto type definition, goto declaration, goto implementation, hover, completion, find references, folding, formatting, rename (with `prepareRename`), workspace symbols, document symbols, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), signature help, inlay hints, code actions (add missing match arms, generate impl, remove unused imports), auto-import, document links (include-macro literals link to the files they name), linked editing ranges (same-scope occurrences edit together), and an optional `--log-file` that tees the server's tracing events to a JSON-lines file.
 - **Test harness** (`glyim-test`) — compile-pass / compile-fail / UI / run-pass / run-fail modes with inline annotations (`//~ ERROR`, `//~| …`), snapshot testing (CST, def-map, MIR), mocking utilities for every compiler phase, and property-based type generation.
 
 ---
@@ -495,7 +495,8 @@ cargo run -p glyim-test --example evidence_report
 # walkthrough per seam (declaration, implementation, pull diagnostics,
 # workspace diagnostics, related diagnostics,
 # inlay hints, call hierarchy, signature help, semantic tokens, selection
-# ranges, document highlight, type definition, and the --log-file sink):
+# ranges, document highlight, document links, linked editing, type
+# definition, and the --log-file sink):
 cargo run -p glyim-lsp --example goto_declaration_walkthrough
 cargo run -p glyim-lsp --example implementation_walkthrough
 cargo run -p glyim-lsp --example pull_diagnostics_walkthrough
@@ -507,6 +508,8 @@ cargo run -p glyim-lsp --example signature_help_walkthrough
 cargo run -p glyim-lsp --example semantic_tokens_walkthrough
 cargo run -p glyim-lsp --example selection_range_walkthrough
 cargo run -p glyim-lsp --example document_highlight_walkthrough
+cargo run -p glyim-lsp --example document_links_walkthrough
+cargo run -p glyim-lsp --example linked_editing_walkthrough
 cargo run -p glyim-lsp --example type_definition_walkthrough
 cargo run -p glyim-lsp --example server_log_walkthrough
 
