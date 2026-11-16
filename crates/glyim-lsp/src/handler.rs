@@ -14,7 +14,9 @@ use crate::goto_definition::goto_definition;
 use crate::hover::provide_hover;
 use crate::implementation::goto_implementation;
 use crate::inlay_hint::inlay_hints;
+use crate::inline_value::inline_values;
 use crate::linked_editing::linked_editing_ranges;
+use crate::moniker::monikers;
 use crate::navigation::{document_symbols, find_references, workspace_symbols};
 use crate::on_type_formatting::on_type_formatting;
 use crate::prepare_rename::prepare_rename;
@@ -37,10 +39,11 @@ use lsp_types::request::{
     DocumentHighlightRequest, DocumentLinkRequest, DocumentSymbolRequest, ExecuteCommand,
     FoldingRangeRequest, Formatting, GotoDeclaration, GotoDefinition, GotoImplementation,
     GotoImplementationParams, GotoTypeDefinition, HoverRequest, Initialize, InlayHintRequest,
-    LinkedEditingRange, OnTypeFormatting, PrepareRenameRequest, References, Rename,
-    SelectionRangeRequest, SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown,
-    SignatureHelpRequest, TypeHierarchyPrepare, TypeHierarchySubtypes, TypeHierarchySupertypes,
-    WorkspaceDiagnosticRequest, WorkspaceSymbolRequest,
+    InlineValueRequest, LinkedEditingRange, MonikerRequest, OnTypeFormatting, PrepareRenameRequest,
+    References, Rename, SelectionRangeRequest, SemanticTokensFullRequest,
+    SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest, TypeHierarchyPrepare,
+    TypeHierarchySubtypes, TypeHierarchySupertypes, WorkspaceDiagnosticRequest,
+    WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -152,6 +155,22 @@ pub fn build_router(
                 // conformance test pins this advertisement to the router
                 // registration.
                 inlay_hint_provider: Some(OneOf::Left(true)),
+                // LSP-MONIKER: the moniker capability. The handler below
+                // reads the same shared `SymbolIndex` goto-definition and
+                // hover read (recorded definitions with their qualified
+                // module paths) plus the stored parse trees for the spelled
+                // import paths, so no re-analysis happens on the request
+                // path. The conformance test pins this advertisement to the
+                // router registration.
+                moniker_provider: Some(OneOf::Left(true)),
+                // LSP-INLINE-VALUE: the inline-value capability. The
+                // handler below reads the same stored HIRs the
+                // type-hierarchy engine reads (every `let` binding with
+                // its byte-exact pattern span — the same spans rename
+                // edits consume), so no re-analysis happens on the request
+                // path. The conformance test pins this advertisement to
+                // the router registration.
+                inline_value_provider: Some(OneOf::Left(true)),
                 // LSP-IMPLEMENTATION: the goto-implementation capability.
                 // The handler below walks the driver's stored `CrateHir`s
                 // (each `impl` block records its trait path and self type
@@ -492,6 +511,34 @@ pub fn build_router(
         async move {
             let guard = db.file_map.read();
             Ok(type_subtypes(&db, &guard, &params))
+        }
+    });
+
+    // Inline Value (LSP-INLINE-VALUE): the recorded `let` bindings of the
+    // requested range answer as variable lookups — the facts a debug
+    // adapter stopped on a frame needs to render inline variable names,
+    // served from the stored HIRs (the same spans rename edits consume).
+    let db_inline_values = db.clone();
+    router.request::<InlineValueRequest, _>(move |(), params: InlineValueParams| {
+        let db = db_inline_values.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(inline_values(&db, &guard, &params))
+        }
+    });
+
+    // Moniker (LSP-MONIKER): the cursor's identifier resolves to the
+    // identities the recorded facts vouch for — the spelled path of the
+    // `use` binding it sits on, the qualified module path of the definition
+    // it sits on, or the name-only resolution of a bare usage. lsp-types
+    // 0.97 carries the `moniker_provider` capability, advertised above and
+    // pinned by the conformance test.
+    let db_moniker = db.clone();
+    router.request::<MonikerRequest, _>(move |(), params: MonikerParams| {
+        let db = db_moniker.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(monikers(&db, &guard, &params))
         }
     });
 
