@@ -129,8 +129,9 @@ impl ImplSource for HirImplSource<'_> {
 /// The last path segment's resolved name, if the path carries one.
 ///
 /// Empty paths (a parse-recovery shape the lowering can produce) name
-/// nothing.
-fn last_segment_name(path: &Path, interner: &glyim_core::Interner) -> Option<String> {
+/// nothing. Shared with the type-hierarchy engine, which matches the
+/// same recorded names.
+pub(crate) fn last_segment_name(path: &Path, interner: &glyim_core::Interner) -> Option<String> {
     path.segments
         .last()
         .map(|segment| interner.resolve(segment.name).to_string())
@@ -140,7 +141,9 @@ fn last_segment_name(path: &Path, interner: &glyim_core::Interner) -> Option<Str
 /// any. `impl Greet for P` spells both sides as paths; slices, tuples,
 /// and pointers have no single name to match a cursor against, so they
 /// answer `None` (the impl site stays recorded, but no symbol claims it).
-fn type_ref_last_name(ty: &TypeRef, interner: &glyim_core::Interner) -> Option<String> {
+/// Shared with the type-hierarchy engine, which matches the same
+/// recorded names.
+pub(crate) fn type_ref_last_name(ty: &TypeRef, interner: &glyim_core::Interner) -> Option<String> {
     match ty {
         TypeRef::Path(path) => last_segment_name(path, interner),
         _ => None,
