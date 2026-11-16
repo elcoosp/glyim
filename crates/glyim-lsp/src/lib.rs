@@ -61,6 +61,8 @@ pub mod symbol_index;
 pub mod type_definition;
 /// uri.
 pub mod uri; // Make database public
+/// `workspace_diagnostics` (LSP-WORKSPACE-DIAG).
+pub mod workspace_diagnostics;
 
 #[cfg(test)]
 mod tests;
@@ -90,7 +92,8 @@ pub use inlay_hint::{
 };
 pub use prepare_rename::{prepare_rename, rename_target};
 pub use pull_diagnostics::{
-    DiagnosticSource, RecordedDiagnosticSource, pull_diagnostics, pull_report,
+    AffectedFilesSource, DependencyGraphSource, DiagnosticSource, RecordedDiagnosticSource,
+    pull_diagnostics, pull_report, related_reports,
 };
 pub use reference_graph::{Reference, ReferenceGraph, ReferenceKind};
 pub use selection_range::{
@@ -110,4 +113,8 @@ pub use state::LspState;
 pub use symbol_index::{DefinitionLocation, SymbolIndex, SymbolInfo, SymbolKind, TypeSignature};
 pub use type_definition::{
     SymbolIndexSource, TypeSymbolSource, named_type_of, type_definition, type_target,
+};
+pub use workspace_diagnostics::{
+    AnalysedFile, AnalysedSetSource, RecordedAnalysedSource, workspace_diagnostics,
+    workspace_report,
 };
