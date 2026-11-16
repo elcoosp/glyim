@@ -31,14 +31,26 @@
 //! `null`. Only a document the server does not know (not open, never
 //! analysed) answers `None` via the entry point.
 //!
+//! Related documents (LSP-RELATED-DIAG): the report carries a
+//! `relatedDocuments` entry per file the dependency graph says is
+//! *affected by* the pulled one (its transitive dependents — the files
+//! the driver re-analyses when it changes), each answering that file's
+//! own recorded set through the same pull policy. A file nobody depends
+//! on answers without a `relatedDocuments` key at all — the exact shape
+//! the pull path answered before the fan-out existed, so clients that
+//! never opted in see no change. `inter_file_dependencies: true` was
+//! advertised from day one; this is the route that makes it true in
+//! fact.
+//!
 //! Wire mapping (LSP spec): `DocumentDiagnosticReportResult::Report`
-//! wrapping a full report with `relatedDocuments: None` (no cross-file
-//! report fan-out yet), items in the driver's recorded order — the same
+//! wrapping a full report with `relatedDocuments` over the affected set
+//! (omitted when empty), items in the driver's recorded order — the same
 //! order `publishDiagnostics` carries — in the same `SourceMap` UTF-16
 //! coordinates the push path uses.
 
 use crate::AnalysisDatabase;
 use crate::database::FileMap;
+use crate::dep_graph::DependencyGraph;
 use glyim_span::FileId;
 use lsp_types::{
     Diagnostic, DocumentDiagnosticParams, DocumentDiagnosticReport, DocumentDiagnosticReportKind,
@@ -46,6 +58,7 @@ use lsp_types::{
     RelatedFullDocumentDiagnosticReport,
 };
 use std::collections::HashMap;
+use std::str::FromStr;
 use url::Url;
 
 /// The recorded-set seam for pull-diagnostics requests (LSP-PULL-DIAG).
@@ -112,13 +125,18 @@ pub fn pull_report(
     })
 }
 
-/// `textDocument/diagnostic` request entry point (LSP-PULL-DIAG).
+/// `textDocument/diagnostic` request entry point (LSP-PULL-DIAG, with
+/// the LSP-RELATED-DIAG fan-out).
 ///
 /// Resolution order: URI → open-file lookup → recorded set through the
-/// shared seam → full report. Returns `None` only when the document is
-/// not one the server knows (not open, never analysed); callers answer
-/// `null` for that. An open file with no problems answers an empty full
-/// report, not `null` — the empty report is the protocol's "clean" answer.
+/// shared seam → full report → related reports over the dependency
+/// graph. Returns `None` only when the document is not one the server
+/// knows (not open, never analysed); callers answer `null` for that. An
+/// open file with no problems answers an empty full report, not `null`
+/// — the empty report is the protocol's "clean" answer. The related
+/// documents answer each file affected by the pulled one (its
+/// transitive dependents) with that file's own pull answer; a file
+/// nobody depends on answers without a `relatedDocuments` key at all.
 #[must_use]
 pub fn pull_diagnostics(
     db: &AnalysisDatabase,
@@ -131,6 +149,16 @@ pub fn pull_diagnostics(
 
     let recorded = db.diagnostics.read();
     let kind = pull_report(&RecordedDiagnosticSource::new(&recorded), file_id, None);
+    let related = {
+        let graph = db.dep_graph.read();
+        let affected = DependencyGraphSource::new(&graph, file_map);
+        related_reports(
+            &affected,
+            &RecordedDiagnosticSource::new(&recorded),
+            file_map,
+            file_id,
+        )
+    };
     drop(recorded);
 
     let full = match kind {
@@ -140,11 +168,114 @@ pub fn pull_diagnostics(
         // an empty report rather than a panic.
         DocumentDiagnosticReportKind::Unchanged(_) => FullDocumentDiagnosticReport::default(),
     };
-    tracing::debug!(items = full.items.len(), "pull diagnostics answered");
+    let related_documents = if related.is_empty() {
+        None
+    } else {
+        Some(related)
+    };
+    tracing::debug!(
+        items = full.items.len(),
+        related = related_documents.as_ref().map_or(0, |m| m.len()),
+        "pull diagnostics answered"
+    );
     Some(DocumentDiagnosticReportResult::Report(
         DocumentDiagnosticReport::Full(RelatedFullDocumentDiagnosticReport {
-            related_documents: None,
+            related_documents,
             full_document_diagnostic_report: full,
         }),
     ))
+}
+
+// -- Related-document fan-out (LSP-RELATED-DIAG) -------------------------------
+
+/// The affected-set seam for related-document fan-out (LSP-RELATED-DIAG).
+///
+/// The fan-out policy in [`related_reports`] must stay testable without a
+/// live `AnalysisDatabase` (locks, maps, drivers), so it reads the
+/// affected set through this trait. The production
+/// [`DependencyGraphSource`] borrows the driver's `db.dep_graph` and
+/// translates through the session's `FileMap`; a future dependency
+/// oracle would slot in behind the same seam without touching the
+/// policy.
+pub trait AffectedFilesSource {
+    /// The ids of the files affected by a change to `origin`, in any
+    /// order (the policy imposes the deterministic ascending-`FileId`
+    /// order). The origin itself may appear — the policy drops it.
+    fn affected_by(&self, origin: FileId) -> Vec<FileId>;
+}
+
+/// Production [`AffectedFilesSource`]: borrows the driver's
+/// `db.dep_graph` and answers with the transitive reverse-dependency
+/// closure of `origin` — the files the driver re-analyses when `origin`
+/// changes — translated back to ids through the session's `FileMap`.
+/// Files no longer in the `FileMap` (mid-teardown) are skipped: a path
+/// without a session id has no URI to key a related report with.
+///
+/// Borrowing (not cloning the graph) keeps the request
+/// allocation-free apart from the returned reports; the read guard
+/// lives in the caller.
+pub struct DependencyGraphSource<'a> {
+    graph: &'a DependencyGraph,
+    file_map: &'a FileMap,
+}
+
+impl<'a> DependencyGraphSource<'a> {
+    /// Borrows the dependency graph and session file map as the
+    /// affected-set source for one request.
+    #[must_use]
+    pub fn new(graph: &'a DependencyGraph, file_map: &'a FileMap) -> Self {
+        Self { graph, file_map }
+    }
+}
+
+impl AffectedFilesSource for DependencyGraphSource<'_> {
+    fn affected_by(&self, origin: FileId) -> Vec<FileId> {
+        let Some(origin_path) = self.file_map.path(origin) else {
+            return Vec::new();
+        };
+        self.graph
+            .affected_files(origin_path)
+            .iter()
+            .filter_map(|path| self.file_map.get_by_path(path))
+            .collect()
+    }
+}
+
+/// Related-document fan-out policy: one full report per file affected by
+/// a change to `origin`, ascending [`FileId`] order, keyed by each
+/// file's own URI.
+///
+/// The origin itself is dropped (its report is the answer, not a
+/// related document — [`DependencyGraphSource`]'s traversal seeds the
+/// stack with it). Each related report answers through the same
+/// [`pull_report`] policy the client-facing report uses, so a client
+/// that follows the fan-out sees exactly what a per-file pull would
+/// answer. An empty affected set answers an empty map, which the entry
+/// point maps to `related_documents: None` (the wire's "no related
+/// reports" form).
+#[must_use]
+pub fn related_reports(
+    affected: &dyn AffectedFilesSource,
+    recorded: &dyn DiagnosticSource,
+    file_map: &FileMap,
+    origin: FileId,
+) -> HashMap<lsp_types::Uri, DocumentDiagnosticReportKind> {
+    let mut ids = affected.affected_by(origin);
+    ids.retain(|id| *id != origin);
+    // Ascending file id (allocation order): the graph's traversal order
+    // is a HashSet walk, so the policy — not the production source —
+    // owns the deterministic order.
+    ids.sort_by_key(|id| id.to_raw());
+    ids.into_iter()
+        .filter_map(|id| {
+            let path = file_map.path(id)?;
+            let wire_uri =
+                lsp_types::Uri::from_str(Url::from_file_path(path).ok()?.as_str()).ok()?;
+            let kind = pull_report(recorded, id, None);
+            // Each related entry is a bare kind (the wire map value):
+            // the per-entry `relatedDocuments` recursion is not
+            // represented here — one level of fan-out, no nesting.
+            Some((wire_uri, kind))
+        })
+        .collect()
 }
