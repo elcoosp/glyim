@@ -3,6 +3,7 @@ use crate::call_hierarchy::{incoming_calls, outgoing_calls, prepare_call_hierarc
 use crate::code_action::provide_code_actions;
 use crate::completion::provide_completions;
 use crate::document_highlight::document_highlights;
+use crate::document_link::document_links;
 use crate::driver::AnalysisMessage;
 use crate::folding::provide_folding_ranges;
 use crate::formatting::format_document;
@@ -11,6 +12,7 @@ use crate::goto_definition::goto_definition;
 use crate::hover::provide_hover;
 use crate::implementation::goto_implementation;
 use crate::inlay_hint::inlay_hints;
+use crate::linked_editing::linked_editing_ranges;
 use crate::navigation::{document_symbols, find_references, workspace_symbols};
 use crate::prepare_rename::prepare_rename;
 use crate::pull_diagnostics::pull_diagnostics;
@@ -28,11 +30,11 @@ use lsp_types::notification::{DidChangeTextDocument, DidCloseTextDocument, DidOp
 use lsp_types::request::{
     CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare,
     CodeActionRequest, Completion, DocumentDiagnosticRequest, DocumentHighlightRequest,
-    DocumentSymbolRequest, FoldingRangeRequest, Formatting, GotoDeclaration, GotoDefinition,
-    GotoImplementation, GotoImplementationParams, GotoTypeDefinition, HoverRequest, Initialize,
-    InlayHintRequest, PrepareRenameRequest, References, Rename, SelectionRangeRequest,
-    SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest,
-    WorkspaceDiagnosticRequest, WorkspaceSymbolRequest,
+    DocumentLinkRequest, DocumentSymbolRequest, FoldingRangeRequest, Formatting, GotoDeclaration,
+    GotoDefinition, GotoImplementation, GotoImplementationParams, GotoTypeDefinition, HoverRequest,
+    Initialize, InlayHintRequest, LinkedEditingRange, PrepareRenameRequest, References, Rename,
+    SelectionRangeRequest, SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown,
+    SignatureHelpRequest, WorkspaceDiagnosticRequest, WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -181,6 +183,29 @@ pub fn build_router(
                 // and was tested, but neither advertised nor routed — a dead
                 // feature. Advertise it so clients send the request.
                 workspace_symbol_provider: Some(OneOf::Left(true)),
+                // LSP-DOC-LINK: the document-link capability. The handler
+                // below walks the driver's stored parse trees (the same
+                // immutable green store selection-range and semantic-tokens
+                // read) for include-macro call shapes, so no re-analysis
+                // happens on the request path and the capability answers on
+                // broken code too. Targets resolve directly — no
+                // `documentLink/resolve` round-trip — so the resolve
+                // provider stays off. The conformance test pins this
+                // advertisement to the router registration.
+                document_link_provider: Some(DocumentLinkOptions {
+                    resolve_provider: Some(false),
+                    work_done_progress_options: WorkDoneProgressOptions::default(),
+                }),
+                // LSP-LINKED-EDIT: the linked-editing-range capability. The
+                // handler below composes the document-highlight occurrence
+                // seam (the shared reference graph, T129 scope-owner
+                // filter included), so multi-cursor in-place editing follows
+                // exactly the same scoping rules highlight, find-references
+                // and rename enforce. The conformance test pins this
+                // advertisement to the router registration.
+                linked_editing_range_provider: Some(LinkedEditingRangeServerCapabilities::Simple(
+                    true,
+                )),
                 ..ServerCapabilities::default()
             };
             Ok(InitializeResult {
@@ -311,6 +336,35 @@ pub fn build_router(
         async move {
             let guard = db.file_map.read();
             Ok(find_references(&db, &guard, &params))
+        }
+    });
+
+    // Document Links (LSP-DOC-LINK): the string literals of the open
+    // document's include-macro calls become clickable file links — the
+    // whole `include!`/`include_str!`/`include_bytes!("…")` shape links to
+    // the path it spells, resolved against the containing document's
+    // directory. The walk reads the stored parse trees (no re-analysis),
+    // so it answers on broken code too; no include calls answer `null`.
+    let db_doc_link = db.clone();
+    router.request::<DocumentLinkRequest, _>(move |(), params: DocumentLinkParams| {
+        let db = db_doc_link.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(document_links(&db, &guard, &params))
+        }
+    });
+
+    // Linked Editing Ranges (LSP-LINKED-EDIT): the cursor's symbol becomes
+    // an in-place multi-cursor edit group — every same-file occurrence the
+    // document-highlight policy vouches for (shared reference graph, T129
+    // scope-owner filter included) answers as one range group, kinds
+    // dropped. Off-symbol cursors and unopened documents answer `null`.
+    let db_linked_edit = db.clone();
+    router.request::<LinkedEditingRange, _>(move |(), params: LinkedEditingRangeParams| {
+        let db = db_linked_edit.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(linked_editing_ranges(&db, &guard, &params))
         }
     });
 
