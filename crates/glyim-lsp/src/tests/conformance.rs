@@ -45,6 +45,7 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "linked_editing_range_provider",
         "code_lens_provider",
         "document_on_type_formatting_provider",
+        "execute_command_provider",
     ]
 }
 
@@ -136,6 +137,55 @@ fn semantic_tokens_is_in_the_expected_set() {
     assert!(
         expected_advertised_providers().contains(&"semantic_tokens_provider"),
         "semantic_tokens_provider must be advertised"
+    );
+}
+
+#[test]
+fn type_hierarchy_has_a_pinned_wire_contract() {
+    use lsp_types::request::Request;
+    // Regression pin (LSP-TYPE-HIERARCHY): the `typeHierarchy/*` requests
+    // define no `ServerCapabilities` field in lsp-types 0.97 (the LSP spec
+    // gates them on registration, not on a static capability), so the
+    // router registration *is* the advertisement. The pin is the wire
+    // contract instead: the three request types' METHOD strings, so an
+    // lsp-types upgrade that reshapes the endpoints surfaces here and the
+    // end-to-end tests in `type_hierarchy_tests.rs` pin the handlers.
+    assert_eq!(
+        lsp_types::request::TypeHierarchyPrepare::METHOD,
+        "textDocument/prepareTypeHierarchy"
+    );
+    assert_eq!(
+        lsp_types::request::TypeHierarchySupertypes::METHOD,
+        "typeHierarchy/supertypes"
+    );
+    assert_eq!(
+        lsp_types::request::TypeHierarchySubtypes::METHOD,
+        "typeHierarchy/subtypes"
+    );
+}
+
+#[test]
+fn execute_command_is_in_the_expected_set() {
+    // Regression pin (LSP-EXEC-CMD): the `workspace/executeCommand`
+    // capability must be advertised with the same command id the
+    // code-lens resolve emits — an advertised command with no
+    // advertisement-side registration and no execution route was the
+    // exact dead-feature shape the conformance audit exists for.
+    assert!(
+        expected_advertised_providers().contains(&"execute_command_provider"),
+        "execute_command_provider must be advertised"
+    );
+}
+
+#[test]
+fn execute_command_advertises_the_lens_command() {
+    // The advertised command set names exactly what a client may execute:
+    // the code-lens resolve's command id, and nothing else.
+    let advertised = crate::handler::advertised_commands();
+    assert_eq!(
+        advertised,
+        vec![crate::code_lens::SHOW_REFERENCES_COMMAND.to_string()],
+        "the advertised command set is the lens command, verbatim"
     );
 }
 
