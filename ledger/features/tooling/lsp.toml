@@ -294,3 +294,23 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-MONIKER"
+title         = "monikers: textDocument/moniker answers the recorded identity of the cursor's symbol — the spelled use-path it sits on, the qualified module path of the definition it sits on, or the name-only resolution of a bare usage"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-INLINE-VALUE"
+title         = "inline values: textDocument/inlineValue answers the recorded let bindings of the requested range as variable lookups, served from the stored HIR's pattern spans"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
