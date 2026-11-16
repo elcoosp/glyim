@@ -41,6 +41,8 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "code_action_provider",
         "document_symbol_provider",
         "workspace_symbol_provider",
+        "document_link_provider",
+        "linked_editing_range_provider",
     ]
 }
 
@@ -62,6 +64,29 @@ fn document_highlight_is_in_the_expected_set() {
     assert!(
         expected_advertised_providers().contains(&"document_highlight_provider"),
         "document_highlight_provider must be advertised"
+    );
+}
+
+#[test]
+fn document_link_is_in_the_expected_set() {
+    // Regression pin (LSP-DOC-LINK): the `textDocument/documentLink`
+    // capability must be advertised alongside its router registration; a
+    // future removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"document_link_provider"),
+        "document_link_provider must be advertised"
+    );
+}
+
+#[test]
+fn linked_editing_range_is_in_the_expected_set() {
+    // Regression pin (LSP-LINKED-EDIT): the
+    // `textDocument/linkedEditingRange` capability must be advertised
+    // alongside its router registration; a future removal of either half
+    // surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"linked_editing_range_provider"),
+        "linked_editing_range_provider must be advertised"
     );
 }
 
