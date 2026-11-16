@@ -9,9 +9,12 @@
 //! and the full wire path are covered end-to-end in
 //! `pull_diagnostics_tests.rs`.
 
+use crate::database::FileMap;
 use crate::pull_diagnostics::{DiagnosticSource, pull_report};
 use glyim_span::FileId;
 use lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 struct MockSource {
     recorded: Vec<Diagnostic>,
@@ -91,4 +94,133 @@ fn a_clean_analysed_file_answers_an_empty_full_report() {
         panic!("a clean file must still answer a full report");
     };
     assert!(full.items.is_empty());
+}
+
+// -- Related-document fan-out (LSP-RELATED-DIAG) ------------------------------
+//
+// The same seam discipline as the report policy above: the fan-out
+// decision in [`crate::pull_diagnostics::related_reports`] reads the
+// affected set through the [`crate::pull_diagnostics::AffectedFilesSource`]
+// seam, so the *composition decision* is pinned here without a database,
+// lock, or dependency graph. The production
+// [`crate::pull_diagnostics::DependencyGraphSource`] and the full wire
+// path are covered end-to-end in `pull_diagnostics_tests.rs`.
+
+struct MockAffectedSet {
+    affected: Vec<FileId>,
+}
+
+impl crate::pull_diagnostics::AffectedFilesSource for MockAffectedSet {
+    fn affected_by(&self, _origin: FileId) -> Vec<FileId> {
+        self.affected.clone()
+    }
+}
+
+struct MockSets {
+    sets: HashMap<FileId, Vec<Diagnostic>>,
+}
+
+impl crate::pull_diagnostics::DiagnosticSource for MockSets {
+    fn diagnostics_of(&self, file_id: FileId) -> Vec<Diagnostic> {
+        self.sets.get(&file_id).cloned().unwrap_or_default()
+    }
+}
+
+fn affected(file_id: FileId, name: &str, messages: &[&str]) -> (FileId, PathBuf, Vec<Diagnostic>) {
+    (
+        file_id,
+        PathBuf::from(format!("/test/{name}.g")),
+        messages.iter().map(|m| diag(m)).collect(),
+    )
+}
+
+#[test]
+fn related_reports_carry_one_full_kind_per_affected_file() {
+    let mut file_map = FileMap::new();
+    let origin_path = PathBuf::from("/test/origin.g");
+    let dep_path = PathBuf::from("/test/dependent.g");
+    // The policy resolves each affected id through the file map — the
+    // mock set must carry the ids the map actually allocated, not
+    // invented raw values.
+    let origin = file_map.get_or_create(&origin_path);
+    let dep_id = file_map.get_or_create(&dep_path);
+    let (_, _, dep_diags) = affected(dep_id, "dependent", &["boom"]);
+    let mock_affected = MockAffectedSet {
+        affected: vec![dep_id],
+    };
+    let mock_sets = MockSets {
+        sets: HashMap::from([(dep_id, dep_diags)]),
+    };
+
+    let related =
+        crate::pull_diagnostics::related_reports(&mock_affected, &mock_sets, &file_map, origin);
+    assert_eq!(related.len(), 1, "one report per affected file");
+    let (uri, report) = related.iter().next().expect("one entry");
+    assert_eq!(
+        uri.as_str(),
+        url::Url::from_file_path(&dep_path).unwrap().as_str(),
+        "the affected file's own URI keys the entry"
+    );
+    let lsp_types::DocumentDiagnosticReportKind::Full(full) = report else {
+        panic!("the server never issues result ids; a related report must be full");
+    };
+    assert_eq!(full.result_id, None);
+    assert_eq!(
+        full.items.len(),
+        1,
+        "the affected file's recorded set passes through"
+    );
+}
+
+#[test]
+fn related_reports_exclude_the_origin_file_itself() {
+    // `DependencyGraph::affected_files` includes the origin file (the
+    // traversal seeds the stack with it); a related-document entry for
+    // the file the client *just pulled* would be redundant — its report
+    // is the answer itself.
+    let mut file_map = FileMap::new();
+    let origin_path = PathBuf::from("/test/origin.g");
+    let dep_path = PathBuf::from("/test/dependent.g");
+    let origin = file_map.get_or_create(&origin_path);
+    let dep_id = file_map.get_or_create(&dep_path);
+    let mock_affected = MockAffectedSet {
+        affected: vec![origin, dep_id],
+    };
+    let mock_sets = MockSets {
+        sets: HashMap::from([(origin, vec![diag("pulled")]), (dep_id, Vec::new())]),
+    };
+
+    let related =
+        crate::pull_diagnostics::related_reports(&mock_affected, &mock_sets, &file_map, origin);
+    assert_eq!(
+        related.len(),
+        1,
+        "the origin never appears in its own related set"
+    );
+    let uri = related.keys().next().expect("one entry");
+    assert_ne!(
+        uri.as_str(),
+        url::Url::from_file_path(&origin_path).unwrap().as_str()
+    );
+}
+
+#[test]
+fn related_reports_answer_empty_without_dependents() {
+    // No affected files → an empty map, which the entry point maps to
+    // `related_documents: None` (the wire's "no related reports" form).
+    let mock_affected = MockAffectedSet {
+        affected: Vec::new(),
+    };
+    let mock_sets = MockSets {
+        sets: HashMap::new(),
+    };
+    let file_map = FileMap::new();
+
+    let related = crate::pull_diagnostics::related_reports(
+        &mock_affected,
+        &mock_sets,
+        &file_map,
+        FileId::from_raw(0),
+    );
+    assert!(related.is_empty());
 }
