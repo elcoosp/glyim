@@ -1,9 +1,9 @@
 {
   "schema": "glyim.status/1",
-  "features": 247,
+  "features": 248,
   "records": 56,
   "summary": {
-    "L0": 234,
+    "L0": 235,
     "L1": 7,
     "L2": 6,
     "L3": 0,
@@ -2166,6 +2166,14 @@
     },
     {
       "id": "TOOL-LSP-PULL-DIAG",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-RANGE-FORMAT",
       "tier": "tooling",
       "target_level": "L4",
       "computed_level": "L0",
