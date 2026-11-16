@@ -43,6 +43,8 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "workspace_symbol_provider",
         "document_link_provider",
         "linked_editing_range_provider",
+        "code_lens_provider",
+        "document_on_type_formatting_provider",
     ]
 }
 
@@ -87,6 +89,30 @@ fn linked_editing_range_is_in_the_expected_set() {
     assert!(
         expected_advertised_providers().contains(&"linked_editing_range_provider"),
         "linked_editing_range_provider must be advertised"
+    );
+}
+
+#[test]
+fn code_lens_is_in_the_expected_set() {
+    // Regression pin (LSP-CODE-LENS): the `textDocument/codeLens`
+    // capability must be advertised (with its resolve provider, since the
+    // `codeLens/resolve` route exists) alongside its two router
+    // registrations; a future removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"code_lens_provider"),
+        "code_lens_provider must be advertised"
+    );
+}
+
+#[test]
+fn on_type_formatting_is_in_the_expected_set() {
+    // Regression pin (LSP-ON-TYPE-FORMAT): the
+    // `textDocument/onTypeFormatting` capability must be advertised
+    // (with its trigger characters) alongside its router registration; a
+    // future removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"document_on_type_formatting_provider"),
+        "document_on_type_formatting_provider must be advertised"
     );
 }
 
