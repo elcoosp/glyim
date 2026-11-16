@@ -22,7 +22,7 @@ import { Aside, Badge, Code } from '@astrojs/starlight/components';
 | `--lib` | drapeau | off | Crée un projet bibliothèque au lieu d'un binaire. |
 | `--edition <EDITION>` | chaîne | `2024` | Édition du langage. |
 
-<Code lang="bash" code={`glyip new my_project
+<Code lang="bash" title="Terminal" code={`glyip new my_project
 glyip new my_lib --lib`} />
 
 ### `glyip build`
@@ -37,7 +37,7 @@ Compile le projet. Les builds sont incrémentaux — les sources et la configura
 | `--opt-level <N>` | 0–3 | `0` | Niveau d'optimisation. |
 | `--lto <KIND>` | `off` \| `thin` \| `fat` | `off` | Optimisation à l'édition de liens. Les valeurs inconnues sont traitées comme `off`. |
 
-<Code lang="bash" code={`glyip build --release --opt-level 2`} />
+<Code lang="bash" title="Terminal" code={`glyip build --release --opt-level 2`} />
 
 ### `glyip test`
 
@@ -50,7 +50,7 @@ Lance les tests du projet.
 | `--no-run` | drapeau | off | Compile les tests mais ne les lance pas. |
 | `--compiled` | drapeau | off | Compile chaque fichier de test en exécutable natif et le lance comme un vrai sous-processus au lieu de l'interpréteur MIR in-process. |
 
-<Code lang="bash" code={`glyip test --filter parser --compiled`} />
+<Code lang="bash" title="Terminal" code={`glyip test --filter parser --compiled`} />
 
 ### `glyip run`
 
@@ -63,7 +63,7 @@ Compile et exécute le binaire du projet. Utilise toujours le backend LLVM, parc
 | `--lto <KIND>` | `off` \| `thin` \| `fat` | `off` | Optimisation à l'édition de liens. |
 | `-- <ARGS>` | chaînes | aucun | Tout ce qui suit `--` est passé au programme. |
 
-<Code lang="bash" code={`glyip run -- --flag value`} />
+<Code lang="bash" title="Terminal" code={`glyip run -- --flag value`} />
 
 ## Le manifeste `Glyip.toml`
 

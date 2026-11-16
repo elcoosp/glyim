@@ -14,7 +14,7 @@ This guide shows how to start the Glyim language server and wire it into an edit
 
 After building the workspace (see the [getting started tutorial](/tutorials/getting-started/)), the server binary is available at `target/release/glyim-lsp`:
 
-<Code lang="bash" code={`./target/release/glyim-lsp`} />
+<Code lang="bash" title="Terminal" code={`./target/release/glyim-lsp`} />
 
 The server communicates over stdio, the standard LSP transport, and publishes diagnostics with `textDocument/publishDiagnostics` as you edit.
 
@@ -61,7 +61,7 @@ Use an absolute path to the binary. The server needs to find the compiler's comp
 
 If you drive tooling without LSP, the compiler emits one JSON object per diagnostic:
 
-<Code lang="bash" code={`glyim input.g --error-format json`} />
+<Code lang="bash" title="Terminal" code={`glyim input.g --error-format json`} />
 
 This is the same feed the language server uses internally, which makes it suitable for custom integrations, CI checks, and log analysis.
 

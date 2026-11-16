@@ -20,10 +20,10 @@ Before building, set `LLVM_SYS_231_PREFIX` to your LLVM 23 installation prefix:
 
 <Tabs>
    <TabItem label="macOS (Homebrew)">
-        <Code lang="bash" code={`export LLVM_SYS_231_PREFIX="$(brew --prefix llvm@23)"`} />
+        <Code lang="bash" title="Terminal" code={`export LLVM_SYS_231_PREFIX="$(brew --prefix llvm@23)"`} />
    </TabItem>
    <TabItem label="Debian / Ubuntu">
-        <Code lang="bash" code={`export LLVM_SYS_231_PREFIX="/usr/lib/llvm-23"`} />
+        <Code lang="bash" title="Terminal" code={`export LLVM_SYS_231_PREFIX="/usr/lib/llvm-23"`} />
    </TabItem>
 </Tabs>
 
@@ -37,20 +37,20 @@ Add the `export` line to your shell profile so every future session picks it up.
 
 1. Clone the repository:
 
-   <Code lang="bash" code={`git clone https://github.com/elcoosp/glyim
+   <Code lang="bash" title="Terminal" code={`git clone https://github.com/elcoosp/glyim
 cd glyim`} />
 
 2. Build the workspace in release mode:
 
-   <Code lang="bash" code={`cargo build --release`} />
+   <Code lang="bash" title="Terminal" code={`cargo build --release`} />
 
 3. Locate the compiler driver. The binary is at `target/release/glyim-cli` — invoke it as `glyim-cli` (rename or symlink it to `glyim` if you prefer):
 
-   <Code lang="bash" code={`./target/release/glyim-cli --version`} />
+   <Code lang="bash" title="Terminal" code={`./target/release/glyim-cli --version`} />
 
    You can also invoke the driver through Cargo on every call, which avoids symlinks:
 
-   <Code lang="bash" code={`cargo run -p glyim-cli -- --help`} />
+   <Code lang="bash" title="Terminal" code={`cargo run -p glyim-cli -- --help`} />
 
 </Steps>
 
@@ -62,21 +62,21 @@ cd glyim`} />
 
 1. Scaffold a new binary project:
 
-   <Code lang="bash" code={`cargo run -p glyip -- new hello
+   <Code lang="bash" title="Terminal" code={`cargo run -p glyip -- new hello
 cd hello`} />
 
 2. Inspect what `glyip new` generated. The project contains a `Glyip.toml` manifest and a `src/main.g` source file:
 
-   <Code lang="bash" code={`cat Glyip.toml
+   <Code lang="bash" title="Terminal" code={`cat Glyip.toml
 cat src/main.g`} />
 
 3. Build the project:
 
-   <Code lang="bash" code={`cargo run -p glyip -- build`} />
+   <Code lang="bash" title="Terminal" code={`cargo run -p glyip -- build`} />
 
 4. Run it:
 
-   <Code lang="bash" code={`cargo run -p glyip -- run`} />
+   <Code lang="bash" title="Terminal" code={`cargo run -p glyip -- run`} />
 
    `glyip run` is a transparent wrapper: it exits with the compiled program's exit code, so a failing program does not look like a passing command.
 
@@ -97,7 +97,7 @@ The default template produces a binary that prints a greeting. Edit `src/main.g`
 
 Once you are comfortable with `glyip`, you can bypass project management and drive the compiler directly. The equivalent of the tutorial so far, in one command:
 
-<Code lang="bash" code={`glyim-cli src/main.g --emit exec -o hello
+<Code lang="bash" title="Terminal" code={`glyim-cli src/main.g --emit exec -o hello
 ./hello`} />
 
 The `--emit exec` flag produces a runnable executable; the default `--emit obj` produces an object file. See the [CLI reference](/reference/cli/) for every flag.

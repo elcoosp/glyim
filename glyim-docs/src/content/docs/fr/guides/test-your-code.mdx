@@ -14,11 +14,11 @@ Ce guide montre comment lancer les tests d'un projet Glyim, comment le harnais d
 
 Depuis le répertoire qui contient votre `Glyip.toml` :
 
-<Code lang="bash" code={`glyip test`} />
+<Code lang="bash" title="Terminal" code={`glyip test`} />
 
 Variations utiles :
 
-<Code lang="bash" code={`glyip test --filter parser    # ne lancer que les tests dont le nom contient "parser"
+<Code lang="bash" title="Terminal" code={`glyip test --filter parser    # ne lancer que les tests dont le nom contient "parser"
 glyip test --no-run           # compiler les tests mais ne pas les lancer
 glyip test --compiled         # compiler chaque test en exe natif et le lancer
 glyip test --release          # compiler les tests en mode release`} />
@@ -64,13 +64,13 @@ snapshot_mir("my_mir_case", &ctx, &body);`} />
 
 Quand un changement intentionnel altère les instantanés, mettez-les à jour :
 
-<Code lang="bash" code={`GLYIM_BLESS=1 cargo test -p glyim-test
+<Code lang="bash" title="Terminal" code={`GLYIM_BLESS=1 cargo test -p glyim-test
 # ou, pour une revue interactive
 cargo insta review`} />
 
 Pour voir la sortie capturée des programmes des tests run-pass/run-fail, réglez `GLYIM_TEST_SHOW_OUTPUT=1` :
 
-<Code lang="bash" code={`GLYIM_TEST_SHOW_OUTPUT=1 cargo test -p glyim-test`} />
+<Code lang="bash" title="Terminal" code={`GLYIM_TEST_SHOW_OUTPUT=1 cargo test -p glyim-test`} />
 
 <Aside type="note">
 Le harnais livre aussi des utilitaires de mock pour chaque phase du compilateur (`MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen`, `TestDbBuilder`) et un module de propriétés qui génère des types aléatoires pour vérifier des invariants comme « l'unification d'un type avec lui-même réussit ».

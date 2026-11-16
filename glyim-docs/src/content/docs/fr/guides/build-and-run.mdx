@@ -14,17 +14,17 @@ Ce guide montre comment piloter le flux de build au quotidien avec `glyip` : bui
 
 Lancez cette commande dans le répertoire qui contient votre `Glyip.toml` :
 
-<Code lang="bash" code={`glyip build`} />
+<Code lang="bash" title="Terminal" code={`glyip build`} />
 
 Le build est incrémental : `glyip` empreinte les sources et la configuration de build avec SHA-256 et ne recompile que ce qui a changé.
 
 ## Compiler en mode release
 
-<Code lang="bash" code={`glyip build --release`} />
+<Code lang="bash" title="Terminal" code={`glyip build --release`} />
 
 Combinez `--release` avec un niveau d'optimisation explicite et une stratégie LTO quand vous voulez un build ajusté :
 
-<Code lang="bash" code={`glyip build --release --opt-level 2 --lto thin`} />
+<Code lang="bash" title="Terminal" code={`glyip build --release --opt-level 2 --lto thin`} />
 
 <Aside type="caution">
 Le LTO `fat` effectue une fusion de modules et une étape d'optimisation dans le compilateur. Le LTO `thin` exige le backend LLVM et l'outil `llvm-lto2` de la même distribution LLVM contre laquelle `glyim-codegen-llvm` a été compilé ; demander `thin` avec le backend bytecode est une erreur explicite plutôt qu'un no-op silencieux.
@@ -34,7 +34,7 @@ Le LTO `fat` effectue une fusion de modules et une étape d'optimisation dans le
 
 `glyip build --backend` accepte `llvm` (le défaut, produisant des exécutables natifs) ou `bytecode` (le format à opcodes propre à Glyim, utilisé pour les tests et l'exécution embarquée — sa sortie n'est pas directement exécutable) :
 
-<Code lang="bash" code={`glyip build --backend bytecode`} />
+<Code lang="bash" title="Terminal" code={`glyip build --backend bytecode`} />
 
 `glyip run` compile toujours avec le backend LLVM, parce qu'exécuter nécessite quelque chose que le système d'exploitation peut démarrer.
 
@@ -42,7 +42,7 @@ Le LTO `fat` effectue une fusion de modules et une étape d'optimisation dans le
 
 Tout ce qui suit `--` est passé à votre programme :
 
-<Code lang="bash" code={`glyip run -- --flag value`} />
+<Code lang="bash" title="Terminal" code={`glyip run -- --flag value`} />
 
 `glyip run` compile d'abord, puis exécute le binaire, et sort avec le statut de sortie de l'enfant. Un programme qui sort avec un statut d'échec produit une invocation `glyip run` en échec.
 
@@ -50,7 +50,7 @@ Tout ce qui suit `--` est passé à votre programme :
 
 Passez un triple cible pour compiler pour une autre architecture :
 
-<Code lang="bash" code={`glyip run --target aarch64-unknown-linux-gnu`} />
+<Code lang="bash" title="Terminal" code={`glyip run --target aarch64-unknown-linux-gnu`} />
 
 Le triple par défaut est le triple hôte (dérivé de `std::env::consts`). Le même drapeau `--target` existe sur `glyim` (voir la [référence CLI](/reference/cli/)).
 

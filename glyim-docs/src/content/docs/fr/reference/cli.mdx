@@ -10,7 +10,7 @@ import { Aside, Code } from '@astrojs/starlight/components';
 
 Le pilote de compilateur `glyim` (compilé comme `glyim-cli`) compile un seul fichier source `.g`. Cette page documente la surface complète de ligne de commande, vérifiée contre le parseur d'arguments dans `crates/glyim-cli`.
 
-<Code lang="bash" code={`glyim <INPUT> [FLAGS]`} />
+<Code lang="bash" title="Terminal" code={`glyim <INPUT> [FLAGS]`} />
 
 ## Arguments et drapeaux
 
@@ -75,7 +75,7 @@ Le backend LLVM est une dépendance dure du pipeline — il n'y a pas de drapeau
 
 ## Exemples
 
-<Code lang="bash" code={`# Fichier objet avec le backend LLVM (défauts)
+<Code lang="bash" title="Terminal" code={`# Fichier objet avec le backend LLVM (défauts)
 glyim input.g -o output.o
 
 # IR LLVM pour inspection

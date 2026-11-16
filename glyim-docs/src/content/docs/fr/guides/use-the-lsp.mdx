@@ -14,7 +14,7 @@ Ce guide montre comment démarrer le serveur de langage Glyim et le câbler dans
 
 Après avoir compilé l'espace de travail (voir le [tutoriel de démarrage](/tutorials/getting-started/)), le binaire du serveur est disponible à `target/release/glyim-lsp` :
 
-<Code lang="bash" code={`./target/release/glyim-lsp`} />
+<Code lang="bash" title="Terminal" code={`./target/release/glyim-lsp`} />
 
 Le serveur communique sur stdio, le transport LSP standard, et publie les diagnostics avec `textDocument/publishDiagnostics` pendant que vous éditez.
 
@@ -61,7 +61,7 @@ Utilisez un chemin absolu vers le binaire. Le serveur doit trouver les composant
 
 Si vous pilotez l'outillage sans LSP, le compilateur émet un objet JSON par diagnostic :
 
-<Code lang="bash" code={`glyim input.g --error-format json`} />
+<Code lang="bash" title="Terminal" code={`glyim input.g --error-format json`} />
 
 C'est le même flux que le serveur de langage utilise en interne, ce qui le rend approprié pour les intégrations personnalisées, les vérifications CI et l'analyse de journaux.
 
