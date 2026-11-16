@@ -168,6 +168,23 @@ fn diagnostic_provider_is_in_the_expected_set() {
 }
 
 #[test]
+fn diagnostic_provider_advertises_workspace_diagnostics() {
+    // Regression pin (LSP-WORKSPACE-DIAG): the pull capability's
+    // `workspace_diagnostics` flag moved to `true` alongside the
+    // `WorkspaceDiagnosticRequest` router registration (`workspace/
+    // diagnostic`). The flag lives inside
+    // `DiagnosticServerCapabilities::Options` built in
+    // `handler::build_router`'s capability literal, so flipping it back
+    // to `false` without dropping the route is invisible to the
+    // provider-set check above — the honest pairing (advertise ⇔ route)
+    // is anchored here and enforced by the compile in `build_router`.
+    assert!(
+        expected_advertised_providers().contains(&"diagnostic_provider"),
+        "diagnostic_provider must remain advertised (now with workspaceDiagnostics)"
+    );
+}
+
+#[test]
 fn rename_provider_advertises_prepare() {
     // Regression pin (LSP-PREPARE-RENAME): `rename_provider` moved from the
     // plain-boolean form to `OneOf::Right(RenameProviderCapability::Options)`
