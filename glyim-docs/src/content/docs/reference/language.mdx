@@ -112,6 +112,14 @@ Declarative macros use `macro_rules!` with fragment specifiers including `:expr`
 | `include!`, `include_str!`, `include_bytes!` | Embed other files at compile time. |
 | `concat!`, `concat_idents!` | Literal and identifier concatenation. |
 | `stringify!` | Render an expression as a string literal. |
+| `format!` | Format a string from values and display specifiers. |
+| `vec!` | Build a `Vec` from elements or a fill value. |
+| `matches!` | Test whether an expression matches a pattern. |
+| `assert!`, `assert_eq!`, `assert_ne!` | Runtime assertions (checked in debug and release). |
+| `debug_assert!`, `debug_assert_eq!`, `debug_assert_ne!` | Assertions checked in debug builds only. |
+| `write!`, `writeln!` | Write formatted output into a sink. |
+
+The standard library additionally defines `println!`, `print!`, `eprintln!`, `eprint!`, and `panic!` as declarative macros in its `.g` sources; they resolve through the regular user-macro path rather than the builtin table.
 
 Procedural macros are supported through a C-compatible token-stream ABI (`glyim-proc-macro`) with a `dlopen`-based cdylib loader, driven by the `--proc-macro-deps` CLI flag.
 
