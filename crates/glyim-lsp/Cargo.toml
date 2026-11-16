@@ -122,6 +122,18 @@ harness = false
 name = "linked_editing"
 harness = false
 
+# Moniker request bench (LSP-MONIKER; dependency-free, `harness = false`
+# like the other request benches).
+[[bench]]
+name = "moniker"
+harness = false
+
+# Inline-value request bench (LSP-INLINE-VALUE; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "inline_value"
+harness = false
+
 [dependencies]
 notify = "8.2"
 # `crossbeam-channel` and `file_url` were declared here but never imported
