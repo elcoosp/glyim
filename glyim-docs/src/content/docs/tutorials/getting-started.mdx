@@ -12,7 +12,7 @@ In this tutorial you build the Glyim compiler from source, create a new project 
 
 ## Prerequisites
 
-- **Rust** — latest stable toolchain, 2024 edition. Rust 1.94 or newer is recommended; the declared MSRV is 1.85.
+- **Rust** — latest stable toolchain, 2024 edition. Rust 1.95 or newer is required; the declared MSRV is 1.95 (pinned in `Cargo.toml` and enforced by the CI `msrv` job).
 - **LLVM 23** — required by the LLVM backend. The backend is a hard dependency of the workspace; there is no feature flag to build without it.
 - **`just`** and **`watchexec`** — optional, only for the convenience recipes in the repository's `justfile`.
 
