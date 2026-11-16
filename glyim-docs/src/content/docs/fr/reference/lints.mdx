@@ -31,17 +31,7 @@ Les trois drapeaux sont répétables, et les drapeaux tardifs surchargent les pr
 
 ## Utilisation
 
-<Code lang="bash" title="Terminal" code={`# Promeut le lint unsafe_fn_call en erreur
-glyim input.g -D unsafe
-
-# Le supprime
-glyim input.g -A unsafe_fn_call
-
-# Règle explicitement au niveau warning
-glyim input.g -W unused_generic_params
-
-# Liste chaque nom de lint et alias disponibles
-glyim -W help`} />
+<Code lang="bash" title="Terminal" code={"# Promeut le lint unsafe_fn_call en erreur\nglyim input.g -D unsafe\n\n# Le supprime\nglyim input.g -A unsafe_fn_call\n\n# R\u00e8gle explicitement au niveau warning\nglyim input.g -W unused_generic_params\n\n# Liste chaque nom de lint et alias disponibles\nglyim -W help"} />
 
 `glyim -W help` répond avant que l'analyse d'arguments n'impose le fichier d'entrée requis, donc il fonctionne comme commande autonome.
 

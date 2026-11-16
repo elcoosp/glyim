@@ -12,33 +12,27 @@ Ce guide montre comment regarder dans le compilateur pendant qu'il traite un seu
 
 Chaque commande ci-dessous compile un fichier nommé `input.g`. Ajoutez `--with-stdlib` quand votre fichier utilise des noms tels que `println`, `Vec`, `Option`, `Result`, `String` ou `Box` — le drapeau préfixe la bibliothèque standard assemblée pour que ces noms se résolvent sans déclarations `use` explicites :
 
-<Code lang="bash" title="Terminal" code={`glyim input.g --with-stdlib --emit mir`} />
+<Code lang="bash" title="Terminal" code={"glyim input.g --with-stdlib --emit mir"} />
 
 ## Émettre des représentations intermédiaires
 
 Le drapeau `--emit` sélectionne l'artefact de sortie :
 
-<Code lang="bash" title="Terminal" code={`glyim input.g --emit mir        # MIR après abaissement — utile pour déboguer l'abaissement
-glyim input.g --emit llvm-ir    # IR LLVM du backend LLVM
-glyim input.g --emit asm        # assembleur cible
-glyim input.g --emit obj        # fichier objet natif (défaut)
-glyim input.g --emit exec -o hello   # exécutable lançable
-glyim input.g --emit cdylib     # bibliothèque dynamique, utilisée pour les crates proc-macro`} />
+<Code lang="bash" title="Terminal" code={"glyim input.g --emit mir        # MIR apr\u00e8s abaissement \u2014 utile pour d\u00e9boguer l'abaissement\nglyim input.g --emit llvm-ir    # IR LLVM du backend LLVM\nglyim input.g --emit asm        # assembleur cible\nglyim input.g --emit obj        # fichier objet natif (d\u00e9faut)\nglyim input.g --emit exec -o hello   # ex\u00e9cutable lan\u00e7able\nglyim input.g --emit cdylib     # biblioth\u00e8que dynamique, utilis\u00e9e pour les crates proc-macro"} />
 
 Écrivez l'artefact vers un chemin spécifique avec `-o` :
 
-<Code lang="bash" title="Terminal" code={`glyim input.g --emit llvm-ir -o out.ll`} />
+<Code lang="bash" title="Terminal" code={"glyim input.g --emit llvm-ir -o out.ll"} />
 
 ## Comparer les deux backends
 
 Le drapeau `--backend` sélectionne entre `llvm` (défaut) et `bytecode`. Le backend bytecode émet du bytecode compact de machine à pile que la crate `glyim-bytecode-vm` exécute — utile pour les tests et l'exécution embarquée :
 
-<Code lang="bash" title="Terminal" code={`glyim input.g --backend bytecode --emit obj`} />
+<Code lang="bash" title="Terminal" code={"glyim input.g --backend bytecode --emit obj"} />
 
 ## Régler l'optimisation et les unités de codegen
 
-<Code lang="bash" title="Terminal" code={`glyim input.g -O2 --lto thin          # niveau d'optimisation 2, LTO thin
-glyim input.g --codegen-units 4       # partitionner en 4 unités de codegen`} />
+<Code lang="bash" title="Terminal" code={"glyim input.g -O2 --lto thin          # niveau d'optimisation 2, LTO thin\nglyim input.g --codegen-units 4       # partitionner en 4 unit\u00e9s de codegen"} />
 
 - `-O/--opt-level` va de 0 (défaut) à 3.
 - `--codegen-units` vaut par défaut la parallélisme disponible plafonnée à 16, reflétant la politique `-C codegen-units` de rustc.
@@ -46,17 +40,17 @@ glyim input.g --codegen-units 4       # partitionner en 4 unités de codegen`} /
 
 ## Compiler en croisé
 
-<Code lang="bash" title="Terminal" code={`glyim input.g --target aarch64-unknown-linux-gnu`} />
+<Code lang="bash" title="Terminal" code={"glyim input.g --target aarch64-unknown-linux-gnu"} />
 
 Surchargez l'éditeur de liens système et passez des drapeaux supplémentaires quand nécessaire :
 
-<Code lang="bash" title="Terminal" code={`glyim input.g --linker /path/to/ld --link-flags "-L/opt/lib -lmylib"`} />
+<Code lang="bash" title="Terminal" code={"glyim input.g --linker /path/to/ld --link-flags \"-L/opt/lib -lmylib\""} />
 
 ## Obtenir des diagnostics lisibles par machine
 
 Les éditeurs et l'outillage consomment les diagnostics en JSON, un objet par diagnostic :
 
-<Code lang="bash" title="Terminal" code={`glyim input.g --error-format json`} />
+<Code lang="bash" title="Terminal" code={"glyim input.g --error-format json"} />
 
 Le format par défaut `human` rend les diagnostics avec `miette`, y compris les extraits de source et les étiquettes.
 
@@ -64,8 +58,7 @@ Le format par défaut `human` rend les diagnostics avec `miette`, y compris les 
 
 Compilez d'abord les sources de dépendances proc-macro en cdylibs hôte, puis référencez-les avec une liste séparée par virgules :
 
-<Code lang="bash" title="Terminal" code={`glyim proc_macro_dep.g --emit cdylib
-glyim main.g --proc-macro-deps proc_macro_dep.g`} />
+<Code lang="bash" title="Terminal" code={"glyim proc_macro_dep.g --emit cdylib\nglyim main.g --proc-macro-deps proc_macro_dep.g"} />
 
 <Aside type="caution">
 La compilation hôte en deux étapes pour les macros procédurales est encore en cours de câblage dans le flux `glyim-cli` par défaut. La surface de drapeaux existe et le pont C-ABI (`glyim-proc-macro`, basé sur `dlopen`) est fonctionnel, mais attendez-vous à des aspérités.
@@ -75,10 +68,7 @@ La compilation hôte en deux étapes pour les macros procédurales est encore en
 
 Le compilateur livre actuellement deux lints : `unsafe_fn_call` (alias `unsafe`) et `unused_generic_params` (alias `unused_generics`). Réglez leurs niveaux avec des drapeaux répétables :
 
-<Code lang="bash" title="Terminal" code={`glyim input.g -D unsafe                     # promouvoir en erreur
-glyim input.g -A unsafe_fn_call             # supprimer
-glyim input.g -W unused_generic_params      # remettre en warning (le défaut)
-glyim -W help                               # lister tous les lints disponibles`} />
+<Code lang="bash" title="Terminal" code={"glyim input.g -D unsafe                     # promouvoir en erreur\nglyim input.g -A unsafe_fn_call             # supprimer\nglyim input.g -W unused_generic_params      # remettre en warning (le d\u00e9faut)\nglyim -W help                               # lister tous les lints disponibles"} />
 
 `-A` autorise (supprime), `-W` avertit (défaut), et `-D` dénie, ce qui avorte la compilation à la barrière d'erreur du pipeline. Voir la [référence des lints](/reference/lints/) pour les détails.
 

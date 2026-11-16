@@ -14,21 +14,17 @@ Ce guide montre comment déclarer des dépendances dans `Glyip.toml`, comment `g
 
 `glyip` accepte deux syntaxes de dépendance. Utilisez une chaîne nue pour une exigence de registre :
 
-<Code lang="toml" title="Glyip.toml" code={`[dependencies]
-serde = "1.0"`} />
+<Code lang="toml" title="Glyip.toml" code={"[dependencies]\nserde = \"1.0\""} />
 
 Utilisez une table pour les exigences path, git ou mixtes :
 
-<Code lang="toml" title="Glyip.toml" code={`[dependencies]
-local_util = { path = "../local_util" }
-my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }`} />
+<Code lang="toml" title="Glyip.toml" code={"[dependencies]\nlocal_util = { path = \"../local_util\" }\nmy_crate = { git = \"https://github.com/example/my_crate\", tag = \"v0.3.0\" }"} />
 
 Une dépendance git épingle exactement un ref : `branch`, `tag` ou un hash `rev` exact. Sans aucun, la pointe de la branche par défaut du dépôt est utilisée.
 
 Les dépendances de développement uniquement vont dans `[dev-dependencies]` et utilisent la même syntaxe :
 
-<Code lang="toml" title="Cargo.toml" code={`[dev-dependencies]
-test_helpers = { path = "../test_helpers" }`} />
+<Code lang="toml" title="Cargo.toml" code={"[dev-dependencies]\ntest_helpers = { path = \"../test_helpers\" }"} />
 
 <Aside type="tip">
 Les clés inconnues dans `Glyip.toml` sont rejetées — le parseur de manifeste utilise `deny_unknown_fields`, donc une faute comme `dependecies` échoue bruyamment au lieu d'être ignorée.

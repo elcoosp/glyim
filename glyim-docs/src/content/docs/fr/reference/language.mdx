@@ -12,53 +12,7 @@ Glyim est un langage de programmation système de type Rust avec sa propre exten
 
 ## Une visite en un seul bloc
 
-<Code lang="rust" code={`// Structs, enums, generics, traits.
-struct Point<T> {
-    x: T,
-    y: T,
-}
-
-enum Shape {
-    Circle(f64),
-    Rectangle(f64, f64),
-    Point,
-}
-
-trait Area {
-    fn area(&self) -> f64;
-}
-
-impl Area for Shape {
-    fn area(&self) -> f64 {
-        match self {
-            Shape::Circle(r) => 3.14159 * r * r,
-            Shape::Rectangle(w, h) => w * h,
-            Shape::Point => 0.0,
-        }
-    }
-}
-
-// Pattern matching, ranges, guards.
-fn classify(n: i32) -> &str {
-    match n {
-        0 => "zero",
-        1 | 2 => "small",
-        x if x < 0 => "negative",
-        _ => "large",
-    }
-}
-
-// Closures and iterators.
-fn sum_of_squares(values: &[i32]) -> i32 {
-    values.iter().map(|x| *x * *x).sum()
-}
-
-// Async / await.
-async fn fetch_twice() -> i32 {
-    let a = fetch_one().await;
-    let b = fetch_one().await;
-    a + b
-}`} />
+<Code lang="rust" code={"// Structs, enums, generics, traits.\nstruct Point<T> {\n    x: T,\n    y: T,\n}\n\nenum Shape {\n    Circle(f64),\n    Rectangle(f64, f64),\n    Point,\n}\n\ntrait Area {\n    fn area(&self) -> f64;\n}\n\nimpl Area for Shape {\n    fn area(&self) -> f64 {\n        match self {\n            Shape::Circle(r) => 3.14159 * r * r,\n            Shape::Rectangle(w, h) => w * h,\n            Shape::Point => 0.0,\n        }\n    }\n}\n\n// Pattern matching, ranges, guards.\nfn classify(n: i32) -> &str {\n    match n {\n        0 => \"zero\",\n        1 | 2 => \"small\",\n        x if x < 0 => \"negative\",\n        _ => \"large\",\n    }\n}\n\n// Closures and iterators.\nfn sum_of_squares(values: &[i32]) -> i32 {\n    values.iter().map(|x| *x * *x).sum()\n}\n\n// Async / await.\nasync fn fetch_twice() -> i32 {\n    let a = fetch_one().await;\n    let b = fetch_one().await;\n    a + b\n}"} />
 
 ## Constructions
 

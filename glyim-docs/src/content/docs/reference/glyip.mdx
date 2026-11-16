@@ -22,8 +22,7 @@ Scaffold a new project.
 | `--lib` | flag | off | Create a library project instead of a binary. |
 | `--edition <EDITION>` | string | `2024` | Language edition. |
 
-<Code lang="bash" title="Terminal" code={`glyip new my_project
-glyip new my_lib --lib`} />
+<Code lang="bash" title="Terminal" code={"glyip new my_project\nglyip new my_lib --lib"} />
 
 ### `glyip build`
 
@@ -37,7 +36,7 @@ Compile the project. Builds are incremental — sources and build configuration 
 | `--opt-level <N>` | 0–3 | `0` | Optimization level. |
 | `--lto <KIND>` | `off` \| `thin` \| `fat` | `off` | Link-time optimization. Unknown values are treated as `off`. |
 
-<Code lang="bash" title="Terminal" code={`glyip build --release --opt-level 2`} />
+<Code lang="bash" title="Terminal" code={"glyip build --release --opt-level 2"} />
 
 ### `glyip test`
 
@@ -50,7 +49,7 @@ Run the project's tests.
 | `--no-run` | flag | off | Compile the tests but do not run them. |
 | `--compiled` | flag | off | Compile each test file to a native executable and run it as a real subprocess instead of the in-process MIR interpreter. |
 
-<Code lang="bash" title="Terminal" code={`glyip test --filter parser --compiled`} />
+<Code lang="bash" title="Terminal" code={"glyip test --filter parser --compiled"} />
 
 ### `glyip run`
 
@@ -63,7 +62,7 @@ Build and execute the project's binary. Always uses the LLVM backend, because ru
 | `--lto <KIND>` | `off` \| `thin` \| `fat` | `off` | Link-time optimization. |
 | `-- <ARGS>` | strings | none | Everything after `--` is passed to the program. |
 
-<Code lang="bash" title="Terminal" code={`glyip run -- --flag value`} />
+<Code lang="bash" title="Terminal" code={"glyip run -- --flag value"} />
 
 ## The `Glyip.toml` manifest
 
@@ -87,13 +86,7 @@ Each `bin` entry accepts `name` (required) and `path` (source file, relative to 
 
 Both sections map a crate name to either a bare version requirement or a detail table:
 
-<Code lang="toml" title="Glyip.toml" code={`[dependencies]
-serde = "1.0"
-local_util = { path = "../local_util" }
-my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }
-
-[dev-dependencies]
-test_helpers = { path = "../test_helpers" }`} />
+<Code lang="toml" title="Glyip.toml" code={"[dependencies]\nserde = \"1.0\"\nlocal_util = { path = \"../local_util\" }\nmy_crate = { git = \"https://github.com/example/my_crate\", tag = \"v0.3.0\" }\n\n[dev-dependencies]\ntest_helpers = { path = \"../test_helpers\" }"} />
 
 | Key | Type | Description |
 |-----|------|-------------|

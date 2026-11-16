@@ -14,7 +14,7 @@ This guide shows how to start the Glyim language server and wire it into an edit
 
 After building the workspace (see the [getting started tutorial](/tutorials/getting-started/)), the server binary is available at `target/release/glyim-lsp`:
 
-<Code lang="bash" title="Terminal" code={`./target/release/glyim-lsp`} />
+<Code lang="bash" title="Terminal" code={"./target/release/glyim-lsp"} />
 
 The server communicates over stdio, the standard LSP transport, and publishes diagnostics with `textDocument/publishDiagnostics` as you edit.
 
@@ -22,15 +22,7 @@ The server communicates over stdio, the standard LSP transport, and publishes di
 
 Point your editor's LSP client at the `glyim-lsp` binary. Most editors expose this as a "custom server command" setting. A generic configuration pattern:
 
-<Code lang="json" code={`{
-  "languageserver": {
-    "glyim": {
-      "command": "/absolute/path/to/glyim/target/release/glyim-lsp",
-      "args": [],
-      "filetypes": ["glyim"]
-    }
-  }
-}`} />
+<Code lang="json" code={"{\n  \"languageserver\": {\n    \"glyim\": {\n      \"command\": \"/absolute/path/to/glyim/target/release/glyim-lsp\",\n      \"args\": [],\n      \"filetypes\": [\"glyim\"]\n    }\n  }\n}"} />
 
 <Aside type="tip">
 Use an absolute path to the binary. The server needs to find the compiler's components, and a relative path resolves against the editor's working directory, not yours.
@@ -62,7 +54,7 @@ Use an absolute path to the binary. The server needs to find the compiler's comp
 
 If you drive tooling without LSP, the compiler emits one JSON object per diagnostic:
 
-<Code lang="bash" title="Terminal" code={`glyim input.g --error-format json`} />
+<Code lang="bash" title="Terminal" code={"glyim input.g --error-format json"} />
 
 This is the same feed the language server uses internally, which makes it suitable for custom integrations, CI checks, and log analysis.
 

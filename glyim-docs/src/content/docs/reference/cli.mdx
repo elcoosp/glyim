@@ -10,7 +10,7 @@ import { Aside, Code } from '@astrojs/starlight/components';
 
 The `glyim` compiler driver (built as `glyim-cli`) compiles a single `.g` source file. This page documents the complete command-line surface, verified against the argument parser in `crates/glyim-cli`.
 
-<Code lang="bash" title="Terminal" code={`glyim <INPUT> [FLAGS]`} />
+<Code lang="bash" title="Terminal" code={"glyim <INPUT> [FLAGS]"} />
 
 ## Arguments and flags
 
@@ -75,23 +75,7 @@ The LLVM backend is a hard dependency of the pipeline — there is no feature fl
 
 ## Examples
 
-<Code lang="bash" title="Terminal" code={`# Object file with the LLVM backend (defaults)
-glyim input.g -o output.o
-
-# LLVM IR for inspection
-glyim input.g --emit llvm-ir
-
-# Optimized executable with thin LTO
-glyim input.g --emit exec -O2 --lto thin -o hello
-
-# Cross-compile to AArch64 Linux
-glyim input.g --target aarch64-unknown-linux-gnu
-
-# JSON diagnostics for editor tooling
-glyim input.g --error-format json
-
-# Prepend the standard library, deny the unsafe_fn_call lint
-glyim input.g --with-stdlib -D unsafe`} />
+<Code lang="bash" title="Terminal" code={"# Object file with the LLVM backend (defaults)\nglyim input.g -o output.o\n\n# LLVM IR for inspection\nglyim input.g --emit llvm-ir\n\n# Optimized executable with thin LTO\nglyim input.g --emit exec -O2 --lto thin -o hello\n\n# Cross-compile to AArch64 Linux\nglyim input.g --target aarch64-unknown-linux-gnu\n\n# JSON diagnostics for editor tooling\nglyim input.g --error-format json\n\n# Prepend the standard library, deny the unsafe_fn_call lint\nglyim input.g --with-stdlib -D unsafe"} />
 
 ## Next steps
 

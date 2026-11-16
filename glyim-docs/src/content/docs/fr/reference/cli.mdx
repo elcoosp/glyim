@@ -10,7 +10,7 @@ import { Aside, Code } from '@astrojs/starlight/components';
 
 Le pilote de compilateur `glyim` (compilé comme `glyim-cli`) compile un seul fichier source `.g`. Cette page documente la surface complète de ligne de commande, vérifiée contre le parseur d'arguments dans `crates/glyim-cli`.
 
-<Code lang="bash" title="Terminal" code={`glyim <INPUT> [FLAGS]`} />
+<Code lang="bash" title="Terminal" code={"glyim <INPUT> [FLAGS]"} />
 
 ## Arguments et drapeaux
 
@@ -75,23 +75,7 @@ Le backend LLVM est une dépendance dure du pipeline — il n'y a pas de drapeau
 
 ## Exemples
 
-<Code lang="bash" title="Terminal" code={`# Fichier objet avec le backend LLVM (défauts)
-glyim input.g -o output.o
-
-# IR LLVM pour inspection
-glyim input.g --emit llvm-ir
-
-# Exécutable optimisé avec LTO thin
-glyim input.g --emit exec -O2 --lto thin -o hello
-
-# Compiler en croisé pour AArch64 Linux
-glyim input.g --target aarch64-unknown-linux-gnu
-
-# Diagnostics JSON pour l'outillage d'éditeur
-glyim input.g --error-format json
-
-# Préfixer la bibliothèque standard, dénier le lint unsafe_fn_call
-glyim input.g --with-stdlib -D unsafe`} />
+<Code lang="bash" title="Terminal" code={"# Fichier objet avec le backend LLVM (d\u00e9fauts)\nglyim input.g -o output.o\n\n# IR LLVM pour inspection\nglyim input.g --emit llvm-ir\n\n# Ex\u00e9cutable optimis\u00e9 avec LTO thin\nglyim input.g --emit exec -O2 --lto thin -o hello\n\n# Compiler en crois\u00e9 pour AArch64 Linux\nglyim input.g --target aarch64-unknown-linux-gnu\n\n# Diagnostics JSON pour l'outillage d'\u00e9diteur\nglyim input.g --error-format json\n\n# Pr\u00e9fixer la biblioth\u00e8que standard, d\u00e9nier le lint unsafe_fn_call\nglyim input.g --with-stdlib -D unsafe"} />
 
 ## Étapes suivantes
 

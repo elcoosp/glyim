@@ -12,29 +12,7 @@ This page walks through Glyim's compilation pipeline stage by stage — what eac
 
 ## The map
 
-<Code lang="text" code={`source.g
-   │
-   ▼
-Lexer → Parser → CST                (glyim-frontend, glyim-syntax)
-                     │
-                     ▼
-HIR (untyped) ← Def-Map ← Macro     (glyim-hir, glyim-def-map, glyim-meta)
-                     │              expansion
-                     ▼
-Typeck (inference) ⇄ Trait solving  (glyim-typeck, glyim-solve)
-   → THIR (typed)
-                     │
-                     ▼
-Lowering → MIR (CFG)                (glyim-lower, glyim-mir)
-   (monomorphization)
-                     │
-         ┌───────────┼───────────┐
-         ▼           ▼           ▼
-   Borrowck (NLL)  Optimizer   MIR interpreter
-                     │           (const-eval, tests)
-                     ▼
-        LLVM IR → .o / exe      or      Bytecode → .gbc
-        (glyim-codegen-llvm)            (glyim-codegen, glyim-bytecode-vm)`} />
+<Code lang="text" code={"source.g\n   \u2502\n   \u25bc\nLexer \u2192 Parser \u2192 CST                (glyim-frontend, glyim-syntax)\n                     \u2502\n                     \u25bc\nHIR (untyped) \u2190 Def-Map \u2190 Macro     (glyim-hir, glyim-def-map, glyim-meta)\n                     \u2502              expansion\n                     \u25bc\nTypeck (inference) \u21c4 Trait solving  (glyim-typeck, glyim-solve)\n   \u2192 THIR (typed)\n                     \u2502\n                     \u25bc\nLowering \u2192 MIR (CFG)                (glyim-lower, glyim-mir)\n   (monomorphization)\n                     \u2502\n         \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n         \u25bc           \u25bc           \u25bc\n   Borrowck (NLL)  Optimizer   MIR interpreter\n                     \u2502           (const-eval, tests)\n                     \u25bc\n        LLVM IR \u2192 .o / exe      or      Bytecode \u2192 .gbc\n        (glyim-codegen-llvm)            (glyim-codegen, glyim-bytecode-vm)"} />
 
 ## Frontend: from characters to a lossless tree
 

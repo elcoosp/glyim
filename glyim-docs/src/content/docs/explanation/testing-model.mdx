@@ -28,11 +28,7 @@ The modes are deliberately coarse-grained: a test file states *what* must hold, 
 
 A `compile-fail` test pins diagnostics next to the code that produces them:
 
-<Code lang="rust" title="src/main.rs" code={`fn main() {
-    let x: i32 = "hello";
-    //~^ ERROR mismatched types
-    //~| expected i32, found str
-}`} />
+<Code lang="rust" title="src/main.rs" code={"fn main() {\n    let x: i32 = \"hello\";\n    //~^ ERROR mismatched types\n    //~| expected i32, found str\n}"} />
 
 The annotation grammar supports continuations (`//~|`), back-references (`//~^`), fuzzy ±1-line matching (`//~~`), and optional diagnostics (`//~?`). The effect: every diagnostic the compiler is expected to produce is written down next to the code that triggers it, so a diagnostic's text or placement cannot drift without a test failing.
 

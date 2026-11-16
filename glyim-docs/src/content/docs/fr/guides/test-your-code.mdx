@@ -14,14 +14,11 @@ Ce guide montre comment lancer les tests d'un projet Glyim, comment le harnais d
 
 Depuis le répertoire qui contient votre `Glyip.toml` :
 
-<Code lang="bash" title="Terminal" code={`glyip test`} />
+<Code lang="bash" title="Terminal" code={"glyip test"} />
 
 Variations utiles :
 
-<Code lang="bash" title="Terminal" code={`glyip test --filter parser    # ne lancer que les tests dont le nom contient "parser"
-glyip test --no-run           # compiler les tests mais ne pas les lancer
-glyip test --compiled         # compiler chaque test en exe natif et le lancer
-glyip test --release          # compiler les tests en mode release`} />
+<Code lang="bash" title="Terminal" code={"glyip test --filter parser    # ne lancer que les tests dont le nom contient \"parser\"\nglyip test --no-run           # compiler les tests mais ne pas les lancer\nglyip test --compiled         # compiler chaque test en exe natif et le lancer\nglyip test --release          # compiler les tests en mode release"} />
 
 Par défaut les tests tournent in-process sur l'interpréteur MIR. `--compiled` produit un vrai exécutable par test et le lance comme sous-processus, ce qui exerce le chemin de codegen LLVM complet.
 
@@ -41,11 +38,7 @@ Le harnais de test du compilateur (`glyim-test`) découvre les fichiers `.g` sou
 
 Un test `compile-fail` nomme les diagnostics qu'il attend à côté de la ligne fautive :
 
-<Code lang="rust" title="src/main.rs" code={`fn main() {
-    let x: i32 = "hello";
-    //~^ ERROR mismatched types
-    //~| expected i32, found str
-}`} />
+<Code lang="rust" title="src/main.rs" code={"fn main() {\n    let x: i32 = \"hello\";\n    //~^ ERROR mismatched types\n    //~| expected i32, found str\n}"} />
 
 La grammaire d'annotation :
 
@@ -59,18 +52,15 @@ La grammaire d'annotation :
 
 Les tests d'instantanés pour le CST, le def-map et MIR utilisent `insta` dans l'espace de travail du compilateur :
 
-<Code lang="rust" code={`snapshot_cst("my_syntax_case", source);
-snapshot_mir("my_mir_case", &ctx, &body);`} />
+<Code lang="rust" code={"snapshot_cst(\"my_syntax_case\", source);\nsnapshot_mir(\"my_mir_case\", &ctx, &body);"} />
 
 Quand un changement intentionnel altère les instantanés, mettez-les à jour :
 
-<Code lang="bash" title="Terminal" code={`GLYIM_BLESS=1 cargo test -p glyim-test
-# ou, pour une revue interactive
-cargo insta review`} />
+<Code lang="bash" title="Terminal" code={"GLYIM_BLESS=1 cargo test -p glyim-test\n# ou, pour une revue interactive\ncargo insta review"} />
 
 Pour voir la sortie capturée des programmes des tests run-pass/run-fail, réglez `GLYIM_TEST_SHOW_OUTPUT=1` :
 
-<Code lang="bash" title="Terminal" code={`GLYIM_TEST_SHOW_OUTPUT=1 cargo test -p glyim-test`} />
+<Code lang="bash" title="Terminal" code={"GLYIM_TEST_SHOW_OUTPUT=1 cargo test -p glyim-test"} />
 
 <Aside type="note">
 Le harnais livre aussi des utilitaires de mock pour chaque phase du compilateur (`MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen`, `TestDbBuilder`) et un module de propriétés qui génère des types aléatoires pour vérifier des invariants comme « l'unification d'un type avec lui-même réussit ».

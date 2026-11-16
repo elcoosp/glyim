@@ -14,7 +14,7 @@ Ce guide montre comment démarrer le serveur de langage Glyim et le câbler dans
 
 Après avoir compilé l'espace de travail (voir le [tutoriel de démarrage](/tutorials/getting-started/)), le binaire du serveur est disponible à `target/release/glyim-lsp` :
 
-<Code lang="bash" title="Terminal" code={`./target/release/glyim-lsp`} />
+<Code lang="bash" title="Terminal" code={"./target/release/glyim-lsp"} />
 
 Le serveur communique sur stdio, le transport LSP standard, et publie les diagnostics avec `textDocument/publishDiagnostics` pendant que vous éditez.
 
@@ -22,15 +22,7 @@ Le serveur communique sur stdio, le transport LSP standard, et publie les diagno
 
 Pointez le client LSP de votre éditeur sur le binaire `glyim-lsp`. La plupart des éditeurs exposent cela comme un réglage « commande de serveur personnalisée ». Un motif de configuration générique :
 
-<Code lang="json" code={`{
-  "languageserver": {
-    "glyim": {
-      "command": "/absolute/path/to/glyim/target/release/glyim-lsp",
-      "args": [],
-      "filetypes": ["glyim"]
-    }
-  }
-}`} />
+<Code lang="json" code={"{\n  \"languageserver\": {\n    \"glyim\": {\n      \"command\": \"/absolute/path/to/glyim/target/release/glyim-lsp\",\n      \"args\": [],\n      \"filetypes\": [\"glyim\"]\n    }\n  }\n}"} />
 
 <Aside type="tip">
 Utilisez un chemin absolu vers le binaire. Le serveur doit trouver les composants du compilateur, et un chemin relatif se résout contre le répertoire de travail de l'éditeur, pas le vôtre.
@@ -62,7 +54,7 @@ Utilisez un chemin absolu vers le binaire. Le serveur doit trouver les composant
 
 Si vous pilotez l'outillage sans LSP, le compilateur émet un objet JSON par diagnostic :
 
-<Code lang="bash" title="Terminal" code={`glyim input.g --error-format json`} />
+<Code lang="bash" title="Terminal" code={"glyim input.g --error-format json"} />
 
 C'est le même flux que le serveur de langage utilise en interne, ce qui le rend approprié pour les intégrations personnalisées, les vérifications CI et l'analyse de journaux.
 

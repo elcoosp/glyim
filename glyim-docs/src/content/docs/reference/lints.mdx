@@ -31,17 +31,7 @@ All three flags are repeatable, and later flags override earlier ones for the sa
 
 ## Usage
 
-<Code lang="bash" title="Terminal" code={`# Promote the unsafe_fn_call lint to an error
-glyim input.g -D unsafe
-
-# Suppress it
-glyim input.g -A unsafe_fn_call
-
-# Explicitly set warning level
-glyim input.g -W unused_generic_params
-
-# List every available lint name and alias
-glyim -W help`} />
+<Code lang="bash" title="Terminal" code={"# Promote the unsafe_fn_call lint to an error\nglyim input.g -D unsafe\n\n# Suppress it\nglyim input.g -A unsafe_fn_call\n\n# Explicitly set warning level\nglyim input.g -W unused_generic_params\n\n# List every available lint name and alias\nglyim -W help"} />
 
 `glyim -W help` answers before argument parsing enforces the required input file, so it works as a standalone command.
 
