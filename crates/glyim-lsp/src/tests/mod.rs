@@ -43,6 +43,8 @@ mod workspace_symbol_tests;
 // New test modules for M10
 mod common;
 mod driver_tests;
+mod execute_command;
+mod execute_command_tests;
 mod goto_definition_tests;
 mod implementation;
 mod implementation_tests;
@@ -67,3 +69,5 @@ mod test_utils;
 mod tier6_4_completion_tests;
 mod type_definition;
 mod type_definition_tests;
+mod type_hierarchy;
+mod type_hierarchy_tests;
