@@ -1,5 +1,4 @@
 //! Language Server Protocol implementation for Glyim compiler.
-// Stylistic clippy lints suppressed crate-wide (test-noise lints).
 
 /// `call_hierarchy` (LSP-CALL-HIERARCHY).
 pub mod call_hierarchy;
@@ -53,6 +52,8 @@ pub mod on_type_formatting;
 pub mod prepare_rename;
 /// `pull_diagnostics` (LSP-PULL-DIAG).
 pub mod pull_diagnostics;
+/// `range_formatting` (LSP-RANGE-FORMAT).
+pub mod range_formatting;
 /// `reference_graph`.
 pub mod reference_graph;
 /// rename.
@@ -135,6 +136,10 @@ pub use prepare_rename::{prepare_rename, rename_target};
 pub use pull_diagnostics::{
     AffectedFilesSource, DependencyGraphSource, DiagnosticSource, RecordedDiagnosticSource,
     pull_diagnostics, pull_report, related_reports,
+};
+pub use range_formatting::{
+    RangeEdit, RangeFormatSource, StoredRangeFormatSource, compute_range_edits, range_formatting,
+    wire_range_formatting,
 };
 pub use reference_graph::{Reference, ReferenceGraph, ReferenceKind};
 pub use selection_range::{
