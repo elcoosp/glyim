@@ -30,6 +30,32 @@ pub enum AnalysisMessage {
     Shutdown,
 }
 
+/// Surface a rejected analysis send instead of swallowing it.
+///
+/// A dropped `try_send` means the affected file's analysis never runs and
+/// its diagnostics quietly go stale — a silent fallback, which this
+/// crate's observability rails refuse. The channel is bounded by design,
+/// so the drop itself is correct behaviour under load (full) and at
+/// shutdown (closed); surfacing it is what was missing. The error hands
+/// the message back, so the warn names the exact file that was dropped
+/// and why.
+pub(crate) fn warn_dropped_send(err: tokio::sync::mpsc::error::TrySendError<AnalysisMessage>) {
+    use tokio::sync::mpsc::error::TrySendError;
+    let (message, reason) = match err {
+        TrySendError::Full(message) => (message, "analysis channel full"),
+        TrySendError::Closed(message) => (message, "analysis channel closed"),
+    };
+    let path = match message {
+        AnalysisMessage::FileChanged { path, .. } | AnalysisMessage::FileClosed { path } => path,
+        AnalysisMessage::Shutdown => PathBuf::new(),
+    };
+    tracing::warn!(
+        path = %path.display(),
+        reason,
+        "analysis request dropped; diagnostics for this file may stay stale"
+    );
+}
+
 /// `AnalysisDriver`.
 pub struct AnalysisDriver {
     db: Arc<AnalysisDatabase>,
@@ -199,11 +225,13 @@ impl AnalysisDriver {
                 let content = file_id_opt
                     .and_then(|id| source_maps.get(&id).map(|sm| sm.source().to_string()));
                 if let Some(content) = content {
-                    let _ = self.analysis_tx.try_send(AnalysisMessage::FileChanged {
+                    if let Err(err) = self.analysis_tx.try_send(AnalysisMessage::FileChanged {
                         path: other,
                         content,
                         version: 0,
-                    });
+                    }) {
+                        warn_dropped_send(err);
+                    }
                 }
             }
         }
@@ -307,7 +335,13 @@ impl AnalysisDriver {
             diagnostics,
         };
         use lsp_types::notification::PublishDiagnostics as PD;
-        let _ = client.notify::<PD>(params);
+        if let Err(err) = client.notify::<PD>(params) {
+            tracing::warn!(
+                %uri_str,
+                %err,
+                "publish_diagnostics notify failed: the client transport rejected the report"
+            );
+        }
     }
 
     fn extract_dependencies(
