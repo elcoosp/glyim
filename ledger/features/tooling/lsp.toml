@@ -364,3 +364,23 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-COLOR"
+title         = "document color: textDocument/documentColor answers every string literal that spells a hex color payload — the swatch site an editor renders inline — and textDocument/colorPresentation answers the picker's recolor echo with the canonical hex spelling over the reported extent, no re-analysis on the request path"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-WORKSPACE-FOLDERS"
+title         = "workspace folders: the client's initialize folder set — the deprecated rootUri as the fallback — seeds the session's order-stable folder store, workspace/didChangeWorkspaceFolders re-derives it over the honest removal rules, and the folder queries answer which recorded folders contain a path"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
