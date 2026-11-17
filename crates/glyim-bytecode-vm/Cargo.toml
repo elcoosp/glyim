@@ -16,6 +16,12 @@ description = "Switch-dispatch bytecode virtual machine for the Glyim bytecode b
 name = "module_image"
 harness = false
 
+# Float-execution bench (the float seam: OP_LOAD_CONST_F64, (Float, Float)
+# binop dispatch, FloatToInt casts; dependency-free, `harness = false`).
+[[bench]]
+name = "float_exec"
+harness = false
+
 [dependencies]
 # The module-image seam (glyim.module-image/1) logs encode/decode events and
 # every decode rejection through the workspace-standard tracing layer, so a
