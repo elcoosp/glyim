@@ -11,13 +11,16 @@ use tracing::debug;
 
 /// `AnalysisMessage`.
 pub enum AnalysisMessage {
-    /// `Variant`.
+    /// A file the editor owns changed (didOpen/didChange): the path,
+    /// the content to analyse, and the client version the change
+    /// carried (re-analyses of dependent files reuse the message with
+    /// version 0 — the enqueue is best-effort, see `analyze_file`).
     FileChanged {
-        /// `Struct`.
+        /// The path the change names.
         path: PathBuf,
-        /// `Struct`.
+        /// The content to analyse.
         content: String,
-        /// `Struct`.
+        /// The client version the change carried.
         version: i32,
     },
     /// A file changed on disk and the session re-analyses it through the
@@ -30,12 +33,25 @@ pub enum AnalysisMessage {
         /// The file content as it reads from disk.
         content: String,
     },
-    /// `Variant`.
+    /// A file the session knows moved (LSP-FILE-RENAME, editor-owned
+    /// rename): the session's path-keyed state re-points in place — the
+    /// `FileId` and every fact keyed by it survive, the dependency
+    /// graph's edges follow the file, and the diagnostics report
+    /// republishes under the new path.
+    FileRenamed {
+        /// The path the file moved from.
+        old: PathBuf,
+        /// The path the file moved to.
+        new: PathBuf,
+    },
+    /// A file was closed (didClose, or a forget decision): the
+    /// recorded facts for the path are cleared and an empty diagnostics
+    /// report clears the editor's view.
     FileClosed {
-        /// `Struct`.
+        /// The path that was closed.
         path: PathBuf,
     },
-    /// `Variant`.
+    /// The session is shutting down: stop the loop.
     Shutdown,
 }
 
@@ -58,6 +74,7 @@ pub(crate) fn warn_dropped_send(err: tokio::sync::mpsc::error::TrySendError<Anal
         AnalysisMessage::FileChanged { path, .. }
         | AnalysisMessage::WatchedFileChanged { path, .. }
         | AnalysisMessage::FileClosed { path } => path,
+        AnalysisMessage::FileRenamed { old, .. } => old,
         AnalysisMessage::Shutdown => PathBuf::new(),
     };
     tracing::warn!(
@@ -128,6 +145,13 @@ impl AnalysisDriver {
             use std::collections::HashMap;
             let mut latest_changes: HashMap<PathBuf, (String, Option<i32>)> = HashMap::new();
             let mut closed_paths: Vec<PathBuf> = Vec::new();
+            // LSP-FILE-RENAME: the in-place re-keys the route decided,
+            // (old, new) pairs in decision order, duplicate old paths
+            // collapsed to the first (one burst answers at most one
+            // move per old path — the engine's own rule, re-enforced at
+            // the coalescing seam so a rename and its stale echo do not
+            // move the session twice).
+            let mut renames: Vec<(PathBuf, PathBuf)> = Vec::new();
             let mut shutdown = false;
 
             let mut absorb = |msg: AnalysisMessage| match msg {
@@ -140,6 +164,11 @@ impl AnalysisDriver {
                 }
                 AnalysisMessage::WatchedFileChanged { path, content } => {
                     latest_changes.insert(path, (content, None));
+                }
+                AnalysisMessage::FileRenamed { old, new } => {
+                    if !renames.iter().any(|(seen, _)| seen == &old) {
+                        renames.push((old, new));
+                    }
                 }
                 AnalysisMessage::FileClosed { path } => {
                     latest_changes.remove(&path);
@@ -172,8 +201,15 @@ impl AnalysisDriver {
                 // showing the last diagnostics for a file the user closed
                 // and re-opened elsewhere.
                 self.publish_diagnostics(&path, None, Vec::new());
-                let file_id = self.db.file_map.write().get_by_path(&path);
-                self.db.file_map.write().remove(&path);
+                // One write guard for both the lookup and the removal —
+                // the second `write()` here used to re-acquire the lock
+                // the lookup already held.
+                let file_id = {
+                    let mut file_map = self.db.file_map.write();
+                    let id = file_map.get_by_path(&path);
+                    file_map.remove(&path);
+                    id
+                };
                 // LSP-WORKSPACE-DIAG: the version dies with the file, so
                 // a later re-open starts from a clean "never opened" state
                 // instead of replaying the previous session's version.
@@ -182,10 +218,76 @@ impl AnalysisDriver {
                 }
                 self.db.dep_graph.write().clear_deps(&path);
             }
+            // LSP-FILE-RENAME: the editor-owned re-keys. The re-point
+            // happens before the batch's analyses, so a rename followed
+            // by a didChange on the new path analyses under the path the
+            // session now knows.
+            for (old, new) in renames {
+                self.rename_file(&old, &new);
+            }
             for (path, (content, version)) in latest_changes {
                 self.analyze_file(&path, &content, version);
             }
         }
+    }
+
+    /// Re-point the session's path-keyed state after an editor-owned
+    /// file rename (LSP-FILE-RENAME).
+    ///
+    /// The recorded facts are keyed by the `FileId`, so a rename moves
+    /// only the path maps: the file map re-keys in place (`FileMap::
+    /// rename` refuses a collision and an unknown old path — a refused
+    /// re-point is a logged skip, never a guessed state change), the
+    /// dependency graph's edges follow the file
+    /// (`DependencyGraph::rename_node`), and a watched record the path
+    /// should not carry (an editor-owned rename decided a re-key; the
+    /// record moves defensively so the path-keyed set never drifts)
+    /// moves with it. The stale diagnostics report under the old URI is
+    /// cleared, and the recorded report — if any — republishes under
+    /// the new URI so the editor's view follows the file. `FileId`-
+    /// keyed state (source maps, symbol index, reference graph, HIR,
+    /// parse trees, typeck) is untouched by construction.
+    fn rename_file(&self, old: &Path, new: &Path) {
+        let renamed = {
+            let mut file_map = self.db.file_map.write();
+            file_map.rename(old, new)
+        };
+        if !renamed {
+            tracing::warn!(
+                old = %old.display(),
+                new = %new.display(),
+                "file rename refused by the file map; session state left untouched"
+            );
+            return;
+        }
+        self.db.dep_graph.write().rename_node(old, new);
+        {
+            let mut watched = self.db.watched_files.write();
+            if watched.remove(old) {
+                watched.insert(new.to_path_buf());
+            }
+        }
+        // The old URI's report is stale the moment the file moves; the
+        // recorded facts republish under the new URI (no client version
+        // exists for a path the client has not didOpen'd since the
+        // rename — `None`, never a fabricated one).
+        self.publish_diagnostics(old, None, Vec::new());
+        let file_id = self.db.file_map.read().get_by_path(new);
+        if let Some(id) = file_id {
+            let recorded = self
+                .db
+                .diagnostics
+                .read()
+                .get(&id)
+                .cloned()
+                .unwrap_or_default();
+            self.publish_diagnostics(new, None, recorded);
+        }
+        debug!(
+            old = %old.display(),
+            new = %new.display(),
+            "session re-pointed after a file rename"
+        );
     }
 
     fn analyze_file(&self, path: &PathBuf, content: &str, version: Option<i32>) {
