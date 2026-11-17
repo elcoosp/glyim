@@ -54,6 +54,10 @@ Use an absolute path to the binary. The server needs to find the compiler's comp
   - generate an `impl` block,
   - remove unused imports,
   - auto-import for unresolved names.
+- **Save-time format edits** — `textDocument/willSaveWaitUntil` answers, before the editor writes the file, the edits that bring the stored text to the same saved form the `textDocument/formatting` request would produce (one formatter, two wire shapes). An already-formatted document answers null — no edit churn.
+- **Watched files** — `workspace/didChangeWatchedFiles` refreshes what no editor ever opened: a non-open file whose content moved on disk re-analyses from the file's content (the driver's dependent refresh follows), and a non-open file that no longer exists is forgotten.
+- **File operations** — `workspace/didCreateFiles` indexes a created file no editor owns from disk (its definitions may resolve bare usages in the open documents), and `workspace/didDeleteFiles` forgets a deleted one — the watched-files ownership rules over the client's declared operations.
+- **File renames** — `workspace/didRenameFiles` moves the session's path-keyed state with the file: an editor-owned document re-keys in place (its recorded facts stay valid, and the dependency graph's edges follow it), a watched load re-analyses from the new path, and the diagnostics report republishes under the new URI.
 
 ## Fall back to JSON diagnostics
 
