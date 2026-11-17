@@ -200,6 +200,15 @@ pub struct AnalysisDatabase {
     /// the first consumer; the driver still writes every edge and clears
     /// on close/re-analysis, exactly as before.
     pub dep_graph: RwLock<crate::dep_graph::DependencyGraph>,
+    /// The paths the server loaded through the watched-files seam
+    /// (LSP-WATCHED-FILES) and not through the editor. The watched-files
+    /// engine distinguishes *editor-owned* documents (didOpen/didChange
+    /// drive their content — a watched event for them is redundant) from
+    /// session-known ones it loaded itself (a later watched event
+    /// re-analyses them: external tools may touch them repeatedly).
+    /// Recorded by the watched-files route when it re-analyses a path
+    /// from disk, removed when the path is forgotten.
+    pub watched_files: RwLock<std::collections::HashSet<PathBuf>>,
 }
 
 impl Default for AnalysisDatabase {
@@ -224,6 +233,7 @@ impl AnalysisDatabase {
             raw_diagnostics: RwLock::new(HashMap::new()),
             versions: RwLock::new(HashMap::new()),
             dep_graph: RwLock::new(crate::dep_graph::DependencyGraph::new()),
+            watched_files: RwLock::new(std::collections::HashSet::new()),
         }
     }
 
