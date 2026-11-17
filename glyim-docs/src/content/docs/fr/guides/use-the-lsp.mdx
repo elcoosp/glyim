@@ -52,6 +52,10 @@ Utilisez un chemin absolu vers le binaire. Le serveur doit trouver les composant
   - générer un bloc `impl`,
   - retirer les imports inutilisés,
   - auto-import pour les noms non résolus.
+- **Éditions de mise en forme à la sauvegarde** — `textDocument/willSaveWaitUntil` répond, avant que l'éditeur n'écrive le fichier, avec les éditions qui amènent le texte enregistré à la même forme que la demande `textDocument/formatting` produirait (un seul formateur, deux formes filaires). Un document déjà formaté répond null — aucun remous d'édition.
+- **Fichiers surveillés** — `workspace/didChangeWatchedFiles` rafraîchit ce qu'aucun éditeur n'a jamais ouvert : un fichier non ouvert dont le contenu a changé sur disque se réanalyse depuis le contenu du fichier (le rafraîchissement des dépendants du pilote suit), et un fichier non ouvert qui n'existe plus est oublié.
+- **Opérations de fichiers** — `workspace/didCreateFiles` indexe depuis le disque un fichier créé qu'aucun éditeur ne possède (ses définitions peuvent résoudre les usages nus dans les documents ouverts), et `workspace/didDeleteFiles` oublie un fichier supprimé — les règles de possession des fichiers surveillés appliquées aux opérations déclarées par le client.
+- **Renommages de fichiers** — `workspace/didRenameFiles` déplace l'état de la session indexé par chemin avec le fichier : un document possédé par l'éditeur se réindexe sur place (ses faits enregistrés restent valables, et les arêtes du graphe de dépendances le suivent), un chargement surveillé se réanalyse depuis le nouveau chemin, et le rapport de diagnostics se republie sous le nouvel URI.
 
 ## Retomber sur les diagnostics JSON
 
