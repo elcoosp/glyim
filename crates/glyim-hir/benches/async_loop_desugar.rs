@@ -11,10 +11,14 @@
 //!   0..n { acc = acc + dep(i).await; }`): the normalization pass rewrites
 //!   the `for` into the while shape, then builds the `Start`/`S0`/`Done`
 //!   coroutine machine.
+//! * `desugar_loop_await` — the GAP-0006 `loop`-shape closure (`loop {
+//!   acc = acc + dep(i).await; ... }`): the normalization pass rewrites the
+//!   `loop` into `while true` in place (a fresh literal-`true` condition,
+//!   the body carried over untouched), then builds the same machine.
 //! * `desugar_while_loop_await` — the pre-existing supported shape
 //!   (`while i < n { ... }`), the normalization-free baseline.
 //! * `lower_plain_fn` — the same body without `async`/`.await`: the
-//!   raw-lowering floor the two desugar benches are measured against.
+//!   raw-lowering floor the desugar benches are measured against.
 //!
 //! Run with:
 //!
@@ -62,6 +66,12 @@ fn main() {
         (
             "desugar_for_loop_await",
             async_loop_source("    for i in 0..n {\n        acc = acc + dep(i).await;\n    }"),
+        ),
+        (
+            "desugar_loop_await",
+            async_loop_source(
+                "    let mut i = 0;\n    loop {\n        acc = acc + dep(i).await;\n        i = i + 1;\n        if i >= n {\n            break acc;\n        }\n    }",
+            ),
         ),
         (
             "desugar_while_loop_await",
