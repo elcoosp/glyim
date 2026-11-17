@@ -21,16 +21,6 @@ plan §3.3: allowed, but never silent).
 - GAP-0003 — `panic!` does not unwind: `glyim_panic` exits 101 without running destructors (intentional, documented)
 - GAP-0005 — `TyCtx::needs_drop` is conservative for `dyn Trait`/generic/projection types (drop glue may be skipped)
 
-## GAP-0001 — .await inside a loop body rejected by async lowering (diagnostic T0060)
-
-- class: `a` (diagnosed: every use site gets a diagnostic)
-- affects: `LANG-ASYNC-AWAIT`
-- caps affected features at `L2`
-- opened in: v0.3.0
-- status: witnessed
-- witness: `crates/glyim-test/tests/compile-fail/async-await-in-loop-known-gap.g` (strict xfail)
-- expect: witness must produce diagnostic `T0060`
-
 ## GAP-0002 — Windows SEH cleanup edges are unreachable: no lowering site sets cleanup (panic exits 101)
 
 - class: `b` (silent wrong behaviour — always first in the work queue)
@@ -63,5 +53,15 @@ plan §3.3: allowed, but never silent).
 - caps affected features at `L2`
 - opened in: v0.3.0
 - status: unwitnessed (witness debt)
+
+## GAP-0006 — .await inside `loop` bodies / non-range `for` iterables rejected by async lowering (diagnostic T0060)
+
+- class: `a` (diagnosed: every use site gets a diagnostic)
+- affects: `LANG-ASYNC-AWAIT`
+- caps affected features at `L2`
+- opened in: v0.10.0
+- status: witnessed
+- witness: `crates/glyim-test/tests/compile-fail/async-await-in-unbounded-loop-known-gap.g` (strict xfail)
+- expect: witness must produce diagnostic `T0060`
 
 <!-- ledger:known-gaps:end -->
