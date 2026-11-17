@@ -324,3 +324,23 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-WILL-SAVE"
+title         = "save-time format edits: textDocument/willSaveWaitUntil answers the edits that bring the stored text to the shared formatter core's saved form — one edit over the changed region, never churn on an already-formatted document — so format-on-save composes with the same formatter the other shapes read"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-WATCHED-FILES"
+title         = "watched files: workspace/didChangeWatchedFiles refreshes what no editor ever opened — a non-open file's change on disk re-analyses from the file's content and the driver's dependent refresh follows, a deletion is forgotten"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
