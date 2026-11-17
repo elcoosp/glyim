@@ -76,4 +76,62 @@ impl DependencyGraph {
     pub fn dependencies(&self, file: &PathBuf) -> Option<&HashSet<PathBuf>> {
         self.deps.get(file)
     }
+
+    /// Re-point every edge that names `old` — as the file or as a
+    /// dependency — to `new` (LSP-FILE-RENAME).
+    ///
+    /// The rename of an editor-owned document must not lose the graph's
+    /// edges: a file's dependents were invalidated by its *content*, and
+    /// the content did not move — only the path it is keyed by did. The
+    /// whole node moves in one step (forward edges, reverse edges, both
+    /// endpoint maps), so `affected_files` and the driver's dependent
+    /// refresh keep working through the new path. A `new` path that
+    /// already carries edges merges them — the sets union, never drop.
+    /// A no-op when the old path carries no edges, or when old and new
+    /// are the same path.
+    pub fn rename_node(&mut self, old: &Path, new: &Path) {
+        if old == new {
+            return;
+        }
+        let old_deps = self.deps.remove(old);
+        let old_dependents = self.rev_deps.remove(old);
+        if old_deps.is_none() && old_dependents.is_none() {
+            return;
+        }
+        if let Some(deps) = &old_deps {
+            for dep in deps {
+                if dep == old {
+                    // Self-edges do not occur (the driver never records
+                    // a file depending on itself); a defensive skip
+                    // here keeps a malformed graph from panicking on
+                    // the re-point.
+                    continue;
+                }
+                if let Some(rev) = self.rev_deps.get_mut(dep) {
+                    rev.remove(old);
+                    rev.insert(new.to_path_buf());
+                }
+            }
+        }
+        if let Some(dependents) = &old_dependents {
+            for dependent in dependents {
+                if dependent == old {
+                    continue;
+                }
+                if let Some(fwd) = self.deps.get_mut(dependent) {
+                    fwd.remove(old);
+                    fwd.insert(new.to_path_buf());
+                }
+            }
+        }
+        if let Some(deps) = old_deps {
+            self.deps.entry(new.to_path_buf()).or_default().extend(deps);
+        }
+        if let Some(dependents) = old_dependents {
+            self.rev_deps
+                .entry(new.to_path_buf())
+                .or_default()
+                .extend(dependents);
+        }
+    }
 }
