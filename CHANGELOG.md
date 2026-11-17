@@ -42,6 +42,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`benches/module_assembly`) and a walkthrough
   (`examples/module_assembly_walkthrough`) land with it; the dead
   `Chunk::entry` field (written by nothing) is removed.
+- **Float arithmetic and casts in the bytecode VM**: the bytecode backend
+  emits float constants and float cast kinds that the VM could not execute
+  — float constants travelled under the integer `OP_LOAD_CONST` (so float
+  arithmetic ran as *integer* arithmetic over the raw `f64` bit patterns)
+  and `OP_CAST` was a documented no-op (so `f as i32` silently kept the
+  float). The VM grows a `Value::Float` kind (bit-pattern equality, the
+  `InterpValue::Float` convention), a typed `OP_LOAD_CONST_F64` constant
+  opcode the emitter emits for `MirConstKind::FloatBits`, IEEE-754
+  semantics for float binary/unary ops (`1.0 / 0.0` is `+inf`, matching
+  LLVM's `fdiv` and the interpreter's T106 convention; comparisons produce
+  the VM's `Int` bool encoding), and the interpreter's MIR-14 cast
+  semantics: `OP_CAST` now carries a second operand byte naming the target
+  primitive (`glyim_bytecode_vm::CastTarget`) so integer truncation is
+  width-aware (`(-1i32) as u8 == 255`, not an identity). Every operand-kind
+  mismatch is an explicit typed error (`VmError::BinOpTypeMismatch` /
+  `UnOpTypeMismatch` / `CastOperandMismatch` / `UnknownCastKind` /
+  `UnknownCastTarget` / `ExpectedInt`) — the pre-seam silent reinterpretations
+  are gone, and the now-redundant `const_is_int` peephole side-record is
+  removed with them. The `vm_interp_diff` differential pins float results
+  bit-for-bit against the MIR interpreter (arithmetic, `inf`, negation,
+  comparisons feeding branches, `f as i32`, `i32 as u8`, and a
+  cross-function float call through the assembled image); a float-execution
+  bench (`benches/float_exec`) and a consumer walkthrough
+  (`examples/float_casts_walkthrough`) land with it.
+- **String constants across the module-image boundary**: the emitter's
+  string table was process-local — a string constant was an opaque
+  interner index under the integer `OP_LOAD_CONST`, equality-by-index only
+  worked while the pool lived in the emitting process, and the payload was
+  unrecoverable from the artifact. String constants now travel under their
+  own opcode (`OP_LOAD_CONST_STR`, a pool reference), the pool rides inside
+  the module image (format version 2: a string-count + length-prefixed
+  UTF-8 section after the function table; version-1 images still decode
+  with an empty pool), the VM resolves indices into `Module::strings`
+  (`Value::Str`, out-of-range indices are an explicit
+  `VmError::StringIndexOutOfBounds`), and `OP_EQ`/`OP_NE` over two strings
+  compare *content* — no more equality-by-interning-accident. The
+  `vm_interp_diff` differential pins string equality through the
+  assembled-image path against the interpreter, the module-image bench
+  measures the pool section, and the image walkthrough demonstrates it.
 - **`.await` inside a `for` loop over a range** (GAP-0001 closed): the
   async state-machine desugar now normalizes `for i in a..b` into the
   `while` shape it already re-drives — a synthetic `let mut __for_i`
