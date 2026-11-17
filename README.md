@@ -84,7 +84,7 @@ The design is heavily inspired by rustc's architecture (arena-allocated IRs, int
 ### Code Generation
 
 - **LLVM backend** (`glyim-codegen-llvm`) using `inkwell`/LLVM 23 — produces native object files with real ABI lowering, debug info, exception handling (Itanium + SEH), and Link-Time Optimization (`fat` / `thin`).
-- **Bytecode backend** (`glyim-codegen`) — a compact stack-machine bytecode used for testing and embedded execution, verified by the `glyim-bytecode-vm` crate; the emitter can assemble whole multi-function modules into the versioned, loadable `glyim.module-image/1` container (`generate_module_image`), which the VM validates and runs after a round trip. The VM executes the full emitted surface: IEEE-754 float arithmetic over `OP_LOAD_CONST_F64` constants, the interpreter's width-aware cast semantics (`OP_CAST` carries kind + target primitive), and string constants through the image's string pool (`OP_LOAD_CONST_STR` compares by content).
+- **Bytecode backend** (`glyim-codegen`) — a compact stack-machine bytecode used for testing and embedded execution, verified by the `glyim-bytecode-vm` crate; the emitter can assemble whole multi-function modules into the versioned, loadable `glyim.module-image/1` container (`generate_module_image`), which the VM validates and runs after a round trip. The VM executes the full emitted surface: IEEE-754 float arithmetic over `OP_LOAD_CONST_F64` constants, the interpreter's width-aware cast semantics (`OP_CAST` carries kind + target primitive), and string constants through the image's string pool (`OP_LOAD_CONST_STR` compares by content). Two observability/safety seams complete the picture: an execution-trace hook (`glyim_bytecode_vm::trace` — a `TraceSink` the VM hands one step per dispatch to, with a capturing collector, a `tracing`-event sink, and a deterministic `render_trace` listing) and a fuel budget (`Vm::with_fuel` — an infinite loop in a loaded artifact stops with the explicit `VmError::FuelExhausted` instead of hanging the host).
 
 ### Tooling
 
@@ -124,7 +124,7 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `glyim-layout` | Type layout computation (size, alignment, ABI, vtables). |
 | `glyim-codegen` | Abstract code generation backend trait + bytecode backend. |
 | `glyim-codegen-llvm` | LLVM backend (via `inkwell`) with full ABI handling and LTO. |
-| `glyim-bytecode-vm` | Switch-dispatch VM executing the bytecode backend's output (IEEE-754 floats, width-aware casts, pooled string constants), plus the module-image container (`encode_module`/`decode_module`) that ships it across process boundaries and its disassembler (`render_module`/`render_function`): the deterministic, total instruction listing for a decoded artifact (unknown bytes list as `unknown(0xNN)`, truncated payloads as `<truncated>`). |
+| `glyim-bytecode-vm` | Switch-dispatch VM executing the bytecode backend's output (IEEE-754 floats, width-aware casts, pooled string constants), plus the module-image container (`encode_module`/`decode_module`) that ships it across process boundaries, its disassembler (`render_module`/`render_function`: the deterministic, total instruction listing for a decoded artifact — unknown bytes list as `unknown(0xNN)`, truncated payloads as `<truncated>`), the execution-trace seam (`TraceSink`/`TraceCollector`/`render_trace`: one step per dispatch over the executed path), and the fuel budget (`Vm::with_fuel` → `VmError::FuelExhausted`). |
 | `glyim-runtime` | Runtime FFI: alloc, dealloc, drop glue, panic, fs/net/thread/time/process. |
 | `glyim-db` | Compilation database: interners, VFS, type context, trait context. |
 | `glyim-pipeline` | End-to-end compilation driver (lex → parse → def-map → HIR → typeck → lower → borrowck → opt → codegen). |
@@ -488,12 +488,24 @@ cargo run -p glyim-pipeline --example hello_pipeline
 # Execute in-process via the interpreter run contract.
 cargo run -p glyim-pipeline --example run_interp
 
+# Walk the solver's bootstrap surface (the builtin-trait registry).
+cargo run -p glyim-pipeline --example builtin_trait_registry
+
+# Read the M2.1 per-phase profile the driver's --time-passes prints.
+cargo run -p glyim-pipeline --example phase_profile
+
 # Walk the async desugar's loop-await shapes: what `loop`/`for`/`while`
 # bodies desugar to (and which shapes stay diagnosed, GAP-0006).
 cargo run -p glyim-hir --example async_loop_desugar
 
+# The `for`-over-a-range variant of the same desugar walkthrough.
+cargo run -p glyim-hir --example async_for_loop_desugar
+
 # Round-trip the readiness ledger's evidence JSONL (M1.5 seam).
 cargo run -p glyim-test --example evidence_report
+
+# File a strict-xfail witness fixture against a registered gap (M1.6).
+cargo run -p glyim-test --example known_gap_witness
 
 # Drive the language server's request engines in-process — one
 # walkthrough per seam (declaration, implementation, pull diagnostics,
@@ -590,6 +602,30 @@ cargo run -p glyim-ledger --example gaps_unwitness
 # Grant, then retire C9 waivers by exact ID (waivers grant/revoke faces).
 cargo run -p glyim-ledger --example waivers_revoke
 
+# Re-pin one C9 waiver's expiry by exact ID (waivers extend face).
+cargo run -p glyim-ledger --example waivers_extend
+
+# Grant one C9 waiver through the curated write face (waivers grant face).
+cargo run -p glyim-ledger --example waivers_grant
+
+# The constitution-C9 waiver-health report (expired waivers fail).
+cargo run -p glyim-ledger --example waiver_health
+
+# Open a NEW gap entry into the registry (the gap lifecycle's first stage).
+cargo run -p glyim-ledger --example gaps_open
+
+# Attach a witness fixture to one unwitnessed gap (the write face).
+cargo run -p glyim-ledger --example gaps_witness
+
+# Remove one gap's block from its registry (the closure face).
+cargo run -p glyim-ledger --example gaps_retire
+
+# Retract every committed record of one fixture by its digest.
+cargo run -p glyim-ledger --example evidence_retract
+
+# File one §3.5 inventory exemption, then unignore it.
+cargo run -p glyim-ledger --example inventory_ignore_lifecycle
+
 # Build + verify a corpus manifest over the 7 generator families (M2.3).
 cargo run -p glyim-bench --example corpus_walk
 
@@ -614,6 +650,42 @@ cargo run -p glyim-bench --example history_trend
 # Disassemble a decoded module image: the deterministic instruction
 # listing (unknown bytes list as unknown(0xNN), truncation as <truncated>).
 cargo run -p glyim-bytecode-vm --example module_disasm_walkthrough
+
+# Round-trip the loadable module image: encode, decode, run (v2 format).
+cargo run -p glyim-bytecode-vm --example module_image_walkthrough
+
+# Float arithmetic and width-aware casts in the VM (the interpreter's
+# MIR-14 cast semantics).
+cargo run -p glyim-bytecode-vm --example float_casts_walkthrough
+
+# Trace what a decoded module actually executed: per-dispatch steps,
+# frame-depth transitions, bounded capture, and the fuel budget that
+# stops an infinite loop with an explicit error.
+cargo run -p glyim-bytecode-vm --example execution_trace_walkthrough
+
+# Emit MIR bodies into a loadable module image (the assembler seam).
+cargo run -p glyim-codegen --example module_assembly_walkthrough
+
+# Construct diagnostics and render them (human / JSON faces).
+cargo run -p glyim-diag --example render_diagnostics
+
+# Drive the lexer and parser over a small program.
+cargo run -p glyim-frontend --example lex_parse
+
+# Dump the assembled core / alloc / std library sources the compiler
+# consumes as its bootstrapping corpus.
+cargo run -p glyim-lang-core --example core_modules_walkthrough
+cargo run -p glyim-lang-alloc --example alloc_modules_walkthrough
+cargo run -p glyim-lang-std --example dump_assembled
+
+# The opt-level pass plan (which MIR passes run at which level).
+cargo run -p glyim-opt --example pass_plans
+
+# Check the repo-health metrics ratchet against its baseline (M0.6).
+cargo run -p glyim-metrics --example baseline_check
+
+# Persist two bench reports and diff them (the M2.5 gate over files).
+cargo run -p glyim-bench --example diff_reports
 
 # Walk the virtual filesystem seam every driver sits on.
 cargo run -p glyim-vfs --example vfs_walkthrough
@@ -710,7 +782,7 @@ cargo insta review
 - NLL borrow checking with two-phase borrows and move analysis.
 - MIR optimisation passes (const prop, DCE, CFG simplify, unreachable elimination, slice desugar, drop elaboration).
 - LLVM codegen for scalar and aggregate types, with real ABI lowering.
-- Bytecode codegen and the bytecode VM, including multi-function module-image assembly (`generate_module_image` → `decode_module` → run) verified against the MIR interpreter by the differential suite, over the MIR call-frame ABI (local 0 return place, args at `locals[1..=arg_count]`); the differential also pins float arithmetic/casts and pooled string equality bit-for-bit against the interpreter.
+- Bytecode codegen and the bytecode VM, including multi-function module-image assembly (`generate_module_image` → `decode_module` → run) verified against the MIR interpreter by the differential suite, over the MIR call-frame ABI (local 0 return place, args at `locals[1..=arg_count]`); the differential also pins float arithmetic/casts and pooled string equality bit-for-bit against the interpreter. The VM additionally carries the execution-trace seam (per-dispatch `TraceSink` steps with a deterministic `render_trace` listing) and the fuel budget (`Vm::with_fuel`, `VmError::FuelExhausted`), so a traced, budgeted run over a decoded image is scriptable end to end.
 - MIR interpreter used for `const fn` evaluation and `run-*` tests.
 - LSP with pushed, per-file-pull (with related documents), and workspace-pull diagnostics, hover, completion, goto-definition, goto-type-definition, goto-declaration, goto-implementation, references, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), type hierarchy (prepare a trait/struct/enum item and walk the recorded impl facts), signature help, inlay hints, inline values, rename (with `prepareRename`), folding, formatting, range formatting, on-type formatting, code actions (add missing match arms, generate impl, remove unused imports), auto-import, code lenses (with a live-count resolve, executable through `workspace/executeCommand`), document links, linked editing ranges, monikers, workspace/document symbols, save-time format edits (`willSaveWaitUntil`), watched files, file operations (`didCreateFiles`/`didDeleteFiles`), file renames (`didRenameFiles`), workspace folders (`workspaceFolders` served with change notifications), document color (`documentColor` swatch sites over hex string literals, `colorPresentation` recolor echo), and an optional JSON-lines server log (`--log-file`).
 - `glyip` build tool: project scaffolding, incremental builds, dependency resolution (path / registry / git), lockfiles, and compiled test execution.
