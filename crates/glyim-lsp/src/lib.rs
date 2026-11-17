@@ -22,6 +22,10 @@ pub mod document_link;
 pub mod driver;
 /// `execute_command` (LSP-EXEC-CMD).
 pub mod execute_command;
+/// `file_operations` (LSP-FILE-CREATE-DELETE).
+pub mod file_operations;
+/// `file_rename` (LSP-FILE-RENAME).
+pub mod file_rename;
 /// folding.
 pub mod folding;
 /// formatting.
@@ -110,6 +114,13 @@ pub use document_link::{
 pub use execute_command::{
     ExecuteCommandError, GraphReferenceLookup, ReferenceLookup, ShowReferencesArgs,
     compute_reference_targets, execute_command, parse_show_references_args,
+};
+pub use file_operations::{
+    created_file_changes, created_file_decisions, deleted_file_changes, deleted_file_decisions,
+};
+pub use file_rename::{
+    FileRename, RenameSessionSource, RenamedDecisions, SessionRenameSource,
+    compute_rename_decisions, renamed_file_decisions, renamed_files,
 };
 pub use goto_declaration::{
     DeclarationSource, ParseTreeDeclarationSource, declaration_target, goto_declaration,
