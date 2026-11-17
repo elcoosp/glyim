@@ -84,7 +84,7 @@ The design is heavily inspired by rustc's architecture (arena-allocated IRs, int
 ### Code Generation
 
 - **LLVM backend** (`glyim-codegen-llvm`) using `inkwell`/LLVM 23 — produces native object files with real ABI lowering, debug info, exception handling (Itanium + SEH), and Link-Time Optimization (`fat` / `thin`).
-- **Bytecode backend** (`glyim-codegen`) — a compact stack-machine bytecode used for testing and embedded execution, verified by the `glyim-bytecode-vm` crate.
+- **Bytecode backend** (`glyim-codegen`) — a compact stack-machine bytecode used for testing and embedded execution, verified by the `glyim-bytecode-vm` crate; the emitter can assemble whole multi-function modules into the versioned, loadable `glyim.module-image/1` container (`generate_module_image`), which the VM validates and runs after a round trip.
 
 ### Tooling
 
@@ -124,7 +124,7 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `glyim-layout` | Type layout computation (size, alignment, ABI, vtables). |
 | `glyim-codegen` | Abstract code generation backend trait + bytecode backend. |
 | `glyim-codegen-llvm` | LLVM backend (via `inkwell`) with full ABI handling and LTO. |
-| `glyim-bytecode-vm` | Switch-dispatch VM executing the bytecode backend's output. |
+| `glyim-bytecode-vm` | Switch-dispatch VM executing the bytecode backend's output, plus the module-image container (`encode_module`/`decode_module`) that ships it across process boundaries. |
 | `glyim-runtime` | Runtime FFI: alloc, dealloc, drop glue, panic, fs/net/thread/time/process. |
 | `glyim-db` | Compilation database: interners, VFS, type context, trait context. |
 | `glyim-pipeline` | End-to-end compilation driver (lex → parse → def-map → HIR → typeck → lower → borrowck → opt → codegen). |
@@ -702,7 +702,7 @@ cargo insta review
 - NLL borrow checking with two-phase borrows and move analysis.
 - MIR optimisation passes (const prop, DCE, CFG simplify, unreachable elimination, slice desugar, drop elaboration).
 - LLVM codegen for scalar and aggregate types, with real ABI lowering.
-- Bytecode codegen and the bytecode VM.
+- Bytecode codegen and the bytecode VM, including multi-function module-image assembly (`generate_module_image` → `decode_module` → run) verified against the MIR interpreter by the differential suite, over the MIR call-frame ABI (local 0 return place, args at `locals[1..=arg_count]`).
 - MIR interpreter used for `const fn` evaluation and `run-*` tests.
 - LSP with pushed, per-file-pull (with related documents), and workspace-pull diagnostics, hover, completion, goto-definition, goto-type-definition, goto-declaration, goto-implementation, references, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), type hierarchy (prepare a trait/struct/enum item and walk the recorded impl facts), signature help, inlay hints, inline values, rename (with `prepareRename`), folding, formatting, range formatting, on-type formatting, code actions (add missing match arms, generate impl, remove unused imports), auto-import, code lenses (with a live-count resolve, executable through `workspace/executeCommand`), document links, linked editing ranges, monikers, workspace/document symbols, save-time format edits (`willSaveWaitUntil`), watched files, file operations (`didCreateFiles`/`didDeleteFiles`), file renames (`didRenameFiles`), workspace folders (`workspaceFolders` served with change notifications), document color (`documentColor` swatch sites over hex string literals, `colorPresentation` recolor echo), and an optional JSON-lines server log (`--log-file`).
 - `glyip` build tool: project scaffolding, incremental builds, dependency resolution (path / registry / git), lockfiles, and compiled test execution.
