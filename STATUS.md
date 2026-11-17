@@ -2,11 +2,11 @@
 
 # Readiness status
 
-Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **252** features over **56** evidence record(s) (0 error(s), 3 warning(s)).
+Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **254** features over **56** evidence record(s) (0 error(s), 3 warning(s)).
 
 | Level | Features |
 |---|---|
-| L0 | 239 |
+| L0 | 241 |
 | L1 | 7 |
 | L2 | 6 |
 | L3 | 0 |
@@ -223,6 +223,7 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `TOOL-LSP-CALL-HIERARCHY` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-CODE-ACTIONS` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-CODE-LENS` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-COLOR` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-COMPLETION` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-DECLARATION` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-DIAG` | tooling | L4 | L0 | - | - |
@@ -256,6 +257,7 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `TOOL-LSP-WATCHED-FILES` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-WILL-SAVE` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-WORKSPACE-DIAG` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-WORKSPACE-FOLDERS` | tooling | L4 | L0 | - | - |
 | `TOOL-METRICS-RATCHET` | tooling | L3 | L0 | - | - |
 | `TOOL-TEST-COMPILE-FAIL` | tooling | L4 | L0 | - | - |
 | `TOOL-TEST-COMPILE-PASS` | tooling | L4 | L1 | - | - |
