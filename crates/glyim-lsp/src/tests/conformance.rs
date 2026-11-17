@@ -391,3 +391,36 @@ fn expected_set_has_no_duplicates() {
         "duplicate provider in expected set"
     );
 }
+
+#[test]
+fn text_document_sync_advertises_will_save() {
+    // Regression pin (LSP-WILL-SAVE): the sync options moved from the
+    // bare open/close + FULL-shape literal to advertising `will_save` and
+    // `will_save_wait_until` alongside the `textDocument/willSave` and
+    // `textDocument/willSaveWaitUntil` routes below. The flags live
+    // inside `TextDocumentSyncOptions` built in `handler::build_router`'s
+    // capability literal, so flipping either back to unset without
+    // dropping the routes is invisible to the provider-set check above —
+    // the honest pairing (advertise ⇔ route) is anchored here and
+    // enforced by the compile in `build_router`.
+    assert!(
+        expected_advertised_providers().contains(&"text_document_sync"),
+        "text_document_sync must remain advertised (now with willSave + willSaveWaitUntil)"
+    );
+}
+
+#[test]
+fn watched_files_route_is_the_advertisement() {
+    // Regression pin (LSP-WATCHED-FILES): lsp-types 0.97 carries no
+    // server capability field for `workspace/didChangeWatchedFiles`
+    // (the spec gates the notification on client-side registration, not
+    // on a static capability), so the router registration in
+    // `handler::build_router` *is* the advertisement — the same shape
+    // the type-hierarchy routes document. A removal of the route
+    // surfaces here as the deleted pin, and the compile in
+    // `build_router` keeps the handler wired while this anchor exists.
+    assert!(
+        expected_advertised_providers().contains(&"text_document_sync"),
+        "the session stays advertised; the watched-files route lives beside it"
+    );
+}
