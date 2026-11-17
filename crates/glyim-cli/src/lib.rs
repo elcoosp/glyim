@@ -272,9 +272,10 @@ with the input file and the backtrace."
             // P1-O4: an ICE is a compiler bug, not a user error — exit 101
             // (Rust's conventional ICE code) so scripts can distinguish it
             // from a compile error (1) or CLI misuse (2). The message above
-            // is the user-facing signal; the returned diagnostics are kept
-            // for API compatibility but are not re-printed.
-            let _ = glyim_diag::GlyimDiagnostic::internal_error(report);
+            // is the user-facing signal; a structured `internal_error`
+            // diagnostic is deliberately NOT emitted here (it would duplicate
+            // the same message on stderr), and the process exits before
+            // `run`'s diagnostic list could carry one back to a caller.
             std::process::exit(101);
         }
     }
