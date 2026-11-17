@@ -3,13 +3,13 @@
 //! These tests verify the *structural* desugar decision only (the bail-out gate
 //! that engages the state-machine path when `suspend_count >= 2`). They build a
 //! `CrateHir` by hand (with `Expr::Await` nodes already present) and run
-//! `desugar_async` directly, bypassing the source parser. This is necessary
-//! because the source-level `async fn`/`.await` lower (in `lower_expr.rs`) does
-//! NOT yet emit `Expr::Await` for `.await` postfixes inside async bodies — the
-//! `.await` operand is dropped and `let` bindings in async bodies are omitted,
-//! so a parsed `async fn` body never contains `Expr::Await`. That parser gap is
-//! tracked separately in §6.1 / `KNOWN_GAPS`; here we test the desugar logic in
-//! isolation, which is the part §1.1 owns.
+//! `desugar_async` directly, bypassing the source parser: the structural
+//! routing decisions are pinned here in isolation, while the end-to-end
+//! parser → desugar → typeck → MIR → interpreter proofs live in
+//! `glyim-pipeline`'s `async_runtime` / `async_multi_await_runtime` /
+//! `async_for_loop_runtime` integration tests (the source-level
+//! `async fn`/`.await` lower emits `Expr::Await` since the parser gap
+//! tracked in §6.1 closed).
 //!
 //! The multi-poll poll-body uses placeholder `i32` future/live-local field types
 //! because HIR is pre-type-check (the suspended future's type is unknowable
@@ -382,6 +382,320 @@ fn while_loop_await_desugars_to_state_machine() {
     assert!(
         has_state_enum,
         "while-loop-await must produce a *State/*Future type; items: {:?}",
+        hir.items
+            .iter()
+            .map(|it| hir.interner.resolve(it.name).to_string())
+            .collect::<Vec<_>>()
+    );
+}
+
+// --- GAP-0001 closure: `.await` inside a `for` loop over a range ---
+
+/// Shapes a `for`-loop await test body can take.
+struct ForLoopAwaitShape {
+    /// `0..n` when `false`, `0..=n` when `true`; ignored when
+    /// `range_iterable` is `false`.
+    inclusive: bool,
+    /// Range iterable (`0..n`) when `true`, a bare non-range path (`it`)
+    /// when `false` (the still-unsupported shape, GAP-0006).
+    range_iterable: bool,
+    /// Simple `i` binding when `true`, tuple pattern `(a, b)` when `false`
+    /// (still unsupported: the desugar renames a simple binding only).
+    simple_pat: bool,
+}
+
+/// Builds `async fn loop_for(n: i32) -> i32 { let mut total = 0;
+/// for i in 0..n { total = dep(i).await; } total }` (the GAP-0001 witness
+/// shape) — or one of the still-unsupported variants when `shape` says so.
+fn build_async_hir_for_loop_await(shape: ForLoopAwaitShape) -> CrateHir {
+    let interner = Interner::new();
+    let fn_name: Name = interner.intern("loop_for");
+    let n_name: Name = interner.intern("n");
+    let total_name: Name = interner.intern("total");
+    let i_name: Name = interner.intern("i");
+    let a_name: Name = interner.intern("a");
+    let b_name: Name = interner.intern("b");
+    let it_name: Name = interner.intern("it");
+    let dep_name: Name = interner.intern("dep");
+
+    let mut exprs: IndexVec<ExprId, Expr> = IndexVec::new();
+    let mut pats: IndexVec<crate::PatId, crate::Pat> = IndexVec::new();
+
+    let path = |n: Name, exprs: &mut IndexVec<ExprId, Expr>| -> ExprId {
+        exprs.push(Expr::Path(Path {
+            segments: vec![PathSegment {
+                name: n,
+                generic_args: None,
+            }],
+            kind: PathKind::Plain,
+        }))
+    };
+    let i32_ty = TypeRef::Path(Path {
+        segments: vec![PathSegment {
+            name: interner.intern("i32"),
+            generic_args: None,
+        }],
+        kind: PathKind::Plain,
+    });
+
+    let zero = exprs.push(Expr::Literal(Literal::Int(0, None)));
+    let total_pat = pats.push(crate::Pat::Binding {
+        name: total_name,
+        mutability: glyim_core::primitives::Mutability::Mut,
+        subpattern: None,
+    });
+    let let_total = exprs.push(Expr::Let {
+        pat: total_pat,
+        pat_span: Span::DUMMY,
+        value: zero,
+        ty: None,
+    });
+
+    // `for <pat> in <iterable> { total = dep(<pat var>).await; }`
+    let iterable = if shape.range_iterable {
+        let n_path = path(n_name, &mut exprs);
+        exprs.push(Expr::Range {
+            start: Some(zero),
+            end: Some(n_path),
+            inclusive: shape.inclusive,
+        })
+    } else {
+        path(it_name, &mut exprs)
+    };
+
+    // The loop-body pattern: `i`, or the unsupported `(a, b)` tuple.
+    let mut pat_var = i_name;
+    let for_pat = if shape.simple_pat {
+        pats.push(crate::Pat::Binding {
+            name: i_name,
+            mutability: glyim_core::primitives::Mutability::Not,
+            subpattern: None,
+        })
+    } else {
+        let a_pat = pats.push(crate::Pat::Binding {
+            name: a_name,
+            mutability: glyim_core::primitives::Mutability::Not,
+            subpattern: None,
+        });
+        let b_pat = pats.push(crate::Pat::Binding {
+            name: b_name,
+            mutability: glyim_core::primitives::Mutability::Not,
+            subpattern: None,
+        });
+        pat_var = a_name;
+        pats.push(crate::Pat::Tuple(vec![a_pat, b_pat]))
+    };
+
+    let pat_path = path(pat_var, &mut exprs);
+    let dep_path = path(dep_name, &mut exprs);
+    let dep_call = exprs.push(Expr::Call {
+        func: dep_path,
+        args: vec![pat_path],
+    });
+    let await_expr = exprs.push(Expr::Await { expr: dep_call });
+    let total_path = path(total_name, &mut exprs);
+    let assign_total = exprs.push(Expr::Assign {
+        lhs: total_path,
+        rhs: await_expr,
+    });
+    let loop_body = exprs.push(Expr::Block {
+        stmts: vec![assign_total],
+        tail: None,
+    });
+    let for_expr = exprs.push(Expr::For {
+        pat: for_pat,
+        iterable,
+        body: loop_body,
+    });
+    let total_tail = path(total_name, &mut exprs);
+    let block = exprs.push(Expr::Block {
+        stmts: vec![let_total, for_expr],
+        tail: Some(total_tail),
+    });
+    let _ = block;
+
+    let body = Body {
+        unsafe_blocks: std::collections::HashSet::new(),
+        owner: LocalDefId::from_raw(0),
+        exprs: exprs.clone(),
+        pat_spans: {
+            let mut s = IndexVec::new();
+            for _ in 0..pats.len() {
+                s.push(Span::DUMMY);
+            }
+            s
+        },
+        pats,
+        params: Vec::new(),
+        span: Span::DUMMY,
+        expr_spans: {
+            let mut s = IndexVec::new();
+            for _ in 0..exprs.len() {
+                s.push(Span::DUMMY);
+            }
+            s
+        },
+    };
+    let body_id = BodyId::from_raw(0);
+
+    let params = vec![Param {
+        name: n_name,
+        ty: Some(i32_ty.clone()),
+        span: Span::DUMMY,
+    }];
+    let fn_item = FnItem {
+        params,
+        return_ty: Some(i32_ty.clone()),
+        body: Some(body_id),
+        is_unsafe: false,
+        is_async: true,
+        is_const: false,
+        generic_params: Vec::new(),
+        where_clauses: Vec::new(),
+        abi: None,
+        attrs: Vec::new(),
+    };
+    let item = Item {
+        id: ItemId::from_raw(0),
+        name: fn_name,
+        kind: ItemKind::Fn(fn_item),
+        visibility: Visibility::Inherited,
+        span: Span::DUMMY,
+    };
+
+    let mut items: IndexVec<ItemId, Item> = IndexVec::new();
+    items.push(item);
+    let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
+    bodies.push(body);
+    let mut body_owners: IndexVec<BodyId, LocalDefId> = IndexVec::new();
+    body_owners.push(LocalDefId::from_raw(0));
+
+    CrateHir {
+        items,
+        bodies,
+        body_owners,
+        interner,
+    }
+}
+
+/// GAP-0001 closure: the witness shape — a single `.await` inside a `for`
+/// body over a half-open range — must desugar to the same resumable
+/// `*State` coroutine machine the `while` shape produces, with the loop
+/// variable carried as a state field so it survives a `Poll::Pending`.
+#[test]
+fn for_loop_await_desugars_to_state_machine() {
+    let mut hir = build_async_hir_for_loop_await(ForLoopAwaitShape {
+        inclusive: false,
+        range_iterable: true,
+        simple_pat: true,
+    });
+    let mut diags: Vec<GlyimDiagnostic> = Vec::new();
+    desugar_async(&mut hir, &mut diags);
+    assert!(
+        diags.iter().all(|d| !d.is_error()),
+        "for-loop-over-range await must desugar cleanly; got diagnostics: {diags:?}"
+    );
+    let enums = enum_item_names(&hir);
+    assert!(
+        enums.iter().any(|n| n.contains("loop_for")),
+        "for-loop-await must produce its coroutine state machine; enums: {enums:?}"
+    );
+}
+
+/// GAP-0001 closure: the inclusive form (`0..=n`) is the same supported
+/// shape — the machine's loop step compares with `<=` instead of `<`.
+#[test]
+fn for_loop_await_inclusive_range_desugars() {
+    let mut hir = build_async_hir_for_loop_await(ForLoopAwaitShape {
+        inclusive: true,
+        range_iterable: true,
+        simple_pat: true,
+    });
+    let mut diags: Vec<GlyimDiagnostic> = Vec::new();
+    desugar_async(&mut hir, &mut diags);
+    assert!(
+        diags.iter().all(|d| !d.is_error()),
+        "for-loop-over-inclusive-range await must desugar cleanly; got: {diags:?}"
+    );
+}
+
+/// A `for` loop whose iterable is NOT a range stays on the async-v2
+/// diagnostic (GAP-0006 witness debt): the machine cannot re-drive an
+/// arbitrary iterator's `next()` across a `Poll::Pending` yet.
+#[test]
+fn for_loop_over_nonrange_iterable_is_rejected() {
+    let mut hir = build_async_hir_for_loop_await(ForLoopAwaitShape {
+        inclusive: false,
+        range_iterable: false,
+        simple_pat: true,
+    });
+    let mut diags: Vec<GlyimDiagnostic> = Vec::new();
+    desugar_async(&mut hir, &mut diags);
+    assert!(
+        diags.iter().any(|d| d.is_error()),
+        "for-over-non-range iterable must be rejected with a diagnostic: {diags:?}"
+    );
+    let enums = enum_item_names(&hir);
+    assert!(
+        !enums.iter().any(|n| n.contains("State")),
+        "rejected shape must NOT produce a *State enum: {enums:?}"
+    );
+}
+
+/// A `for` loop with a destructuring pattern (not a simple binding) stays
+/// on the async-v2 diagnostic: the machine carries the iterator state under
+/// a synthetic name and cannot rename every pattern binding yet.
+#[test]
+fn for_loop_with_tuple_pattern_is_rejected() {
+    let mut hir = build_async_hir_for_loop_await(ForLoopAwaitShape {
+        inclusive: false,
+        range_iterable: true,
+        simple_pat: false,
+    });
+    let mut diags: Vec<GlyimDiagnostic> = Vec::new();
+    desugar_async(&mut hir, &mut diags);
+    assert!(
+        diags.iter().any(|d| d.is_error()),
+        "for-over-range with tuple pattern must be rejected with a diagnostic: {diags:?}"
+    );
+}
+
+/// GAP-0001 closure: the desugared machine carries the loop variable
+/// across suspension — the state enum's suspended variant must hold a
+/// synthetic iterator field (prefixed `__for`) alongside the user's
+/// loop locals, so `poll()` can resume mid-iteration.
+#[test]
+fn for_loop_state_carries_iterator_field() {
+    let mut hir = build_async_hir_for_loop_await(ForLoopAwaitShape {
+        inclusive: false,
+        range_iterable: true,
+        simple_pat: true,
+    });
+    let mut diags: Vec<GlyimDiagnostic> = Vec::new();
+    desugar_async(&mut hir, &mut diags);
+    assert!(
+        diags.iter().all(|d| !d.is_error()),
+        "desugar must succeed; got: {diags:?}"
+    );
+    // The generated state enum must carry a synthetic `__for`-prefixed
+    // field on one of its variants.
+    let mut found_iter_field = false;
+    for item in hir.items.iter() {
+        if let ItemKind::Enum(enum_item) = &item.kind {
+            for variant in &enum_item.variants {
+                if variant
+                    .fields
+                    .iter()
+                    .any(|f| hir.interner.resolve(f.name).starts_with("__for"))
+                {
+                    found_iter_field = true;
+                }
+            }
+        }
+    }
+    assert!(
+        found_iter_field,
+        "state machine must carry a synthetic __for* iterator field; items: {:?}",
         hir.items
             .iter()
             .map(|it| hir.interner.resolve(it.name).to_string())
