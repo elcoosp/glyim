@@ -3,6 +3,7 @@ use crate::call_hierarchy::{incoming_calls, outgoing_calls, prepare_call_hierarc
 use crate::code_action::provide_code_actions;
 use crate::code_lens::{code_lenses, resolve_code_lens};
 use crate::completion::provide_completions;
+use crate::document_color::{color_presentations, document_colors};
 use crate::document_highlight::document_highlights;
 use crate::document_link::document_links;
 use crate::driver::AnalysisMessage;
@@ -28,6 +29,7 @@ use crate::range_formatting::range_formatting;
 use crate::rename::rename_symbol;
 use crate::selection_range::selection_ranges;
 use crate::semantic_tokens::{semantic_tokens_full, semantic_tokens_range, token_legend};
+use crate::session_folders::{did_change_workspace_folders, seed_workspace_folders};
 use crate::signature_help::signature_help;
 use crate::type_definition::type_definition;
 use crate::type_hierarchy::{prepare_type_hierarchy, type_subtypes, type_supertypes};
@@ -40,20 +42,20 @@ use std::ops::ControlFlow;
 
 use lsp_types::notification::WillSaveTextDocument;
 use lsp_types::notification::{
-    DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidCreateFiles,
-    DidDeleteFiles, DidOpenTextDocument, DidRenameFiles,
+    DidChangeTextDocument, DidChangeWatchedFiles, DidChangeWorkspaceFolders, DidCloseTextDocument,
+    DidCreateFiles, DidDeleteFiles, DidOpenTextDocument, DidRenameFiles,
 };
 use lsp_types::request::{
     CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare,
-    CodeActionRequest, CodeLensRequest, CodeLensResolve, Completion, DocumentDiagnosticRequest,
-    DocumentHighlightRequest, DocumentLinkRequest, DocumentSymbolRequest, ExecuteCommand,
-    FoldingRangeRequest, Formatting, GotoDeclaration, GotoDefinition, GotoImplementation,
-    GotoImplementationParams, GotoTypeDefinition, HoverRequest, Initialize, InlayHintRequest,
-    InlineValueRequest, LinkedEditingRange, MonikerRequest, OnTypeFormatting, PrepareRenameRequest,
-    RangeFormatting, References, Rename, SelectionRangeRequest, SemanticTokensFullRequest,
-    SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest, TypeHierarchyPrepare,
-    TypeHierarchySubtypes, TypeHierarchySupertypes, WillSaveWaitUntil, WorkspaceDiagnosticRequest,
-    WorkspaceSymbolRequest,
+    CodeActionRequest, CodeLensRequest, CodeLensResolve, ColorPresentationRequest, Completion,
+    DocumentColor, DocumentDiagnosticRequest, DocumentHighlightRequest, DocumentLinkRequest,
+    DocumentSymbolRequest, ExecuteCommand, FoldingRangeRequest, Formatting, GotoDeclaration,
+    GotoDefinition, GotoImplementation, GotoImplementationParams, GotoTypeDefinition, HoverRequest,
+    Initialize, InlayHintRequest, InlineValueRequest, LinkedEditingRange, MonikerRequest,
+    OnTypeFormatting, PrepareRenameRequest, RangeFormatting, References, Rename,
+    SelectionRangeRequest, SemanticTokensFullRequest, SemanticTokensRangeRequest, Shutdown,
+    SignatureHelpRequest, TypeHierarchyPrepare, TypeHierarchySubtypes, TypeHierarchySupertypes,
+    WillSaveWaitUntil, WorkspaceDiagnosticRequest, WorkspaceSymbolRequest,
 };
 use lsp_types::*;
 use std::sync::Arc;
@@ -79,9 +81,14 @@ pub fn build_router(
 
     // Initialize
     let db_init = db.clone();
-    router.request::<Initialize, _>(move |(), _params: InitializeParams| {
-        let _db = db_init.clone();
+    router.request::<Initialize, _>(move |(), params: InitializeParams| {
+        let db = db_init.clone();
         async move {
+            // LSP-WORKSPACE-FOLDERS: the client's initialize folder set is
+            // the session's first record of which folders it serves (the
+            // deprecated `rootUri` is the fallback when no folder list is
+            // sent); the change route below re-derives it afterwards.
+            seed_workspace_folders(&db, &params);
             let capabilities = ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
@@ -260,6 +267,17 @@ pub fn build_router(
                     resolve_provider: Some(false),
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 }),
+                // LSP-COLOR: the document-color capability. The two
+                // handlers below walk the driver's stored parse trees (the
+                // same immutable green store document-link and
+                // selection-range read) for string literals that spell a
+                // hex color payload, so no re-analysis happens on the
+                // request path and the swatches answer on broken code too.
+                // One capability covers both wire shapes — the
+                // `documentColor` listing and the picker's
+                // `colorPresentation` echo. The conformance test pins this
+                // advertisement to the router registration.
+                color_provider: Some(ColorProviderCapability::Simple(true)),
                 // LSP-LINKED-EDIT: the linked-editing-range capability. The
                 // handler below composes the document-highlight occurrence
                 // seam (the shared reference graph, T129 scope-owner
@@ -322,7 +340,18 @@ pub fn build_router(
                 // records facts for. The conformance test pins this
                 // advertisement to the router registration.
                 workspace: Some(WorkspaceServerCapabilities {
-                    workspace_folders: None,
+                    // LSP-WORKSPACE-FOLDERS: the folder-set capability. The
+                    // seed below records the client's initialize folder set
+                    // (the deprecated `rootUri` as the fallback) and the
+                    // notification route below re-derives it on
+                    // `workspace/didChangeWorkspaceFolders` — folder queries
+                    // answer from that store, no analysis work involved. The
+                    // conformance test pins this advertisement to the router
+                    // registration.
+                    workspace_folders: Some(WorkspaceFoldersServerCapabilities {
+                        supported: Some(true),
+                        change_notifications: Some(OneOf::Left(true)),
+                    }),
                     file_operations: Some(WorkspaceFileOperationsServerCapabilities {
                         did_rename: Some(FileOperationRegistrationOptions {
                             filters: vec![FileOperationFilter {
@@ -539,6 +568,40 @@ pub fn build_router(
         async move {
             let guard = db.file_map.read();
             Ok(document_links(&db, &guard, &params))
+        }
+    });
+
+    // Document Color (LSP-COLOR): the string literals that spell a hex
+    // color payload answer as the swatch sites an editor renders inline —
+    // the payload extent (quotes excluded) carries the parsed channels.
+    // The walk reads the stored parse trees (no re-analysis), so it
+    // answers on broken code too; a color-free document answers `null`.
+    let db_doc_color = db.clone();
+    router.request::<DocumentColor, _>(move |(), params: DocumentColorParams| {
+        let db = db_doc_color.clone();
+        async move {
+            let guard = db.file_map.read();
+            // lsp-types 0.97 pins the result to `Vec` (no null face), so
+            // the engines' `None` — its internal no-answer convention —
+            // flattens to an empty listing on the wire.
+            Ok(document_colors(&db, &guard, &params).unwrap_or_default())
+        }
+    });
+
+    // Color Presentation (LSP-COLOR): the picker's echo — a color value
+    // for a range documentColor reported — answers the canonical hex
+    // spelling to splice. The range must map byte-exactly onto a recorded
+    // site (a presentation over arbitrary text would splice hex over
+    // prose, so it answers `null`); the requested color may differ from
+    // the recorded one — recoloring is the API's purpose.
+    let db_color_pres = db.clone();
+    router.request::<ColorPresentationRequest, _>(move |(), params: ColorPresentationParams| {
+        let db = db_color_pres.clone();
+        async move {
+            let guard = db.file_map.read();
+            // Same `Vec` contract as the listing route above: a range
+            // no site occupies flattens to an empty answer.
+            Ok(color_presentations(&db, &guard, &params).unwrap_or_default())
         }
     });
 
@@ -1009,6 +1072,20 @@ pub fn build_router(
         }
         ControlFlow::Continue(())
     });
+
+    // Workspace Folders (LSP-WORKSPACE-FOLDERS): the client's folder-set
+    // edits re-derive the session's folder store — folders are metadata,
+    // so the route's whole job is the state edit (no analysis enqueues,
+    // no diagnostics republish); the folder queries answer the new set
+    // from the next read on. Unresolvable URIs are skipped with the same
+    // honesty the seed applies.
+    let db_workspace_folders = db.clone();
+    router.notification::<DidChangeWorkspaceFolders>(
+        move |(), params: DidChangeWorkspaceFoldersParams| {
+            did_change_workspace_folders(&db_workspace_folders, &params);
+            ControlFlow::Continue(())
+        },
+    );
 
     // File Create (LSP-FILE-CREATE-DELETE): the client declares the
     // file its workspace UI created. The decisions reuse the watched
