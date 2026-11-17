@@ -91,6 +91,18 @@ fn measured_module(count: usize) -> Module {
     Module::new(functions, count)
 }
 
+/// The string-pool corpus: the same multi-function shape, plus a pool of
+/// `count` distinct string payloads — the version-2 section
+/// `OP_LOAD_CONST_STR` indices resolve into, sized like a real program's
+/// literal set.
+fn measured_string_module(count: usize, strings: usize) -> Module {
+    let mut module = measured_module(count);
+    module.strings = (0..strings)
+        .map(|i| format!("string_payload_{i:04}"))
+        .collect();
+    module
+}
+
 fn main() {
     let module = measured_module(32);
     let image = encode_module(&module);
@@ -120,4 +132,35 @@ fn main() {
     );
     println!("best encode: {best_encode} ns/op");
     println!("best decode: {best_decode} ns/op");
+
+    // The version-2 string-pool section: same measured loop over a module
+    // whose pool carries 64 payloads, so pool encode/decode cost stays
+    // visible against the function-table baseline above.
+    let stringy = measured_string_module(32, 64);
+    let stringy_image = encode_module(&stringy);
+    let mut best_string_encode = u64::MAX;
+    let mut best_string_decode = u64::MAX;
+    for _ in 0..runs {
+        let start = Instant::now();
+        for _ in 0..ITERATIONS {
+            black_box(encode_module(black_box(&stringy)));
+        }
+        best_string_encode =
+            best_string_encode.min(start.elapsed().as_nanos() as u64 / u64::from(ITERATIONS));
+
+        let start = Instant::now();
+        for _ in 0..ITERATIONS {
+            black_box(decode_module(black_box(&stringy_image)).expect("corpus image must decode"));
+        }
+        best_string_decode =
+            best_string_decode.min(start.elapsed().as_nanos() as u64 / u64::from(ITERATIONS));
+    }
+    println!(
+        "string module: {} functions, {} pool entries, image {} bytes",
+        stringy.functions.len(),
+        stringy.strings.len(),
+        stringy_image.len()
+    );
+    println!("best encode (with pool): {best_string_encode} ns/op");
+    println!("best decode (with pool): {best_string_decode} ns/op");
 }
