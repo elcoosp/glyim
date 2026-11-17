@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`.await` inside a `for` loop over a range** (GAP-0001 closed): the
+  async state-machine desugar now normalizes `for i in a..b` into the
+  `while` shape it already re-drives — a synthetic `let mut __for_i`
+  iterator binding hoisted before the loop, the loop variable renamed to
+  it inside the body, and an explicit increment step after it — so the
+  `Start`/`S0`/`Done` machine carries the iterator and the loop's live
+  locals across `Poll::Pending` and `poll()` resumes mid-iteration
+  (`0..=` normalizes to a `<=` loop step). The strict-xfail witness
+  retired into a run-pass fixture
+  (`tests/run-pass/behavior/async_for_loop_await.g`, exit code 3), the
+  remaining loop shapes re-registered as the witnessed GAP-0006 with a new
+  compile-fail witness, and the desugar's T0060 diagnostic now names the
+  still-unsupported shapes (`loop` bodies, `for` over a non-range
+  iterable, destructuring loop patterns).
 - **LSP workspace folders (`workspace.workspaceFolders` +
   `workspace/didChangeWorkspaceFolders`)**: the session records the
   folder set it serves — seeded from the client's initialize folder list
