@@ -41,7 +41,7 @@ use glyim_test::harness::compiler::FrontendOnlyCompiler;
 use glyim_test::harness::config::{TestConfig, TestMode};
 use glyim_test::harness::executor::{TestExecutor, TestOutcome};
 
-/// A witness fixture for `GAP-0001` compiled with the frontend-only
+/// A witness fixture for `GAP-0006` compiled with the frontend-only
 /// compiler: `compile` never runs typeck or lowering, so the only way the
 /// compiler can reject the program is a parse error.
 ///
@@ -63,11 +63,11 @@ const GAP_CLOSED_SOURCE: &str = "fn main() {}\n";
 /// discovered. `open` selects the still-rejected vs already-accepted body.
 fn witness_fixture(open: bool) -> DiscoveredTest {
     DiscoveredTest {
-        path: PathBuf::from("tests/compile-fail/async-await-in-loop-known-gap.g"),
-        name: "async-await-in-loop-known-gap".to_string(),
+        path: PathBuf::from("tests/compile-fail/async-await-in-unbounded-loop-known-gap.g"),
+        name: "async-await-in-unbounded-loop-known-gap".to_string(),
         config: TestConfig {
             mode: TestMode::CompileFail,
-            known_gap: Some("GAP-0001".to_string()),
+            known_gap: Some("GAP-0006".to_string()),
             ..TestConfig::default()
         },
         source: Arc::from(if open {
