@@ -61,7 +61,7 @@ The design is heavily inspired by rustc's architecture (arena-allocated IRs, int
 - **Generics** with type parameters, generic bounds (`T: Trait`), and where-clauses.
 - **Traits** with default methods, associated types, and static dispatch.
 - **Pattern matching** with literals, ranges, or-patterns, slices, structs, tuples, enums, and `if` guards.
-- **`async`/`await`** with state-machine desugaring (straight-line and multi-await bodies).
+- **`async`/`await`** with state-machine desugaring (straight-line, multi-await, and loop bodies: `.await` inside `while` and `for i in a..b` loops suspends and resumes through a real `Start`/`S0`/`Done` machine).
 - **Closures** with capture analysis (`ByValue` / `ByRef(Mut)` / `ByRef(Not)`).
 - **Macros**: declarative `macro_rules!` with fragment specifiers (`:expr`, `:ty`, `:pat`, `:tt`, …), plus built-in `file!`, `line!`, `column!`, `env!`, `option_env!`, `include!`, `include_str!`, `include_bytes!`, `concat!`, `concat_idents!`, `stringify!`, `format!`, `vec!`, `matches!`, `assert!`, `assert_eq!`, `assert_ne!`, `debug_assert!`, `debug_assert_eq!`, `debug_assert_ne!`, `write!`, `writeln!`; the stdlib additionally defines `println!`/`print!`/`eprintln!`/`eprint!`/`panic!` as declarative macros.
 - **Procedural macros** through a C-compatible token-stream ABI (`glyim-proc-macro`), with a `dlopen`-based cdylib loader.
@@ -711,13 +711,16 @@ cargo insta review
 
 The compiler's development is tracked against an internal de-stubbing plan.
 Status is a property of the **readiness ledger**, not of prose: the open gaps
-live in `ledger/gaps/known/*.toml` (GAP-0001…GAP-0005), are validated by CI's
+live in `ledger/gaps/known/*.toml` (GAP-0002…GAP-0006), are validated by CI's
 `ledger check` job, and carry strict-xfail witness fixtures under
 `crates/glyim-test/tests/` where one is reproducible. Render the coverage
 report with `cargo run -p glyim-ledger -- gaps`. Notable open items include:
 
-- `.await` inside a loop body is a deliberate, diagnosed hard error
-  (`[T0060]`, GAP-0001, witnessed) until the async state-machine v2 lands.
+- `.await` inside a loop body works for `while` and `for`-over-range
+  bodies (a real suspend/resume machine; GAP-0001 closed). The remaining
+  loop shapes — `loop` bodies and `for` over a non-range iterable — stay a
+  deliberate, diagnosed hard error (`[T0060]`, GAP-0006, witnessed) until
+  the rest of the async state-machine v2 lands.
 - `panic!` does not unwind: `glyim_panic` writes the message to stderr and
   exits 101 without running destructors (GAP-0003, intentional and
   documented).
