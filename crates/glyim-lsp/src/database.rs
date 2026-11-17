@@ -235,6 +235,15 @@ pub struct AnalysisDatabase {
     /// Recorded by the watched-files route when it re-analyses a path
     /// from disk, removed when the path is forgotten.
     pub watched_files: RwLock<std::collections::HashSet<PathBuf>>,
+    /// The workspace folders the session serves (LSP-WORKSPACE-FOLDERS),
+    /// in first-added order — seeded from the client's initialize params
+    /// (the deprecated `rootUri` as the fallback), re-derived on
+    /// `workspace/didChangeWorkspaceFolders`. Folders are session
+    /// metadata keyed by the spelled path (the same keying the file map
+    /// uses), so no analysis artifact hangs off this store; the folder
+    /// queries (`session_folders`) read it through the
+    /// `FolderSetSource` seam.
+    pub workspace_folders: RwLock<Vec<crate::session_folders::FolderRecord>>,
 }
 
 impl Default for AnalysisDatabase {
@@ -260,6 +269,7 @@ impl AnalysisDatabase {
             versions: RwLock::new(HashMap::new()),
             dep_graph: RwLock::new(crate::dep_graph::DependencyGraph::new()),
             watched_files: RwLock::new(std::collections::HashSet::new()),
+            workspace_folders: RwLock::new(Vec::new()),
         }
     }
 
