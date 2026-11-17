@@ -76,8 +76,12 @@ pub mod symbol_index;
 pub mod type_definition;
 /// `type_hierarchy` (LSP-TYPE-HIERARCHY).
 pub mod type_hierarchy;
-/// uri.
+/// `uri`.
 pub mod uri; // Make database public
+/// `watched_files` (LSP-WATCHED-FILES).
+pub mod watched_files;
+/// `will_save` (LSP-WILL-SAVE).
+pub mod will_save;
 /// `workspace_diagnostics` (LSP-WORKSPACE-DIAG).
 pub mod workspace_diagnostics;
 
@@ -164,6 +168,14 @@ pub use type_hierarchy::{
     HierarchyItemKind, HierarchyMember, HirTypeHierarchySource, NamedItem, TypeHierarchySource,
     compute_subtypes, compute_supertypes, hierarchy_target, prepare_type_hierarchy, type_subtypes,
     type_supertypes,
+};
+pub use watched_files::{
+    SessionWatchedSource, WatchedChange, WatchedChangeKind, WatchedDecisions, WatchedSessionSource,
+    compute_watched_changes, watched_file_changes, watched_file_decisions,
+};
+pub use will_save::{
+    SaveEdit, SaveFormatSource, StoredSaveFormatSource, compute_save_edits, will_save_edits,
+    wire_save_edit,
 };
 pub use workspace_diagnostics::{
     AnalysedFile, AnalysedSetSource, RecordedAnalysedSource, workspace_diagnostics,
