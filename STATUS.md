@@ -2,11 +2,11 @@
 
 # Readiness status
 
-Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **248** features over **56** evidence record(s) (0 error(s), 3 warning(s)).
+Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **250** features over **56** evidence record(s) (0 error(s), 3 warning(s)).
 
 | Level | Features |
 |---|---|
-| L0 | 235 |
+| L0 | 237 |
 | L1 | 7 |
 | L2 | 6 |
 | L3 | 0 |
@@ -251,6 +251,8 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `TOOL-LSP-SIGNATURE-HELP` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-SYMBOLS` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-TYPE-HIERARCHY` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-WATCHED-FILES` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-WILL-SAVE` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-WORKSPACE-DIAG` | tooling | L4 | L0 | - | - |
 | `TOOL-METRICS-RATCHET` | tooling | L3 | L0 | - | - |
 | `TOOL-TEST-COMPILE-FAIL` | tooling | L4 | L0 | - | - |
