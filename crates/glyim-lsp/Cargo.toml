@@ -164,6 +164,13 @@ harness = false
 name = "file_operations"
 harness = false
 
+# Document-color request bench (LSP-COLOR; dependency-free,
+# `harness = false` like the other request benches — the swatch listing
+# and the picker's presentation echo share one measured corpus).
+[[bench]]
+name = "document_color"
+harness = false
+
 [dependencies]
 # `notify` (and before it `crossbeam-channel`/`file_url`) were declared
 # here but never imported anywhere in the crate — the driver's watcher
@@ -214,3 +221,9 @@ serde_json = "1.0"
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
+
+# Workspace-folder apply bench (LSP-WORKSPACE-FOLDERS; dependency-free,
+# `harness = false` like the other request benches).
+[[bench]]
+name = "workspace_folders"
+harness = false
