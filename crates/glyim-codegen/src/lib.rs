@@ -2,7 +2,7 @@
 // Stylistic clippy lints suppressed crate-wide (test-noise lints).
 
 use glyim_core::primitives::{BinOp, UnOp};
-use glyim_core::{FnDefId, IndexVec, TargetInfo};
+use glyim_core::{DefId, FnDefId, IndexVec, TargetInfo};
 use glyim_diag::{CompResult, GlyimDiagnostic};
 use glyim_layout::{FieldsShape, LayoutComputer, SimpleLayoutComputer, TagEncoding, VariantsShape};
 use glyim_mir::*;
@@ -398,10 +398,12 @@ impl BytecodeBackend {
                                 // the base address is already on the stack, we
                                 // push the slice value, read its len, subtract
                                 // the offset, scale by elem_size, and add to the
-                                // base. (No bytecode VM exists in the repo, but
-                                // golden-pattern tests assert the emitted
-                                // opcodes, which is this backend's verification
-                                // convention.)
+                                // base. (The `glyim-bytecode-vm` VM executes
+                                // this shape end to end: the `vm_interp_diff`
+                                // differential runs emitted modules through it
+                                // against the MIR interpreter, and the
+                                // golden-pattern tests still assert the emitted
+                                // opcodes.)
                                 let slice_local = place.local;
                                 bc.push(OP_LEN);
                                 bc.extend_from_slice(&slice_local.to_raw().to_le_bytes());
@@ -618,6 +620,138 @@ impl CodegenBackend for BytecodeBackend {
 }
 
 impl BytecodeBackend {
+    /// Assemble a loadable `glyim.module-image/1` module over a whole body
+    /// set.
+    ///
+    /// [`CodegenBackend::generate`] concatenates every body's instruction
+    /// stream into one file — bytes no loader can execute (no function
+    /// table, no entry point, no per-body boundaries). This method is the
+    /// sanctioned multi-function path: it emits every body, resolves the
+    /// emitter's `fn_table` index space into the module's function vector,
+    /// records each body's block-offset table (so the VM resolves jump and
+    /// call-resume targets by block index), and encodes the container the
+    /// VM crate defines (`glyim_bytecode_vm::encode_module`). Consumers
+    /// hand the bytes to `glyim_bytecode_vm::decode_module` and run the
+    /// decoded module — see the `vm_interp_diff` differential tests.
+    ///
+    /// Assembly rules:
+    /// - a body whose `owner` matches a `fn_table` slot occupies that slot
+    ///   (that is the index every `OP_CALL` pushes);
+    /// - a body no other body references (typically `main`) is appended
+    ///   after the interned slots, in emission order;
+    /// - the entry is the first body named `main`, else the first function.
+    ///
+    /// # Errors
+    ///
+    /// Refuses (explicit `internal_error` diagnostics, never a silent
+    /// broken artifact):
+    /// - any opt level above [`OptLevel::O0`] — block-offset tables are
+    ///   recorded before the peephole pass (see
+    ///   [`BytecodeBackend::generate_function_with_blocks`]), so assembled
+    ///   jump targets would be wrong at `O1`+;
+    /// - an empty body set — the image would decode to an unrunnable
+    ///   module;
+    /// - an ambiguous fn table: two slots interned for the same `FnDefId`
+    ///   under different substitutions (a generic callee called at two
+    ///   instantiations) cannot be mapped back to the one emitted body
+    ///   without a substitution-aware body identity this emitter does not
+    ///   carry.
+    pub fn generate_module_image(&self, bodies: &[(String, Arc<Body>)]) -> CompResult<Vec<u8>> {
+        if self.opt_level != OptLevel::O0 {
+            return Err(vec![GlyimDiagnostic::internal_error(
+                "module image assembly requires OptLevel::O0: block-offset \
+                 tables are recorded before the peephole pass, so assembled \
+                 jump targets would be wrong at higher levels",
+            )]);
+        }
+        if bodies.is_empty() {
+            return Err(vec![GlyimDiagnostic::internal_error(
+                "module image assembly requires at least one body; an image \
+                 with no functions cannot decode into a runnable module",
+            )]);
+        }
+
+        // Emit every body in the given order. `generate_function_with_blocks`
+        // records each block's byte offset and resets the per-function
+        // peephole bookkeeping itself.
+        let mut emitted: Vec<(DefId, Vec<u8>, Vec<usize>, usize, usize)> = Vec::new();
+        for (_symbol, body) in bodies {
+            let (code, block_offsets) = self.generate_function_with_blocks(body)?;
+            emitted.push((
+                body.owner,
+                code,
+                block_offsets,
+                body.locals.len(),
+                body.arg_count,
+            ));
+        }
+
+        // Resolve the fn-table index space. The table is in index order
+        // (interning appends), so slot `i` is exactly what `OP_CALL` pushes.
+        // Fn ids travel as `LocalDefId::to_raw()` (the interpreter's
+        // callee-resolution convention), so slots match bodies through the
+        // owner's local id.
+        let fn_table = self.fn_table.borrow().clone();
+        let local_of = |owner: DefId| owner.local_id.to_raw();
+        let mut interned_counts: std::collections::HashMap<u32, usize> =
+            std::collections::HashMap::new();
+        for (def_id, _substs) in &fn_table {
+            *interned_counts.entry(def_id.to_raw()).or_insert(0) += 1;
+        }
+        if let Some((raw, count)) = interned_counts.iter().find(|(_, c)| **c > 1) {
+            return Err(vec![GlyimDiagnostic::internal_error(format!(
+                "module image assembly is ambiguous: fn table holds {count} \
+                 substitution slots for one body (local def id {raw}); a \
+                 generic callee called at several instantiations needs \
+                 substitution-aware body identity this emitter does not carry"
+            ))]);
+        }
+
+        // Placement: a body whose owner matches a fn-table slot occupies
+        // that slot (the index every `OP_CALL` pushes); bodies nobody
+        // references (typically `main`) are appended after the interned
+        // slots, in emission order. The entry is the first body named
+        // `main` — a called `main` would own a slot, so the entry is
+        // whatever position the body landed at.
+        let mut slots: Vec<Option<glyim_bytecode_vm::Function>> = vec![None; fn_table.len()];
+        let mut appended: Vec<glyim_bytecode_vm::Function> = Vec::new();
+        let mut entry: Option<usize> = None;
+        for ((symbol, _body), (owner, code, block_offsets, n_locals, arg_count)) in
+            bodies.iter().zip(emitted)
+        {
+            let function =
+                glyim_bytecode_vm::Function::with_blocks(code, n_locals, arg_count, block_offsets);
+            let position = match fn_table
+                .iter()
+                .position(|(def_id, _)| def_id.to_raw() == local_of(owner))
+            {
+                Some(i) => {
+                    slots[i] = Some(function);
+                    i
+                }
+                None => {
+                    appended.push(function);
+                    fn_table.len() + appended.len() - 1
+                }
+            };
+            if symbol.as_str() == "main" && entry.is_none() {
+                entry = Some(position);
+            }
+        }
+        let entry = entry.unwrap_or(0);
+
+        let functions: Vec<glyim_bytecode_vm::Function> =
+            slots.into_iter().flatten().chain(appended).collect();
+        let module = glyim_bytecode_vm::Module::new(functions, entry);
+        let image = glyim_bytecode_vm::encode_module(&module);
+        tracing::debug!(
+            functions = module.functions.len(),
+            bytes = image.len(),
+            "module image assembled"
+        );
+        Ok(image)
+    }
+
     /// Run the peephole optimization pass over the emitted bytecode stream.
     ///
     /// Implemented on a width-aware decoded form (see [`decode_bytecode`]) so it
