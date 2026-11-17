@@ -131,21 +131,20 @@ impl SignatureSource for SignatureIndexSource<'_> {
     fn signature_of(&self, callee: &str) -> Option<SignatureData> {
         // Only function-kind symbols carry call signatures: a same-named
         // struct is not what `callee(args)` invoked.
-        self.index
-            .lookup_by_name(callee)
-            .iter()
-            .find(|sym| {
-                matches!(sym.kind, crate::symbol_index::SymbolKind::Function)
-                    && sym.type_signature.is_some()
-            })
-            .map(|sym| {
-                render_signature(
-                    &sym.name,
-                    sym.type_signature
-                        .as_ref()
-                        .expect("checked by the find above"),
-                )
-            })
+        // Only function-kind symbols carry call signatures: a same-named
+        // struct is not what `callee(args)` invoked. `find_map` binds the
+        // "only functions with a type signature" predicate to the render
+        // step structurally — the pair `(kind, signature)` is matched in
+        // one place, so a predicate refactor can no longer strand a
+        // justifying `.expect` behind it.
+        self.index.lookup_by_name(callee).iter().find_map(|sym| {
+            match (&sym.kind, sym.type_signature.as_ref()) {
+                (crate::symbol_index::SymbolKind::Function, Some(signature)) => {
+                    Some(render_signature(&sym.name, signature))
+                }
+                _ => None,
+            }
+        })
     }
 }
 
