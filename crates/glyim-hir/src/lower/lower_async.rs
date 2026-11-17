@@ -77,17 +77,19 @@ pub fn desugar_async(hir: &mut crate::CrateHir, diags: &mut Vec<GlyimDiagnostic>
         });
 
         // Phase 3 (GLYIM_DESTUB_PLAN): the v1 state-machine transform supports
-        // `.await` inside a `while` body and — since the GAP-0001 closure —
-        // inside a `for i in a..b` body (normalized into the while shape by
-        // `find_and_normalize_loop_stmt`). The remaining loop shapes (`loop`
-        // bodies, `for` over a non-range iterable, destructuring loop
-        // patterns) cannot be re-driven across a `Poll::Pending` yet, and the
-        // single most important correctness guard is to NEVER silently fall
-        // through to the old skeleton (whose `S_k` arms hardcode
-        // `Poll::Pending` and produce an infinite-`Pending` miscompile that
-        // hangs forever). Instead we emit a clear compile-time diagnostic and
-        // route to the single-poll desugar, which at least turns each
-        // `Pending` into a loud `panic!` rather than a silent infinite loop.
+        // `.await` inside a `while` body, inside a `for i in a..b` body
+        // (normalized into the while shape by `find_and_normalize_loop_stmt`,
+        // the GAP-0001 closure) and — since the GAP-0006 `loop`-shape closure —
+        // inside an unbounded `loop` body (normalized into `while true` in
+        // place). The remaining loop shapes (`for` over a non-range iterable,
+        // destructuring loop patterns) cannot be re-driven across a
+        // `Poll::Pending` yet, and the single most important correctness guard
+        // is to NEVER silently fall through to the old skeleton (whose `S_k`
+        // arms hardcode `Poll::Pending` and produce an infinite-`Pending`
+        // miscompile that hangs forever). Instead we emit a clear compile-time
+        // diagnostic and route to the single-poll desugar, which at least turns
+        // each `Pending` into a loud `panic!` rather than a silent infinite
+        // loop.
         let loop_await_await = body_id.and_then(|b| {
             let root = root_expr_id(&hir.bodies[b]);
             let mut sps = Vec::new();
@@ -103,9 +105,10 @@ pub fn desugar_async(hir: &mut crate::CrateHir, diags: &mut Vec<GlyimDiagnostic>
             // resumable state machine — `Poll::Pending` leaves the in-loop
             // state in place and `poll()` re-drives it on resume, so it can
             // never spin forever). It returns `Some(())` for the supported
-            // shapes (a single `.await` inside a `while` body, or inside a
-            // `for` body over a range, with a statically nameable future
-            // type) and `None` for unsupported shapes.
+            // shapes (a single `.await` inside a `while` body, inside a `for`
+            // body over a range, or inside an unbounded `loop` body, with a
+            // statically nameable future type) and `None` for unsupported
+            // shapes.
             if desugar_loop_async_fn(hir, item_id, diags).is_some() {
                 continue;
             }
@@ -128,8 +131,8 @@ pub fn desugar_async(hir: &mut crate::CrateHir, diags: &mut Vec<GlyimDiagnostic>
                 },
                 DiagSeverity::Error,
                 "`.await` inside a loop body is not yet supported by the async state-machine \
-                 lowering for this shape (`loop` bodies, `for` over a non-range iterable, \
-                 destructuring loop patterns; tracked: KNOWN_GAPS.md async-v2). Hoist the \
+                 lowering for this shape (`for` over a non-range iterable, destructuring \
+                 loop patterns; tracked: KNOWN_GAPS.md async-v2). Hoist the \
                  await out of the loop, or collect futures into a Vec and await them \
                  sequentially outside the loop.",
                 glyim_diag::MultiSpan::from_span(span),
@@ -2296,11 +2299,12 @@ fn copy_expr_subst_await(
 ///
 /// Returns the `ExprId` of the (possibly synthesized) `Expr::While` root
 /// statement plus the synthesized iterator-increment statement (`None` for
-/// a native `while`), or `None` when the shape is unsupported (`loop { .. }`,
-/// a `for` over a non-range iterable, a destructuring loop pattern, or a
-/// range bound that is a general expression — the machine re-evaluates the
-/// condition on every re-drive, but a `for` loop evaluates its bounds once,
-/// so only side-effect-free bounds (literal / path) are safe to normalize).
+/// a native `while` or a normalized `loop`), or `None` when the shape is
+/// unsupported (a `for` over a non-range iterable, a destructuring loop
+/// pattern, or a range bound that is a general expression — the machine
+/// re-evaluates the condition on every re-drive, but a `for` loop evaluates
+/// its bounds once, so only side-effect-free bounds (literal / path) are
+/// safe to normalize).
 ///
 /// Normalization (GAP-0001 closure) rewrites, in the scratch `work_body`:
 ///
@@ -2320,16 +2324,48 @@ fn copy_expr_subst_await(
 /// spliced so the machine's `Start` arm copies the init binding as a
 /// pre-loop statement and the state enum carries `__for_i` as a loop local
 /// across `Poll::Pending`.
+///
+/// Normalization (GAP-0006 `loop`-shape closure) rewrites `loop { B }` into
+/// `while true { B }` in place — the machine's re-evaluated condition is a
+/// fresh literal `true`, the body needs no rename, and the exit path is the
+/// depth-0 `break` translation's `Done` transition.
 fn find_and_normalize_loop_stmt(
     work_body: &mut Body,
     body_root: ExprId,
     root_stmts: &mut Vec<ExprId>,
     interner: &Interner,
 ) -> Option<(ExprId, Option<ExprId>)> {
-    let idx = root_stmts
-        .iter()
-        .position(|s| matches!(work_body.exprs[*s], Expr::While { .. } | Expr::For { .. }))?;
+    let idx = root_stmts.iter().position(|s| {
+        matches!(
+            work_body.exprs[*s],
+            Expr::While { .. } | Expr::For { .. } | Expr::Loop { .. }
+        )
+    })?;
     let stmt = root_stmts[idx];
+
+    // `loop { B }` normalizes into the `while true { B }` shape the machine
+    // re-drives, in place: the condition is a fresh literal `true` (the
+    // machine re-evaluates the condition on every re-drive, and a literal is
+    // both correct and side-effect-free), and the loop body is carried over
+    // untouched — no pattern rename, no statement extraction, no increment
+    // step — so every depth-0 `break`/`continue` inside keeps its
+    // translation. The exit path is the machine's own `Done` transition,
+    // which the depth-0 `break` translation (`translate_loop_ctrl`) already
+    // emits; the loop's value comes from the `break v` operand when present.
+    // Reassigning the slot re-initializes the moved-out place.
+    if matches!(work_body.exprs[stmt], Expr::Loop { .. }) {
+        let loop_body = match work_body.exprs[stmt].clone() {
+            Expr::Loop { body } => body,
+            _ => unreachable!("matches! above"),
+        };
+        let cond = work_body.alloc_expr(Expr::Literal(Literal::Bool(true)), Span::DUMMY);
+        work_body.exprs[stmt] = Expr::While {
+            cond,
+            body: loop_body,
+        };
+        return Some((stmt, None));
+    }
+
     if matches!(work_body.exprs[stmt], Expr::While { .. }) {
         return Some((stmt, None));
     }
@@ -3101,8 +3137,8 @@ fn desugar_loop_async_fn(
             },
             DiagSeverity::Error,
             "`.await` inside a loop body is not yet supported by the async state-machine \
-             lowering for this shape (`loop` bodies, `for` over a non-range iterable, \
-             destructuring loop patterns; tracked: KNOWN_GAPS.md async-v2). Hoist the \
+             lowering for this shape (`for` over a non-range iterable, destructuring \
+             loop patterns; tracked: KNOWN_GAPS.md async-v2). Hoist the \
              await out of the loop, or collect futures into a Vec and await them \
              sequentially outside the loop.",
             glyim_diag::MultiSpan::from_span(span),
@@ -3111,10 +3147,29 @@ fn desugar_loop_async_fn(
 
     let mut work_body = hir.bodies[original_body_id].clone();
     let body_root = root_expr_id(&work_body);
-    let (mut root_stmts, _root_tail) = match &work_body.exprs[body_root] {
+    let (mut root_stmts, mut root_tail) = match &work_body.exprs[body_root] {
         Expr::Block { stmts, tail } => (stmts.clone(), *tail),
         _ => (Vec::new(), Some(body_root)),
     };
+
+    // A loop written as the body's last expression is the root block's
+    // TAIL, not a statement: the parser lowers a trailing `loop { .. }`,
+    // `while { .. }`, or `for { .. }` with no following statement as the
+    // block's tail expression, so the statement scan below would miss it.
+    // The machine consumes a *statement* loop, so splice a tail-position
+    // loop into the statement list first. After the splice the `Done`
+    // result comes from the loop locals (or the `break v` operand), not
+    // from a (now consumed) tail expression, which is exactly the
+    // tail-less fallback the machine already implements.
+    if let Some(t) = root_tail {
+        if matches!(
+            work_body.exprs[t],
+            Expr::While { .. } | Expr::For { .. } | Expr::Loop { .. }
+        ) {
+            root_stmts.push(t);
+            root_tail = None;
+        }
+    }
 
     // Find the loop statement. `while` is natively supported; the GAP-0001
     // witness shape — `for <pat> in <start>..<end>` with a single `.await`
@@ -3122,18 +3177,22 @@ fn desugar_loop_async_fn(
     // synthetic `let mut __for_i = <start>;` before the loop, the pattern
     // binding renamed to `__for_i` inside the body, and an explicit
     // `__for_i = __for_i + 1;` step after it), so the state machine below
-    // re-drives both shapes identically. Other shapes keep the async-v2
-    // diagnostic (the caller emits it when we return `None`). The second
-    // element is the normalization's iterator-increment statement, which a
-    // translated `continue` must re-run so the loop variable advances.
+    // re-drives both shapes identically; the GAP-0006 `loop`-shape witness —
+    // `loop { .. }` with a single `.await` in the body — is normalized into
+    // `while true { .. }` in place, so the machine re-drives it too (the
+    // exit path is the depth-0 `break` translation's `Done` transition).
+    // Other shapes keep the async-v2 diagnostic (the caller emits it when we
+    // return `None`). The second element is the normalization's
+    // iterator-increment statement, which a translated `continue` must
+    // re-run so the loop variable advances (`None` for native `while` and
+    // normalized `loop` bodies).
     let (loop_stmt, for_step_increment) =
         match find_and_normalize_loop_stmt(&mut work_body, body_root, &mut root_stmts, interner) {
             Some(found) => found,
             None => {
-                // No supported loop statement here (e.g. `loop { .. }`, a
-                // `for` over a non-range iterable, or a destructuring loop
-                // pattern): the caller emits the async-v2 diagnostic for
-                // the shape.
+                // No supported loop statement here (a `for` over a non-range
+                // iterable, or a destructuring loop pattern): the caller
+                // emits the async-v2 diagnostic for the shape.
                 return None;
             }
         };
@@ -3205,7 +3264,7 @@ fn desugar_loop_async_fn(
     // scope (the `Start` arm's copied pre-loop bindings and the `S0` arm's
     // pattern bindings). `None` (tail-less body) falls back to the last
     // loop local.
-    let result_local = match _root_tail {
+    let result_local = match root_tail {
         Some(t) => match &work_body.exprs[t] {
             Expr::Path(p) => p.as_name(),
             _ => loop_local_names.last().copied(),
@@ -3233,7 +3292,7 @@ fn desugar_loop_async_fn(
     let ready_value_name = interner.intern("__v");
     let fut_local_name = interner.intern("fut");
     // The tail expression to evaluate at `Done`, fresh per transition site.
-    let result_value_src = _root_tail;
+    let result_value_src = root_tail;
     let build_result_value = |body: &mut Body| -> ExprId {
         match result_value_src {
             Some(t) => copy_expr_renamed(&work_body, body, t, &base_rename, interner),
