@@ -158,8 +158,13 @@ fn range_by_range_composes_with_the_whole_document() {
     // Whole document, one edit.
     let whole = compute_range_edits(&mock, 0, text.len()).expect("the document is compressed");
     // First range: lines 0-1 (the header + one statement), base indent 0.
-    let lo = line_start(text, 1);
-    let first = compute_range_edits(&mock, 0, lo).expect("line 1 is compressed");
+    // The span claims through line 1's start, so both lines are inside
+    // the claim — with the shared core idempotent for a `fn main() {`
+    // header, a line-0-only claim is already formatted and answers
+    // `None` (the no-churn contract), which would leave line 1 outside
+    // every range and break the composition this test pins.
+    let lo = line_start(text, 2);
+    let first = compute_range_edits(&mock, 0, lo).expect("lines 0-1 are compressed");
     let mut spliced = text[..first.start].to_string() + &first.new_text + &text[first.end..];
     // Second range: the remaining lines, byte offsets taken from the
     // spliced state (the first edit shifted them) — exactly what a client
