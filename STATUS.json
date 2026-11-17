@@ -1,9 +1,9 @@
 {
   "schema": "glyim.status/1",
-  "features": 250,
+  "features": 252,
   "records": 56,
   "summary": {
-    "L0": 237,
+    "L0": 239,
     "L1": 7,
     "L2": 6,
     "L3": 0,
@@ -2054,6 +2054,22 @@
     },
     {
       "id": "TOOL-LSP-EXEC-CMD",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-FILE-CREATE-DELETE",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-FILE-RENAME",
       "tier": "tooling",
       "target_level": "L4",
       "computed_level": "L0",
