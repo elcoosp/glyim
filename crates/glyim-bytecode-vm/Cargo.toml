@@ -28,6 +28,13 @@ harness = false
 name = "module_disasm"
 harness = false
 
+# Execution-trace bench (the trace seam: untraced vs traced dispatch-loop
+# overhead over a countdown loop, plus the captured-steps render;
+# dependency-free, `harness = false`).
+[[bench]]
+name = "vm_trace"
+harness = false
+
 [dependencies]
 # The module-image seam (glyim.module-image/1) logs encode/decode events and
 # every decode rejection through the workspace-standard tracing layer, so a
