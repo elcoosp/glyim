@@ -176,10 +176,6 @@ pub struct BytecodeBackend {
     ty_ctx: Option<TyCtxHandle>,
     /// Optimization level (default `O0`). Higher levels run the peephole pass.
     opt_level: OptLevel,
-    /// Per emitted `OP_LOAD_CONST`, whether the pushed value is an integer
-    /// (Int/Uint/Bool/Char). Recorded in emission order so the peephole pass
-    /// can fold integer binary ops without mis-folding float/string constants.
-    const_is_int: RefCell<Vec<bool>>,
 }
 
 impl BytecodeBackend {
@@ -197,7 +193,6 @@ impl BytecodeBackend {
             }),
             ty_ctx: Some(handle),
             opt_level: OptLevel::O0,
-            const_is_int: RefCell::new(Vec::new()),
         }
     }
 
@@ -231,6 +226,36 @@ impl BytecodeBackend {
         self.ty_ctx
             .as_ref()
             .and_then(|h| h.read().ok().and_then(|g| g.clone()))
+    }
+
+    /// Map a cast's target type onto the VM's [`glyim_bytecode_vm::CastTarget`]
+    /// primitive code — the second `OP_CAST` operand byte. Non-primitive or
+    /// unresolvable targets (no published `TyCtx`, `Ty::ERROR`) map to
+    /// [`glyim_bytecode_vm::CastTarget::Unknown`], over which the VM's casts
+    /// are the identity (the interpreter's own value-level fallback).
+    fn cast_target_of(&self, ty: Ty) -> glyim_bytecode_vm::CastTarget {
+        use glyim_bytecode_vm::CastTarget;
+        use glyim_core::primitives::{FloatTy, IntTy, UintTy};
+        let Some(ctx) = self.resolve_ty_ctx() else {
+            return CastTarget::Unknown;
+        };
+        match ctx.ty_kind(ty) {
+            TyKind::Int(IntTy::I8) => CastTarget::I8,
+            TyKind::Int(IntTy::I16) => CastTarget::I16,
+            TyKind::Int(IntTy::I32) => CastTarget::I32,
+            TyKind::Int(IntTy::I64) => CastTarget::I64,
+            TyKind::Int(IntTy::Isize) => CastTarget::Isize,
+            TyKind::Uint(UintTy::U8) => CastTarget::U8,
+            TyKind::Uint(UintTy::U16) => CastTarget::U16,
+            TyKind::Uint(UintTy::U32) => CastTarget::U32,
+            TyKind::Uint(UintTy::U64) => CastTarget::U64,
+            TyKind::Uint(UintTy::Usize) => CastTarget::Usize,
+            TyKind::Float(FloatTy::F32) => CastTarget::F32,
+            TyKind::Float(FloatTy::F64) => CastTarget::F64,
+            TyKind::Bool => CastTarget::Bool,
+            TyKind::Char => CastTarget::Char,
+            _ => CastTarget::Unknown,
+        }
     }
 
     /// `with_opt_level`.
@@ -475,9 +500,6 @@ impl BytecodeBackend {
     ) -> CompResult<(Vec<u8>, Vec<usize>)> {
         let mut bc = Vec::new();
         let mut block_offsets = Vec::with_capacity(body.basic_blocks.len());
-        // Reset the per-constant int-tracking record; it is rebuilt during this
-        // function's emission and consumed by the peephole pass below.
-        self.const_is_int.borrow_mut().clear();
         for block in body.basic_blocks.iter() {
             block_offsets.push(bc.len());
             for stmt in &block.statements {
@@ -553,6 +575,23 @@ pub(crate) const OP_LEN: u8 = 0x1F;
 pub(crate) const OP_SWITCH_INT: u8 = 0x20;
 pub(crate) const OP_ASSERT: u8 = 0x21;
 pub(crate) const OP_CALL_INDIRECT: u8 = 0x22;
+/// `OP_LOAD_CONST_F64`: push a 64-bit float constant as raw `f64` bits.
+///
+/// Float constants previously shared the integer `OP_LOAD_CONST`, which made
+/// the constant stream type-erased: the VM had no way to know an operand was
+/// a float, so it executed float arithmetic as *integer* arithmetic over the
+/// raw bit patterns. A distinct opcode gives the constant stream its type
+/// back (and let the peephole pass drop the `const_is_int` side-record it
+/// needed to avoid mis-folding float constants).
+pub(crate) const OP_LOAD_CONST_F64: u8 = 0x23;
+/// `OP_LOAD_CONST_STR`: push a byte string resolved from the module's string
+/// pool. String constants previously pushed the interner *index* under the
+/// integer `OP_LOAD_CONST` — equality-by-index only worked while the pool
+/// lived in the same process, and the payload was unrecoverable from the
+/// artifact. Under its own opcode, the index is explicitly a pool reference
+/// that `generate_module_image` ships alongside (the image's string-pool
+/// section, `Module::strings` on the VM side).
+pub(crate) const OP_LOAD_CONST_STR: u8 = 0x24;
 pub(crate) const OP_LOAD_LOCAL_ADDR: u8 = 0x29;
 pub(crate) const OP_STORE_FIELD: u8 = 0x2A;
 pub(crate) const OP_DEREF: u8 = 0x2B;
@@ -742,7 +781,12 @@ impl BytecodeBackend {
 
         let functions: Vec<glyim_bytecode_vm::Function> =
             slots.into_iter().flatten().chain(appended).collect();
-        let module = glyim_bytecode_vm::Module::new(functions, entry);
+        // Ship the string pool alongside: every `OP_LOAD_CONST_STR` this
+        // emission wrote is an index into this table, so the image is
+        // self-contained (before the pool travelled in the image, string
+        // payloads were unrecoverable from the artifact).
+        let strings = self.string_table.borrow().clone();
+        let module = glyim_bytecode_vm::Module::with_strings(functions, strings, entry);
         let image = glyim_bytecode_vm::encode_module(&module);
         tracing::debug!(
             functions = module.functions.len(),
@@ -763,29 +807,27 @@ impl BytecodeBackend {
     /// 2. **Double-negation cancellation**: `OP_NEG; OP_NEG` is removed (identity
     ///    for all numeric types).
     ///
-    /// The `const_is_int` record (populated during emission) ensures float and
-    /// string constants are never folded, so this pass is type-safe.
+    /// Type safety needs no side-record: float constants travel under
+    /// [`OP_LOAD_CONST_F64`] (never under [`OP_LOAD_CONST`]), so an
+    /// `OP_LOAD_CONST` pair is integer-typed by construction and a
+    /// float/string constant can never be mis-folded. Float folding is
+    /// deliberately *not* implemented: folding changes NaN/precision edges,
+    /// and the pass only ever rewrites what its rules prove.
     fn peephole(&self, bc: &mut Vec<u8>) {
         let instrs = decode_bytecode(bc);
-        let ints = self.const_is_int.borrow();
-        let mut int_iter = ints.iter().copied();
         let mut out: Vec<Instr> = Vec::with_capacity(instrs.len());
         let mut k = 0usize;
         while k < instrs.len() {
             let op = instrs[k].op;
             if op == OP_LOAD_CONST {
                 let v = i64::from_le_bytes(instrs[k].operand[..8].try_into().unwrap());
-                let is_int = int_iter.next().unwrap_or(false);
                 // LOAD_CONST(int a) ; LOAD_CONST(int b) ; foldable BINOP
-                if is_int
-                    && k + 2 < instrs.len()
+                if k + 2 < instrs.len()
                     && instrs[k + 1].op == OP_LOAD_CONST
-                    && int_iter.clone().next() == Some(true)
                     && is_foldable_binop(instrs[k + 2].op)
                 {
                     let v2 = i64::from_le_bytes(instrs[k + 1].operand[..8].try_into().unwrap());
                     if let Some(folded) = fold_int_binop(instrs[k + 2].op, v, v2) {
-                        int_iter.next(); // consume the second const's int flag
                         out.push(Instr {
                             op: OP_LOAD_CONST,
                             operand: folded.to_le_bytes().to_vec(),
@@ -841,6 +883,8 @@ fn decode_operand(bc: &[u8], i: usize, op: u8) -> (Vec<u8>, usize) {
     };
     match op {
         OP_LOAD_CONST => take(8),
+        OP_LOAD_CONST_F64 => take(8),
+        OP_LOAD_CONST_STR => take(4),
         // T041-PATCHED [BC-5]: `OP_DISCRIMINANT` takes no operand bytes
         // (the emitter pushes it bare). Consuming 4 bytes here made the
         // peephole decoder eat the following `OP_STORE_LOCAL` + its u32
@@ -848,7 +892,9 @@ fn decode_operand(bc: &[u8], i: usize, op: u8) -> (Vec<u8>, usize) {
         // local. `OP_LEN` still takes a 4-byte operand.
         OP_LOAD_LOCAL | OP_STORE_LOCAL | OP_JUMP | OP_JUMP_IF | OP_LEN => take(4),
         OP_DISCRIMINANT => take(0),
-        OP_CAST => take(1),
+        // The cast operand is two bytes: the cast kind, then the target
+        // primitive (`glyim_bytecode_vm::CastTarget`) the cast converts to.
+        OP_CAST => take(2),
         OP_ASSERT => {
             // 1-byte expected + 4-byte target.
             let (a, c1) = take(1);
@@ -1067,7 +1113,7 @@ impl BytecodeBackend {
                 bc.extend_from_slice(&place.local.to_raw().to_le_bytes());
                 Ok(())
             }
-            Rvalue::Cast(kind, operand, _) => {
+            Rvalue::Cast(kind, operand, target_ty) => {
                 self.emit_operand(bc, operand, local_tys)?;
                 bc.push(OP_CAST);
                 bc.push(match kind {
@@ -1080,6 +1126,11 @@ impl BytecodeBackend {
                     CastKind::IntToPtr => 6,
                     CastKind::FloatToFloat => 7,
                 });
+                // The second operand byte names the target primitive, so the
+                // VM can implement the cast's real semantics (width-aware
+                // integer truncation, int/float conversion) instead of the
+                // no-op the single-byte form condemned it to.
+                bc.push(self.cast_target_of(*target_ty) as u8);
                 Ok(())
             }
             Rvalue::Repeat(operand, mir_const) => {
@@ -1113,27 +1164,25 @@ impl BytecodeBackend {
                     MirConstKind::Int(v) => {
                         bc.push(OP_LOAD_CONST);
                         bc.extend_from_slice(&(*v as i64).to_le_bytes());
-                        self.const_is_int.borrow_mut().push(true);
                     }
                     MirConstKind::Uint(v) => {
                         bc.push(OP_LOAD_CONST);
                         bc.extend_from_slice(&(*v as i64).to_le_bytes());
-                        self.const_is_int.borrow_mut().push(true);
                     }
                     MirConstKind::Bool(b) => {
                         bc.push(OP_LOAD_CONST);
                         bc.extend_from_slice(&i64::from(*b).to_le_bytes());
-                        self.const_is_int.borrow_mut().push(true);
                     }
                     MirConstKind::Char(c) => {
                         bc.push(OP_LOAD_CONST);
                         bc.extend_from_slice(&(*c as i64).to_le_bytes());
-                        self.const_is_int.borrow_mut().push(true);
                     }
                     MirConstKind::FloatBits(b) => {
-                        bc.push(OP_LOAD_CONST);
+                        // A typed constant under its own opcode: raw `f64`
+                        // bits, so the VM's float path (IEEE arithmetic,
+                        // never integer ops over bit patterns) can see it.
+                        bc.push(OP_LOAD_CONST_F64);
                         bc.extend_from_slice(&b.to_le_bytes());
-                        self.const_is_int.borrow_mut().push(false);
                     }
                     MirConstKind::String(_name) => {
                         // Resolve the interner through the live TyCtx. Hold the
@@ -1145,15 +1194,13 @@ impl BytecodeBackend {
                             None => "string_payload".to_string(),
                         };
                         let idx = self.intern_string(&str_content);
-                        bc.push(OP_LOAD_CONST);
-                        bc.extend_from_slice(&i64::from(idx).to_le_bytes());
-                        self.const_is_int.borrow_mut().push(false);
+                        bc.push(OP_LOAD_CONST_STR);
+                        bc.extend_from_slice(&idx.to_le_bytes());
                     }
                     MirConstKind::Fn(def_id, substs) => {
                         bc.push(OP_LOAD_CONST);
                         let idx = self.intern_fn(*def_id, *substs);
                         bc.extend_from_slice(&i64::from(idx).to_le_bytes());
-                        self.const_is_int.borrow_mut().push(false);
                     }
                     MirConstKind::ConstRef(def_id, _) => {
                         // T114-PATCHED-BC [LL-19]: emitting the const's
@@ -1191,12 +1238,10 @@ impl BytecodeBackend {
                         };
                         bc.push(OP_LOAD_CONST);
                         bc.extend_from_slice(&(size as i64).to_le_bytes());
-                        self.const_is_int.borrow_mut().push(true);
                     }
                     MirConstKind::Unit | MirConstKind::Error => {
                         bc.push(OP_LOAD_CONST);
                         bc.extend_from_slice(&0i64.to_le_bytes());
-                        self.const_is_int.borrow_mut().push(true);
                     }
                     // Devirtualized by monomorphization before codegen. The
                     // LLVM backend hard-errors on this (lower.rs's
