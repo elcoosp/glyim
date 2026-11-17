@@ -40,7 +40,8 @@ use glyim_span::Span;
 
 use crate::{
     AssociatedTy, Body, BodyId, EnumItem, Expr, ExprId, Field, ImplItem, ImplMethod, Item, ItemId,
-    ItemKind, MatchArm, Param, Pat, Path, PathKind, PathSegment, StructItem, TypeRef, Variant,
+    ItemKind, Literal, MatchArm, Param, Pat, Path, PathKind, PathSegment, StructItem, TypeRef,
+    Variant,
 };
 use glyim_diag::{DiagSeverity, ErrorCategory, ErrorCode, GlyimDiagnostic};
 
@@ -75,16 +76,18 @@ pub fn desugar_async(hir: &mut crate::CrateHir, diags: &mut Vec<GlyimDiagnostic>
             sps.len()
         });
 
-        // Phase 3 (GLYIM_DESTUB_PLAN): the v1 state-machine transform does NOT
-        // yet support `.await` inside a `while`/`loop`/`for` body. Resuming into
-        // a loop's mid-iteration state requires splitting the loop body itself,
-        // which is the v2 follow-up. Until then, the single most important
-        // correctness guard is to NEVER silently fall through to the old
-        // skeleton (whose `S_k` arms hardcode `Poll::Pending` and produce an
-        // infinite-`Pending` miscompile that hangs forever). Instead we emit a
-        // clear compile-time diagnostic and route to the single-poll desugar,
-        // which at least turns each `Pending` into a loud `panic!` rather than a
-        // silent infinite loop.
+        // Phase 3 (GLYIM_DESTUB_PLAN): the v1 state-machine transform supports
+        // `.await` inside a `while` body and — since the GAP-0001 closure —
+        // inside a `for i in a..b` body (normalized into the while shape by
+        // `find_and_normalize_loop_stmt`). The remaining loop shapes (`loop`
+        // bodies, `for` over a non-range iterable, destructuring loop
+        // patterns) cannot be re-driven across a `Poll::Pending` yet, and the
+        // single most important correctness guard is to NEVER silently fall
+        // through to the old skeleton (whose `S_k` arms hardcode
+        // `Poll::Pending` and produce an infinite-`Pending` miscompile that
+        // hangs forever). Instead we emit a clear compile-time diagnostic and
+        // route to the single-poll desugar, which at least turns each
+        // `Pending` into a loud `panic!` rather than a silent infinite loop.
         let loop_await_await = body_id.and_then(|b| {
             let root = root_expr_id(&hir.bodies[b]);
             let mut sps = Vec::new();
@@ -100,8 +103,9 @@ pub fn desugar_async(hir: &mut crate::CrateHir, diags: &mut Vec<GlyimDiagnostic>
             // resumable state machine — `Poll::Pending` leaves the in-loop
             // state in place and `poll()` re-drives it on resume, so it can
             // never spin forever). It returns `Some(())` for the supported
-            // shape (a single `.await` inside a `while` body with a statically
-            // nameable future type) and `None` for unsupported shapes.
+            // shapes (a single `.await` inside a `while` body, or inside a
+            // `for` body over a range, with a statically nameable future
+            // type) and `None` for unsupported shapes.
             if desugar_loop_async_fn(hir, item_id, diags).is_some() {
                 continue;
             }
@@ -124,8 +128,10 @@ pub fn desugar_async(hir: &mut crate::CrateHir, diags: &mut Vec<GlyimDiagnostic>
                 },
                 DiagSeverity::Error,
                 "`.await` inside a loop body is not yet supported by the async state-machine \
-                 lowering (tracked: KNOWN_GAPS.md async-v2). Hoist the await out of the loop, \
-                 or collect futures into a Vec and await them sequentially outside the loop.",
+                 lowering for this shape (`loop` bodies, `for` over a non-range iterable, \
+                 destructuring loop patterns; tracked: KNOWN_GAPS.md async-v2). Hoist the \
+                 await out of the loop, or collect futures into a Vec and await them \
+                 sequentially outside the loop.",
                 glyim_diag::MultiSpan::from_span(span),
             ));
             continue;
@@ -2243,31 +2249,13 @@ fn copy_expr_subst_await(
 /// for the loop-await state machine. `build_state_struct` covers `Start` and
 /// `S0`; `Done` carries a single `result` field initialised from a local, so
 /// it is built separately.
-fn build_loop_done_struct(
-    body: &mut Body,
-    interner: &Interner,
-    state_name: &str,
-    result_local: crate::Name,
-) -> ExprId {
-    let result_value = body.alloc_expr(
-        Expr::Path(plain_path(interner, interner.resolve(result_local))),
-        Span::DUMMY,
-    );
-    body.alloc_expr(
-        Expr::Struct {
-            path: two_seg(interner, state_name, interner.intern("Done")),
-            fields: vec![(interner.intern("result"), result_value)],
-            spread: None,
-        },
-        Span::DUMMY,
-    )
-}
-
 /// Loop-await coroutine desugar (M4/M5, plan §P2-1 step 1-3).
 ///
 /// Handles the safe subset: an async fn whose body is
-/// `let mut <locals>; while <cond> { ... <e>.await ...; <tail> } <tail>` with
-/// exactly ONE `.await` inside the `while` body, whose awaited future's type is
+/// `let mut <locals>; while <cond> { ... <e>.await ...; <tail> } <tail>` or
+/// `let mut <locals>; for <pat> in <a>..[=]<b> { ... <e>.await ...; <tail> } <tail>`
+/// (`for` is normalized into the `while` shape — the GAP-0001 closure) with
+/// exactly ONE `.await` inside the loop body, whose awaited future's type is
 /// statically nameable (a direct call to a desugared `async fn`, so its
 /// `FooFuture` type is known). It emits a genuinely resumable state machine:
 ///
@@ -2303,6 +2291,781 @@ fn build_loop_done_struct(
 /// (compile error, never a silently-miscompiling binary).
 /// Returns `Some(())` if the body was desugared, or `None` if its shape is not
 /// yet supported (so the caller can fall back to the `async-v2` diagnostic).
+/// Locate the async fn's loop statement and normalize supported `for`
+/// loops into the `while` shape the loop-await state machine re-drives.
+///
+/// Returns the `ExprId` of the (possibly synthesized) `Expr::While` root
+/// statement plus the synthesized iterator-increment statement (`None` for
+/// a native `while`), or `None` when the shape is unsupported (`loop { .. }`,
+/// a `for` over a non-range iterable, a destructuring loop pattern, or a
+/// range bound that is a general expression — the machine re-evaluates the
+/// condition on every re-drive, but a `for` loop evaluates its bounds once,
+/// so only side-effect-free bounds (literal / path) are safe to normalize).
+///
+/// Normalization (GAP-0001 closure) rewrites, in the scratch `work_body`:
+///
+/// ```text
+/// for i in a..b { BODY(i) }
+/// ```
+///
+/// into
+///
+/// ```text
+/// let mut __for_i = a;
+/// while __for_i < b { BODY(__for_i); __for_i = __for_i + 1; }
+/// ```
+///
+/// (`<=` for `..=`), with the pattern binding renamed to the fresh
+/// synthetic name inside the loop body. `root_stmts` and the root block are
+/// spliced so the machine's `Start` arm copies the init binding as a
+/// pre-loop statement and the state enum carries `__for_i` as a loop local
+/// across `Poll::Pending`.
+fn find_and_normalize_loop_stmt(
+    work_body: &mut Body,
+    body_root: ExprId,
+    root_stmts: &mut Vec<ExprId>,
+    interner: &Interner,
+) -> Option<(ExprId, Option<ExprId>)> {
+    let idx = root_stmts
+        .iter()
+        .position(|s| matches!(work_body.exprs[*s], Expr::While { .. } | Expr::For { .. }))?;
+    let stmt = root_stmts[idx];
+    if matches!(work_body.exprs[stmt], Expr::While { .. }) {
+        return Some((stmt, None));
+    }
+
+    // `Expr::For`: normalize into the while shape if the shape is supported.
+    let (pat, iterable, for_body) = match &work_body.exprs[stmt] {
+        Expr::For {
+            pat,
+            iterable,
+            body,
+        } => (*pat, *iterable, *body),
+        _ => unreachable!("stmt matched Expr::For"),
+    };
+
+    // Supported iterable: `a..b` / `a..=b` with side-effect-free bounds.
+    let (start, end, inclusive) = match &work_body.exprs[iterable] {
+        Expr::Range {
+            start,
+            end,
+            inclusive,
+        } => match (start, end) {
+            (Some(s), Some(e)) => {
+                let bound_ok =
+                    |id: ExprId| matches!(work_body.exprs[id], Expr::Literal(_) | Expr::Path(_));
+                if bound_ok(*s) && bound_ok(*e) {
+                    (*s, *e, *inclusive)
+                } else {
+                    return None;
+                }
+            }
+            _ => return None,
+        },
+        _ => return None,
+    };
+
+    // Supported pattern: a simple binding (the machine renames the binding
+    // name inside the body). Destructuring patterns stay on the diagnostic.
+    let pat_binding = match &work_body.pats[pat] {
+        Pat::Binding {
+            name,
+            mutability: _,
+            subpattern: None,
+        } => *name,
+        _ => return None,
+    };
+
+    // The for body must be a plain statement block (no tail value) — the
+    // shape the machine can re-drive statement by statement.
+    let for_body_shape_ok = matches!(&work_body.exprs[for_body], Expr::Block { tail: None, .. });
+    if !for_body_shape_ok {
+        return None;
+    }
+
+    // Fresh synthetic iterator name: never collide with a binding already
+    // present in the body.
+    let existing: std::collections::HashSet<crate::Name> = work_body
+        .pats
+        .iter()
+        .filter_map(|p| binding_name(p))
+        .collect();
+    let mut fresh = interner.intern("__for_i");
+    let mut k = 0u32;
+    while existing.contains(&fresh) {
+        if k >= 1_000 {
+            // Absurd collision count (the body binds a thousand __for_i*
+            // names): treat the shape as unsupported.
+            return None;
+        }
+        k += 1;
+        fresh = interner.intern(&format!("__for_i{k}"));
+    }
+
+    // Snapshot copy: `copy_expr_renamed` needs distinct src/dst arenas, so
+    // clone the scratch body once and copy out of the snapshot.
+    let snap = work_body.clone();
+    let no_rename = std::collections::HashMap::new();
+    let rename: std::collections::HashMap<crate::Name, crate::Name> =
+        [(pat_binding, fresh)].into_iter().collect();
+
+    let start_copy = copy_expr_renamed(&snap, work_body, start, &no_rename, interner);
+    let end_copy = copy_expr_renamed(&snap, work_body, end, &no_rename, interner);
+    let renamed_body = copy_expr_renamed(&snap, work_body, for_body, &rename, interner);
+    let mut body_stmts = match &work_body.exprs[renamed_body] {
+        Expr::Block { stmts, tail: None } => stmts.clone(),
+        _ => return None,
+    };
+
+    // `__for_i = __for_i + 1;`
+    let i_path_inc = work_body.alloc_expr(
+        Expr::Path(plain_path(interner, interner.resolve(fresh))),
+        Span::DUMMY,
+    );
+    let one = work_body.alloc_expr(Expr::Literal(Literal::Int(1, None)), Span::DUMMY);
+    let inc_rhs = work_body.alloc_expr(
+        Expr::Binary {
+            op: glyim_core::primitives::BinOp::Add,
+            lhs: i_path_inc,
+            rhs: one,
+        },
+        Span::DUMMY,
+    );
+    let inc = work_body.alloc_expr(
+        Expr::Assign {
+            lhs: i_path_inc,
+            rhs: inc_rhs,
+        },
+        Span::DUMMY,
+    );
+    body_stmts.push(inc);
+    let new_body = work_body.alloc_expr(
+        Expr::Block {
+            stmts: body_stmts,
+            tail: None,
+        },
+        Span::DUMMY,
+    ); // `__for_i < end` (or `<=` for `..=`).
+    let i_path = work_body.alloc_expr(
+        Expr::Path(plain_path(interner, interner.resolve(fresh))),
+        Span::DUMMY,
+    );
+    let cond = work_body.alloc_expr(
+        Expr::Binary {
+            op: if inclusive {
+                glyim_core::primitives::BinOp::LtEq
+            } else {
+                glyim_core::primitives::BinOp::Lt
+            },
+            lhs: i_path,
+            rhs: end_copy,
+        },
+        Span::DUMMY,
+    );
+    let while_stmt = work_body.alloc_expr(
+        Expr::While {
+            cond,
+            body: new_body,
+        },
+        Span::DUMMY,
+    );
+
+    // `let mut __for_i = start;`
+    let init_pat = work_body.pats.push(Pat::Binding {
+        name: fresh,
+        mutability: glyim_core::primitives::Mutability::Mut,
+        subpattern: None,
+    });
+    let init_stmt = work_body.alloc_expr(
+        Expr::Let {
+            pat: init_pat,
+            pat_span: Span::DUMMY,
+            value: start_copy,
+            ty: None,
+        },
+        Span::DUMMY,
+    );
+
+    // Splice the root block: the init binding before the loop, the
+    // synthesized while in the for's slot.
+    root_stmts[idx] = while_stmt;
+    root_stmts.insert(idx, init_stmt);
+    if let Expr::Block { stmts, .. } = &mut work_body.exprs[body_root] {
+        stmts.clone_from(root_stmts);
+    }
+    Some((while_stmt, Some(inc)))
+}
+
+/// The `Name` a pattern binds directly, if any.
+fn binding_name(pat: &Pat) -> Option<crate::Name> {
+    match pat {
+        Pat::Binding { name, .. } | Pat::RefBinding { name, .. } => Some(*name),
+        _ => None,
+    }
+}
+
+/// Rewrite the depth-0 `break`/`continue` of a copied loop-await body —
+/// the jumps targeting the desugared loop itself — into the machine's own
+/// state transitions, editing `body`'s arena in place.
+///
+/// Inside the poll body these jumps would otherwise target the poll
+/// dispatch loop: a `break` would exit it (a type error against the
+/// `Poll<_>` return), a `continue` would re-enter the dispatch with the
+/// same `S0` state and re-poll the same future forever. So:
+///
+/// * `continue` → the loop step (`on_continue`), optionally preceded by the
+///   `for` normalization's iterator increment, so the loop variable still
+///   advances before the next iteration's condition is re-checked;
+/// * `break` / `break v` → the `Done { result: <result local | v> }`
+///   transition (`on_break`), which the dispatch loop returns as
+///   `Poll::Ready`.
+///
+/// Jumps nested inside an inner `while`/`loop`/`for` (depth > 0) or inside
+/// a closure body keep their real inner loop and stay verbatim. Each
+/// translation site is freshly allocated by the callbacks, and the walker
+/// never descends into a replaced node, so a translated jump's embedded
+/// dispatch `continue` is never itself re-translated.
+fn translate_loop_ctrl(
+    body: &mut Body,
+    root: ExprId,
+    state_name: &str,
+    state_field_name: crate::Name,
+    on_continue: &mut impl FnMut(&mut Body) -> ExprId,
+    on_break: &mut impl FnMut(&mut Body, Option<ExprId>) -> ExprId,
+) {
+    fn walk(
+        body: &mut Body,
+        id: ExprId,
+        depth: u32,
+        state_name: &str,
+        state_field_name: crate::Name,
+        on_continue: &mut impl FnMut(&mut Body) -> ExprId,
+        on_break: &mut impl FnMut(&mut Body, Option<ExprId>) -> ExprId,
+    ) {
+        // Clone the expr to decide the case (the clone carries the same
+        // child ids); mutation below writes fresh structs into the slot.
+        let expr = body.exprs[id].clone();
+        match expr {
+            // Terminal jumps: translate at depth 0, keep verbatim deeper.
+            Expr::Continue => {
+                if depth == 0 {
+                    let step = on_continue(body);
+                    let step_root = body.exprs[step].clone();
+                    body.exprs[id] = step_root;
+                }
+            }
+            Expr::Break { value } => {
+                if depth == 0 {
+                    let replacement = on_break(body, value);
+                    let block_root = body.exprs[replacement].clone();
+                    body.exprs[id] = block_root;
+                } else if let Some(v) = value {
+                    walk(
+                        body,
+                        v,
+                        depth,
+                        state_name,
+                        state_field_name,
+                        on_continue,
+                        on_break,
+                    );
+                }
+            }
+            Expr::Block { stmts, tail } => {
+                for s in stmts {
+                    walk(
+                        body,
+                        s,
+                        depth,
+                        state_name,
+                        state_field_name,
+                        on_continue,
+                        on_break,
+                    );
+                }
+                if let Some(t) = tail {
+                    walk(
+                        body,
+                        t,
+                        depth,
+                        state_name,
+                        state_field_name,
+                        on_continue,
+                        on_break,
+                    );
+                }
+            }
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+            } => {
+                walk(
+                    body,
+                    cond,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+                walk(
+                    body,
+                    then_branch,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+                if let Some(e) = else_branch {
+                    walk(
+                        body,
+                        e,
+                        depth,
+                        state_name,
+                        state_field_name,
+                        on_continue,
+                        on_break,
+                    );
+                }
+            }
+            // A nested loop increments the jump depth: its own
+            // break/continue target it, not the desugared loop.
+            Expr::While { cond, body: wb } => {
+                walk(
+                    body,
+                    cond,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+                walk(
+                    body,
+                    wb,
+                    depth + 1,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            Expr::Loop { body: lb } => {
+                walk(
+                    body,
+                    lb,
+                    depth + 1,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            Expr::For {
+                pat: _,
+                iterable,
+                body: fb,
+            } => {
+                walk(
+                    body,
+                    iterable,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+                walk(
+                    body,
+                    fb,
+                    depth + 1,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            // A closure body is its own control-flow scope: nothing inside
+            // it can target the desugared loop.
+            Expr::Closure {
+                params: _,
+                param_tys: _,
+                body: cb,
+                is_move: _,
+            } => {
+                walk(
+                    body,
+                    cb,
+                    depth + 1,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            Expr::Match { scrutinee, arms } => {
+                walk(
+                    body,
+                    scrutinee,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+                for arm in arms {
+                    if let Some(g) = arm.guard {
+                        walk(
+                            body,
+                            g,
+                            depth,
+                            state_name,
+                            state_field_name,
+                            on_continue,
+                            on_break,
+                        );
+                    }
+                    walk(
+                        body,
+                        arm.body,
+                        depth,
+                        state_name,
+                        state_field_name,
+                        on_continue,
+                        on_break,
+                    );
+                }
+            }
+            Expr::Call { func, args } => {
+                walk(
+                    body,
+                    func,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+                for a in args {
+                    walk(
+                        body,
+                        a,
+                        depth,
+                        state_name,
+                        state_field_name,
+                        on_continue,
+                        on_break,
+                    );
+                }
+            }
+            Expr::MethodCall { receiver, args, .. } => {
+                walk(
+                    body,
+                    receiver,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+                for a in args {
+                    walk(
+                        body,
+                        a,
+                        depth,
+                        state_name,
+                        state_field_name,
+                        on_continue,
+                        on_break,
+                    );
+                }
+            }
+            Expr::Field { receiver, .. } => {
+                walk(
+                    body,
+                    receiver,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            Expr::Index { base, index } => {
+                walk(
+                    body,
+                    base,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+                walk(
+                    body,
+                    index,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            Expr::Unary { expr, .. } => {
+                walk(
+                    body,
+                    expr,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            Expr::Binary { lhs, rhs, .. } => {
+                walk(
+                    body,
+                    lhs,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+                walk(
+                    body,
+                    rhs,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            Expr::Cast { expr, .. } => {
+                walk(
+                    body,
+                    expr,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            Expr::Ref { expr, .. } => {
+                walk(
+                    body,
+                    expr,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            Expr::Assign { lhs, rhs } => {
+                walk(
+                    body,
+                    lhs,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+                walk(
+                    body,
+                    rhs,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            Expr::Return { value } => {
+                if let Some(v) = value {
+                    walk(
+                        body,
+                        v,
+                        depth,
+                        state_name,
+                        state_field_name,
+                        on_continue,
+                        on_break,
+                    );
+                }
+            }
+            Expr::Let { value, .. } => {
+                walk(
+                    body,
+                    value,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            Expr::Struct { fields, spread, .. } => {
+                for (_, e) in fields {
+                    walk(
+                        body,
+                        e,
+                        depth,
+                        state_name,
+                        state_field_name,
+                        on_continue,
+                        on_break,
+                    );
+                }
+                if let Some(s) = spread {
+                    walk(
+                        body,
+                        s,
+                        depth,
+                        state_name,
+                        state_field_name,
+                        on_continue,
+                        on_break,
+                    );
+                }
+            }
+            Expr::Array(es) | Expr::Tuple(es) => {
+                for e in es {
+                    walk(
+                        body,
+                        e,
+                        depth,
+                        state_name,
+                        state_field_name,
+                        on_continue,
+                        on_break,
+                    );
+                }
+            }
+            Expr::Range { start, end, .. } => {
+                if let Some(s) = start {
+                    walk(
+                        body,
+                        s,
+                        depth,
+                        state_name,
+                        state_field_name,
+                        on_continue,
+                        on_break,
+                    );
+                }
+                if let Some(e) = end {
+                    walk(
+                        body,
+                        e,
+                        depth,
+                        state_name,
+                        state_field_name,
+                        on_continue,
+                        on_break,
+                    );
+                }
+            }
+            Expr::Await { expr } | Expr::Try { expr } => {
+                walk(
+                    body,
+                    expr,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            // GSX view expressions: attribute/child holes are body-owned
+            // exprs — walk them like any other child (no loop constructs
+            // exist inside a view, but holes may embed arbitrary exprs).
+            Expr::Gsx(g) => {
+                fn walk_gsx(
+                    body: &mut Body,
+                    g: &mut GsxExpr,
+                    depth: u32,
+                    state_name: &str,
+                    state_field_name: crate::Name,
+                    on_continue: &mut impl FnMut(&mut Body) -> ExprId,
+                    on_break: &mut impl FnMut(&mut Body, Option<ExprId>) -> ExprId,
+                ) {
+                    for attr in &mut g.attrs {
+                        let value = match attr {
+                            GsxAttrHIR::Plain { value, .. }
+                            | GsxAttrHIR::Directive { value, .. } => value,
+                        };
+                        if let GsxAttrValue::Expr(e) = value {
+                            walk(
+                                body,
+                                *e,
+                                depth,
+                                state_name,
+                                state_field_name,
+                                on_continue,
+                                on_break,
+                            );
+                        }
+                    }
+                    for child in &mut g.children {
+                        match child {
+                            GsxChildHIR::Expr(e) => {
+                                walk(
+                                    body,
+                                    *e,
+                                    depth,
+                                    state_name,
+                                    state_field_name,
+                                    on_continue,
+                                    on_break,
+                                );
+                            }
+                            GsxChildHIR::Node(inner) => {
+                                walk_gsx(
+                                    body,
+                                    inner,
+                                    depth,
+                                    state_name,
+                                    state_field_name,
+                                    on_continue,
+                                    on_break,
+                                );
+                            }
+                            GsxChildHIR::Text(_) => {}
+                        }
+                    }
+                }
+                let mut g2 = (*g).clone();
+                walk_gsx(
+                    body,
+                    &mut g2,
+                    depth,
+                    state_name,
+                    state_field_name,
+                    on_continue,
+                    on_break,
+                );
+            }
+            // Leaves (paths, literals, missing/err sentinels).
+            Expr::Path(_) | Expr::Literal(_) | Expr::Missing | Expr::Err => {}
+        }
+    }
+    walk(
+        body,
+        root,
+        0,
+        state_name,
+        state_field_name,
+        on_continue,
+        on_break,
+    );
+}
+
 fn desugar_loop_async_fn(
     hir: &mut crate::CrateHir,
     item_id: ItemId,
@@ -2338,31 +3101,42 @@ fn desugar_loop_async_fn(
             },
             DiagSeverity::Error,
             "`.await` inside a loop body is not yet supported by the async state-machine \
-             lowering (tracked: KNOWN_GAPS.md async-v2). Hoist the await out of the loop, \
-             or collect futures into a Vec and await them sequentially outside the loop.",
+             lowering for this shape (`loop` bodies, `for` over a non-range iterable, \
+             destructuring loop patterns; tracked: KNOWN_GAPS.md async-v2). Hoist the \
+             await out of the loop, or collect futures into a Vec and await them \
+             sequentially outside the loop.",
             glyim_diag::MultiSpan::from_span(span),
         ));
     };
 
-    let work_body = hir.bodies[original_body_id].clone();
+    let mut work_body = hir.bodies[original_body_id].clone();
     let body_root = root_expr_id(&work_body);
-    let (root_stmts, _root_tail) = match &work_body.exprs[body_root] {
+    let (mut root_stmts, _root_tail) = match &work_body.exprs[body_root] {
         Expr::Block { stmts, tail } => (stmts.clone(), *tail),
         _ => (Vec::new(), Some(body_root)),
     };
 
-    // Find the loop statement (only `while` is supported for now).
-    let loop_stmt = root_stmts
-        .iter()
-        .find(|s| matches!(work_body.exprs[**s], Expr::While { .. }))
-        .copied();
-    let loop_stmt = match loop_stmt {
-        Some(s) => s,
-        None => {
-            // No `while` loop with an await: should not have been routed here.
-            return None;
-        }
-    };
+    // Find the loop statement. `while` is natively supported; the GAP-0001
+    // witness shape — `for <pat> in <start>..<end>` with a single `.await`
+    // in the body — is normalized into the same while shape first (a
+    // synthetic `let mut __for_i = <start>;` before the loop, the pattern
+    // binding renamed to `__for_i` inside the body, and an explicit
+    // `__for_i = __for_i + 1;` step after it), so the state machine below
+    // re-drives both shapes identically. Other shapes keep the async-v2
+    // diagnostic (the caller emits it when we return `None`). The second
+    // element is the normalization's iterator-increment statement, which a
+    // translated `continue` must re-run so the loop variable advances.
+    let (loop_stmt, for_step_increment) =
+        match find_and_normalize_loop_stmt(&mut work_body, body_root, &mut root_stmts, interner) {
+            Some(found) => found,
+            None => {
+                // No supported loop statement here (e.g. `loop { .. }`, a
+                // `for` over a non-range iterable, or a destructuring loop
+                // pattern): the caller emits the async-v2 diagnostic for
+                // the shape.
+                return None;
+            }
+        };
     let (loop_cond, loop_body_root) = match &work_body.exprs[loop_stmt] {
         Expr::While { cond, body } => (*cond, *body),
         _ => unreachable!("loop_stmt is a While"),
@@ -2425,6 +3199,12 @@ fn desugar_loop_async_fn(
         }
     }
     // The post-loop tail expression (e.g. `total`) is the `Done` result.
+    // A plain path tail is read directly from the carried loop local; any
+    // other tail shape (a computed expression) is re-evaluated at the
+    // `Done` transitions, where every loop local it can reference is in
+    // scope (the `Start` arm's copied pre-loop bindings and the `S0` arm's
+    // pattern bindings). `None` (tail-less body) falls back to the last
+    // loop local.
     let result_local = match _root_tail {
         Some(t) => match &work_body.exprs[t] {
             Expr::Path(p) => p.as_name(),
@@ -2452,6 +3232,17 @@ fn desugar_loop_async_fn(
     }
     let ready_value_name = interner.intern("__v");
     let fut_local_name = interner.intern("fut");
+    // The tail expression to evaluate at `Done`, fresh per transition site.
+    let result_value_src = _root_tail;
+    let build_result_value = |body: &mut Body| -> ExprId {
+        match result_value_src {
+            Some(t) => copy_expr_renamed(&work_body, body, t, &base_rename, interner),
+            None => body.alloc_expr(
+                Expr::Path(plain_path(interner, interner.resolve(result_local))),
+                Span::DUMMY,
+            ),
+        }
+    };
 
     let mut poll_body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
@@ -2496,7 +3287,6 @@ fn desugar_loop_async_fn(
                            fut_local_name: crate::Name,
                            inner: ExprId,
                            base_rename: &std::collections::HashMap<crate::Name, crate::Name>,
-                           result_local: crate::Name,
                            cond: ExprId| {
         let mut stmts: Vec<ExprId> = Vec::new();
         // let fut = <inner>  (re-drive the next iteration's future)
@@ -2537,7 +3327,15 @@ fn desugar_loop_async_fn(
 
         // else: self.state = Done(result); continue
         let mut else_stmts: Vec<ExprId> = Vec::new();
-        let done_struct = build_loop_done_struct(poll_body, interner, state_name, result_local);
+        let done_result_value = build_result_value(poll_body);
+        let done_struct = poll_body.alloc_expr(
+            Expr::Struct {
+                path: two_seg(interner, state_name, interner.intern("Done")),
+                fields: vec![(interner.intern("result"), done_result_value)],
+                spread: None,
+            },
+            Span::DUMMY,
+        );
         else_stmts.push(assign_state(
             poll_body,
             interner,
@@ -2607,7 +3405,6 @@ fn desugar_loop_async_fn(
             fut_local_name,
             inner,
             &base_rename,
-            result_local,
             loop_cond,
         ));
         poll_body.alloc_expr(Expr::Block { stmts, tail: None }, Span::DUMMY)
@@ -2680,55 +3477,98 @@ fn desugar_loop_async_fn(
 
         // Ready(__v): run post-await loop body (await -> __v), then loop step.
         let mut ready_stmts: Vec<ExprId> = Vec::new();
-        // Collect every statement in the loop body, descending through any
-        // wrapper nodes (Block, If, While, Loop) so the post-await body is
-        // fully substituted even when the loop body isn't a bare `Expr::Block`.
-        {
-            let mut stmts: Vec<ExprId> = Vec::new();
-            fn collect_stmts(body: &Body, id: ExprId, out: &mut Vec<ExprId>) {
-                match &body.exprs[id] {
-                    Expr::Block { stmts, tail } => {
-                        for s in stmts {
-                            collect_stmts(body, *s, out);
-                        }
-                        if let Some(t) = tail {
-                            collect_stmts(body, *t, out);
-                        }
-                    }
-                    Expr::If {
-                        then_branch,
-                        else_branch,
-                        ..
-                    } => {
-                        collect_stmts(body, *then_branch, out);
-                        if let Some(e) = else_branch {
-                            collect_stmts(body, *e, out);
-                        }
-                    }
-                    Expr::While { body: wb, .. } | Expr::Loop { body: wb } => {
-                        collect_stmts(body, *wb, out);
-                    }
-                    other => {
-                        // A non-statement expr (e.g. `Assign`, `Let`, `Call`) is
-                        // itself a statement in the loop body.
-                        let _ = other;
-                        out.push(id);
-                    }
-                }
-            }
-            collect_stmts(&work_body, loop_body_root, &mut stmts);
-            for s in stmts {
-                ready_stmts.push(copy_expr_subst_await(
-                    &work_body,
-                    &mut poll_body,
-                    s,
-                    &base_rename,
+        // Copy the WHOLE loop body with the await substituted by the polled
+        // value, preserving wrapper structure: an `If`/`While`/`Loop` around
+        // the await keeps its guard and its `break`/`continue` targets
+        // (flattening the wrappers here would run guarded statements
+        // unconditionally and orphan their jumps). `copy_expr_subst_await`
+        // recurses through every variant, so a non-`Block` body root is
+        // copied just as faithfully.
+        let copied_body = copy_expr_subst_await(
+            &work_body,
+            &mut poll_body,
+            loop_body_root,
+            &base_rename,
+            interner,
+            await_expr,
+            ready_value_name,
+        );
+        // Depth-0 `break`/`continue` (jumps targeting the desugared loop
+        // itself) cannot survive verbatim inside the dispatch loop: a
+        // `break` would exit the poll dispatch loop and a `continue` would
+        // re-enter it with the same `S0` state (an unbounded re-poll).
+        // Translate them into the machine's own transitions: `continue`
+        // becomes the loop step (optionally preceded by the `for`
+        // normalization's iterator increment, so the loop variable still
+        // advances), `break [v]` becomes the `Done { result }` transition.
+        // Inner-loop jumps (depth > 0) keep their real inner loop and stay
+        // verbatim.
+        translate_loop_ctrl(
+            &mut poll_body,
+            copied_body,
+            &state_name,
+            state_field_name,
+            // Fresh loop step per site (the step ends in the machine's own
+            // dispatch `continue`, which must never be re-translated).
+            &mut |body: &mut Body| {
+                let step = build_loop_step(
+                    body,
                     interner,
-                    await_expr,
-                    ready_value_name,
-                ));
-            }
-        }
+                    state_field_name,
+                    &state_name,
+                    &original_params,
+                    &loop_local_names,
+                    fut_local_name,
+                    inner,
+                    &base_rename,
+                    loop_cond,
+                );
+                match for_step_increment {
+                    Some(inc) => {
+                        // `for i in a..b`: a `continue` must still advance
+                        // the iterator state before the next loop step.
+                        // The step itself ends in the machine's dispatch
+                        // `continue`, so nothing after it is reachable.
+                        let inc_copy =
+                            copy_expr_renamed(&work_body, body, inc, &base_rename, interner);
+                        body.alloc_expr(
+                            Expr::Block {
+                                stmts: vec![inc_copy, step],
+                                tail: None,
+                            },
+                            Span::DUMMY,
+                        )
+                    }
+                    None => step,
+                }
+            },
+            &mut |body: &mut Body, value: Option<ExprId>| {
+                // `break [v]`: transition to `Done { result: v }` and
+                // re-enter the dispatch loop, which returns `Poll::Ready`.
+                let result_value = match value {
+                    Some(v) => v,
+                    None => build_result_value(body),
+                };
+                let done = body.alloc_expr(
+                    Expr::Struct {
+                        path: two_seg(interner, &state_name, interner.intern("Done")),
+                        fields: vec![(interner.intern("result"), result_value)],
+                        spread: None,
+                    },
+                    Span::DUMMY,
+                );
+                let assign = assign_state(body, interner, state_field_name, done);
+                let cont = body.alloc_expr(Expr::Continue, Span::DUMMY);
+                body.alloc_expr(
+                    Expr::Block {
+                        stmts: vec![assign, cont],
+                        tail: None,
+                    },
+                    Span::DUMMY,
+                )
+            },
+        );
+        ready_stmts.push(copied_body);
         ready_stmts.push(build_loop_step(
             &mut poll_body,
             interner,
@@ -2739,7 +3579,6 @@ fn desugar_loop_async_fn(
             fut_local_name,
             inner,
             &base_rename,
-            result_local,
             loop_cond,
         ));
         let ready_arm_body = poll_body.alloc_expr(
