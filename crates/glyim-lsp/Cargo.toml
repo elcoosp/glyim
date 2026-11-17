@@ -140,11 +140,24 @@ harness = false
 name = "range_formatting"
 harness = false
 
+# Save-time edit bench (LSP-WILL-SAVE; dependency-free, `harness =
+# false` like the other request benches).
+[[bench]]
+name = "will_save"
+harness = false
+
+# Watched-files bench (LSP-WATCHED-FILES; dependency-free, `harness =
+# false` like the other request benches).
+[[bench]]
+name = "watched_files"
+harness = false
+
 [dependencies]
-notify = "8.2"
-# `crossbeam-channel` and `file_url` were declared here but never imported
-# anywhere in the crate (cargo's unused-dependency lint flagged both);
-# removed with the LSP-CALL-HIERARCHY pass so the manifest reflects the
+# `notify` (and before it `crossbeam-channel`/`file_url`) were declared
+# here but never imported anywhere in the crate — the driver's watcher
+# was scaffolding that never constructed anything, and the watched-files
+# seam (LSP-WATCHED-FILES) is the client-forwarded refresh story instead.
+# cargo's unused-dependency lint flagged them; the manifest reflects the
 # actual dependency set.
 glyim-db = { path = "../glyim-db" }
 glyim-hir = { path = "../glyim-hir" }
