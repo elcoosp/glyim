@@ -152,6 +152,18 @@ harness = false
 name = "watched_files"
 harness = false
 
+# File-rename decision bench (LSP-FILE-RENAME; dependency-free, `harness
+# = false` like the other request benches).
+[[bench]]
+name = "file_rename"
+harness = false
+
+# File create/delete decision bench (LSP-FILE-CREATE-DELETE;
+# dependency-free, `harness = false` like the other request benches).
+[[bench]]
+name = "file_operations"
+harness = false
+
 [dependencies]
 # `notify` (and before it `crossbeam-channel`/`file_url`) were declared
 # here but never imported anywhere in the crate — the driver's watcher
