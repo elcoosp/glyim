@@ -923,6 +923,7 @@ dependencies = [
  "glyim-mir",
  "glyim-span",
  "glyim-type",
+ "tracing",
 ]
 
 [[package]]
