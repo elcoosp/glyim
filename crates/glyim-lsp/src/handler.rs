@@ -6,6 +6,7 @@ use crate::completion::provide_completions;
 use crate::document_highlight::document_highlights;
 use crate::document_link::document_links;
 use crate::driver::AnalysisMessage;
+use crate::driver::warn_dropped_send;
 use crate::execute_command::execute_command;
 use crate::folding::provide_folding_ranges;
 use crate::formatting::format_document;
@@ -28,12 +29,17 @@ use crate::semantic_tokens::{semantic_tokens_full, semantic_tokens_range, token_
 use crate::signature_help::signature_help;
 use crate::type_definition::type_definition;
 use crate::type_hierarchy::{prepare_type_hierarchy, type_subtypes, type_supertypes};
+use crate::watched_files::watched_file_decisions;
+use crate::will_save::will_save_edits;
 use crate::workspace_diagnostics::workspace_diagnostics;
 use async_lsp::ResponseError;
 use async_lsp::router::Router;
 use std::ops::ControlFlow;
 
-use lsp_types::notification::{DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument};
+use lsp_types::notification::WillSaveTextDocument;
+use lsp_types::notification::{
+    DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidOpenTextDocument,
+};
 use lsp_types::request::{
     CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare,
     CodeActionRequest, CodeLensRequest, CodeLensResolve, Completion, DocumentDiagnosticRequest,
@@ -43,7 +49,7 @@ use lsp_types::request::{
     InlineValueRequest, LinkedEditingRange, MonikerRequest, OnTypeFormatting, PrepareRenameRequest,
     RangeFormatting, References, Rename, SelectionRangeRequest, SemanticTokensFullRequest,
     SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest, TypeHierarchyPrepare,
-    TypeHierarchySubtypes, TypeHierarchySupertypes, WorkspaceDiagnosticRequest,
+    TypeHierarchySubtypes, TypeHierarchySupertypes, WillSaveWaitUntil, WorkspaceDiagnosticRequest,
     WorkspaceSymbolRequest,
 };
 use lsp_types::*;
@@ -78,6 +84,18 @@ pub fn build_router(
                     TextDocumentSyncOptions {
                         open_close: Some(true),
                         change: Some(TextDocumentSyncKind::FULL),
+                        // LSP-WILL-SAVE: the save-time hooks. `will_save`
+                        // turns the `textDocument/willSave` notification on
+                        // (routed below, observability only); `will_save_
+                        // wait_until` turns the request on — the handler
+                        // below feeds the stored text through the same
+                        // `format_source` core the full-document request
+                        // reads (one formatter, three wire shapes), so a
+                        // saved file and a manually formatted file agree by
+                        // construction. The conformance test pins this
+                        // advertisement to the router registration.
+                        will_save: Some(true),
+                        will_save_wait_until: Some(true),
                         ..Default::default()
                     },
                 )),
@@ -296,6 +314,34 @@ pub fn build_router(
                 server_info: None,
             })
         }
+    });
+
+    // Save-time edits (LSP-WILL-SAVE): the client asks for the edits that
+    // bring the document to its saved form before it hits the disk — the
+    // format-on-save hook. The handler feeds the stored text through the
+    // same `format_source` core the full-document request reads; an
+    // already-formatted document answers `null` (no edit churn), and the
+    // save reason is deliberately not consulted (the formatter is
+    // reason-agnostic).
+    let db_will_save = db.clone();
+    router.request::<WillSaveWaitUntil, _>(move |(), params: WillSaveTextDocumentParams| {
+        let db = db_will_save.clone();
+        async move {
+            let guard = db.file_map.read();
+            Ok(will_save_edits(&db, &guard, &params))
+        }
+    });
+
+    // Will Save (LSP-WILL-SAVE): the notification half of the save
+    // negotiation. It carries no request semantics — clients that
+    // negotiated `willSaveWaitUntil` send the request separately — so the
+    // route records the event for the log file and moves on.
+    router.notification::<WillSaveTextDocument>(move |(), params: WillSaveTextDocumentParams| {
+        tracing::debug!(
+            uri = %params.text_document.uri.as_str(),
+            "textDocument/willSave received"
+        );
+        ControlFlow::Continue(())
     });
 
     // Shutdown
@@ -853,6 +899,54 @@ pub fn build_router(
         // Same bounded-channel discipline as didOpen above.
         if let Err(err) = tx_close.try_send(AnalysisMessage::FileClosed { path: path.clone() }) {
             tracing::warn!(?path, %err, "analysis channel dropped the didClose notice");
+        }
+        ControlFlow::Continue(())
+    });
+
+    // Watched Files (LSP-WATCHED-FILES): the client forwards the file
+    // events for paths its watchers matched — the refresh path for
+    // content no editor ever opened. Each decision executes here: a
+    // re-analysis reads the file from disk and feeds the driver (the
+    // path is recorded as watched first, so a later event stays
+    // re-analysable; a read failure is a logged skip, never a panic —
+    // one unreadable file must not erase the good decisions), a forget
+    // reuses the driver's close cleanup (recorded facts cleared, empty
+    // diagnostics published). lsp-types 0.97 carries no server
+    // capability field for this notification, so the registration *is*
+    // the advertisement — pinned by the wire and conformance tests.
+    let db_watched_files = db.clone();
+    let tx_watched_files = analysis_tx.clone();
+    router.notification::<DidChangeWatchedFiles>(move |(), params: DidChangeWatchedFilesParams| {
+        let decisions = watched_file_decisions(&db_watched_files, &params);
+        for path in &decisions.reanalyse {
+            db_watched_files.watched_files.write().insert(path.clone());
+            match std::fs::read_to_string(path) {
+                Ok(content) => {
+                    if let Err(err) =
+                        tx_watched_files.try_send(AnalysisMessage::WatchedFileChanged {
+                            path: path.clone(),
+                            content,
+                        })
+                    {
+                        warn_dropped_send(err);
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        path = %path.display(),
+                        %err,
+                        "watched file unreadable; re-analysis skipped"
+                    );
+                }
+            }
+        }
+        for path in &decisions.forget {
+            db_watched_files.watched_files.write().remove(path);
+            if let Err(err) =
+                tx_watched_files.try_send(AnalysisMessage::FileClosed { path: path.clone() })
+            {
+                warn_dropped_send(err);
+            }
         }
         ControlFlow::Continue(())
     });
