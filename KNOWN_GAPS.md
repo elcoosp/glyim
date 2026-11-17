@@ -54,14 +54,14 @@ plan §3.3: allowed, but never silent).
 - opened in: v0.3.0
 - status: unwitnessed (witness debt)
 
-## GAP-0006 — .await inside `loop` bodies / non-range `for` iterables rejected by async lowering (diagnostic T0060)
+## GAP-0006 — .await inside non-range `for` iterables / destructuring loop patterns rejected by async lowering (diagnostic T0060)
 
 - class: `a` (diagnosed: every use site gets a diagnostic)
 - affects: `LANG-ASYNC-AWAIT`
 - caps affected features at `L2`
 - opened in: v0.10.0
 - status: witnessed
-- witness: `crates/glyim-test/tests/compile-fail/async-await-in-unbounded-loop-known-gap.g` (strict xfail)
+- witness: `crates/glyim-test/tests/compile-fail/async-await-in-non-range-for-known-gap.g` (strict xfail)
 - expect: witness must produce diagnostic `T0060`
 
 <!-- ledger:known-gaps:end -->
