@@ -15,7 +15,7 @@
 //!   `OP_TRAP`.
 //!
 //! The decoder returns explicit, typed errors (`VmError::UnknownOpcode` /
-//! `UnknownOpcode` / `StackUnderflow` / `LocalOutOfBounds` /
+//! `StackUnderflow` / `LocalOutOfBounds` /
 //! `CallFrameOverflow` / `AbnormalTermination`) rather than silently
 //! mis-executing an unhandled opcode, so adding a new emitter opcode forces a
 //! deliberate VM decision.
@@ -23,6 +23,10 @@
 //! Wire format (operand sizes) mirrors `crates/glyim-codegen/src/lib.rs`
 //! exactly: every `OP_*` that carries a payload uses little-endian `i64`
 //! (constants) or `u32` (local/block/function indices) as the emitter writes.
+
+pub mod image;
+
+pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
 
 /// A runtime value on the VM stack / in a local slot.
 ///
@@ -191,7 +195,11 @@ impl Opcode {
 /// targets in the emitted bytecode are block indices; `block_offsets` lets
 /// the VM resolve them. When `block_offsets` is empty, targets are treated as
 /// raw byte offsets (used by hand-assembled tests).
-#[derive(Debug, Clone)]
+///
+/// Call-frame ABI (the emitter's MIR convention): local 0 is the return
+/// place, and the call arguments occupy locals `1..=arg_count` on the
+/// callee's frame.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Function {
     /// Raw instruction bytes.
     pub code: Vec<u8>,
@@ -255,7 +263,7 @@ impl Function {
 ///
 /// The VM executes functions by index; `OP_CALL`/`OP_CALL_INDIRECT` reference
 /// the same index space used by the emitter's `fn_table`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module {
     /// Functions indexed by the emitter's function indices.
     pub functions: Vec<Function>,
@@ -365,7 +373,6 @@ impl Vm {
             vec![Function::new(chunk.code.clone(), chunk.n_locals, 0)],
             0,
         );
-        let _ = chunk.entry; // single-function entry is always 0
         self.run_module(&module)
     }
 
@@ -387,10 +394,17 @@ impl Vm {
             .functions
             .get(func)
             .ok_or(VmError::FunctionOutOfBounds(func))?;
-        let n_locals = f.n_locals.max(args.len());
+        // MIR ABI (the emitter's and the interpreter's convention): local 0
+        // is the return place, call arguments occupy locals 1..=arg_count.
+        // Binding args at locals[0..] here made every emitted call read its
+        // first argument as the zero-initialised return slot instead (the
+        // multi-function differential caught it: the single-function path
+        // never passes args, so the mismatch hid until cross-function
+        // `OP_CALL` ran).
+        let n_locals = f.n_locals.max(args.len() + 1);
         let mut locals = vec![Value::Int(0); n_locals];
         for (i, a) in args.iter().enumerate() {
-            locals[i] = a.clone();
+            locals[i + 1] = a.clone();
         }
         let mem_size = (n_locals * 8).max(8);
         self.frames.push(Frame {
@@ -747,36 +761,28 @@ impl Vm {
 /// A chunk of bytecode to execute, plus the number of locals it needs.
 ///
 /// `Chunk` retains the original single-function API; it is reinterpreted as a
-/// one-function [`Module`] by [`Vm::run`].
+/// one-function [`Module`] by [`Vm::run`]. (The former `entry` field is
+/// gone: it was written by nothing — both constructors hardcoded 0 and
+/// `Vm::run` discarded it — so it was dead API surface.)
 #[derive(Debug, Clone)]
 pub struct Chunk {
     /// Raw instruction bytes.
     pub code: Vec<u8>,
     /// Number of local slots.
     pub n_locals: usize,
-    /// Byte offset of the function entry point (0 for a single function).
-    pub entry: usize,
 }
 
 impl Chunk {
     /// new.
     #[must_use]
     pub fn new(code: Vec<u8>) -> Chunk {
-        Chunk {
-            code,
-            n_locals: 0,
-            entry: 0,
-        }
+        Chunk { code, n_locals: 0 }
     }
 
     /// Build a chunk with an explicit local count.
     #[must_use]
     pub fn with_locals(code: Vec<u8>, n_locals: usize) -> Chunk {
-        Chunk {
-            code,
-            n_locals,
-            entry: 0,
-        }
+        Chunk { code, n_locals }
     }
 }
 
@@ -1117,37 +1123,38 @@ mod tests {
         // main: return fib(6) == 8
         let mut fib = Asm::new();
         fib.label(0); // entry
-        fib.load_local(0);
+        fib.load_local(1); // MIR ABI: the argument lives at local 1
         fib.load_const(2);
         fib.op(Opcode::Lt); // n < 2
         fib.op(Opcode::JumpIf);
         fib.u32(3); // -> base (block 3)
-        // recursive case
+        // recursive case (dests live at 2/3: local 1 holds the argument
+        // under the MIR call-frame ABI)
         fib.label(1);
         fib.load_const(0); // fn idx 0 (fib) [bottom]
-        fib.load_local(0);
+        fib.load_local(1);
         fib.load_const(1);
         fib.op(Opcode::Sub); // n-1 [top = arg]
         fib.op(Opcode::Call);
         fib.u32(1); // argc
-        fib.u32(1); // dest local 1
+        fib.u32(2); // dest local 2
         fib.u32(2); // resume -> block 2 (L_add1)
         fib.label(2); // L_add1
         fib.load_const(0); // fn idx 0 (fib) [bottom]
-        fib.load_local(0);
+        fib.load_local(1);
         fib.load_const(2);
         fib.op(Opcode::Sub); // n-2 [top = arg]
         fib.op(Opcode::Call);
         fib.u32(1); // argc
-        fib.u32(2); // dest local 2
+        fib.u32(3); // dest local 3
         fib.u32(4); // resume -> block 4 (L_add2)
         fib.label(4); // L_add2
-        fib.load_local(1);
         fib.load_local(2);
+        fib.load_local(3);
         fib.op(Opcode::Add);
         fib.op(Opcode::Return);
         fib.label(3); // L_base
-        fib.load_local(0);
+        fib.load_local(1);
         fib.op(Opcode::Return);
 
         let mut main = Asm::new();
@@ -1179,7 +1186,7 @@ mod tests {
         fib.u32(1); // dest
         fib.u32(0); // resume -> block 0 (loop)
         fib.label(1);
-        fib.load_local(1);
+        fib.load_local(2);
         fib.op(Opcode::Return);
 
         let module = Module::new(vec![fib.finish(8, 1)], 0);
