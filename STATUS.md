@@ -61,7 +61,7 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `COMPILER-TI-BIDI` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `COMPILER-TI-OCCURS` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `COMPILER-TI-UNIFICATION` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
-| `LANG-ASYNC-AWAIT` | core | L5 | L0 | GAP-0001 | fuzz_cpu_hours, mutation_kill_rate_pct |
+| `LANG-ASYNC-AWAIT` | core | L5 | L0 | GAP-0006 | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-BUILTIN-BOX` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-BUILTIN-OPTION` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-BUILTIN-PHANTOMDATA` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
