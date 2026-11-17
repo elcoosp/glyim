@@ -2,11 +2,11 @@
 
 # Readiness status
 
-Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **250** features over **56** evidence record(s) (0 error(s), 3 warning(s)).
+Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **252** features over **56** evidence record(s) (0 error(s), 3 warning(s)).
 
 | Level | Features |
 |---|---|
-| L0 | 237 |
+| L0 | 239 |
 | L1 | 7 |
 | L2 | 6 |
 | L3 | 0 |
@@ -228,6 +228,8 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `TOOL-LSP-DIAG` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-DOC-LINK` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-EXEC-CMD` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-FILE-CREATE-DELETE` | tooling | L4 | L0 | - | - |
+| `TOOL-LSP-FILE-RENAME` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-FOLDING` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-FORMAT` | tooling | L4 | L0 | - | - |
 | `TOOL-LSP-GOTO-DEF` | tooling | L4 | L0 | - | - |
