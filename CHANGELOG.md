@@ -8,6 +8,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Loadable bytecode module images (`glyim.module-image/1`)**: the
+  bytecode VM gains a versioned, self-describing container for whole
+  modules — `encode_module` serializes a `Module` (function table, entry
+  index, per-function locals/args/block-offset tables and code) into
+  deterministic bytes; `decode_module` validates untrusted bytes back
+  into an executable module, refusing every structural defect explicitly
+  (`ImageError::BadMagic` / `UnsupportedVersion` / `Truncated` /
+  `EntryOutOfBounds` / `BlockOffsetOutOfRange` / `TrailingBytes`) and
+  logging rejections through `tracing`. `Function`/`Module` grew
+  structural equality so round trips assert byte-for-byte identity; a
+  decode/encode timing bench (`benches/module_image`) and a consumer
+  walkthrough (`examples/module_image_walkthrough`) land with it. The
+  emitter's raw `generate` stream is unchanged — this is the missing
+  persistence boundary the backend's "testing and embedded execution"
+  story needed.
+- **Multi-function module-image assembly
+  (`BytecodeBackend::generate_module_image`)**: the emitter can now
+  produce the loadable artifact — it emits every body, resolves the
+  fn-table index space every `OP_CALL` pushes, records per-function
+  block-offset tables, appends unreferenced bodies, and picks the body
+  named `main` as the entry. Assembly refuses (explicit diagnostics,
+  never a broken artifact) opt levels above `O0` (block tables are
+  recorded before the peephole pass), empty body sets, and fn tables
+  holding several substitution slots for one body (a generic callee
+  called at several instantiations). The `vm_interp_diff` differential
+  now covers cross-function `OP_CALL`, two-level call chains, and mutual
+  recursion end to end (assemble → decode → run vs the MIR interpreter) —
+  and it caught a real pre-existing mismatch: the VM bound call
+  arguments at `locals[0..]` while the emitter's MIR ABI keeps local 0 as
+  the return place and args at `locals[1..=arg_count]`; the VM now
+  follows the producer's ABI. An assembly timing bench
+  (`benches/module_assembly`) and a walkthrough
+  (`examples/module_assembly_walkthrough`) land with it; the dead
+  `Chunk::entry` field (written by nothing) is removed.
 - **`.await` inside a `for` loop over a range** (GAP-0001 closed): the
   async state-machine desugar now normalizes `for i in a..b` into the
   `while` shape it already re-drives — a synthetic `let mut __for_i`
