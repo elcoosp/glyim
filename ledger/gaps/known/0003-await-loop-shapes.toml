@@ -1,0 +1,22 @@
+# GAP-0006 opened by the GAP-0001 closure (the `for`-over-range loop-await
+# desugar). The `for i in a..b` shape the GAP-0001 witness pinned now
+# desugars to a resumable `Start`/`S0`/`Done` machine; the remaining loop
+# shapes still cannot be re-driven across a `Poll::Pending` and keep the
+# loud async-v2 hard error (diagnostic T0060).
+#
+# Witnessed since its opening: the fixture at `witness` reproduces the gap
+# and carries the `//@ known-gap: GAP-0006` header, and the harness applies
+# the strict-xfail inversion (if the compiler starts accepting the witness,
+# the fixture fails with `known-gap GAP-0006 closed`, forcing the witness
+# to be retired in the gap-closing change).
+
+[[gap]]
+id        = "GAP-0006"
+class     = "a"
+title     = ".await inside `loop` bodies / non-range `for` iterables rejected by async lowering (diagnostic T0060)"
+affects   = ["LANG-ASYNC-AWAIT"]
+caps      = "L2"
+expect    = { diagnostic = "T0060" }
+opened_in = "v0.10.0"
+status    = "witnessed"
+witness   = "crates/glyim-test/tests/compile-fail/async-await-in-unbounded-loop-known-gap.g"
