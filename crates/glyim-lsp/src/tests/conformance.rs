@@ -45,11 +45,13 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "document_symbol_provider",
         "workspace_symbol_provider",
         "document_link_provider",
+        "color_provider",
         "linked_editing_range_provider",
         "code_lens_provider",
         "document_on_type_formatting_provider",
         "execute_command_provider",
         "workspace_file_operations",
+        "workspace_folders",
     ]
 }
 
@@ -60,6 +62,30 @@ fn workspace_symbol_is_in_the_expected_set() {
     assert!(
         expected_advertised_providers().contains(&"workspace_symbol_provider"),
         "workspace_symbol_provider must be advertised"
+    );
+}
+
+#[test]
+fn color_provider_is_in_the_expected_set() {
+    // Regression pin (LSP-COLOR): the `textDocument/documentColor` +
+    // `textDocument/colorPresentation` capability must be advertised
+    // alongside its two router registrations; a future removal of either
+    // half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"color_provider"),
+        "color_provider must be advertised"
+    );
+}
+
+#[test]
+fn workspace_folders_is_in_the_expected_set() {
+    // Regression pin (LSP-WORKSPACE-FOLDERS): the folder-set capability
+    // must be advertised (supported + change notifications) alongside its
+    // initialize seed and the `workspace/didChangeWorkspaceFolders` route;
+    // a future removal of either half surfaces here first.
+    assert!(
+        expected_advertised_providers().contains(&"workspace_folders"),
+        "workspace_folders must be advertised"
     );
 }
 
