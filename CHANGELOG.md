@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **LSP workspace folders (`workspace.workspaceFolders` +
+  `workspace/didChangeWorkspaceFolders`)**: the session records the
+  folder set it serves — seeded from the client's initialize folder list
+  (the deprecated `rootUri` as the fallback) and re-derived on change
+  events (known removals drop, unknown removals skip, re-adds keep their
+  first recording) — and answers which recorded folders contain a path,
+  the scoping primitive per-folder work slots into. Folders are session
+  metadata keyed by the spelled path; a folder whose URI does not resolve
+  to a file path is skipped, never invented.
+- **LSP document color (`textDocument/documentColor` +
+  `textDocument/colorPresentation`)**: every string literal that spells a
+  hex color payload (`#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`) answers as
+  the swatch site an editor renders inline (the payload extent, quotes
+  excluded), and the picker's recolor echo answers the canonical lowercase
+  hex spelling over the reported extent — one notation, one presentation.
+  The capability walks the stored parse trees, so it works on broken
+  code; a presentation over a range no site occupies is never offered.
 - **LSP document links (`textDocument/documentLink`)**: the string
   literals of the file-taking builtin macros (`include!`, `include_str!`,
   `include_bytes!`) become clickable file links, resolved against the
