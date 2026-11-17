@@ -8,6 +8,8 @@ use crate::document_link::document_links;
 use crate::driver::AnalysisMessage;
 use crate::driver::warn_dropped_send;
 use crate::execute_command::execute_command;
+use crate::file_operations::{created_file_decisions, deleted_file_decisions};
+use crate::file_rename::renamed_file_decisions;
 use crate::folding::provide_folding_ranges;
 use crate::formatting::format_document;
 use crate::goto_declaration::goto_declaration;
@@ -38,7 +40,8 @@ use std::ops::ControlFlow;
 
 use lsp_types::notification::WillSaveTextDocument;
 use lsp_types::notification::{
-    DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidOpenTextDocument,
+    DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidCreateFiles,
+    DidDeleteFiles, DidOpenTextDocument, DidRenameFiles,
 };
 use lsp_types::request::{
     CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare,
@@ -306,6 +309,62 @@ pub fn build_router(
                 execute_command_provider: Some(ExecuteCommandOptions {
                     commands: advertised_commands(),
                     work_done_progress_options: WorkDoneProgressOptions::default(),
+                }),
+                // LSP-FILE-RENAME: the file-rename capability. The
+                // handler below turns each client-reported rename into
+                // the per-role session decision the engine computes —
+                // editor-owned documents re-key in place (the `FileId`
+                // and every fact keyed by it survive), watched loads
+                // follow the watched-files honest refresh — so the
+                // session's path-keyed state follows the file instead of
+                // pointing at a path that no longer exists. The
+                // `**/*.g` filter names the only files the session
+                // records facts for. The conformance test pins this
+                // advertisement to the router registration.
+                workspace: Some(WorkspaceServerCapabilities {
+                    workspace_folders: None,
+                    file_operations: Some(WorkspaceFileOperationsServerCapabilities {
+                        did_rename: Some(FileOperationRegistrationOptions {
+                            filters: vec![FileOperationFilter {
+                                pattern: FileOperationPattern {
+                                    glob: "**/*.g".to_string(),
+                                    matches: None,
+                                    options: None,
+                                },
+                                scheme: None,
+                            }],
+                        }),
+                        // LSP-FILE-CREATE-DELETE: the declared
+                        // counterparts of the watched events — the
+                        // routes below run the same ownership policy
+                        // the watched route runs, over the operations
+                        // the client's workspace UI performed. The
+                        // conformance test pins the advertisement to
+                        // the router registrations.
+                        did_create: Some(FileOperationRegistrationOptions {
+                            filters: vec![FileOperationFilter {
+                                pattern: FileOperationPattern {
+                                    glob: "**/*.g".to_string(),
+                                    matches: None,
+                                    options: None,
+                                },
+                                scheme: None,
+                            }],
+                        }),
+                        will_create: None,
+                        will_rename: None,
+                        did_delete: Some(FileOperationRegistrationOptions {
+                            filters: vec![FileOperationFilter {
+                                pattern: FileOperationPattern {
+                                    glob: "**/*.g".to_string(),
+                                    matches: None,
+                                    options: None,
+                                },
+                                scheme: None,
+                            }],
+                        }),
+                        will_delete: None,
+                    }),
                 }),
                 ..ServerCapabilities::default()
             };
@@ -945,6 +1004,118 @@ pub fn build_router(
             if let Err(err) =
                 tx_watched_files.try_send(AnalysisMessage::FileClosed { path: path.clone() })
             {
+                warn_dropped_send(err);
+            }
+        }
+        ControlFlow::Continue(())
+    });
+
+    // File Create (LSP-FILE-CREATE-DELETE): the client declares the
+    // file its workspace UI created. The decisions reuse the watched
+    // policy on purpose — the declared shape is the forwarded events'
+    // counterpart, and one ownership rule decides both — so a created
+    // file no editor owns re-analyses from disk (its definitions may
+    // resolve bare usages in the open documents) and a path the editor
+    // owns is skipped (its lifecycle belongs to didOpen/didClose). The
+    // execution mirrors the watched route exactly.
+    let db_file_create = db.clone();
+    let tx_file_create = analysis_tx.clone();
+    router.notification::<DidCreateFiles>(move |(), params: CreateFilesParams| {
+        let decisions = created_file_decisions(&db_file_create, &params);
+        for path in &decisions.reanalyse {
+            db_file_create.watched_files.write().insert(path.clone());
+            match std::fs::read_to_string(path) {
+                Ok(content) => {
+                    if let Err(err) = tx_file_create.try_send(AnalysisMessage::WatchedFileChanged {
+                        path: path.clone(),
+                        content,
+                    }) {
+                        warn_dropped_send(err);
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        path = %path.display(),
+                        %err,
+                        "created file unreadable; re-analysis skipped"
+                    );
+                }
+            }
+        }
+        ControlFlow::Continue(())
+    });
+
+    // File Delete (LSP-FILE-CREATE-DELETE): the client declares the
+    // file its workspace UI deleted. A path no editor owns is forgotten
+    // (the close cleanup clears the recorded facts and publishes an
+    // empty report); a path the editor owns is skipped — didClose owns
+    // the lifecycle. The execution mirrors the watched route exactly.
+    let db_file_delete = db.clone();
+    let tx_file_delete = analysis_tx.clone();
+    router.notification::<DidDeleteFiles>(move |(), params: DeleteFilesParams| {
+        let decisions = deleted_file_decisions(&db_file_delete, &params);
+        for path in &decisions.forget {
+            db_file_delete.watched_files.write().remove(path);
+            if let Err(err) =
+                tx_file_delete.try_send(AnalysisMessage::FileClosed { path: path.clone() })
+            {
+                warn_dropped_send(err);
+            }
+        }
+        ControlFlow::Continue(())
+    });
+
+    // File Rename (LSP-FILE-RENAME): the client reports the file moves
+    // its own UI drives — the session's path-keyed state must follow
+    // them or goto-definition and find-references land on paths that no
+    // longer exist. Each decision executes here: a re-key feeds the
+    // driver's `FileRenamed` message (the path maps move, the `FileId`
+    // and the facts keyed by it survive); a refresh is the watched-files
+    // honest refresh over the new path — the old path is forgotten (the
+    // close cleanup clears the recorded facts and publishes an empty
+    // report) and the new one re-analyses from disk (a read failure is
+    // a logged skip, never a panic — one unreadable file must not erase
+    // the good decisions). The advertisement lives in the initialize
+    // capabilities (`workspace.fileOperations.didRename`); the wire and
+    // conformance tests pin the pair.
+    let db_file_rename = db.clone();
+    let tx_file_rename = analysis_tx.clone();
+    router.notification::<DidRenameFiles>(move |(), params: RenameFilesParams| {
+        let decisions = renamed_file_decisions(&db_file_rename, &params);
+        for rename in &decisions.refresh {
+            db_file_rename.watched_files.write().remove(&rename.old);
+            db_file_rename
+                .watched_files
+                .write()
+                .insert(rename.new.clone());
+            if let Err(err) = tx_file_rename.try_send(AnalysisMessage::FileClosed {
+                path: rename.old.clone(),
+            }) {
+                warn_dropped_send(err);
+            }
+            match std::fs::read_to_string(&rename.new) {
+                Ok(content) => {
+                    if let Err(err) = tx_file_rename.try_send(AnalysisMessage::WatchedFileChanged {
+                        path: rename.new.clone(),
+                        content,
+                    }) {
+                        warn_dropped_send(err);
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        path = %rename.new.display(),
+                        %err,
+                        "renamed file unreadable; re-analysis skipped"
+                    );
+                }
+            }
+        }
+        for rename in &decisions.rekey {
+            if let Err(err) = tx_file_rename.try_send(AnalysisMessage::FileRenamed {
+                old: rename.old.clone(),
+                new: rename.new.clone(),
+            }) {
                 warn_dropped_send(err);
             }
         }
