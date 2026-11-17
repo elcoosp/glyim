@@ -1,8 +1,14 @@
 # GAP-0006 opened by the GAP-0001 closure (the `for`-over-range loop-await
 # desugar). The `for i in a..b` shape the GAP-0001 witness pinned now
-# desugars to a resumable `Start`/`S0`/`Done` machine; the remaining loop
-# shapes still cannot be re-driven across a `Poll::Pending` and keep the
-# loud async-v2 hard error (diagnostic T0060).
+# desugars to a resumable `Start`/`S0`/`Done` machine, and the GAP-0006
+# `loop`-shape closure landed the unbounded `loop` body the same way
+# (normalized into the `while true` shape the machine re-drives, with the
+# depth-0 `break` translation as the exit path). The remaining loop shapes
+# still cannot be re-driven across a `Poll::Pending` and keep the loud
+# async-v2 hard error (diagnostic T0060): a `for` over a non-range iterable
+# needs iterator state carried across the suspension (the machine has no
+# `next()` protocol to re-drive), and destructuring loop patterns need the
+# machine to rename every pattern binding.
 #
 # Witnessed since its opening: the fixture at `witness` reproduces the gap
 # and carries the `//@ known-gap: GAP-0006` header, and the harness applies
@@ -13,10 +19,10 @@
 [[gap]]
 id        = "GAP-0006"
 class     = "a"
-title     = ".await inside `loop` bodies / non-range `for` iterables rejected by async lowering (diagnostic T0060)"
+title     = ".await inside non-range `for` iterables / destructuring loop patterns rejected by async lowering (diagnostic T0060)"
 affects   = ["LANG-ASYNC-AWAIT"]
 caps      = "L2"
 expect    = { diagnostic = "T0060" }
 opened_in = "v0.10.0"
 status    = "witnessed"
-witness   = "crates/glyim-test/tests/compile-fail/async-await-in-unbounded-loop-known-gap.g"
+witness   = "crates/glyim-test/tests/compile-fail/async-await-in-non-range-for-known-gap.g"
