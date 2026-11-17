@@ -585,9 +585,17 @@ impl<'a> SimpleLayoutComputer<'a> {
             },
             variants: VariantsShape::Multiple {
                 tag: niche_field_ty,
-                tag_field: u32::try_from(niche_field_idx).unwrap_or(0),
+                // The niche's tag field / untagged variant are laid out into
+                // the u32 index space the rest of the layout uses. A failed
+                // conversion is an index-space overflow, and silently
+                // substituting `0` used to wire every Field(0) read of the
+                // enum to the niche slot instead (a silent miscompile); hard
+                // error like any other layout overflow.
+                tag_field: u32::try_from(niche_field_idx)
+                    .map_err(|_| LayoutError::SizeOverflow(niche_field_ty))?,
                 tag_encoding: TagEncoding::Niche {
-                    untagged_variant: u32::try_from(niche_variant_idx).unwrap_or(0),
+                    untagged_variant: u32::try_from(niche_variant_idx)
+                        .map_err(|_| LayoutError::SizeOverflow(niche_field_ty))?,
                     niche_variants,
                     niche_start,
                 },
