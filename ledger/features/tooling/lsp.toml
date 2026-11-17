@@ -344,3 +344,23 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-FILE-CREATE-DELETE"
+title         = "file operations: workspace/didCreateFiles indexes a created file no editor owns from disk and workspace/didDeleteFiles forgets a deleted one — the watched-files ownership rules over the client's declared operations"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+
+[[feature]]
+id            = "TOOL-LSP-FILE-RENAME"
+title         = "file renames: workspace/didRenameFiles re-points the session's path-keyed state — an editor-owned document re-keys in place so every fact keyed by its file id survives, a watched load follows the watched-files honest refresh from the new path, and the dependency graph's edges move with the file"
+area          = "tooling.lsp"
+tier          = "tooling"
+spec          = "README.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
