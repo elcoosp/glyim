@@ -14,12 +14,12 @@
 //! module image that encodes a [`Module`] to bytes and decodes untrusted
 //! bytes back into a validated, executable [`Module`].
 //!
-//! # Layout (version 1)
+//! # Layout (version 2)
 //!
 //! ```text
 //! offset  size  field
 //! 0       4     magic: b"GLBC"
-//! 4       2     format version, u16 LE (currently 1)
+//! 4       2     format version, u16 LE (currently 2)
 //! 6       4     function count, u32 LE
 //! 10      4     entry function index, u32 LE
 //! then, per function, in index order:
@@ -29,7 +29,15 @@
 //!         4·len block offsets, u32 LE each
 //!         4     code length, u32 LE
 //!         len   code bytes
+//! then (version 2 only), the byte-string pool `OP_LOAD_CONST_STR`
+//! indices resolve into:
+//!         4     string count, u32 LE
+//!         per string: 4 byte length, u32 LE, then that many UTF-8 bytes
 //! ```
+//!
+//! Version-1 images (the pre-pool format) decode unchanged, with an empty
+//! pool: the section is version-gated, so images shipped before the string
+//! pool keep loading and version-2 producers stay deterministic.
 //!
 //! The wire format mirrors the emitter's operand conventions exactly (the
 //! same rule the opcode numbering follows): every payload is little-endian,
@@ -54,8 +62,14 @@ use tracing::debug;
 /// The image magic bytes: every well-formed image starts with them.
 pub const IMAGE_MAGIC: [u8; 4] = *b"GLBC";
 
-/// The image format version this crate writes and accepts.
-pub const IMAGE_VERSION: u16 = 1;
+/// The image format version this crate writes (2, the string-pool format)
+/// and the oldest version it still accepts (1, the pre-pool format, which
+/// decodes with an empty pool). A decoder that refuses a *range* of versions
+/// keeps the container evolvable without stranding shipped artifacts.
+pub const IMAGE_VERSION: u16 = 2;
+/// The oldest format version [`decode_module`] accepts (the pre-string-pool
+/// layout).
+pub const IMAGE_VERSION_OLDEST: u16 = 1;
 
 /// Fixed size of the image header (magic + version + function count +
 /// entry index).
@@ -111,6 +125,13 @@ pub enum ImageError {
         /// Bytes actually present.
         found: usize,
     },
+    /// A version-2 string-pool entry is not valid UTF-8. The pool is
+    /// `Vec<String>` in memory, so a payload that cannot decode is a
+    /// corrupt artifact, not something to smuggle through as bytes.
+    InvalidString {
+        /// The pool index whose payload failed to decode.
+        string: usize,
+    },
 }
 
 impl ImageError {
@@ -142,6 +163,9 @@ impl ImageError {
             }
             ImageError::TrailingBytes { expected, found } => {
                 format!("trailing bytes: declared structures end at {expected}, image is {found}")
+            }
+            ImageError::InvalidString { string } => {
+                format!("string pool entry {string} is not valid UTF-8")
             }
         }
     }
@@ -182,6 +206,14 @@ pub fn encode_module(module: &Module) -> Vec<u8> {
         }
         out.extend_from_slice(&(f.code.len() as u32).to_le_bytes());
         out.extend_from_slice(&f.code);
+    }
+    // The string pool (version 2): `OP_LOAD_CONST_STR` indices resolve into
+    // this table, so string payloads survive the process boundary as bytes
+    // instead of as opaque interner indices.
+    out.extend_from_slice(&(module.strings.len() as u32).to_le_bytes());
+    for s in &module.strings {
+        out.extend_from_slice(&(s.len() as u32).to_le_bytes());
+        out.extend_from_slice(s.as_bytes());
     }
     debug!(
         functions = module.functions.len(),
@@ -275,7 +307,7 @@ fn decode_validated(bytes: &[u8]) -> Result<Module, ImageError> {
         needed: HEADER_SIZE,
         available: bytes.len(),
     })?;
-    if version != IMAGE_VERSION {
+    if !(IMAGE_VERSION_OLDEST..=IMAGE_VERSION).contains(&version) {
         return Err(ImageError::UnsupportedVersion {
             found: version,
             supported: IMAGE_VERSION,
@@ -329,13 +361,32 @@ fn decode_validated(bytes: &[u8]) -> Result<Module, ImageError> {
         });
     }
 
+    // Version 2 carries the string pool after the function table; version 1
+    // ends here and decodes with an empty pool.
+    let mut strings = Vec::new();
+    if version >= 2 {
+        let string_count = r.u32()? as usize;
+        strings = Vec::with_capacity(string_count);
+        for idx in 0..string_count {
+            let len = r.u32()? as usize;
+            let raw = r.take(len)?.to_vec();
+            let s =
+                String::from_utf8(raw).map_err(|_| ImageError::InvalidString { string: idx })?;
+            strings.push(s);
+        }
+    }
+
     if r.pos != bytes.len() {
         return Err(ImageError::TrailingBytes {
             expected: r.pos,
             found: bytes.len(),
         });
     }
-    Ok(Module { functions, entry })
+    Ok(Module {
+        functions,
+        entry,
+        strings,
+    })
 }
 
 #[cfg(test)]
