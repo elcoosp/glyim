@@ -8,6 +8,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Module-image disassembler (`render_module` / `render_function`)** in
+  `glyim-bytecode-vm`: the observability half of the loadable-image seam —
+  once an artifact is decoded, the listing answers "what instructions does
+  this carry?" without re-deriving the wire format by hand (the debugging
+  counterpart of the assembler, the way `llvm-dis` backs `llvm-as`). The
+  rendering is deterministic (the same module renders byte-identical text,
+  pinned by a golden test), total over corrupt code (unknown opcode bytes
+  list as `unknown(0xNN)` and consume nothing, a payload that runs past
+  the code's end lists `<truncated>` and ends the function's listing —
+  never a panic, never a silent skip), and read-only. Operand decoding
+  mirrors `Vm::drive`'s widths exactly: typed float constants list both
+  the IEEE-754 value and the raw bit pattern, `OP_CAST` lists the cast
+  kind and target names, `OP_LOAD_CONST_STR` lists the pool index and the
+  pool content (an out-of-range index says so), `OP_CALL` lists argc /
+  dest / resume target, and block-index mode labels the listing with the
+  function's `bN@off:` table so jump targets read against it. A
+  disassembly timing bench (`benches/module_disasm`) and a consumer
+  walkthrough (`examples/module_disasm_walkthrough`) land with it.
+- **`.await` inside an unbounded `loop` body** (the GAP-0006 `loop`-shape
+  closure): the async state-machine desugar now normalizes `loop { .. }`
+  into the `while true { .. }` shape it already re-drives — a fresh
+  literal-`true` condition, the loop body carried over untouched (no
+  pattern rename, no increment step) — so the `Start`/`S0`/`Done` machine
+  carries the in-loop locals across `Poll::Pending` and `poll()` resumes
+  mid-iteration, exactly like the `while` and `for`-over-range shapes. A
+  `loop` written as the body's last expression (the parser lowers it into
+  the root block's *tail* slot, where the statement scan never looked) is
+  spliced into the statement list first, which also unlocks tail-position
+  `while`/`for` awaits. The depth-0 `break [v]` inside the loop body is
+  the machine's `Done { result }` exit, so `break acc` resolves the future
+  with the value the loop exited on. The strict-xfail witness retired into
+  a run-pass fixture (`tests/run-pass/behavior/async_loop_await.g`, exit
+  code 11); GAP-0006 is re-registered for the remaining shapes (`for` over
+  a non-range iterable, destructuring loop patterns) with a rewritten
+  compile-fail witness, and the desugar's T0060 diagnostic now names only
+  the still-unsupported shapes. A desugar bench shape
+  (`benches/async_loop_desugar`), a consumer walkthrough
+  (`examples/async_loop_desugar`), and a pipeline runtime differential
+  (`glyim-pipeline` `async_loop_runtime`: structure + `block_on` value
+  proofs for `break v` / plain `break` / `continue` / guarded awaits) land
+  with it.
 - **Loadable bytecode module images (`glyim.module-image/1`)**: the
   bytecode VM gains a versioned, self-describing container for whole
   modules — `encode_module` serializes a `Module` (function table, entry
