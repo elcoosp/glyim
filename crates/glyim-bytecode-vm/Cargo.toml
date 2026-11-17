@@ -22,6 +22,12 @@ harness = false
 name = "float_exec"
 harness = false
 
+# Module-disassembly bench (the disasm seam: render_module/render_function
+# over a decoded fib+main module; dependency-free, `harness = false`).
+[[bench]]
+name = "module_disasm"
+harness = false
+
 [dependencies]
 # The module-image seam (glyim.module-image/1) logs encode/decode events and
 # every decode rejection through the workspace-standard tracing layer, so a
