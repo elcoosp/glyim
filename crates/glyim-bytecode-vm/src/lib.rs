@@ -36,9 +36,11 @@
 
 pub mod disasm;
 pub mod image;
+pub mod trace;
 
 pub use disasm::{render_function, render_module};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
+pub use trace::{StepDetail, TraceCollector, TraceSink, TracingSink, VmStep, render_trace};
 
 /// A runtime value on the VM stack / in a local slot.
 ///
@@ -492,7 +494,68 @@ pub enum VmError {
     /// does not have (the pool travels inside the image, so this is a
     /// corrupt or hand-mis-assembled artifact, not a runtime condition).
     StringIndexOutOfBounds(usize),
+    /// The execution budget set by [`Vm::with_fuel`] was spent: the machine
+    /// refused a dispatch after `executed` dispatches had run. The embedded
+    /// execution story's runtime complement of [`decode_module`]'s
+    /// structural validation — an infinite loop stops with this explicit
+    /// error instead of hanging the embedding host.
+    FuelExhausted {
+        /// How many dispatches ran before the budget was spent.
+        executed: u64,
+    },
 }
+
+impl std::fmt::Display for VmError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VmError::UnexpectedEndOfCode => {
+                write!(f, "ran past the end of a function's code without a Return")
+            }
+            VmError::UnknownOpcode(raw) => write!(f, "unknown opcode byte 0x{raw:02x}"),
+            VmError::StackUnderflow => {
+                write!(f, "stack underflow (popped with too few operands)")
+            }
+            VmError::LocalOutOfBounds(idx) => write!(f, "local index {idx} out of bounds"),
+            VmError::EmptyReturn => write!(f, "a Return executed with an empty stack"),
+            VmError::AbnormalTermination => write!(f, "OP_TRAP / OP_UNREACHABLE executed"),
+            VmError::AssertionFailed => write!(f, "OP_ASSERT condition did not hold"),
+            VmError::CallFrameOverflow => write!(f, "call stack exceeded the depth limit"),
+            VmError::FunctionOutOfBounds(idx) => {
+                write!(f, "call referenced function index {idx} out of range")
+            }
+            VmError::SwitchNoTarget => {
+                write!(
+                    f,
+                    "OP_SWITCH_INT discriminant matched no arm and no otherwise"
+                )
+            }
+            VmError::BinOpTypeMismatch { op, left, right } => {
+                write!(f, "{op} cannot operate on ({left}, {right}) operands")
+            }
+            VmError::UnOpTypeMismatch { op, operand } => {
+                write!(f, "{op} cannot operate on a {operand} operand")
+            }
+            VmError::CastOperandMismatch { kind, operand } => {
+                write!(f, "cast {kind} cannot convert a {operand} operand")
+            }
+            VmError::UnknownCastKind(kind) => write!(f, "unknown cast-kind byte 0x{kind:02x}"),
+            VmError::UnknownCastTarget(target) => {
+                write!(f, "unknown cast-target byte 0x{target:02x}")
+            }
+            VmError::ExpectedInt { role, found } => {
+                write!(f, "expected an Int for the {role}, found {found}")
+            }
+            VmError::StringIndexOutOfBounds(idx) => {
+                write!(f, "string pool index {idx} out of range")
+            }
+            VmError::FuelExhausted { executed } => {
+                write!(f, "execution budget spent after {executed} dispatches")
+            }
+        }
+    }
+}
+
+impl std::error::Error for VmError {}
 
 /// The target primitive type an `OP_CAST` converts to, written by the emitter
 /// as the cast's second operand byte.
@@ -668,6 +731,15 @@ pub struct Vm {
     stack: Vec<Value>,
     /// The call stack.
     frames: Vec<Frame>,
+    /// The attached execution-trace sink, if any (`None` = the seam costs
+    /// one check per dispatch — exactly the pre-seam behavior).
+    trace: Option<Box<dyn TraceSink>>,
+    /// The remaining execution budget ([`Vm::with_fuel`]); `None` = unlimited
+    /// (the pre-seam behavior).
+    fuel: Option<u64>,
+    /// The lifetime dispatch count: every instruction dispatch this VM has
+    /// performed (including the faulting one that ends a run with an error).
+    executed: u64,
 }
 
 impl Vm {
@@ -675,6 +747,41 @@ impl Vm {
     #[must_use]
     pub fn new() -> Vm {
         Vm::default()
+    }
+
+    /// Attach an execution-trace sink ([`crate::trace`]): every instruction
+    /// dispatch is handed to it just before the instruction executes. The
+    /// sink observes only — it never changes execution — and `Vm::take_trace`
+    /// hands it back after the run.
+    #[must_use]
+    pub fn with_trace(mut self, sink: Box<dyn TraceSink>) -> Vm {
+        self.trace = Some(sink);
+        self
+    }
+
+    /// Detach and return the trace sink (the typed owner recovers it through
+    /// `TraceSink::as_any`). `None` when no sink was attached.
+    pub fn take_trace(&mut self) -> Option<Box<dyn TraceSink>> {
+        self.trace.take()
+    }
+
+    /// Set an execution budget: the machine refuses a dispatch once `fuel`
+    /// dispatches have run, returning [`VmError::FuelExhausted`] — the
+    /// runtime complement of [`decode_module`]'s structural validation, so
+    /// an infinite loop in a loaded artifact stops with an explicit error
+    /// instead of hanging the embedding host. [`Vm::executed`] reports the
+    /// count either way.
+    #[must_use]
+    pub fn with_fuel(mut self, fuel: u64) -> Vm {
+        self.fuel = Some(fuel);
+        self
+    }
+
+    /// How many instruction dispatches this VM has performed in its lifetime
+    /// (including the faulting dispatch that ended a run with an error).
+    #[must_use]
+    pub fn executed(&self) -> u64 {
+        self.executed
     }
 
     /// Execute the module's entry function.
@@ -772,7 +879,39 @@ impl Vm {
                 return Err(VmError::UnexpectedEndOfCode);
             }
             let raw = code[pc];
-            let op = Opcode::from_u8(raw).ok_or(VmError::UnknownOpcode(raw))?;
+            let decoded = Opcode::from_u8(raw);
+            // Fuel gate (the `with_fuel` seam): a refused dispatch never
+            // executes and never reaches the trace hook, so a budget spent
+            // mid-run leaves the trace exactly at the last executed step.
+            if let Some(fuel) = self.fuel.as_mut() {
+                if *fuel == 0 {
+                    return Err(VmError::FuelExhausted {
+                        executed: self.executed,
+                    });
+                }
+                *fuel -= 1;
+            }
+            self.executed += 1;
+            // Execution-trace hook (the `trace` module's seam): record the
+            // dispatch *before* the instruction executes, so a faulting
+            // dispatch is the trace's last entry. Unknown opcode bytes are
+            // recorded too (`opcode: None`) — the trace is total over
+            // faulting runs. With no sink attached this is one `None` check.
+            if let Some(sink) = self.trace.as_mut() {
+                let detail = decoded
+                    .map(|op| crate::trace::step_detail(code, &module.strings, pc + 1, op))
+                    .unwrap_or(StepDetail::None);
+                sink.step(&VmStep {
+                    func,
+                    pc,
+                    raw,
+                    opcode: decoded,
+                    frame_depth: self.frames.len(),
+                    stack_depth: self.stack.len(),
+                    detail,
+                });
+            }
+            let op = decoded.ok_or(VmError::UnknownOpcode(raw))?;
             self.frames[frame_idx].pc = pc + 1;
 
             match op {
@@ -2143,5 +2282,132 @@ mod string_tests {
                 right: "Int"
             }
         );
+    }
+}
+
+#[cfg(test)]
+mod fuel_tests {
+    use crate::{Function, Module, Opcode, StepDetail, TraceCollector, Value, Vm, VmError};
+
+    fn i64le(v: i64) -> [u8; 8] {
+        v.to_le_bytes()
+    }
+    fn u32le(v: u32) -> [u8; 4] {
+        v.to_le_bytes()
+    }
+    fn op(o: Opcode) -> u8 {
+        o as u8
+    }
+
+    /// helper(n) = n * 2 + main returning helper(21): 9 dispatches total.
+    fn golden_module() -> Module {
+        let mut helper = Vec::new();
+        helper.push(op(Opcode::LoadConst));
+        helper.extend_from_slice(&i64le(2));
+        helper.push(op(Opcode::LoadLocal));
+        helper.extend_from_slice(&u32le(1));
+        helper.push(op(Opcode::Mul));
+        helper.push(op(Opcode::Return));
+        let mut main = Vec::new();
+        main.push(op(Opcode::LoadConst));
+        main.extend_from_slice(&i64le(0));
+        main.push(op(Opcode::LoadConst));
+        main.extend_from_slice(&i64le(21));
+        main.push(op(Opcode::Call));
+        main.extend_from_slice(&u32le(1));
+        main.extend_from_slice(&u32le(0));
+        main.extend_from_slice(&u32le(31));
+        main.push(op(Opcode::LoadLocal));
+        main.extend_from_slice(&u32le(0));
+        main.push(op(Opcode::Return));
+        Module::with_strings(
+            vec![Function::new(helper, 2, 1), Function::new(main, 1, 0)],
+            vec!["abc".to_string()],
+            1,
+        )
+    }
+
+    /// Exactly-enough fuel runs to completion; one dispatch short is an
+    /// explicit `FuelExhausted` carrying the executed count.
+    #[test]
+    fn fuel_counts_dispatches_exactly() {
+        let module = golden_module();
+        let mut vm = Vm::new().with_fuel(9);
+        let value = vm.run_module(&module).expect("9 dispatches fit in 9 fuel");
+        assert_eq!(value, Value::Int(42));
+        assert_eq!(vm.executed(), 9);
+
+        let mut vm = Vm::new().with_fuel(8);
+        let err = vm.run_module(&module).expect_err("8 fuel is one short");
+        assert_eq!(err, VmError::FuelExhausted { executed: 8 });
+        assert_eq!(vm.executed(), 8);
+    }
+
+    /// Zero fuel rejects the first dispatch — the program never runs.
+    #[test]
+    fn zero_fuel_rejects_the_first_dispatch() {
+        let module = golden_module();
+        let mut vm = Vm::new().with_fuel(0);
+        let err = vm.run_module(&module).expect_err("no fuel, no run");
+        assert_eq!(err, VmError::FuelExhausted { executed: 0 });
+        assert_eq!(vm.executed(), 0);
+    }
+
+    /// No fuel attached: unlimited execution (the pre-seam behavior), with
+    /// the dispatch count still tracked for post-run introspection.
+    #[test]
+    fn no_fuel_is_unlimited() {
+        let module = golden_module();
+        let mut vm = Vm::new();
+        let value = vm.run_module(&module).expect("unlimited run");
+        assert_eq!(value, Value::Int(42));
+        assert_eq!(vm.executed(), 9);
+    }
+
+    /// The DoS-close proof: a self-jumping `loop` — unbounded execution
+    /// before this seam — stops at exactly the fuel budget with the explicit
+    /// error, not a hang.
+    #[test]
+    fn infinite_loop_stops_at_the_budget() {
+        // b0: jump b0
+        let mut code = Vec::new();
+        code.push(op(Opcode::Jump));
+        code.extend_from_slice(&u32le(0));
+        let f = Function::with_blocks(code, 0, 0, vec![0]);
+        let module = Module::new(vec![f], 0);
+        let mut vm = Vm::new().with_fuel(500);
+        let err = vm.run_module(&module).expect_err("the loop never halts");
+        assert_eq!(err, VmError::FuelExhausted { executed: 500 });
+    }
+
+    /// Fuel composes with the trace seam: both hooks observe the same run,
+    /// and an exhausted run still surfaces the faulting step's capture.
+    #[test]
+    fn fuel_composes_with_trace() {
+        let module = golden_module();
+        let collector = TraceCollector::bounded(3);
+        let mut vm = Vm::new().with_fuel(4).with_trace(Box::new(collector));
+        let err = vm.run_module(&module).expect_err("4 fuel is 5 short");
+        assert_eq!(err, VmError::FuelExhausted { executed: 4 });
+        let mut boxed = vm.take_trace().expect("attached");
+        let c = boxed
+            .as_any()
+            .downcast_ref::<TraceCollector>()
+            .expect("collector");
+        assert_eq!(c.len(), 3, "the bounded capture stopped at its cap");
+        assert!(c.overflowed());
+        assert_eq!(c.steps()[0].detail, StepDetail::ConstInt(0));
+    }
+
+    /// Fuel composes with the image round trip: decode the shipped bytes,
+    /// then run the loaded artifact under a budget.
+    #[test]
+    fn fuel_composes_with_module_image() {
+        let module = golden_module();
+        let bytes = crate::encode_module(&module);
+        let loaded = crate::decode_module(&bytes).expect("decode");
+        let mut vm = Vm::new().with_fuel(9);
+        let value = vm.run_module(&loaded).expect("runs under budget");
+        assert_eq!(value, Value::Int(42));
     }
 }
