@@ -38,7 +38,7 @@ use tracing::debug;
 /// The cast-kind byte's name, as the VM's `OP_CAST` wire format spells it
 /// (the numbering mirrors `cast_value`'s constants). Unknown kind bytes
 /// render as `unknown(0xNN)`.
-fn cast_kind_name(kind: u8) -> String {
+pub(crate) fn cast_kind_name(kind: u8) -> String {
     match kind {
         0 => "IntToInt".to_string(),
         1 => "FloatToInt".to_string(),
@@ -54,7 +54,7 @@ fn cast_kind_name(kind: u8) -> String {
 
 /// The target-type byte's name (the [`crate::CastTarget`] numbering).
 /// Unknown target bytes render as `unknown(0xNN)`.
-fn cast_target_name(target: u8) -> String {
+pub(crate) fn cast_target_name(target: u8) -> String {
     match crate::CastTarget::from_u8(target) {
         Some(t) => format!("{t:?}"),
         None => format!("unknown(0x{target:02x})"),
@@ -348,7 +348,7 @@ fn decode_instruction(
 /// plain-upper conversion would render `OP_LOADCONST`, not
 /// `OP_LOAD_CONST`). A new opcode must be given its mnemonic here, which is
 /// the listing decision the exhaustive match forces.
-fn op_name(op: crate::Opcode) -> &'static str {
+pub(crate) fn op_name(op: crate::Opcode) -> &'static str {
     match op {
         crate::Opcode::LoadConst => "OP_LOAD_CONST",
         crate::Opcode::LoadConstF64 => "OP_LOAD_CONST_F64",
