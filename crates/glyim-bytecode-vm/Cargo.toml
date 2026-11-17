@@ -10,7 +10,18 @@ version = "0.10.0"
 edition = "2024"
 description = "Switch-dispatch bytecode virtual machine for the Glyim bytecode backend (Phase 7 production-grade)"
 
+# Module-image encode/decode bench (glyim.module-image/1; dependency-free,
+# `harness = false` like the other request/timing benches in the workspace).
+[[bench]]
+name = "module_image"
+harness = false
+
 [dependencies]
+# The module-image seam (glyim.module-image/1) logs encode/decode events and
+# every decode rejection through the workspace-standard tracing layer, so a
+# mis-shipped image surfaces in the driver's subscriber output like the
+# interpreter's unhandled-extern warning does.
+tracing = { workspace = true }
 
 [dev-dependencies]
 glyim-core = { path = "../glyim-core" }
