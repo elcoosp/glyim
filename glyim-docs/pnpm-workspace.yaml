@@ -4,4 +4,4 @@ peerDependencyRules:
   allowedVersions:
     '@ascorbic/loader-utils>astro': '*'
 minimumReleaseAgeExclude:
-  - "@elcoosp/*"
+  - '@elcoosp/*'
