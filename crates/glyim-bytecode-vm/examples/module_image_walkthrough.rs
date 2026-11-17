@@ -13,7 +13,9 @@
 //! cargo run -p glyim-bytecode-vm --example module_image_walkthrough
 //! ```
 
-use glyim_bytecode_vm::{Function, ImageError, Module, Opcode, decode_module, encode_module};
+use glyim_bytecode_vm::{
+    Function, ImageError, Module, Opcode, Value, decode_module, encode_module,
+};
 
 /// helper(n): returns `n * 2`. No jumps, so it carries no block-offset
 /// table (the VM's raw byte-offset target mode).
@@ -74,4 +76,32 @@ fn main() {
         }
         other => panic!("expected UnsupportedVersion, got {other:?}"),
     }
+
+    // The version-2 string pool: string constants travel under
+    // `OP_LOAD_CONST_STR` (a pool index), and the pool itself rides inside
+    // the image, so string payloads — and content equality over them —
+    // survive the process boundary. main compares pool slots 0 and 1 by
+    // content and returns 0 (they differ).
+    let mut code = Vec::new();
+    code.push(Opcode::LoadConstStr as u8);
+    code.extend_from_slice(&0u32.to_le_bytes()); // "abc"
+    code.push(Opcode::LoadConstStr as u8);
+    code.extend_from_slice(&1u32.to_le_bytes()); // "abd"
+    code.push(Opcode::Eq as u8);
+    code.push(Opcode::Return as u8);
+    let stringy = Module::with_strings(
+        vec![Function::new(code, 1, 0)],
+        vec!["abc".to_string(), "abd".to_string()],
+        0,
+    );
+    let stringy_image = encode_module(&stringy);
+    let loaded_strings = decode_module(&stringy_image).expect("pooled image must decode");
+    println!(
+        "pooled image: {} string(s) rode along ({} bytes)",
+        loaded_strings.strings.len(),
+        stringy_image.len()
+    );
+    let eq = loaded_strings.run().expect("pooled module must execute");
+    println!("\"abc\" == \"abd\" -> {eq:?} (content equality, not interner-index luck)");
+    assert_eq!(eq, Value::Int(0));
 }
