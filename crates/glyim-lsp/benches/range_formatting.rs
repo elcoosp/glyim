@@ -26,9 +26,12 @@ use url::Url;
 /// One unit: one function with a compressed statement and an already
 /// formatted one — the realistic mix a selection touches. The units scale
 /// the claimed span's prefix scan while the per-request shape stays fixed.
+/// `let a=1;` sits un-indented, so the core answers a re-indent under the
+/// idempotent formatter (a corpus of already-formatted units would answer
+/// `None` — the no-churn contract — and bench nothing).
 const fn unit_source() -> &'static str {
     "fn unit() -> i32 {\n\
-     \x20   let a=1;\n\
+     \x20let a=1;\n\
      \x20   let b = 2;\n\
      \x20   a\n\
      }\n\n"
