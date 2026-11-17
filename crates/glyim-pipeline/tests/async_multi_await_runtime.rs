@@ -264,7 +264,6 @@ fn main() -> i32 {
     // by DefId, exactly as the codegen path does, so `block_on<F>` becomes
     // `block_on<TwoFuture>` with a static `two_poll` call.
     let mono_bodies = comp.monomorphize(main_fn_def_id);
-    std::fs::write("/tmp/mono_dump.txt", format!("{mono_bodies:#?}")).unwrap();
 
     let main_body = mono_bodies
         .iter()
@@ -378,7 +377,6 @@ fn main() -> i32 {
     // Structural guard: the generated poll body must be a real machine.
     let poll = find_poll_body(&bodies).expect("generated countdown poll body must exist");
     assert_is_state_machine(poll, "countdown poll");
-    std::fs::write("/tmp/poll_dump.txt", format!("{poll:#?}")).unwrap();
 
     // Now run it for real through the interpreter, after monomorphization.
     let comp = compile_async_full(src).expect("full compile for runtime");
@@ -386,7 +384,6 @@ fn main() -> i32 {
     let main_fn_def_id = glyim_core::def_id::FnDefId::from_raw(main_def_id.local_id.to_raw());
 
     let mono_bodies = comp.monomorphize(main_fn_def_id);
-    std::fs::write("/tmp/mono_dump.txt", format!("{mono_bodies:#?}")).unwrap();
 
     let main_body = mono_bodies
         .iter()
