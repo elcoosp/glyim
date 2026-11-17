@@ -34,8 +34,10 @@
 //! two bytes: the cast kind, then the [`CastTarget`] primitive the cast
 //! converts to.
 
+pub mod disasm;
 pub mod image;
 
+pub use disasm::{render_function, render_module};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
 
 /// A runtime value on the VM stack / in a local slot.
