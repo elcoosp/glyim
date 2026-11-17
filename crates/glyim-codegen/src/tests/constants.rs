@@ -1,6 +1,6 @@
 //! Tests for constant emission (S08-T02, S08-T03)
 
-use crate::{BytecodeBackend, CodegenBackend};
+use crate::{BytecodeBackend, CodegenBackend, OP_LOAD_CONST_STR};
 use glyim_core::primitives::Mutability;
 use glyim_core::{CrateId, FnDefId, Interner, LocalDefId};
 use glyim_mir::{
@@ -57,7 +57,13 @@ fn string_constant_emitted_to_string_table() {
     assert!(result.is_ok());
     let bc = result.unwrap();
     assert!(!bc.is_empty());
-    assert_eq!(bc[0], 0x01);
+    // A string constant is a *pool reference*: it travels under
+    // `OP_LOAD_CONST_STR` + a u32 pool index (never under the integer
+    // `OP_LOAD_CONST`), and `generate_module_image` ships the pool the
+    // index resolves into.
+    assert_eq!(bc[0], OP_LOAD_CONST_STR);
+    let idx = u32::from_le_bytes(bc[1..5].try_into().unwrap());
+    assert_eq!(idx, 0, "first interned string lands at pool index 0");
 }
 
 #[test]
