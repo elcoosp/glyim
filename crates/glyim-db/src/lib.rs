@@ -70,13 +70,29 @@ impl Database {
     }
 
     /// `set_ty_ctx`.
+    ///
+    /// A poisoned lock (a panic while another thread held the write guard)
+    /// recovers through `PoisonError::into_inner` instead of panicking the
+    /// caller: the `Option<TyCtx>` inside is a plain assignment, not an
+    /// invariant a panic could have left half-updated.
     pub fn set_ty_ctx(&self, ctx: glyim_type::TyCtx) {
-        *self.ty_ctx.write().unwrap() = Some(Arc::new(ctx));
+        let mut guard = self
+            .ty_ctx
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *guard = Some(Arc::new(ctx));
     }
 
     /// `get_ty_ctx`.
+    ///
+    /// Poison recovery mirrors [`Database::set_ty_ctx`]: a panicking reader
+    /// cannot have damaged the shared `Option`, so the guard's payload is
+    /// still the source of truth.
     pub fn get_ty_ctx(&self) -> Option<Arc<glyim_type::TyCtx>> {
-        self.ty_ctx.read().unwrap().clone()
+        self.ty_ctx
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// `ty_ctx_handle`.
