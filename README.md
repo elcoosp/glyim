@@ -61,7 +61,7 @@ The design is heavily inspired by rustc's architecture (arena-allocated IRs, int
 - **Generics** with type parameters, generic bounds (`T: Trait`), and where-clauses.
 - **Traits** with default methods, associated types, and static dispatch.
 - **Pattern matching** with literals, ranges, or-patterns, slices, structs, tuples, enums, and `if` guards.
-- **`async`/`await`** with state-machine desugaring (straight-line, multi-await, and loop bodies: `.await` inside `while` and `for i in a..b` loops suspends and resumes through a real `Start`/`S0`/`Done` machine).
+- **`async`/`await`** with state-machine desugaring (straight-line, multi-await, and loop bodies: `.await` inside `while`, `for i in a..b`, and unbounded `loop` bodies suspends and resumes through a real `Start`/`S0`/`Done` machine, with depth-0 `break [v]`/`continue` translated to the machine's own transitions).
 - **Closures** with capture analysis (`ByValue` / `ByRef(Mut)` / `ByRef(Not)`).
 - **Macros**: declarative `macro_rules!` with fragment specifiers (`:expr`, `:ty`, `:pat`, `:tt`, …), plus built-in `file!`, `line!`, `column!`, `env!`, `option_env!`, `include!`, `include_str!`, `include_bytes!`, `concat!`, `concat_idents!`, `stringify!`, `format!`, `vec!`, `matches!`, `assert!`, `assert_eq!`, `assert_ne!`, `debug_assert!`, `debug_assert_eq!`, `debug_assert_ne!`, `write!`, `writeln!`; the stdlib additionally defines `println!`/`print!`/`eprintln!`/`eprint!`/`panic!` as declarative macros.
 - **Procedural macros** through a C-compatible token-stream ABI (`glyim-proc-macro`), with a `dlopen`-based cdylib loader.
@@ -124,7 +124,7 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `glyim-layout` | Type layout computation (size, alignment, ABI, vtables). |
 | `glyim-codegen` | Abstract code generation backend trait + bytecode backend. |
 | `glyim-codegen-llvm` | LLVM backend (via `inkwell`) with full ABI handling and LTO. |
-| `glyim-bytecode-vm` | Switch-dispatch VM executing the bytecode backend's output (IEEE-754 floats, width-aware casts, pooled string constants), plus the module-image container (`encode_module`/`decode_module`) that ships it across process boundaries. |
+| `glyim-bytecode-vm` | Switch-dispatch VM executing the bytecode backend's output (IEEE-754 floats, width-aware casts, pooled string constants), plus the module-image container (`encode_module`/`decode_module`) that ships it across process boundaries and its disassembler (`render_module`/`render_function`): the deterministic, total instruction listing for a decoded artifact (unknown bytes list as `unknown(0xNN)`, truncated payloads as `<truncated>`). |
 | `glyim-runtime` | Runtime FFI: alloc, dealloc, drop glue, panic, fs/net/thread/time/process. |
 | `glyim-db` | Compilation database: interners, VFS, type context, trait context. |
 | `glyim-pipeline` | End-to-end compilation driver (lex → parse → def-map → HIR → typeck → lower → borrowck → opt → codegen). |
@@ -488,6 +488,10 @@ cargo run -p glyim-pipeline --example hello_pipeline
 # Execute in-process via the interpreter run contract.
 cargo run -p glyim-pipeline --example run_interp
 
+# Walk the async desugar's loop-await shapes: what `loop`/`for`/`while`
+# bodies desugar to (and which shapes stay diagnosed, GAP-0006).
+cargo run -p glyim-hir --example async_loop_desugar
+
 # Round-trip the readiness ledger's evidence JSONL (M1.5 seam).
 cargo run -p glyim-test --example evidence_report
 
@@ -607,6 +611,10 @@ cargo run -p glyim-bench --example matrix_gate
 # Measure total drift across a program's committed history window (M2.5 complement).
 cargo run -p glyim-bench --example history_trend
 
+# Disassemble a decoded module image: the deterministic instruction
+# listing (unknown bytes list as unknown(0xNN), truncation as <truncated>).
+cargo run -p glyim-bytecode-vm --example module_disasm_walkthrough
+
 # Walk the virtual filesystem seam every driver sits on.
 cargo run -p glyim-vfs --example vfs_walkthrough
 
@@ -716,9 +724,10 @@ live in `ledger/gaps/known/*.toml` (GAP-0002…GAP-0006), are validated by CI's
 `crates/glyim-test/tests/` where one is reproducible. Render the coverage
 report with `cargo run -p glyim-ledger -- gaps`. Notable open items include:
 
-- `.await` inside a loop body works for `while` and `for`-over-range
-  bodies (a real suspend/resume machine; GAP-0001 closed). The remaining
-  loop shapes — `loop` bodies and `for` over a non-range iterable — stay a
+- `.await` inside a loop body works for `while`, `for`-over-range, and
+  unbounded `loop` bodies (a real suspend/resume machine; GAP-0001 closed,
+  and the GAP-0006 `loop` shape closed). The remaining loop shapes — `for`
+  over a non-range iterable and destructuring loop patterns — stay a
   deliberate, diagnosed hard error (`[T0060]`, GAP-0006, witnessed) until
   the rest of the async state-machine v2 lands.
 - `panic!` does not unwind: `glyim_panic` writes the message to stderr and
