@@ -148,6 +148,32 @@ impl FileMap {
             self.id_to_path.remove(&id);
         }
     }
+
+    /// Re-point a path key to a new path, preserving the `FileId`
+    /// (LSP-FILE-RENAME).
+    ///
+    /// Every recorded fact — source maps, symbol index, reference
+    /// graph, HIR, parse trees, typeck state, recorded diagnostics — is
+    /// keyed by the id, so preserving it is what makes the rename a
+    /// *re-key*: the facts survive the move untouched, and only the two
+    /// path maps move. Returns `false` without touching the map when
+    /// the old path is unknown, or when the new path is already known —
+    /// a collision must not orphan the existing path's facts, so a
+    /// rename never half-applies.
+    pub fn rename(&mut self, old: &Path, new: &Path) -> bool {
+        let Some(id) = self.path_to_id.remove(old) else {
+            return false;
+        };
+        if self.path_to_id.contains_key(new) {
+            // Collision: put the old key back — the rename never
+            // half-applies.
+            self.path_to_id.insert(old.to_path_buf(), id);
+            return false;
+        }
+        self.id_to_path.insert(id, new.to_path_buf());
+        self.path_to_id.insert(new.to_path_buf(), id);
+        true
+    }
 }
 
 /// `AnalysisDatabase`.
