@@ -77,3 +77,7 @@ mod type_definition;
 mod type_definition_tests;
 mod type_hierarchy;
 mod type_hierarchy_tests;
+mod watched_files;
+mod watched_files_tests;
+mod will_save;
+mod will_save_tests;
