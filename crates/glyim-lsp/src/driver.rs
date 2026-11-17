@@ -4,7 +4,6 @@ use glyim_core::{CrateId, Interner};
 use glyim_def_map::build_def_map;
 use glyim_frontend::{lex, parse_to_syntax};
 use glyim_hir::pipeline_api::lower_crate_for_pipeline;
-use notify::RecommendedWatcher;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
@@ -20,6 +19,16 @@ pub enum AnalysisMessage {
         content: String,
         /// `Struct`.
         version: i32,
+    },
+    /// A file changed on disk and the session re-analyses it through the
+    /// watched-files seam (LSP-WATCHED-FILES): no client version exists
+    /// (the editor never opened it), so the analysis records none — the
+    /// workspace pull answers it with the honest `version: None`.
+    WatchedFileChanged {
+        /// The path the watched event named.
+        path: PathBuf,
+        /// The file content as it reads from disk.
+        content: String,
     },
     /// `Variant`.
     FileClosed {
@@ -46,7 +55,9 @@ pub(crate) fn warn_dropped_send(err: tokio::sync::mpsc::error::TrySendError<Anal
         TrySendError::Closed(message) => (message, "analysis channel closed"),
     };
     let path = match message {
-        AnalysisMessage::FileChanged { path, .. } | AnalysisMessage::FileClosed { path } => path,
+        AnalysisMessage::FileChanged { path, .. }
+        | AnalysisMessage::WatchedFileChanged { path, .. }
+        | AnalysisMessage::FileClosed { path } => path,
         AnalysisMessage::Shutdown => PathBuf::new(),
     };
     tracing::warn!(
@@ -65,7 +76,6 @@ pub struct AnalysisDriver {
     /// cross-file hover/completions/references stay fresh after a
     /// signature change.
     analysis_tx: tokio::sync::mpsc::Sender<AnalysisMessage>,
-    _watcher: Option<RecommendedWatcher>, // kept for drop
     /// P0-4 (production-readiness plan §5): client socket so `analyze_file`
     /// can publish `textDocument/publishDiagnostics` after each analysis
     /// (and an empty list on `didClose` to clear). `Some` in the production
@@ -82,14 +92,17 @@ impl AnalysisDriver {
         analysis_tx: tokio::sync::mpsc::Sender<AnalysisMessage>,
         client: Option<async_lsp::ClientSocket>,
     ) -> Self {
-        // Create a channel for file system events, but we won't spawn a thread for now
-        // to keep compilation simple. The watcher can be added later.
-        let _watcher: Option<RecommendedWatcher> = None;
+        // The server-side file watcher was scaffolded here once (a
+        // `notify::RecommendedWatcher` field, never constructed) while the
+        // external-refresh story was undecided; the watched-files seam
+        // (LSP-WATCHED-FILES) is that story — the client forwards the
+        // events, the `watched_files` route decides, and the driver
+        // carries the refresh through — so the dead field and its
+        // `notify` dependency are gone.
         Self {
             db,
             rx,
             analysis_tx,
-            _watcher,
             client,
         }
     }
@@ -107,9 +120,13 @@ impl AnalysisDriver {
         // distinct files touched in the burst.
         while let Some(first) = self.rx.recv().await {
             // Map path -> latest (content, version). FileClosed cancels
-            // any pending FileChanged for the same path.
+            // any pending FileChanged for the same path. The version is
+            // `Some` for editor-driven changes (didOpen/didChange carry
+            // the client's version) and `None` for watched-file
+            // re-analyses (LSP-WATCHED-FILES: no client version exists —
+            // the analysis records none, never a fabricated 0).
             use std::collections::HashMap;
-            let mut latest_changes: HashMap<PathBuf, (String, i32)> = HashMap::new();
+            let mut latest_changes: HashMap<PathBuf, (String, Option<i32>)> = HashMap::new();
             let mut closed_paths: Vec<PathBuf> = Vec::new();
             let mut shutdown = false;
 
@@ -119,7 +136,10 @@ impl AnalysisDriver {
                     content,
                     version,
                 } => {
-                    latest_changes.insert(path, (content, version));
+                    latest_changes.insert(path, (content, Some(version)));
+                }
+                AnalysisMessage::WatchedFileChanged { path, content } => {
+                    latest_changes.insert(path, (content, None));
                 }
                 AnalysisMessage::FileClosed { path } => {
                     latest_changes.remove(&path);
@@ -163,7 +183,7 @@ impl AnalysisDriver {
                 self.db.dep_graph.write().clear_deps(&path);
             }
             for (path, (content, version)) in latest_changes {
-                self.analyze_file(&path, &content, Some(version));
+                self.analyze_file(&path, &content, version);
             }
         }
     }
