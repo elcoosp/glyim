@@ -702,3 +702,185 @@ fn for_loop_state_carries_iterator_field() {
             .collect::<Vec<_>>()
     );
 }
+
+// --- GAP-0006 `loop`-shape closure: `.await` inside an unbounded `loop` body ---
+
+/// Builds `async fn loop_await(n: i32) -> i32 { let mut total = 0; loop {
+/// total = dep(total).await; if total >= n { break total; } } }` — the
+/// GAP-0006 `loop`-shape body: a single `.await` inside an unbounded `loop`
+/// whose exit is a depth-0 `break v`, with a statically nameable future type
+/// (`dep`).
+fn build_async_hir_loop_await() -> CrateHir {
+    let interner = Interner::new();
+    let fn_name: Name = interner.intern("loop_await");
+    let n_name: Name = interner.intern("n");
+    let total_name: Name = interner.intern("total");
+    let dep_name: Name = interner.intern("dep");
+
+    let mut exprs: IndexVec<ExprId, Expr> = IndexVec::new();
+    let mut pats: IndexVec<crate::PatId, crate::Pat> = IndexVec::new();
+
+    let path = |n: Name, exprs: &mut IndexVec<ExprId, Expr>| -> ExprId {
+        exprs.push(Expr::Path(Path {
+            segments: vec![PathSegment {
+                name: n,
+                generic_args: None,
+            }],
+            kind: PathKind::Plain,
+        }))
+    };
+    let i32_ty = TypeRef::Path(Path {
+        segments: vec![PathSegment {
+            name: interner.intern("i32"),
+            generic_args: None,
+        }],
+        kind: PathKind::Plain,
+    });
+
+    let zero = exprs.push(Expr::Literal(Literal::Int(0, None)));
+    let total_pat = pats.push(crate::Pat::Binding {
+        name: total_name,
+        mutability: glyim_core::primitives::Mutability::Mut,
+        subpattern: None,
+    });
+    let let_total = exprs.push(Expr::Let {
+        pat: total_pat,
+        pat_span: Span::DUMMY,
+        value: zero,
+        ty: None,
+    });
+
+    let total_path = path(total_name, &mut exprs);
+    let dep_path = path(dep_name, &mut exprs);
+    let dep_call = exprs.push(Expr::Call {
+        func: dep_path,
+        args: vec![total_path],
+    });
+    let await_expr = exprs.push(Expr::Await { expr: dep_call });
+    let total_path2 = path(total_name, &mut exprs);
+    let assign_total = exprs.push(Expr::Assign {
+        lhs: total_path2,
+        rhs: await_expr,
+    });
+
+    let n_path = path(n_name, &mut exprs);
+    let total_path3 = path(total_name, &mut exprs);
+    let guard = exprs.push(Expr::Binary {
+        op: glyim_core::primitives::BinOp::LtEq,
+        lhs: n_path,
+        rhs: total_path3,
+    });
+    let break_value = path(total_name, &mut exprs);
+    let brk = exprs.push(Expr::Break {
+        value: Some(break_value),
+    });
+    let if_branch = exprs.push(Expr::Block {
+        stmts: vec![brk],
+        tail: None,
+    });
+    let guard_if = exprs.push(Expr::If {
+        cond: guard,
+        then_branch: if_branch,
+        else_branch: None,
+    });
+    let loop_body = exprs.push(Expr::Block {
+        stmts: vec![assign_total, guard_if],
+        tail: None,
+    });
+
+    let loop_expr = exprs.push(Expr::Loop { body: loop_body });
+    let _ = loop_expr;
+
+    let block = exprs.push(Expr::Block {
+        stmts: vec![let_total, loop_expr],
+        tail: None,
+    });
+    let _ = block;
+
+    let body = Body {
+        unsafe_blocks: std::collections::HashSet::new(),
+        owner: LocalDefId::from_raw(0),
+        exprs: exprs.clone(),
+        pat_spans: {
+            // T053-PATCHED [LSP-4]: tests build `pats` manually and don't
+            // track spans; parallel array of DUMMY is fine for HIR tests.
+            let mut s = IndexVec::new();
+            for _ in 0..pats.len() {
+                s.push(Span::DUMMY);
+            }
+            s
+        },
+        pats,
+        params: Vec::new(),
+        span: Span::DUMMY,
+        expr_spans: {
+            let mut s = IndexVec::new();
+            for _ in 0..exprs.len() {
+                s.push(Span::DUMMY);
+            }
+            s
+        },
+    };
+    let body_id = BodyId::from_raw(0);
+
+    let params = vec![Param {
+        name: n_name,
+        ty: Some(i32_ty.clone()),
+        span: Span::DUMMY,
+    }];
+    let fn_item = FnItem {
+        params,
+        return_ty: Some(i32_ty.clone()),
+        body: Some(body_id),
+        is_unsafe: false,
+        is_async: true,
+        is_const: false,
+        generic_params: Vec::new(),
+        where_clauses: Vec::new(),
+        abi: None,
+        attrs: Vec::new(),
+    };
+    let item = Item {
+        id: ItemId::from_raw(0),
+        name: fn_name,
+        kind: ItemKind::Fn(fn_item),
+        visibility: Visibility::Inherited,
+        span: Span::DUMMY,
+    };
+
+    let mut items: IndexVec<ItemId, Item> = IndexVec::new();
+    items.push(item);
+    let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
+    bodies.push(body);
+    let mut body_owners: IndexVec<BodyId, LocalDefId> = IndexVec::new();
+    body_owners.push(LocalDefId::from_raw(0));
+
+    CrateHir {
+        items,
+        bodies,
+        body_owners,
+        interner,
+    }
+}
+
+/// GAP-0006 `loop`-shape closure: an `.await` inside an unbounded `loop`
+/// body (exit via depth-0 `break v`) must desugar to the same resumable
+/// `*State` coroutine machine the `while` and `for`-over-range shapes
+/// produce — NOT be rejected with the async-v2 diagnostic. The desugar
+/// normalizes `loop { .. }` into the `while true { .. }` shape the machine
+/// already re-drives, so `poll()` suspends mid-iteration and resumes.
+#[test]
+fn loop_body_await_desugars_to_state_machine() {
+    let mut hir = build_async_hir_loop_await();
+    let mut diags: Vec<GlyimDiagnostic> = Vec::new();
+    desugar_async(&mut hir, &mut diags);
+    assert!(
+        diags.iter().all(|d| !d.is_error()),
+        "loop-body-await should desugar cleanly; got diagnostics: {diags:?}"
+    );
+    let enums = enum_item_names(&hir);
+    assert!(
+        enums.iter().any(|n| n.contains("loop_await")),
+        "loop-body-await must produce its coroutine state machine; enums: {enums:?}"
+    );
+}
