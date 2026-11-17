@@ -67,6 +67,19 @@ pub(crate) fn format_source(source: &str, base_indent: usize) -> String {
                 result.push('\n');
                 indent_level += 1;
                 result.push_str(&INDENT.repeat(indent_level));
+                if i + 1 < chars.len() && chars[i + 1] == '\n' {
+                    // The branch just opened the brace's block at the new
+                    // depth; the source's own newline is redundant —
+                    // consume it so no phantom blank line follows the
+                    // brace. The symmetric `}` branch below already does
+                    // this for closing braces; without it here, feeding a
+                    // formatted document back through the core added one
+                    // blank line per opening brace per pass, so the core
+                    // was not a fixpoint of its own output and the
+                    // "already formatted" contracts (no edit churn) could
+                    // never hold for brace documents.
+                    i += 1;
+                }
             }
             '}' => {
                 if at_line_start(&result) {
