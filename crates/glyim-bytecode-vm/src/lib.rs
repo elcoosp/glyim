@@ -11,18 +11,28 @@
 //!   / `OP_LEN` / `OP_DISCRIMINANT` / `OP_INDEX`-style projections resolve,
 //! - cross-function calls (`OP_CALL` / `OP_CALL_INDIRECT`) with a real call
 //!   stack (recursion supported),
-//! - `OP_AGGREGATE` (tuples), `OP_CAST`, `OP_ASSERT`, `OP_REPEAT`, `OP_DROP`,
-//!   `OP_TRAP`.
+//! - `OP_AGGREGATE` (tuples), `OP_CAST` (the full cast semantics the
+//!   interpreter implements: width-aware integer truncation, int/float
+//!   conversion, pointer-kind identity), `OP_ASSERT`, `OP_REPEAT`,
+//!   `OP_DROP`, `OP_TRAP`,
+//! - float arithmetic (`OP_LOAD_CONST_F64` + IEEE-754 `f64` semantics for
+//!   `OP_ADD` … `OP_SHR` over `Value::Float` operands, with `1.0 / 0.0` as
+//!   `+inf`, matching LLVM's `fdiv` and the MIR interpreter).
 //!
 //! The decoder returns explicit, typed errors (`VmError::UnknownOpcode` /
 //! `StackUnderflow` / `LocalOutOfBounds` /
-//! `CallFrameOverflow` / `AbnormalTermination`) rather than silently
-//! mis-executing an unhandled opcode, so adding a new emitter opcode forces a
-//! deliberate VM decision.
+//! `CallFrameOverflow` / `AbnormalTermination` / `BinOpTypeMismatch` /
+//! `UnOpTypeMismatch` / `CastOperandMismatch` / `UnknownCastKind` /
+//! `UnknownCastTarget` / `ExpectedInt`) rather than silently
+//! mis-executing an unhandled opcode or a kind-mismatched operand, so
+//! adding a new emitter opcode forces a deliberate VM decision.
 //!
 //! Wire format (operand sizes) mirrors `crates/glyim-codegen/src/lib.rs`
 //! exactly: every `OP_*` that carries a payload uses little-endian `i64`
-//! (constants) or `u32` (local/block/function indices) as the emitter writes.
+//! (integer constants, float constants as raw `f64` bits) or `u32`
+//! (local/block/function indices) as the emitter writes. `OP_CAST` carries
+//! two bytes: the cast kind, then the [`CastTarget`] primitive the cast
+//! converts to.
 
 pub mod image;
 
@@ -31,14 +41,40 @@ pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_mo
 /// A runtime value on the VM stack / in a local slot.
 ///
 /// Scalars are `Int(i64)` (also used for bools: 0 = false, 1 = true, and as
-/// opaque pointer/address slots in the per-frame memory model). `Tuple` holds
-/// aggregate literals produced by `OP_AGGREGATE`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// opaque pointer/address slots in the per-frame memory model), `Float(f64)`
+/// (pushed by `OP_LOAD_CONST_F64` and produced by float arithmetic — the
+/// emitter emits float constants as raw `f64` bits, so without a dedicated
+/// value kind the machine silently executed float arithmetic as *integer*
+/// arithmetic over the bit patterns), and `Tuple` holds aggregate literals
+/// produced by `OP_AGGREGATE`.
+#[derive(Debug, Clone)]
 pub enum Value {
     /// A 64-bit integer scalar (also used for bools/addresses).
     Int(i64),
+    /// A 64-bit IEEE-754 float scalar.
+    Float(f64),
+    /// A byte string resolved from the module's string pool (pushed by
+    /// `OP_LOAD_CONST_STR`; the pool travels inside the module image).
+    Str(String),
     /// An aggregate literal (tuple) produced by `OP_AGGREGATE`.
     Tuple(Vec<Value>),
+}
+
+impl PartialEq for Value {
+    /// Structural equality, except floats compare by **bit pattern** (the
+    /// `InterpValue::Float` convention in `glyim-mir-interp`): `NaN == NaN`
+    /// holds and `0.0 != -0.0`, so test assertions stay deterministic across
+    /// platforms and an `Eq` implementor can never silently treat two
+    /// different bit patterns as the same value.
+    fn eq(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => a == b,
+            (Value::Float(a), Value::Float(b)) => a.to_bits() == b.to_bits(),
+            (Value::Str(a), Value::Str(b)) => a == b,
+            (Value::Tuple(a), Value::Tuple(b)) => a == b,
+            _ => false,
+        }
+    }
 }
 
 impl Value {
@@ -48,6 +84,18 @@ impl Value {
             // Address slots are always stored as Int; tuples should never be
             // used arithmetically.
             Value::Tuple(_) => 0,
+            Value::Float(_) => 0,
+            Value::Str(_) => 0,
+        }
+    }
+
+    /// The value kind's name, as reported in typed type-mismatch errors.
+    fn kind_name(&self) -> &'static str {
+        match self {
+            Value::Int(_) => "Int",
+            Value::Float(_) => "Float",
+            Value::Str(_) => "Str",
+            Value::Tuple(_) => "Tuple",
         }
     }
 }
@@ -127,6 +175,16 @@ pub enum Opcode {
     Assert = 0x21,
     /// `Variant`.
     CallIndirect = 0x22,
+    /// `OP_LOAD_CONST_F64`: push a 64-bit IEEE-754 float constant. The
+    /// payload is 8 little-endian bytes of the `f64` bit pattern (the same
+    /// width/endianness the emitter's integer constants use).
+    LoadConstF64 = 0x23,
+    /// `OP_LOAD_CONST_STR`: push a byte string resolved from the module's
+    /// string pool. The payload is a `u32` pool index; the pool itself
+    /// travels inside the module image (`Module::strings`), so string
+    /// constants survive the process boundary as content, not as opaque
+    /// interner indices.
+    LoadConstStr = 0x24,
     /// `Variant`.
     LoadLocalAddr = 0x29,
     /// `Variant`.
@@ -178,6 +236,8 @@ impl Opcode {
             0x20 => Opcode::SwitchInt,
             0x21 => Opcode::Assert,
             0x22 => Opcode::CallIndirect,
+            0x23 => Opcode::LoadConstF64,
+            0x24 => Opcode::LoadConstStr,
             0x29 => Opcode::LoadLocalAddr,
             0x2A => Opcode::StoreField,
             0x2B => Opcode::Deref,
@@ -186,6 +246,54 @@ impl Opcode {
             0xFF => Opcode::Trap,
             _ => return None,
         })
+    }
+
+    /// The opcode's mnemonic, as it appears in typed mismatch errors.
+    fn name(self) -> &'static str {
+        match self {
+            Opcode::LoadConst => "LoadConst",
+            Opcode::Add => "Add",
+            Opcode::Sub => "Sub",
+            Opcode::Mul => "Mul",
+            Opcode::Div => "Div",
+            Opcode::Rem => "Rem",
+            Opcode::Eq => "Eq",
+            Opcode::Ne => "Ne",
+            Opcode::Lt => "Lt",
+            Opcode::Gt => "Gt",
+            Opcode::Le => "Le",
+            Opcode::Ge => "Ge",
+            Opcode::And => "And",
+            Opcode::Or => "Or",
+            Opcode::Not => "Not",
+            Opcode::Neg => "Neg",
+            Opcode::BitAnd => "BitAnd",
+            Opcode::BitOr => "BitOr",
+            Opcode::BitXor => "BitXor",
+            Opcode::Shl => "Shl",
+            Opcode::Shr => "Shr",
+            Opcode::LoadLocal => "LoadLocal",
+            Opcode::StoreLocal => "StoreLocal",
+            Opcode::Return => "Return",
+            Opcode::JumpIf => "JumpIf",
+            Opcode::Jump => "Jump",
+            Opcode::Call => "Call",
+            Opcode::Cast => "Cast",
+            Opcode::Aggregate => "Aggregate",
+            Opcode::Discriminant => "Discriminant",
+            Opcode::Len => "Len",
+            Opcode::SwitchInt => "SwitchInt",
+            Opcode::Assert => "Assert",
+            Opcode::CallIndirect => "CallIndirect",
+            Opcode::LoadConstF64 => "LoadConstF64",
+            Opcode::LoadConstStr => "LoadConstStr",
+            Opcode::LoadLocalAddr => "LoadLocalAddr",
+            Opcode::StoreField => "StoreField",
+            Opcode::Deref => "Deref",
+            Opcode::Drop => "Drop",
+            Opcode::Repeat => "Repeat",
+            Opcode::Trap => "Trap",
+        }
     }
 }
 
@@ -262,20 +370,41 @@ impl Function {
 /// A module: a table of functions plus an entry-function index.
 ///
 /// The VM executes functions by index; `OP_CALL`/`OP_CALL_INDIRECT` reference
-/// the same index space used by the emitter's `fn_table`.
+/// the same index space used by the emitter's `fn_table`. `strings` is the
+/// module's byte-string pool — the table `OP_LOAD_CONST_STR` indices resolve
+/// into, carried inside the image so string constants survive a process
+/// boundary (version-1 images and `Module::new`-built modules simply carry
+/// an empty pool).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module {
     /// Functions indexed by the emitter's function indices.
     pub functions: Vec<Function>,
     /// Index of the entry function executed by [`Module::run`].
     pub entry: usize,
+    /// The byte-string pool `OP_LOAD_CONST_STR` indices resolve into.
+    pub strings: Vec<String>,
 }
 
 impl Module {
     /// new.
     #[must_use]
     pub fn new(functions: Vec<Function>, entry: usize) -> Module {
-        Module { functions, entry }
+        Module {
+            functions,
+            entry,
+            strings: Vec::new(),
+        }
+    }
+
+    /// Build a module with an explicit string pool (the shape the emitter's
+    /// `generate_module_image` produces).
+    #[must_use]
+    pub fn with_strings(functions: Vec<Function>, strings: Vec<String>, entry: usize) -> Module {
+        Module {
+            functions,
+            entry,
+            strings,
+        }
     }
 
     /// Execute the module's entry function with no arguments, returning its
@@ -313,6 +442,203 @@ pub enum VmError {
     /// `OP_SWITCH_INT` discriminant did not match any arm and there is no
     /// otherwise-target (should not happen for well-formed bytecode).
     SwitchNoTarget,
+    /// An arithmetic/logic binary op received operand kinds it cannot
+    /// operate on: float arithmetic over an `Int` operand, bitwise/shift
+    /// ops over `Float` operands, or arithmetic over a `Tuple`. Every one
+    /// of these was, before the float seam, silently mis-executed (floats
+    /// ran as integer ops over the raw bit patterns, tuples read as 0).
+    BinOpTypeMismatch {
+        /// The opcode that rejected the operands (e.g. `"Add"`).
+        op: &'static str,
+        /// The left operand's kind name (`"Int"` / `"Float"` / `"Tuple"`).
+        left: &'static str,
+        /// The right operand's kind name.
+        right: &'static str,
+    },
+    /// A unary op (`OP_NOT` / `OP_NEG`) received a value kind it cannot
+    /// operate on (`OP_NOT` over a `Float`, say).
+    UnOpTypeMismatch {
+        /// The opcode that rejected the operand (e.g. `"Not"`).
+        op: &'static str,
+        /// The operand's kind name.
+        operand: &'static str,
+    },
+    /// `OP_CAST` was asked to convert an operand whose kind the cast cannot
+    /// convert (e.g. `FloatToInt` over an `Int` operand) — the interpreter
+    /// panics on the same shape, so this is its explicit VM counterpart.
+    CastOperandMismatch {
+        /// The cast kind that rejected the operand (e.g. `"FloatToInt"`).
+        kind: &'static str,
+        /// The operand's kind name.
+        operand: &'static str,
+    },
+    /// `OP_CAST` carried a cast-kind byte the VM does not know.
+    UnknownCastKind(u8),
+    /// `OP_CAST` carried a target-type byte the VM does not know.
+    UnknownCastTarget(u8),
+    /// An operand was expected to be an `Int` (an address, a switch
+    /// discriminant, a call target, a branch condition, or a repeat count)
+    /// but was another kind. Before the float seam these read as a silent
+    /// `0`.
+    ExpectedInt {
+        /// What the operand was used as (e.g. `"address"`).
+        role: &'static str,
+        /// The kind name actually found.
+        found: &'static str,
+    },
+    /// `OP_LOAD_CONST_STR` referenced a pool index the module's string pool
+    /// does not have (the pool travels inside the image, so this is a
+    /// corrupt or hand-mis-assembled artifact, not a runtime condition).
+    StringIndexOutOfBounds(usize),
+}
+
+/// The target primitive type an `OP_CAST` converts to, written by the emitter
+/// as the cast's second operand byte.
+///
+/// The numbering is the VM crate's own (the VM has no dependency on the type
+/// crates); the emitter maps `TyKind::Int(IntTy::I8)`-style kinds onto these
+/// variants. `Unknown` is the emitter's fallback when no type context is
+/// available or the target is not a primitive — every cast over it is the
+/// identity, which is exactly what the pre-seam VM did for *all* casts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum CastTarget {
+    /// No target type available: casts are the identity.
+    Unknown = 0,
+    /// `i8`.
+    I8 = 1,
+    /// `i16`.
+    I16 = 2,
+    /// `i32`.
+    I32 = 3,
+    /// `i64`.
+    I64 = 4,
+    /// `isize`.
+    Isize = 5,
+    /// `u8`.
+    U8 = 6,
+    /// `u16`.
+    U16 = 7,
+    /// `u32`.
+    U32 = 8,
+    /// `u64`.
+    U64 = 9,
+    /// `usize`.
+    Usize = 10,
+    /// `f32` (a value-level identity in this VM, whose floats are `f64`).
+    F32 = 11,
+    /// `f64`.
+    F64 = 12,
+    /// `bool` (identity at the value level).
+    Bool = 13,
+    /// `char` (identity at the value level).
+    Char = 14,
+}
+
+impl CastTarget {
+    /// Decode a target-type byte, or `None` if the byte is not a
+    /// [`CastTarget`] (an explicit [`VmError::UnknownCastTarget`] for the
+    /// caller).
+    #[must_use]
+    pub fn from_u8(b: u8) -> Option<CastTarget> {
+        Some(match b {
+            0 => CastTarget::Unknown,
+            1 => CastTarget::I8,
+            2 => CastTarget::I16,
+            3 => CastTarget::I32,
+            4 => CastTarget::I64,
+            5 => CastTarget::Isize,
+            6 => CastTarget::U8,
+            7 => CastTarget::U16,
+            8 => CastTarget::U32,
+            9 => CastTarget::U64,
+            10 => CastTarget::Usize,
+            11 => CastTarget::F32,
+            12 => CastTarget::F64,
+            13 => CastTarget::Bool,
+            14 => CastTarget::Char,
+            _ => return None,
+        })
+    }
+}
+
+/// Apply an `OP_CAST`: convert `operand` per the emitter's cast-kind byte and
+/// [`CastTarget`], mirroring the MIR interpreter's cast semantics
+/// (`glyim-mir-interp`'s `Rvalue::Cast` arm, MIR-14):
+///
+/// - `IntToInt` and `FloatToInt` are a *real truncation* to the target
+///   width/signedness (`(-1i32) as u8 == 255`), computed through `i128` so
+///   the narrow-width wrap and the float saturation range match the
+///   interpreter exactly;
+/// - `IntToFloat` converts, `FloatToFloat` is the `f64`-level identity;
+/// - pointer kinds are the identity (the VM's addresses are plain `Int`s —
+///   the interpreter documents the same value-level identity for
+///   `PtrToPtr`/`FnPtrToPtr`);
+/// - an operand whose kind the cast cannot convert (e.g. `FloatToInt` over
+///   an `Int`) is an explicit [`VmError::CastOperandMismatch`], the
+///   interpreter's panic counterpart.
+fn cast_value(kind: u8, target: CastTarget, operand: Value) -> ExecResult<Value> {
+    const CAST_INT_TO_INT: u8 = 0;
+    const CAST_FLOAT_TO_INT: u8 = 1;
+    const CAST_INT_TO_FLOAT: u8 = 2;
+    const CAST_PTR_TO_PTR: u8 = 3;
+    const CAST_FN_PTR_TO_PTR: u8 = 4;
+    const CAST_PTR_TO_INT: u8 = 5;
+    const CAST_INT_TO_PTR: u8 = 6;
+    const CAST_FLOAT_TO_FLOAT: u8 = 7;
+    match kind {
+        CAST_INT_TO_INT => Ok(match operand {
+            Value::Int(v) => Value::Int(trunc_i128(i128::from(v), target) as i64),
+            // The interpreter's IntToInt passes non-int operands through
+            // unchanged (its `other => Ok(other)` arm).
+            other => other,
+        }),
+        CAST_FLOAT_TO_INT => match operand {
+            Value::Float(f) => Ok(Value::Int(trunc_i128(f as i128, target) as i64)),
+            other => Err(VmError::CastOperandMismatch {
+                kind: "FloatToInt",
+                operand: other.kind_name(),
+            }),
+        },
+        CAST_INT_TO_FLOAT => match operand {
+            Value::Int(v) => Ok(Value::Float(v as f64)),
+            other => Err(VmError::CastOperandMismatch {
+                kind: "IntToFloat",
+                operand: other.kind_name(),
+            }),
+        },
+        CAST_FLOAT_TO_FLOAT => match operand {
+            Value::Float(f) => Ok(Value::Float(f)),
+            other => Err(VmError::CastOperandMismatch {
+                kind: "FloatToFloat",
+                operand: other.kind_name(),
+            }),
+        },
+        // Pointer casts: identity at this value level (addresses are Ints).
+        CAST_PTR_TO_PTR | CAST_FN_PTR_TO_PTR | CAST_PTR_TO_INT | CAST_INT_TO_PTR => Ok(operand),
+        _ => Err(VmError::UnknownCastKind(kind)),
+    }
+}
+
+/// Truncate an `i128` to the target primitive's width/signedness — the VM
+/// mirror of the interpreter's `trunc_to_ty` (MIR-14): a wrap through the
+/// narrower width, then sign/zero extension back into the wide form. Unknown
+/// and non-integer targets leave the value unchanged (the interpreter's
+/// fallthrough).
+fn trunc_i128(v: i128, target: CastTarget) -> i128 {
+    match target {
+        CastTarget::I8 => i128::from(v as i8),
+        CastTarget::I16 => i128::from(v as i16),
+        CastTarget::I32 => i128::from(v as i32),
+        CastTarget::I64 => i128::from(v as i64),
+        CastTarget::Isize => v as isize as i128,
+        CastTarget::U8 => i128::from(v as u8),
+        CastTarget::U16 => i128::from(v as u16),
+        CastTarget::U32 => i128::from(v as u32),
+        CastTarget::U64 => i128::from(v as u64),
+        CastTarget::Usize => (v as usize) as i128,
+        _ => v,
+    }
 }
 
 /// Maximum call-stack depth, to guard against infinite recursion.
@@ -452,6 +778,19 @@ impl Vm {
                     let v = Vm::read_i64(code, &mut self.frames[frame_idx].pc)?;
                     self.stack.push(Value::Int(v));
                 }
+                Opcode::LoadConstF64 => {
+                    let bits = Vm::read_i64(code, &mut self.frames[frame_idx].pc)?;
+                    self.stack.push(Value::Float(f64::from_bits(bits as u64)));
+                }
+                Opcode::LoadConstStr => {
+                    let idx = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
+                    let s = module
+                        .strings
+                        .get(idx)
+                        .ok_or(VmError::StringIndexOutOfBounds(idx))?
+                        .clone();
+                    self.stack.push(Value::Str(s));
+                }
                 Opcode::LoadLocal => {
                     let idx = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
                     let v = self.local_ref(idx)?.clone();
@@ -467,12 +806,12 @@ impl Vm {
                     self.stack.push(Value::Int(idx as i64));
                 }
                 Opcode::StoreField => {
-                    let addr = self.pop()?.as_int() as usize;
+                    let addr = self.pop_int("address")? as usize;
                     let v = self.pop()?;
                     self.set_mem(addr, v)?;
                 }
                 Opcode::Deref => {
-                    let addr = self.pop()?.as_int() as usize;
+                    let addr = self.pop_int("address")? as usize;
                     let v = self.mem(addr)?.clone();
                     self.stack.push(v);
                 }
@@ -494,20 +833,33 @@ impl Vm {
                 | Opcode::BitXor
                 | Opcode::Shl
                 | Opcode::Shr => {
-                    let b = self.pop()?.as_int();
-                    let a = self.pop()?.as_int();
+                    let b = self.pop()?;
+                    let a = self.pop()?;
                     let r = self.binop(op, a, b)?;
-                    self.stack.push(Value::Int(r));
+                    self.stack.push(r);
                 }
                 Opcode::Not | Opcode::Neg => {
-                    let a = self.pop()?.as_int();
-                    let r = self.unop(op, a);
-                    self.stack.push(Value::Int(r));
+                    let a = self.pop()?;
+                    let r = self.unop(op, a)?;
+                    self.stack.push(r);
                 }
                 Opcode::Cast => {
-                    // Bounds-check the kind byte; the Cast kind is unused by this backend.
-                    let _ = code[self.frames[frame_idx].pc];
+                    // Wire format (the emitter's `Rvalue::Cast` arm): the
+                    // cast-kind byte, then the target-type byte. The old
+                    // single-byte form made `OP_CAST` a no-op — every float
+                    // and narrowing cast silently kept its operand's value.
+                    let kind = code[self.frames[frame_idx].pc];
                     self.frames[frame_idx].pc += 1;
+                    let target = code[self.frames[frame_idx].pc];
+                    self.frames[frame_idx].pc += 1;
+                    if !matches!(kind, 0..=7) {
+                        return Err(VmError::UnknownCastKind(kind));
+                    }
+                    let target =
+                        CastTarget::from_u8(target).ok_or(VmError::UnknownCastTarget(target))?;
+                    let operand = self.pop()?;
+                    let out = cast_value(kind, target, operand)?;
+                    self.stack.push(out);
                 }
                 Opcode::Jump => {
                     let target = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
@@ -517,13 +869,13 @@ impl Vm {
                 Opcode::JumpIf => {
                     let target = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
                     let off = module.functions[func].resolve_target(target as u32);
-                    let cond = self.pop()?.as_int();
+                    let cond = self.pop_int("branch condition")?;
                     if cond != 0 {
                         self.frames[frame_idx].pc = off;
                     }
                 }
                 Opcode::SwitchInt => {
-                    let discr = self.pop()?.as_int();
+                    let discr = self.pop_int("switch discriminant")?;
                     let count = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
                     let mut taken: Option<usize> = None;
                     for _ in 0..count {
@@ -557,7 +909,10 @@ impl Vm {
                     let v = self.local_ref(idx)?.clone();
                     let len = match &v {
                         Value::Tuple(elems) => elems.len() as i64,
-                        Value::Int(_) => 0,
+                        // Length is only meaningful for aggregates; scalars
+                        // read as 0 (the pre-float VM's convention for
+                        // non-aggregate locals).
+                        Value::Int(_) | Value::Float(_) | Value::Str(_) => 0,
                     };
                     self.stack.push(Value::Int(len));
                 }
@@ -565,7 +920,7 @@ impl Vm {
                     let v = self.pop()?;
                     let discr = match &v {
                         Value::Tuple(elems) => elems.len() as i64,
-                        Value::Int(_) => 0,
+                        Value::Int(_) | Value::Float(_) | Value::Str(_) => 0,
                     };
                     self.stack.push(Value::Int(discr));
                 }
@@ -592,7 +947,7 @@ impl Vm {
                     // `value` and the value into `count`, producing an
                     // empty tuple for the common `[x; 3]` case (3 as
                     // `value`, 0 as `count`).
-                    let count = self.pop()?.as_int();
+                    let count = self.pop_int("repeat count")?;
                     let value = self.pop()?;
                     let mut elems = Vec::new();
                     for _ in 0..count.max(0) {
@@ -637,7 +992,7 @@ impl Vm {
                         args.push(self.pop()?);
                     }
                     args.reverse();
-                    let fn_idx = self.pop()?.as_int() as usize;
+                    let fn_idx = self.pop_int("call target")? as usize;
                     // Push the callee frame and loop with it on top. The
                     // callee's return writes into `dest_local` of *this* frame
                     // via the `Return` arm above.
@@ -650,7 +1005,64 @@ impl Vm {
         }
     }
 
-    fn binop(&self, op: Opcode, a: i64, b: i64) -> ExecResult<i64> {
+    /// Binary op dispatch. `(Int, Int)` keeps the wrapped-arithmetic and
+    /// trap-on-div-by-zero semantics the VM has always had; `(Float, Float)`
+    /// runs IEEE-754 `f64` arithmetic where `1.0 / 0.0` is `+inf` (the T106
+    /// convention: LLVM's `fdiv` and the MIR interpreter agree, so the third
+    /// backend must too) and comparisons push the VM's `Int` bool encoding
+    /// (`JumpIf` is jump-if-nonzero). Any other kind pairing — mixed
+    /// `Int`/`Float`, `Tuple` operands, bitwise/shift ops over floats — is
+    /// an explicit [`VmError::BinOpTypeMismatch`], never a silent
+    /// reinterpretation.
+    fn binop(&self, op: Opcode, a: Value, b: Value) -> ExecResult<Value> {
+        match (&a, &b) {
+            (Value::Float(fa), Value::Float(fb)) => {
+                let r = match op {
+                    Opcode::Add => fa + fb,
+                    Opcode::Sub => fa - fb,
+                    Opcode::Mul => fa * fb,
+                    Opcode::Div => fa / fb,
+                    Opcode::Eq => return Ok(Value::Int(i64::from(fa == fb))),
+                    Opcode::Ne => return Ok(Value::Int(i64::from(fa != fb))),
+                    Opcode::Lt => return Ok(Value::Int(i64::from(fa < fb))),
+                    Opcode::Gt => return Ok(Value::Int(i64::from(fa > fb))),
+                    Opcode::Le => return Ok(Value::Int(i64::from(fa <= fb))),
+                    Opcode::Ge => return Ok(Value::Int(i64::from(fa >= fb))),
+                    _ => {
+                        return Err(VmError::BinOpTypeMismatch {
+                            op: op.name(),
+                            left: a.kind_name(),
+                            right: b.kind_name(),
+                        });
+                    }
+                };
+                Ok(Value::Float(r))
+            }
+            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(self.binop_int(op, *a, *b)?)),
+            // String equality is content equality: pool-backed `Value::Str`s
+            // compare by bytes, not by the interner index an opaque
+            // `OP_LOAD_CONST` used to carry (equality-by-index only worked
+            // while the pool lived in the same process).
+            (Value::Str(sa), Value::Str(sb)) => match op {
+                Opcode::Eq => Ok(Value::Int(i64::from(sa == sb))),
+                Opcode::Ne => Ok(Value::Int(i64::from(sa != sb))),
+                _ => Err(VmError::BinOpTypeMismatch {
+                    op: op.name(),
+                    left: a.kind_name(),
+                    right: b.kind_name(),
+                }),
+            },
+            _ => Err(VmError::BinOpTypeMismatch {
+                op: op.name(),
+                left: a.kind_name(),
+                right: b.kind_name(),
+            }),
+        }
+    }
+
+    /// The integer binary-op path, unchanged from the pre-float VM: wrapping
+    /// arithmetic, div/rem by zero (and `i64::MIN / -1`) trap.
+    fn binop_int(&self, op: Opcode, a: i64, b: i64) -> ExecResult<i64> {
         Ok(match op {
             Opcode::Add => a.wrapping_add(b),
             Opcode::Sub => a.wrapping_sub(b),
@@ -677,11 +1089,33 @@ impl Vm {
         })
     }
 
-    fn unop(&self, op: Opcode, a: i64) -> i64 {
-        match op {
-            Opcode::Not => i64::from(a == 0),
-            Opcode::Neg => a.wrapping_neg(),
-            _ => unreachable!("unop called on non-unary op"),
+    /// Unary op dispatch: `Neg` is defined for both scalar kinds (IEEE
+    /// negation for `Float`), `Not` only for `Int` — over a `Float` it is an
+    /// explicit [`VmError::UnOpTypeMismatch`], not a silent bit reinterpretation.
+    fn unop(&self, op: Opcode, a: Value) -> ExecResult<Value> {
+        match (op, &a) {
+            (Opcode::Neg, Value::Int(a)) => Ok(Value::Int(a.wrapping_neg())),
+            (Opcode::Neg, Value::Float(a)) => Ok(Value::Float(-*a)),
+            (Opcode::Not, Value::Int(a)) => Ok(Value::Int(i64::from(*a == 0))),
+            _ => Err(VmError::UnOpTypeMismatch {
+                op: op.name(),
+                operand: a.kind_name(),
+            }),
+        }
+    }
+
+    /// Pop an operand that must be an `Int` (addresses, discriminants, call
+    /// targets, branch conditions, repeat counts). Every other kind is an
+    /// explicit [`VmError::ExpectedInt`] — the pre-float VM silently read
+    /// these as `0`.
+    fn pop_int(&mut self, role: &'static str) -> ExecResult<i64> {
+        let v = self.pop()?;
+        match v {
+            Value::Int(n) => Ok(n),
+            other => Err(VmError::ExpectedInt {
+                role,
+                found: other.kind_name(),
+            }),
         }
     }
 
@@ -1192,5 +1626,520 @@ mod tests {
         let module = Module::new(vec![fib.finish(8, 1)], 0);
         let err = module.run().unwrap_err();
         assert_eq!(err, VmError::CallFrameOverflow);
+    }
+}
+
+#[cfg(test)]
+mod float_tests {
+    use super::*;
+
+    fn u32le(v: u32) -> [u8; 4] {
+        v.to_le_bytes()
+    }
+    fn op(o: Opcode) -> u8 {
+        o as u8
+    }
+
+    /// The emitter's cast-kind numbering (mirrors `glyim_mir::CastKind`).
+    const CAST_INT_TO_INT: u8 = 0;
+    const CAST_FLOAT_TO_INT: u8 = 1;
+    const CAST_INT_TO_FLOAT: u8 = 2;
+    const CAST_PTR_TO_PTR: u8 = 3;
+    const CAST_FN_PTR_TO_PTR: u8 = 4;
+    const CAST_PTR_TO_INT: u8 = 5;
+    const CAST_INT_TO_PTR: u8 = 6;
+    const CAST_FLOAT_TO_FLOAT: u8 = 7;
+
+    /// A tiny float assembler: appends a `LoadConstF64 v` pair.
+    struct Asm {
+        code: Vec<u8>,
+        blocks: Vec<usize>,
+    }
+    impl Asm {
+        fn new() -> Self {
+            Asm {
+                code: Vec::new(),
+                blocks: Vec::new(),
+            }
+        }
+        fn label(&mut self, idx: usize) {
+            while self.blocks.len() <= idx {
+                self.blocks.push(0);
+            }
+            self.blocks[idx] = self.code.len();
+        }
+        fn op(&mut self, o: Opcode) {
+            self.code.push(op(o));
+        }
+        fn u32(&mut self, v: u32) {
+            self.code.extend_from_slice(&u32le(v));
+        }
+        fn load_const(&mut self, v: i64) {
+            self.op(Opcode::LoadConst);
+            self.code.extend_from_slice(&v.to_le_bytes());
+        }
+        fn load_const_f64(&mut self, v: f64) {
+            self.op(Opcode::LoadConstF64);
+            self.code.extend_from_slice(&v.to_le_bytes());
+        }
+        fn load_local(&mut self, idx: u32) {
+            self.op(Opcode::LoadLocal);
+            self.u32(idx);
+        }
+        fn cast(&mut self, kind: u8, target: CastTarget) {
+            self.op(Opcode::Cast);
+            self.code.push(kind);
+            self.code.push(target as u8);
+        }
+        fn finish(self, n_locals: usize, arg_count: usize) -> Function {
+            Function::with_blocks(self.code, n_locals, arg_count, self.blocks)
+        }
+    }
+
+    fn run_chunk(code: Vec<u8>, n_locals: usize) -> ExecResult<Value> {
+        Module::new(vec![Function::new(code, n_locals, 0)], 0).run()
+    }
+
+    // --- constants ---
+
+    #[test]
+    fn load_const_f64_pushes_a_float_value() {
+        let mut a = Asm::new();
+        a.load_const_f64(3.75);
+        a.op(Opcode::Return);
+        assert_eq!(run_chunk(a.code, 0).unwrap(), Value::Float(3.75));
+    }
+
+    // --- arithmetic (IEEE semantics; T106: div-by-zero is inf, like LLVM
+    // and the MIR interpreter) ---
+
+    #[test]
+    fn float_arithmetic_is_ieee() {
+        // 1.5 + 2.25 = 3.75
+        let mut a = Asm::new();
+        a.load_const_f64(1.5);
+        a.load_const_f64(2.25);
+        a.op(Opcode::Add);
+        a.op(Opcode::Return);
+        assert_eq!(run_chunk(a.code, 0).unwrap(), Value::Float(3.75));
+
+        // 1.0 / 0.0 = +inf (never traps: the interpreter and LLVM agree)
+        let mut d = Asm::new();
+        d.load_const_f64(1.0);
+        d.load_const_f64(0.0);
+        d.op(Opcode::Div);
+        d.op(Opcode::Return);
+        assert_eq!(run_chunk(d.code, 0).unwrap(), Value::Float(f64::INFINITY));
+    }
+
+    #[test]
+    fn float_comparisons_produce_bool_ints() {
+        let mut a = Asm::new();
+        a.load_const_f64(2.5);
+        a.load_const_f64(3.5);
+        a.op(Opcode::Lt);
+        a.op(Opcode::Return);
+        assert_eq!(run_chunk(a.code, 0).unwrap(), Value::Int(1));
+
+        let mut b = Asm::new();
+        b.load_const_f64(3.5);
+        b.load_const_f64(2.5);
+        b.op(Opcode::Ge);
+        b.op(Opcode::Return);
+        assert_eq!(run_chunk(b.code, 0).unwrap(), Value::Int(1));
+    }
+
+    #[test]
+    fn float_div_zero_comparisons_are_ordered() {
+        // NaN comparisons are false; inf comparisons are ordered.
+        let mut a = Asm::new();
+        a.load_const_f64(f64::NAN);
+        a.load_const_f64(1.0);
+        a.op(Opcode::Lt);
+        a.op(Opcode::Return);
+        assert_eq!(run_chunk(a.code, 0).unwrap(), Value::Int(0));
+    }
+
+    // --- type discipline: mixed-kind operands are explicit errors, never a
+    // silent reinterpretation (the pre-float VM ran float binops as *integer*
+    // ops over the raw bit patterns) ---
+
+    #[test]
+    fn mixed_int_float_arithmetic_is_a_typed_error() {
+        let mut a = Asm::new();
+        a.load_const(1);
+        a.load_const_f64(2.0);
+        a.op(Opcode::Add);
+        a.op(Opcode::Return);
+        assert_eq!(
+            run_chunk(a.code, 0).unwrap_err(),
+            VmError::BinOpTypeMismatch {
+                op: "Add",
+                left: "Int",
+                right: "Float"
+            }
+        );
+    }
+
+    #[test]
+    fn tuple_arithmetic_is_a_typed_error() {
+        let mut a = Asm::new();
+        a.load_const(7);
+        a.load_const(8);
+        a.op(Opcode::Aggregate);
+        a.u32(2);
+        a.load_const(1);
+        a.op(Opcode::Add);
+        a.op(Opcode::Return);
+        assert_eq!(
+            run_chunk(a.code, 2).unwrap_err(),
+            VmError::BinOpTypeMismatch {
+                op: "Add",
+                left: "Tuple",
+                right: "Int"
+            }
+        );
+    }
+
+    #[test]
+    fn bitwise_and_shift_ops_reject_float_operands() {
+        for o in [Opcode::BitAnd, Opcode::Shl] {
+            let mut a = Asm::new();
+            a.load_const_f64(1.0);
+            a.load_const_f64(2.0);
+            a.op(o);
+            a.op(Opcode::Return);
+            assert_eq!(
+                run_chunk(a.code, 0).unwrap_err(),
+                VmError::BinOpTypeMismatch {
+                    op: match o {
+                        Opcode::BitAnd => "BitAnd",
+                        _ => "Shl",
+                    },
+                    left: "Float",
+                    right: "Float"
+                },
+                "op {o:?}"
+            );
+        }
+    }
+
+    // --- unary ---
+
+    #[test]
+    fn float_negation_is_ieee() {
+        let mut a = Asm::new();
+        a.load_const_f64(3.5);
+        a.op(Opcode::Neg);
+        a.op(Opcode::Return);
+        assert_eq!(run_chunk(a.code, 0).unwrap(), Value::Float(-3.5));
+    }
+
+    #[test]
+    fn logical_not_rejects_float_operands() {
+        let mut a = Asm::new();
+        a.load_const_f64(1.0);
+        a.op(Opcode::Not);
+        a.op(Opcode::Return);
+        assert_eq!(
+            run_chunk(a.code, 0).unwrap_err(),
+            VmError::UnOpTypeMismatch {
+                op: "Not",
+                operand: "Float"
+            }
+        );
+    }
+
+    // --- casts (the full interpreter MIR-14 semantics: a real truncation to
+    // the target width/signedness, not an identity) ---
+
+    #[test]
+    fn cast_int_to_int_truncates_to_target_width() {
+        // (-1i32) as u8 == 255 (MIR-14, mirrors the interpreter)
+        let mut a = Asm::new();
+        a.load_const(-1);
+        a.cast(CAST_INT_TO_INT, CastTarget::U8);
+        a.op(Opcode::Return);
+        assert_eq!(run_chunk(a.code, 0).unwrap(), Value::Int(255));
+
+        // 300 as i8 == 44 (modular wrap through the narrower width)
+        let mut b = Asm::new();
+        b.load_const(300);
+        b.cast(CAST_INT_TO_INT, CastTarget::I8);
+        b.op(Opcode::Return);
+        assert_eq!(run_chunk(b.code, 0).unwrap(), Value::Int(44));
+    }
+
+    #[test]
+    fn cast_int_to_float_converts() {
+        let mut a = Asm::new();
+        a.load_const(3);
+        a.cast(CAST_INT_TO_FLOAT, CastTarget::F64);
+        a.op(Opcode::Return);
+        assert_eq!(run_chunk(a.code, 0).unwrap(), Value::Float(3.0));
+    }
+
+    #[test]
+    fn cast_float_to_int_truncates_to_target_width() {
+        // 3.99 as i32 == 3
+        let mut a = Asm::new();
+        a.load_const_f64(3.99);
+        a.cast(CAST_FLOAT_TO_INT, CastTarget::I32);
+        a.op(Opcode::Return);
+        assert_eq!(run_chunk(a.code, 0).unwrap(), Value::Int(3));
+
+        // 300.0 as u8 == 44 (the interpreter's trunc_to_ty: f -> i128, then
+        // a modular wrap through the narrower width)
+        let mut b = Asm::new();
+        b.load_const_f64(300.0);
+        b.cast(CAST_FLOAT_TO_INT, CastTarget::U8);
+        b.op(Opcode::Return);
+        assert_eq!(run_chunk(b.code, 0).unwrap(), Value::Int(44));
+    }
+
+    #[test]
+    fn cast_float_to_float_preserves_value() {
+        let mut a = Asm::new();
+        a.load_const_f64(1.5);
+        a.cast(CAST_FLOAT_TO_FLOAT, CastTarget::F64);
+        a.op(Opcode::Return);
+        assert_eq!(run_chunk(a.code, 0).unwrap(), Value::Float(1.5));
+    }
+
+    #[test]
+    fn pointer_cast_kinds_are_identity_in_the_vm() {
+        // The VM's address model is Int-only (the interpreter documents the
+        // same identity for PtrToPtr/FnPtrToPtr at its value level).
+        for kind in [
+            CAST_PTR_TO_PTR,
+            CAST_FN_PTR_TO_PTR,
+            CAST_PTR_TO_INT,
+            CAST_INT_TO_PTR,
+        ] {
+            let mut a = Asm::new();
+            a.load_const(0x1234);
+            a.cast(kind, CastTarget::Unknown);
+            a.op(Opcode::Return);
+            assert_eq!(
+                run_chunk(a.code, 0).unwrap(),
+                Value::Int(0x1234),
+                "kind {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_cast_bytes_are_typed_errors() {
+        let mut a = Asm::new();
+        a.load_const(1);
+        a.code.push(op(Opcode::Cast));
+        a.code.push(9); // no cast kind 9 exists
+        a.code.push(CastTarget::F64 as u8);
+        a.op(Opcode::Return);
+        assert_eq!(
+            run_chunk(a.code, 0).unwrap_err(),
+            VmError::UnknownCastKind(9)
+        );
+
+        let mut b = Asm::new();
+        b.load_const(1);
+        b.code.push(op(Opcode::Cast));
+        b.code.push(CAST_INT_TO_INT);
+        b.code.push(200); // no CastTarget 200 exists
+        b.op(Opcode::Return);
+        assert_eq!(
+            run_chunk(b.code, 0).unwrap_err(),
+            VmError::UnknownCastTarget(200)
+        );
+    }
+
+    #[test]
+    fn cast_with_empty_stack_underflows() {
+        let mut a = Asm::new();
+        a.code.push(op(Opcode::Cast));
+        a.code.push(CAST_INT_TO_FLOAT);
+        a.code.push(CastTarget::F64 as u8);
+        a.op(Opcode::Return);
+        assert_eq!(run_chunk(a.code, 0).unwrap_err(), VmError::StackUnderflow);
+    }
+
+    // --- value semantics ---
+
+    #[test]
+    fn float_equality_is_bit_pattern_based() {
+        // The image crate's value-assert note anticipated this: Eq must not
+        // silently hold over NaN-like semantics, so Float equality compares
+        // bit patterns (the InterpValue::Float convention).
+        assert_eq!(Value::Float(f64::NAN), Value::Float(f64::NAN));
+        assert_ne!(Value::Float(0.0), Value::Float(-0.0));
+        assert_eq!(Value::Float(1.5), Value::Float(1.5));
+        assert_ne!(Value::Float(1.0), Value::Int(1));
+    }
+
+    #[test]
+    fn float_module_executes_through_the_image_round_trip() {
+        // s = a + b * 2.0 with a/b as float arguments on a callee frame, then
+        // a float-to-int cast in main: the cross-function float shape. The
+        // MIR call-frame ABI puts the arguments at locals 1..=arg_count.
+        let mut helper = Asm::new();
+        helper.load_local(1);
+        helper.load_local(2);
+        helper.op(Opcode::Add);
+        helper.load_const_f64(2.0);
+        helper.op(Opcode::Mul);
+        helper.op(Opcode::Return);
+
+        let mut main = Asm::new();
+        main.load_const(0); // fn idx 0: helper
+        main.load_const_f64(1.25);
+        main.load_const_f64(2.0); // (1.25 + 2.0) * 2.0 = 6.5
+        main.op(Opcode::Call);
+        main.u32(2);
+        main.u32(0);
+        main.u32(1);
+        main.label(1);
+        main.load_local(0); // the returned Float(6.5)
+        main.cast(CAST_FLOAT_TO_INT, CastTarget::I64);
+        main.op(Opcode::Return);
+
+        let module = Module::new(vec![helper.finish(4, 2), main.finish(1, 0)], 1);
+        let image = crate::image::encode_module(&module);
+        let decoded = crate::image::decode_module(&image).expect("float module image decodes");
+        assert_eq!(decoded.run().unwrap(), Value::Int(6));
+    }
+}
+
+#[cfg(test)]
+mod string_tests {
+    use super::*;
+    use crate::image::{decode_module, encode_module};
+
+    fn u32le(v: u32) -> [u8; 4] {
+        v.to_le_bytes()
+    }
+    fn op(o: Opcode) -> u8 {
+        o as u8
+    }
+
+    /// A module carrying a string pool: `main` loads two pool strings and
+    /// compares them by content (`OP_EQ` over `(Str, Str)`).
+    fn pool_module() -> Module {
+        let mut code = Vec::new();
+        code.push(op(Opcode::LoadConstStr));
+        code.extend_from_slice(&u32le(0)); // "abc"
+        code.push(op(Opcode::LoadConstStr));
+        code.extend_from_slice(&u32le(1)); // "abd"
+        code.push(op(Opcode::Eq));
+        code.push(op(Opcode::Return));
+        Module::with_strings(
+            vec![Function::new(code, 1, 0)],
+            vec!["abc".to_string(), "abd".to_string()],
+            0,
+        )
+    }
+
+    #[test]
+    fn load_const_str_resolves_from_the_module_pool() {
+        let mut code = Vec::new();
+        code.push(op(Opcode::LoadConstStr));
+        code.extend_from_slice(&u32le(1));
+        code.push(op(Opcode::Return));
+        let module = Module::with_strings(
+            vec![Function::new(code, 1, 0)],
+            vec!["ignored".to_string(), "payload".to_string()],
+            0,
+        );
+        assert_eq!(module.run().unwrap(), Value::Str("payload".to_string()));
+    }
+
+    #[test]
+    fn string_constants_compare_by_content() {
+        // "abc" vs "abd": content comparison must say 0. (Pre-seam, a string
+        // constant was an opaque interner index under OP_LOAD_CONST —
+        // equality-by-index only worked by interning accident, and the pool
+        // was lost across the process boundary.)
+        assert_eq!(pool_module().run().unwrap(), Value::Int(0));
+
+        // Equal contents (different pool slots) compare equal.
+        let mut code = Vec::new();
+        code.push(op(Opcode::LoadConstStr));
+        code.extend_from_slice(&u32le(0));
+        code.push(op(Opcode::LoadConstStr));
+        code.extend_from_slice(&u32le(1));
+        code.push(op(Opcode::Eq));
+        code.push(op(Opcode::Return));
+        let module = Module::with_strings(
+            vec![Function::new(code, 1, 0)],
+            vec!["same".to_string(), "same".to_string()],
+            0,
+        );
+        assert_eq!(module.run().unwrap(), Value::Int(1));
+    }
+
+    #[test]
+    fn string_index_out_of_range_is_a_typed_error() {
+        let mut code = Vec::new();
+        code.push(op(Opcode::LoadConstStr));
+        code.extend_from_slice(&u32le(7));
+        code.push(op(Opcode::Return));
+        let module =
+            Module::with_strings(vec![Function::new(code, 1, 0)], vec!["x".to_string()], 0);
+        assert_eq!(
+            module.run().unwrap_err(),
+            VmError::StringIndexOutOfBounds(7)
+        );
+    }
+
+    #[test]
+    fn strings_survive_the_image_round_trip() {
+        let module = pool_module();
+        let image = encode_module(&module);
+        let decoded = decode_module(&image).expect("string pool image decodes");
+        assert_eq!(decoded.strings, module.strings, "pool round trips exactly");
+        assert_eq!(
+            decoded.run().unwrap(),
+            Value::Int(0),
+            "still compares by content"
+        );
+    }
+
+    #[test]
+    fn legacy_v1_images_still_decode_without_a_pool() {
+        // Hand-write a version-1 image (no strings section): the decoder
+        // accepts it as a pool-less module, so images shipped before the
+        // string pool keep loading.
+        let mut bytes: Vec<u8> = Vec::new();
+        bytes.extend_from_slice(&crate::image::IMAGE_MAGIC);
+        bytes.extend_from_slice(&1u16.to_le_bytes()); // version 1
+        bytes.extend_from_slice(&u32le(1)); // one function
+        bytes.extend_from_slice(&u32le(0)); // entry 0
+        bytes.extend_from_slice(&u32le(1)); // n_locals
+        bytes.extend_from_slice(&u32le(0)); // arg_count
+        bytes.extend_from_slice(&u32le(0)); // no block table
+        bytes.extend_from_slice(&u32le(1)); // code length 1
+        bytes.push(op(Opcode::Return));
+        let module = decode_module(&bytes).expect("v1 image decodes");
+        assert!(module.strings.is_empty(), "v1 carries no pool");
+    }
+
+    #[test]
+    fn string_equality_never_crosses_kinds() {
+        let mut code = Vec::new();
+        code.push(op(Opcode::LoadConstStr));
+        code.extend_from_slice(&u32le(0));
+        code.push(op(Opcode::LoadConst));
+        code.extend_from_slice(&1i64.to_le_bytes());
+        code.push(op(Opcode::Eq));
+        code.push(op(Opcode::Return));
+        let module =
+            Module::with_strings(vec![Function::new(code, 1, 0)], vec!["x".to_string()], 0);
+        assert_eq!(
+            module.run().unwrap_err(),
+            VmError::BinOpTypeMismatch {
+                op: "Eq",
+                left: "Str",
+                right: "Int"
+            }
+        );
     }
 }
