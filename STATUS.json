@@ -521,7 +521,7 @@
       "target_level": "L5",
       "computed_level": "L0",
       "capped_by": [
-        "GAP-0001"
+        "GAP-0006"
       ],
       "unmeasured": [
         "fuzz_cpu_hours",
