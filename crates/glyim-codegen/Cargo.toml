@@ -10,6 +10,14 @@ license.workspace = true
 version = "0.10.0"
 edition = "2024"
 
+# Module-image assembly bench (generate_module_image; dependency-free,
+# `harness = false` like the other timing benches in the workspace — the
+# corpus is built from `glyim-test`'s blessed TyCtx, same as the crate's
+# unit tests).
+[[bench]]
+name = "module_assembly"
+harness = false
+
 [dependencies]
 glyim-core = { workspace = true }
 glyim-diag = { workspace = true }
@@ -18,6 +26,11 @@ glyim-type = { workspace = true }
 glyim-layout = { workspace = true }
 glyim-span = { workspace = true }
 tracing = { workspace = true }
+# The module-image assembly seam (`generate_module_image`): the emitter
+# produces the loadable `glyim.module-image/1` container the VM crate
+# defines, so its encoder becomes a regular dependency. The VM crate is
+# dependency-free, so the edge stays acyclic.
+glyim-bytecode-vm = { workspace = true }
 
 [dev-dependencies]
 glyim-test = { workspace = true }
