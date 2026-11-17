@@ -1,9 +1,9 @@
 {
   "schema": "glyim.status/1",
-  "features": 248,
+  "features": 250,
   "records": 56,
   "summary": {
-    "L0": 235,
+    "L0": 237,
     "L1": 7,
     "L2": 6,
     "L3": 0,
@@ -2238,6 +2238,22 @@
     },
     {
       "id": "TOOL-LSP-TYPE-HIERARCHY",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-WATCHED-FILES",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-LSP-WILL-SAVE",
       "tier": "tooling",
       "target_level": "L4",
       "computed_level": "L0",
