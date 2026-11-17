@@ -14,6 +14,8 @@ pub mod database;
 pub mod dep_graph;
 /// diagnostics.
 pub mod diagnostics;
+/// `document_color` (LSP-COLOR).
+pub mod document_color;
 /// `document_highlight` (LSP-HIGHLIGHT).
 pub mod document_highlight;
 /// `document_link` (LSP-DOC-LINK).
@@ -70,6 +72,8 @@ pub mod semantic_tokens;
 pub mod server;
 /// `server_log` (LSP-LOG-FILE).
 pub mod server_log;
+/// `session_folders` (LSP-WORKSPACE-FOLDERS).
+pub mod session_folders;
 /// `signature_help` (LSP-SIGNATURE-HELP).
 pub mod signature_help;
 /// state.
@@ -103,6 +107,11 @@ pub use code_lens::{
 };
 pub use database::AnalysisDatabase;
 pub use database::{FileMap, SourceMap};
+pub use document_color::{
+    ColorLexSource, ColorLit, ColorPresentationFact, ParseTreeColorSource, RecordedColor,
+    color_presentations, compute_color_presentations, compute_document_colors, document_colors,
+    spell_hex_payload, wire_color_information,
+};
 pub use document_highlight::{
     HighlightKind, HighlightSpan, OccurrenceSource, ReferenceGraphSource, compute_highlights,
     document_highlights,
@@ -166,6 +175,11 @@ pub use semantic_tokens::{
     token_type_for,
 };
 pub use server_log::{FileLog, LogInitError, install_global};
+pub use session_folders::{
+    FolderChange, FolderRecord, FolderSetSource, SessionFolderSource, compute_folder_set,
+    compute_folders_containing, did_change_workspace_folders, folder_change_from_wire,
+    folder_record_from_wire, folders_containing, recorded_folders, seed_workspace_folders,
+};
 pub use signature_help::{
     CallSiteSource, CalledFunction, ReferenceGraphCallSiteSource, SignatureData, SignatureHelpPlan,
     SignatureIndexSource, SignatureSource, compute_signature_help, signature_help,
