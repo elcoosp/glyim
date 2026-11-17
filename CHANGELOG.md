@@ -8,6 +8,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Execution trace seam (`glyim_bytecode_vm::trace`)**: the *dynamic* half
+  of the image seam's observability story — the disassembler lists what a
+  decoded artifact *carries*, the trace answers what it *did*. `Vm` grows a
+  `with_trace(Box<dyn TraceSink>)` hook fired once per instruction dispatch
+  (just before the instruction executes, so a faulting dispatch is the
+  trace's last entry; unknown opcode bytes record as `opcode: None`), with
+  two in-crate sinks: `TraceCollector` (bounded or unbounded capture — a
+  bounded collector sets a displayed `overflowed` flag instead of growing
+  without limit over an infinite loop) and `TracingSink` (one
+  `tracing::debug!` event per dispatch, the workspace-standard layer). The
+  step record (`VmStep`) carries function/pc/frame-depth/stack-depth plus a
+  structured `StepDetail` payload decoded at the exact operand widths
+  `Vm::drive` reads (typed constants with raw IEEE-754 bits, pool state,
+  cast kind/target, branch targets, call shapes; a payload that runs past
+  the code's end records `StepDetail::Truncated`, never a panic).
+  `render_trace` renders a captured run into the disassembler's
+  deterministic diagnostic style (a golden test pins the two-function
+  call-shape listing end to end). The no-sink path costs one `None` check
+  per dispatch — the pre-seam behavior. A dispatch overhead bench
+  (`benches/vm_trace`: untraced vs traced over a countdown loop, plus the
+  captured-steps render) and a consumer walkthrough
+  (`examples/execution_trace_walkthrough`) land with it.
+- **Fuel budget for the VM (`Vm::with_fuel` → `VmError::FuelExhausted`)**:
+  the embedded-execution story's runtime complement of `decode_module`'s
+  structural validation — the image seam can refuse a corrupt artifact, but
+  nothing stopped a *well-formed* one from looping forever inside the
+  embedding host. The machine now refuses a dispatch once the budget is
+  spent, returning the explicit error with the executed count (a refused
+  dispatch never reaches the trace hook, so the trace ends at the last
+  executed step); `Vm::executed` reports the lifetime dispatch count either
+  way. Tests pin exact-budget completion, one-short exhaustion, zero fuel,
+  and the self-jump `loop` that previously hung stopping at exactly its
+  budget; the bench measures the counter's overhead (untraced vs fueled is
+  within noise), and the walkthrough demonstrates the stopped loop.
+- **`VmError` renders**: the VM's error enum gains `Display` +
+  `std::error::Error` (its `ImageError` sibling had both; `VmError` was
+  `Debug`-only, so every consumer — the differential harness, the examples —
+  printed the derived debug form instead of a diagnostic sentence).
+- **Poison-recovery in `glyim-db`'s `TyCtx` locks**: `set_ty_ctx`/`get_ty_ctx`
+  recovered from a poisoned `std::sync::RwLock` by panicking; the guarded
+  payload is a plain `Option` assignment no panic can leave half-updated, so
+  both faces now recover through `PoisonError::into_inner` instead of
+  poisoning the caller.
+- **README example inventory**: the "Library Examples" list now names every
+  example on disk (22 were shipped but unlisted — the bytecode-vm image /
+  float / disasm walkthroughs, the codegen assembly walkthrough, the diag /
+  frontend / lang / opt / metrics / bench consumers, and 7 ledger faces),
+  plus the new execution-trace walkthrough.
 - **Module-image disassembler (`render_module` / `render_function`)** in
   `glyim-bytecode-vm`: the observability half of the loadable-image seam —
   once an artifact is decoded, the listing answers "what instructions does
