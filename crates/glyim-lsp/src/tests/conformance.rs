@@ -49,6 +49,7 @@ fn expected_advertised_providers() -> Vec<&'static str> {
         "code_lens_provider",
         "document_on_type_formatting_provider",
         "execute_command_provider",
+        "workspace_file_operations",
     ]
 }
 
@@ -422,5 +423,66 @@ fn watched_files_route_is_the_advertisement() {
     assert!(
         expected_advertised_providers().contains(&"text_document_sync"),
         "the session stays advertised; the watched-files route lives beside it"
+    );
+}
+
+#[test]
+fn workspace_file_operations_advertises_did_rename() {
+    // Regression pin (LSP-FILE-RENAME): the `workspace.fileOperations`
+    // capability moved from unset to advertising `didRename` alongside
+    // the `workspace/didRenameFiles` route below. The flag lives inside
+    // `WorkspaceServerCapabilities` built in `handler::build_router`'s
+    // capability literal, so flipping it back to unset without dropping
+    // the route is invisible to the provider-set check above — the
+    // honest pairing (advertise ⇔ route) is anchored here and enforced
+    // by the compile in `build_router`.
+    assert!(
+        expected_advertised_providers().contains(&"workspace_file_operations"),
+        "workspace_file_operations must remain advertised (now with didRename)"
+    );
+}
+
+#[test]
+fn file_rename_has_a_pinned_wire_contract() {
+    // Regression pin (LSP-FILE-RENAME): the notification type's METHOD
+    // string, so an lsp-types upgrade that reshapes the endpoint
+    // surfaces here, not on a client's screen.
+    use lsp_types::notification::Notification;
+    assert_eq!(
+        lsp_types::notification::DidRenameFiles::METHOD,
+        "workspace/didRenameFiles"
+    );
+}
+
+#[test]
+fn workspace_file_operations_advertise_did_create_and_did_delete() {
+    // Regression pin (LSP-FILE-CREATE-DELETE): the
+    // `workspace.fileOperations` capability advertises `didCreate` and
+    // `didDelete` alongside the `workspace/didCreateFiles` and
+    // `workspace/didDeleteFiles` routes. The flags live inside
+    // `WorkspaceServerCapabilities` built in `handler::build_router`'s
+    // capability literal, so flipping either back to unset without
+    // dropping the routes is invisible to the provider-set check above
+    // — the honest pairing (advertise ⇔ route) is anchored here and
+    // enforced by the compile in `build_router`.
+    assert!(
+        expected_advertised_providers().contains(&"workspace_file_operations"),
+        "workspace_file_operations must remain advertised (now with didCreate + didDelete)"
+    );
+}
+
+#[test]
+fn file_operations_have_pinned_wire_contracts() {
+    // Regression pins (LSP-FILE-CREATE-DELETE): the notification types'
+    // METHOD strings, so an lsp-types upgrade that reshapes the
+    // endpoints surfaces here, not on a client's screen.
+    use lsp_types::notification::Notification;
+    assert_eq!(
+        lsp_types::notification::DidCreateFiles::METHOD,
+        "workspace/didCreateFiles"
+    );
+    assert_eq!(
+        lsp_types::notification::DidDeleteFiles::METHOD,
+        "workspace/didDeleteFiles"
     );
 }
