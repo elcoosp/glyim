@@ -1,7 +1,7 @@
 use crate::{
     BytecodeBackend, CodegenBackend, OP_ADD, OP_DEREF, OP_DROP, OP_JUMP, OP_JUMP_IF, OP_LOAD_CONST,
-    OP_LOAD_LOCAL, OP_LOAD_LOCAL_ADDR, OP_REPEAT, OP_RETURN, OP_STORE_FIELD, OP_STORE_LOCAL,
-    OP_TRAP,
+    OP_LOAD_CONST_F64, OP_LOAD_LOCAL, OP_LOAD_LOCAL_ADDR, OP_REPEAT, OP_RETURN, OP_STORE_FIELD,
+    OP_STORE_LOCAL, OP_TRAP,
 };
 use glyim_core::{
     IndexVec,
@@ -2924,7 +2924,11 @@ fn test_float_constant_emits() {
     let expected_bytes = bits.to_le_bytes();
     let mut found = false;
     for i in 0..bytecode.len().saturating_sub(8) {
-        if bytecode[i] == OP_LOAD_CONST && bytecode[i + 1..i + 9] == expected_bytes {
+        // A float constant is a *typed* constant: it must travel under
+        // `OP_LOAD_CONST_F64` — never under the integer `OP_LOAD_CONST`,
+        // which the pre-float VM executed as integer arithmetic over the
+        // raw bit patterns.
+        if bytecode[i] == OP_LOAD_CONST_F64 && bytecode[i + 1..i + 9] == expected_bytes {
             found = true;
             break;
         }
