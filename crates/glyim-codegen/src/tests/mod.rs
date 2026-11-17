@@ -10,6 +10,7 @@ mod constants;
 mod discriminant_len;
 mod existing;
 mod layout;
+mod module_assembly;
 mod peephole;
 mod slice_projection;
 mod terminators;
