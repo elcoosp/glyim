@@ -2,24 +2,14 @@
 # the M1.7 migration slice landed in `0002-known-gaps-migration.toml`
 # (KNOWN_GAPS §§4/§6 entries GAP-0003..GAP-0005 with the GAP-0004 witness).
 #
-# GAP-0001 is witnessed since M1.6: the fixture at `witness` reproduces the
-# gap and carries the `//@ known-gap: GAP-0001` header, and the harness
-# applies the strict-xfail inversion (if the compiler starts accepting the
-# witness, the fixture fails with `known-gap GAP-0001 closed`, forcing the
-# witness to be retired in the gap-closing change). GAP-0002 remains
-# `unwitnessed` witness debt (plan §3.3): it is Windows-only (SEH) and has
-# no cross-platform reproducible fixture yet.
-
-[[gap]]
-id        = "GAP-0001"
-class     = "a"
-title     = ".await inside a loop body rejected by async lowering (diagnostic T0060)"
-affects   = ["LANG-ASYNC-AWAIT"]
-caps      = "L2"
-expect    = { diagnostic = "T0060" }
-opened_in = "v0.3.0"
-status    = "witnessed"
-witness   = "crates/glyim-test/tests/compile-fail/async-await-in-loop-known-gap.g"
+# GAP-0001 (`.await` inside a loop body rejected, T0060) closed here: the
+# `for`-over-range shape its witness pinned desugars to a resumable
+# `Start`/`S0`/`Done` machine since the loop-await `for` normalization, the
+# witness retired into `tests/run-pass/behavior/async_for_loop_await.g`,
+# and the remaining loop shapes re-registered as GAP-0006 in
+# `0003-await-loop-shapes.toml` (with its own strict-xfail witness).
+# GAP-0002 remains `unwitnessed` witness debt (plan §3.3): it is
+# Windows-only (SEH) and has no cross-platform reproducible fixture yet.
 
 [[gap]]
 id        = "GAP-0002"
