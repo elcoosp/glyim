@@ -1,0 +1,29 @@
+# Curated domain glossary for @elcoosp/docs-toolkit (starlight-term-glossary)
+- term: "borrow checker"
+  locale: en
+  href: "/explanation/borrow-checking/"
+  definition: "Static analysis pass using non-lexical lifetimes to verify reference validity and prevent aliasing bugs at compile time."
+- term: "two-phase borrows"
+  locale: en
+  href: "/explanation/borrow-checking/#two-phase-borrows"
+  definition: "Borrow mode allowing a mutable reservation during method argument evaluation before activating exclusive write access."
+- term: "arena allocation"
+  locale: en
+  href: "/explanation/architecture/#arena-allocated-irs"
+  definition: "Compiler memory strategy allocating IR nodes contiguously in bump arenas for cache locality and fast bulk deallocation."
+- term: "write-set"
+  locale: en
+  href: "/explanation/gsx-reactivity/"
+  definition: "Set of memory paths a mutation can modify, computed by the compiler to emit targeted GSX view patches without runtime diffing."
+- term: "monomorphization"
+  locale: en
+  href: "/explanation/pipeline/"
+  definition: "Lowering pass that specializes generic functions and types into concrete machine representations for each instantiated type."
+- term: "emprunts en deux phases"
+  locale: fr
+  href: "/fr/explanation/borrow-checking/"
+  definition: "Mode d’emprunt autorisant une réservation mutable pendant l’évaluation des arguments avant d’activer l’accès exclusif."
+- term: "ensemble d’écriture"
+  locale: fr
+  href: "/fr/explanation/gsx-reactivity/"
+  definition: "Ensemble des chemins mémoire modifiables calculé à la compilation pour générer des patches de vue ciblés sans diff runtime."
