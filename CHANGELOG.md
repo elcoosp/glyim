@@ -8,6 +8,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Tail-window seam (`glyim_bytecode_vm::window`)**: the
+  *bounded-memory failure counterpart* of the execution-trace seam —
+  the trace records every dispatch (the right answer at O(steps)
+  memory) and the fault-backtrace seam names the fault site, but
+  nothing answered the flight-recorder question: what did the run's
+  last dispatches look like immediately before it ended? A
+  `WindowCollector` — a fixed-size ring over the same per-dispatch
+  stream the trace hook produces — holds the most recent `n` steps
+  regardless of the run's length (the memory bound is the window, never
+  the transcript), with the newest entry always the run's final
+  dispatch: the hook fires *before* the instruction executes, so a
+  faulting `Call` and a fuel budget's last allowed dispatch land in the
+  tail. The dispatches the bound scrolls out are counted in
+  `WindowCollector::dropped` — a *displayed* fact, never a silent drop
+  (the same honesty rule as the call-state seam's overflow flag), and
+  `first_dispatch()` names the window's absolute 1-based starting
+  dispatch so the tail slots into the run's numbering. Contract like
+  the other stream folds: read-only, total, bounded, deterministic —
+  `render_window` spells each captured dispatch in the trace render's
+  exact field shape (the payload spelling is now shared
+  `trace::render_detail`), with the explicit
+  `no dispatches in the window` line, and a `from_tail` re-fold of a
+  captured transcript. A bench (`benches/vm_window`: the ring's
+  dispatch overhead vs the untraced baseline over a countdown loop, the
+  post-hoc re-fold, the render) and a consumer walkthrough
+  (`examples/fault_window_walkthrough`) land with it.
+- **Inclusive-cost seam (`glyim_bytecode_vm::cost`)**: the *call-tree*
+  counterpart of the execution-profile seam — profile charges every
+  dispatch to the function that executed it, so a run spent inside a
+  callee reads as "one dispatch here, a million there" and the
+  *cumulative* question ("which call subtree dominates the run?") has no
+  answer in any flat column. `CostCollector` folds the same per-dispatch
+  stream the trace hook produces into per-function **inclusive** and
+  **exclusive** dispatch counts: the fold reconstructs the active call
+  stack from the stream's `frame_depth` transitions (the call-graph
+  seam's follow-step trick in its depth edition — no `Call` payload is
+  needed, so `OP_CALL` and `OP_CALL_INDIRECT` fold identically and
+  recursion disambiguates by depth), and every active frame earns one
+  inclusive credit per dispatch while the executing function alone earns
+  the exclusive credit (a function active at several depths of a
+  recursion earns one credit per active frame, so the inclusive column
+  sums the whole active subtree). Contract like the other stream folds:
+  read-only, total (a faulting dispatch and a fuel budget's last allowed
+  dispatch fold in — the entry frame is on the stack for the whole run,
+  so the root's inclusive count always equals the step total), bounded
+  (two counters per observed function plus the active stack — memory is
+  a function of the module's shape, never of the run length), and a
+  deterministic `render_cost` listing (the `fn <i>: inclusive=<a>
+  exclusive=<b>` lines over every function of the module, the
+  hottest-five summary, the explicit `no dispatches` line) with a
+  `hottest_inclusive(n)` ranking (ties by function index ascending) and
+  a `from_steps` re-fold of a captured transcript. A bench
+  (`benches/vm_cost`: the live fold's dispatch overhead vs the untraced
+  baseline over a call-heavy loop, the post-hoc re-fold, the render) and
+  a consumer walkthrough (`examples/inclusive_cost_walkthrough`) land
+  with it.
 - **Call-state seam (`glyim_bytecode_vm::state`)**: the *frame-lifecycle*
   counterpart of the local-watch seam — watch reports one event per
   local *write*, but nothing answered the frame-shaped question: at the
