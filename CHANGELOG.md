@@ -42,6 +42,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the self-jump `loop` that previously hung stopping at exactly its
   budget; the bench measures the counter's overhead (untraced vs fueled is
   within noise), and the walkthrough demonstrates the stopped loop.
+- **Execution-profile seam (`glyim_bytecode_vm::profile`)**: the aggregate
+  half of the dynamic observability story — the trace answers what a
+  decoded module *did* step by step, the profile answers where its
+  dispatches *went* without retaining the transcript: `ProfileCollector`
+  impls `TraceSink` and folds the per-dispatch stream into per-opcode and
+  per-function dispatch counts plus peak frame/stack depths in
+  O(#distinct opcodes + #functions) memory (bounded, never run-length),
+  and `render_profile` renders the aggregate deterministically in the
+  disassembler's diagnostic style (a golden test pins the two-function
+  call-shape profile end to end). The fold is honest at the edges: an
+  unknown opcode byte lands in its own displayed `unknown(0xNN)` bucket,
+  the faulting dispatch of a failing run is folded in, a function the run
+  never entered renders a `0` line, and a fuel-refused dispatch never
+  reaches the hook so the profile's total equals `Vm::executed` exactly.
+  `hottest(n)` ranks opcodes by dispatch count with raw-byte tie-breaks,
+  and `from_steps` re-folds a captured `TraceCollector` transcript into
+  the identical profile post-hoc. A dispatch-overhead bench
+  (`benches/vm_profile`: unprofiled vs profiled over a countdown loop,
+  plus the `from_steps` fold and the render) and a consumer walkthrough
+  (`examples/execution_profile_walkthrough`) land with it.
 - **`VmError` renders**: the VM's error enum gains `Display` +
   `std::error::Error` (its `ImageError` sibling had both; `VmError` was
   `Debug`-only, so every consumer — the differential harness, the examples —
@@ -213,6 +233,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seam (the reference graph's T129 scope-owner filter included).
 
 ### Fixed
+- **`glyim-layout` fails a niche index overflow instead of writing zero**:
+  encoding a niche-encoding enum's tag field / untagged variant into the
+  `u32` index space used `u32::try_from(..).unwrap_or(0)`, so an overflowing
+  index silently substituted `0` — wiring every `Field(0)` read of the enum
+  to the niche slot. A failed conversion now hard-errors
+  (`LayoutError::SizeOverflow`) like every other layout overflow.
 - Site getting-started tutorial (en/fr) now states the real MSRV (1.95,
   matching `Cargo.toml` and the CI `msrv` job) instead of the stale
   1.94/1.85 pair.
