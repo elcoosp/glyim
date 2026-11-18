@@ -35,6 +35,14 @@ harness = false
 name = "vm_trace"
 harness = false
 
+# Execution-profile bench (the profile seam: the aggregate fold's dispatch
+# overhead vs the untraced baseline, the post-hoc `from_steps` fold over a
+# captured transcript, and the deterministic render; dependency-free,
+# `harness = false`).
+[[bench]]
+name = "vm_profile"
+harness = false
+
 [dependencies]
 # The module-image seam (glyim.module-image/1) logs encode/decode events and
 # every decode rejection through the workspace-standard tracing layer, so a
