@@ -41,6 +41,7 @@ pub mod branches;
 pub mod callgraph;
 pub mod cost;
 pub mod coverage;
+pub mod dataflow;
 pub mod diff;
 pub mod disasm;
 pub mod image;
@@ -58,6 +59,10 @@ pub use branches::{BranchCollector, BranchKind, BranchSite, render_branches};
 pub use callgraph::{CallGraphCollector, render_call_graph};
 pub use cost::{CostCollector, HotFunction, render_cost};
 pub use coverage::{CoverageCollector, render_coverage};
+pub use dataflow::{
+    DataFlowCollector, FlowEvent, FlowRecorder, ReadEvent, ReadSink, SlotFlow, TracingReadSink,
+    UninitializedRead, render_data_flow,
+};
 pub use diff::render_module_diff;
 pub use disasm::{render_function, render_module};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
@@ -759,6 +764,12 @@ pub struct Vm {
     /// stores, the call-argument binds, and the callee-return dest write
     /// (`None` = one check per *write* — the pre-seam behavior).
     watch: Option<Box<dyn crate::watch::WatchSink>>,
+    /// The attached data-flow read sink ([`crate::dataflow`]), if any: it
+    /// fires once per successful `OP_LOAD_LOCAL` (the value reads; the
+    /// address/length forms are not value reads) so the fold can pair
+    /// reads with the writes the watch hook reports (`None` = one check
+    /// per *read* — the pre-seam behavior).
+    reads: Option<Box<dyn crate::dataflow::ReadSink>>,
     /// The attached fault-backtrace sink ([`crate::backtrace`]), if any: it
     /// fires once when a run ends in a [`VmError`] (`None` = one check per
     /// *failed* run — a clean run pays nothing beyond the site stores).
@@ -842,6 +853,28 @@ impl Vm {
     /// was attached.
     pub fn take_watch(&mut self) -> Option<Box<dyn crate::watch::WatchSink>> {
         self.watch.take()
+    }
+
+    /// Attach a data-flow read sink ([`crate::dataflow`]): every
+    /// successful `OP_LOAD_LOCAL` hands one [`ReadEvent`] to it just after
+    /// the value is fetched. Pairing reads with writes needs the *same*
+    /// collector on both hooks — attach it through [`Vm::with_watch`] too
+    /// (a collector that implements both sink traits, like
+    /// [`crate::dataflow::DataFlowCollector`] or
+    /// [`crate::dataflow::FlowRecorder`]). Observation only — the read
+    /// stream never changes execution — and [`Vm::take_reads`] hands it
+    /// back after the run.
+    #[must_use]
+    pub fn with_reads(mut self, sink: Box<dyn crate::dataflow::ReadSink>) -> Vm {
+        self.reads = Some(sink);
+        self
+    }
+
+    /// Detach and return the data-flow read sink (the typed owner recovers
+    /// it through [`crate::dataflow::ReadSink::as_any`]). `None` when no
+    /// sink is attached.
+    pub fn take_reads(&mut self) -> Option<Box<dyn crate::dataflow::ReadSink>> {
+        self.reads.take()
     }
 
     /// Attach a call-state sink ([`crate::state`]): every frame boundary —
@@ -1145,6 +1178,15 @@ impl Vm {
                 Opcode::LoadLocal => {
                     let idx = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
                     let v = self.local_ref(idx)?.clone();
+                    // The data-flow seam's read event: one per successful
+                    // `OP_LOAD_LOCAL`, reported just after the value is
+                    // fetched (a bounds failure above reads nothing and
+                    // reports nothing). One `None` check per read when no
+                    // sink is attached; the event's value is the sink's
+                    // copy, not the stack's.
+                    if self.reads.is_some() {
+                        self.record_read(func, idx, v.clone(), self.frames.len());
+                    }
                     self.stack.push(v);
                 }
                 Opcode::StoreLocal => {
@@ -1583,6 +1625,26 @@ impl Vm {
                 dispatch: self.executed,
                 frame_depth,
                 via,
+            });
+        }
+    }
+
+    /// Hand one local-read event to the attached data-flow sink
+    /// ([`crate::dataflow`]), if any. The event carries the machine's
+    /// current dispatch site ([`Vm::fault_pc`], the producing instruction)
+    /// and the lifetime dispatch count — the same site tracking the watch
+    /// events and trace steps use, so a read pairs with its def by
+    /// dispatch number. One `None` check per local read when no sink is
+    /// attached.
+    fn record_read(&mut self, func: usize, local: usize, value: Value, frame_depth: usize) {
+        if let Some(sink) = self.reads.as_mut() {
+            sink.read(&crate::dataflow::ReadEvent {
+                func,
+                local,
+                value,
+                pc: self.fault_pc,
+                dispatch: self.executed,
+                frame_depth,
             });
         }
     }
