@@ -19,11 +19,13 @@
 //!   `OP_ADD` … `OP_SHR` over `Value::Float` operands, with `1.0 / 0.0` as
 //!   `+inf`, matching LLVM's `fdiv` and the MIR interpreter).
 //!
-//! The decoder returns explicit, typed errors (`VmError::UnknownOpcode` /
-//! `StackUnderflow` / `LocalOutOfBounds` /
-//! `CallFrameOverflow` / `AbnormalTermination` / `BinOpTypeMismatch` /
+//! The decoder returns explicit, typed errors (`VmError::UnexpectedEndOfCode`
+//! / `UnknownOpcode` / `StackUnderflow` / `LocalOutOfBounds` / `EmptyReturn`
+//! / `AbnormalTermination` / `AssertionFailed` / `CallFrameOverflow` /
+//! `FunctionOutOfBounds` / `SwitchNoTarget` / `BinOpTypeMismatch` /
 //! `UnOpTypeMismatch` / `CastOperandMismatch` / `UnknownCastKind` /
-//! `UnknownCastTarget` / `ExpectedInt`) rather than silently
+//! `UnknownCastTarget` / `ExpectedInt` / `StringIndexOutOfBounds` /
+//! `FuelExhausted`) rather than silently
 //! mis-executing an unhandled opcode or a kind-mismatched operand, so
 //! adding a new emitter opcode forces a deliberate VM decision.
 //!
@@ -34,11 +36,17 @@
 //! two bytes: the cast kind, then the [`CastTarget`] primitive the cast
 //! converts to.
 
+pub mod backtrace;
+pub mod coverage;
 pub mod disasm;
 pub mod image;
 pub mod profile;
 pub mod trace;
 
+pub use backtrace::{
+    BacktraceCollector, FaultFrame, FaultReport, FaultSink, FaultSite, render_backtrace,
+};
+pub use coverage::{CoverageCollector, render_coverage};
 pub use disasm::{render_function, render_module};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
 pub use profile::{HotOpcode, ProfileCollector, render_profile};
@@ -84,16 +92,10 @@ impl PartialEq for Value {
 }
 
 impl Value {
-    fn as_int(&self) -> i64 {
-        match self {
-            Value::Int(v) => *v,
-            // Address slots are always stored as Int; tuples should never be
-            // used arithmetically.
-            Value::Tuple(_) => 0,
-            Value::Float(_) => 0,
-            Value::Str(_) => 0,
-        }
-    }
+    // No silent scalar coercion: the `as_int()` helper (which mapped every
+    // non-Int kind to `0`) is gone — its last caller (the `OP_ASSERT`
+    // condition) now goes through the typed [`VmError::ExpectedInt`] path
+    // like every other operand role.
 
     /// The value kind's name, as reported in typed type-mismatch errors.
     fn kind_name(&self) -> &'static str {
@@ -736,6 +738,18 @@ pub struct Vm {
     /// The attached execution-trace sink, if any (`None` = the seam costs
     /// one check per dispatch — exactly the pre-seam behavior).
     trace: Option<Box<dyn TraceSink>>,
+    /// The attached fault-backtrace sink ([`crate::backtrace`]), if any: it
+    /// fires once when a run ends in a [`VmError`] (`None` = one check per
+    /// *failed* run — a clean run pays nothing beyond the site stores).
+    fault: Option<Box<dyn crate::backtrace::FaultSink>>,
+    /// The machine's current dispatch site — the function index of the
+    /// dispatch in flight (the backtrace seam's fault-site tracking). Set
+    /// at every dispatch, and to the entry request before the first one, so
+    /// a fault report is exact without touching the hot match.
+    fault_func: usize,
+    /// The loop-top pc paired with [`Vm::fault_func`] (for a pre-execution
+    /// fault, `0`).
+    fault_pc: usize,
     /// The remaining execution budget ([`Vm::with_fuel`]); `None` = unlimited
     /// (the pre-seam behavior).
     fuel: Option<u64>,
@@ -767,6 +781,25 @@ impl Vm {
         self.trace.take()
     }
 
+    /// Attach a fault-backtrace sink ([`crate::backtrace`]): the sink is
+    /// handed one [`crate::backtrace::FaultReport`] when a run ends in a
+    /// [`VmError`] — the fault site, the suspended caller chain, the
+    /// dispatch count, and the fuel state. The sink observes only — the
+    /// caller receives the same error either way — and [`Vm::take_backtrace`]
+    /// hands it back after the run.
+    #[must_use]
+    pub fn with_backtrace(mut self, sink: Box<dyn crate::backtrace::FaultSink>) -> Vm {
+        self.fault = Some(sink);
+        self
+    }
+
+    /// Detach and return the fault-backtrace sink (the typed owner recovers
+    /// it through [`crate::backtrace::FaultSink::as_any`]). `None` when no
+    /// sink was attached.
+    pub fn take_backtrace(&mut self) -> Option<Box<dyn crate::backtrace::FaultSink>> {
+        self.fault.take()
+    }
+
     /// Set an execution budget: the machine refuses a dispatch once `fuel`
     /// dispatches have run, returning [`VmError::FuelExhausted`] — the
     /// runtime complement of [`decode_module`]'s structural validation, so
@@ -788,13 +821,66 @@ impl Vm {
 
     /// Execute the module's entry function.
     pub fn run_module(&mut self, module: &Module) -> ExecResult<Value> {
+        // The fault-site tracking starts at the entry request: a pre-
+        // execution fault (an empty function table, a bad entry index, a
+        // depth overflow on the entry push) reports where the run was
+        // asked to begin, with zero dispatches.
+        self.fault_func = module.entry;
+        self.fault_pc = 0;
         if module.functions.is_empty() {
-            return Err(VmError::FunctionOutOfBounds(0));
+            return Err(self.report_fault(module, VmError::FunctionOutOfBounds(0)));
         }
         // Push the entry frame. The entry has no caller, so dest_local is
         // irrelevant and resume_target is ignored.
-        self.push_frame(module, module.entry, &[], u32::MAX, usize::MAX)?;
+        if let Err(err) = self.push_frame(module, module.entry, &[], u32::MAX, usize::MAX) {
+            return Err(self.report_fault(module, err));
+        }
         self.drive(module)
+    }
+
+    /// Build the fault report for a run that ended in `error` (the
+    /// backtrace seam): the tracked dispatch site, the suspended caller
+    /// chain (innermost caller first), the dispatch count, and the fuel
+    /// state. Called exactly once per failed run, before the error reaches
+    /// the caller — the seam observes, it never rewrites the error.
+    fn report_fault(&mut self, module: &Module, error: VmError) -> VmError {
+        let site = crate::backtrace::FaultSite {
+            func: self.fault_func,
+            pc: self.fault_pc,
+            // The pre-execution faults (an empty function table, a bad
+            // entry index, a depth overflow on the entry push) have no
+            // dispatched instruction to decode; the site's pc and the
+            // zero dispatch count say so.
+            opcode: module
+                .functions
+                .get(self.fault_func)
+                .and_then(|f| f.code.get(self.fault_pc))
+                .copied()
+                .and_then(Opcode::from_u8),
+        };
+        // Every frame but the one the site belongs to is a suspended
+        // caller; innermost caller first (a Rust-style backtrace order).
+        let callers: Vec<crate::backtrace::FaultFrame> = self
+            .frames
+            .iter()
+            .rev()
+            .skip(1)
+            .map(|f| crate::backtrace::FaultFrame {
+                func: f.func,
+                pc: f.pc,
+            })
+            .collect();
+        let report = crate::backtrace::FaultReport {
+            error: error.clone(),
+            site,
+            callers,
+            executed: self.executed,
+            fuel_left: self.fuel,
+        };
+        if let Some(sink) = self.fault.as_mut() {
+            sink.fault(&report);
+        }
+        error
     }
 
     /// Inspect a local slot of the top call frame (test/debug helper).
@@ -861,21 +947,48 @@ impl Vm {
     /// its value into the caller's recorded `dest_local`. This keeps host
     /// (Rust) stack depth constant regardless of VM call depth, so deep and
     /// even infinite VM recursion are handled by the `MAX_CALL_DEPTH` guard
-    /// instead of overflowing the host stack.
+    /// instead of overflowing the host stack. A run that ends in an error
+    /// reports through the backtrace seam ([`Vm::with_backtrace`]) exactly
+    /// once, then returns the error untouched.
     fn drive(&mut self, module: &Module) -> ExecResult<Value> {
+        let result = self.drive_inner(module);
+        if let Err(err) = &result {
+            // The backtrace seam's hook: one call per failed run, before
+            // the error reaches the caller (the seam observes — the error
+            // the caller receives is the one the machine produced).
+            self.report_fault(module, err.clone());
+        }
+        result
+    }
+
+    /// The dispatch loop [`Vm::drive`] wraps. Every error path funnels out
+    /// of here with the fault-site tracking ([`Vm::fault_func`] /
+    /// [`Vm::fault_pc`]) already pointing at the dispatch in flight — the
+    /// loop top refreshes it before the fuel gate and the bounds check, so
+    /// a refused dispatch reports the dispatch that was refused.
+    fn drive_inner(&mut self, module: &Module) -> ExecResult<Value> {
         loop {
             // Borrow split: fetch the pc and current function from the top
             // frame without holding a mutable borrow across the big match.
             if self.frames.is_empty() {
                 // The entry frame returned without producing a value on the
                 // operand stack (should have pushed its retval before Return).
-                return self.pop().map_err(|_| VmError::EmptyReturn);
+                // The fault-site tracking still points at the entry frame's
+                // last dispatch — the `OP_RETURN` that ended the run.
+                return self
+                    .pop()
+                    .map_err(|_| self.report_fault(module, VmError::EmptyReturn));
             }
             let frame_idx = self.frames.len() - 1;
             let (pc, func) = {
                 let fr = &self.frames[frame_idx];
                 (fr.pc, fr.func)
             };
+            // Fault-site tracking (the backtrace seam): two integer stores
+            // per dispatch keep the machine's current site visible; the
+            // hook itself fires only on the fault.
+            self.fault_func = func;
+            self.fault_pc = pc;
             let code = &module.functions[func].code;
             if pc >= code.len() {
                 return Err(VmError::UnexpectedEndOfCode);
@@ -1040,7 +1153,11 @@ impl Vm {
                     let expected = code[self.frames[frame_idx].pc];
                     self.frames[frame_idx].pc += 1;
                     let target = Vm::read_u32(code, &mut self.frames[frame_idx].pc)?;
-                    let cond = self.pop()?.as_int();
+                    // The assert condition is an Int (the emitter writes the
+                    // comparison ops' Int bools) — a Float/Tuple/Str operand
+                    // is an explicit [`VmError::ExpectedInt`], not a silent
+                    // `as_int()` 0 that flipped the assert's outcome.
+                    let cond = self.pop_int("assert condition")?;
                     if (cond != 0) != (expected != 0) {
                         return Err(VmError::AssertionFailed);
                     }
@@ -1629,6 +1746,30 @@ mod tests {
         assert_eq!(
             vm.run_module(&module_bad).unwrap_err(),
             VmError::AssertionFailed
+        );
+    }
+
+    /// A non-Int assert condition is an explicit `ExpectedInt`, not the old
+    /// silent `as_int()` 0: a Float condition read as 0 and *flipped the
+    /// assert's outcome* (expected=true failed; worse, expected=false
+    /// passed). The typed error names the role, like every other
+    /// `pop_int` site.
+    #[test]
+    fn assert_condition_rejects_non_int_operands() {
+        let mut a = Asm::new();
+        a.op(Opcode::LoadConstF64);
+        a.i64(1.5f64.to_bits() as i64);
+        a.op(Opcode::Assert);
+        a.code.push(1u8); // expected = true
+        a.u32(0); // resume target
+        let module = Module::new(vec![a.finish(1, 0)], 0);
+        let mut vm = Vm::new();
+        assert_eq!(
+            vm.run_module(&module).unwrap_err(),
+            VmError::ExpectedInt {
+                role: "assert condition",
+                found: "Float",
+            }
         );
     }
 
