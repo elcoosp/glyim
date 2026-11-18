@@ -87,6 +87,22 @@ harness = false
 name = "vm_run_diff"
 harness = false
 
+# Branch-history bench (the branches seam: the per-decision fold's dispatch
+# overhead vs the untraced baseline over a branch-heavy loop, the post-hoc
+# `from_steps` fold over a captured transcript, and the deterministic
+# render; dependency-free, `harness = false`).
+[[bench]]
+name = "vm_branches"
+harness = false
+
+# Call-state bench (the state seam: the frame-boundary hook's overhead vs
+# the unattached baseline over a call-heavy loop — one locals snapshot per
+# frame enter and exit — and the deterministic render; dependency-free,
+# `harness = false`).
+[[bench]]
+name = "vm_state"
+harness = false
+
 [dependencies]
 # The module-image seam (glyim.module-image/1) logs encode/decode events and
 # every decode rejection through the workspace-standard tracing layer, so a
