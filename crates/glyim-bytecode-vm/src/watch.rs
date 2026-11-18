@@ -284,8 +284,10 @@ pub fn render_watch(events: &[WatchEvent], module: &Module) -> String {
 /// integers plain, floats with their raw IEEE-754 bits (the disasm
 /// convention — a corrupted bit pattern stays visible), strings quoted
 /// (`Debug`), tuples as a parenthesized, comma-separated, recursively
-/// rendered list (`()` for the empty aggregate).
-fn render_value(value: &Value) -> String {
+/// rendered list (`()` for the empty aggregate). Shared with
+/// [`crate::state::render_state`] so both renders spell values
+/// identically.
+pub(crate) fn render_value(value: &Value) -> String {
     match value {
         Value::Int(n) => format!("{n}"),
         Value::Float(f) => format!("{f} (bits 0x{:016x})", f.to_bits()),
