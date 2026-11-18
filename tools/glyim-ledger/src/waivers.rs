@@ -1475,6 +1475,21 @@ mod tests {
         }
     }
 
+    /// [`entry`] dated from the executor's clock instead: the write faces
+    /// (`run_waivers_grant` / `run_waivers_extend`) derive their expiries
+    /// from `today_iso()`, so a test that seeds a document, runs a write
+    /// face, and reloads through the C9 horizon check must date both sides
+    /// from [`executor_today()`] to stay valid on any run date.
+    fn executor_entry(id: &str, feature: &str, expires_days_ahead: i64) -> WaiverEntry {
+        WaiverEntry {
+            id: id.to_string(),
+            feature: feature.to_string(),
+            reason: format!("{id}: synthetic exception for the test suite"),
+            issue: "https://github.com/elcoosp/glyim/issues/42".to_string(),
+            expires: executor_today().plus_days(expires_days_ahead).to_iso(),
+        }
+    }
+
     /// A set with one valid waiver, one expired waiver, and one valid
     /// waiver with zero days left (the `expires == today` boundary).
     fn mixed_set() -> WaiverSet {
@@ -2687,9 +2702,17 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
 
     #[test]
     fn file_extender_round_trips_the_canonical_document() {
+        // The executor derives the new expiry from the wall clock, so both
+        // the seeded entries and the reload assessment date follow the
+        // executor's clock (the engine-level tests above keep the pinned
+        // [`today()`]). Seeding from the pinned date would drift the
+        // extended expiry past the C9 horizon as the calendar advances
+        // (the horizon the reload checks is assessment_date + 14), so
+        // seeding from [`executor_today()`] keeps the round trip valid on
+        // any run date.
         let entries = vec![
-            entry("WVR-20261101-first", "LANG-A", 5),
-            entry("WVR-20261109-third", "LANG-C", 1),
+            executor_entry("WVR-20261101-first", "LANG-A", 5),
+            executor_entry("WVR-20261109-third", "LANG-C", 1),
         ];
         let root = seeded_root(&entries);
         let outcome = run_waivers_extend(
@@ -2705,7 +2728,7 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
 
         // The rewritten document still parses through the same loader the
         // diff gate uses, carries both entries, and only the target moved.
-        let reloaded = super::load_waivers(&root.join("ledger/waivers.toml"), today());
+        let reloaded = super::load_waivers(&root.join("ledger/waivers.toml"), executor_today());
         assert!(
             reloaded.diagnostics.is_empty(),
             "{:?}",
