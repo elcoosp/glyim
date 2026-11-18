@@ -126,6 +126,22 @@ harness = false
 name = "vm_window"
 harness = false
 
+# Assertion-stream bench (the asserts seam: the per-assert hook's overhead
+# vs the unattached baseline over an assert-heavy countdown loop — one
+# small-struct event per evaluated assert, passing or failing — and the
+# deterministic render; dependency-free, `harness = false`).
+[[bench]]
+name = "vm_asserts"
+harness = false
+
+# Drop-stream bench (the drops seam: the per-discard hook's overhead vs
+# the unattached baseline over a drop-heavy countdown loop — one event
+# with the popped value per executed discard — and the deterministic
+# render; dependency-free, `harness = false`).
+[[bench]]
+name = "vm_drops"
+harness = false
+
 [dependencies]
 # The module-image seam (glyim.module-image/1) logs encode/decode events and
 # every decode rejection through the workspace-standard tracing layer, so a
