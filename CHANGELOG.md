@@ -8,6 +8,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Drop-observation seam (`glyim_bytecode_vm::drops`)**: the
+  *destruction-side counterpart* of the local-watch and call-state seams
+  — the watch records what values a module's local slots *took* and the
+  call-state seam records what frames *held*, but every `OP_DROP`
+  discards a value and the discarded value vanished from every view at
+  the pop, so the emitter's scope-exit shape (one `OP_DROP` per destroyed
+  value) was invisible after the run. The VM now hands one `DropEvent`
+  (the discard site: function index and the opcode's byte offset; the
+  discarded value in full) to a `DropSink` attached through
+  `Vm::with_drops` at each executed `OP_DROP` — the event *takes* the
+  value the opcode already popped, so the seam adds no clone on the fire
+  path. `DropCollector` captures the stream in bounded memory
+  (`bounded(max)` + a displayed overflow flag, the honesty rule every
+  other collector follows) with `events_of(func)` site reads, and
+  `render_drops` renders the deterministic listing (the explicit
+  `no drops` empty state, one site-plus-value line per discard in the
+  watch render's value spellings — integers plain, floats with their raw
+  bits, strings quoted, tuples parenthesized). Contract like the other
+  seams: read-only (the pop the opcode pays is unchanged — the sink
+  observes, it never resurrects a discarded value), total over the
+  *executed* discards (a refused dispatch never discards, so a fuel
+  budget's last cut reports nothing), zero-cost when unused (one `None`
+  check per executed `OP_DROP`), and composing with everything else (the
+  traced, budgeted, assert-observed run's discard stream is unchanged by
+  the other hooks). A bench (`benches/vm_drops`: the per-discard hook's
+  overhead vs the unattached baseline over a drop-heavy countdown, and
+  the render) and a consumer walkthrough (`examples/drops_walkthrough`:
+  the destroyed aggregate and the discarded address, the drop-heavy
+  loop's per-iteration stream, the bounded capture, and the read-only
+  proof) land with it.
+- **Assertion-observation seam (`glyim_bytecode_vm::asserts`)**: the
+  *invariant counterpart* of the coverage and branch-history seams — an
+  `OP_ASSERT` is a decision the program's own invariant wrote, but its
+  outcome is folded away by both views (coverage counts the site as hit,
+  the branch history records the landing the polarity forced), and a
+  failing run's `VmError::AssertionFailed` answers "which assert failed"
+  only for the *last* one — nothing said whether the run's earlier
+  assertions actually held. The VM now hands one `AssertEvent` (the site:
+  function index and the opcode's byte offset; the asserted polarity; the
+  observed condition; the pass/fail verdict) to an `AssertSink` attached
+  through `Vm::with_asserts` the moment an assert's condition has been
+  compared against its asserted polarity, *before* the fault a failing
+  assert raises — so the failing assert is the stream's last entry, the
+  run's earlier passes never silently vanish behind it. `AssertCollector`
+  captures the stream in bounded memory (`bounded(max)` + a displayed
+  overflow flag, the honesty rule every other collector follows), with
+  `passed_count`/`failed_count` tallies, `events_of(func)` site reads,
+  and a deterministic `render_asserts` listing (the explicit
+  `no assertions` empty state, one `pass`/`fail` line per evaluation in
+  the machine's Int-bool spelling). Contract like the other seams:
+  read-only (the verdict never flips, a failing assert faults with
+  exactly the pre-seam error), total over the *evaluated* asserts (a
+  refused dispatch never evaluates, so a fuel budget's last cut reports
+  nothing), zero-cost when unused (one `None` check per executed
+  `OP_ASSERT`), and composing with everything else (the traced,
+  budgeted, windowed run's assert stream is unchanged by the other
+  hooks). A bench (`benches/vm_asserts`: the per-assert hook's overhead
+  vs the unattached baseline over an assert-heavy countdown, and the
+  render) and a consumer walkthrough
+  (`examples/assertions_walkthrough`: the passing assert, the
+  assert-not polarity shape, the failing assert's displayed verdict,
+  the bounded capture, and the read-only proof) land with it.
 - **Data-flow seam (`glyim_bytecode_vm::dataflow`)**: the *read-side
   counterpart* of the local-watch seam — the watch records what values a
   module's local slots took, but nothing paired those writes with the
