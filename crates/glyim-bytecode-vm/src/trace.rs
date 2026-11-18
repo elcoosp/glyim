@@ -299,8 +299,10 @@ pub fn render_trace(steps: &[VmStep], module: &Module) -> String {
 }
 
 /// Render one step's payload suffix (the text after the mnemonic, in the
-/// disassembler's spelling; [`StepDetail::None`] renders nothing).
-fn render_detail(detail: &StepDetail, module: &Module) -> String {
+/// disassembler's spelling; [`StepDetail::None`] renders nothing). Shared
+/// with the tail-window render, which spells the captured tail in the
+/// trace's exact field shape.
+pub(crate) fn render_detail(detail: &StepDetail, module: &Module) -> String {
     match *detail {
         StepDetail::None => String::new(),
         StepDetail::ConstInt(v) => format!(" {v}"),
