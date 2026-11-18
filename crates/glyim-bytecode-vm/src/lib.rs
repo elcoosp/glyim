@@ -37,6 +37,7 @@
 //! converts to.
 
 pub mod backtrace;
+pub mod branches;
 pub mod callgraph;
 pub mod coverage;
 pub mod diff;
@@ -44,12 +45,14 @@ pub mod disasm;
 pub mod image;
 pub mod profile;
 pub mod rundiff;
+pub mod state;
 pub mod trace;
 pub mod watch;
 
 pub use backtrace::{
     BacktraceCollector, FaultFrame, FaultReport, FaultSink, FaultSite, render_backtrace,
 };
+pub use branches::{BranchCollector, BranchKind, BranchSite, render_branches};
 pub use callgraph::{CallGraphCollector, render_call_graph};
 pub use coverage::{CoverageCollector, render_coverage};
 pub use diff::render_module_diff;
@@ -57,6 +60,7 @@ pub use disasm::{render_function, render_module};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
 pub use profile::{HotOpcode, ProfileCollector, render_profile};
 pub use rundiff::render_run_diff;
+pub use state::{StateCollector, StateEvent, StatePhase, StateSink, render_state};
 pub use trace::{StepDetail, TraceCollector, TraceSink, TracingSink, VmStep, render_trace};
 pub use watch::{TracingWatchSink, WatchCollector, WatchEvent, WatchSink, WatchVia, render_watch};
 
@@ -755,6 +759,11 @@ pub struct Vm {
     /// fires once when a run ends in a [`VmError`] (`None` = one check per
     /// *failed* run — a clean run pays nothing beyond the site stores).
     fault: Option<Box<dyn crate::backtrace::FaultSink>>,
+    /// The attached call-state sink ([`crate::state`]), if any: it fires
+    /// once per frame boundary — a frame's enter and its exit — with a
+    /// full locals snapshot (`None` = one check per *frame boundary* —
+    /// the pre-seam behavior).
+    state: Option<Box<dyn crate::state::StateSink>>,
     /// The machine's current dispatch site — the function index of the
     /// dispatch in flight (the backtrace seam's fault-site tracking). Set
     /// at every dispatch, and to the entry request before the first one, so
@@ -829,6 +838,24 @@ impl Vm {
     /// was attached.
     pub fn take_watch(&mut self) -> Option<Box<dyn crate::watch::WatchSink>> {
         self.watch.take()
+    }
+
+    /// Attach a call-state sink ([`crate::state`]): every frame boundary —
+    /// a frame's enter (locals freshly bound) and its exit (the final
+    /// local state) — is handed to it with a full locals snapshot. The
+    /// sink observes only — it never changes execution — and
+    /// [`Vm::take_state`] hands it back after the run.
+    #[must_use]
+    pub fn with_state(mut self, sink: Box<dyn crate::state::StateSink>) -> Vm {
+        self.state = Some(sink);
+        self
+    }
+
+    /// Detach and return the call-state sink (the typed owner recovers it
+    /// through [`crate::state::StateSink::as_any`]). `None` when no sink
+    /// was attached.
+    pub fn take_state(&mut self) -> Option<Box<dyn crate::state::StateSink>> {
+        self.state.take()
     }
 
     /// Set an execution budget: the machine refuses a dispatch once `fuel`
@@ -983,6 +1010,24 @@ impl Vm {
                     crate::watch::WatchVia::ArgBind,
                 );
             }
+        }
+        // The call-state seam's frame-enter event: the frame's locals are
+        // bound (the MIR ABI's zero return place, the arguments) and the
+        // frame is about to dispatch its first instruction. The snapshot
+        // is paid only when a sink is attached (the clones are the
+        // event's, not the frame's).
+        if let Some(sink) = self.state.as_mut() {
+            let locals = self
+                .frames
+                .last()
+                .map(|f| f.locals.clone())
+                .unwrap_or_default();
+            sink.frame_enter(&crate::state::StateEvent {
+                phase: crate::state::StatePhase::Enter,
+                func,
+                depth: self.frames.len(),
+                locals,
+            });
         }
         Ok(())
     }
@@ -1273,6 +1318,19 @@ impl Vm {
                         .frames
                         .pop()
                         .expect("the dispatch loop never runs without a frame");
+                    // The call-state seam's frame-exit event: the frame's
+                    // final local state (every mutation the body made),
+                    // reported before the frame is discarded. The entry
+                    // frame's exit is the run's last event. The snapshot
+                    // is paid only when a sink is attached.
+                    if let Some(sink) = self.state.as_mut() {
+                        sink.frame_exit(&crate::state::StateEvent {
+                            phase: crate::state::StatePhase::Exit,
+                            func: finished.func,
+                            depth: self.frames.len() + 1,
+                            locals: finished.locals.clone(),
+                        });
+                    }
                     if self.frames.is_empty() {
                         // Entry frame returned: the value is the module result.
                         return Ok(retval);
