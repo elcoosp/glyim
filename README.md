@@ -84,7 +84,7 @@ The design is heavily inspired by rustc's architecture (arena-allocated IRs, int
 ### Code Generation
 
 - **LLVM backend** (`glyim-codegen-llvm`) using `inkwell`/LLVM 23 — produces native object files with real ABI lowering, debug info, exception handling (Itanium + SEH), and Link-Time Optimization (`fat` / `thin`).
-- **Bytecode backend** (`glyim-codegen`) — a compact stack-machine bytecode used for testing and embedded execution, verified by the `glyim-bytecode-vm` crate; the emitter can assemble whole multi-function modules into the versioned, loadable `glyim.module-image/1` container (`generate_module_image`), which the VM validates and runs after a round trip. The VM executes the full emitted surface: IEEE-754 float arithmetic over `OP_LOAD_CONST_F64` constants, the interpreter's width-aware cast semantics (`OP_CAST` carries kind + target primitive), and string constants through the image's string pool (`OP_LOAD_CONST_STR` compares by content). Two observability/safety seams complete the picture: an execution-trace hook (`glyim_bytecode_vm::trace` — a `TraceSink` the VM hands one step per dispatch to, with a capturing collector, a `tracing`-event sink, and a deterministic `render_trace` listing) and a fuel budget (`Vm::with_fuel` — an infinite loop in a loaded artifact stops with the explicit `VmError::FuelExhausted` instead of hanging the host).
+- **Bytecode backend** (`glyim-codegen`) — a compact stack-machine bytecode used for testing and embedded execution, verified by the `glyim-bytecode-vm` crate; the emitter can assemble whole multi-function modules into the versioned, loadable `glyim.module-image/1` container (`generate_module_image`), which the VM validates and runs after a round trip. The VM executes the full emitted surface: IEEE-754 float arithmetic over `OP_LOAD_CONST_F64` constants, the interpreter's width-aware cast semantics (`OP_CAST` carries kind + target primitive), and string constants through the image's string pool (`OP_LOAD_CONST_STR` compares by content). Two observability/safety seams complete the picture: an execution-trace hook (`glyim_bytecode_vm::trace` — a `TraceSink` the VM hands one step per dispatch to, with a capturing collector, a `tracing`-event sink, and a deterministic `render_trace` listing) and a fuel budget (`Vm::with_fuel` — an infinite loop in a loaded artifact stops with the explicit `VmError::FuelExhausted` instead of hanging the host). The aggregate view over the same stream is the execution-profile seam (`glyim_bytecode_vm::profile` — a `ProfileCollector` sink that folds the per-dispatch steps into per-opcode and per-function dispatch counts plus peak frame/stack depths in bounded memory, with a deterministic `render_profile` listing, a `hottest(n)` ranking, and a `from_steps` re-fold of a captured transcript; unknown opcode bytes land in their own displayed `unknown(0xNN)` bucket).
 
 ### Tooling
 
@@ -124,7 +124,7 @@ The compiler is split into small, single-responsibility crates. Each phase consu
 | `glyim-layout` | Type layout computation (size, alignment, ABI, vtables). |
 | `glyim-codegen` | Abstract code generation backend trait + bytecode backend. |
 | `glyim-codegen-llvm` | LLVM backend (via `inkwell`) with full ABI handling and LTO. |
-| `glyim-bytecode-vm` | Switch-dispatch VM executing the bytecode backend's output (IEEE-754 floats, width-aware casts, pooled string constants), plus the module-image container (`encode_module`/`decode_module`) that ships it across process boundaries, its disassembler (`render_module`/`render_function`: the deterministic, total instruction listing for a decoded artifact — unknown bytes list as `unknown(0xNN)`, truncated payloads as `<truncated>`), the execution-trace seam (`TraceSink`/`TraceCollector`/`render_trace`: one step per dispatch over the executed path), and the fuel budget (`Vm::with_fuel` → `VmError::FuelExhausted`). |
+| `glyim-bytecode-vm` | Switch-dispatch VM executing the bytecode backend's output (IEEE-754 floats, width-aware casts, pooled string constants), plus the module-image container (`encode_module`/`decode_module`) that ships it across process boundaries, its disassembler (`render_module`/`render_function`: the deterministic, total instruction listing for a decoded artifact — unknown bytes list as `unknown(0xNN)`, truncated payloads as `<truncated>`), the execution-trace seam (`TraceSink`/`TraceCollector`/`render_trace`: one step per dispatch over the executed path), the execution-profile seam (`ProfileCollector`/`render_profile`: the per-opcode and per-function aggregate over the same stream, bounded memory, `hottest(n)`, `from_steps`), and the fuel budget (`Vm::with_fuel` → `VmError::FuelExhausted`). |
 | `glyim-runtime` | Runtime FFI: alloc, dealloc, drop glue, panic, fs/net/thread/time/process. |
 | `glyim-db` | Compilation database: interners, VFS, type context, trait context. |
 | `glyim-pipeline` | End-to-end compilation driver (lex → parse → def-map → HIR → typeck → lower → borrowck → opt → codegen). |
@@ -663,6 +663,11 @@ cargo run -p glyim-bytecode-vm --example float_casts_walkthrough
 # stops an infinite loop with an explicit error.
 cargo run -p glyim-bytecode-vm --example execution_trace_walkthrough
 
+# Aggregate what a decoded module spent its dispatches on: per-opcode and
+# per-function counts, peak depths, hottest-opcode ranking, and the
+# from_steps re-fold of a captured transcript.
+cargo run -p glyim-bytecode-vm --example execution_profile_walkthrough
+
 # Emit MIR bodies into a loadable module image (the assembler seam).
 cargo run -p glyim-codegen --example module_assembly_walkthrough
 
@@ -692,6 +697,10 @@ cargo run -p glyim-vfs --example vfs_walkthrough
 
 # Walk the content-addressed compile cache and the session-state bundle.
 cargo run -p glyim-db --example compile_cache_walkthrough
+
+# Compose the source-location vocabulary every diagnostic rides on:
+# files, byte spans, hygiene contexts, the miette conversion, MultiSpan.
+cargo run -p glyim-span --example span_walkthrough
 ```
 
 ---
