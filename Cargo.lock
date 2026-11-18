@@ -897,7 +897,6 @@ dependencies = [
  "tempfile",
  "toml",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -1339,7 +1338,6 @@ dependencies = [
  "libc",
  "mio",
  "socket2",
- "tracing",
  "windows-sys 0.61.2",
 ]
 
