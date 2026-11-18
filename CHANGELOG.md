@@ -8,6 +8,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Run-diff seam (`glyim_bytecode_vm::rundiff`)**: the *behavioral*
+  counterpart of the module-image diff — `render_module_diff` answers
+  what changed between two decoded *artifacts*, but nothing answered
+  what changed between two *runs* (an emitter tweak that leaves the
+  artifact bytes almost untouched can still change what a run does, and
+  reconstructing the behavioral delta from two traces means eyeballing
+  step lists side by side). `render_run_diff` walks two captured
+  transcripts ([`VmStep`] lists, as captured by `TraceCollector`)
+  dispatch by dispatch and renders where the two runs part ways
+  deterministically: the `diverge at dispatch N:` site with both steps
+  spelled in `render_trace`'s field shape (site, depths, mnemonic —
+  unknown bytes as the disassembler's `unknown(0xNN)` — and the payload,
+  module-free so the two sides may come from different modules: a
+  `ConstStr` step shows the pool index and its resolution, never the
+  content) plus the honest tail counts, or the shorter side's explicit
+  end line when one transcript is a strict prefix of the other (a fuel
+  budget or a fault ends one run where the other continues — an end is
+  an end, never a divergence, never a silent pad). Two identical
+  transcripts render the explicit `no divergence` line — the
+  determinism gate any no-op change must pass (the seam's test pins two
+  real runs of the same module and walks an emitter tweak that changes
+  one constant). The diff is a pure function over the two transcripts,
+  total over any pair (the empty pair included). A bench
+  (`benches/vm_run_diff`: the identical pair's full scan, the
+  early-divergence short circuit, the render) and a consumer walkthrough
+  (`examples/run_diff_walkthrough`) land with it.
+- **Call-graph seam (`glyim_bytecode_vm::callgraph`)**: the
+  *structural-dynamic* counterpart of the VM's observability suite — the
+  profile answers where the dispatches went by opcode and function, the
+  coverage which instruction sites ran, but none of them answered who
+  *called whom* (a hot function's dispatch count says nothing about
+  whether one caller fans out to it or five do; reconstructing edges from
+  a trace means replaying the frame stack by hand). `CallGraphCollector`
+  impls `TraceSink` and folds the per-dispatch stream into
+  per-`(caller, callee)` edge dispatch counts in bounded memory (a
+  `BTreeMap` keyed by function-index pairs — the render's order is the
+  map's order, never an iteration accident). Because the trace hook fires
+  *before* an instruction executes and the `Call` wire payload carries the
+  arity, the destination local, and the resume target — not the callee
+  (the callee index sits on the operand stack, invisible to a read-only
+  sink) — the fold names the callee by the step that *follows* the call:
+  a successful call dispatches into the callee's entry instruction, whose
+  step sits exactly one frame deeper, so recursion disambiguates by depth
+  and a self-edge accumulates once per recursive dispatch. A call whose
+  callee never dispatches (an out-of-range function index, a faulting
+  entry instruction, a callee with empty code, a fuel budget cut between
+  the call and the entry) stays in `calls()` and reports through
+  `unresolved_calls()` — displayed, never silently dropped. The seam is
+  read-only (the watched result equals the untraced one), total over the
+  folded stream (the faulting dispatch of a failed run is folded in), and
+  deterministic (`render_call_graph`'s listing is pinned by a golden
+  test: the header, the ascending edge lines, the explicit `no calls`
+  line for a call-free run, and the `unresolved-calls` count). `from_steps`
+  re-folds a captured `TraceCollector` transcript into the identical map
+  post-hoc, the hook composes with every other seam (fuel ends the graph
+  at the executed dispatches), and `callees_of`/`callers_of` read the map
+  back in ascending order. The fold is one depth check per dispatch plus
+  one map update per call. A bench (`benches/vm_callgraph`: the edge
+  fold's dispatch overhead vs the untraced baseline over a call-heavy
+  loop, the `from_steps` re-fold, the render) and a consumer walkthrough
+  (`examples/call_graph_walkthrough`) land with it.
 - **Module-image diff seam (`glyim_bytecode_vm::diff`)**: the artifact-level
   change report — the image seam ships a module across a process boundary
   and the disassembler lists what one artifact carries, but nothing
