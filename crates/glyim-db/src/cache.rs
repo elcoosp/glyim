@@ -47,10 +47,16 @@
 //!   cleanly and produced this exact object".
 //! - **The object file is written atomically** (temp file + rename) so a
 //!   concurrent reader never observes a partial write.
-//! - **Cache misses are silent.** If the cache directory is unwritable, the
-//!   compiler still compiles from scratch — a cache is an optimisation, never
-//!   a correctness dependency.
+//! - **Cache transitions are observable.** The best-effort contract is
+//!   unchanged — a miss, a failed store, and an eviction never affect the
+//!   compile — but nothing is silent *to a consumer who asks*: with a sink
+//!   attached ([`CompileCache::with_sink`]) the cache hands one
+//!   [`CacheEvent`](crate::cache_metrics::CacheEvent) to it after every
+//!   transition (see the [`cache_metrics`](crate::cache_metrics) module for
+//!   the observability seam's contract). Without a sink the cache behaves
+//!   exactly as before the seam existed.
 
+use crate::cache_metrics::{CacheEvent, CacheSink};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
@@ -70,6 +76,14 @@ pub struct CompileCache {
     /// disables eviction entirely (useful for tests that don't want to
     /// touch the filesystem).
     max_bytes: Option<u64>,
+    /// The observability sink ([`crate::cache_metrics::CacheSink`]) the
+    /// cache hands one [`CacheEvent`](crate::cache_metrics::CacheEvent) to
+    /// per lifecycle transition, or `None` (the zero-cost default: one
+    /// lock-and-check per transition, exactly the pre-seam behavior). The
+    /// mutex keeps the cache `Send + Sync` — `lookup`/`store` take `&self`
+    /// — and keeps a panicking sink from poisoning the cache's other
+    /// callers (`parking_lot` has no poison guard to trip over).
+    sink: parking_lot::Mutex<Option<Box<dyn CacheSink + Send>>>,
 }
 
 impl CompileCache {
@@ -84,7 +98,52 @@ impl CompileCache {
             Ok(v) => v.parse::<u64>().ok(),
             Err(_) => Some(DEFAULT_MAX_BYTES),
         };
-        Self { root, max_bytes }
+        Self {
+            root,
+            max_bytes,
+            sink: parking_lot::Mutex::new(None),
+        }
+    }
+
+    /// Pin the on-disk budget explicitly (`None` disables eviction).
+    ///
+    /// The explicit builder wins over the `GLYIM_CACHE_MAX_BYTES`
+    /// environment default `open` applied — an `open(dir).with_max_bytes(..)`
+    /// chain reads as "this budget, whatever the environment says", which is
+    /// what tests and embeddings that want a *deterministic* cache size
+    /// need.
+    #[must_use]
+    pub fn with_max_bytes(mut self, max_bytes: Option<u64>) -> Self {
+        self.max_bytes = max_bytes;
+        self
+    }
+
+    /// Attach a [`CacheSink`](crate::cache_metrics::CacheSink): from here on
+    /// the cache hands one
+    /// [`CacheEvent`](crate::cache_metrics::CacheEvent) to `sink` after each
+    /// lifecycle transition (hit, miss, store, eviction). See the
+    /// [`cache_metrics`](crate::cache_metrics) module for the seam's
+    /// read-only / total / zero-cost contract.
+    #[must_use]
+    pub fn with_sink(self, sink: Box<dyn CacheSink + Send>) -> Self {
+        *self.sink.lock() = Some(sink);
+        self
+    }
+
+    /// Take the attached sink back, if any (the same take-the-observer-out
+    /// shape `Vm::take_trace` uses). Downcast through the sink's
+    /// [`CacheSink::as_any`](crate::cache_metrics::CacheSink::as_any) hook
+    /// to recover the concrete type.
+    pub fn take_sink(&mut self) -> Option<Box<dyn CacheSink + Send>> {
+        self.sink.lock().take()
+    }
+
+    /// Hand one event to the attached sink, if any. The single lock-and-
+    /// check is the seam's entire cost when unused.
+    fn emit(&self, event: CacheEvent) {
+        if let Some(sink) = self.sink.lock().as_mut() {
+            sink.event(&event);
+        }
     }
 
     /// Open the cache at the process-wide default location.
@@ -211,19 +270,41 @@ impl CompileCache {
     /// "Non-empty" guards against a partially-written file left by a previous
     /// crash (the writer is atomic, but a foreign process could still corrupt
     /// the directory; an empty file is never a valid object).
+    ///
+    /// Either outcome is reported to the attached sink (a
+    /// [`CacheEvent::Hit`](crate::cache_metrics::CacheEvent::Hit) with the
+    /// object's size, or a
+    /// [`CacheEvent::Miss`](crate::cache_metrics::CacheEvent::Miss) — the
+    /// empty-file guard case reports as a miss too, because the caller pays
+    /// a full compile either way).
     #[must_use]
     pub fn lookup(&self, key: &str) -> Option<PathBuf> {
         let path = self.object_path(key);
         match std::fs::metadata(&path) {
-            Ok(m) if m.len() > 0 => Some(path),
-            _ => None,
+            Ok(m) if m.len() > 0 => {
+                self.emit(CacheEvent::Hit {
+                    key: key.to_string(),
+                    size_bytes: m.len(),
+                });
+                Some(path)
+            }
+            _ => {
+                self.emit(CacheEvent::Miss {
+                    key: key.to_string(),
+                });
+                None
+            }
         }
     }
 
     /// Store `object` under `key`, atomically.
     ///
     /// Best effort: any I/O failure is silently ignored (the compile already
-    /// succeeded; not caching only costs time next run).
+    /// succeeded; not caching only costs time next run). A successful store
+    /// is reported to the attached sink (a
+    /// [`CacheEvent::Stored`](crate::cache_metrics::CacheEvent::Stored) with
+    /// the copied size); a failed store reports nothing — nothing was
+    /// stored.
     pub fn store(&self, key: &str, object: &Path) {
         let dest = self.object_path(key);
         // Unique temp name so concurrent compiles of different crates do not
@@ -231,17 +312,23 @@ impl CompileCache {
         let tmp = self
             .objects_dir()
             .join(format!(".{key}.{}.tmp", std::process::id()));
-        if std::fs::copy(object, &tmp).is_ok() {
+        if let Ok(copied) = std::fs::copy(object, &tmp)
             // Rename is atomic on every supported platform; a reader sees
             // either the old (absent) or the new (complete) file, never a
             // partial one.
-            let _ = std::fs::rename(&tmp, &dest);
+            && std::fs::rename(&tmp, &dest).is_ok()
+        {
+            self.emit(CacheEvent::Stored {
+                key: key.to_string(),
+                size_bytes: copied,
+            });
         }
         let _ = std::fs::remove_file(&tmp);
         // P1-O2: trim the cache to `max_bytes`. Best-effort — a failure to
         // read a directory entry, stat a file, or remove an old object is
         // not fatal (a missed eviction just means the cache is slightly
-        // over budget for one more run).
+        // over budget for one more run). Each successful removal is
+        // reported to the attached sink.
         self.evict_if_needed();
     }
 
@@ -254,7 +341,11 @@ impl CompileCache {
     /// file would be more hostile than briefly exceeding the budget).
     ///
     /// **P1-O2 (`KNOWN_GAPS` §7).** Called once per `store`; no background
-    /// task, no per-store directory walk when under budget.
+    /// task, no per-store directory walk when under budget. Every
+    /// successful removal is reported to the attached sink as an
+    /// [`CacheEvent::Evicted`](crate::cache_metrics::CacheEvent::Evicted)
+    /// with the object's key (its file stem) and size — the trim's bytes
+    /// are a displayed fact, never a silent drop.
     fn evict_if_needed(&self) {
         let Some(max) = self.max_bytes else { return };
         let Ok(entries) = std::fs::read_dir(self.objects_dir()) else {
@@ -293,17 +384,26 @@ impl CompileCache {
         }
         // Oldest first. Ties broken by path so behaviour is deterministic.
         files.sort_by(|a, b| a.mtime.cmp(&b.mtime).then_with(|| a.path.cmp(&b.path)));
-        let mut removed = 0u64;
         for entry in files {
             if total <= max {
                 break;
             }
             if std::fs::remove_file(&entry.path).is_ok() {
                 total -= entry.size;
-                removed += entry.size;
+                // The key is the file stem (`object_path` writes
+                // `{key}.o`); `to_string_lossy` keeps the event total —
+                // our own keys are ASCII hex, so lossy never rewrites one.
+                let key = entry
+                    .path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                self.emit(CacheEvent::Evicted {
+                    key,
+                    size_bytes: entry.size,
+                });
             }
         }
-        let _ = removed; // suppress unused on the no-eviction path
     }
 }
 
