@@ -8,6 +8,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Fault-backtrace seam (`glyim_bytecode_vm::backtrace`)**: the
+  *failure-time* counterpart of the trace/profile story — the trace
+  answers what a run did step by step, but when a loaded artifact *faults*
+  the bare `VmError` carries no location (an `AbnormalTermination` says
+  nothing about where or how deep, and reconstructing it from a trace
+  means attaching a collector and scanning the transcript). `Vm` grows a
+  `with_backtrace(Box<dyn FaultSink>)` hook fired exactly once when a run
+  ends in a `VmError`, handing over a `FaultReport`: the fault site
+  (function, dispatch pc, decoded opcode), the suspended caller chain
+  (innermost first, a Rust-style backtrace, each frame at its resume pc),
+  the lifetime dispatch count, and the fuel state. The seam is
+  failure-only (a clean run never fires it), read-only (the caller
+  receives the same error either way), and total (every error path fires —
+  a pre-execution fault reports the entry request with zero dispatches, an
+  unknown opcode byte keeps `opcode: None`, the fuel gate's refused
+  dispatch is the reported site, and a cross-seam test pins the fault site
+  to the trace's last recorded step). `BacktraceCollector` captures the
+  report (a run ends at its first fault, so one captured report is the
+  whole story) and `render_backtrace` renders it deterministically in the
+  disassembler's diagnostic style (a golden test pins the trapped-callee
+  listing end to end). The machine's current site is two integer stores
+  per dispatch; the hook itself is one `None` check per *failed* run. A
+  bench (`benches/vm_backtrace`: the clean-run baseline pair, the
+  fault-path capture, the render, and the 1023-caller deep chain) and a
+  consumer walkthrough (`examples/fault_backtrace_walkthrough`) land with
+  it.
+- **Instruction-coverage seam (`glyim_bytecode_vm::coverage`)**: the
+  *spatial* aggregate over the trace stream — the profile answers where
+  the dispatches went by opcode and function, the coverage answers which
+  of the artifact's instruction sites ran and which are dead (an untaken
+  branch, an unreachable block). `CoverageCollector` impls `TraceSink` and
+  folds the per-dispatch stream into a per-`(function, pc)` hit map,
+  aligned against the module's instruction-site inventory (the same walk
+  `render_module`'s listing uses — one wire-format reading shared by the
+  static listing and the dynamic map, so a covered site reads identically
+  in both) in O(#sites) memory (bounded, never run-length).
+  `render_coverage` renders the run deterministically: covered sites in
+  module order with their hit counts (the disassembler's listing
+  spellings), the `uncovered` dead-code list, and — over a corrupt block
+  table that dispatched mid-instruction — a separate `misaligned hits`
+  section that keeps the exact pc (displayed, never dropped, never counted
+  against the aligned denominator). `from_steps` re-folds a captured
+  `TraceCollector` transcript into the identical map post-hoc, a
+  fuel-refused dispatch never reaches the hook (the coverage ends exactly
+  at the executed sites), and the faulting dispatch of a failing run is
+  folded in. A bench (`benches/vm_coverage`: the hit-map fold's dispatch
+  overhead vs the untraced baseline, the `from_steps` fold, the render)
+  and a consumer walkthrough (`examples/coverage_walkthrough`) land with
+  it.
 - **Execution trace seam (`glyim_bytecode_vm::trace`)**: the *dynamic* half
   of the image seam's observability story — the disassembler lists what a
   decoded artifact *carries*, the trace answers what it *did*. `Vm` grows a
