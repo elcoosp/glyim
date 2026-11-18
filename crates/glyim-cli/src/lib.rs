@@ -39,10 +39,11 @@ pub struct CliArgs {
     pub link_flags: Option<String>,
     /// Link-time optimization strategy: `off` (default), `fat`, or `thin`
     /// (linked via `llvm-lto2`). The backend's `run_lto` merge exists and
-    /// is unit-tested, and `fat` is accepted here and mixed into the
-    /// compile-cache key, but the driver does not call `run_lto` yet — so
-    /// `--lto=fat` currently behaves like `off` (a tracked gap, Phase
-    /// 10.2). `thin` runs the real per-CGU bitcode + thin-link pipeline.
+    /// is unit-tested, and the strategy is mixed into the compile-cache
+    /// key; `fat` is rejected by the backend with an explicit error (full
+    /// fat LTO needs the multi-CGU compilation driver, a tracked gap,
+    /// Phase 10.2) — it never compiles silently as `off`. `thin` runs the
+    /// real per-CGU bitcode + thin-link pipeline.
     #[arg(long = "lto", default_value = "off")]
     pub lto: String,
     /// Number of codegen units (CGUs) to partition monomorphized items into
