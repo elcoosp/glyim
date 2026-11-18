@@ -8,6 +8,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Module-image diff seam (`glyim_bytecode_vm::diff`)**: the artifact-level
+  change report — the image seam ships a module across a process boundary
+  and the disassembler lists what one artifact carries, but nothing
+  answered what *changed* between two builds (the only prior option was a
+  manual byte-by-byte eyeball, or `cmp`, which reports one offset and
+  stops). `render_module_diff` walks two decoded [`Module`]s index by
+  index — functions (code with the first-diff pc and the metadata pairs,
+  block tables), the string pool, the entry point — and renders the
+  differences deterministically: `-`/`+`/`~` lines per removed/added/
+  changed function in index order (a same-index divergence is one change
+  line, never a removal+addition pair; a prefix-truncated code buffer
+  diffs at the shorter buffer's end), the same three shapes over the
+  pool entries, and an explicit `entry: a -> b` line when the entry index
+  moved. Identical modules render the explicit `no differences` line —
+  the regression gate any emitter change that should not alter shipped
+  bytes must pass (encode → decode → diff over the loaded pair, pinned by
+  a round-trip test). The diff is a pure function over the two modules,
+  total over any pair. A bench (`benches/module_diff`: the identical fast
+  path and the divergent render, both sides riding the image round trip)
+  and a consumer walkthrough (`examples/module_diff_walkthrough`) land
+  with it.
+- **Local-watch seam (`glyim_bytecode_vm::watch`)**: the *data-flow*
+  counterpart of the VM's observability suite — the trace answers where a
+  run went step by step, the profile where the dispatches aggregated, the
+  coverage which instruction sites ran, the backtrace why a run failed,
+  but none of them answered what a program's locals *held* (an
+  `AssertionFailed` over a countdown loop says nothing about the counter's
+  iteration-by-iteration values; reconstructing that from a trace means
+  replaying the operand stack by hand). `Vm` grows a
+  `with_watch(Box<dyn WatchSink>)` hook fired once per successful local
+  write, covering all three write paths the machine has: the program's
+  `OP_STORE_LOCAL` stores, the `OP_CALL` argument binds (the MIR ABI's
+  arguments landing in the callee's locals `1..=arg_count`), and the
+  callee's `OP_RETURN` landing its value in the caller's recorded
+  `dest_local`. Each `WatchEvent` carries the writer function, the slot,
+  the value (a clone — the machine keeps executing), the producing
+  dispatch's site (`pc`) and 1-based lifetime number, the owning frame's
+  depth (recursion disambiguated), and the `WatchVia` kind
+  (`store-local` / `arg-bind` / `callee-return`). The seam is read-only
+  (the watched result equals the unwatched one), total over the
+  successful writes (a bounds-failing store writes nothing and reports
+  nothing; zero-initialisation is allocation, not a write), bounded
+  (`WatchCollector::bounded` marks overflow instead of growing without
+  limit), and deterministic (`render_watch`'s listing is pinned by a
+  golden test; values render in the disassembler's spellings — floats
+  with their raw IEEE-754 bits, tuples parenthesized and recursive).
+  `slot_history` reads one watched slot's values back in write order, and
+  the hook composes with every other seam (trace + watch on one run, fuel
+  ending the stream at the executed writes, the image round trip watching
+  a decoded artifact identically). The hook is one `None` check per local
+  write when no sink is attached. A bench (`benches/vm_watch`: the
+  per-write capture overhead vs the unwatched baseline over a store-heavy
+  countdown, and the render) and a consumer walkthrough
+  (`examples/local_watch_walkthrough`) land with it.
 - **Fault-backtrace seam (`glyim_bytecode_vm::backtrace`)**: the
   *failure-time* counterpart of the trace/profile story — the trace
   answers what a run did step by step, but when a loaded artifact *faults*
