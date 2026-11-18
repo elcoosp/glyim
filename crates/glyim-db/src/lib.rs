@@ -1,5 +1,6 @@
 //! Crate root.
 pub mod cache;
+pub mod cache_metrics;
 
 use glyim_core::def_id::CrateId;
 use glyim_core::interner::Interner;
@@ -146,7 +147,10 @@ impl Default for Database {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests;
+
+#[cfg(test)]
+mod database_tests {
     use super::*;
 
     #[test]
