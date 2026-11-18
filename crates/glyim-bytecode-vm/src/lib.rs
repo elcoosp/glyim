@@ -37,22 +37,26 @@
 //! converts to.
 
 pub mod backtrace;
+pub mod callgraph;
 pub mod coverage;
 pub mod diff;
 pub mod disasm;
 pub mod image;
 pub mod profile;
+pub mod rundiff;
 pub mod trace;
 pub mod watch;
 
 pub use backtrace::{
     BacktraceCollector, FaultFrame, FaultReport, FaultSink, FaultSite, render_backtrace,
 };
+pub use callgraph::{CallGraphCollector, render_call_graph};
 pub use coverage::{CoverageCollector, render_coverage};
 pub use diff::render_module_diff;
 pub use disasm::{render_function, render_module};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
 pub use profile::{HotOpcode, ProfileCollector, render_profile};
+pub use rundiff::render_run_diff;
 pub use trace::{StepDetail, TraceCollector, TraceSink, TracingSink, VmStep, render_trace};
 pub use watch::{TracingWatchSink, WatchCollector, WatchEvent, WatchSink, WatchVia, render_watch};
 
