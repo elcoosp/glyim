@@ -8,6 +8,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Call-state seam (`glyim_bytecode_vm::state`)**: the *frame-lifecycle*
+  counterpart of the local-watch seam — watch reports one event per
+  local *write*, but nothing answered the frame-shaped question: at the
+  moment a call began, what did the callee's locals hold (which arguments
+  landed where, was the return place still zero), and at the moment it
+  returned, what did the frame hold after everything the body did? A new
+  `StateSink` — the first hook the VM fires at the frame *lifecycle*
+  rather than per dispatch — hands one `StateEvent` per boundary from two
+  sites: `Vm::push_frame` fires `frame_enter` the moment a frame's locals
+  are bound (the MIR ABI's zero return place at slot 0, the arguments at
+  `1..=arg_count`), and the `OP_RETURN` arm fires `frame_exit` with the
+  frame's final local state before the frame is discarded (the entry
+  frame's exit is the run's last event — a straight-line run reports
+  exactly two boundaries). Each event carries the frame's function index
+  and 1-based depth, so a recursion's nesting reads LIFO, and a full
+  locals snapshot paid only when a sink is attached (one `Option` check
+  per frame boundary when none is — the pre-seam behavior). Contract
+  like the other seams: read-only, total, bounded (`StateCollector::bounded`
+  flags overflow instead of growing without limit over unbounded
+  recursion — a displayed fact, never a silent drop), deterministic
+  `render_state` listing (the `enter`/`exit` phases, the `fn`/`depth`
+  pair, the locals in `render_watch`'s value spellings, the explicit
+  `no frame boundaries` line), and an honest unbalanced tail — a fuel
+  budget or a fault ending the run between the boundaries is displayed,
+  never silently paired away. A bench (`benches/vm_state`: the
+  frame-boundary hook's overhead vs the unattached baseline over a
+  call-heavy loop — one locals snapshot per boundary — and the render)
+  and a consumer walkthrough (`examples/call_state_walkthrough`) land
+  with it.
+- **Branch-history seam (`glyim_bytecode_vm::branches`)**: the
+  *directional* counterpart of the instruction-coverage seam — coverage
+  answers which instruction sites a run dispatched and which stayed dead,
+  but it cannot say which way a branch actually went (an untaken branch
+  and a taken one are equally "covered" sites). `BranchCollector` folds
+  the same per-dispatch stream the trace hook produces into
+  per-decision-site histories keyed `(function, pc)`: for a `JumpIf`, the
+  taken/fall-through split named by the step that *follows* the branch
+  (the machine's next dispatch — the stream carries no "branch was taken"
+  bit, so the fold resolves outcomes the same way the call-graph seam
+  names a callee by the following step), and for every decision opcode a
+  landing map of where control went next, with per-outcome counts.
+  `Jump`, `SwitchInt`, and `Assert` transfer unconditionally on success,
+  so their landing map is the whole outcome (a `SwitchInt`'s arm values
+  travel in the instruction payload, not the stream — the landing map is
+  the honest observable); a held `Assert` lands on its target, a failed
+  one ends the run in `VmError::AssertionFailed`. A decision whose
+  resolving step never arrives (a fault at the branch itself — a float
+  condition under `JumpIf` — a fuel budget cut between the branch and its
+  landing, the branch as the stream's last dispatch) keeps its dispatch
+  count at its site and reports through `unresolved_decisions` —
+  displayed, never silently dropped. Deterministic `render_branches`
+  listing (site lines with the disassembler's mnemonics, landing lines in
+  ascending key order, the explicit `no decision dispatches` line) and a
+  `from_steps` re-fold of a captured transcript, exactly like the other
+  stream folds. A bench (`benches/vm_branches`: the live fold's dispatch
+  overhead vs the untraced baseline over a branch-heavy loop, the
+  post-hoc re-fold, the render) and a consumer walkthrough
+  (`examples/branch_history_walkthrough`) land with it.
 - **Run-diff seam (`glyim_bytecode_vm::rundiff`)**: the *behavioral*
   counterpart of the module-image diff — `render_module_diff` answers
   what changed between two decoded *artifacts*, but nothing answered
