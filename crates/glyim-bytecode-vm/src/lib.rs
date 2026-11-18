@@ -36,6 +36,7 @@
 //! two bytes: the cast kind, then the [`CastTarget`] primitive the cast
 //! converts to.
 
+pub mod asserts;
 pub mod backtrace;
 pub mod branches;
 pub mod callgraph;
@@ -44,6 +45,7 @@ pub mod coverage;
 pub mod dataflow;
 pub mod diff;
 pub mod disasm;
+pub mod drops;
 pub mod image;
 pub mod profile;
 pub mod rundiff;
@@ -52,6 +54,7 @@ pub mod trace;
 pub mod watch;
 pub mod window;
 
+pub use asserts::{AssertCollector, AssertEvent, AssertSink, render_asserts};
 pub use backtrace::{
     BacktraceCollector, FaultFrame, FaultReport, FaultSink, FaultSite, render_backtrace,
 };
@@ -65,6 +68,7 @@ pub use dataflow::{
 };
 pub use diff::render_module_diff;
 pub use disasm::{render_function, render_module};
+pub use drops::{DropCollector, DropEvent, DropSink, render_drops};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
 pub use profile::{HotOpcode, ProfileCollector, render_profile};
 pub use rundiff::render_run_diff;
@@ -779,6 +783,16 @@ pub struct Vm {
     /// full locals snapshot (`None` = one check per *frame boundary* —
     /// the pre-seam behavior).
     state: Option<Box<dyn crate::state::StateSink>>,
+    /// The attached assertion sink ([`crate::asserts`]), if any: it fires
+    /// once per evaluated `OP_ASSERT` — passing or failing — with the
+    /// assert's site, the asserted polarity, the observed condition, and
+    /// the verdict (`None` = one check per *assert* — the pre-seam
+    /// behavior).
+    asserts: Option<Box<dyn crate::asserts::AssertSink>>,
+    /// The attached discard sink ([`crate::drops`]), if any: it fires
+    /// once per executed `OP_DROP` with the discard site and the popped
+    /// value (`None` = one check per *discard* — the pre-seam behavior).
+    drops: Option<Box<dyn crate::drops::DropSink>>,
     /// The machine's current dispatch site — the function index of the
     /// dispatch in flight (the backtrace seam's fault-site tracking). Set
     /// at every dispatch, and to the entry request before the first one, so
@@ -893,6 +907,45 @@ impl Vm {
     /// was attached.
     pub fn take_state(&mut self) -> Option<Box<dyn crate::state::StateSink>> {
         self.state.take()
+    }
+
+    /// Attach an assertion sink ([`crate::asserts`]): every evaluated
+    /// `OP_ASSERT` — passing or failing — hands one
+    /// [`crate::asserts::AssertEvent`] to it the moment its condition has
+    /// been compared against the asserted polarity, before the fault a
+    /// failing assert raises. The sink observes only — it never flips a
+    /// verdict and a failing assert faults with exactly the pre-seam
+    /// error — and [`Vm::take_asserts`] hands it back after the run.
+    #[must_use]
+    pub fn with_asserts(mut self, sink: Box<dyn crate::asserts::AssertSink>) -> Vm {
+        self.asserts = Some(sink);
+        self
+    }
+
+    /// Detach and return the assertion sink (the typed owner recovers it
+    /// through [`crate::asserts::AssertSink::as_any`]). `None` when no
+    /// sink was attached.
+    pub fn take_asserts(&mut self) -> Option<Box<dyn crate::asserts::AssertSink>> {
+        self.asserts.take()
+    }
+
+    /// Attach a discard sink ([`crate::drops`]): every executed `OP_DROP`
+    /// hands one [`crate::drops::DropEvent`] to it — the discard site and
+    /// the popped value in full (the event takes the value the opcode
+    /// already popped, so the seam adds no clone). The sink observes only
+    /// — it never resurrects a discarded value — and [`Vm::take_drops`]
+    /// hands it back after the run.
+    #[must_use]
+    pub fn with_drops(mut self, sink: Box<dyn crate::drops::DropSink>) -> Vm {
+        self.drops = Some(sink);
+        self
+    }
+
+    /// Detach and return the discard sink (the typed owner recovers it
+    /// through [`crate::drops::DropSink::as_any`]). `None` when no sink
+    /// was attached.
+    pub fn take_drops(&mut self) -> Option<Box<dyn crate::drops::DropSink>> {
+        self.drops.take()
     }
 
     /// Set an execution budget: the machine refuses a dispatch once `fuel`
@@ -1287,6 +1340,9 @@ impl Vm {
                     self.frames[frame_idx].pc = off;
                 }
                 Opcode::Assert => {
+                    // The loop-top `pc` is the OP_ASSERT opcode's own byte
+                    // offset (the frame's pc has already advanced past it).
+                    let site = pc;
                     let expected = code[self.frames[frame_idx].pc];
                     self.frames[frame_idx].pc += 1;
                     let target = Vm::read_u32(code, &mut self.frames[frame_idx].pc)?;
@@ -1295,7 +1351,24 @@ impl Vm {
                     // is an explicit [`VmError::ExpectedInt`], not a silent
                     // `as_int()` 0 that flipped the assert's outcome.
                     let cond = self.pop_int("assert condition")?;
-                    if (cond != 0) != (expected != 0) {
+                    let observed = cond != 0;
+                    let passed = observed == (expected != 0);
+                    // The assertion seam's hook (the `asserts` module):
+                    // one event per evaluated assert — passing or failing —
+                    // fired *before* the fault a failing assert raises, so
+                    // the event list's last entry is the failure the run
+                    // ends on. With no sink attached this is one `None`
+                    // check; observation never flips a verdict.
+                    if let Some(sink) = self.asserts.as_mut() {
+                        sink.assert_evaluated(&crate::asserts::AssertEvent {
+                            func,
+                            pc: site,
+                            expected: expected != 0,
+                            observed,
+                            passed,
+                        });
+                    }
+                    if !passed {
                         return Err(VmError::AssertionFailed);
                     }
                     let off = module.functions[func].resolve_target(target);
@@ -1331,7 +1404,20 @@ impl Vm {
                     self.stack.push(Value::Tuple(elems));
                 }
                 Opcode::Drop => {
-                    let _addr = self.pop()?;
+                    // The discard seam's hook (the `drops` module): the
+                    // popped value is the event's — the pop the opcode
+                    // already paid for, so the seam adds no clone — and
+                    // the event reports the site alongside it. With no
+                    // sink attached this is one `None` check over a
+                    // discard the pre-seam machine already made.
+                    let dropped = self.pop()?;
+                    if let Some(sink) = self.drops.as_mut() {
+                        sink.dropped(&crate::drops::DropEvent {
+                            func,
+                            pc,
+                            value: dropped,
+                        });
+                    }
                     // The emitter writes `DROP; JUMP u32`. Do NOT consume the
                     // following opcode here — let `OP_JUMP` execute normally
                     // (RT-3: the old code ate the JUMP opcode + target as one
