@@ -58,6 +58,20 @@ harness = false
 name = "vm_coverage"
 harness = false
 
+# Local-watch bench (the watch seam: the per-write hook overhead vs the
+# unwatched baseline over a store-heavy countdown loop, and the
+# deterministic render; dependency-free, `harness = false`).
+[[bench]]
+name = "vm_watch"
+harness = false
+
+# Module-image diff bench (the diff seam: the identical fast path and the
+# divergent render over two decoded golden modules; dependency-free,
+# `harness = false`).
+[[bench]]
+name = "module_diff"
+harness = false
+
 [dependencies]
 # The module-image seam (glyim.module-image/1) logs encode/decode events and
 # every decode rejection through the workspace-standard tracing layer, so a
