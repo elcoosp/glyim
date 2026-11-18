@@ -19,7 +19,12 @@ socket2 = "0.6"
 libc = "0.2"
 mio = { version = "1.2", features = ["net", "os-poll"] }
 glyim-core = { workspace = true }
-tracing = { workspace = true }
+
+# Windows-only process/console plumbing (the runtime probe's handle
+# cleanup, the crash-diagnostics walk). Scoped to the target so the
+# Linux/macOS builds do not carry (or get warned about) a dependency
+# their cfg gates compile out.
+[target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
     "Win32_System_Console",
     "Win32_System_Threading",
