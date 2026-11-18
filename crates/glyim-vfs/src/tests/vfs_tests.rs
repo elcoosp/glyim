@@ -45,7 +45,8 @@ fn set_file_content_updates_content() {
     let id = vfs.add_file_content(&path, Arc::from("old"));
     assert_eq!(vfs.file_content(id), Some(Arc::from("old")));
 
-    vfs.set_file_content(id, Arc::from("new"));
+    vfs.set_file_content(id, Arc::from("new"))
+        .expect("the write lands on a registered id");
     assert_eq!(vfs.file_content(id), Some(Arc::from("new")));
 }
 
@@ -70,10 +71,12 @@ fn add_file_content_updates_existing_path() {
 }
 
 #[test]
-fn set_file_content_does_nothing_for_invalid_id() {
+fn set_file_content_rejects_unknown_file_id() {
     let vfs = Vfs::new();
     let bogus_id = FileId::from_raw(999);
-    vfs.set_file_content(bogus_id, Arc::from("ignored"));
-    // No panic, no change
+    let err = vfs
+        .set_file_content(bogus_id, Arc::from("refused"))
+        .expect_err("an unknown id never silently loses the write");
+    assert_eq!(err, crate::VfsError::UnknownFile(bogus_id));
     assert_eq!(vfs.len(), 0);
 }
