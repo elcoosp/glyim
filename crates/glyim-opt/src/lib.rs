@@ -54,7 +54,8 @@ pub fn optimize(ctx: &TyCtx, body: &Arc<Body>) -> Optimized {
 /// plan regardless of its contents — a plan without
 /// [`BuiltinMirPass::SliceDesugar`] that meets a body carrying `Subslice`
 /// projections surfaces here as a precise compiler-bug panic instead of
-/// three stages later in codegen as `unreachable!("Subslice")`.
+/// three stages later in codegen as the `internal compiler error: Subslice
+/// projection …` panic.
 ///
 /// # Panics
 ///
@@ -76,7 +77,7 @@ pub fn optimize_with_plan(ctx: &TyCtx, body: &Arc<Body>, plan: &PassPlan) -> Opt
         pass.run(ctx, &mut body);
     }
     // Post-condition (de-stubbing plan §8.7): codegen (glyim-codegen-llvm)
-    // treats a surviving `Subslice` as `unreachable!`, so a release build
+    // treats a surviving `Subslice` as a `panic!` ICE, so a release build
     // must never hand one over. For plans that include `slice_desugar`
     // this is exactly the check `optimize` has always run right after
     // that pass; for plans that skip it, this is the guard that turns a
