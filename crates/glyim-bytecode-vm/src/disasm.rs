@@ -170,7 +170,12 @@ fn render_body(f: &Function, pool: Option<&[String]>) -> String {
 /// number of payload bytes consumed. Unknown opcodes consume nothing
 /// (`(unknown(0xNN), 0)`); a truncated payload renders `<truncated>` and
 /// consumes the rest of the code (the listing for that function ends).
-fn decode_instruction(
+///
+/// `pub(crate)`: the coverage seam ([`crate::coverage`]) reuses this walker
+/// for its instruction-site inventory — the same widths, the same advance
+/// rule, one wire-format reading shared by the static listing and the
+/// dynamic hit map.
+pub(crate) fn decode_instruction(
     code: &[u8],
     pool: Option<&[String]>,
     raw: u8,
