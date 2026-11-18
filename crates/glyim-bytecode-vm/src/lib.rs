@@ -39,6 +39,7 @@
 pub mod backtrace;
 pub mod branches;
 pub mod callgraph;
+pub mod cost;
 pub mod coverage;
 pub mod diff;
 pub mod disasm;
@@ -48,12 +49,14 @@ pub mod rundiff;
 pub mod state;
 pub mod trace;
 pub mod watch;
+pub mod window;
 
 pub use backtrace::{
     BacktraceCollector, FaultFrame, FaultReport, FaultSink, FaultSite, render_backtrace,
 };
 pub use branches::{BranchCollector, BranchKind, BranchSite, render_branches};
 pub use callgraph::{CallGraphCollector, render_call_graph};
+pub use cost::{CostCollector, HotFunction, render_cost};
 pub use coverage::{CoverageCollector, render_coverage};
 pub use diff::render_module_diff;
 pub use disasm::{render_function, render_module};
@@ -63,6 +66,7 @@ pub use rundiff::render_run_diff;
 pub use state::{StateCollector, StateEvent, StatePhase, StateSink, render_state};
 pub use trace::{StepDetail, TraceCollector, TraceSink, TracingSink, VmStep, render_trace};
 pub use watch::{TracingWatchSink, WatchCollector, WatchEvent, WatchSink, WatchVia, render_watch};
+pub use window::{WindowCollector, render_window};
 
 /// A runtime value on the VM stack / in a local slot.
 ///
