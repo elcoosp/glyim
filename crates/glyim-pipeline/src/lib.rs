@@ -243,7 +243,14 @@ fn load_crate_source(
         return Err(mod_diags);
     }
     let flattened: Arc<str> = Arc::from(flattened);
-    db.vfs().set_file_content(file_id, flattened.clone());
+    // The id was minted (or resolved) above, so the write cannot fail by
+    // construction; a refusal means the VFS invariant broke, and losing
+    // the flattened source here would corrupt every later read.
+    if let Err(err) = db.vfs().set_file_content(file_id, flattened.clone()) {
+        return Err(vec![GlyimDiagnostic::internal_error(format!(
+            "VFS write failed: {err}"
+        ))]);
+    }
     Ok((file_id, flattened))
 }
 
