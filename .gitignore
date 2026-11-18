@@ -17,6 +17,3 @@ dump.txt
 # Build-time backups
 *.bak
 *.orig
-
-# Ship-ceremony artifacts (task-local, never committed)
-ship.toml
