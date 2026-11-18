@@ -44,11 +44,19 @@ fn main() {
     );
 
     // 3. Mutation: the LSP change face — the same FileId, new content.
-    vfs.set_file_content(buffer_id, Arc::from("fn main() -> i32 { 42 }"));
+    //    The write is total: an unknown id is refused (a stale id never
+    //    silently loses the edit).
+    vfs.set_file_content(buffer_id, Arc::from("fn main() -> i32 { 42 }"))
+        .expect("buffer still registered");
     let current = vfs
         .file_content(buffer_id)
         .expect("buffer still registered");
     assert!(current.contains("42"), "content updated in place");
+    let bogus = glyim_span::FileId::from_raw(999);
+    let refused = vfs
+        .set_file_content(bogus, Arc::from("never lands"))
+        .expect_err("an unknown id is refused, never silently dropped");
+    println!("a stale FileId is refused: {refused}");
 
     // 4. Lookups on both keys: path → id and id → content/path.
     assert_eq!(vfs.file_id(&disk_path), Some(file_id));
