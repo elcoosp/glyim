@@ -27,7 +27,7 @@ Combine `--release` with an explicit optimization level and LTO strategy when yo
 <Code lang="bash" title="Terminal" code={"glyip build --release --opt-level 2 --lto thin"} />
 
 <Aside type="caution">
-`fat` LTO performs an in-compiler module merge and optimize step. `thin` LTO requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution that `glyim-codegen-llvm` was built against; requesting `thin` with the bytecode backend is an explicit error rather than a silent no-op.
+`fat` LTO is rejected with an explicit error (full fat LTO needs the multi-CGU compilation driver, a tracked gap — it never compiles silently as `off`). `thin` LTO requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution that `glyim-codegen-llvm` was built against; requesting `thin` with the bytecode backend is an explicit error rather than a silent no-op.
 </Aside>
 
 ## Choose a backend
