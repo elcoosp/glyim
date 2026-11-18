@@ -65,6 +65,12 @@ harness = false
 name = "vm_watch"
 harness = false
 
+# Data-flow seam bench: the paired fold's per-read overhead over a
+# read-heavy countdown, the interleaved transcript capture, and the render.
+[[bench]]
+name = "vm_dataflow"
+harness = false
+
 # Module-image diff bench (the diff seam: the identical fast path and the
 # divergent render over two decoded golden modules; dependency-free,
 # `harness = false`).
