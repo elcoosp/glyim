@@ -63,9 +63,16 @@ impl LspState {
     /// `did_change`.
     pub fn did_change(&mut self, path: PathBuf, content: String, version: i32) {
         if let Some(&(file_id, _)) = self.open_files.get(&path) {
-            self.db
+            // The id came from `open_files`, so the write cannot fail by
+            // construction; a failure means the VFS invariant broke, and
+            // the dropped edit must surface instead of silently losing it.
+            if let Err(err) = self
+                .db
                 .vfs()
-                .set_file_content(file_id, Arc::from(content.clone()));
+                .set_file_content(file_id, Arc::from(content.clone()))
+            {
+                tracing::warn!("did_change refused by the VFS ({err}); edit dropped");
+            }
             self.open_files.insert(path.clone(), (file_id, version));
             if let Some(tx) = &self.driver_tx {
                 if let Err(err) = tx.try_send(AnalysisMessage::FileChanged {
