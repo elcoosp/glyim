@@ -17,7 +17,6 @@ serde_json = { workspace = true }
 # document (the waivers-loader precedent in glyim-ledger's diff slice).
 toml = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 
 [lib]
 name = "glyim_bench"
