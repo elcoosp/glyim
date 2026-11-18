@@ -36,10 +36,12 @@
 
 pub mod disasm;
 pub mod image;
+pub mod profile;
 pub mod trace;
 
 pub use disasm::{render_function, render_module};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
+pub use profile::{HotOpcode, ProfileCollector, render_profile};
 pub use trace::{StepDetail, TraceCollector, TraceSink, TracingSink, VmStep, render_trace};
 
 /// A runtime value on the VM stack / in a local slot.
