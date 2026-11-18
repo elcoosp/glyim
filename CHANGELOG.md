@@ -8,6 +8,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Data-flow seam (`glyim_bytecode_vm::dataflow`)**: the *read-side
+  counterpart* of the local-watch seam — the watch records what values a
+  module's local slots took, but nothing paired those writes with the
+  reads that consumed them, and a run that reads a slot it never stored
+  in (the frame's zero-initialisation leaking into semantics) was
+  invisible to every other seam: the trace shows a `LoadLocal`, the watch
+  shows the writes, but "this read had no producing write in its frame"
+  was nowhere. The VM now hands one `ReadEvent` (the watch event's field
+  shape minus the write kind: function, slot, value, site, lifetime
+  dispatch number, frame depth) to a `ReadSink` attached through
+  `Vm::with_reads` for every successful `OP_LOAD_LOCAL`, and
+  `DataFlowCollector` — a shared-state fold implementing *both* sink
+  traits, attached through `Vm::with_watch` *and* `Vm::with_reads` (the
+  hooks take the sink by value, so the collector's clone shares one
+  fold) — links each read to the dispatch that last wrote its slot per
+  `(function, frame depth, slot)`, the same key the watch events carry,
+  so recursion disambiguates by depth. A read whose slot no write in its
+  frame ever defined is reported through `uninitialized_reads` — the
+  zero-init consumption is a *displayed* fact, never a silent one — with
+  the displayed list capped (`with_uninitialized_cap`) and the exact
+  total kept beside it (the same honesty rule as the bounded collectors'
+  overflow flags). `FlowRecorder` captures the interleaved write/read
+  transcript in arrival order (bounded or unbounded) and
+  `DataFlowCollector::from_transcript` replays it into the identical
+  fold; `TracingReadSink` emits one `tracing::debug!` event per read for
+  the workspace-standard observability layer; `render_data_flow` renders
+  the deterministic listing (the explicit `no data-flow events recorded`
+  empty state, slot lines sorted by `(function, depth, slot)`, the
+  per-slot `last def` dispatch). Contract like the other stream seams:
+  read-only, total over the *successful* reads (a faulting bounds load
+  reads nothing and reports nothing; the address-form
+  `OP_LOAD_LOCAL_ADDR` and the aggregate-length `OP_LEN` are not value
+  reads and are out of scope, the same scoping the watch seam applies to
+  its write paths), zero-cost when unused (one `None` check per local
+  read), and composing with everything else (fuel refusal means a read
+  never happens, a decoded image reads exactly like an in-memory module,
+  and the trace ride-along is unchanged). A bench
+  (`benches/vm_dataflow`: the paired fold's per-read overhead over a
+  read-heavy countdown, the transcript capture, the render) and a
+  consumer walkthrough (`examples/data_flow_walkthrough`: the ABI pair,
+  the interleaved transcript, and the uninitialized-read report) land
+  with it.
+- **Cache-observability seam (`glyim_db::cache_metrics`)**: the
+  *lifecycle counterpart* of the compile cache's best-effort contract —
+  misses, stores, and budget evictions were deliberately silent (nothing
+  must be reported), but that silence made an unexpectedly slow rebuild
+  indistinguishable from a rebuild that recompiled everything, and an
+  eviction that pushed a hot object out of the size-capped cache was
+  invisible until the next full recompile. The cache now hands one
+  `CacheEvent` (`Hit` / `Miss` / `Stored` / `Evicted`, each with the
+  object's size where bytes move) to the attached `CacheSink` just after
+  each transition completes — the same sink/collector/render shape the
+  bytecode VM's seam family uses. `CacheCollector` folds the stream into
+  an O(1) aggregate (counts and byte totals plus the last key of each
+  kind — memory is a constant, never a function of how many compiles
+  ran) with a `from_events` transcript re-fold and a `hit_rate()` that
+  is `None` when no lookup ran (an average over nothing is not a fact);
+  `render_cache_report` renders the deterministic listing (the explicit
+  `no cache events recorded` empty state, the `n/a (no lookups)`
+  pure-writer state); `CacheTracingSink` emits one `tracing::debug!`
+  event per transition for the workspace-standard observability layer.
+  Wire-up mirrors the VM: `CompileCache::with_sink` attaches,
+  `CompileCache::take_sink` takes the observer back out (the
+  `Vm::take_trace` shape, downcast through the `as_any` hook), and the
+  new `CompileCache::with_max_bytes` pins the budget explicitly (the
+  builder wins over the `GLYIM_CACHE_MAX_BYTES` environment default —
+  what deterministic tests need). Contract like the other seams:
+  read-only, total (a failed store reports nothing because nothing was
+  stored; the empty-file guard reports as a miss, because the caller
+  pays a full compile either way), and zero-cost when unused (one
+  lock-and-check per transition). The seam also retires the eviction
+  trim's dead `removed` accumulator — its bytes now travel on the
+  `Evicted` events — and wires the orphaned `glyim-db` `src/tests`
+  module (three `Database` tests that sat undeclared in `lib.rs` and so
+  never compiled or ran) back into the test tree. A bench
+  (`benches/cache_metrics`: the 64k-event fold, the render, and the
+  sink-attached vs bare per-lookup overhead) and a consumer walkthrough
+  (`examples/cache_metrics_walkthrough`: miss → store → hit → eviction,
+  rendered) land with it.
 - **Tail-window seam (`glyim_bytecode_vm::window`)**: the
   *bounded-memory failure counterpart* of the execution-trace seam —
   the trace records every dispatch (the right answer at O(steps)
