@@ -201,8 +201,9 @@ pub fn validate_body(ctx: &TyCtx, body: &Body) -> Result<(), MirValidationError>
 /// `slice_desugar` exists precisely to eliminate every `Subslice` from MIR.
 /// This is the post-condition check: once `slice_desugar` has run, a surviving
 /// `Subslice` is a compiler bug, not bad user input. Calling this right after
-/// `slice_desugar::run` makes codegen's `unreachable!("Subslice")`
-/// (glyim-codegen-llvm/src/lower.rs) true by construction rather than by hope.
+/// `slice_desugar::run` makes codegen's `internal compiler error: Subslice
+/// projection …` panic (glyim-codegen-llvm/src/lower.rs) true by
+/// construction rather than by hope.
 pub fn validate_no_subslice(body: &Body) -> Result<(), MirValidationError> {
     for bb in body.basic_blocks.iter() {
         for stmt in &bb.statements {
