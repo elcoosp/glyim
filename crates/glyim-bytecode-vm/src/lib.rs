@@ -38,19 +38,23 @@
 
 pub mod backtrace;
 pub mod coverage;
+pub mod diff;
 pub mod disasm;
 pub mod image;
 pub mod profile;
 pub mod trace;
+pub mod watch;
 
 pub use backtrace::{
     BacktraceCollector, FaultFrame, FaultReport, FaultSink, FaultSite, render_backtrace,
 };
 pub use coverage::{CoverageCollector, render_coverage};
+pub use diff::render_module_diff;
 pub use disasm::{render_function, render_module};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
 pub use profile::{HotOpcode, ProfileCollector, render_profile};
 pub use trace::{StepDetail, TraceCollector, TraceSink, TracingSink, VmStep, render_trace};
+pub use watch::{TracingWatchSink, WatchCollector, WatchEvent, WatchSink, WatchVia, render_watch};
 
 /// A runtime value on the VM stack / in a local slot.
 ///
@@ -738,6 +742,11 @@ pub struct Vm {
     /// The attached execution-trace sink, if any (`None` = the seam costs
     /// one check per dispatch — exactly the pre-seam behavior).
     trace: Option<Box<dyn TraceSink>>,
+    /// The attached local-watch sink ([`crate::watch`]), if any: it fires
+    /// once per successful local write — the program's `OP_STORE_LOCAL`
+    /// stores, the call-argument binds, and the callee-return dest write
+    /// (`None` = one check per *write* — the pre-seam behavior).
+    watch: Option<Box<dyn crate::watch::WatchSink>>,
     /// The attached fault-backtrace sink ([`crate::backtrace`]), if any: it
     /// fires once when a run ends in a [`VmError`] (`None` = one check per
     /// *failed* run — a clean run pays nothing beyond the site stores).
@@ -798,6 +807,24 @@ impl Vm {
     /// sink was attached.
     pub fn take_backtrace(&mut self) -> Option<Box<dyn crate::backtrace::FaultSink>> {
         self.fault.take()
+    }
+
+    /// Attach a local-watch sink ([`crate::watch`]): every successful local
+    /// write — the program's `OP_STORE_LOCAL` stores, the call-argument
+    /// binds, and the callee-return dest write — is handed to it just after
+    /// the slot is updated. The sink observes only — it never changes
+    /// execution — and [`Vm::take_watch`] hands it back after the run.
+    #[must_use]
+    pub fn with_watch(mut self, sink: Box<dyn crate::watch::WatchSink>) -> Vm {
+        self.watch = Some(sink);
+        self
+    }
+
+    /// Detach and return the local-watch sink (the typed owner recovers it
+    /// through [`crate::watch::WatchSink::as_any`]). `None` when no sink
+    /// was attached.
+    pub fn take_watch(&mut self) -> Option<Box<dyn crate::watch::WatchSink>> {
+        self.watch.take()
     }
 
     /// Set an execution budget: the machine refuses a dispatch once `fuel`
@@ -938,6 +965,21 @@ impl Vm {
             resume_target,
             dest_local,
         });
+        // The local-watch seam's argument-bind events: the MIR ABI's
+        // argument landing is a write into the callee's locals
+        // `1..=arg_count`, recorded per slot (only when a sink is attached
+        // — the clones below are the sink's copies, not the frame's).
+        if self.watch.is_some() {
+            for (i, a) in args.iter().enumerate() {
+                self.record_watch(
+                    func,
+                    i + 1,
+                    a.clone(),
+                    self.frames.len(),
+                    crate::watch::WatchVia::ArgBind,
+                );
+            }
+        }
         Ok(())
     }
 
@@ -1220,23 +1262,54 @@ impl Vm {
                     // so an empty stack here means "returns Unit", not an
                     // error. Value-returning functions still push their result.
                     let retval = self.pop().unwrap_or(Value::Int(0));
-                    let finished = self.frames.pop().unwrap();
+                    // The dispatch loop only reaches a `Return` dispatch with
+                    // a frame on the stack (the empty check above the loop
+                    // header returns early), so the pop cannot miss.
+                    let finished = self
+                        .frames
+                        .pop()
+                        .expect("the dispatch loop never runs without a frame");
                     if self.frames.is_empty() {
                         // Entry frame returned: the value is the module result.
                         return Ok(retval);
                     }
                     // Write the return value into the caller's dest_local and
                     // resume the caller at its recorded target (a block index,
-                    // resolved via the caller's own block-offset table).
-                    let caller = self.frames.last_mut().unwrap();
-                    let dest = finished.dest_local;
-                    let caller_func = caller.func;
-                    let resume =
-                        module.functions[caller_func].resolve_target(finished.resume_target);
-                    if dest < caller.locals.len() {
-                        caller.locals[dest] = retval;
+                    // resolved via the caller's own block-offset table). A
+                    // non-entry frame always sits under a caller, so the
+                    // borrow cannot miss either.
+                    let (caller_func, dest, watch_value) = {
+                        let caller = self
+                            .frames
+                            .last_mut()
+                            .expect("a non-entry frame always has a caller");
+                        let dest = finished.dest_local;
+                        let caller_func = caller.func;
+                        let resume =
+                            module.functions[caller_func].resolve_target(finished.resume_target);
+                        let wrote_dest = dest < caller.locals.len();
+                        if wrote_dest {
+                            caller.locals[dest] = retval.clone();
+                        }
+                        // The local-watch seam's callee-return event: the
+                        // value clone is paid only when a sink is attached.
+                        let watch_value = if wrote_dest && self.watch.is_some() {
+                            Some(retval.clone())
+                        } else {
+                            None
+                        };
+                        caller.pc = resume;
+                        (caller_func, dest, watch_value)
+                    };
+                    if let Some(value) = watch_value {
+                        self.record_watch(
+                            caller_func,
+                            dest,
+                            value,
+                            self.frames.len(),
+                            crate::watch::WatchVia::CalleeReturn,
+                        );
                     }
-                    caller.pc = resume;
                     // Continue the loop with the caller frame on top.
                 }
                 Opcode::Call | Opcode::CallIndirect => {
@@ -1385,6 +1458,12 @@ impl Vm {
     }
 
     fn set_local(&mut self, idx: usize, v: Value) -> ExecResult<()> {
+        // The watch seam's context (which frame wrote, at what depth) is
+        // captured before the mutable borrow; the event itself is recorded
+        // after the write completes (a bounds failure returns below and
+        // reports nothing).
+        let depth = self.frames.len();
+        let writer_func = self.frames.last().map(|f| f.func);
         let frame = self.frames.last_mut().ok_or(VmError::StackUnderflow)?;
         if idx >= frame.locals.len() {
             return Err(VmError::LocalOutOfBounds(idx));
@@ -1405,7 +1484,41 @@ impl Vm {
                 }
             }
         }
+        // The local-watch seam's `OP_STORE_LOCAL` event. The mirror above
+        // is the addressable-memory view of the same write, not a second
+        // one; only the semantic slot write is reported.
+        if let Some(func) = writer_func {
+            self.record_watch(func, idx, v, depth, crate::watch::WatchVia::StoreLocal);
+        }
         Ok(())
+    }
+
+    /// Hand one local-write event to the attached watch sink
+    /// ([`crate::watch`]), if any. The event carries the machine's current
+    /// dispatch site ([`Vm::fault_pc`], the producing instruction) and the
+    /// lifetime dispatch count — the same site tracking the backtrace seam
+    /// uses, so a watch event pairs with the trace step of the same
+    /// dispatch number. One `None` check per local write when no sink is
+    /// attached.
+    fn record_watch(
+        &mut self,
+        func: usize,
+        local: usize,
+        value: Value,
+        frame_depth: usize,
+        via: crate::watch::WatchVia,
+    ) {
+        if let Some(sink) = self.watch.as_mut() {
+            sink.write(&crate::watch::WatchEvent {
+                func,
+                local,
+                value,
+                pc: self.fault_pc,
+                dispatch: self.executed,
+                frame_depth,
+                via,
+            });
+        }
     }
 
     fn mem(&self, addr: usize) -> ExecResult<&Value> {
