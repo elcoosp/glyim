@@ -24,6 +24,12 @@ tracing = { workspace = true }
 [dev-dependencies]
 tempfile = "3.27"
 glyim-test = { workspace = true }
+
+[[bench]]
+name = "cache_metrics"
+harness = false
+path = "benches/cache_metrics.rs"
+
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
