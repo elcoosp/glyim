@@ -1,7 +1,7 @@
 [package]
 documentation = "https://glyim.vercel.app"
 
-description = "The glyim-db crate for the glyim ecosystem"
+description = "Compilation database: interners, VFS, type context, trait context."
 repository = "https://github.com/elcoosp/glyim"
 readme = "../../README.md"
 name = "glyim-db"
