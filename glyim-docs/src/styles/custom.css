@@ -1,16 +1,3 @@
-/*
- * Glyim brand theme.
- *
- * Accent derived from the graphite 3-D "G" logo: near-achromatic dark gray
- * at contrast-safe lightness levels.
- */
-
-:root {
-  --sl-color-accent-low: hsl(0 0% 85%);
-  --sl-color-accent: hsl(0 0% 25%);
-  --sl-color-accent-high: hsl(0 0% 17%);
-}
-
 [data-theme='dark'] {
   --sl-color-accent-low: hsl(0 0% 45%);
   --sl-color-accent: hsl(0 0% 75%);
