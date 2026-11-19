@@ -1,7 +1,7 @@
 [package]
 documentation = "https://glyim.vercel.app"
 
-description = "The glyim-lang-std crate for the glyim ecosystem"
+description = "Standard library source: io, fs, net, thread, sync, task."
 repository = "https://github.com/elcoosp/glyim"
 readme = "../../README.md"
 name = "glyim-lang-std"
