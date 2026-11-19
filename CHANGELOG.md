@@ -8,6 +8,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Call-stream observation seam (`glyim_bytecode_vm::calls`)**: the
+  *call-ABI counterpart* of the call-graph and call-state seams — the
+  call graph folds the execution trace into per-`(caller, callee)`
+  edges and the call-state seam snapshots a frame's locals at its
+  boundaries, but the trace hook fires *before* a call executes and its
+  one-line step entries fold the call's operands away: the argument
+  values, the destination local, and the returned value were unreadable
+  after the fact. The VM now hands one `CallStarted` (the caller's
+  function index, the call site, the callee, the argument values in
+  full as *sink-side copies*, the destination local, and the resume
+  target) per executed `OP_CALL`/`OP_CALL_INDIRECT` just after the
+  callee's frame is pushed, and one `CallReturned` (the returning
+  function, the frame depth it sat at, and the value it handed back as
+  a sink-side copy) per executed `OP_RETURN` just after the frame is
+  popped, to a `CallSink` attached through `Vm::with_calls` — the entry
+  frame's return is the run's last event, its value the module result.
+  `CallCollector` captures the interleaved transcript (`events()` plus
+  filtered `starts()`/`returns()` views) in bounded memory
+  (`bounded(max)` + a displayed overflow flag) and folds as it
+  captures: `open_calls()` — the calls started but not yet returned,
+  displayed by `render_calls` as `unreturned calls: N`, never silently
+  paired away — `max_depth()`, and `indirect_count()`. Contract like
+  the other seams: read-only, total over the *executed* call stream (a
+  call the machine refuses — a bad function index, a depth overflow —
+  never executes and reports nothing; the fault stream owns the
+  refusal), zero-cost when unused (one `Option` check per call and per
+  return), and composing with everything else. A bench
+  (`benches/vm_calls`: the per-call hooks' overhead vs the unattached
+  baseline over a call-heavy countdown, and the render) and a consumer
+  walkthrough (`examples/calls_walkthrough`: the paired call and
+  return, the bounded recursion's depth folds, the fault's open call,
+  the call-heavy loop, the bounded capture, and the read-only proof)
+  land with it.
+- **String-pool observation seam (`glyim_bytecode_vm::strings`)**: the
+  *runtime counterpart* of the module-image diff's structural pool
+  lines — the diff names pool *changes* between two artifacts, but the
+  pool's runtime face was invisible: which slots did this run resolve,
+  from which sites, and how many times was one shared slot
+  re-resolved (the shared-slot audit where an opaque-index constant or
+  a content-equality break shows up as the wrong slot)? The VM now
+  hands one `StringLoadEvent` (the resolution site, the pool slot, and
+  the resolved byte string in full as a *sink-side copy*) per executed
+  `OP_LOAD_CONST_STR` just after the slot's byte string is resolved
+  and before the value is pushed, to a `StringSink` attached through
+  `Vm::with_strings`. `StringCollector` captures the transcript in
+  bounded memory (`bounded(max)` + a displayed overflow flag) and
+  folds as it captures: `resolutions(slot)` and `slot_count()` — the
+  per-slot counts — and `total_bytes()`, and `render_strings` renders
+  the deterministic listing (the explicit `no string loads` empty
+  state, one site/slot/value line per load in the watch render's value
+  spellings, then the per-slot summary in slot order). Contract like
+  the other seams: read-only, total over the *executed* resolutions (a
+  bad pool index faults and resolves nothing — the fault stream owns
+  the refusal), zero-cost when unused (one `Option` check per load),
+  and composing with everything else. A bench (`benches/vm_strings`:
+  the per-resolution hook's overhead vs the unattached baseline over a
+  string-heavy countdown, and the render) and a consumer walkthrough
+  (`examples/strings_walkthrough`: the two-slot shape, the shared-slot
+  loop, the bounded capture, and the read-only proof) land with it.
 - **Memory-observation seam (`glyim_bytecode_vm::memory`)**: the
   *frame-memory counterpart* of the local-watch and data-flow seams —
   the watch records what values a module's local slots *took* and the
