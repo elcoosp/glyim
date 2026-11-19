@@ -1,7 +1,7 @@
 [package]
 documentation = "https://glyim.vercel.app"
 
-description = "The glyim-typeck crate for the glyim ecosystem"
+description = "Type checker: HIR → THIR with inference and coherence."
 repository = "https://github.com/elcoosp/glyim"
 readme = "../../README.md"
 name = "glyim-typeck"
