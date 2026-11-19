@@ -8,6 +8,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Memory-observation seam (`glyim_bytecode_vm::memory`)**: the
+  *frame-memory counterpart* of the local-watch and data-flow seams —
+  the watch records what values a module's local slots *took* and the
+  data-flow seam pairs those writes with the reads that consumed them,
+  but both watch the *slot* face. The aggregate lowering also runs on
+  the *memory* face: `OP_STORE_FIELD` writes a field through an address
+  and `OP_DEREf` reads it back, and the frame's addressable memory
+  region is zero-initialised — a read of an address the run never wrote
+  is a silent zero, not an error, so the wrong-field-offset class (read
+  a neighbour slot's zero instead of the stored field) was invisible
+  after the run. The VM now hands one `MemWriteEvent` (the store site:
+  function index and the opcode's byte offset; the frame-relative
+  address; the stored value in full) per executed `OP_STORE_FIELD` just
+  after the store lands, and one `MemReadEvent` (the deref site, the
+  address, the fetched value) per executed `OP_DEREf` just after the
+  value is fetched, to a `MemSink` attached through `Vm::with_memory` —
+  both events take *sink-side copies* of their values (the read hook's
+  copies-into-the-event shape), so the machine's own values stay exactly
+  where they were. `MemCollector` captures the interleaved transcript
+  (`events()` — writes and reads in execution order — plus filtered
+  `writes()`/`reads()` views) in bounded memory (`bounded(max)` + a
+  displayed overflow flag) and folds as it captures: `is_written(addr)`
+  and `unwritten_reads()`/`unwritten_read_count()` — the reads whose
+  address had no prior write when the read executed — and
+  `render_memory` renders the deterministic listing (the explicit
+  `no memory events` empty state, one kind/site/address/value line per
+  access in the watch render's value spellings, then the unwritten reads
+  as their own section). Contract like the other seams: read-only (the
+  stored and fetched values are unchanged — the sink observes, it never
+  rewrites memory), total over the *executed* accesses (a store refused
+  by the bounds check writes nothing and reports nothing — the fault
+  stream owns the refusal, the watch seam's failed-store rule),
+  zero-cost when unused (one `None` check per executed access), and
+  composing with everything else. A bench (`benches/vm_memory`: the
+  per-access hooks' overhead vs the unattached baseline over a
+  memory-heavy countdown, and the render) and a consumer walkthrough
+  (`examples/memory_walkthrough`: the paired store-and-read, the
+  unwritten read, the memory-heavy loop's per-iteration traffic, the
+  bounded capture, and the read-only proof) land with it.
+- **Cast-observation seam (`glyim_bytecode_vm::casts`)**: the
+  *value-transformation counterpart* of the local-watch and data-flow
+  seams — the watch records what values a module's local slots *took*
+  and the data-flow seam pairs those writes with the reads that consumed
+  them, but every `OP_CAST` *changes a value in place* and the change
+  vanished from every view at the push: the execution trace names the
+  cast's kind and target bytes, yet the operand it consumed and the
+  result it produced are folded away by the one-line step entries, and
+  the run's own output shows only the *last* cast's result. The classic
+  silent-lossy-cast audit — `(-1i32) as u8 == 255`, `(3.99) as i32 == 3`
+  — was unreadable after the fact. The VM now hands one `CastEvent` (the
+  cast site: function index and the opcode's byte offset; the decoded
+  kind/target pair — the seam's own `CastKind` spelling of the emitter's
+  cast-kind byte, named the way the typed cast-mismatch errors spell it;
+  the operand/result values in full) to a `CastSink` attached through
+  `Vm::with_casts` the moment a cast has produced its result, just
+  before the result is pushed — the event takes *sink-side copies* of
+  both values (the read hook's copies-into-the-event shape), so the
+  machine's own values stay exactly where they were and the seam adds
+  one clone per traced cast. `CastCollector` captures the stream in
+  bounded memory (`bounded(max)` + a displayed overflow flag, the
+  honesty rule every other collector follows) with `events_of(func)`
+  site reads, `events_of_kind(kind)` kind reads (the float-cast audit's
+  first query), and `changed_count()` (the structural-equality fold:
+  every cross-kind cast and every truncation/wrap counts, an identity
+  cast does not), and `render_casts` renders the deterministic listing
+  (the explicit `no casts` empty state, one kind/target site line per
+  cast with the operand/result pair in the watch render's value
+  spellings — floats carry their raw bits, so the golden is
+  platform-exact). Contract like the other seams: read-only (the pushed
+  result is unchanged — the sink observes, it never rewrites a cast's
+  outcome), total over the *executed* casts (a cast that faults —
+  `VmError::UnknownCastKind` / `VmError::CastOperandMismatch` — never
+  executes, so it reports nothing; the fault stream owns it), zero-cost
+  when unused (one `None` check per executed `OP_CAST`), and composing
+  with everything else. A bench (`benches/vm_casts`: the per-cast hook's
+  overhead vs the unattached baseline over a cast-heavy countdown, and
+  the render) and a consumer walkthrough (`examples/casts_walkthrough`:
+  the wrap, the truncation, the identity, the float-cast kind read, the
+  cast-heavy loop's per-iteration stream, the bounded capture, and the
+  read-only proof) land with it.
 - **Drop-observation seam (`glyim_bytecode_vm::drops`)**: the
   *destruction-side counterpart* of the local-watch and call-state seams
   — the watch records what values a module's local slots *took* and the
