@@ -8,6 +8,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Float-operation observation seam (`glyim_bytecode_vm::floats`)**:
+  the *arithmetic counterpart* of the value seams — every opcode class
+  carried an observation hook except the float stream, and the float
+  stream is the only arithmetic the machine runs that *never faults*:
+  integer division by zero traps, but `1.0 / 0.0` is the documented
+  convention (`+inf`, matching LLVM's `fdiv` and the MIR interpreter),
+  and `inf - inf` or `0.0 * inf` land as NaN — a silently-poisoned
+  value that flows into comparisons (every NaN compare is false) and
+  reads like a lowering bug rather than the arithmetic it came from.
+  The VM now hands one `FloatConst` (the site and the constant) per
+  executed `OP_LOAD_CONST_F64` just after the payload has been decoded
+  and before the value is pushed, one `FloatBinop` (the site, the
+  opcode, the operands in full as *sink-side copies*, and the answer —
+  a `Float` for arithmetic, the machine's `Int` bool encoding for
+  comparisons) per executed `(Float, Float)` binop just after the arm
+  has computed its answer — a *refused* pairing (mixed `Int`/`Float`
+  kinds, a bitwise op over floats) faults with
+  `VmError::BinOpTypeMismatch` and never reaches the hook (the fault
+  stream owns the refusal) — and one `FloatNeg` (the site, the
+  operand, and the IEEE negation) per executed `OP_NEG` over a float,
+  to a `FloatSink` attached through `Vm::with_floats`; the constant
+  pushes that executed before a refusal still report (the seam is
+  total over the *executed* float stream). `FloatCollector` captures
+  the interleaved transcript (`events()` plus filtered
+  `const_events()`/`binop_events()`/`neg_events()` views) in bounded
+  memory (`bounded(max)` + a displayed overflow flag) and folds as it
+  captures: `const_count()`/`binop_count()`/`neg_count()` plus the
+  IEEE-754 specials folds — `nan_results()` and `inf_results()`, the
+  arithmetic answers that came back NaN or infinite, the convention
+  path kept visible instead of silently consumed. `render_floats`
+  renders the deterministic listing (the explicit `no float events`
+  empty state; one `const`/`binop`/`neg` line per event with the
+  machine's value spellings — the float spelling carries the bit
+  pattern, so `-0.0` and the specials stay auditable). `Opcode::name`
+  is public now, the same documented-mnemonic surface the casts' and
+  watch's kinds already expose, so the binop lines spell the
+  dispatched opcode. Contract like the other seams: read-only,
+  total over the executed stream, zero-cost when unused (one `Option`
+  check per float operation, the operand copies paid only on the fire
+  path), and composing with everything else. A bench
+  (`benches/vm_floats`: the per-float-op hooks' overhead vs the
+  unattached baseline over a float-heavy countdown loop, and the
+  render) and a consumer walkthrough (`examples/floats_walkthrough`:
+  the one-binop kernel, both specials, the comparison and negation
+  faces, the float-heavy loop, the bounded capture, the refused
+  pairing, and the read-only proof) land with it. With this seam every
+  behavioral opcode class carries an observation hook.
 - **Composite-construction observation seam (`glyim_bytecode_vm::aggregates`)**:
   the *construction counterpart* of the value seams — the watch seam
   records what values slots *took*, the drop seam what the run
