@@ -1,7 +1,7 @@
 [package]
 documentation = "https://glyim.vercel.app"
 
-description = "The glyim-layout crate for the glyim ecosystem"
+description = "Type layout computation (size, alignment, ABI, vtables)."
 repository = "https://github.com/elcoosp/glyim"
 readme = "../../README.md"
 name = "glyim-layout"
