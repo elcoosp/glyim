@@ -176,6 +176,24 @@ harness = false
 name = "vm_strings"
 harness = false
 
+# Composite-construction bench (the aggregate seam: the per-construction
+# hooks' overhead vs the unattached baseline over a repeat-heavy
+# countdown loop — one event with sink-side operand copies per executed
+# `OP_AGGREGATE` fold or `OP_REPEAT` replication — and the deterministic
+# render; dependency-free, `harness = false`).
+[[bench]]
+name = "vm_aggregates"
+harness = false
+
+# Projection-stream bench (the projections seam: the per-projection
+# hooks' overhead vs the unattached baseline over a projection-heavy
+# countdown loop — one event with a sink-side operand copy per executed
+# `OP_LEN` read or `OP_DISCRIMINANT` read — and the deterministic
+# render; dependency-free, `harness = false`).
+[[bench]]
+name = "vm_projections"
+harness = false
+
 [dependencies]
 # The module-image seam (glyim.module-image/1) logs encode/decode events and
 # every decode rejection through the workspace-standard tracing layer, so a
