@@ -3,7 +3,7 @@
 //! Dependency-free (`harness = false`), mirroring the `vm_casts` /
 //! `vm_asserts` benches in this crate: only `std::time::Instant` +
 //! `std::hint::black_box`. The memory seam (the `memory` module) rides
-//! the `OP_STORE_FIELD` and `OP_DEREf` arms — one write event per
+//! the `OP_STORE_FIELD` and `OP_DEREF` arms — one write event per
 //! executed store and one read event per executed deref, with the site,
 //! the address, and a sink-side copy of the value — so its headline
 //! numbers are the **per-access overhead** of a live run (one `Option`
@@ -21,7 +21,7 @@ use std::time::Instant;
 
 /// A memory-heavy loop: a countdown whose body stores the counter
 /// through address 0 and reads it back every iteration — every iteration
-/// pays exactly one `OP_STORE_FIELD` dispatch and one `OP_DEREf` dispatch
+/// pays exactly one `OP_STORE_FIELD` dispatch and one `OP_DEREF` dispatch
 /// (one write event and one read event per iteration).
 fn store_loop() -> Module {
     let mut main = Vec::new();
