@@ -18,13 +18,13 @@ GSX est expérimental. Le parseur, le vérificateur de types et l'étage `glyim-
 
 Les éléments de vue GSX sont des expressions de première classe en Glyim. Un composant complet de l'exemple phare du design :
 
-<Code lang="rust" code={"use ui::{View, Host, Handler};\n\n#[state]\nstruct Counter {\n    count: i32,\n    step:  i32,\n    name:  String,\n}\n\n#[component]\nfn CounterView(s: &Counter) -> View {\n    <section class=\"counter\" aria-label=\"Counter\">\n        <h1>\"Hello, {s.name}!\"</h1>\n\n        <button on:click={|s, _| s.count -= s.step}>\"\u2212\"</button>\n        <output class:warn={s.count < 0}>\"{s.count}\"</output>\n        <button on:click={|s, _| s.count += s.step}>\"+\"</button>\n\n        <input bind:value={s.name} placeholder=\"Your name\" />\n\n        {if s.count > 10 {\n            <p class=\"big\">\"That's a lot.\"</p>\n        } else {\n            <></>\n        }}\n\n        <ul>\n            {for item in s.history.iter() by item.id {\n                <li>\"{item.label}\"</li>\n            }}\n        </ul>\n    </section>\n}"} />
+<Code lang="rust" meta="ignore" code={"use ui::{View, Host, Handler};\n\n#[state]\nstruct Counter {\n    count: i32,\n    step:  i32,\n    name:  String,\n}\n\n#[component]\nfn CounterView(s: &Counter) -> View {\n    <section class=\"counter\" aria-label=\"Counter\">\n        <h1>\"Hello, {s.name}!\"</h1>\n\n        <button on:click={|s, _| s.count -= s.step}>\"\u2212\"</button>\n        <output class:warn={s.count < 0}>\"{s.count}\"</output>\n        <button on:click={|s, _| s.count += s.step}>\"+\"</button>\n\n        <input bind:value={s.name} placeholder=\"Your name\" />\n\n        {if s.count > 10 {\n            <p class=\"big\">\"That's a lot.\"</p>\n        } else {\n            <></>\n        }}\n\n        <ul>\n            {for item in s.history.iter() by item.id {\n                <li>\"{item.label}\"</li>\n            }}\n        </ul>\n    </section>\n}"} />
 
 ## Connaître les règles de texte
 
 Le texte est toujours un littéral de chaîne — le texte brut façon JSX ne fait pas partie de la syntaxe, ce qui garde le lexer inchangé et évite les règles de repliement des espaces :
 
-<Code lang="rust" code={"<h1>\"Hello, {s.name}!\"</h1>"} />
+<Code lang="rust" meta="ignore" code={"<h1>\"Hello, {s.name}!\"</h1>"} />
 
 Le parseur GSX découpe le littéral en pièces statiques et trous typés à l'analyse, donc l'ensemble de lecture de chaque trou est syntaxiquement visible et l'échappement est piloté par le type. Les espaces entre frères ne sont pas significatifs ; écrivez `" "` explicitement quand vous en avez besoin.
 
@@ -47,11 +47,11 @@ Les tags en minuscules se résolvent à travers le schéma de dialecte actif —
 
 Il n'y a pas de directives de template comme `v-if` ou `{#each}` — vous utilisez les `if`, `match` et `for` natifs de Glyim dans `{ }`, et le compilateur reconnaît ces formes comme des régions :
 
-<Code lang="rust" code={"{if s.count > 10 {\n    <p class=\"big\">\"That's a lot.\"</p>\n} else {\n    <></>\n}}"} />
+<Code lang="rust" meta="ignore" code={"{if s.count > 10 {\n    <p class=\"big\">\"That's a lot.\"</p>\n} else {\n    <></>\n}}"} />
 
 Pour les listes, ajoutez une expression de clé `by` — un mot-clé contextuel à portée GSX accepté seulement dans un `for` en position d'enfant — pour obtenir une réconciliation à clé :
 
-<Code lang="rust" code={"{for item in s.history.iter() by item.id {\n    <li>\"{item.label}\"</li>\n}}"} />
+<Code lang="rust" meta="ignore" code={"{for item in s.history.iter() by item.id {\n    <li>\"{item.label}\"</li>\n}}"} />
 
 ## Le faire passer par l'étage du compilateur
 
