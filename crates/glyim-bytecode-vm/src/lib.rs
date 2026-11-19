@@ -35,7 +35,29 @@
 //! (local/block/function indices) as the emitter writes. `OP_CAST` carries
 //! two bytes: the cast kind, then the [`CastTarget`] primitive the cast
 //! converts to.
+//!
+//! # Observability seams
+//!
+//! Every behavioral opcode class carries an observation hook in the same
+//! shape — an event type, a sink trait, a bounded capturing collector
+//! with a displayed overflow flag, and a deterministic render — attached
+//! through a `Vm::with_*` builder and recovered through the paired
+//! `Vm::take_*`: the execution trace ([`trace`]) and its aggregates over
+//! the same stream (the profile, coverage, branch-history, call-graph,
+//! inclusive-cost, and tail-window seams), the fault backtrace
+//! ([`backtrace`]), the frame lifecycle ([`state`]), the local write and
+//! read faces ([`watch`] / [`dataflow`]), the frame-memory face
+//! ([`memory`]), the call ABI ([`calls`]), the string pool ([`strings`]),
+//! the casts ([`casts`]), the assertions ([`asserts`]), the drops
+//! ([`drops`]), the composite constructions ([`aggregates`]), the
+//! composite projections ([`projections`]), and the artifact-level
+//! faces (the module image [`image`] with its decoder, disassembler
+//! ([`disasm`]), and the module/run diff seams ([`diff`] /
+//! [`rundiff`])). The hooks fire only when a sink is attached — one
+//! `Option` check per event, exactly the pre-seam behavior when the
+//! sink is absent — so observation never changes execution.
 
+pub mod aggregates;
 pub mod asserts;
 pub mod backtrace;
 pub mod branches;
@@ -51,6 +73,7 @@ pub mod drops;
 pub mod image;
 pub mod memory;
 pub mod profile;
+pub mod projections;
 pub mod rundiff;
 pub mod state;
 pub mod strings;
@@ -58,6 +81,10 @@ pub mod trace;
 pub mod watch;
 pub mod window;
 
+pub use aggregates::{
+    AggregateBuilt, AggregateCollector, AggregateEvent, AggregateSink, RepeatBuilt,
+    render_aggregates,
+};
 pub use asserts::{AssertCollector, AssertEvent, AssertSink, render_asserts};
 pub use backtrace::{
     BacktraceCollector, FaultFrame, FaultReport, FaultSink, FaultSite, render_backtrace,
@@ -78,6 +105,9 @@ pub use drops::{DropCollector, DropEvent, DropSink, render_drops};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
 pub use memory::{MemCollector, MemEvent, MemReadEvent, MemSink, MemWriteEvent, render_memory};
 pub use profile::{HotOpcode, ProfileCollector, render_profile};
+pub use projections::{
+    DiscrRead, LenRead, ProjectionCollector, ProjectionEvent, ProjectionSink, render_projections,
+};
 pub use rundiff::render_run_diff;
 pub use state::{StateCollector, StateEvent, StatePhase, StateSink, render_state};
 pub use strings::{StringCollector, StringLoadEvent, StringSink, render_strings};
@@ -472,7 +502,7 @@ pub enum VmError {
     LocalOutOfBounds(usize),
     /// A `Return` executed with an empty stack.
     EmptyReturn,
-    /// `OP_TRAP` / `OP_UNREACHABLE` was executed.
+    /// `OP_TRAP` was executed (the codegen emitter's only abort opcode).
     AbnormalTermination,
     /// `OP_ASSERT` condition was `expected == false`.
     AssertionFailed,
@@ -554,7 +584,7 @@ impl std::fmt::Display for VmError {
             }
             VmError::LocalOutOfBounds(idx) => write!(f, "local index {idx} out of bounds"),
             VmError::EmptyReturn => write!(f, "a Return executed with an empty stack"),
-            VmError::AbnormalTermination => write!(f, "OP_TRAP / OP_UNREACHABLE executed"),
+            VmError::AbnormalTermination => write!(f, "OP_TRAP executed"),
             VmError::AssertionFailed => write!(f, "OP_ASSERT condition did not hold"),
             VmError::CallFrameOverflow => write!(f, "call stack exceeded the depth limit"),
             VmError::FunctionOutOfBounds(idx) => {
@@ -824,6 +854,24 @@ pub struct Vm {
     /// slot, and the resolved byte string — (`None` = one check per
     /// *resolution* — the pre-seam behavior).
     strings: Option<Box<dyn crate::strings::StringSink>>,
+    /// The attached composite-construction sink ([`crate::aggregates`]),
+    /// if any: it fires once per executed construction — one
+    /// [`crate::aggregates::AggregateBuilt`] just after an
+    /// `OP_AGGREGATE` fold has popped its operands, one
+    /// [`crate::aggregates::RepeatBuilt`] just after an `OP_REPEAT`'s
+    /// count and value have been popped — with the site and the
+    /// operands in full (`None` = one check per *construction* — the
+    /// pre-seam behavior).
+    aggregates: Option<Box<dyn crate::aggregates::AggregateSink>>,
+    /// The attached composite-projection sink ([`crate::projections`]),
+    /// if any: it fires once per executed aggregate projection — one
+    /// [`crate::projections::LenRead`] just after an `OP_LEN` has
+    /// fetched its local operand, one
+    /// [`crate::projections::DiscrRead`] just after an
+    /// `OP_DISCRIMINANT` has popped its operand — with the site, the
+    /// operand, and the answer (`None` = one check per *projection* —
+    /// the pre-seam behavior).
+    projections: Option<Box<dyn crate::projections::ProjectionSink>>,
     /// The machine's current dispatch site — the function index of the
     /// dispatch in flight (the backtrace seam's fault-site tracking). Set
     /// at every dispatch, and to the entry request before the first one, so
@@ -1070,6 +1118,60 @@ impl Vm {
     /// no sink was attached.
     pub fn take_strings(&mut self) -> Option<Box<dyn crate::strings::StringSink>> {
         self.strings.take()
+    }
+
+    /// Attach a composite-construction sink ([`crate::aggregates`]):
+    /// every executed `OP_AGGREGATE` hands one
+    /// [`crate::aggregates::AggregateBuilt`] to it the moment the fold
+    /// has popped its operands — the site, the arity, and the folded
+    /// elements in full (sink-side copies; the machine pushes its own
+    /// tuple right after the hook returns) — and every executed
+    /// `OP_REPEAT` hands one [`crate::aggregates::RepeatBuilt`] the
+    /// moment the count and value have been popped — the site, the raw
+    /// count (a negative count is displayed, not clamped away), and the
+    /// replicated value. A construction the machine refuses (an
+    /// operand-stack underflow mid-fold, a non-Int repeat count) never
+    /// executes, so it reports nothing — the fault stream owns it. The
+    /// sink observes only — it never changes a built tuple — and
+    /// [`Vm::take_aggregates`] hands it back after the run.
+    #[must_use]
+    pub fn with_aggregates(mut self, sink: Box<dyn crate::aggregates::AggregateSink>) -> Vm {
+        self.aggregates = Some(sink);
+        self
+    }
+
+    /// Detach and return the composite-construction sink (the typed
+    /// owner recovers it through
+    /// [`crate::aggregates::AggregateSink::as_any`]). `None` when no
+    /// sink was attached.
+    pub fn take_aggregates(&mut self) -> Option<Box<dyn crate::aggregates::AggregateSink>> {
+        self.aggregates.take()
+    }
+
+    /// Attach a composite-projection sink ([`crate::projections`]):
+    /// every executed `OP_LEN` hands one
+    /// [`crate::projections::LenRead`] to it the moment the operand has
+    /// been fetched from its local slot — the site, the local index,
+    /// the projected operand in full (a sink-side copy), and the
+    /// machine's answer — and every executed `OP_DISCRIMINANT` hands
+    /// one [`crate::projections::DiscrRead`] the moment the operand has
+    /// been popped — the site, the operand, and the answer. A
+    /// projection the machine refuses (an out-of-bounds local index)
+    /// never executes, so it reports nothing — the fault stream owns
+    /// it. The sink observes only — it never changes an answer — and
+    /// [`Vm::take_projections`] hands it back after the run.
+    #[must_use]
+    pub fn with_projections(mut self, sink: Box<dyn crate::projections::ProjectionSink>) -> Vm {
+        self.projections = Some(sink);
+        self
+    }
+
+    /// Detach and return the composite-projection sink (the typed
+    /// owner recovers it through
+    /// [`crate::projections::ProjectionSink::as_any`]). `None` when no
+    /// sink was attached.
+    pub fn take_projections(&mut self) -> Option<Box<dyn crate::projections::ProjectionSink>> {
+        self.projections.take()
     }
 
     /// Set an execution budget: the machine refuses a dispatch once `fuel`
@@ -1584,6 +1686,22 @@ impl Vm {
                         // non-aggregate locals).
                         Value::Int(_) | Value::Float(_) | Value::Str(_) => 0,
                     };
+                    // The projection seam's hook (the `projections`
+                    // module): one event per executed length read, fired
+                    // after the operand has been fetched from its local
+                    // (an out-of-bounds index faults and never reaches
+                    // the hook) and before the answer is pushed. The
+                    // operand clone is paid only when a sink is
+                    // attached.
+                    if let Some(sink) = self.projections.as_mut() {
+                        sink.length_read(&crate::projections::LenRead {
+                            func,
+                            pc,
+                            local: idx,
+                            operand: v.clone(),
+                            result: len,
+                        });
+                    }
                     self.stack.push(Value::Int(len));
                 }
                 Opcode::Discriminant => {
@@ -1592,6 +1710,20 @@ impl Vm {
                         Value::Tuple(elems) => elems.len() as i64,
                         Value::Int(_) | Value::Float(_) | Value::Str(_) => 0,
                     };
+                    // The projection seam's discriminant hook (the
+                    // `projections` module): one event per executed
+                    // discriminant read, fired after the operand has
+                    // been popped and before the answer is pushed. The
+                    // operand clone is paid only when a sink is
+                    // attached.
+                    if let Some(sink) = self.projections.as_mut() {
+                        sink.discriminant_read(&crate::projections::DiscrRead {
+                            func,
+                            pc,
+                            operand: v.clone(),
+                            result: discr,
+                        });
+                    }
                     self.stack.push(Value::Int(discr));
                 }
                 Opcode::Aggregate => {
@@ -1601,6 +1733,20 @@ impl Vm {
                         elems.push(self.pop()?);
                     }
                     elems.reverse();
+                    // The aggregate seam's hook (the `aggregates` module):
+                    // one event per executed fold, fired after the
+                    // operands have been popped (an underflow faults and
+                    // never reaches the hook) and before the built tuple
+                    // is pushed. The elements clone is paid only when a
+                    // sink is attached.
+                    if let Some(sink) = self.aggregates.as_mut() {
+                        sink.aggregate_built(&crate::aggregates::AggregateBuilt {
+                            func,
+                            pc,
+                            arity: n,
+                            elements: elems.clone(),
+                        });
+                    }
                     self.stack.push(Value::Tuple(elems));
                 }
                 Opcode::Drop => {
@@ -1635,6 +1781,24 @@ impl Vm {
                     let mut elems = Vec::new();
                     for _ in 0..count.max(0) {
                         elems.push(value.clone());
+                    }
+                    // The aggregate seam's replication hook (the
+                    // `aggregates` module): one event per executed
+                    // replication, fired after the count and value have
+                    // been popped (a non-Int count faults and never
+                    // reaches the hook) and before the produced tuple is
+                    // pushed. The event carries the *raw* count — a
+                    // negative count clamps to the empty tuple, and the
+                    // display keeps the raw value instead of silently
+                    // pairing the clamp away. The value clone is paid
+                    // only when a sink is attached.
+                    if let Some(sink) = self.aggregates.as_mut() {
+                        sink.repeat_built(&crate::aggregates::RepeatBuilt {
+                            func,
+                            pc,
+                            count,
+                            value: value.clone(),
+                        });
                     }
                     self.stack.push(Value::Tuple(elems));
                 }
