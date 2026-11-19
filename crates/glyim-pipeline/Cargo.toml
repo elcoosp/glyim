@@ -1,7 +1,7 @@
 [package]
 documentation = "https://glyim.vercel.app"
 
-description = "The glyim-pipeline crate for the glyim ecosystem"
+description = "End-to-end compilation driver: lex → parse → … → codegen."
 repository = "https://github.com/elcoosp/glyim"
 readme = "../../README.md"
 name = "glyim-pipeline"
