@@ -40,6 +40,7 @@ pub mod asserts;
 pub mod backtrace;
 pub mod branches;
 pub mod callgraph;
+pub mod casts;
 pub mod cost;
 pub mod coverage;
 pub mod dataflow;
@@ -47,6 +48,7 @@ pub mod diff;
 pub mod disasm;
 pub mod drops;
 pub mod image;
+pub mod memory;
 pub mod profile;
 pub mod rundiff;
 pub mod state;
@@ -60,6 +62,7 @@ pub use backtrace::{
 };
 pub use branches::{BranchCollector, BranchKind, BranchSite, render_branches};
 pub use callgraph::{CallGraphCollector, render_call_graph};
+pub use casts::{CastCollector, CastEvent, CastKind, CastSink, render_casts};
 pub use cost::{CostCollector, HotFunction, render_cost};
 pub use coverage::{CoverageCollector, render_coverage};
 pub use dataflow::{
@@ -70,6 +73,7 @@ pub use diff::render_module_diff;
 pub use disasm::{render_function, render_module};
 pub use drops::{DropCollector, DropEvent, DropSink, render_drops};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
+pub use memory::{MemCollector, MemEvent, MemReadEvent, MemSink, MemWriteEvent, render_memory};
 pub use profile::{HotOpcode, ProfileCollector, render_profile};
 pub use rundiff::render_run_diff;
 pub use state::{StateCollector, StateEvent, StatePhase, StateSink, render_state};
@@ -793,6 +797,17 @@ pub struct Vm {
     /// once per executed `OP_DROP` with the discard site and the popped
     /// value (`None` = one check per *discard* — the pre-seam behavior).
     drops: Option<Box<dyn crate::drops::DropSink>>,
+    /// The attached cast sink ([`crate::casts`]), if any: it fires once
+    /// per executed `OP_CAST` with the cast site, the decoded
+    /// kind/target pair, and sink-side copies of the operand and the
+    /// result (`None` = one check per *cast* — the pre-seam behavior).
+    casts: Option<Box<dyn crate::casts::CastSink>>,
+    /// The attached memory sink ([`crate::memory`]), if any: it fires
+    /// once per executed frame-memory access — one write event per
+    /// successful `OP_STORE_FIELD`, one read event per executed
+    /// `OP_DEREf` — with the site, the address, and the value
+    /// (`None` = one check per *access* — the pre-seam behavior).
+    memory: Option<Box<dyn crate::memory::MemSink>>,
     /// The machine's current dispatch site — the function index of the
     /// dispatch in flight (the backtrace seam's fault-site tracking). Set
     /// at every dispatch, and to the entry request before the first one, so
@@ -942,10 +957,55 @@ impl Vm {
     }
 
     /// Detach and return the discard sink (the typed owner recovers it
-    /// through [`crate::drops::DropSink::as_any`]). `None` when no sink
-    /// was attached.
+    /// through [`crate::drops::DropSink::as_any`]). `None` when no
+    /// sink was attached.
     pub fn take_drops(&mut self) -> Option<Box<dyn crate::drops::DropSink>> {
         self.drops.take()
+    }
+
+    /// Attach a cast sink ([`crate::casts`]): every executed `OP_CAST`
+    /// hands one [`crate::casts::CastEvent`] to it the moment the cast
+    /// has produced its result — the cast site, the decoded kind/target
+    /// pair, and the operand/result values in full (the event takes
+    /// sink-side copies; the machine's own values stay exactly where they
+    /// were). A cast that faults (`UnknownCastKind` /
+    /// `CastOperandMismatch`) never executes, so it reports nothing — the
+    /// fault stream owns it. The sink observes only — it never changes a
+    /// cast's outcome — and [`Vm::take_casts`] hands it back after the
+    /// run.
+    #[must_use]
+    pub fn with_casts(mut self, sink: Box<dyn crate::casts::CastSink>) -> Vm {
+        self.casts = Some(sink);
+        self
+    }
+
+    /// Detach and return the cast sink (the typed owner recovers it
+    /// through [`crate::casts::CastSink::as_any`]). `None` when no
+    /// sink was attached.
+    pub fn take_casts(&mut self) -> Option<Box<dyn crate::casts::CastSink>> {
+        self.casts.take()
+    }
+
+    /// Attach a memory sink ([`crate::memory`]): every executed
+    /// frame-memory access hands one event to it — one
+    /// [`crate::memory::MemWriteEvent`] per successful `OP_STORE_FIELD`
+    /// just after the store lands, one [`crate::memory::MemReadEvent`]
+    /// per executed `OP_DEREf` just after the value is fetched. A store
+    /// refused by the bounds check writes nothing and reports nothing —
+    /// the fault stream owns the refusal. The sink observes only — it
+    /// never changes a stored or fetched value — and
+    /// [`Vm::take_memory`] hands it back after the run.
+    #[must_use]
+    pub fn with_memory(mut self, sink: Box<dyn crate::memory::MemSink>) -> Vm {
+        self.memory = Some(sink);
+        self
+    }
+
+    /// Detach and return the memory sink (the typed owner recovers it
+    /// through [`crate::memory::MemSink::as_any`]). `None` when no
+    /// sink was attached.
+    pub fn take_memory(&mut self) -> Option<Box<dyn crate::memory::MemSink>> {
+        self.memory.take()
     }
 
     /// Set an execution budget: the machine refuses a dispatch once `fuel`
@@ -1254,11 +1314,46 @@ impl Vm {
                 Opcode::StoreField => {
                     let addr = self.pop_int("address")? as usize;
                     let v = self.pop()?;
+                    // The memory seam's value copy: taken before the store
+                    // consumes the machine's value, paid only when a sink is
+                    // attached (the event's value is the sink's copy — the
+                    // read hook's shape).
+                    let mem_value = if self.memory.is_some() {
+                        Some(v.clone())
+                    } else {
+                        None
+                    };
                     self.set_mem(addr, v)?;
+                    // The memory seam's write event: one per successful
+                    // store, reported just after the slot is updated (a
+                    // bounds refusal writes nothing and reports nothing —
+                    // the fault stream owns it).
+                    if let (Some(sink), Some(value)) = (self.memory.as_mut(), mem_value) {
+                        sink.mem_wrote(&crate::memory::MemWriteEvent {
+                            func,
+                            pc,
+                            addr,
+                            value,
+                        });
+                    }
                 }
                 Opcode::Deref => {
                     let addr = self.pop_int("address")? as usize;
                     let v = self.mem(addr)?.clone();
+                    // The memory seam's read event: one per successful
+                    // deref, reported just after the value is fetched (a
+                    // bounds failure above reads nothing and reports
+                    // nothing). One `None` check per access when no sink
+                    // is attached; the event's value is the sink's copy,
+                    // not the stack's.
+                    if let Some(sink) = self.memory.as_mut() {
+                        sink.mem_read(&crate::memory::MemReadEvent {
+                            func,
+                            pc,
+                            addr,
+                            value: v.clone(),
+                        });
+                    }
                     self.stack.push(v);
                 }
                 Opcode::Add
@@ -1304,7 +1399,33 @@ impl Vm {
                     let target =
                         CastTarget::from_u8(target).ok_or(VmError::UnknownCastTarget(target))?;
                     let operand = self.pop()?;
+                    // The cast seam's operand copy: taken before the cast
+                    // consumes the machine's value, paid only when a sink is
+                    // attached (the event's values are the sink's copies —
+                    // the read hook's shape — so the seam adds one clone per
+                    // traced cast, never a move out of the machine).
+                    let cast_operand = if self.casts.is_some() {
+                        Some(operand.clone())
+                    } else {
+                        None
+                    };
                     let out = cast_value(kind, target, operand)?;
+                    // The cast seam's event: one per executed cast, reported
+                    // just after the cast computed and just before the result
+                    // is pushed. A faulting cast (unknown kind, mismatched
+                    // operand) never reaches the hook — the fault stream owns
+                    // it.
+                    if let (Some(sink), Some(cast_operand)) = (self.casts.as_mut(), cast_operand) {
+                        sink.cast_evaluated(&crate::casts::CastEvent {
+                            func,
+                            pc,
+                            kind: crate::casts::CastKind::from_u8(kind)
+                                .expect("the arm validated the cast-kind byte"),
+                            target,
+                            operand: cast_operand,
+                            result: out.clone(),
+                        });
+                    }
                     self.stack.push(out);
                 }
                 Opcode::Jump => {
