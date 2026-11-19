@@ -1,7 +1,7 @@
 [package]
 documentation = "https://glyim.vercel.app"
 
-description = "The glyim-mir crate for the glyim ecosystem"
+description = "Mid-level IR (CFG), place types, statement/terminator kinds."
 repository = "https://github.com/elcoosp/glyim"
 readme = "../../README.md"
 name = "glyim-mir"
