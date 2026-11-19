@@ -308,7 +308,7 @@ mod backtrace_tests {
 
     const GOLDEN: &str = "\
 backtrace glyim.module-image/2 executed=4
-  0: fn 0 pc 0 OP_TRAP: OP_TRAP / OP_UNREACHABLE executed
+  0: fn 0 pc 0 OP_TRAP: OP_TRAP executed
   1: fn 1 pc 31 OP_LOAD_LOCAL (resume)
 ";
 
