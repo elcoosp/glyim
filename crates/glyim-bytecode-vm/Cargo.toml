@@ -159,6 +159,23 @@ harness = false
 name = "vm_memory"
 harness = false
 
+# Call-stream bench (the calls seam: the per-call hooks' overhead vs the
+# unattached baseline over a call-heavy countdown loop — one start event
+# with sink-side argument copies per executed call and one return event
+# per executed return — and the deterministic render; dependency-free,
+# `harness = false`).
+[[bench]]
+name = "vm_calls"
+harness = false
+
+# String-stream bench (the strings seam: the per-resolution hook's
+# overhead vs the unattached baseline over a string-heavy countdown loop
+# — one event with a sink-side value copy per executed pool resolution —
+# and the deterministic render; dependency-free, `harness = false`).
+[[bench]]
+name = "vm_strings"
+harness = false
+
 [dependencies]
 # The module-image seam (glyim.module-image/1) logs encode/decode events and
 # every decode rejection through the workspace-standard tracing layer, so a
