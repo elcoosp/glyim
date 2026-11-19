@@ -194,6 +194,16 @@ harness = false
 name = "vm_projections"
 harness = false
 
+# Float-stream bench (the float seam: the per-float-op hooks' overhead
+# vs the unattached baseline over a float-heavy countdown loop — one
+# event with sink-side operand/answer copies per executed
+# `OP_LOAD_CONST_F64` push, `(Float, Float)` binop, or `OP_NEG`
+# negation — and the deterministic render; dependency-free,
+# `harness = false`).
+[[bench]]
+name = "vm_floats"
+harness = false
+
 [dependencies]
 # The module-image seam (glyim.module-image/1) logs encode/decode events and
 # every decode rejection through the workspace-standard tracing layer, so a
