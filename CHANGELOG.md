@@ -8,6 +8,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Composite-construction observation seam (`glyim_bytecode_vm::aggregates`)**:
+  the *construction counterpart* of the value seams — the watch seam
+  records what values slots *took*, the drop seam what the run
+  *destroyed*, the cast seam what it *transformed*, but the moment of
+  *construction* was invisible: the `OP_AGGREGATE` fold that turns the
+  operand stack's top `n` values into one tuple, and the `OP_REPEAT`
+  replication that turns one value and a count into an `n`-tuple,
+  produced their tuples with no observation anywhere on the path, so a
+  lowering bug that aggregated the wrong operand span (or repeated into
+  the wrong length) shipped as a wrong tuple. The VM now hands one
+  `AggregateBuilt` (the fold site, the arity, and the folded elements
+  in full as *sink-side copies*) per executed `OP_AGGREGATE` just
+  after the fold has popped its operands — an operand-stack underflow
+  mid-fold faults and never executes, so it reports nothing (the fault
+  stream owns the refusal) — and one `RepeatBuilt` (the site, the
+  *raw* count, and the replicated value) per executed `OP_REPEAT` just
+  after the count and value have been popped, to an `AggregateSink`
+  attached through `Vm::with_aggregates`; a negative repeat count is
+  not a fault (the machine clamps it to the empty tuple) and the event
+  displays the raw count instead of silently pairing the clamp away.
+  `AggregateCollector` captures the interleaved transcript (`events()`
+  plus filtered `builds()`/`repeats()` views) in bounded memory
+  (`bounded(max)` + a displayed overflow flag) and folds as it
+  captures: `built_count()`/`repeat_count()`, `total_elements()` —
+  every folded arity plus every produced repeat length, the run's
+  composite-materialization count (a negative repeat's clamp
+  contributes `0`) — and `max_arity()`, the arity high-water mark.
+  `render_aggregates` renders the deterministic listing (the explicit
+  `no aggregate events` empty state, one `build` line with its element
+  spellings or one `repeat` line with its raw count, replicated value,
+  and produced arity per event). Contract like the other seams:
+  read-only, total over the *executed* construction stream, zero-cost
+  when unused (one `Option` check per construction), and composing
+  with everything else. A bench (`benches/vm_aggregates`: the
+  per-construction hooks' overhead vs the unattached baseline over a
+  repeat-heavy countdown, and the render) and a consumer walkthrough
+  (`examples/aggregates_walkthrough`: the one-fold shape, the
+  repeat-heavy loop, the negative-count clamp, the bounded capture,
+  and the read-only proof) land with it.
+- **Composite-projection observation seam (`glyim_bytecode_vm::projections`)**:
+  the *interrogation counterpart* of the aggregate seam — the
+  aggregate seam watches the moment of *construction*, but the
+  machine's only aggregate-projection opcodes (`OP_LEN`, the length
+  read over a local; `OP_DISCRIMINANT`, the discriminant read over the
+  popped operand) carried no observation, and both have a documented
+  *scalar convention* — a projection over a non-aggregate value
+  answers `0` (the pre-float VM's convention) — so a lowering bug that
+  projected a scalar, or a field-offset bug that read the wrong slot's
+  length, landed in that convention as a silent zero. The VM now hands
+  one `LenRead` (the read site, the local index, the projected operand
+  in full as a *sink-side copy*, and the machine's answer) per
+  executed `OP_LEN` just after the operand has been fetched from its
+  local — an out-of-bounds local index faults and never executes, so
+  it reports nothing (the fault stream owns the refusal) — and one
+  `DiscrRead` (the read site, the popped operand, and the answer) per
+  executed `OP_DISCRIMINANT` just after the operand has been popped,
+  to a `ProjectionSink` attached through `Vm::with_projections`.
+  `ProjectionCollector` captures the interleaved transcript
+  (`events()` plus filtered `len_events()`/`discr_events()` views) in
+  bounded memory (`bounded(max)` + a displayed overflow flag) and
+  folds as it captures: `len_count()`/`discr_count()` and
+  `scalar_reads()` — the scalar-convention tally, the path a lowering
+  bug lands in, kept visible instead of silently consumed.
+  `render_projections` renders the deterministic listing (the explicit
+  `no projection events` empty state, one `len` line with its local
+  index or one `discr` line per event, the operand in the watch
+  render's value spellings, and the answer after a `->`). Contract
+  like the other seams: read-only, total over the *executed*
+  projection stream, zero-cost when unused (one `Option` check per
+  read), and composing with everything else. A bench
+  (`benches/vm_projections`: the per-projection hooks' overhead vs the
+  unattached baseline over a projection-heavy countdown, and the
+  render) and a consumer walkthrough (`examples/projections_walkthrough`:
+  the length read, the discriminant read, the scalar convention, the
+  projection-heavy loop, the bounded capture, and the read-only proof)
+  land with it.
 - **Call-stream observation seam (`glyim_bytecode_vm::calls`)**: the
   *call-ABI counterpart* of the call-graph and call-state seams — the
   call graph folds the execution trace into per-`(caller, callee)`
