@@ -1,7 +1,7 @@
 [package]
 documentation = "https://glyim.vercel.app"
 
-description = "The glyim-lower crate for the glyim ecosystem"
+description = "THIR → MIR lowering + monomorphization + CGU partitioning."
 repository = "https://github.com/elcoosp/glyim"
 readme = "../../README.md"
 name = "glyim-lower"
