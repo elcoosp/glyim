@@ -1,7 +1,7 @@
 [package]
 documentation = "https://glyim.vercel.app"
 
-description = "The glyim-type crate for the glyim ecosystem"
+description = "Core type system and Type Context (TyCtx)."
 repository = "https://github.com/elcoosp/glyim"
 readme = "../../README.md"
 name = "glyim-type"
