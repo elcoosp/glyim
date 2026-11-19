@@ -50,7 +50,10 @@
 //! ([`memory`]), the call ABI ([`calls`]), the string pool ([`strings`]),
 //! the casts ([`casts`]), the assertions ([`asserts`]), the drops
 //! ([`drops`]), the composite constructions ([`aggregates`]), the
-//! composite projections ([`projections`]), and the artifact-level
+//! composite projections ([`projections`]), the float operations
+//! ([`floats`] — the `OP_LOAD_CONST_F64` pushes, the `(Float, Float)`
+//! binop arms, and the `OP_NEG` negations, with the IEEE-754 specials
+//! folded as they capture), and the artifact-level
 //! faces (the module image [`image`] with its decoder, disassembler
 //! ([`disasm`]), and the module/run diff seams ([`diff`] /
 //! [`rundiff`])). The hooks fire only when a sink is attached — one
@@ -70,6 +73,7 @@ pub mod dataflow;
 pub mod diff;
 pub mod disasm;
 pub mod drops;
+pub mod floats;
 pub mod image;
 pub mod memory;
 pub mod profile;
@@ -102,6 +106,9 @@ pub use dataflow::{
 pub use diff::render_module_diff;
 pub use disasm::{render_function, render_module};
 pub use drops::{DropCollector, DropEvent, DropSink, render_drops};
+pub use floats::{
+    FloatBinop, FloatCollector, FloatConst, FloatEvent, FloatNeg, FloatSink, render_floats,
+};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
 pub use memory::{MemCollector, MemEvent, MemReadEvent, MemSink, MemWriteEvent, render_memory};
 pub use profile::{HotOpcode, ProfileCollector, render_profile};
@@ -320,7 +327,11 @@ impl Opcode {
     }
 
     /// The opcode's mnemonic, as it appears in typed mismatch errors.
-    fn name(self) -> &'static str {
+    /// Public for the observation seams' renderers (the float stream's
+    /// binop lines spell the dispatched opcode) and for tooling that
+    /// reports over the wire format; the mirror of
+    /// [`CastKind::name`](crate::casts::CastKind::name).
+    pub fn name(self) -> &'static str {
         match self {
             Opcode::LoadConst => "LoadConst",
             Opcode::Add => "Add",
@@ -391,7 +402,10 @@ pub struct Function {
 }
 
 impl Function {
-    /// new.
+    /// Build a function body from its instruction bytes, the number
+    /// of local slots the frame allocates, and the argument count (the
+    /// MIR call-frame ABI: slot 0 is the return place, the arguments
+    /// land at `1..=arg_count`).
     #[must_use]
     pub fn new(code: Vec<u8>, n_locals: usize, arg_count: usize) -> Function {
         Function {
@@ -457,7 +471,10 @@ pub struct Module {
 }
 
 impl Module {
-    /// new.
+    /// Assemble a runnable module from its function bodies and the
+    /// entry function's index (the decoded shape of a
+    /// `glyim.module-image/1` container; the string pool starts
+    /// empty — use the image decoder for pool-backed artifacts).
     #[must_use]
     pub fn new(functions: Vec<Function>, entry: usize) -> Module {
         Module {
@@ -839,7 +856,7 @@ pub struct Vm {
     /// The attached memory sink ([`crate::memory`]), if any: it fires
     /// once per executed frame-memory access — one write event per
     /// successful `OP_STORE_FIELD`, one read event per executed
-    /// `OP_DEREf` — with the site, the address, and the value
+    /// `OP_DEREF` — with the site, the address, and the value
     /// (`None` = one check per *access* — the pre-seam behavior).
     memory: Option<Box<dyn crate::memory::MemSink>>,
     /// The attached call sink ([`crate::calls`]), if any: it fires once
@@ -872,6 +889,17 @@ pub struct Vm {
     /// operand, and the answer (`None` = one check per *projection* —
     /// the pre-seam behavior).
     projections: Option<Box<dyn crate::projections::ProjectionSink>>,
+    /// The attached float-stream sink ([`crate::floats`]), if any: it
+    /// fires once per executed float operation — one
+    /// [`crate::floats::FloatConst`] just after an
+    /// `OP_LOAD_CONST_F64`'s payload has been decoded, one
+    /// [`crate::floats::FloatBinop`] just after a `(Float, Float)`
+    /// binop arm has computed its answer, one
+    /// [`crate::floats::FloatNeg`] just after an `OP_NEG` has negated
+    /// a float — with the site and the operands/results in full
+    /// (`None` = one check per *float operation* — the pre-seam
+    /// behavior).
+    floats: Option<Box<dyn crate::floats::FloatSink>>,
     /// The machine's current dispatch site — the function index of the
     /// dispatch in flight (the backtrace seam's fault-site tracking). Set
     /// at every dispatch, and to the entry request before the first one, so
@@ -1054,7 +1082,7 @@ impl Vm {
     /// frame-memory access hands one event to it — one
     /// [`crate::memory::MemWriteEvent`] per successful `OP_STORE_FIELD`
     /// just after the store lands, one [`crate::memory::MemReadEvent`]
-    /// per executed `OP_DEREf` just after the value is fetched. A store
+    /// per executed `OP_DEREF` just after the value is fetched. A store
     /// refused by the bounds check writes nothing and reports nothing —
     /// the fault stream owns the refusal. The sink observes only — it
     /// never changes a stored or fetched value — and
@@ -1172,6 +1200,27 @@ impl Vm {
     /// sink was attached.
     pub fn take_projections(&mut self) -> Option<Box<dyn crate::projections::ProjectionSink>> {
         self.projections.take()
+    }
+
+    /// Attach a float-stream sink ([`crate::floats`]): every executed
+    /// float operation is handed to it just after the machine has
+    /// computed its answer — one [`crate::floats::FloatConst`] per
+    /// `OP_LOAD_CONST_F64` push, one [`crate::floats::FloatBinop`] per
+    /// executed `(Float, Float)` binop arm, one
+    /// [`crate::floats::FloatNeg`] per executed `OP_NEG` over a float.
+    /// The sink observes only — it never changes execution — and
+    /// [`Vm::take_floats`] hands it back after the run.
+    #[must_use]
+    pub fn with_floats(mut self, sink: Box<dyn crate::floats::FloatSink>) -> Vm {
+        self.floats = Some(sink);
+        self
+    }
+
+    /// Detach and return the float-stream sink (the typed owner
+    /// recovers it through [`crate::floats::FloatSink::as_any`]).
+    /// `None` when no sink was attached.
+    pub fn take_floats(&mut self) -> Option<Box<dyn crate::floats::FloatSink>> {
+        self.floats.take()
     }
 
     /// Set an execution budget: the machine refuses a dispatch once `fuel`
@@ -1443,7 +1492,19 @@ impl Vm {
                 }
                 Opcode::LoadConstF64 => {
                     let bits = Vm::read_i64(code, &mut self.frames[frame_idx].pc)?;
-                    self.stack.push(Value::Float(f64::from_bits(bits as u64)));
+                    let value = f64::from_bits(bits as u64);
+                    // The float seam's hook (the `floats` module): one
+                    // event per executed constant push, reported just
+                    // after the payload has been decoded and before the
+                    // value is pushed (a truncated payload above faults
+                    // and reports nothing — the fault stream owns it).
+                    // One `None` check per push when no sink is
+                    // attached; the event's value is the sink's copy,
+                    // not the stack's.
+                    if let Some(sink) = self.floats.as_mut() {
+                        sink.float_const(&crate::floats::FloatConst { func, pc, value });
+                    }
+                    self.stack.push(Value::Float(value));
                 }
                 Opcode::LoadConstStr => {
                     let idx = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
@@ -1557,12 +1618,61 @@ impl Vm {
                 | Opcode::Shr => {
                     let b = self.pop()?;
                     let a = self.pop()?;
+                    // The float seam's hook (the `floats` module): one
+                    // event per executed `(Float, Float)` binop arm,
+                    // reported just after the arm has computed its
+                    // answer and before it is pushed. The operand
+                    // copies are paid only when a sink is attached; a
+                    // *refused* pairing (mixed kinds, a bitwise op over
+                    // floats) faults below and reports nothing — the
+                    // fault stream owns it.
+                    let float_face = if self.floats.is_some() {
+                        match (&a, &b) {
+                            (Value::Float(_), Value::Float(_)) => Some((a.clone(), b.clone())),
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
                     let r = self.binop(op, a, b)?;
+                    if let (Some(sink), Some((lhs, rhs))) = (self.floats.as_mut(), float_face) {
+                        sink.float_binop(&crate::floats::FloatBinop {
+                            func,
+                            pc,
+                            op,
+                            lhs,
+                            rhs,
+                            result: r.clone(),
+                        });
+                    }
                     self.stack.push(r);
                 }
                 Opcode::Not | Opcode::Neg => {
                     let a = self.pop()?;
+                    // The float seam's negation hook: one event per
+                    // executed `OP_NEG` over a float, reported just
+                    // after the unary arm has computed its answer and
+                    // before it is pushed (an `OP_NOT` over a float
+                    // faults below and reports nothing — the fault
+                    // stream owns it). The operand copy is paid only
+                    // when a sink is attached.
+                    let neg_face = if self.floats.is_some() && matches!(op, Opcode::Neg) {
+                        match &a {
+                            Value::Float(_) => Some(a.clone()),
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
                     let r = self.unop(op, a)?;
+                    if let (Some(sink), Some(operand)) = (self.floats.as_mut(), neg_face) {
+                        sink.float_neg(&crate::floats::FloatNeg {
+                            func,
+                            pc,
+                            operand,
+                            result: r.clone(),
+                        });
+                    }
                     self.stack.push(r);
                 }
                 Opcode::Cast => {
@@ -2190,7 +2300,9 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    /// new.
+    /// Build a chunk from raw instruction bytes with zero local slots
+    /// (the single-expression shape; pair with
+    /// [`Chunk::with_locals`] when the code addresses locals).
     #[must_use]
     pub fn new(code: Vec<u8>) -> Chunk {
         Chunk { code, n_locals: 0 }
