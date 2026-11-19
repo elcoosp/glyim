@@ -200,6 +200,18 @@ pub(crate) struct PreparedCompilation {
     // wired.
 }
 
+/// The pipeline's `TyCtx` invariant: every post-analysis phase reads the
+/// `TyCtx` the typeck phase installed into the database. A `None` here is
+/// an ordering violation of the pipeline's own phase sequence — the public
+/// entry points never produce it — so the failure is an explicit panic that
+/// names the phase which hit it, not a bare message (and not a silent
+/// default: a lowered body without its type context is a wrong artifact).
+fn ty_ctx_after_analysis(db: &Database, phase: &'static str) -> Arc<glyim_type::TyCtx> {
+    db.get_ty_ctx().unwrap_or_else(|| {
+        panic!("TyCtx not initialized: the {phase} phase ran before the typeck phase set it")
+    })
+}
+
 /// Load a crate's source into the VFS and **flatten its external modules**.
 ///
 /// This is the single entry point every pipeline path (entry discovery,
@@ -680,7 +692,7 @@ impl Pipeline {
             std::collections::HashMap<glyim_core::def_id::DefId, Arc<Body>>,
             std::collections::HashMap<glyim_core::def_id::DefId, Arc<Body>>,
         ) = {
-            let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
+            let ty_ctx_guard = ty_ctx_after_analysis(db, "lowering");
             let ty_ctx_ref = ty_ctx_guard.as_ref();
 
             let lower_ctx =
@@ -784,7 +796,7 @@ impl Pipeline {
         let mono_items: Vec<glyim_lower::mono::MonoItemData> = {
             let _guard = recorder.enter(Phase::Mono);
             let mut mono_ctx = MonoCtx::new();
-            let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
+            let ty_ctx_guard = ty_ctx_after_analysis(db, "monomorphization");
             let ty_ctx_ref = ty_ctx_guard.as_ref();
             let body_provider = make_mir_body_provider(&mir_bodies_map, &sink_cell, ty_ctx_ref);
             let drop_provider = make_drop_glue_provider(ty_ctx_ref);
@@ -932,7 +944,7 @@ impl Pipeline {
             // (`stdlib_full_probe` regression, KNOWN_GAPS §3.5.20).
             let synthesized: Option<Vec<(String, Arc<Body>)>> = if emit_object {
                 let _guard = recorder.enter(Phase::Mono);
-                let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
+                let ty_ctx_guard = ty_ctx_after_analysis(db, "monomorphization");
                 let ty_ctx_ref = ty_ctx_guard.as_ref();
                 let empty_subst = glyim_type::Substitution::empty();
                 let mut synthetic_roots: Vec<glyim_lower::mono::MonoItem> = Vec::new();
@@ -1000,7 +1012,7 @@ impl Pipeline {
         // observation point until the follow-up lands with a consumer.
         let mut dropped = 0usize;
         {
-            let ty_ctx_guard = db.get_ty_ctx().expect("TyCtx not initialized");
+            let ty_ctx_guard = ty_ctx_after_analysis(db, "raw-generic filtering");
             let ty_ctx_ref = ty_ctx_guard.as_ref();
             let mut kept: Vec<(String, Arc<Body>)> = Vec::new();
             for (sym, body) in std::mem::take(&mut all_bodies) {
@@ -1016,7 +1028,7 @@ impl Pipeline {
             }
         }
 
-        let ty_ctx = db.get_ty_ctx().expect("TyCtx not initialized");
+        let ty_ctx = ty_ctx_after_analysis(db, "codegen");
         // Any Error-severity diagnostic short-circuits above, so everything
         // left in the sink is advisory. Surface it on the success value so the
         // caller can render it. Sorted + deduped for a stable order.
