@@ -1,7 +1,7 @@
 [package]
 documentation = "https://glyim.vercel.app"
 
-description = "The glyim-diag crate for the glyim ecosystem"
+description = "Diagnostic types and error reporting built on `miette`."
 repository = "https://github.com/elcoosp/glyim"
 readme = "../../README.md"
 name = "glyim-diag"
