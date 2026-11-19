@@ -40,6 +40,7 @@ pub mod asserts;
 pub mod backtrace;
 pub mod branches;
 pub mod callgraph;
+pub mod calls;
 pub mod casts;
 pub mod cost;
 pub mod coverage;
@@ -52,6 +53,7 @@ pub mod memory;
 pub mod profile;
 pub mod rundiff;
 pub mod state;
+pub mod strings;
 pub mod trace;
 pub mod watch;
 pub mod window;
@@ -62,6 +64,7 @@ pub use backtrace::{
 };
 pub use branches::{BranchCollector, BranchKind, BranchSite, render_branches};
 pub use callgraph::{CallGraphCollector, render_call_graph};
+pub use calls::{CallCollector, CallEvent, CallReturned, CallSink, CallStarted, render_calls};
 pub use casts::{CastCollector, CastEvent, CastKind, CastSink, render_casts};
 pub use cost::{CostCollector, HotFunction, render_cost};
 pub use coverage::{CoverageCollector, render_coverage};
@@ -77,6 +80,7 @@ pub use memory::{MemCollector, MemEvent, MemReadEvent, MemSink, MemWriteEvent, r
 pub use profile::{HotOpcode, ProfileCollector, render_profile};
 pub use rundiff::render_run_diff;
 pub use state::{StateCollector, StateEvent, StatePhase, StateSink, render_state};
+pub use strings::{StringCollector, StringLoadEvent, StringSink, render_strings};
 pub use trace::{StepDetail, TraceCollector, TraceSink, TracingSink, VmStep, render_trace};
 pub use watch::{TracingWatchSink, WatchCollector, WatchEvent, WatchSink, WatchVia, render_watch};
 pub use window::{WindowCollector, render_window};
@@ -808,6 +812,18 @@ pub struct Vm {
     /// `OP_DEREf` — with the site, the address, and the value
     /// (`None` = one check per *access* — the pre-seam behavior).
     memory: Option<Box<dyn crate::memory::MemSink>>,
+    /// The attached call sink ([`crate::calls`]), if any: it fires once
+    /// per executed call — one [`crate::calls::CallStarted`] just after
+    /// the callee's frame is pushed, one [`crate::calls::CallReturned`]
+    /// just after the returning frame is popped — with the site, the
+    /// callee, the arguments, and the returned value (`None` = one check
+    /// per *call or return* — the pre-seam behavior).
+    calls: Option<Box<dyn crate::calls::CallSink>>,
+    /// The attached string-pool sink ([`crate::strings`]), if any: it
+    /// fires once per executed `OP_LOAD_CONST_STR` — the site, the pool
+    /// slot, and the resolved byte string — (`None` = one check per
+    /// *resolution* — the pre-seam behavior).
+    strings: Option<Box<dyn crate::strings::StringSink>>,
     /// The machine's current dispatch site — the function index of the
     /// dispatch in flight (the backtrace seam's fault-site tracking). Set
     /// at every dispatch, and to the entry request before the first one, so
@@ -1006,6 +1022,54 @@ impl Vm {
     /// sink was attached.
     pub fn take_memory(&mut self) -> Option<Box<dyn crate::memory::MemSink>> {
         self.memory.take()
+    }
+
+    /// Attach a call sink ([`crate::calls`]): every executed call hands
+    /// one [`crate::calls::CallStarted`] to it the moment the callee's
+    /// frame has been pushed — the call site, the callee, the argument
+    /// values in full (sink-side copies; the machine's own values moved
+    /// into the callee's locals), the destination local, and the resume
+    /// target — and every executed return hands one
+    /// [`crate::calls::CallReturned`] just after the returning frame is
+    /// popped, with the value it returned (the entry frame's return is
+    /// the run's last event: the module result). A call the machine
+    /// refuses (a bad function index, a depth overflow) never executes,
+    /// so it reports nothing — the fault stream owns it. The sink
+    /// observes only — it never changes a call's outcome — and
+    /// [`Vm::take_calls`] hands it back after the run.
+    #[must_use]
+    pub fn with_calls(mut self, sink: Box<dyn crate::calls::CallSink>) -> Vm {
+        self.calls = Some(sink);
+        self
+    }
+
+    /// Detach and return the call sink (the typed owner recovers it
+    /// through [`crate::calls::CallSink::as_any`]). `None` when no sink
+    /// was attached.
+    pub fn take_calls(&mut self) -> Option<Box<dyn crate::calls::CallSink>> {
+        self.calls.take()
+    }
+
+    /// Attach a string-pool sink ([`crate::strings`]): every executed
+    /// `OP_LOAD_CONST_STR` hands one [`crate::strings::StringLoadEvent`]
+    /// to it the moment the pool slot's byte string has been resolved —
+    /// the site, the pool slot, and the resolved value in full (a
+    /// sink-side copy; the machine's own value is pushed right after the
+    /// hook returns). A resolution refused by the pool bounds check
+    /// never executes, so it reports nothing — the fault stream owns it.
+    /// The sink observes only — it never changes a resolved value — and
+    /// [`Vm::take_strings`] hands it back after the run.
+    #[must_use]
+    pub fn with_strings(mut self, sink: Box<dyn crate::strings::StringSink>) -> Vm {
+        self.strings = Some(sink);
+        self
+    }
+
+    /// Detach and return the string-pool sink (the typed owner recovers
+    /// it through [`crate::strings::StringSink::as_any`]). `None` when
+    /// no sink was attached.
+    pub fn take_strings(&mut self) -> Option<Box<dyn crate::strings::StringSink>> {
+        self.strings.take()
     }
 
     /// Set an execution budget: the machine refuses a dispatch once `fuel`
@@ -1286,6 +1350,21 @@ impl Vm {
                         .get(idx)
                         .ok_or(VmError::StringIndexOutOfBounds(idx))?
                         .clone();
+                    // The string seam's event: one per executed resolution,
+                    // reported just after the pool slot's byte string is
+                    // fetched and before the value is pushed (a bad index
+                    // above faults and reports nothing — the fault stream
+                    // owns it). One `None` check per resolution when no sink
+                    // is attached; the event's value is the sink's copy, not
+                    // the stack's.
+                    if let Some(sink) = self.strings.as_mut() {
+                        sink.string_loaded(&crate::strings::StringLoadEvent {
+                            func,
+                            pc,
+                            pool_idx: idx,
+                            value: Value::Str(s.clone()),
+                        });
+                    }
                     self.stack.push(Value::Str(s));
                 }
                 Opcode::LoadLocal => {
@@ -1584,6 +1663,20 @@ impl Vm {
                             locals: finished.locals.clone(),
                         });
                     }
+                    // The call seam's return event: the frame's identity
+                    // (its function index and the depth it sat at) and
+                    // the value it produced, reported just after the
+                    // frame is popped and before the value reaches the
+                    // caller's destination (or ends the run as the module
+                    // result). The value clone is paid only when a sink
+                    // is attached.
+                    if let Some(sink) = self.calls.as_mut() {
+                        sink.call_returned(&crate::calls::CallReturned {
+                            func: finished.func,
+                            depth: self.frames.len() + 1,
+                            value: retval.clone(),
+                        });
+                    }
                     if self.frames.is_empty() {
                         // Entry frame returned: the value is the module result.
                         return Ok(retval);
@@ -1645,6 +1738,24 @@ impl Vm {
                     // callee's return writes into `dest_local` of *this* frame
                     // via the `Return` arm above.
                     self.push_frame(module, fn_idx, &args, target, dest_local)?;
+                    // The call seam's start event: one per executed call,
+                    // reported just after the callee's frame is pushed — a
+                    // refused call (a bad function index, a depth overflow)
+                    // never reaches the hook, the fault stream owns it. The
+                    // argument copies are the sink's (the machine's own
+                    // values moved into the callee's locals); the clone is
+                    // paid only when a sink is attached.
+                    if let Some(sink) = self.calls.as_mut() {
+                        sink.call_started(&crate::calls::CallStarted {
+                            caller_func: func,
+                            site_pc: pc,
+                            callee_func: fn_idx,
+                            args: args.clone(),
+                            dest_local,
+                            resume_target: target,
+                            indirect: op == Opcode::CallIndirect,
+                        });
+                    }
                 }
                 Opcode::Trap => {
                     return Err(VmError::AbnormalTermination);
