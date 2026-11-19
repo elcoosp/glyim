@@ -6,7 +6,7 @@
 //! values a local slot took, and the data-flow seam pairs those writes
 //! with the reads — but both watch the slot face. The aggregate lowering
 //! also runs on the memory face: `OP_STORE_FIELD` writes a field through
-//! an address and `OP_DEREf` reads it back, and the frame's addressable
+//! an address and `OP_DEREF` reads it back, and the frame's addressable
 //! memory is zero-initialised — a read of an address the run never wrote
 //! is a silent zero, not an error. The memory seam (`MemCollector` +
 //! `render_memory`) is that counterpart: the VM hands it one
