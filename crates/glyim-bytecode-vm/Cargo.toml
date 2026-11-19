@@ -142,6 +142,23 @@ harness = false
 name = "vm_drops"
 harness = false
 
+# Cast-stream bench (the casts seam: the per-cast hook's overhead vs the
+# unattached baseline over a cast-heavy countdown loop — one event with
+# sink-side operand/result copies per executed cast — and the deterministic
+# render; dependency-free, `harness = false`).
+[[bench]]
+name = "vm_casts"
+harness = false
+
+# Memory-stream bench (the memory seam: the per-access hooks' overhead vs
+# the unattached baseline over a memory-heavy countdown loop — one write
+# event and one read event per iteration, with a sink-side value copy per
+# event — and the deterministic render; dependency-free,
+# `harness = false`).
+[[bench]]
+name = "vm_memory"
+harness = false
+
 [dependencies]
 # The module-image seam (glyim.module-image/1) logs encode/decode events and
 # every decode rejection through the workspace-standard tracing layer, so a
