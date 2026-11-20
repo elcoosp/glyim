@@ -307,12 +307,44 @@ jobs:
         run: cargo run -p glyim-ledger -- check .
       - name: evidence check (the committed store is well-formed, M1.10)
         run: cargo run -p glyim-ledger -- evidence check .
+      - name: evidence audit (committed records resolve to real fixtures, M1.10)
+        run: cargo run -p glyim-ledger -- evidence audit .
       - name: STATUS is up to date (M1.10 remainder)
         run: |
           cargo run -p glyim-ledger -- status . --check
           cargo run -p glyim-ledger -- status . --check --format json
+      - name: README status block is up to date (M1.9 generated content)
+        run: bash scripts/readme-status-block.sh --check
       - name: Export JSON schemas (determinism smoke)
         run: cargo run -p glyim-ledger -- schema /tmp/ledger-schema.json
+
+  # M1.10 readiness-regression gate (plan §6 M1.10, constitution C9): the
+  # `ledger diff` face compares the baseline tree (the PR base / main) with
+  # the current tree and fails on any level or gap regression unless an
+  # unexpired `ledger/waivers.toml` waiver covers it. Two runs in one job:
+  # the diff itself, and the waiver-health report (an expired waiver fails
+  # even when no current regression needs covering).
+  ledger-diff:
+    name: Ledger diff regression gate (M1.10)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check out the baseline tree into a worktree
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE" ]; then
+            BASE="origin/main"
+          fi
+          git worktree add /tmp/baseline-wt "$BASE"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: ledger diff (regressions block merge unless waived)
+        run: cargo run -p glyim-ledger -- diff /tmp/baseline-wt .
+      - name: waiver health (expired waivers fail, C9)
+        run: cargo run -p glyim-ledger -- waivers .
 
   dead-code-check:
     name: Dead-code burndown
