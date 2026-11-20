@@ -8,6 +8,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Fuel-observation seam (`glyim_bytecode_vm::fuel`)**: the *budget
+  counterpart* of the trace seam — the fuel gate (`Vm::with_fuel`) is
+  the machine's execution-budget rail (an infinite loop in a loaded
+  artifact stops with the explicit `VmError::FuelExhausted` instead of
+  hanging an embedding host), but the budget itself was observable
+  only through its refusal: nothing answered *where* the budget went —
+  how much burned per function, at which site the last allowed
+  dispatch ran, what remained at each step. The VM now hands one
+  `FuelTick` (the executing function, the dispatch site, the
+  dispatch's 1-based lifetime number, and the budget remaining after
+  this dispatch's spend — `None` for an unbounded run, still
+  observable as burn) to a `FuelSink` per executed dispatch, just
+  after the budget for that dispatch has been spent and before the
+  instruction executes — the same cadence as the trace hook — attached
+  through `Vm::with_fuel_sink` and recovered through
+  `Vm::take_fuel_sink`; a fuel-refused dispatch never executes and
+  never ticks (the fault stream owns the refusal). `FuelCollector`
+  captures the diary in bounded memory (`bounded(max)` + a displayed
+  overflow flag) and folds as it captures: `burn_by_function()` — the
+  per-function dispatch counts in a `BTreeMap`, deterministic by
+  construction — and `last_tick()`, the last allowed dispatch, which
+  for a budget that ran out names the site the refusal happened at.
+  `render_fuel` renders the deterministic report (the header with the
+  final remaining, the per-function burn lines, one line per tick, the
+  explicit `no fuel ticks` empty state). Contract like the other
+  seams: read-only, total over the executed dispatches, zero-cost when
+  unused (one `Option` check per dispatch), and composing with
+  everything else (the tick count equals the trace's step count on one
+  run). A bench (`benches/vm_fuel`: the per-dispatch checkpoint hook's
+  overhead vs the unattached baseline over a budget-burning countdown
+  loop, and the render) and a consumer walkthrough
+  (`examples/fuel_walkthrough`: the exact-fit budget's diary, the
+  burn folds, the exhausted budget's how-far-it-got report, the
+  unbounded run's `None`-remaining ticks, the bounded capture, and the
+  read-only proof) land with it.
+- **Operand-stack observation seam (`glyim_bytecode_vm::stack`)**: the
+  *movement counterpart* of the value seams — the watch seam records
+  what values slots *took* and the trace seam where the machine went,
+  but the operand stack, the channel every opcode's operands and
+  answers actually travel through, was observable only as a depth
+  number (`VmStep::stack_depth`); a `VmError::BinOpTypeMismatch` names
+  the kinds that collided, but a *silent* wrong answer — a binop that
+  consumed a neighbouring kind and produced a plausible `Int` — left
+  nothing behind. The VM now hands one `Pushed` (the site, the
+  producing dispatch number, the frame depth, the depth the movement
+  produces, and the value in full as a *sink-side copy*) to a
+  `StackSink` just before a value lands on the operand stack and one
+  `Popped` just after a pop resolves, attached through
+  `Vm::with_stack` and recovered through `Vm::take_stack`; every push
+  and pop funnels through the machine's own `push_operand`/`pop` paths
+  (the push funnel is the seam's wire-up — the thirteen raw
+  `self.stack.push` sites now all route through one hook point), so
+  the stream is total over the executed movements: the call's argument
+  and target pops, the binop's right-then-left operand pops, the
+  aggregate folds, the retval pops, the drops. A failed pop — a
+  `VmError::StackUnderflow` — pops nothing and reports nothing (the
+  fault stream owns the refusal), and a unit-return's empty-stack pop
+  is a failed pop whose substituted `Unit` never rides the stack (the
+  call seams' events cover the dest write). `StackCollector` captures
+  the interleaved transcript (`events()` plus filtered
+  `pushed_events()`/`popped_events()` views) in bounded memory
+  (`bounded(max)` + a displayed overflow flag) and folds as it
+  captures: `pushed_count()`/`popped_count()` plus `net_growth()` —
+  the run's balance (`0` for every program that ends as it started) —
+  and `max_depth_seen()`, the operand-stack high-water mark as the
+  machine itself shaped it. `render_stack` renders the deterministic
+  listing (the header alone for the empty capture; one `push`/`pop`
+  line per movement with the watch render's value spellings — floats
+  carry their bit pattern, pool strings stay quoted, tuples render
+  recursively). `Value::kind_name` is public now (the same
+  documented-kind surface the casts' and watch's kinds already
+  expose), so the tracing sink's movement logs spell the moved kind.
+  Contract like the other seams: read-only, total over the executed
+  stream, zero-cost when unused (one `Option` check per movement, the
+  value copies paid only on the fire path), and composing with
+  everything else. A bench (`benches/vm_stack`: the per-movement
+  funnel hooks' overhead vs the unattached baseline over a
+  movement-heavy countdown loop — twelve movements per iteration — and
+  the render) and a consumer walkthrough
+  (`examples/stack_walkthrough`: the golden stream, the balance folds,
+  the movement-heavy loop, the bounded capture, the silent failed pop,
+  the silent unit return, and the read-only proof) land with it.
 - **Float-operation observation seam (`glyim_bytecode_vm::floats`)**:
   the *arithmetic counterpart* of the value seams — every opcode class
   carried an observation hook except the float stream, and the float
