@@ -2,12 +2,14 @@
 edition = "2024"
 version = "0.10.0"
 license = "MIT"
-# Bumped 1.85 -> 1.95 with the dependency-update pass: parking_lot 0.13 (the
-# strictest updated dependency) requires 1.95, and the 2024-edition let-chains
-# now used in the code stabilized in 1.88.
-rust-version = "1.95"
-repository = "https://github.com/elcoosp/glyim"
-readme = "README.md"
+# MSRV 1.95 (bumped 1.85 -> 1.95 with the dependency-update pass: parking_lot
+# 0.13, the strictest updated dependency, requires 1.95, and the 2024-edition
+# let-chains now used in the code stabilized in 1.88). Recorded here and in
+# `rust-toolchain.toml`'s story rather than as `rust-version`, because no
+# member inherits it and an uninherited `rust-version` is dead manifest
+# surface cargo warns about; the `msrv` CI job pins the real floor (1.95.0).
+# `repository` / `readme` live in the members that publish their own metadata
+# the same way.
 
 [workspace]
 resolver = "3"
