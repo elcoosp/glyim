@@ -1,13 +1,13 @@
 {
   "schema": "glyim.status/1",
   "features": 254,
-  "records": 56,
+  "records": 632,
   "summary": {
     "L0": 241,
     "L1": 7,
-    "L2": 6,
+    "L2": 2,
     "L3": 0,
-    "L4": 0,
+    "L4": 4,
     "L5": 0
   },
   "entries": [
@@ -804,7 +804,7 @@
       "id": "LANG-SCOPE-MOD-DECL",
       "tier": "core",
       "target_level": "L5",
-      "computed_level": "L2",
+      "computed_level": "L4",
       "capped_by": [],
       "unmeasured": [
         "fuzz_cpu_hours",
@@ -914,7 +914,7 @@
       "id": "LANG-SYN-FN-DEF",
       "tier": "core",
       "target_level": "L5",
-      "computed_level": "L2",
+      "computed_level": "L4",
       "capped_by": [],
       "unmeasured": [
         "fuzz_cpu_hours",
@@ -947,7 +947,7 @@
       "id": "LANG-SYN-IMPL",
       "tier": "core",
       "target_level": "L5",
-      "computed_level": "L2",
+      "computed_level": "L4",
       "capped_by": [],
       "unmeasured": [
         "fuzz_cpu_hours",
@@ -1090,7 +1090,7 @@
       "id": "LANG-SYN-UNSAFE-BLOCK",
       "tier": "core",
       "target_level": "L5",
-      "computed_level": "L2",
+      "computed_level": "L4",
       "capped_by": [],
       "unmeasured": [
         "fuzz_cpu_hours",
