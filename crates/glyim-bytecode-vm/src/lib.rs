@@ -53,7 +53,11 @@
 //! composite projections ([`projections`]), the float operations
 //! ([`floats`] — the `OP_LOAD_CONST_F64` pushes, the `(Float, Float)`
 //! binop arms, and the `OP_NEG` negations, with the IEEE-754 specials
-//! folded as they capture), the operand-stack movements ([`stack`] —
+//! folded as they capture), the integer operations ([`math`] — the
+//! `(Int, Int)` binop arms with the wrap verdict spelled per event,
+//! the `OP_NEG` negations, and the `OP_NOT` bools, with the
+//! *where did the wrapping semantics engage* folds off the same
+//! stream), the operand-stack movements ([`stack`] —
 //! every push and pop the machine performs, the value stream through its
 //! core channel, funneled through `Vm::push_operand` / `Vm::pop` so the
 //! stream is total), the execution budget ([`fuel`] — one checkpoint per
@@ -62,7 +66,14 @@
 //! the artifact-level
 //! faces (the module image [`image`] with its decoder, disassembler
 //! ([`disasm`]), and the module/run diff seams ([`diff`] /
-//! [`rundiff`])). The hooks fire only when a sink is attached — one
+//! [`rundiff`])). The one deliberate non-observer is the host-interrupt
+//! gate ([`interrupt`]): the external counterpart of the budget — an
+//! armed [`Interrupt`] veto is consulted once per pending dispatch, just
+//! after the fuel gate, and a veto stops the run with the explicit
+//! `VmError::Interrupted` carrying the host's own reason (the refusal
+//! contract is the fuel gate's: a vetoed dispatch never executes and
+//! never reaches the trace or fuel hooks). The hooks fire only when a
+//! sink is attached — one
 //! `Option` check per event, exactly the pre-seam behavior when the
 //! sink is absent — so observation never changes execution.
 
@@ -82,6 +93,8 @@ pub mod drops;
 pub mod floats;
 pub mod fuel;
 pub mod image;
+pub mod interrupt;
+pub mod math;
 pub mod memory;
 pub mod profile;
 pub mod projections;
@@ -119,6 +132,10 @@ pub use floats::{
 };
 pub use fuel::{FuelCollector, FuelSink, FuelTick, TracingFuelSink, render_fuel};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
+pub use interrupt::{Deadline, Interrupt, InterruptFn, InterruptProbe};
+pub use math::{
+    MathBinop, MathCollector, MathEvent, MathNeg, MathNot, MathSink, TracingMathSink, render_math,
+};
 pub use memory::{MemCollector, MemEvent, MemReadEvent, MemSink, MemWriteEvent, render_memory};
 pub use profile::{HotOpcode, ProfileCollector, render_profile};
 pub use projections::{
@@ -603,6 +620,18 @@ pub enum VmError {
         /// How many dispatches ran before the budget was spent.
         executed: u64,
     },
+    /// The host veto armed by [`Vm::with_interrupt`] refused the pending
+    /// dispatch: `executed` dispatches had completed when the veto fired
+    /// and `reason` is the veto's own label — the host's story, not the
+    /// machine's (the budget's story is [`VmError::FuelExhausted`]; a
+    /// fuel-refused dispatch is never consulted). A vetoed dispatch never
+    /// executes and never reaches the trace or fuel hooks.
+    Interrupted {
+        /// How many dispatches had completed when the veto fired.
+        executed: u64,
+        /// The veto's own reason label (host-chosen).
+        reason: &'static str,
+    },
 }
 
 impl std::fmt::Display for VmError {
@@ -650,6 +679,12 @@ impl std::fmt::Display for VmError {
             }
             VmError::FuelExhausted { executed } => {
                 write!(f, "execution budget spent after {executed} dispatches")
+            }
+            VmError::Interrupted { executed, reason } => {
+                write!(
+                    f,
+                    "host interrupt refused the next dispatch after {executed} dispatches: {reason}"
+                )
             }
         }
     }
@@ -916,6 +951,16 @@ pub struct Vm {
     /// (`None` = one check per *float operation* — the pre-seam
     /// behavior).
     floats: Option<Box<dyn crate::floats::FloatSink>>,
+    /// The attached integer-arithmetic sink ([`crate::math`]), if any: it
+    /// fires once per executed integer operation — one
+    /// [`crate::math::MathBinop`] just after a `(Int, Int)` binop arm has
+    /// computed its answer (with the wrap verdict spelled per event), one
+    /// [`crate::math::MathNeg`] just after an `OP_NEG` has negated an
+    /// integer, one [`crate::math::MathNot`] just after an `OP_NOT` has
+    /// tested one — with the site and the operands/results in full
+    /// (`None` = one check per *integer operation* — the pre-seam
+    /// behavior).
+    maths: Option<Box<dyn crate::math::MathSink>>,
     /// The operand-stack seam's sink (the `stack` module): one
     /// [`crate::stack::Pushed`] just before a value lands on the operand
     /// stack and one [`crate::stack::Popped`] just after a pop resolves —
@@ -929,6 +974,12 @@ pub struct Vm {
     /// run is budgeted (`None` = one check per *dispatch* — the pre-seam
     /// behavior).
     fuel_sink: Option<Box<dyn crate::fuel::FuelSink>>,
+    /// The host-interrupt veto (the `interrupt` module), if armed: it is
+    /// consulted once per pending dispatch, just after the fuel gate, and
+    /// a vetoed dispatch stops the run with the explicit
+    /// [`VmError::Interrupted`] (`None` = one check per *dispatch* — the
+    /// pre-gate behavior).
+    interrupt: Option<Box<dyn crate::interrupt::Interrupt>>,
     /// The machine's current dispatch site — the function index of the
     /// dispatch in flight (the backtrace seam's fault-site tracking). Set
     /// at every dispatch, and to the entry request before the first one, so
@@ -1252,6 +1303,27 @@ impl Vm {
         self.floats.take()
     }
 
+    /// Attach an integer-arithmetic sink ([`crate::math`]): every
+    /// executed integer operation is handed to it just after the machine
+    /// has computed its answer — one [`crate::math::MathBinop`] per
+    /// executed `(Int, Int)` binop arm (with the wrap verdict spelled
+    /// per event), one [`crate::math::MathNeg`] per executed `OP_NEG`
+    /// over an integer, one [`crate::math::MathNot`] per executed
+    /// `OP_NOT`. The sink observes only — it never changes execution —
+    /// and [`Vm::take_math`] hands it back after the run.
+    #[must_use]
+    pub fn with_math(mut self, sink: Box<dyn crate::math::MathSink>) -> Vm {
+        self.maths = Some(sink);
+        self
+    }
+
+    /// Detach and return the integer-arithmetic sink (the typed owner
+    /// recovers it through [`crate::math::MathSink::as_any`]). `None`
+    /// when no sink was attached.
+    pub fn take_math(&mut self) -> Option<Box<dyn crate::math::MathSink>> {
+        self.maths.take()
+    }
+
     /// Attach the operand-stack seam's sink ([`crate::stack`]): every
     /// executed operand-stack movement is handed to it — one
     /// [`crate::stack::Pushed`] just before a value lands on the stack and
@@ -1301,6 +1373,31 @@ impl Vm {
     /// attached.
     pub fn take_fuel_sink(&mut self) -> Option<Box<dyn crate::fuel::FuelSink>> {
         self.fuel_sink.take()
+    }
+
+    /// Arm the host-interrupt gate (the [`crate::interrupt`] module): the
+    /// machine consults the veto once per pending dispatch, just after the
+    /// fuel gate and before the dispatch executes. A veto
+    /// ([`crate::interrupt::Interrupt::interrupted`] returning
+    /// `Some(reason)`) refuses the pending dispatch — the run stops with
+    /// the explicit [`VmError::Interrupted`], carrying the host's own
+    /// reason — and the vetoed dispatch never executes and never reaches
+    /// the trace or fuel hooks, exactly like a fuel-refused dispatch. The
+    /// fuel gate outranks the veto: a budget spent mid-run stops with
+    /// [`VmError::FuelExhausted`] even when a veto is armed (the budget's
+    /// refusal is the budget story, unchanged for existing users).
+    /// [`Vm::take_interrupt`] hands the veto back after the run.
+    #[must_use]
+    pub fn with_interrupt(mut self, interrupt: Box<dyn crate::interrupt::Interrupt>) -> Vm {
+        self.interrupt = Some(interrupt);
+        self
+    }
+
+    /// Detach and return the host-interrupt veto (the typed owner recovers
+    /// it through [`crate::interrupt::Interrupt::as_any`]). `None` when no
+    /// veto was armed.
+    pub fn take_interrupt(&mut self) -> Option<Box<dyn crate::interrupt::Interrupt>> {
+        self.interrupt.take()
     }
 
     /// How many instruction dispatches this VM has performed in its lifetime
@@ -1531,6 +1628,28 @@ impl Vm {
                 }
                 *fuel -= 1;
             }
+            // The host-interrupt gate (`Vm::with_interrupt`, the
+            // `interrupt` module): one consultation per pending dispatch,
+            // just after the fuel gate — the external counterpart of the
+            // budget rail. A vetoed dispatch never executes and never
+            // reaches the trace or fuel hooks (the same refusal contract
+            // as the fuel gate), and the fuel gate outranks the veto: a
+            // budget spent mid-run is the budget story even when a veto
+            // is armed. One `None` check per dispatch when no veto is
+            // armed.
+            if let Some(interrupt) = self.interrupt.as_mut() {
+                let probe = crate::interrupt::InterruptProbe {
+                    func,
+                    pc,
+                    dispatch: self.executed + 1,
+                };
+                if let Some(reason) = interrupt.interrupted(&probe) {
+                    return Err(VmError::Interrupted {
+                        executed: self.executed,
+                        reason,
+                    });
+                }
+            }
             self.executed += 1;
             // The fuel seam's checkpoint (the `fuel` module): one event
             // per executed dispatch, fired just after the budget for this
@@ -1718,12 +1837,42 @@ impl Vm {
                     } else {
                         None
                     };
+                    // The math seam's hook (the `math` module): one event
+                    // per executed `(Int, Int)` binop arm, reported just
+                    // after the arm has computed its answer and before it
+                    // is pushed, with the wrap verdict spelled per event
+                    // (the wrapping semantics are the documented integer
+                    // convention, so a wrapped answer is an *observed*
+                    // fact, never a fault). The operand copies are paid
+                    // only when a sink is attached; a *refused* pairing
+                    // (mixed kinds, a bitwise op over floats) faults
+                    // below and reports nothing — the fault stream owns
+                    // it, and so does a trapping division.
+                    let math_face = if self.maths.is_some() {
+                        match (&a, &b) {
+                            (Value::Int(_), Value::Int(_)) => Some((a.clone(), b.clone())),
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
                     let r = self.binop(op, a, b)?;
                     if let (Some(sink), Some((lhs, rhs))) = (self.floats.as_mut(), float_face) {
                         sink.float_binop(&crate::floats::FloatBinop {
                             func,
                             pc,
                             op,
+                            lhs,
+                            rhs,
+                            result: r.clone(),
+                        });
+                    }
+                    if let (Some(sink), Some((lhs, rhs))) = (self.maths.as_mut(), math_face) {
+                        sink.math_binop(&crate::math::MathBinop {
+                            func,
+                            pc,
+                            op,
+                            wrapped: crate::math::binop_wrapped(op, &lhs, &rhs),
                             lhs,
                             rhs,
                             result: r.clone(),
@@ -1748,6 +1897,24 @@ impl Vm {
                     } else {
                         None
                     };
+                    // The math seam's unary hooks (the `math` module): one
+                    // event per executed `OP_NEG` over an integer (the
+                    // `i64::MIN` negation is the one wrapped case, spelled
+                    // per event) and one per executed `OP_NOT` over an
+                    // integer, reported just after the unary arm has
+                    // computed its answer and before it is pushed. The
+                    // operand copy is paid only when a sink is attached;
+                    // a float operand faults below and reports nothing —
+                    // the fault stream owns it.
+                    let math_face =
+                        if self.maths.is_some() && matches!(op, Opcode::Neg | Opcode::Not) {
+                            match &a {
+                                Value::Int(_) => Some(a.clone()),
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        };
                     let r = self.unop(op, a)?;
                     if let (Some(sink), Some(operand)) = (self.floats.as_mut(), neg_face) {
                         sink.float_neg(&crate::floats::FloatNeg {
@@ -1756,6 +1923,26 @@ impl Vm {
                             operand,
                             result: r.clone(),
                         });
+                    }
+                    if let (Some(sink), Some(operand)) = (self.maths.as_mut(), math_face) {
+                        match op {
+                            Opcode::Neg => sink.math_neg(&crate::math::MathNeg {
+                                func,
+                                pc,
+                                wrapped: operand == Value::Int(i64::MIN),
+                                operand,
+                                result: r.clone(),
+                            }),
+                            // The math face is only armed for `Neg` and
+                            // `Not`; any other unary opcode never
+                            // captured an operand.
+                            _ => sink.math_not(&crate::math::MathNot {
+                                func,
+                                pc,
+                                operand,
+                                result: r.clone(),
+                            }),
+                        }
                     }
                     self.push_operand(r);
                 }
