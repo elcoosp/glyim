@@ -22,6 +22,8 @@ pub mod fmt_check;
 pub mod fmt_fix;
 /// helpers.
 pub mod helpers;
+/// `ledger`.
+pub mod ledger;
 /// mutation.
 pub mod mutation;
 /// `self_review`.
