@@ -2,15 +2,15 @@
 
 # Readiness status
 
-Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **254** features over **56** evidence record(s) (0 error(s), 3 warning(s)).
+Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **254** features over **632** evidence record(s) (0 error(s), 3 warning(s)).
 
 | Level | Features |
 |---|---|
 | L0 | 241 |
 | L1 | 7 |
-| L2 | 6 |
+| L2 | 2 |
 | L3 | 0 |
-| L4 | 0 |
+| L4 | 4 |
 | L5 | 0 |
 
 | Feature | Tier | Target | Computed | Capped by | Unmeasured |
@@ -87,7 +87,7 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `LANG-MACRO-RULES` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-MATCH-GUARDS` | core | L5 | L1 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SCOPE-ATTR-ALLOW` | core | L5 | L2 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
-| `LANG-SCOPE-MOD-DECL` | core | L5 | L2 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
+| `LANG-SCOPE-MOD-DECL` | core | L5 | L4 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SCOPE-SHADOWING` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SCOPE-STATIC-ITEM` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SCOPE-VIS-PUB` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
@@ -97,10 +97,10 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `LANG-SYN-ENUM` | core | L5 | L1 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SYN-EXTERN-BLOCK` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SYN-FIELD-ACCESS` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
-| `LANG-SYN-FN-DEF` | core | L5 | L2 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
+| `LANG-SYN-FN-DEF` | core | L5 | L4 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SYN-IF` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SYN-IF-LET` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
-| `LANG-SYN-IMPL` | core | L5 | L2 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
+| `LANG-SYN-IMPL` | core | L5 | L4 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SYN-INDEX` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SYN-LET` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SYN-LOOP-BREAK` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
@@ -113,7 +113,7 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `LANG-SYN-STRUCT-UPDATE` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SYN-TUPLE-EXPR` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SYN-TUPLE-STRUCT` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
-| `LANG-SYN-UNSAFE-BLOCK` | core | L5 | L2 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
+| `LANG-SYN-UNSAFE-BLOCK` | core | L5 | L4 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SYN-WHILE` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-TRAIT-ASSOC-TYPES` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-TRAIT-DEF` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
