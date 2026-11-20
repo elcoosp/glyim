@@ -1,0 +1,907 @@
+{
+  "command": "cargo test --workspace --all-features",
+  "suites": [
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 162,
+      "target": "unittests::glyim-bench"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "unittests::glyim-bench"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 170,
+      "target": "unittests::glyim-borrowck"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 355,
+      "target": "unittests::glyim-bytecode-vm"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 48,
+      "target": "unittests::glyim-cli"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "unittests::glyim-cli"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 5,
+      "target": "integration::cache_integration"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 3,
+      "target": "integration::compound_assign"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 5,
+      "target": "integration::emit_modes"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 3,
+      "target": "integration::logical_short_circuit"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::loop_break_value"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 3,
+      "target": "integration::option_match_payload"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 4,
+      "target": "integration::primitive_trait_impl"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::struct_field_order"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::thin_lto_e2e"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::trait_bound_diagnostic"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 2,
+      "target": "integration::trait_method_value"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 2,
+      "target": "integration::with_stdlib"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 180,
+      "target": "unittests::glyim-codegen"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 302,
+      "target": "unittests::glyim-codegen-llvm"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 100,
+      "target": "unittests::glyim-const-eval"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 36,
+      "target": "unittests::glyim-core"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 19,
+      "target": "unittests::glyim-db"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 104,
+      "target": "unittests::glyim-def-map"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 26,
+      "target": "unittests::glyim-diag"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 807,
+      "target": "unittests::glyim-frontend"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 82,
+      "target": "unittests::glyim-gsx"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 6,
+      "target": "integration::counter"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 121,
+      "target": "unittests::glyim-hir"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 30,
+      "target": "unittests::glyim-lang-alloc"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::alloc_compile"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::stdlib_parse_probe"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 60,
+      "target": "unittests::glyim-lang-core"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::stdlib_parse_probe"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 97,
+      "target": "unittests::glyim-lang-std"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::stdlib_parse_probe"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 3,
+      "target": "integration::with_stdlib_surface"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 63,
+      "target": "unittests::glyim-layout"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 3,
+      "target": "integration::layout_fuzz"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 432,
+      "target": "unittests::glyim-ledger"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "unittests::glyim-ledger"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 226,
+      "target": "unittests::glyim-lower"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 481,
+      "target": "unittests::glyim-lsp"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "unittests::glyim-lsp"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 89,
+      "target": "unittests::glyim-meta"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 30,
+      "target": "unittests::glyim-metrics"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 2,
+      "target": "unittests::glyim-metrics"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 4,
+      "target": "integration::adr_registry"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 207,
+      "target": "unittests::glyim-mir"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 216,
+      "target": "unittests::glyim-mir-interp"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 85,
+      "target": "unittests::glyim-opt"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 50,
+      "target": "unittests::glyim-pilot"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "unittests::glyim-pilot"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 23,
+      "target": "unittests::glyim-pipeline"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 9,
+      "target": "integration::async_for_loop_runtime"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 6,
+      "target": "integration::async_loop_runtime"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 5,
+      "target": "integration::async_multi_await_runtime"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::async_runtime"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 2,
+      "target": "integration::closure_byref_runtime"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 3,
+      "target": "integration::mir_compilation"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 2,
+      "target": "integration::opt_level_plans"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::stdlib_full_probe"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 3,
+      "target": "integration::struct_drop_runtime"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 16,
+      "target": "integration::vm_interp_diff"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 5,
+      "target": "unittests::glyim-proc-macro"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 112,
+      "target": "unittests::glyim-runtime"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 313,
+      "target": "unittests::glyim-solve"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 22,
+      "target": "unittests::glyim-span"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 24,
+      "target": "unittests::glyim-syntax"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 178,
+      "target": "unittests::glyim-test"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "unittests::glyim-test"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::annotations_corpus"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::compile_fail_corpus"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::compile_pass_corpus"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 2,
+      "target": "integration::differential"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::no_ice_corpus"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::probe_single"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::run_fail_corpus"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::run_pass_corpus"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 3,
+      "target": "integration::runtime"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::ui_corpus"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 602,
+      "target": "unittests::glyim-type"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "integration::auto_trait_recursive"
+    },
+    {
+      "failed": 0,
+      "ignored": 2,
+      "outcome": "ok",
+      "passed": 111,
+      "target": "unittests::glyim-typeck"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 6,
+      "target": "unittests::glyim-vfs"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 217,
+      "target": "unittests::glyip"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "unittests::glyip"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 93,
+      "target": "unittests::ledger-schema"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "doc-tests::glyim_bench"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 1,
+      "target": "unattributed"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_borrowck"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_bytecode_vm"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_cli"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_codegen"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_codegen_llvm"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_const_eval"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_core"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_db"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_def_map"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_diag"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_frontend"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_gsx"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_hir"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_lang_alloc"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_lang_core"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_lang_std"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_layout"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_ledger"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_lower"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_lsp"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_meta"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_metrics"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_mir"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_mir_interp"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_opt"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_pilot"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_pipeline"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_proc_macro"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_runtime"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_solve"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_span"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_syntax"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_test"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_type"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_typeck"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyim_vfs"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::glyip"
+    },
+    {
+      "failed": 0,
+      "ignored": 0,
+      "outcome": "ok",
+      "passed": 0,
+      "target": "doc-tests::ledger_schema"
+    }
+  ],
+  "summary": {
+    "failed": 0,
+    "ignored": 2,
+    "passed": 6401,
+    "suites": 128
+  }
+}
