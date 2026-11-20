@@ -153,8 +153,8 @@ impl Gate for LedgerGate {
 #[cfg(test)]
 mod tests {
     use super::{verdict_from_queue, LedgerGate};
-    use crate::gates::types::GateContext;
-    use std::path::PathBuf;
+    use crate::gates::{types::GateContext, Gate};
+    use std::path::{Path, PathBuf};
 
     /// A sample `glyim.ledger-next/1` document with one ranked queue item
     /// (the shape `ledger next` actually emits; see the runner's renderer).
@@ -181,7 +181,7 @@ mod tests {
     fn verdict_passes_and_surfaces_the_queue_head() {
         let verdict = verdict_from_queue(true, SAMPLE_QUEUE);
         assert!(verdict.passed, "a consistent registry with a queue passes");
-        let note = verdict.note.unwrap_or_default();
+        let note = verdict.message.clone();
         assert!(
             note.contains("GAP-0002") && note.contains("Windows SEH"),
             "the gate note must surface the queue head item, got: {note}"
@@ -226,7 +226,7 @@ mod tests {
             "the repo's registry is consistent and its queue is non-empty: {:?}",
             result.details
         );
-        let note = result.note.unwrap_or_default();
+        let note = result.message.clone();
         assert!(
             note.starts_with("queue head (rank 1): GAP-"),
             "the verdict must name the ledger-ranked head item, got: {note}"
