@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **M0 rails (plan §6 M0.1/M0.4–M0.7)**: ADR-001…015 stubs from the §8
+  register + index (completeness test), `AGENTS.md`, enforced PR template +
+  CI `check-templates`, `just bootstrap`/`ci-local`/`verify`, and the metrics
+  ratchet 7 → 12 keys with a fresh `metrics/baseline.json`, the
+  `metrics-must-not-increase` CI job, `metrics/test-baseline.json`, and the `v0.10.0-metrics-baseline` tag.
 - **Hermetic evidence emitter (`glyim-test`)**: fixture paths in
   `glyim.evidence/1` records are now repo-root-relative (forward slashes,
   no `./`/`..`), enforced at both ends of the JSONL seam — the harness
