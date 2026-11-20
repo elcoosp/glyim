@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Hermetic evidence emitter (`glyim-test`)**: fixture paths in
+  `glyim.evidence/1` records are now repo-root-relative (forward slashes,
+  no `./`/`..`), enforced at both ends of the JSONL seam — the harness
+  refuses to write and the ledger refuses to store a non-hermetic spelling.
+- **Full-corpus evidence store**: 632 curated records over 344 fixtures
+  (run-pass gam + real-LLVM passes, compile/fail/ui/runtime corpora),
+  0 absolute paths; the pilot gains a `LedgerGate` and CI a `ledger-diff`
+  regression gate, a nightly full-evidence workflow, and a generated
+  README status block.
 - **Integer-arithmetic observation seam (`glyim_bytecode_vm::math`)**:
   the *integer counterpart* of the float seam — the machine's integer
   faces (the `(Int, Int)` binop arm: arithmetic, comparisons, logic,
