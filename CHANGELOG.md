@@ -8,6 +8,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Integer-arithmetic observation seam (`glyim_bytecode_vm::math`)**:
+  the *integer counterpart* of the float seam — the machine's integer
+  faces (the `(Int, Int)` binop arm: arithmetic, comparisons, logic,
+  bitwise, shifts; plus `OP_NEG` and `OP_NOT` over an integer) run in
+  the documented wrapping semantics, and they were the last opcode
+  class without an observation hook: `i64::MAX + 1` answers `i64::MIN`
+  (never a fault), shifts mask their shift amount
+  (`wrapping_shl`/`wrapping_shr` shift by `(amount as u32) & 63`), and
+  a wrapped answer flows into comparisons and branches exactly like an
+  exact one — a silently-wrapped value looks to the caller like a
+  lowering bug rather than the arithmetic it came from. The VM now
+  hands one `MathBinop` per executed `(Int, Int)` binop arm — the
+  site, the opcode, the operands and the answer in full as
+  *sink-side copies*, and the exact wrap verdict — one `MathNeg` per
+  executed `OP_NEG` over an integer (the `i64::MIN` negation is the
+  one wrapped case) and one `MathNot` per executed `OP_NOT`, attached
+  through `Vm::with_math` and recovered through `Vm::take_math`; a
+  *refused* operation (mixed `Int`/`Float` operands, a bitwise op over
+  floats, a trapping division) faults and never reaches the hook (the
+  fault stream owns the refusal). `MathCollector` captures the
+  transcript in bounded memory (`bounded(max)` + a displayed overflow
+  flag) and folds as it captures: the binop/neg/not tallies, the wrap
+  tally (`wraps()` — how many answers the wrapping semantics
+  produced), the per-opcode binop counts
+  (`count_by_opcode()`, a deterministic `BTreeMap` keyed by opcode
+  name), and the *where did the wrapping semantics engage* fold
+  (`wrapped_by_function()`, keyed by function index).
+  `render_math` renders the deterministic report (the header with the
+  tallies, one line per event with the operands and answer, the
+  `wrapped` verdict appended where it holds, the explicit
+  `no math events` empty state). Contract like the other seams:
+  read-only, total over the executed operations, zero-cost when
+  unused (one `Option` check per integer operation), and composing
+  with everything else (the image round trip, the trace seam, and the
+  interrupt gate ride one machine unchanged). A bench
+  (`benches/vm_math`: the per-binop hook overhead vs the unattached
+  baseline over an arithmetic-heavy countdown loop — two executed
+  integer binops per iteration — and the render) and a consumer
+  walkthrough (`examples/math_walkthrough`: the exact golden `Mul`,
+  the wrapped subtraction, the wrapped `i64::MIN` negation, the
+  masked shift, the folds, the trapping division's empty stream, the
+  bounded capture, and the read-only proof) land with it.
+- **Host-interrupt gate (`glyim_bytecode_vm::interrupt`)**: the *external
+  counterpart* of the fuel gate — the budget (`Vm::with_fuel`) stops a
+  never-terminating machine, but the refusal reason is the budget's
+  story: an embedding host that must stop a machine for its *own*
+  reasons (a wall-clock deadline elapsed, the user cancelled, a
+  supervising policy revoked the run's permission) had no channel — the
+  only per-dispatch stops were the internal budget and a fault. The
+  host now arms a veto (`Interrupt`, consulted once per pending
+  dispatch, just after the fuel gate and before the dispatch executes)
+  through `Vm::with_interrupt` and recovers it typed through
+  `Vm::take_interrupt`; a veto answering `Some(reason)` refuses the
+  pending dispatch and stops the run with the explicit
+  `VmError::Interrupted { executed, reason }`, carrying the host's own
+  label. Contract like the fuel gate: a vetoed dispatch never executes
+  and never reaches the trace or fuel hooks (the trace ends exactly at
+  the last executed dispatch), the fuel gate outranks the veto (a
+  budget spent mid-run is still `FuelExhausted` — existing users see
+  unchanged behavior even with a veto armed), the veto may stop the run
+  but never otherwise change it, and the gate costs one `None` check
+  per dispatch when no veto is armed. Two built-in vetoes ship with it:
+  `Deadline` (a wall-clock deadline captured at arming time — fire
+  once the instant has passed, reason `"deadline"`) and `InterruptFn`
+  (the closure adapter, so hosts veto from their own state without
+  implementing the trait by hand). A bench (`benches/vm_interrupt`: the
+  per-dispatch veto-check overhead of a silent closure veto and a
+  far-future `Deadline` vs the unattached baseline over a
+  never-terminating countdown loop) and a consumer walkthrough
+  (`examples/interrupt_walkthrough`: the expired deadline's immediate
+  refusal, the typed veto recovery, the closure veto over a decoded
+  image with the probe naming the refused dispatch, the fuel-outranks
+  proof in both directions, and the silent veto's read-only run) land
+  with it.
 - **Fuel-observation seam (`glyim_bytecode_vm::fuel`)**: the *budget
   counterpart* of the trace seam — the fuel gate (`Vm::with_fuel`) is
   the machine's execution-budget rail (an infinite loop in a loaded
