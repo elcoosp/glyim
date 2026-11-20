@@ -34,6 +34,12 @@ test:
 test-fast:
     cargo nextest run --workspace --test-threads=2 --no-fail-fast
 
+# The bench harnesses are `harness = false` binaries: compiling and running
+# them under the plain test profile exercises every bench target without a
+# full `cargo bench` release run (the nightly-free bench gate).
+test-benches:
+    cargo test --workspace --benches
+
 test-corpus:
     cargo nextest run -p glyim-test --test run_pass_corpus --features glyim-test/real-llvm
     cargo nextest run -p glyim-test --test compile_pass_corpus --features glyim-test/real-llvm
