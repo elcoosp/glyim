@@ -53,7 +53,13 @@
 //! composite projections ([`projections`]), the float operations
 //! ([`floats`] — the `OP_LOAD_CONST_F64` pushes, the `(Float, Float)`
 //! binop arms, and the `OP_NEG` negations, with the IEEE-754 specials
-//! folded as they capture), and the artifact-level
+//! folded as they capture), the operand-stack movements ([`stack`] —
+//! every push and pop the machine performs, the value stream through its
+//! core channel, funneled through `Vm::push_operand` / `Vm::pop` so the
+//! stream is total), the execution budget ([`fuel`] — one checkpoint per
+//! executed dispatch, the remaining budget spelled per tick when the run
+//! is budgeted, so "where did the budget go" folds off the stream), and
+//! the artifact-level
 //! faces (the module image [`image`] with its decoder, disassembler
 //! ([`disasm`]), and the module/run diff seams ([`diff`] /
 //! [`rundiff`])). The hooks fire only when a sink is attached — one
@@ -74,11 +80,13 @@ pub mod diff;
 pub mod disasm;
 pub mod drops;
 pub mod floats;
+pub mod fuel;
 pub mod image;
 pub mod memory;
 pub mod profile;
 pub mod projections;
 pub mod rundiff;
+pub mod stack;
 pub mod state;
 pub mod strings;
 pub mod trace;
@@ -109,6 +117,7 @@ pub use drops::{DropCollector, DropEvent, DropSink, render_drops};
 pub use floats::{
     FloatBinop, FloatCollector, FloatConst, FloatEvent, FloatNeg, FloatSink, render_floats,
 };
+pub use fuel::{FuelCollector, FuelSink, FuelTick, TracingFuelSink, render_fuel};
 pub use image::{IMAGE_MAGIC, IMAGE_VERSION, ImageError, decode_module, encode_module};
 pub use memory::{MemCollector, MemEvent, MemReadEvent, MemSink, MemWriteEvent, render_memory};
 pub use profile::{HotOpcode, ProfileCollector, render_profile};
@@ -116,6 +125,9 @@ pub use projections::{
     DiscrRead, LenRead, ProjectionCollector, ProjectionEvent, ProjectionSink, render_projections,
 };
 pub use rundiff::render_run_diff;
+pub use stack::{
+    Popped, Pushed, StackCollector, StackEvent, StackSink, TracingStackSink, render_stack,
+};
 pub use state::{StateCollector, StateEvent, StatePhase, StateSink, render_state};
 pub use strings::{StringCollector, StringLoadEvent, StringSink, render_strings};
 pub use trace::{StepDetail, TraceCollector, TraceSink, TracingSink, VmStep, render_trace};
@@ -167,8 +179,12 @@ impl Value {
     // condition) now goes through the typed [`VmError::ExpectedInt`] path
     // like every other operand role.
 
-    /// The value kind's name, as reported in typed type-mismatch errors.
-    fn kind_name(&self) -> &'static str {
+    /// The value kind's name, as reported in typed type-mismatch errors
+    /// and in the observability seams' event logs (the same
+    /// documented-kind surface the casts' and watch's kinds expose —
+    /// public since the operand-stack seam's tracing sink logs it).
+    #[must_use]
+    pub fn kind_name(&self) -> &'static str {
         match self {
             Value::Int(_) => "Int",
             Value::Float(_) => "Float",
@@ -900,6 +916,19 @@ pub struct Vm {
     /// (`None` = one check per *float operation* — the pre-seam
     /// behavior).
     floats: Option<Box<dyn crate::floats::FloatSink>>,
+    /// The operand-stack seam's sink (the `stack` module): one
+    /// [`crate::stack::Pushed`] just before a value lands on the operand
+    /// stack and one [`crate::stack::Popped`] just after a pop resolves —
+    /// the machine's whole value stream through its core channel
+    /// (`None` = one check per *movement* — the pre-seam behavior).
+    stack_sink: Option<Box<dyn crate::stack::StackSink>>,
+    /// The fuel seam's sink (the `fuel` module): one
+    /// [`crate::fuel::FuelTick`] per executed dispatch, just after the
+    /// budget for that dispatch has been spent — the budget face of the
+    /// trace hook, with the remaining budget spelled per tick when the
+    /// run is budgeted (`None` = one check per *dispatch* — the pre-seam
+    /// behavior).
+    fuel_sink: Option<Box<dyn crate::fuel::FuelSink>>,
     /// The machine's current dispatch site — the function index of the
     /// dispatch in flight (the backtrace seam's fault-site tracking). Set
     /// at every dispatch, and to the entry request before the first one, so
@@ -1223,6 +1252,25 @@ impl Vm {
         self.floats.take()
     }
 
+    /// Attach the operand-stack seam's sink ([`crate::stack`]): every
+    /// executed operand-stack movement is handed to it — one
+    /// [`crate::stack::Pushed`] just before a value lands on the stack and
+    /// one [`crate::stack::Popped`] just after a pop resolves. The sink
+    /// observes only — it never changes execution — and
+    /// [`Vm::take_stack`] hands it back after the run.
+    #[must_use]
+    pub fn with_stack(mut self, sink: Box<dyn crate::stack::StackSink>) -> Vm {
+        self.stack_sink = Some(sink);
+        self
+    }
+
+    /// Detach and return the operand-stack seam's sink (the typed owner
+    /// recovers it through [`crate::stack::StackSink::as_any`]).
+    /// `None` when no sink was attached.
+    pub fn take_stack(&mut self) -> Option<Box<dyn crate::stack::StackSink>> {
+        self.stack_sink.take()
+    }
+
     /// Set an execution budget: the machine refuses a dispatch once `fuel`
     /// dispatches have run, returning [`VmError::FuelExhausted`] — the
     /// runtime complement of [`decode_module`]'s structural validation, so
@@ -1233,6 +1281,26 @@ impl Vm {
     pub fn with_fuel(mut self, fuel: u64) -> Vm {
         self.fuel = Some(fuel);
         self
+    }
+
+    /// Attach the fuel seam's sink ([`crate::fuel`]): every executed
+    /// dispatch hands it one [`crate::fuel::FuelTick`] just after the
+    /// budget for that dispatch has been spent and before the instruction
+    /// executes — the same cadence as the trace hook, with the remaining
+    /// budget spelled per tick when the run is budgeted. The sink observes
+    /// only — it never changes execution — and [`Vm::take_fuel_sink`]
+    /// hands it back after the run.
+    #[must_use]
+    pub fn with_fuel_sink(mut self, sink: Box<dyn crate::fuel::FuelSink>) -> Vm {
+        self.fuel_sink = Some(sink);
+        self
+    }
+
+    /// Detach and return the fuel seam's sink (the typed owner recovers it
+    /// through [`crate::fuel::FuelSink::as_any`]). `None` when no sink was
+    /// attached.
+    pub fn take_fuel_sink(&mut self) -> Option<Box<dyn crate::fuel::FuelSink>> {
+        self.fuel_sink.take()
     }
 
     /// How many instruction dispatches this VM has performed in its lifetime
@@ -1451,9 +1519,10 @@ impl Vm {
             }
             let raw = code[pc];
             let decoded = Opcode::from_u8(raw);
-            // Fuel gate (the `with_fuel` seam): a refused dispatch never
-            // executes and never reaches the trace hook, so a budget spent
-            // mid-run leaves the trace exactly at the last executed step.
+            // Fuel gate (`Vm::with_fuel`): a refused dispatch never
+            // executes and never reaches the trace or fuel hooks, so a
+            // budget spent mid-run leaves the trace exactly at the last
+            // executed step.
             if let Some(fuel) = self.fuel.as_mut() {
                 if *fuel == 0 {
                     return Err(VmError::FuelExhausted {
@@ -1463,6 +1532,21 @@ impl Vm {
                 *fuel -= 1;
             }
             self.executed += 1;
+            // The fuel seam's checkpoint (the `fuel` module): one event
+            // per executed dispatch, fired just after the budget for this
+            // dispatch has been spent and before the instruction executes
+            // — the budget face of the trace hook (the same cadence), with
+            // the remaining budget spelled per tick when the run is
+            // budgeted (`None` when it is not). One `None` check per
+            // dispatch when no sink is attached.
+            if let Some(sink) = self.fuel_sink.as_mut() {
+                sink.fuel_ticked(&crate::fuel::FuelTick {
+                    func,
+                    pc,
+                    dispatch: self.executed,
+                    remaining: self.fuel,
+                });
+            }
             // Execution-trace hook (the `trace` module's seam): record the
             // dispatch *before* the instruction executes, so a faulting
             // dispatch is the trace's last entry. Unknown opcode bytes are
@@ -1488,7 +1572,7 @@ impl Vm {
             match op {
                 Opcode::LoadConst => {
                     let v = Vm::read_i64(code, &mut self.frames[frame_idx].pc)?;
-                    self.stack.push(Value::Int(v));
+                    self.push_operand(Value::Int(v));
                 }
                 Opcode::LoadConstF64 => {
                     let bits = Vm::read_i64(code, &mut self.frames[frame_idx].pc)?;
@@ -1504,7 +1588,7 @@ impl Vm {
                     if let Some(sink) = self.floats.as_mut() {
                         sink.float_const(&crate::floats::FloatConst { func, pc, value });
                     }
-                    self.stack.push(Value::Float(value));
+                    self.push_operand(Value::Float(value));
                 }
                 Opcode::LoadConstStr => {
                     let idx = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
@@ -1528,7 +1612,7 @@ impl Vm {
                             value: Value::Str(s.clone()),
                         });
                     }
-                    self.stack.push(Value::Str(s));
+                    self.push_operand(Value::Str(s));
                 }
                 Opcode::LoadLocal => {
                     let idx = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
@@ -1542,7 +1626,7 @@ impl Vm {
                     if self.reads.is_some() {
                         self.record_read(func, idx, v.clone(), self.frames.len());
                     }
-                    self.stack.push(v);
+                    self.push_operand(v);
                 }
                 Opcode::StoreLocal => {
                     let idx = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
@@ -1551,7 +1635,7 @@ impl Vm {
                 }
                 Opcode::LoadLocalAddr => {
                     let idx = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
-                    self.stack.push(Value::Int(idx as i64));
+                    self.push_operand(Value::Int(idx as i64));
                 }
                 Opcode::StoreField => {
                     let addr = self.pop_int("address")? as usize;
@@ -1596,7 +1680,7 @@ impl Vm {
                             value: v.clone(),
                         });
                     }
-                    self.stack.push(v);
+                    self.push_operand(v);
                 }
                 Opcode::Add
                 | Opcode::Sub
@@ -1645,7 +1729,7 @@ impl Vm {
                             result: r.clone(),
                         });
                     }
-                    self.stack.push(r);
+                    self.push_operand(r);
                 }
                 Opcode::Not | Opcode::Neg => {
                     let a = self.pop()?;
@@ -1673,7 +1757,7 @@ impl Vm {
                             result: r.clone(),
                         });
                     }
-                    self.stack.push(r);
+                    self.push_operand(r);
                 }
                 Opcode::Cast => {
                     // Wire format (the emitter's `Rvalue::Cast` arm): the
@@ -1717,7 +1801,7 @@ impl Vm {
                             result: out.clone(),
                         });
                     }
-                    self.stack.push(out);
+                    self.push_operand(out);
                 }
                 Opcode::Jump => {
                     let target = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
@@ -1812,7 +1896,7 @@ impl Vm {
                             result: len,
                         });
                     }
-                    self.stack.push(Value::Int(len));
+                    self.push_operand(Value::Int(len));
                 }
                 Opcode::Discriminant => {
                     let v = self.pop()?;
@@ -1834,7 +1918,7 @@ impl Vm {
                             result: discr,
                         });
                     }
-                    self.stack.push(Value::Int(discr));
+                    self.push_operand(Value::Int(discr));
                 }
                 Opcode::Aggregate => {
                     let n = Vm::read_u32(code, &mut self.frames[frame_idx].pc)? as usize;
@@ -1857,7 +1941,7 @@ impl Vm {
                             elements: elems.clone(),
                         });
                     }
-                    self.stack.push(Value::Tuple(elems));
+                    self.push_operand(Value::Tuple(elems));
                 }
                 Opcode::Drop => {
                     // The discard seam's hook (the `drops` module): the
@@ -1910,7 +1994,7 @@ impl Vm {
                             value: value.clone(),
                         });
                     }
-                    self.stack.push(Value::Tuple(elems));
+                    self.push_operand(Value::Tuple(elems));
                 }
                 Opcode::Return => {
                     // BC-RETURN-FIX: a unit-returning function pushes nothing,
@@ -2261,7 +2345,46 @@ impl Vm {
     }
 
     fn pop(&mut self) -> ExecResult<Value> {
-        self.stack.pop().ok_or(VmError::StackUnderflow)
+        // The stack seam's pop face (the `stack` module): one event per
+        // executed pop, reported just after the pop resolves — a failed
+        // pop (the `StackUnderflow` below) pops nothing and reports
+        // nothing: the fault stream owns the refusal. One `None` check
+        // per pop when no sink is attached; the event's value is the
+        // sink's copy, not the machine's.
+        let popped = self.stack.pop();
+        if let (Some(sink), Some(value)) = (self.stack_sink.as_mut(), &popped) {
+            sink.operand_popped(&crate::stack::Popped {
+                func: self.fault_func,
+                pc: self.fault_pc,
+                dispatch: self.executed,
+                frame_depth: self.frames.len(),
+                depth: self.stack.len(),
+                value: value.clone(),
+            });
+        }
+        popped.ok_or(VmError::StackUnderflow)
+    }
+
+    /// Push one operand onto the machine's operand stack — the stack
+    /// seam's push funnel (the `stack` module): every operand push of the
+    /// machine goes through here so the seam's stream is total over the
+    /// executed movements. The event is reported just before the value
+    /// lands (its `depth` is the landing depth the push produces). One
+    /// `None` check per push when no sink is attached; the event's value
+    /// is the sink's copy, not the machine's.
+    #[inline]
+    fn push_operand(&mut self, v: Value) {
+        if let Some(sink) = self.stack_sink.as_mut() {
+            sink.operand_pushed(&crate::stack::Pushed {
+                func: self.fault_func,
+                pc: self.fault_pc,
+                dispatch: self.executed,
+                frame_depth: self.frames.len(),
+                depth: self.stack.len() + 1,
+                value: v.clone(),
+            });
+        }
+        self.stack.push(v);
     }
 
     fn read_u32(code: &[u8], pc: &mut usize) -> ExecResult<u32> {
