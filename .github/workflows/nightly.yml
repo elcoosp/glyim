@@ -1,0 +1,98 @@
+# Nightly tier (plan M0.7 "tiered workflows" + M1.10 "nightly full-evidence
+# job"): the heavy oracles the PR tier must not carry — the full workspace
+# suite, the real-LLVM corpus runs (LLVM 23 native codegen + link + run),
+# and a full readiness-evidence sweep emitted per test target and uploaded
+# as artifacts. Evidence is machine-generated data for the Readiness Ledger
+# (plan §3.4); the committed store stays curated through
+# `glyim-ledger evidence record`, so the nightly only *observes* — it never
+# mutates the registry on a schedule.
+name: nightly
+
+on:
+  schedule:
+    # 03:17 UTC daily — off the top of the hour so shared runners are not
+    # stampeded by every cron job in the world firing at midnight.
+    - cron: '17 3 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  nightly-full-suite:
+    name: Nightly — full suite + real LLVM + evidence sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the runtime staticlib
+        run: cargo build -p glyim-runtime
+      - name: Install LLVM 23
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 23
+          sudo apt-get install -y llvm-23-dev libpolly-23-dev
+          echo "LLVM_SYS_231_PREFIX=/usr/lib/llvm-23" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+      - name: Full workspace suite
+        run: cargo nextest run --workspace --test-threads=2
+      - name: Build all test targets once (no-run, real-llvm)
+        # DISK/Time protocol: heavy members build once, then every target
+        # executes sequentially; the evidence writer truncates per call, so
+        # each target gets its own GLYIM_TEST_EVIDENCE file.
+        run: cargo test -p glyim-test --no-run --features glyim-test/real-llvm
+      - name: GAM evidence sweep (interpreter backend)
+        run: |
+          mkdir -p target/ledger-evidence
+          for t in run_pass_corpus compile_pass_corpus compile_fail_corpus run_fail_corpus no_ice_corpus ui_corpus; do
+            GLYIM_TEST_EVIDENCE="target/ledger-evidence/gam_${t}.jsonl" \
+              cargo test -q -p glyim-test --features glyim-test/real-llvm --test "$t" --no-fail-fast
+          done
+      - name: LLVM evidence sweep (needs-llvm / differential subset)
+        env:
+          GLYIM_TEST_REAL_LLVM: "1"
+        run: |
+          GLYIM_TEST_EVIDENCE=target/ledger-evidence/llvm_run_pass.jsonl \
+            cargo test -q -p glyim-test --features glyim-test/real-llvm --test run_pass_corpus --no-fail-fast
+          GLYIM_TEST_EVIDENCE=target/ledger-evidence/llvm_runtime_two_step.jsonl \
+            cargo test -q -p glyim-test --features glyim-test/real-llvm --test runtime -- m5_two_step_multi_await_compiles_cleanly
+          GLYIM_TEST_EVIDENCE=target/ledger-evidence/llvm_runtime_one_step.jsonl \
+            cargo test -q -p glyim-test --features glyim-test/real-llvm --test runtime -- m5_one_step_single_await_must_not_miscompile
+      - name: Differential gate (native vs interpreter, release blocker)
+        env:
+          GLYIM_TEST_REAL_LLVM: "1"
+        run: cargo nextest run -p glyim-test --test differential --features glyim-test/real-llvm
+      - name: Evidence curation dry run (validate against the registry)
+        # The nightly store is an artifact, not a commit: the record face
+        # validates + merges + dedupes the sweep output into a store that
+        # must load cleanly — any schema or unknown-feature regression
+        # fails here before the artifact upload.
+        run: |
+          cargo run -q -p glyim-ledger -- evidence record target/ledger-evidence/*.jsonl \
+            --out target/ledger-evidence/nightly-store.jsonl
+          wc -l target/ledger-evidence/nightly-store.jsonl
+      - name: Upload evidence artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-evidence-${{ github.run_id }}
+          path: target/ledger-evidence/
+          retention-days: 30
+          if-no-files-found: error
+      - name: Waiver health (expired waivers fail, C9)
+        run: cargo run -q -p glyim-ledger -- waivers .
+      - name: Ledger determinism self-check (M1.13 first slice)
+        run: cargo run -q -p glyim-ledger -- verify .
+      - name: Release-gate report (unmeasured displayed, never silently passed)
+        run: cargo run -q -p glyim-ledger -- gates .
