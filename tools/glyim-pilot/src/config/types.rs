@@ -421,6 +421,8 @@ pub struct DoneGatesConfig {
     pub audit: Option<bool>,
     /// `Struct`.
     pub self_review: Option<bool>,
+    /// `Struct`.
+    pub ledger: Option<bool>,
 }
 // T067-PATCHED [PILOT-3]: percentage scale (0..100) to match the
 // values parsed from `cargo llvm-cov` output. The previous 0.80
@@ -443,6 +445,7 @@ impl Default for DoneGatesConfig {
             workspace_check: None,
             audit: None,
             self_review: None,
+            ledger: None,
         }
     }
 }
@@ -461,6 +464,7 @@ impl DoneGatesConfig {
             workspace_check: self.workspace_check.unwrap_or(d.workspace_check),
             audit: self.audit.unwrap_or(d.audit),
             self_review: self.self_review.unwrap_or(d.self_review),
+            ledger: self.ledger.unwrap_or(d.ledger),
         }
     }
 }
@@ -484,6 +488,8 @@ pub struct ResolvedDoneGates {
     pub audit: bool,
     /// `Struct`.
     pub self_review: bool,
+    /// `Struct`.
+    pub ledger: bool,
 }
 
 /// Per-level defaults for the done-gate bundle (`dead_code`/`coverage`/…).
@@ -494,6 +500,7 @@ struct DoneDefaults {
     workspace_check: bool,
     audit: bool,
     self_review: bool,
+    ledger: bool,
 }
 
 impl GateLevel {
@@ -506,6 +513,7 @@ impl GateLevel {
                 workspace_check: false,
                 audit: false,
                 self_review: false,
+                ledger: false,
             },
             Self::Strict => DoneDefaults {
                 dead_code: true,
@@ -514,6 +522,7 @@ impl GateLevel {
                 workspace_check: true,
                 audit: false,
                 self_review: false,
+                ledger: true,
             },
             Self::Production => DoneDefaults {
                 dead_code: true,
@@ -522,6 +531,7 @@ impl GateLevel {
                 workspace_check: true,
                 audit: true,
                 self_review: true,
+                ledger: true,
             },
         }
     }
