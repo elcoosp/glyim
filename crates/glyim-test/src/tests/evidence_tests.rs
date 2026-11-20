@@ -237,3 +237,131 @@ fn schema_version_is_pinned() {
     let line = record.to_jsonl_line();
     assert!(line.contains(r#""schema":"glyim.evidence/1""#));
 }
+
+// -- hermetic fixture paths (M1.5 DoD: "run is hermetic") -------------------
+//
+// The corpus collectors derive absolute roots from `CARGO_MANIFEST_DIR`, so
+// the emitter must re-base fixture paths onto the repo root before they
+// reach the committed store: repo-root-relative, forward slashes, no `./`
+// prefix (plan C6 — same inputs, byte-identical records on every machine).
+
+/// A result whose fixture path is spelled the way the corpus collectors
+/// spell it (absolute, `CARGO_MANIFEST_DIR`-derived).
+fn result_with_absolute_path(relative: &str, source: &str) -> TestResult {
+    let test = Arc::new(DiscoveredTest {
+        path: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative),
+        name: "absolute_path_fixture".to_string(),
+        config: TestConfig::default(),
+        source: Arc::from(source),
+        revisions: vec![String::new()],
+    });
+    TestResult {
+        test,
+        revision: String::new(),
+        outcome: TestOutcome::Passed,
+        duration: Duration::from_millis(1),
+        diagnostics: Vec::<GlyimDiagnostic>::new(),
+    }
+}
+
+#[test]
+fn record_fixture_path_is_repo_root_relative() {
+    let result =
+        result_with_absolute_path("tests/run-fail/abort_stderr.g", "fn main() { abort(); }\n");
+    let record = EvidenceRecord::from_result(&result, EvidenceBackend::Gam, 0);
+    // The committed spelling is repo-root-relative: the machine-local
+    // prefix (`CARGO_MANIFEST_DIR`'s absolute value) never reaches the
+    // record, so two machines produce byte-identical stores.
+    assert_eq!(
+        record.fixture, "crates/glyim-test/tests/run-fail/abort_stderr.g",
+        "fixture must be re-based onto the repo root, got: {}",
+        record.fixture
+    );
+    assert!(
+        !record.fixture.starts_with('/') && !record.fixture.starts_with("./"),
+        "fixture must not carry an absolute or `./` prefix: {}",
+        record.fixture
+    );
+    assert!(
+        !record.fixture.contains('\\'),
+        "fixture must use forward slashes: {}",
+        record.fixture
+    );
+}
+
+#[test]
+fn fixture_path_normalises_dot_segments() {
+    // Already-relative spellings keep their shape (the pre-corpus
+    // unit-test spelling `tests/run-pass/x.g` stays valid), but `./`
+    // segments are normalised away during the re-base.
+    let dotted = result_with_absolute_path("./tests/run-pass/./x.g", "fn main() {}\n");
+    let record = EvidenceRecord::from_result(&dotted, EvidenceBackend::Gam, 0);
+    assert_eq!(record.fixture, "crates/glyim-test/tests/run-pass/x.g");
+}
+
+#[test]
+fn validator_rejects_absolute_fixture_paths() {
+    let record = EvidenceRecord::from_result(
+        &passing_result("guard", "fn main() {}\n"),
+        EvidenceBackend::Gam,
+        0,
+    );
+    let mut absolute = record.clone();
+    absolute.fixture = format!(
+        "{}/crates/glyim-test/tests/run-pass/x.g",
+        std::env::temp_dir().display()
+    );
+    let issues = absolute.validate();
+    assert!(
+        issues.iter().any(|i| i.contains("repo-root-relative")),
+        "validator must reject an absolute fixture path: {issues:?}"
+    );
+
+    let mut parent_escape = record;
+    parent_escape.fixture = "../outside/run-pass/x.g".to_string();
+    let issues = parent_escape.validate();
+    assert!(
+        issues.iter().any(|i| i.contains("repo-root-relative")),
+        "validator must reject a `..` escape: {issues:?}"
+    );
+}
+
+#[test]
+fn write_evidence_bytes_are_golden_deterministic() {
+    // Two full emission passes over the same fixtures must land
+    // byte-identical JSONL: this is the store-level contract the M1.13
+    // reproducibility job re-checks across machines.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let sources = [
+        ("one", "fn main() -> i32 { 1 }\n"),
+        ("two", "fn main() -> i32 { 2 }\n"),
+    ];
+    let records: Vec<EvidenceRecord> = sources
+        .iter()
+        .map(|(name, source)| {
+            EvidenceRecord::from_result(
+                &result_with_absolute_path(&format!("tests/run-pass/{name}.g"), source),
+                EvidenceBackend::Gam,
+                0,
+            )
+        })
+        .collect();
+    let first = dir.path().join("first.jsonl");
+    let second = dir.path().join("second.jsonl");
+    write_evidence(&first, &records).expect("first write");
+    write_evidence(&second, &records).expect("second write");
+    let first_bytes = std::fs::read(&first).expect("first file exists");
+    let second_bytes = std::fs::read(&second).expect("second file exists");
+    assert_eq!(
+        first_bytes, second_bytes,
+        "two emission passes must be byte-identical"
+    );
+    for line in String::from_utf8(first_bytes).expect("utf-8").lines() {
+        let parsed = EvidenceRecord::from_jsonl_line(line).expect("line parses");
+        assert!(
+            !parsed.fixture.starts_with('/'),
+            "no absolute path may reach the store: {}",
+            parsed.fixture
+        );
+    }
+}
