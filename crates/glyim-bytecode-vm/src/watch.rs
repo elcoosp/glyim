@@ -704,9 +704,13 @@ watch glyim.module-image/2 writes=2
         });
     }
 
-    /// Same-function frames are disambiguated by frame depth: a recursive
-    /// helper's arg binds land at depth 2 (and 3), the caller's dest write
-    /// at depth 1, all keyed by the writer's function index.
+    /// Same-function frames are disambiguated by frame depth: the callee's
+    /// arg binds and stores land at depth 2, the caller's dest write at
+    /// depth 1, all keyed by the writer's function index. The two callee
+    /// frames here are *sequential* (`helper(helper(9))` evaluates the
+    /// inner call before the outer one starts), so each runs alone at
+    /// depth 2 — the frame depth is what tells callee writes from caller
+    /// writes, and the dispatch numbers order them.
     #[test]
     fn same_function_frames_carry_their_depth() {
         // helper(n): local 0 = n + 1; return local 0 — one store per frame.
