@@ -37,6 +37,11 @@ fn main() {
         "public_items": metrics.public_items,
         "test_functions": metrics.test_functions,
         "workspace_members": metrics.workspace_members,
+        "unwrap_count": metrics.unwrap_count,
+        "unsafe_count": metrics.unsafe_count,
+        "from_raw_count": metrics.from_raw_count,
+        "public_IR_fields": metrics.public_ir_fields,
+        "HashMap_hot_sites": metrics.hash_map_hot_sites,
     }))
     .expect("inline baseline is a valid RepoMetrics document");
     let regressions = glyim_metrics::Ratchet::check(&metrics, &baseline);
