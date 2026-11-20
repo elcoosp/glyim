@@ -218,6 +218,24 @@ harness = false
 name = "vm_fuel"
 harness = false
 
+# Host-interrupt bench (the interrupt gate: the per-dispatch veto-check
+# overhead of an armed gate vs the unattached baseline over a
+# never-terminating countdown loop — a silent `InterruptFn` closure and a
+# far-future `Deadline`, one consultation per pending dispatch;
+# dependency-free, `harness = false`).
+[[bench]]
+name = "vm_interrupt"
+harness = false
+
+# Integer-arithmetic bench (the math seam: the per-binop hook overhead
+# vs the unattached baseline over an arithmetic-heavy countdown loop —
+# two executed integer binops per iteration, with sink-side operand
+# copies per event — and the deterministic render; dependency-free,
+# `harness = false`).
+[[bench]]
+name = "vm_math"
+harness = false
+
 [dependencies]
 # The module-image seam (glyim.module-image/1) logs encode/decode events and
 # every decode rejection through the workspace-standard tracing layer, so a
