@@ -85,7 +85,8 @@ pub struct EvidenceRecord {
     pub schema: String,
     /// Fixture name as the harness reports it (path-derived).
     pub name: String,
-    /// Fixture path relative to the collection root.
+    /// Fixture path relative to the repo root (the hermetic committed
+    /// spelling; see [`hermetic_fixture_path`]).
     pub fixture: String,
     /// SHA-256 (hex) of the exact fixture source bytes.
     pub fixture_sha256: String,
@@ -112,6 +113,52 @@ pub struct EvidenceRecord {
     pub rss_kb: Option<u64>,
 }
 
+/// The repository root this crate lives in, derived from the crate
+/// manifest's location at compile time (`crates/glyim-test` → two parents
+/// up). Never hardcoded: the corpus collectors spell their roots with
+/// `CARGO_MANIFEST_DIR`, so the emitter re-bases against the same anchor
+/// and stays correct wherever the checkout lives.
+fn repo_root() -> &'static Path {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    manifest.parent().and_then(Path::parent).unwrap_or(manifest)
+}
+
+/// Normalises a fixture path to the hermetic committed spelling:
+/// repo-root-relative, forward slashes, no `./` prefix.
+///
+/// The corpus collectors spell their roots with `CARGO_MANIFEST_DIR`
+/// (absolute), which previously leaked the recording machine's filesystem
+/// layout into every record. An absolute path under the repo root is
+/// re-based onto [`repo_root`], `./` segments are dropped, and `\`
+/// separators are normalised to `/`. A path that is neither relative nor
+/// under the repo root (a different checkout, a temp dir) keeps its
+/// spelling — and is rejected by [`EvidenceRecord::validate`] — so a
+/// non-hermetic source fails loudly instead of silently reaching the
+/// committed store.
+#[must_use]
+pub fn hermetic_fixture_path(path: &Path) -> String {
+    let forward = path.to_string_lossy().replace('\\', "/");
+    let normalised = Path::new(forward.as_str());
+    let relative = match normalised.strip_prefix(repo_root()) {
+        Ok(rest) => rest.to_path_buf(),
+        Err(_) => normalised.to_path_buf(),
+    };
+    let mut out = String::with_capacity(relative.as_os_str().len());
+    for component in relative.components() {
+        // `.` segments are noise; `RootDir` only survives when the path
+        // was absolute and outside the repo root, and the leading `/` it
+        // produces is exactly what `validate` then rejects.
+        if matches!(component, std::path::Component::CurDir) {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push('/');
+        }
+        out.push_str(&component.as_os_str().to_string_lossy());
+    }
+    out
+}
+
 impl EvidenceRecord {
     /// Builds the evidence record for one executed fixture.
     ///
@@ -119,7 +166,10 @@ impl EvidenceRecord {
     /// chose (backend from the compiler the executor built, opt level
     /// from the fixture's compile flags via [`opt_level_from_flags`]).
     /// Everything else is read from the result itself; the wall-clock
-    /// `TestResult::duration` is deliberately ignored (hermeticity).
+    /// `TestResult::duration` is deliberately ignored (hermeticity), and
+    /// the fixture path is re-based onto the repo root by
+    /// [`hermetic_fixture_path`] so the committed store never carries a
+    /// machine-local spelling (plan C6).
     #[must_use]
     pub fn from_result(result: &TestResult, backend: EvidenceBackend, opt: u8) -> Self {
         let mut hasher = Sha256::new();
@@ -135,7 +185,7 @@ impl EvidenceRecord {
         Self {
             schema: EVIDENCE_SCHEMA.to_string(),
             name: result.test.name.clone(),
-            fixture: result.test.path.display().to_string(),
+            fixture: hermetic_fixture_path(&result.test.path),
             fixture_sha256,
             revision: result.revision.clone(),
             mode: result.test.config.mode.dir_name().to_string(),
@@ -177,8 +227,9 @@ impl EvidenceRecord {
         serde_json::from_str(line).map_err(|e| e.to_string())
     }
 
-    /// Checks the invariants serde cannot express: hash format and
-    /// declared-backend membership in the ledger set.
+    /// Checks the invariants serde cannot express: hash format, the
+    /// hermetic fixture-path spelling, and declared-backend membership in
+    /// the ledger set.
     ///
     /// Returns human-readable issues (empty = valid); `write_evidence`
     /// refuses to persist records that fail this check so a schema bug
@@ -195,6 +246,24 @@ impl EvidenceRecord {
             issues.push(format!(
                 "fixture_sha256 must be 64 lowercase hex chars, got {:?} (name: {})",
                 self.fixture_sha256, self.name
+            ));
+        }
+        // Hermeticity is a store invariant, not a convention: an absolute
+        // path leaks the recording machine's filesystem layout, a `..`
+        // segment escapes the store root, a `./` prefix and `\` separators
+        // are non-canonical spellings of the same fixture — any of them
+        // breaks the cross-machine byte-determinism the M1.8 `compute` and
+        // the M1.13 reproducibility job rely on.
+        let path_hermetic = !self.fixture.is_empty()
+            && !self.fixture.starts_with('/')
+            && !self.fixture.starts_with("./")
+            && !self.fixture.contains('\\')
+            && !self.fixture.split('/').any(|segment| segment == "..");
+        if !path_hermetic {
+            issues.push(format!(
+                "fixture must be repo-root-relative with forward slashes and no \
+                 `./` or `..` segments, got {:?} (name: {})",
+                self.fixture, self.name
             ));
         }
         for backend in &self.declared_backends {
