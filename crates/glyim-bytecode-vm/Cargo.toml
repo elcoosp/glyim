@@ -204,6 +204,20 @@ harness = false
 name = "vm_floats"
 harness = false
 
+# Operand-stack bench (the stack seam: the per-movement funnel hooks'
+# overhead vs the unattached baseline over a movement-heavy countdown
+# loop, and the deterministic render; dependency-free, `harness = false`).
+[[bench]]
+name = "vm_stack"
+harness = false
+
+# Fuel bench (the fuel seam: the per-dispatch checkpoint hook's overhead
+# vs the unattached baseline over a budget-burning countdown loop, and
+# the deterministic render; dependency-free, `harness = false`).
+[[bench]]
+name = "vm_fuel"
+harness = false
+
 [dependencies]
 # The module-image seam (glyim.module-image/1) logs encode/decode events and
 # every decode rejection through the workspace-standard tracing layer, so a
