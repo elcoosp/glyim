@@ -134,7 +134,8 @@ pub struct LedgerEvidence {
     pub schema: String,
     /// Fixture name as the harness reports it.
     pub name: String,
-    /// Fixture path relative to the collection root.
+    /// Fixture path relative to the repo root (the hermetic committed
+    /// spelling the harness writes).
     pub fixture: String,
     /// SHA-256 (hex) of the fixture source bytes.
     pub fixture_sha256: String,
@@ -172,9 +173,9 @@ impl LedgerEvidence {
     }
 
     /// Checks the invariants serde cannot express: hash format, canonical
-    /// mode, and declared-backend membership. The `schema` tag is checked
-    /// separately by the run entry point so a foreign tag gets its own
-    /// diagnostic code.
+    /// mode, declared-backend membership, and the hermetic fixture-path
+    /// spelling. The `schema` tag is checked separately by the run entry
+    /// point so a foreign tag gets its own diagnostic code.
     ///
     /// Returns human-readable issues (empty = valid); the compute run turns
     /// every issue into an error diagnostic and excludes the record from all
@@ -191,6 +192,24 @@ impl LedgerEvidence {
             issues.push(format!(
                 "fixture_sha256 must be 64 lowercase hex chars, got {:?}",
                 self.fixture_sha256
+            ));
+        }
+        // The committed spelling is repo-root-relative with forward
+        // slashes (plan C6): an absolute path leaks the recording
+        // machine's filesystem layout, a `..` segment escapes the store's
+        // root, a `./` prefix and `\` separators are non-canonical
+        // spellings of the same fixture — any of them breaks cross-machine
+        // byte-determinism and the audit face's path resolution.
+        let path_hermetic = !self.fixture.is_empty()
+            && !self.fixture.starts_with('/')
+            && !self.fixture.starts_with("./")
+            && !self.fixture.contains('\\')
+            && !self.fixture.split('/').any(|segment| segment == "..");
+        if !path_hermetic {
+            issues.push(format!(
+                "fixture must be repo-root-relative with forward slashes and no \
+                 `./` or `..` segments, got {:?}",
+                self.fixture
             ));
         }
         if !CANONICAL_MODES.contains(&self.mode.as_str()) {
@@ -988,6 +1007,84 @@ mutation_kill_rate_pct = 75
         record.declared_backends = vec!["wasm".to_string()];
         let issues = record.validate();
         assert_eq!(issues.len(), 3, "{issues:?}");
+    }
+
+    #[test]
+    fn evidence_validate_rejects_non_hermetic_fixture_paths() {
+        // The committed spelling is repo-root-relative with forward
+        // slashes (plan C6): an absolute path leaks the recording
+        // machine's filesystem layout, a `..` segment escapes the store's
+        // root, and a `./` prefix is a non-canonical spelling of the same
+        // fixture — all three make cross-machine byte-determinism (and
+        // the audit face's path resolution) unreliable.
+        let mut absolute = rec(
+            "abs",
+            sha(1),
+            "run-pass",
+            EvidenceOutcome::Passed,
+            Backend::Gam,
+            &["A"],
+        );
+        absolute.fixture =
+            "/home/record-machine/glyim/crates/glyim-test/tests/run-pass/x.g".to_string();
+        assert!(
+            absolute
+                .validate()
+                .iter()
+                .any(|i| i.contains("repo-root-relative")),
+            "absolute fixture paths must be flagged: {:?}",
+            absolute.validate()
+        );
+
+        let mut escape = rec(
+            "esc",
+            sha(1),
+            "run-pass",
+            EvidenceOutcome::Passed,
+            Backend::Gam,
+            &["A"],
+        );
+        escape.fixture = "../outside/run-pass/x.g".to_string();
+        assert!(
+            escape
+                .validate()
+                .iter()
+                .any(|i| i.contains("repo-root-relative")),
+            "`..` fixture paths must be flagged: {:?}",
+            escape.validate()
+        );
+
+        let mut dotted = rec(
+            "dot",
+            sha(1),
+            "run-pass",
+            EvidenceOutcome::Passed,
+            Backend::Gam,
+            &["A"],
+        );
+        dotted.fixture = "./tests/fixtures/dot.g".to_string();
+        assert!(
+            dotted
+                .validate()
+                .iter()
+                .any(|i| i.contains("repo-root-relative")),
+            "`./` fixture prefixes must be flagged: {:?}",
+            dotted.validate()
+        );
+
+        // The canonical relative spelling stays valid.
+        assert!(
+            rec(
+                "ok",
+                sha(1),
+                "run-pass",
+                EvidenceOutcome::Passed,
+                Backend::Gam,
+                &["A"]
+            )
+            .validate()
+            .is_empty()
+        );
     }
 
     // -- engine: level ladder ------------------------------------------------
