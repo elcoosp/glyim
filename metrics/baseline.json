@@ -1,9 +1,14 @@
 {
-  "code_lines": 260660,
-  "documented_items": 2542,
+  "HashMap_hot_sites": 579,
+  "code_lines": 342377,
+  "documented_items": 3470,
+  "from_raw_count": 629,
   "inline_allows": 0,
-  "public_items": 2900,
-  "rust_files": 1023,
-  "test_functions": 5367,
+  "public_IR_fields": 136,
+  "public_items": 3929,
+  "rust_files": 1291,
+  "test_functions": 6427,
+  "unsafe_count": 207,
+  "unwrap_count": 1366,
   "workspace_members": 40
 }
