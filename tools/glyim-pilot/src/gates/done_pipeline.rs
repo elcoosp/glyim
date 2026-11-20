@@ -2,8 +2,8 @@ use crate::config::types::ResolvedDoneGates;
 use crate::error::PilotError;
 use crate::gates::types::GateContext;
 use crate::gates::{
-    audit::AuditGate, coverage::CoverageGate, dead_code::DeadCodeGate, mutation::MutationGate,
-    workspace_check::WorkspaceCheckGate, Gate, PipelineResult,
+    audit::AuditGate, coverage::CoverageGate, dead_code::DeadCodeGate, ledger::LedgerGate,
+    mutation::MutationGate, workspace_check::WorkspaceCheckGate, Gate, PipelineResult,
 };
 use std::sync::Arc;
 
@@ -28,6 +28,12 @@ pub async fn run_done_pipeline(
     }
     if config.workspace_check {
         gates.push(Arc::new(WorkspaceCheckGate));
+    }
+    // The plan M1.11 integration: the readiness ledger's verdict (registry
+    // consistency + the deterministic `ledger next` queue head) feeds the
+    // orchestrator's task queue.
+    if config.ledger {
+        gates.push(Arc::new(LedgerGate));
     }
     if config.audit {
         gates.push(Arc::new(AuditGate));
