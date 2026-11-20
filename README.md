@@ -474,6 +474,64 @@ Compiler crates live under `crates/`; the five tooling crates live under `tools/
 - **Arena-allocated IRs** — `IndexVec<I, T>` gives every IR node a typed, cheaply-copyable ID. Interning (`TyCtx`) makes type handles stable across phases.
 - **Diagnostics** — every phase returns `Vec<GlyimDiagnostic>`, which the driver renders with `miette` (human) or serialises to JSON.
 
+### Repository Rails: `bootstrap`, `ci-local`, `verify`
+
+The M0 rails (plan §6 M0.1 / M0.5) are three `just` recipes:
+
+```bash
+# One-time environment setup from a clean clone: the Rust stable toolchain
+# (rustfmt + clippy), LLVM 23 (apt.llvm.org on Linux, Homebrew on macOS,
+# or an existing LLVM_SYS_231_PREFIX is kept as-is), and the cargo tools
+# the CI gates use (cargo-nextest, cargo-deny, cargo-machete). Idempotent.
+just bootstrap
+
+# The PR-tier CI gates, locally, in CI's own order: fmt, clippy -D
+# warnings, warn-fallback heuristics, process templates, tests, the
+# metrics ratchet, the ledger gate suite (check, evidence check/audit,
+# STATUS byte-check, README block), waiver health, dead-code check, and
+# cargo-deny. NOT mirrored locally: the multi-OS jobs, coverage/mutation
+# advisories, MSRV (pinned by the dtolnay action), and `ledger diff`
+# (needs the PR base SHA).
+just ci-local
+
+# The universal definition of done's mechanical subset (plan §7.4):
+# fmt + clippy(deny) + tests + ledger check + evidence check + STATUS
+# byte-check + README generated-block drift check.
+just verify
+```
+
+The LLVM 23 note in [Prerequisites](#prerequisites) applies to every recipe
+below `bootstrap` too: set `LLVM_SYS_231_PREFIX` (or have `llvm-config-23`
+on `PATH`) before running `ci-local` or `verify`; the recipes fail with that
+remedy printed instead of an opaque `llvm-sys` build error.
+
+### The M0.6 metrics ratchet
+
+`tools/glyim-metrics` measures twelve cheap lexical properties of the tree —
+`rust_files`, `code_lines`, `public_items`, `documented_items`,
+`test_functions`, `workspace_members`, `inline_allows` (the M0 zero-allow
+policy), `unwrap_count` and `unsafe_count` (production code only:
+`#[cfg(test)]` regions, `#[test]` functions and `tests/` files are excluded
+lexically), `from_raw_count`, `public_IR_fields` (public fields on structs
+in `glyim-mir`/`glyim-hir`), and `HashMap_hot_sites` (`std::collections`
+`HashMap` uses under `crates/`, the M3.9 determinism ratchet's target). The
+committed `metrics/baseline.json` pins them; CI's `metrics-must-not-increase`
+and `metrics-ratchet` jobs fail when any counter moves in its worse
+direction (fewer lines/tests/docs, or ANY new unwrap/unsafe/from_raw/IR
+field/HashMap site/inline allow). Improvements are picked up by re-running
+with `--write` in the same PR (gates never weaken — constitution C9):
+
+```bash
+# Check the tree against the baseline (what CI runs)
+cargo run -p glyim-metrics -- . --check metrics/baseline.json
+
+# Re-pin after an improvement (same PR, never lazily)
+cargo run -p glyim-metrics -- . --write metrics/baseline.json
+```
+
+The measured baseline commit is tagged `v0.10.0-metrics-baseline`; the full
+test-suite run is recorded in `metrics/test-baseline.json`.
+
 ### Running a Subset of Tests
 
 ```bash
@@ -1013,18 +1071,35 @@ session log.
   program plus the `glyim.corpus/1` `corpus.json` manifest, re-hashed on
   every check). The next
   plan items are the M1.9 Astro readiness page (the `glyim.known-gaps/1`
-  face's consumer), the nightly full-evidence job (the M1.10 "STATUS is up to date" CI check, the nightly full-evidence job), and the evidence wiring that
+  face's consumer), and the evidence wiring that
   fills the harness's reserved `instructions`/`rss_kb` columns.
 - `docs/archive/` — historical session documents (`HANDOFF.md`,
   `FIXES.md`) kept for provenance; the root stays navigation-focused.
-- `metrics/baseline.json` — the M0.6 repo-health baseline (file/line/test
-  counts, doc coverage, inline-allow count pinned at 0). CI's
-  `metrics-ratchet` job fails on regression and allows improvement; bump
-  it deliberately with
+- `docs/adr/` — the ADR framework (plan M0.4): ADR-001…015 as *proposed*
+  stubs carrying the §8 decision register's defaults, indexed in
+  `docs/adr/README.md`; register completeness is test-enforced
+  (`tools/glyim-metrics/tests/adr_registry.rs`).
+- `AGENTS.md` — the §7 agent operating protocol (work loop, rules, review
+  checklist, universal definition of done); `.github/PULL_REQUEST_TEMPLATE.md`
+  points at it, and CI's `check-templates` job enforces the pair.
+- `metrics/baseline.json` — the M0.6 repo-health baseline (the full
+  12-key set: file/line/test counts, doc coverage, inline-allow count
+  pinned at 0, and the `unwrap_count`/`unsafe_count`/`from_raw_count`/
+  `public_IR_fields`/`HashMap_hot_sites` ratchets). CI's
+  `metrics-ratchet` and `metrics-must-not-increase` jobs fail on any
+  regression and allow improvement; bump it deliberately with
   `cargo run -p glyim-metrics -- . --write metrics/baseline.json`.
+- `metrics/test-baseline.json` — the recorded full-suite run (M0.2).
 - `.github/workflows/ci.yml` — the enforced gates: fmt + pedantic clippy
   (`-D warnings`, zero inline allows), the test matrix, supply-chain,
-  MSRV, and the metrics ratchet.
+  MSRV, the ledger check/diff suite, process templates (`check-templates`),
+  and the metrics ratchet.
+- `.github/workflows/nightly.yml` — the nightly tier (M0.7/M2a): the full
+  workspace suite, the real-LLVM 23 corpus runs, the GAM + LLVM evidence
+  sweeps (`GLYIM_TEST_EVIDENCE` JSONL per corpus) curated through
+  `glyim-ledger evidence record` and uploaded as artifacts, the
+  differential release-blocker gate, waiver health, and the ledger
+  determinism self-check; triggered on schedule and `workflow_dispatch`.
 
 ---
 
