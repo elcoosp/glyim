@@ -288,6 +288,42 @@ jobs:
           cargo run -p glyim-metrics -- . --write /tmp/current.json
           diff -u metrics/baseline.json /tmp/current.json || true
 
+  # M0.6 ratchet, enforcement face: the plan DoD names the job
+  # "metrics-must-not-increase" — every ratchet metric (code_lines,
+  # test_functions, public_items, documented_items, rust_files,
+  # workspace_members, inline_allows, unwrap_count, unsafe_count,
+  # from_raw_count, public_IR_fields, HashMap_hot_sites) is checked against
+  # the committed baseline, and ANY metric moving in its worse direction
+  # fails the job (gates never weaken — C9). `metrics-ratchet` above keeps
+  # the same check plus the advisory drift diff; this job exists so the
+  # required-check list can reference the DoD-named job directly.
+  metrics-must-not-increase:
+    name: Metrics must-not-increase ratchet (M0.6)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the runtime staticlib
+        run: cargo build -p glyim-runtime
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Fail if any metric regressed against metrics/baseline.json
+        run: cargo run -p glyim-metrics -- . --check metrics/baseline.json
+
+  # M0.5: process scaffolding is enforced — the PR template exists, carries
+  # the ledger-diff / perf-delta / bug-class / breaking-change sections, and
+  # points at AGENTS.md (the §7 agent operating protocol). Pure bash, no
+  # toolchain: this gate must be cheap enough to stay required on every PR
+  # (plan §7.2 rule 9).
+  check-templates:
+    name: Process templates (M0.5)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: PR template references AGENTS.md and carries the mandatory sections
+        run: bash .github/scripts/check-templates.sh
+
   # M1.1 ledger check: registry consistency gate for the Readiness Ledger
   # (docs/roadmaps/glyim-master-plan.md §3). Loads `ledger/features/**` and
   # `ledger/gaps/**` with a deny_unknown_fields schema, then validates
