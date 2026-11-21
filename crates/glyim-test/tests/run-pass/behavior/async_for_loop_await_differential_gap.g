@@ -22,7 +22,7 @@
 //@ expect-exit: 0
 //@ feature: LANG-ASYNC-AWAIT, TOOL-TEST-RUN-PASS
 //@ backends: gam, llvm
-//@ known-gap: GAP-0007
+//@ known-gap-backend-divergence: GAP-0007
 enum Poll<T> { Ready(T), Pending }
 trait Future {
     type Output;
