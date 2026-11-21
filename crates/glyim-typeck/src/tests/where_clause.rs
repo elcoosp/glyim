@@ -54,9 +54,9 @@ fn build_def_map_with_names(
         modules,
         krate,
         interner: interner.clone(),
-        variant_map: std::collections::HashMap::default(),
+        variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
-        def_to_module: std::collections::HashMap::default(),
+        def_to_module: std::collections::HashMap::new(),
     }
 }
 
@@ -470,9 +470,9 @@ fn build_def_map_with_nested_trait(
         modules,
         krate,
         interner: interner.clone(),
-        variant_map: std::collections::HashMap::default(),
+        variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
-        def_to_module: std::collections::HashMap::default(),
+        def_to_module: std::collections::HashMap::new(),
     }
 }
 
