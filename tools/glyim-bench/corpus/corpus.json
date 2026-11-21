@@ -1,0 +1,135 @@
+{
+  "schema": "glyim.corpus/1",
+  "programs": [
+    {
+      "family": "wide",
+      "seed": 0,
+      "size": 32,
+      "reference_exit": 1127,
+      "compile_flags": [],
+      "identity": 9018991200480989640,
+      "sha256": "37d7accbe799681447193024da4163faab73177b407b29f8ae57e070a31ef889"
+    },
+    {
+      "family": "wide",
+      "seed": 1,
+      "size": 32,
+      "reference_exit": 1271,
+      "compile_flags": [],
+      "identity": 11468366331039608352,
+      "sha256": "971613094aaf1a1f8e7e87faa0779d896475abce7572cdb9fcae8d0a3664f3b2"
+    },
+    {
+      "family": "deep",
+      "seed": 0,
+      "size": 32,
+      "reference_exit": 102,
+      "compile_flags": [],
+      "identity": 7629139671228499951,
+      "sha256": "3a5e16f31de104ac18830dee9b1d1d2cc2acb6317d6eea2f3e224581b97cbf59"
+    },
+    {
+      "family": "deep",
+      "seed": 1,
+      "size": 32,
+      "reference_exit": 102,
+      "compile_flags": [],
+      "identity": 7629139671228499951,
+      "sha256": "3a5e16f31de104ac18830dee9b1d1d2cc2acb6317d6eea2f3e224581b97cbf59"
+    },
+    {
+      "family": "generic",
+      "seed": 0,
+      "size": 32,
+      "reference_exit": 1127,
+      "compile_flags": [],
+      "identity": 16949264764362074249,
+      "sha256": "2a78627dde20380bc1a8568f57d48c9879303f0477083e232ff7ff172327a3f0"
+    },
+    {
+      "family": "generic",
+      "seed": 1,
+      "size": 32,
+      "reference_exit": 1271,
+      "compile_flags": [],
+      "identity": 6336551849319921787,
+      "sha256": "7db73ca9a8e8cb18e460ed1c7978ed4ddb982c413fa2d00d3fda4090a607ee49"
+    },
+    {
+      "family": "trait",
+      "seed": 0,
+      "size": 32,
+      "reference_exit": 1127,
+      "compile_flags": [],
+      "identity": 10048909753703729635,
+      "sha256": "230fdfaafc50acb089cb853de6f4229749df633e5e824a86f27852abb39b9e57"
+    },
+    {
+      "family": "trait",
+      "seed": 1,
+      "size": 32,
+      "reference_exit": 1271,
+      "compile_flags": [],
+      "identity": 11031978544578532855,
+      "sha256": "59bf79d2176d98651688c94583953c4b77b3e589a0ab21afe954d39931bb5a97"
+    },
+    {
+      "family": "match",
+      "seed": 0,
+      "size": 32,
+      "reference_exit": 198,
+      "compile_flags": [],
+      "identity": 3628556280386529161,
+      "sha256": "837573c2bba81cc4001769aa01d580b776381a22833975ad3dbbcd439739a464"
+    },
+    {
+      "family": "match",
+      "seed": 1,
+      "size": 32,
+      "reference_exit": 206,
+      "compile_flags": [],
+      "identity": 12046417984552862084,
+      "sha256": "3603cbf936b7e7089db2647f2d203eb92b6c5a5d086e1772af350377ea671732"
+    },
+    {
+      "family": "macro",
+      "seed": 0,
+      "size": 32,
+      "reference_exit": 0,
+      "compile_flags": [
+        "--with-stdlib"
+      ],
+      "identity": 8785881764555346135,
+      "sha256": "351ff7880dad85c56076a81f5e951d5464a6d3835470b1042d834cf76f662b0d"
+    },
+    {
+      "family": "macro",
+      "seed": 1,
+      "size": 32,
+      "reference_exit": 0,
+      "compile_flags": [
+        "--with-stdlib"
+      ],
+      "identity": 344259201963390089,
+      "sha256": "eebcca263c8c9e5384ac99901ed08d830221982a6f6f5458762ae672bd48753f"
+    },
+    {
+      "family": "closure",
+      "seed": 0,
+      "size": 32,
+      "reference_exit": 1514,
+      "compile_flags": [],
+      "identity": 11708207884410414156,
+      "sha256": "8a84f36ef0325d6c1a64bcbb002584cbe0d26cd3409516927cac9747a05efccc"
+    },
+    {
+      "family": "closure",
+      "seed": 1,
+      "size": 32,
+      "reference_exit": 1692,
+      "compile_flags": [],
+      "identity": 9265750125010329211,
+      "sha256": "ac90d51f8294a0118a55d6aafe440a9f857778586f8b605ca43450d025d684a4"
+    }
+  ]
+}
