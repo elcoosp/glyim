@@ -31,6 +31,10 @@ contracts = false
 [gates.done]
 dead_code = false
 coverage = false
+# Plan M1.11: the done pipeline consults the readiness ledger (registry
+# consistency + the deterministic `ledger next` queue head) before any
+# commit, at the shipped `normal` level — not only at strict tiers.
+ledger = true
 mutation = false
 workspace_check = false
 
