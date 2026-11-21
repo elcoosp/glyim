@@ -4,6 +4,81 @@ use std::str::FromStr;
 
 use crate::annotations::directives::{self, FixtureAnnotations};
 
+/// The M1.6/M1.7 known-gap witness contract (plan §3.3), made explicit.
+///
+/// A witness fixture carries one of two tags, and the tag IS the contract
+/// the executor's strict-xfail inversion applies — the shape is declared
+/// by the fixture author (and validated at discovery) instead of inferred
+/// from whether a native executable happened to be produced:
+///
+/// - [`KnownGapWitness::Pinned`] (`//@ known-gap: GAP-NNNN`): the pinned
+///   outcome must hold on **every** backend that runs the fixture.
+///   compile-fail witnesses pin "the compiler rejects"; run witnesses pin
+///   the declared run behaviour. A failure on any side sharpens into
+///   `KnownGapClosed` — the pinned behaviour changed and the witness must
+///   be retired.
+/// - [`KnownGapWitness::BackendDivergence`]
+///   (`//@ known-gap-backend-divergence: GAP-NNNN`): the class-b
+///   differential contract "the reference interpreter passes the pinned
+///   run, the native backend reproduces the declared failure". On the
+///   native side the declared run-phase failure is the *pass* state, and
+///   a passing native run sharpens into `KnownGapClosed`; on the
+///   interpreter side the ordinary pinned contract applies. A
+///   compile-phase native failure (an ICE) is not the declared state on
+///   either side and keeps the generic failure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KnownGapWitness {
+    /// The gap ID the witness pins (the `[[gap]] id` under
+    /// `ledger/gaps/**`).
+    Pinned {
+        /// The pinned gap ID.
+        gap: String,
+    },
+    /// A class-b backend-divergence witness (per-backend contract).
+    BackendDivergence {
+        /// The diverging gap ID.
+        gap: String,
+    },
+}
+
+impl KnownGapWitness {
+    /// The gap ID this witness pins (the ledger pointer every
+    /// `KnownGapClosed` failure names).
+    #[must_use]
+    pub fn gap(&self) -> &str {
+        match self {
+            Self::Pinned { gap } | Self::BackendDivergence { gap } => gap,
+        }
+    }
+
+    /// True when the contract is the per-backend divergence shape (the
+    /// executor's native-side inversion applies).
+    #[must_use]
+    pub fn is_backend_divergence(&self) -> bool {
+        matches!(self, Self::BackendDivergence { .. })
+    }
+
+    /// Resolves the parsed annotation pair into the witness contract.
+    /// The annotation parser rejects the two tags appearing together, so
+    /// `Some` on both is a malformed input this resolver treats as
+    /// "divergence wins" only for totality; the discovery-time
+    /// construction path can never reach it.
+    #[must_use]
+    pub fn from_annotations(
+        known_gap: Option<&str>,
+        backend_divergence: Option<&str>,
+    ) -> Option<Self> {
+        if let Some(gap) = backend_divergence {
+            return Some(Self::BackendDivergence {
+                gap: gap.to_string(),
+            });
+        }
+        known_gap.map(|gap| Self::Pinned {
+            gap: gap.to_string(),
+        })
+    }
+}
+
 #[derive(Clone, Debug)]
 /// The per-fixture configuration a fixture header (legacy `//` or canonical
 /// `//@`) resolves to; every collector/executor decision reads from here.
@@ -58,6 +133,27 @@ pub struct TestConfig {
     /// [`TestMode::RunFail`] (M1.7); the collector rejects any other
     /// mode ([`crate::error::TestDiscoveryError::WitnessUnsupportedMode`]).
     pub known_gap: Option<String>,
+    /// M1.7 backend-divergence witness tag
+    /// (`//@ known-gap-backend-divergence: GAP-NNNN`). `Some(id)` marks
+    /// the fixture as a [`KnownGapWitness::BackendDivergence`] witness —
+    /// the class-b "gam passes, llvm fails" contract. Valid only on the
+    /// run modes (the divergence is a run-behaviour disagreement); the
+    /// collector rejects it elsewhere. Mutually exclusive with
+    /// `known_gap` at the annotation layer.
+    pub known_gap_backend_divergence: Option<String>,
+}
+
+impl TestConfig {
+    /// The resolved witness contract for this fixture, if it is one
+    /// (`None` = not a witness). The executor's strict-xfail inversion
+    /// dispatches on this enum — the declared shape, not a heuristic.
+    #[must_use]
+    pub fn known_gap_witness(&self) -> Option<KnownGapWitness> {
+        KnownGapWitness::from_annotations(
+            self.known_gap.as_deref(),
+            self.known_gap_backend_divergence.as_deref(),
+        )
+    }
 }
 
 impl Default for TestConfig {
@@ -82,6 +178,7 @@ impl Default for TestConfig {
             features: Vec::new(),
             backends: Vec::new(),
             known_gap: None,
+            known_gap_backend_divergence: None,
         }
     }
 }
@@ -483,6 +580,9 @@ pub fn parse_test_config(source: &str) -> Result<ParsedConfig, TestConfigError> 
         .backends
         .clone_from(&annotations.backends.clone().unwrap_or_default());
     config.known_gap.clone_from(&annotations.known_gap);
+    config
+        .known_gap_backend_divergence
+        .clone_from(&annotations.known_gap_backend_divergence);
 
     Ok(ParsedConfig {
         config,
