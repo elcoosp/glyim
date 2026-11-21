@@ -1463,6 +1463,16 @@ mod tests {
         NaiveDate::parse_iso(&crate::today_iso()).expect("today_iso round-trips through parse_iso")
     }
 
+    /// The executor's clock as a raw ISO expiry string, `offset_days`
+    /// signed from [`executor_today()`]: the string form the fixture
+    /// seeds (`prune_entry`, seeded `waivers.toml` documents) need. The
+    /// same rot rule as [`executor_today()`] applies — a pinned calendar
+    /// expiry in a write-face fixture detonates the day the suite runs
+    /// past it (the 2026-11-xx seeds did exactly that).
+    fn executor_date(offset_days: i64) -> String {
+        executor_today().plus_days(offset_days).to_iso()
+    }
+
     /// One synthetic waiver; `days_ahead` is signed from `today()`
     /// (negative = already expired, but still inside the C9 horizon).
     fn entry(id: &str, feature: &str, expires_days_ahead: i64) -> WaiverEntry {
@@ -1838,13 +1848,18 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
         );
 
         // The appended document must parse back through the same loader
-        // the health face and the diff gate use.
-        let set = FileWaiverSource.load(root, today());
+        // the health face and the diff gate use — clocked by the EXECUTOR
+        // clock, the one the grant was dated against. The engine-pinned
+        // [`today()`] sits in the past relative to the real grant date, so
+        // the fresh entry rides beyond the C9 horizon from its vantage
+        // point and the load would drop it (the clock-mixing bug that
+        // rotted this test when the wall clock crossed the pinned date).
+        let set = FileWaiverSource.load(root, executor_today());
         assert_eq!(set.waivers.len(), 1, "the granted entry loads back");
         assert_eq!(set.waivers[0].id, expected_id);
         assert_eq!(set.waivers[0].expires, expected_expires);
         assert!(set.diagnostics.is_empty());
-        let outcome = super::assess_waivers(&set, today());
+        let outcome = super::assess_waivers(&set, executor_today());
         assert!(outcome.is_ok(), "the fresh grant is valid and live");
     }
 
@@ -1854,16 +1869,19 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
         let root = dir.path();
         write_grant_project(
             root,
-            "[[waiver]]\n\
-             id = \"WVR-EXISTING\"\n\
-             feature = \"LANG-EVIDENCE-A\"\n\
-             reason = \"earlier exception\"\n\
-             issue = \"https://github.com/elcoosp/glyim/issues/41\"\n\
-             expires = \"2026-11-19\"\n",
+            &format!(
+                "[[waiver]]\n\
+                 id = \"WVR-EXISTING\"\n\
+                 feature = \"LANG-EVIDENCE-A\"\n\
+                 reason = \"earlier exception\"\n\
+                 issue = \"https://github.com/elcoosp/glyim/issues/41\"\n\
+                 expires = \"{}\"\n",
+                executor_date(7)
+            ),
         );
         run_waivers_grant(root, &grant_request(), &FileWaiverSource, &FileWaiverSink)
             .expect("grant pass");
-        let set = FileWaiverSource.load(root, today());
+        let set = FileWaiverSource.load(root, executor_today());
         assert_eq!(
             set.waivers.len(),
             2,
@@ -2969,13 +2987,17 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
         }
     }
 
-    /// The prune fixture document: one valid (2026-11-20) and two expired
-    /// (2026-11-11, 2026-11-05) entries, deliberately unsorted.
+    /// The prune fixture document: one valid (a week out) and two expired
+    /// (-3d, -30d) entries relative to the executor's clock, deliberately
+    /// unsorted. The expiry faces assess with the real wall clock, so the
+    /// fixture derives from it — a pinned calendar expiry detonated the
+    /// day the suite ran past 2026-11-20 (which rotted eight tests at
+    /// once; see [`executor_date`]).
     fn prune_doc() -> Vec<WaiverEntry> {
         vec![
-            prune_entry("WVR-20261110-beta", "LANG-BETA", "2026-11-11"),
-            prune_entry("WVR-20261107-alpha", "LANG-ALPHA", "2026-11-20"),
-            prune_entry("WVR-20261105-gamma", "LANG-GAMMA", "2026-11-05"),
+            prune_entry("WVR-20261110-beta", "LANG-BETA", &executor_date(-3)),
+            prune_entry("WVR-20261107-alpha", "LANG-ALPHA", &executor_date(7)),
+            prune_entry("WVR-20261105-gamma", "LANG-GAMMA", &executor_date(-30)),
         ]
     }
 
@@ -3024,7 +3046,7 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
         let outcome =
             run_waivers_prune(Path::new("/proj"), &prune_source(), &pruner).expect("prune");
         assert_eq!(outcome.removed[0].feature, "LANG-GAMMA");
-        assert_eq!(outcome.removed[0].expires, "2026-11-05");
+        assert_eq!(outcome.removed[0].expires, executor_date(-30));
         assert_eq!(outcome.target, "/proj/ledger/waivers.toml");
     }
 
@@ -3033,7 +3055,7 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
         let clean = vec![prune_entry(
             "WVR-20261107-alpha",
             "LANG-ALPHA",
-            "2026-11-20",
+            &executor_date(7),
         )];
         let pruner = InMemoryWaiverPruner {
             doc: std::cell::RefCell::new(clean.clone()),
@@ -3105,7 +3127,10 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
 
         // The rewritten document loads cleanly and carries only the valid
         // entry (the health face sees one valid waiver, no expired one).
-        let reloaded = load_waivers(&path, NaiveDate::new_unchecked(2026, 11, 13));
+        // Clocked by the EXECUTOR clock — the surviving entry is dated a
+        // week out from it; loading through the pinned engine date would
+        // put it past the C9 horizon and mint a spurious diagnostic.
+        let reloaded = load_waivers(&path, executor_today());
         assert!(reloaded.diagnostics.is_empty(), "canonical rewrite loads");
         assert_eq!(reloaded.waivers.len(), 1);
         assert_eq!(reloaded.waivers[0].id, "WVR-20261107-alpha");
@@ -3116,7 +3141,7 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
         let dir = tempfile::tempdir().expect("tempdir");
         let root = dir.path().to_path_buf();
         std::fs::create_dir_all(root.join("ledger")).expect("mkdir ledger");
-        let entry = prune_entry("WVR-20261107-alpha", "LANG-ALPHA", "2026-11-20");
+        let entry = prune_entry("WVR-20261107-alpha", "LANG-ALPHA", &executor_date(7));
         let doc = format!(
             "[[waiver]]\n\
              id = \"{}\"\n\
@@ -3147,15 +3172,21 @@ waivers: 3 loaded, 2 valid, 1 expired, 0 diagnostic(s), assessed at 2026-11-13
         let text = format_waivers_prune_text(&outcome);
         assert!(text.contains("pruned 2 expired waiver(s)"), "{text}");
         assert!(text.contains("1 waiver(s) remain"), "{text}");
-        assert!(text.contains("- WVR-20261105-gamma for LANG-GAMMA (expires 2026-11-05)"));
-        assert!(text.contains("- WVR-20261110-beta for LANG-BETA (expires 2026-11-11)"));
+        assert!(text.contains(&format!(
+            "- WVR-20261105-gamma for LANG-GAMMA (expires {})",
+            executor_date(-30)
+        )));
+        assert!(text.contains(&format!(
+            "- WVR-20261110-beta for LANG-BETA (expires {})",
+            executor_date(-3)
+        )));
 
         let clean = InMemoryWaiverSource {
             set: WaiverSet {
                 waivers: vec![prune_entry(
                     "WVR-20261107-alpha",
                     "LANG-ALPHA",
-                    "2026-11-20",
+                    &executor_date(7),
                 )],
                 diagnostics: Vec::new(),
             },
