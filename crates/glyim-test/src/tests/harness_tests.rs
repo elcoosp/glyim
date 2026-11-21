@@ -756,16 +756,19 @@ fn run_mode_witness_failure_sharpens_to_known_gap_closed() {
 
 #[test]
 fn run_mode_witness_inversion_matrix() {
-    use crate::harness::config::TestMode;
+    use crate::harness::config::{KnownGapWitness, TestMode};
     use crate::harness::executor::{TestOutcome, apply_witness_inversion};
 
-    // While the gap is open the pinned behaviour holds: a passing run
-    // witness passes through unchanged (no inversion noise on the happy
-    // path). The matrix covers both run modes plus the inert modes the
-    // collector already rejects at discovery.
+    // Pinned witness (M1.7): the pinned behaviour must hold on EVERY
+    // backend the fixture runs on. A passing run passes through unchanged
+    // (no inversion noise on the happy path); a failing run sharpens into
+    // `KnownGapClosed` on both the interpreter and the native side. The
+    // matrix covers both run modes plus the inert modes the collector
+    // already rejects at discovery.
+    let pinned = |gap| Some(KnownGapWitness::Pinned { gap });
     assert!(matches!(
         apply_witness_inversion(
-            Some("GAP-0004"),
+            pinned("GAP-0004".to_string()),
             TestMode::RunPass,
             TestOutcome::Passed,
             &[],
@@ -780,7 +783,31 @@ fn run_mode_witness_inversion_matrix() {
             expected_exit_code: Some(1),
         },
     };
-    match apply_witness_inversion(Some("GAP-0004"), TestMode::RunFail, failed, &[], false) {
+    match apply_witness_inversion(
+        pinned("GAP-0004".to_string()),
+        TestMode::RunFail,
+        failed.clone(),
+        &[],
+        false,
+    ) {
+        TestOutcome::Failed {
+            reason: crate::error::FailureReason::KnownGapClosed { gap },
+        } => assert_eq!(gap, "GAP-0004"),
+        other => panic!("expected KnownGapClosed, got {other:?}"),
+    }
+
+    // The contract is backend-uniform: the same pinned failure on the
+    // NATIVE side (a real executable was produced and ran) sharpens too.
+    // Under the previous `ran_native` heuristic this state was silently
+    // re-read as backend-divergence debt — a pinned witness has no
+    // per-backend contract, so a native failure is a closed gap.
+    match apply_witness_inversion(
+        pinned("GAP-0004".to_string()),
+        TestMode::RunPass,
+        failed,
+        &[],
+        true,
+    ) {
         TestOutcome::Failed {
             reason: crate::error::FailureReason::KnownGapClosed { gap },
         } => assert_eq!(gap, "GAP-0004"),
@@ -796,7 +823,7 @@ fn run_mode_witness_inversion_matrix() {
     };
     assert!(matches!(
         apply_witness_inversion(
-            Some("GAP-0004"),
+            pinned("GAP-0004".to_string()),
             TestMode::CompilePass,
             failed_cp,
             &[],
@@ -808,19 +835,20 @@ fn run_mode_witness_inversion_matrix() {
 
 #[test]
 fn backend_divergence_witness_inversion_matrix() {
-    use crate::harness::config::TestMode;
+    use crate::harness::config::{KnownGapWitness, TestMode};
     use crate::harness::executor::{TestOutcome, apply_witness_inversion};
 
-    // M1.7 backend-divergence witnesses (class-b differential findings):
-    // the pinned contract is "gam passes, llvm fails". On the native side
+    // Backend-divergence witness (M1.7 class-b): the declared contract is
+    // "gam passes, llvm fails", per side. On the native side
     // (`ran_native = true`) a declared run-phase failure is the gap's
     // pinned state — witnessed debt passes — and a *passing* native run
     // means the gap closed (loud `KnownGapClosed`). A compile-phase native
     // failure (an ICE) is not the declared state and keeps the generic
-    // failure. On the interpreter side (`ran_native = false`) the run
-    // witness keeps the ordinary contract: the pinned run holding passes
-    // through, the pinned behaviour changing sharpens into
-    // `KnownGapClosed`.
+    // failure. On the interpreter side (`ran_native = false`) the
+    // reference run must keep passing: a failure there sharpens into
+    // `KnownGapClosed` too (the pinned REFERENCE behaviour changed).
+    let divergence = |gap| Some(KnownGapWitness::BackendDivergence { gap });
+
     let native_run_failed = TestOutcome::Failed {
         reason: crate::error::FailureReason::RunFailed {
             exit_code: None, // died by signal
@@ -829,7 +857,7 @@ fn backend_divergence_witness_inversion_matrix() {
     };
     assert!(matches!(
         apply_witness_inversion(
-            Some("GAP-0007"),
+            divergence("GAP-0007".to_string()),
             TestMode::RunPass,
             native_run_failed.clone(),
             &[],
@@ -843,7 +871,7 @@ fn backend_divergence_witness_inversion_matrix() {
     };
     assert!(matches!(
         apply_witness_inversion(
-            Some("GAP-0007"),
+            divergence("GAP-0007".to_string()),
             TestMode::RunPass,
             native_timeout,
             &[],
@@ -854,7 +882,7 @@ fn backend_divergence_witness_inversion_matrix() {
 
     // A passing native run = the gap closed; the witness must be retired.
     match apply_witness_inversion(
-        Some("GAP-0007"),
+        divergence("GAP-0007".to_string()),
         TestMode::RunPass,
         TestOutcome::Passed,
         &[],
@@ -875,7 +903,7 @@ fn backend_divergence_witness_inversion_matrix() {
     };
     assert!(matches!(
         apply_witness_inversion(
-            Some("GAP-0007"),
+            divergence("GAP-0007".to_string()),
             TestMode::RunPass,
             native_compile_ice,
             &[],
@@ -884,7 +912,8 @@ fn backend_divergence_witness_inversion_matrix() {
         TestOutcome::Failed { .. }
     ));
 
-    // The gam side keeps the ordinary witness contract.
+    // The reference (gam) side keeps the ordinary pinned contract: the
+    // reference run must keep passing, so a failure there sharpens.
     let interp_failed = TestOutcome::Failed {
         reason: crate::error::FailureReason::RunFailed {
             exit_code: Some(2),
@@ -892,7 +921,7 @@ fn backend_divergence_witness_inversion_matrix() {
         },
     };
     match apply_witness_inversion(
-        Some("GAP-0007"),
+        divergence("GAP-0007".to_string()),
         TestMode::RunPass,
         interp_failed,
         &[],
@@ -903,16 +932,161 @@ fn backend_divergence_witness_inversion_matrix() {
         } => assert_eq!(gap, "GAP-0007"),
         other => panic!("expected KnownGapClosed, got {other:?}"),
     }
+    // ...and a holding reference run passes through (the happy path).
     assert!(matches!(
         apply_witness_inversion(
-            Some("GAP-0007"),
+            divergence("GAP-0007".to_string()),
             TestMode::RunPass,
-            native_run_failed,
+            TestOutcome::Passed,
             &[],
             false,
         ),
         TestOutcome::Passed
     ));
+}
+
+#[test]
+fn known_gap_backend_divergence_directive_parses_and_resolves() {
+    use crate::annotations::directives::parse_directives;
+    use crate::harness::config::{TestConfig, TestMode};
+
+    // The M1.7 class-b annotation is first-class: it parses into its own
+    // field (the pinned tag stays empty) and resolves into the
+    // `BackendDivergence` witness shape the executor dispatches on.
+    let source = "\
+//@ mode: run-pass
+//@ expect-exit: 0
+//@ known-gap-backend-divergence: GAP-0007
+fn main() {}
+";
+    let annotations = parse_directives(source).expect("divergence tag parses");
+    assert_eq!(
+        annotations.known_gap_backend_divergence.as_deref(),
+        Some("GAP-0007")
+    );
+    assert_eq!(annotations.known_gap, None, "the pinned tag stays empty");
+
+    let mut config = TestConfig {
+        mode: TestMode::RunPass,
+        ..TestConfig::default()
+    };
+    config.known_gap = annotations.known_gap;
+    config.known_gap_backend_divergence = annotations.known_gap_backend_divergence;
+    let witness = config
+        .known_gap_witness()
+        .expect("the divergence tag resolves to a witness");
+    assert!(witness.is_backend_divergence());
+    assert_eq!(witness.gap(), "GAP-0007");
+}
+
+#[test]
+fn known_gap_tags_are_mutually_exclusive_in_either_order() {
+    use crate::annotations::directives::parse_directives;
+
+    // One fixture, one witness contract: a fixture cannot simultaneously
+    // pin an outcome on every backend AND pin a per-backend divergence —
+    // whichever tag the ledger consumed, the other's inversion semantics
+    // would silently apply. The rejection carries the 1-based line of the
+    // conflicting tag, in both declaration orders.
+    for header in [
+        "\
+//@ known-gap: GAP-0007
+//@ known-gap-backend-divergence: GAP-0008
+fn main() {}
+",
+        "\
+//@ known-gap-backend-divergence: GAP-0007
+//@ known-gap: GAP-0008
+fn main() {}
+",
+    ] {
+        let err = parse_directives(header).expect_err("the two tags conflict");
+        let (lineno, message) = err;
+        assert!(
+            message.contains("mutually exclusive"),
+            "the error names the conflict: {message}"
+        );
+        assert_eq!(lineno, 2, "the second (conflicting) tag is reported");
+    }
+}
+
+#[test]
+fn collector_rejects_backend_divergence_off_run_modes() {
+    use crate::error::TestDiscoveryError;
+    use crate::harness::collector::TestCollector;
+    use std::fs;
+
+    // The divergence contract pins a RUN-behaviour disagreement between
+    // backends (class-b differential debt). compile-pass and ui pin no
+    // outcome at all, and compile-fail pins a compile-phase disagreement
+    // the per-backend run contract cannot express — all three are
+    // annotation drift and are rejected at discovery.
+    for (mode_dir, header) in [
+        (
+            "compile-fail",
+            "//@ mode: compile-fail\n//@ expect-error: E0001\n",
+        ),
+        ("compile-pass", "//@ mode: compile-pass\n"),
+        ("ui", "//@ mode: ui\n"),
+    ] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join(mode_dir);
+        fs::create_dir(&root).unwrap();
+        let fixture = root.join("witness.g");
+        fs::write(
+            &fixture,
+            format!("{header}//@ known-gap-backend-divergence: GAP-0007\nfn main() {{}}\n"),
+        )
+        .unwrap();
+
+        let collector = TestCollector::new(dir.path());
+        let err = collector
+            .collect(None, None)
+            .expect_err("a backend-divergence witness off the run modes must be rejected");
+        match err {
+            TestDiscoveryError::WitnessUnsupportedMode { path, .. } => {
+                assert_eq!(path, fixture, "{mode_dir} names the offending fixture");
+            }
+            other => panic!("expected WitnessUnsupportedMode, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn collector_accepts_backend_divergence_on_run_modes() {
+    use crate::harness::collector::TestCollector;
+    use crate::harness::config::KnownGapWitness;
+    use std::fs;
+
+    // The GAP-0007 shape: a run fixture whose divergence is the witnessed
+    // debt discovers cleanly and resolves to the BackendDivergence
+    // contract (the production fixture under tests/run-pass/behavior/
+    // carries exactly this header).
+    for (mode_dir, header) in [
+        ("run-pass", "//@ mode: run-pass\n//@ expect-exit: 0\n"),
+        ("run-fail", "//@ mode: run-fail\n//@ expect-exit: 101\n"),
+    ] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join(mode_dir);
+        fs::create_dir(&root).unwrap();
+        let fixture = root.join("witness.g");
+        fs::write(
+            &fixture,
+            format!("{header}//@ known-gap-backend-divergence: GAP-0007\nfn main() {{}}\n"),
+        )
+        .unwrap();
+
+        let collector = TestCollector::new(dir.path());
+        let tests = collector
+            .collect(None, None)
+            .expect("run-mode divergence witnesses are valid");
+        assert_eq!(tests.len(), 1, "{mode_dir}");
+        assert!(tests[0].config.known_gap.is_none());
+        match tests[0].config.known_gap_witness() {
+            Some(KnownGapWitness::BackendDivergence { gap }) => assert_eq!(gap, "GAP-0007"),
+            other => panic!("expected BackendDivergence, got {other:?}"),
+        }
+    }
 }
 
 #[test]
