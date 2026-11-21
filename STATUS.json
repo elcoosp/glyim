@@ -521,7 +521,8 @@
       "target_level": "L5",
       "computed_level": "L0",
       "capped_by": [
-        "GAP-0006"
+        "GAP-0006",
+        "GAP-0007"
       ],
       "unmeasured": [
         "fuzz_cpu_hours",
@@ -783,7 +784,9 @@
       "tier": "core",
       "target_level": "L5",
       "computed_level": "L1",
-      "capped_by": [],
+      "capped_by": [
+        "GAP-0008"
+      ],
       "unmeasured": [
         "fuzz_cpu_hours",
         "mutation_kill_rate_pct"
