@@ -1,6 +1,6 @@
 /// HIR `TypeRef` → `Ty` conversion.
 use glyim_type::InferVar;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use glyim_core::def_id::{AdtId, DefId, LocalDefId, TraitDefId};
 use glyim_core::interner::Name;
@@ -13,15 +13,20 @@ use glyim_type::*;
 use crate::coherence::ResolvedImplHeader;
 
 /// `resolve_type_ref`.
-pub fn resolve_type_ref(
+pub fn resolve_type_ref<S: std::hash::BuildHasher>(
     ctx: &mut TyCtxMut,
     infer: &mut InferenceTable,
     def_map: &glyim_def_map::CrateDefMap,
     diagnostics: &mut Vec<GlyimDiagnostic>,
     ty_ref: &glyim_hir::TypeRef,
-    param_map: &HashMap<Name, Ty>,
+    param_map: &std::collections::HashMap<Name, Ty, S>,
     span: Span,
 ) -> Ty {
+    // The internal walk is keyed on the Fx-hashed map; callers may hold the
+    // table under any hasher, so re-key once at the boundary (cold path).
+    let fx_param_map: FxHashMap<Name, Ty> =
+        param_map.iter().map(|(k, v)| (*k, v.clone())).collect();
+    let param_map = &fx_param_map;
     match ty_ref {
         glyim_hir::TypeRef::Path(path) => {
             resolve_path_type(ctx, infer, def_map, diagnostics, path, param_map, span)
@@ -277,7 +282,7 @@ fn resolve_const_ref(
     _def_map: &glyim_def_map::CrateDefMap,
     diagnostics: &mut Vec<GlyimDiagnostic>,
     const_ref: &glyim_hir::ConstRef,
-    _param_map: &HashMap<Name, Ty>,
+    _param_map: &FxHashMap<Name, Ty>,
     span: Span,
 ) -> Const {
     match const_ref {
@@ -330,8 +335,8 @@ fn resolve_const_ref(
 pub fn build_param_tys(
     ctx: &mut TyCtxMut,
     params: &[glyim_hir::GenericParam],
-) -> HashMap<Name, Ty> {
-    let mut map = HashMap::with_capacity(params.len());
+) -> FxHashMap<Name, Ty> {
+    let mut map = FxHashMap::with_capacity_and_hasher(params.len(), rustc_hash::FxBuildHasher);
     for (i, param) in params.iter().enumerate() {
         match param.kind {
             glyim_hir::GenericParamKind::Type { .. } => {
@@ -572,7 +577,7 @@ pub fn resolve_path_type(
     def_map: &glyim_def_map::CrateDefMap,
     diagnostics: &mut Vec<GlyimDiagnostic>,
     path: &glyim_hir::Path,
-    param_map: &HashMap<Name, Ty>,
+    param_map: &FxHashMap<Name, Ty>,
     span: Span,
 ) -> Ty {
     // Check param_map first for generic params
@@ -864,7 +869,7 @@ fn resolve_qualified_path(
     ctx: &mut TyCtxMut,
     def_map: &glyim_def_map::CrateDefMap,
     path: &glyim_hir::Path,
-    _param_map: &HashMap<Name, Ty>,
+    _param_map: &FxHashMap<Name, Ty>,
     span: Span,
     infer: &mut InferenceTable,
 ) -> Option<Ty> {
@@ -906,7 +911,7 @@ fn resolve_qualified_path(
                 def_map,
                 &mut Vec::new(),
                 arg,
-                &HashMap::new(),
+                &FxHashMap::default(),
                 span,
             );
             if matches!(ctx.ty_kind(resolved), TyKind::Error) {
@@ -1053,7 +1058,7 @@ pub(crate) fn resolve_enum_variant_path(
         def_map,
         &mut Vec::new(),
         &enum_path,
-        &HashMap::new(),
+        &FxHashMap::default(),
         Span::DUMMY,
     );
     let adt_id = match ctx.ty_kind(enum_ty) {
@@ -1202,7 +1207,7 @@ pub(crate) fn resolve_name_to_adt_ty(
     def_map: &glyim_def_map::CrateDefMap,
     diagnostics: &mut Vec<GlyimDiagnostic>,
     path: &glyim_hir::Path,
-    param_map: &HashMap<Name, Ty>,
+    param_map: &FxHashMap<Name, Ty>,
     span: Span,
 ) -> Option<Ty> {
     let name = path.as_name()?;
@@ -1217,7 +1222,7 @@ pub(crate) fn resolve_name_to_adt_ty(
         let caller_args = path.segments.last().and_then(|s| s.generic_args.as_deref());
         let n_caller = caller_args.map_or(0, <[glyim_hir::TypeRef]>::len);
         if n_caller == params.len() {
-            let mut subst: HashMap<u32, GenericArg> = HashMap::new();
+            let mut subst: FxHashMap<u32, GenericArg> = FxHashMap::default();
             if let Some(args) = caller_args {
                 for (i, arg) in args.iter().enumerate() {
                     let ty =
