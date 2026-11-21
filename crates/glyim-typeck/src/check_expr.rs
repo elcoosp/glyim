@@ -1,6 +1,7 @@
 //! Expression checking logic for `FnCtxt`.
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::FxHashMap;
+use std::collections::HashSet;
 
 /// T183-PATCHED [TCK-31]: debug flags read once from env and cached. The
 /// previous per-call `std::env::var("GLYIM_DBG_...")` in the method-
@@ -123,7 +124,7 @@ fn align_impl_param_subst(
     ctx: &glyim_type::TyCtxMut,
     formal: glyim_type::Ty,
     actual: glyim_type::Ty,
-    subst: &mut std::collections::HashMap<u32, glyim_type::GenericArg>,
+    subst: &mut rustc_hash::FxHashMap<u32, glyim_type::GenericArg>,
 ) {
     let formal = match ctx.ty_kind(formal) {
         glyim_type::TyKind::Ref(_, inner, _) => *inner,
@@ -501,8 +502,8 @@ impl FnCtxt<'_> {
                             // the Vec's concrete elem for Param(0).
                             let output_ty = match vec_by_value_elem {
                                 Some(t) => {
-                                    let mut m: std::collections::HashMap<u32, GenericArg> =
-                                        std::collections::HashMap::new();
+                                    let mut m: rustc_hash::FxHashMap<u32, GenericArg> =
+                                        rustc_hash::FxHashMap::default();
                                     m.insert(0, GenericArg::Ty(t));
                                     m.insert(1, GenericArg::Ty(t));
                                     m.insert(2, GenericArg::Ty(t));
@@ -570,8 +571,8 @@ impl FnCtxt<'_> {
                                 // lowering sees `Option<i32>`.
                                 let option_ty = match vec_by_value_elem {
                                     Some(t) if into_iter_info.is_some() => {
-                                        let mut m: std::collections::HashMap<u32, GenericArg> =
-                                            std::collections::HashMap::new();
+                                        let mut m: rustc_hash::FxHashMap<u32, GenericArg> =
+                                            rustc_hash::FxHashMap::default();
                                         m.insert(0, GenericArg::Ty(t));
                                         m.insert(1, GenericArg::Ty(t));
                                         self.ctx.subst_ty(raw_opt, &m)
@@ -877,8 +878,8 @@ impl FnCtxt<'_> {
                                     _ => None,
                                 };
                                 if let Some(e) = elem {
-                                    let mut map: std::collections::HashMap<u32, GenericArg> =
-                                        std::collections::HashMap::new();
+                                    let mut map: rustc_hash::FxHashMap<u32, GenericArg> =
+                                        rustc_hash::FxHashMap::default();
                                     map.insert(0, GenericArg::Ty(e));
                                     map.insert(1, GenericArg::Ty(e));
                                     n.option_ty = self.ctx.subst_ty(n.option_ty, &map);
@@ -1176,7 +1177,7 @@ impl FnCtxt<'_> {
                 // call. Handle it fully here and return.
                 if let Some((self_ty, tid, m)) = param_assoc_call {
                     let self_name = self.ctx.resolver().intern("Self");
-                    let mut pm: HashMap<Name, Ty> = HashMap::new();
+                    let mut pm: FxHashMap<Name, Ty> = FxHashMap::default();
                     pm.insert(self_name, self_ty);
                     let mut arg_exprs = Vec::with_capacity(args.len());
                     for &arg_id in args {
@@ -1410,8 +1411,8 @@ impl FnCtxt<'_> {
                     // `id(40)` return `i32` (not the rigid `T`) and is what
                     // unblocks `block_on<F: MyFuture>`-style dispatch.
                     if let Some(sig) = self.ctx.fn_sig(def_id).cloned() {
-                        let mut subst: std::collections::HashMap<u32, GenericArg> =
-                            std::collections::HashMap::new();
+                        let mut subst: rustc_hash::FxHashMap<u32, GenericArg> =
+                            rustc_hash::FxHashMap::default();
                         // Collect the formal input types into an owned vec so the
                         // immutable borrow of `self.ctx` ends before the mutable
                         // `unify`/`intern_substitution`/`mk_ty` calls below.
@@ -1585,7 +1586,7 @@ impl FnCtxt<'_> {
                         // it, zonk folded `Param(0)` to `Ty::ERROR`, giving
                         // the caller a `Result<ERROR, ...>` destination local
                         // and the runtime store went through a null pointer.
-                        let final_subst_map: std::collections::HashMap<u32, GenericArg> = self
+                        let final_subst_map: rustc_hash::FxHashMap<u32, GenericArg> = self
                             .ctx
                             .substitution_args(new_substs)
                             .iter()
@@ -1960,8 +1961,8 @@ impl FnCtxt<'_> {
                         // the resulting `Param(i)` uses the *whole* map's
                         // index space. So the whole-map substitution is the
                         // correct one.
-                        let full_map: std::collections::HashMap<u32, GenericArg> = {
-                            let mut m: std::collections::HashMap<u32, GenericArg> = impl_part
+                        let full_map: rustc_hash::FxHashMap<u32, GenericArg> = {
+                            let mut m: rustc_hash::FxHashMap<u32, GenericArg> = impl_part
                                 .iter()
                                 .enumerate()
                                 .map(|(i, a)| (i as u32, a.clone()))
@@ -3474,7 +3475,7 @@ impl FnCtxt<'_> {
         // `[T; N]`, `(T, U)`, …) came back with the param intact, so
         // `Vec::<i32> { data: 0 as *mut i32, .. }` unified `*mut i32`
         // against `*mut T` and reported "mismatched types: i32 vs T".
-        let mut map: std::collections::HashMap<u32, GenericArg> = std::collections::HashMap::new();
+        let mut map: rustc_hash::FxHashMap<u32, GenericArg> = rustc_hash::FxHashMap::default();
         for (i, arg) in self.ctx.substitution_args(substs).iter().enumerate() {
             map.insert(i as u32, arg.clone());
         }
@@ -3942,7 +3943,7 @@ impl FnCtxt<'_> {
         // Build the substitution for the method's `Param(i)` placeholders:
         // for an ADT receiver, `i` maps to the receiver's generic argument `i`;
         // for a slice, `Param(0)` maps to the slice element type.
-        let mut subst: HashMap<u32, GenericArg> = HashMap::new();
+        let mut subst: FxHashMap<u32, GenericArg> = FxHashMap::default();
         let inner_ty = match self.ctx.ty_kind(step_ty) {
             TyKind::Ref(_, i, _) => *i,
             _ => step_ty,
@@ -4161,7 +4162,7 @@ impl FnCtxt<'_> {
                         // with a concrete type — that was why `impl str` /
                         // `impl<T> [T]` methods (`as_ptr`, `len`, …) never matched
                         // their primitive receivers.
-                        let mut param_map: HashMap<Name, Ty> = HashMap::new();
+                        let mut param_map: FxHashMap<Name, Ty> = FxHashMap::default();
                         for (i, gp) in impl_item.generic_params.iter().enumerate() {
                             let var = this.infer.new_ty_var(this.ctx);
                             let ty = this.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
@@ -4379,13 +4380,12 @@ impl FnCtxt<'_> {
                                     // s.as_str())`). Resolving first gives the
                                     // closure `s: &String` (concrete), so its
                                     // methods resolve.
-                                    let resolved_pm: std::collections::HashMap<Name, Ty> =
-                                        method_pm
-                                            .iter()
-                                            .map(|(n, t)| {
-                                                (*n, this.infer.resolve_ty_shallow(this.ctx, *t))
-                                            })
-                                            .collect();
+                                    let resolved_pm: rustc_hash::FxHashMap<Name, Ty> = method_pm
+                                        .iter()
+                                        .map(|(n, t)| {
+                                            (*n, this.infer.resolve_ty_shallow(this.ctx, *t))
+                                        })
+                                        .collect();
                                     method
                                         .params
                                         .iter()
@@ -4582,7 +4582,7 @@ impl FnCtxt<'_> {
             // `impl Write for Stdout` block, so defaults fall through here.
             if let glyim_type::TyKind::Adt(_adt_id, _recv_subst) = self.ctx.ty_kind(recv_ty) {
                 let self_name = self.ctx.resolver().intern("Self");
-                let mut pm: HashMap<Name, Ty> = HashMap::new();
+                let mut pm: FxHashMap<Name, Ty> = FxHashMap::default();
                 pm.insert(self_name, recv_ty);
                 let recv_ty_copy = recv_ty;
                 'concrete: for item in self.hir.items.iter() {
@@ -4771,7 +4771,7 @@ impl FnCtxt<'_> {
                     .map(<[(glyim_core::Name, glyim_core::TraitDefId)]>::to_vec);
                 if let Some(traits) = traits {
                     let self_name = self.ctx.resolver().intern("Self");
-                    let mut pm: HashMap<Name, Ty> = HashMap::new();
+                    let mut pm: FxHashMap<Name, Ty> = FxHashMap::default();
                     pm.insert(self_name, recv_ty);
                     for (bound_name, tid) in traits {
                         for item in self.hir.items.iter() {
@@ -4953,7 +4953,7 @@ impl FnCtxt<'_> {
             if last.name != trait_name {
                 continue;
             }
-            let mut param_map: HashMap<Name, Ty> = HashMap::new();
+            let mut param_map: FxHashMap<Name, Ty> = FxHashMap::default();
             for gp in &impl_item.generic_params {
                 let var = self.infer.new_ty_var(self.ctx);
                 param_map.insert(gp.name, self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var))));
@@ -5064,7 +5064,7 @@ impl FnCtxt<'_> {
                     if impl_trait_id != trait_def_id {
                         continue;
                     }
-                    let mut param_map: HashMap<Name, Ty> = HashMap::new();
+                    let mut param_map: FxHashMap<Name, Ty> = FxHashMap::default();
                     for gp in &impl_item.generic_params {
                         let var = self.infer.new_ty_var(self.ctx);
                         let ty = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
