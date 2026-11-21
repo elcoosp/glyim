@@ -323,13 +323,14 @@ fn execute_test(
         execute_inner(&test_clone, &revision_clone, &*compiler, bless)
     });
 
-    let (outcome, diagnostics) = match result {
-        Ok((outcome, diags)) => (outcome, diags),
+    let (outcome, diagnostics, ran_native) = match result {
+        Ok((outcome, diags, ran_native)) => (outcome, diags, ran_native),
         Err(TimeoutError { timeout_secs }) => (
             TestOutcome::Failed {
                 reason: FailureReason::TimeoutExceeded { timeout_secs },
             },
             Vec::new(),
+            false,
         ),
     };
 
@@ -344,12 +345,17 @@ fn execute_test(
     // unchanged. When the pinned outcome NO LONGER holds, the generic
     // mismatch would read as "test bug"; it actually means the gap may have
     // CLOSED, and the strict-xfail contract demands a loud, self-describing
-    // failure that tells the author how to retire the witness.
+    // failure that tells the author how to retire the witness. The run-mode
+    // inversion is backend-shaped (`ran_native`): a backend-divergence
+    // witness pins "gam passes, llvm fails" (the class-b differential
+    // disagreement), so on the native side the *failure* is the pass state
+    // and a passing native run means the gap closed.
     let outcome = apply_witness_inversion(
         test.config.known_gap.as_deref(),
         test.config.mode,
         outcome,
         &diagnostics,
+        ran_native,
     );
 
     TestResult {
@@ -376,7 +382,15 @@ fn execute_test(
 ///   changed and the gap may have closed, so the generic exit/output
 ///   mismatch is sharpened into [`FailureReason::KnownGapClosed`] too. A
 ///   witness that fails for an unrelated regression reads "retire or
-///   re-pin" — actionable either way.
+///   re-pin" — actionable either way. The shape is backend-aware
+///   (`ran_native`): for a **backend-divergence** witness (a class-b
+///   differential finding registered in `ledger/gaps/known/`) the pinned
+///   contract is "gam passes, llvm fails" — under the real LLVM backend
+///   the declared run-phase failure (`RunFailed`/`RunTimeout`/stdout/
+///   stderr mismatch) is the *pass* state (witnessed debt), while a
+///   *passing* native run means the gap closed and the witness must be
+///   retired. A compile-phase native failure is not the declared state
+///   and keeps the generic failure (an ICE is a different bug class).
 /// - **compile-pass / ui**: rejected at discovery (see the collector), so
 ///   the outcome passes through untouched here.
 ///
@@ -388,6 +402,7 @@ pub(crate) fn apply_witness_inversion(
     mode: super::config::TestMode,
     outcome: TestOutcome,
     diagnostics: &[GlyimDiagnostic],
+    ran_native: bool,
 ) -> TestOutcome {
     let Some(gap) = known_gap else {
         return outcome;
@@ -413,7 +428,42 @@ pub(crate) fn apply_witness_inversion(
             }
         }
         super::config::TestMode::RunPass | super::config::TestMode::RunFail => {
-            if matches!(outcome, TestOutcome::Failed { .. }) {
+            if ran_native {
+                // Backend-divergence witness on the native (LLVM) side: the
+                // declared run-phase failure is the gap's pinned state —
+                // witnessed debt passes while the bug reproduces. A passing
+                // native run means the gap closed; sharpen it loudly. A
+                // compile-phase native failure is not the declared state.
+                match outcome {
+                    TestOutcome::Failed { reason }
+                        if matches!(
+                            reason,
+                            FailureReason::RunFailed { .. }
+                                | FailureReason::RunTimeout { .. }
+                                | FailureReason::StdoutMismatch { .. }
+                                | FailureReason::StderrMismatch { .. }
+                        ) =>
+                    {
+                        tracing::info!(
+                            gap = %gap,
+                            "backend-divergence witness holds: the native run failed as declared (witnessed class-b debt)"
+                        );
+                        TestOutcome::Passed
+                    }
+                    TestOutcome::Passed => {
+                        tracing::warn!(
+                            gap = %gap,
+                            "known-gap witness closed: the native run now passes the pinned behaviour"
+                        );
+                        TestOutcome::Failed {
+                            reason: FailureReason::KnownGapClosed {
+                                gap: gap.to_string(),
+                            },
+                        }
+                    }
+                    other => other,
+                }
+            } else if matches!(outcome, TestOutcome::Failed { .. }) {
                 tracing::warn!(
                     gap = %gap,
                     "known-gap witness closed: the pinned run behaviour changed"
@@ -438,7 +488,7 @@ fn execute_inner(
     revision: &str,
     compiler: &dyn TestCompiler,
     bless: bool,
-) -> (TestOutcome, Vec<GlyimDiagnostic>) {
+) -> (TestOutcome, Vec<GlyimDiagnostic>, bool) {
     let mut flags = test.config.compile_flags.clone();
     if let Some(rev_flags) = test.config.revision_compile_flags.get(revision) {
         flags.extend(rev_flags.iter().cloned());
@@ -480,7 +530,19 @@ fn execute_inner(
         ),
     };
 
-    (outcome, output.diagnostics)
+    // Whether the run actually executed a native executable (the real LLVM
+    // path produced and linked one). The witness inversion is backend-shaped
+    // (M1.7 backend-divergence witnesses): the gam side pins "passes", the
+    // LLVM side pins "fails".
+    let ran_native = matches!(
+        test.config.mode,
+        super::config::TestMode::RunPass | super::config::TestMode::RunFail
+    ) && output
+        .executable_path
+        .as_deref()
+        .is_some_and(std::path::Path::exists);
+
+    (outcome, output.diagnostics, ran_native)
 }
 
 fn run_with_timeout<F, R>(timeout: Duration, f: F) -> Result<R, TimeoutError>
