@@ -1,0 +1,64 @@
+# M2.6 absolute per-program budgets (glyim.bench-budgets/1) — the initial
+# baseline from perf/BASELINE.md. Keys are the measured command's argv[0]:
+# the `just bench-ci` recipe hard-links the `glyim-cli` binary once per
+# committed corpus program as `bench-bin/glyim-<family>-<seed>-32`, so each
+# benchmark owns a stable, machine-independent budget key. Rows bound the
+# wall-clock mean only: this calibration environment has no `perf`/
+# `valgrind`, so no instruction stats exist to budget against yet (the CI
+# perf job is where instruction rows get ratcheted in — a wall-only report
+# cannot satisfy an instruction budget, so none is committed here). Each
+# bound is the measured mean × 2 (headroom for runner variance; the tight
+# regression detector is the relative matrix gate at >2% per benchmark /
+# >0.5% geo-mean). The `macro` family is not budgeted: its CLI
+# `--emit=run --with-stdlib` path fails silently at HEAD on integer
+# format! substitutions (see BASELINE.md).
+
+schema = "glyim.bench-budgets/1"
+
+[[budget]]
+program = "./glyim-closure-0-32"
+max_wall_mean_ns = 33392537
+
+[[budget]]
+program = "./glyim-closure-1-32"
+max_wall_mean_ns = 33607982
+
+[[budget]]
+program = "./glyim-deep-0-32"
+max_wall_mean_ns = 28551864
+
+[[budget]]
+program = "./glyim-deep-1-32"
+max_wall_mean_ns = 28095431
+
+[[budget]]
+program = "./glyim-generic-0-32"
+max_wall_mean_ns = 28150917
+
+[[budget]]
+program = "./glyim-generic-1-32"
+max_wall_mean_ns = 27261668
+
+[[budget]]
+program = "./glyim-match-0-32"
+max_wall_mean_ns = 27684519
+
+[[budget]]
+program = "./glyim-match-1-32"
+max_wall_mean_ns = 27455675
+
+[[budget]]
+program = "./glyim-trait-0-32"
+max_wall_mean_ns = 39756208
+
+[[budget]]
+program = "./glyim-trait-1-32"
+max_wall_mean_ns = 38097851
+
+[[budget]]
+program = "./glyim-wide-0-32"
+max_wall_mean_ns = 26251429
+
+[[budget]]
+program = "./glyim-wide-1-32"
+max_wall_mean_ns = 26962570
