@@ -158,6 +158,10 @@ pub struct CorpusProgram {
     pub compile_flags: Vec<String>,
     /// [`fnv1a64`] of [`CorpusProgram::source`] (the manifest's identity).
     pub identity: u64,
+    /// Lowercase hex SHA-256 of [`CorpusProgram::source`] — the committed
+    /// corpus's second identity column (M2.3 "corpora committed with
+    /// hashes"); 64 hex chars, computed by [`sha256_hex`].
+    pub sha256: String,
 }
 
 /// One manifest row: everything needed to regenerate and re-verify a
@@ -177,6 +181,8 @@ pub struct CorpusEntry {
     pub compile_flags: Vec<String>,
     /// [`fnv1a64`] of the program's source text.
     pub identity: u64,
+    /// Lowercase hex SHA-256 of the program's source text.
+    pub sha256: String,
 }
 
 /// The committed corpus artifact: identity, rows, and the verify contract.
@@ -235,6 +241,164 @@ pub fn fnv1a64(data: &str) -> u64 {
     hash
 }
 
+/// The SHA-256 initial hash state (FIPS 180-4, §5.3.3).
+const SHA256_H0: [u32; 8] = [
+    0x6a09_e667,
+    0xbb67_ae85,
+    0x3c6e_f372,
+    0xa54f_f53a,
+    0x510e_527f,
+    0x9b05_688c,
+    0x1f83_d9ab,
+    0x5be0_cd19,
+];
+
+/// The SHA-256 round constants (FIPS 180-4, §4.2.3, the first 64 primes).
+const SHA256_K: [u32; 64] = [
+    0x428a_2f98,
+    0x7137_4491,
+    0xb5c0_fbcf,
+    0xe9b5_dba5,
+    0x3956_c25b,
+    0x59f1_11f1,
+    0x923f_82a4,
+    0xab1c_5ed5,
+    0xd807_aa98,
+    0x1283_5b01,
+    0x2431_85be,
+    0x550c_7dc3,
+    0x72be_5d74,
+    0x80de_b1fe,
+    0x9bdc_06a7,
+    0xc19b_f174,
+    0xe49b_69c1,
+    0xefbe_4786,
+    0x0fc1_9dc6,
+    0x240c_a1cc,
+    0x2de9_2c6f,
+    0x4a74_84aa,
+    0x5cb0_a9dc,
+    0x76f9_88da,
+    0x983e_5152,
+    0xa831_c66d,
+    0xb003_27c8,
+    0xbf59_7fc7,
+    0xc6e0_0bf3,
+    0xd5a7_9147,
+    0x06ca_6351,
+    0x1429_2967,
+    0x27b7_0a85,
+    0x2e1b_2138,
+    0x4d2c_6dfc,
+    0x5338_0d13,
+    0x650a_7354,
+    0x766a_0abb,
+    0x81c2_c92e,
+    0x9272_2c85,
+    0xa2bf_e8a1,
+    0xa81a_664b,
+    0xc24b_8b70,
+    0xc76c_51a3,
+    0xd192_e819,
+    0xd699_0624,
+    0xf40e_3585,
+    0x106a_a070,
+    0x19a4_c116,
+    0x1e37_6c08,
+    0x2748_774c,
+    0x34b0_bcb5,
+    0x391c_0cb3,
+    0x4ed8_aa4a,
+    0x5b9c_ca4f,
+    0x682e_6ff3,
+    0x748f_82ee,
+    0x78a5_636f,
+    0x84c8_7814,
+    0x8cc7_0208,
+    0x90be_fffa,
+    0xa450_6ceb,
+    0xbef9_a3f7,
+    0xc671_78f2,
+];
+
+/// SHA-256 over `data` (FIPS 180-4). Hand-rolled rather than pulled from a
+/// crate so the manifest's second identity column adds no dependency: the
+/// corpus is generator-owned text and the digest is a content address, and
+/// the standard vectors in the crate's tests pin correctness.
+fn sha256(data: &[u8]) -> [u8; 32] {
+    let bit_len = (data.len() as u64).wrapping_mul(8);
+    let mut msg = Vec::with_capacity(data.len() + 72);
+    msg.extend_from_slice(data);
+    msg.push(0x80);
+    while msg.len() % 64 != 56 {
+        msg.push(0);
+    }
+    msg.extend_from_slice(&bit_len.to_be_bytes());
+
+    let mut h = SHA256_H0;
+    for chunk in msg.as_chunks::<64>().0 {
+        let mut w = [0u32; 64];
+        for (i, word) in chunk.as_chunks::<4>().0.iter().enumerate() {
+            w[i] = u32::from_be_bytes(*word);
+        }
+        for i in 16..64 {
+            let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
+            let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
+            w[i] = w[i - 16]
+                .wrapping_add(s0)
+                .wrapping_add(w[i - 7])
+                .wrapping_add(s1);
+        }
+        let (mut a, mut b, mut c, mut d) = (h[0], h[1], h[2], h[3]);
+        let (mut e, mut f, mut g, mut hh) = (h[4], h[5], h[6], h[7]);
+        for (i, k) in SHA256_K.iter().enumerate() {
+            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+            let ch = (e & f) ^ (!e & g);
+            let t1 = hh
+                .wrapping_add(s1)
+                .wrapping_add(ch)
+                .wrapping_add(*k)
+                .wrapping_add(w[i]);
+            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+            let maj = (a & b) ^ (a & c) ^ (b & c);
+            let t2 = s0.wrapping_add(maj);
+            hh = g;
+            g = f;
+            f = e;
+            e = d.wrapping_add(t1);
+            d = c;
+            c = b;
+            b = a;
+            a = t1.wrapping_add(t2);
+        }
+        h[0] = h[0].wrapping_add(a);
+        h[1] = h[1].wrapping_add(b);
+        h[2] = h[2].wrapping_add(c);
+        h[3] = h[3].wrapping_add(d);
+        h[4] = h[4].wrapping_add(e);
+        h[5] = h[5].wrapping_add(f);
+        h[6] = h[6].wrapping_add(g);
+        h[7] = h[7].wrapping_add(hh);
+    }
+    let mut digest = [0u8; 32];
+    for (i, word) in h.iter().enumerate() {
+        digest[i * 4..i * 4 + 4].copy_from_slice(&word.to_be_bytes());
+    }
+    digest
+}
+
+/// Lowercase hex SHA-256 of `data`'s UTF-8 bytes — the manifest's
+/// `sha256` identity column (64 chars).
+#[must_use]
+pub fn sha256_hex(data: &str) -> String {
+    let digest = sha256(data.as_bytes());
+    let mut hex = String::with_capacity(64);
+    for byte in digest {
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
+}
+
 /// Generate one program: a pure function of `(family, seed, size)`.
 ///
 /// # Errors
@@ -269,6 +433,7 @@ pub fn generate(family: CorpusFamily, seed: u64, size: usize) -> Result<CorpusPr
         _ => Vec::new(),
     };
     let identity = fnv1a64(&source);
+    let sha256 = sha256_hex(&source);
     tracing::debug!(
         identity = format_args!("{identity:016x}"),
         "corpus program generated"
@@ -281,6 +446,7 @@ pub fn generate(family: CorpusFamily, seed: u64, size: usize) -> Result<CorpusPr
         reference_exit,
         compile_flags,
         identity,
+        sha256,
     })
 }
 
@@ -529,6 +695,7 @@ impl CorpusEntry {
             reference_exit: program.reference_exit,
             compile_flags: program.compile_flags.clone(),
             identity: program.identity,
+            sha256: program.sha256.clone(),
         }
     }
 }
@@ -590,6 +757,7 @@ impl CorpusManifest {
             if program.identity != entry.identity
                 || program.reference_exit != entry.reference_exit
                 || program.compile_flags != entry.compile_flags
+                || program.sha256 != entry.sha256
             {
                 return Err(BenchError::CorpusIdentityMismatch {
                     family: entry.family.as_str().to_string(),
@@ -639,7 +807,7 @@ impl CorpusManifest {
             "glyim.corpus/1 manifest\n  programs: {}",
             self.programs.len()
         );
-        out.push_str("  family   seed  size  exit  identity            flags\n");
+        out.push_str("  family   seed  size  exit  identity            sha256           flags\n");
         for entry in &self.programs {
             let flags = if entry.compile_flags.is_empty() {
                 "-".to_string()
@@ -648,15 +816,167 @@ impl CorpusManifest {
             };
             let _ = writeln!(
                 out,
-                "  {:<8} {:>4} {:>5} {:>5}  {:016x}  {}",
+                "  {:<8} {:>4} {:>5} {:>5}  {:016x}  {:<16}  {}",
                 entry.family.as_str(),
                 entry.seed,
                 entry.size,
                 entry.reference_exit,
                 entry.identity,
+                entry.sha256.get(..16).unwrap_or(&entry.sha256),
                 flags,
             );
         }
         out
+    }
+}
+
+/// The committed corpora directory, relative to the repository root (plan
+/// M2.3 remainder: "corpora committed with hashes"). The directory holds one
+/// `<family>-<seed>-<size>.g` source per manifest row plus the
+/// `glyim.corpus/1` `corpus.json`, materialized by
+/// `glyim-bench corpus write --dir tools/glyim-bench/corpus --seeds 0,1
+/// --size 32` (all seven families) and re-verified by
+/// `glyim-bench corpus check --dir tools/glyim-bench/corpus`.
+pub const COMMITTED_CORPUS_DIR: &str = "tools/glyim-bench/corpus";
+
+/// The committed corpus's seeds: two per family.
+pub const COMMITTED_SEEDS: [u64; 2] = [0, 1];
+
+/// The committed corpus's `size` parameter (every family shares it).
+pub const COMMITTED_SIZE: usize = 32;
+
+/// The number of committed programs: `families × seeds` = 14, clearing the
+/// master plan's `M2.3` "≥ 12 runtime benchmark programs" floor.
+pub const COMMITTED_PROGRAM_COUNT: usize = CorpusFamily::ALL.len() * COMMITTED_SEEDS.len();
+
+/// The reference stdout a committed corpus program must produce.
+///
+/// Only the `macro` family prints (`println!("done")` closing its
+/// `format!` check chain); every other family communicates through its exit
+/// code alone, so its pinned stdout is empty. The exit half of the reference
+/// output lives on [`CorpusEntry::reference_exit`].
+#[must_use]
+pub fn reference_stdout(family: CorpusFamily) -> &'static str {
+    match family {
+        CorpusFamily::Macro => "done\n",
+        _ => "",
+    }
+}
+
+#[cfg(test)]
+mod committed_corpus_tests {
+    use super::{
+        COMMITTED_PROGRAM_COUNT, COMMITTED_SEEDS, COMMITTED_SIZE, CorpusEntry, CorpusFamily,
+        CorpusManifest, reference_stdout,
+    };
+    use std::path::Path;
+
+    /// The committed directory must satisfy the manifest's own verify
+    /// contract, every committed byte must hash to its row (both identity
+    /// columns), and the manifest must cover the committed plan.
+    #[test]
+    fn committed_corpus_matches_the_manifest() {
+        // COMMITTED_CORPUS_DIR is repo-root-relative; this crate's manifest
+        // dir is the repo's `tools/glyim-bench`, so the committed directory
+        // is `corpus/` beside the manifest — assert the two spellings agree.
+        assert_eq!(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .file_name()
+                .and_then(|name| name.to_str()),
+            Some("glyim-bench")
+        );
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("corpus")
+            .canonicalize()
+            .expect("the committed corpus directory exists");
+        let manifest = CorpusManifest::from_json(
+            &std::fs::read_to_string(dir.join("corpus.json")).expect("committed manifest"),
+        )
+        .expect("the committed manifest parses");
+        assert_eq!(
+            manifest.programs.len(),
+            COMMITTED_PROGRAM_COUNT,
+            "the committed manifest must cover the committed plan"
+        );
+        manifest
+            .verify()
+            .expect("the templates must regenerate every committed row");
+        for entry in &manifest.programs {
+            let source = std::fs::read_to_string(dir.join(format!(
+                "{}-{}-{}.g",
+                entry.family.as_str(),
+                entry.seed,
+                entry.size
+            )))
+            .expect("every committed program file exists");
+            assert_eq!(
+                super::fnv1a64(&source),
+                entry.identity,
+                "committed bytes must match the manifest's fnv identity"
+            );
+            assert_eq!(
+                super::sha256_hex(&source),
+                entry.sha256,
+                "committed bytes must match the manifest's sha256 identity"
+            );
+        }
+    }
+
+    /// The committed plan clears the M2.3 floor and covers every family.
+    #[test]
+    fn committed_plan_covers_every_family_twice() {
+        // Compile-time plan checks (const-evaluable, so runtime asserts
+        // would be constant-value warnings): the floor and the product.
+        const {
+            assert!(
+                COMMITTED_PROGRAM_COUNT >= 12,
+                "M2.3 DoD: >= 12 runtime benchmark programs"
+            );
+            assert!(
+                CorpusFamily::ALL.len() * COMMITTED_SEEDS.len() == COMMITTED_PROGRAM_COUNT,
+                "the committed plan must be families × seeds"
+            );
+            assert!(COMMITTED_SIZE > 0);
+        }
+    }
+
+    /// Only the macro family prints; every family's exit is pinned on the
+    /// entry.
+    #[test]
+    fn reference_stdout_is_pinned_per_family() {
+        for family in CorpusFamily::ALL {
+            let expected = if family == CorpusFamily::Macro {
+                "done\n"
+            } else {
+                ""
+            };
+            assert_eq!(reference_stdout(family), expected);
+        }
+    }
+
+    /// SHA-256 correctness: the FIPS 180-4 standard vectors.
+    #[test]
+    fn sha256_matches_the_standard_vectors() {
+        assert_eq!(
+            super::sha256_hex(""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            super::sha256_hex("abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(
+            super::sha256_hex("The quick brown fox jumps over the lazy dog"),
+            "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592"
+        );
+    }
+
+    /// The entry row's sha256 column must agree with the program's.
+    #[test]
+    fn entry_rows_carry_the_sha256_identity() {
+        let program =
+            super::generate(CorpusFamily::Wide, 0, COMMITTED_SIZE).expect("size in range");
+        let entry = CorpusEntry::from_program(&program);
+        assert_eq!(entry.sha256, super::sha256_hex(&program.source));
     }
 }
