@@ -96,6 +96,24 @@ fn check_corpus_agreement(corpus: &str) {
             skipped.push(test.name.clone());
             continue;
         }
+        // M1.7 strict-xfail witnesses (plan §3.3): a `//@ known-gap:` fixture
+        // is the registered witness of an open gap (ledger/gaps/known/*.toml;
+        // a class-b entry for a backend divergence). Its disagreement IS the
+        // witnessed debt: the gam side passes the pinned run, the LLVM side
+        // reproduces the declared failure. Comparing them here would
+        // re-report filed debt as a release blocker, so record the witness
+        // and skip — exactly like the ledger's `gaps audit` face, which
+        // counts the witnessed entry instead of failing on it. If the LLVM
+        // side starts passing, the run-pass corpus fails the fixture with
+        // `known-gap closed` and the witness must be retired in the
+        // gap-closing change.
+        if let Some(gap) = test.config.known_gap.clone() {
+            skipped.push(format!(
+                "{}: //@ known-gap: {gap} (witnessed class-b debt, gam passes / llvm fails)",
+                test.name
+            ));
+            continue;
+        }
 
         let mut flags = test.config.compile_flags.clone();
         for rev in &test.revisions {
