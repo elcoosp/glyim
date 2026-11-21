@@ -1156,6 +1156,7 @@ dependencies = [
  "glyim-type",
  "glyim-typeck",
  "rowan",
+ "rustc-hash 2.1.3",
  "tempfile",
  "tracing",
 ]
@@ -1448,6 +1449,7 @@ dependencies = [
  "glyim-test",
  "glyim-type",
  "once_cell",
+ "rustc-hash 2.1.3",
  "tracing",
 ]
 
