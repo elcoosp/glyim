@@ -175,9 +175,9 @@ fn build_def_map(
         modules,
         krate,
         interner: interner.clone(),
-        variant_map: std::collections::HashMap::default(),
+        variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
-        def_to_module: std::collections::HashMap::default(),
+        def_to_module: std::collections::HashMap::new(),
     }
 }
 
