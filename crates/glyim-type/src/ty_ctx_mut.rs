@@ -429,7 +429,15 @@ impl TyCtxMut {
     /// parameter type (which may carry `T`) is matched against the argument
     /// type to build `subst`, and the return type is instantiated through it
     /// (plan unstub-5 P5: generic call instantiation).
-    pub fn subst_ty(&mut self, ty: Ty, subst: &std::collections::HashMap<u32, GenericArg>) -> Ty {
+    ///
+    /// Hasher-generic (`S: BuildHasher`) so hot-path callers may pass either
+    /// a `std`-seeded or an `FxHashMap`-seeded substitution map — the
+    /// substitution walk never inspects the hash.
+    pub fn subst_ty<S: std::hash::BuildHasher>(
+        &mut self,
+        ty: Ty,
+        subst: &std::collections::HashMap<u32, GenericArg, S>,
+    ) -> Ty {
         self.subst_ty_depth(ty, subst, 0)
     }
 
@@ -447,10 +455,10 @@ impl TyCtxMut {
     /// otherwise recurses forever and overflows the stack. 64 levels is
     /// deeper than any legitimate chain; returning the type unchanged at the
     /// limit preserves semantics for all valid inputs.
-    fn subst_ty_depth(
+    fn subst_ty_depth<S: std::hash::BuildHasher>(
         &mut self,
         ty: Ty,
-        subst: &std::collections::HashMap<u32, GenericArg>,
+        subst: &std::collections::HashMap<u32, GenericArg, S>,
         depth: u32,
     ) -> Ty {
         if depth >= 64 {
