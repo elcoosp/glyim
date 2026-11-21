@@ -125,6 +125,7 @@ impl<'a> TestCollector<'a> {
             config.features = header_config.features;
             config.backends = header_config.backends;
             config.known_gap = header_config.known_gap;
+            config.known_gap_backend_divergence = header_config.known_gap_backend_divergence;
 
             // M1.4 DoD gate: a fixture that could only pass *by tolerance*
             // is rejected at discovery. The required expectation depends on
@@ -163,17 +164,29 @@ impl<'a> TestCollector<'a> {
                 TestMode::CompilePass | TestMode::Ui => {}
             }
 
-            // M1.6/M1.7 witness contract (plan §3.3): a `//@ known-gap:`
-            // tag is meaningful on the modes whose outcome the executor's
-            // inversion can sharpen — compile-fail (M1.6: the compiler
-            // rejected / accepted the witness) and the run modes (M1.7:
-            // the pinned run behaviour held or changed). compile-pass and
-            // ui pin no run outcome, so a witness there is annotation
-            // drift and is rejected at discovery rather than silently
+            // M1.6/M1.7 witness contract (plan §3.3), enforced per tag
+            // shape: a `//@ known-gap:` (pinned) tag is meaningful on the
+            // modes whose outcome the executor's inversion can sharpen —
+            // compile-fail (M1.6: the compiler rejected / accepted the
+            // witness) and the run modes (M1.7: the pinned run behaviour
+            // held or changed). The `//@ known-gap-backend-divergence:`
+            // tag pins a *run-behaviour* disagreement between backends
+            // (class-b differential debt), so it is meaningful only on
+            // the run modes — on compile-fail it would claim a
+            // compile-phase divergence the per-backend run contract
+            // cannot express. compile-pass and ui pin no outcome at all,
+            // so a witness there is annotation drift. Every invalid
+            // combination is rejected at discovery rather than silently
             // tolerated as an inert tag.
-            if config.known_gap.is_some()
-                && matches!(config.mode, TestMode::CompilePass | TestMode::Ui)
-            {
+            let witness = config.known_gap_witness();
+            let unsupported = match &witness {
+                Some(w) if w.is_backend_divergence() => {
+                    !matches!(config.mode, TestMode::RunPass | TestMode::RunFail)
+                }
+                Some(_) => matches!(config.mode, TestMode::CompilePass | TestMode::Ui),
+                None => false,
+            };
+            if unsupported {
                 return Err(TestDiscoveryError::WitnessUnsupportedMode {
                     path: path.to_path_buf(),
                     mode: config.mode,
