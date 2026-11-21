@@ -101,9 +101,9 @@ fn build_empty_def_map(krate: CrateId) -> CrateDefMap {
         modules,
         krate,
         interner: global_interner(),
-        variant_map: std::collections::HashMap::default(),
+        variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
-        def_to_module: std::collections::HashMap::default(),
+        def_to_module: std::collections::HashMap::new(),
     }
 }
 
@@ -506,9 +506,9 @@ fn v03_t04_default_method_with_generic_params() {
         modules,
         krate: CrateId::from_raw(0),
         interner: interner.clone(),
-        variant_map: std::collections::HashMap::default(),
+        variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
-        def_to_module: std::collections::HashMap::default(),
+        def_to_module: std::collections::HashMap::new(),
     };
 
     let mut solver = MockSolver::new().respond_for_any(SolverResult::Proven);
