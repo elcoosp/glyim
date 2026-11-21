@@ -16,7 +16,7 @@
 
 //! Lexical-scope-aware local variable environment.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use glyim_core::interner::Name;
 #[cfg(test)]
@@ -47,7 +47,7 @@ pub struct LocalVarInfo {
 /// A stack-based lexical variable environment.
 #[derive(Clone, Debug)]
 pub struct LocalEnv {
-    name_map: HashMap<Name, Vec<LocalVarId>>,
+    name_map: FxHashMap<Name, Vec<LocalVarId>>,
     vars: Vec<LocalVarInfo>,
     scope_stack: Vec<usize>,
 }
@@ -56,7 +56,7 @@ impl LocalEnv {
     #[inline]
     pub fn new() -> Self {
         Self {
-            name_map: HashMap::new(),
+            name_map: FxHashMap::default(),
             vars: Vec::new(),
             scope_stack: Vec::new(),
         }
