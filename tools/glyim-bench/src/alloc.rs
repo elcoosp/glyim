@@ -157,6 +157,10 @@ macro_rules! counting_allocator {
 mod tests {
     use super::{alloc_snapshot, reset_alloc_stats};
 
+    /// The isolation guard: set only in the single-test child process the
+    /// reset test spawns (see `reset_returns_counters_to_zero`).
+    const ISOLATED_ENV: &str = "GLYIM_BENCH_ALLOC_RESET_ISOLATED";
+
     #[test]
     fn allocating_increases_count_and_bytes_monotonically() {
         reset_alloc_stats();
@@ -177,17 +181,69 @@ mod tests {
 
     #[test]
     fn reset_returns_counters_to_zero() {
-        let _scratch: Vec<u8> = vec![1; 256];
-        reset_alloc_stats();
-        let snap = alloc_snapshot();
-        // Another thread may allocate between the reset and the read; the
-        // contract tolerates that, so assert on the reset call itself being
-        // orderable: the *next* snapshot after a fresh reset is at most one
-        // transient test-harness allocation away from zero. Read twice and
-        // require the second read to be small rather than exactly zero.
+        // The counters are process-global and the counters tests share
+        // their test binary with sibling tests that allocate in parallel
+        // harness threads. A reset→snapshot window in that shared process
+        // has no synchronization boundary against sibling allocation, so
+        // the old absolute `count < 10_000` bound failed only under
+        // full-workspace parallel load (session 16: red once, green in 4
+        // isolated re-runs) — the classic global-state flake. Quarantining
+        // (protocol §7.2 rule 10) would retire a real contract, so the
+        // test instead takes EXCLUSIVE access: it re-invokes this test
+        // binary with a single-test filter, and only in that child (env
+        // guard; without it the child would recurse forever) does the
+        // strict body run, where the window sees nothing but the harness's
+        // own allocation.
+        //
+        // The strict body is also *stronger* than the old tolerance bound:
+        // it drives the counters to a known large value, resets, and
+        // requires the counters to DROP — a no-op reset cannot pass it,
+        // which the old `< 10_000` bound never actually enforced.
+        if std::env::var_os(ISOLATED_ENV).is_some() {
+            reset_alloc_stats();
+            // Drive the counters to a known, large value (alive past both
+            // snapshots so nothing frees mid-measurement).
+            let probe: Vec<u8> = vec![0; 1 << 20];
+            let before = alloc_snapshot();
+            assert!(
+                before.count > 0 && before.bytes >= probe.len() as u64,
+                "the probe must be counted: {before:?}"
+            );
+            reset_alloc_stats();
+            let after = alloc_snapshot();
+            assert!(
+                after.count < before.count && after.bytes < before.bytes / 2,
+                "reset must drop the counters, not just tolerate them: \
+                 {before:?} -> {after:?}"
+            );
+            assert_eq!(probe[0], 0);
+            return;
+        }
+
+        let exe = std::env::current_exe().expect("the test binary path");
+        // Substring filter (no `--exact`: that needs the full module path
+        // and silently matches nothing when the module moves — the name is
+        // unique in this binary). The parent reads the child's HARNESS
+        // SUMMARY — in-process `println!` output is captured by libtest and
+        // never reaches the parent, so the sentinel alone cannot carry the
+        // signal. `1 passed; 0 failed` proves the filter matched the test
+        // and it passed (a matched-zero filter would print `0 passed;
+        // 0 failed` and also exit 0); the inverted summary line plus a
+        // failing status covers the strict body failing.
+        let output = std::process::Command::new(&exe)
+            .args(["reset_returns_counters_to_zero", "--test-threads=1"])
+            .env(ISOLATED_ENV, "1")
+            .output()
+            .expect("spawn the isolated reset check");
+        let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(
-            snap.count < 10_000,
-            "reset must drop the counters: {snap:?}"
+            output.status.success()
+                && stdout.contains("1 passed; 0 failed")
+                && !stdout.contains("0 passed;"),
+            "the isolated reset check must run and pass; the child refused:\n\
+             status: {}\nstdout:\n{stdout}\nstderr:\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
         );
     }
 }
