@@ -67,9 +67,9 @@ fn def_map_with_module_fn() -> CrateDefMap {
         modules,
         krate: CrateId::from_raw(0),
         interner: global_interner(),
-        variant_map: std::collections::HashMap::default(),
+        variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
-        def_to_module: std::collections::HashMap::default(),
+        def_to_module: std::collections::HashMap::new(),
     }
 }
 
