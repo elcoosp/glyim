@@ -6,7 +6,7 @@ use glyim_hir::*;
 use glyim_solve::InferenceTable;
 use glyim_span::Span;
 use glyim_type::{Ty, TyCtxMut};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::Mutex;
 
 use crate::check_body::FnCtxt;
@@ -54,12 +54,12 @@ pub fn check_function_body(
         env,
         return_ty,
         owner,
-        expr_cache: HashMap::new(),
+        expr_cache: FxHashMap::default(),
         def_map,
         current_module: glyim_def_map::ModuleId::from_raw(0),
         capture_log: Vec::new(),
-        body_owner_map: &HashMap::new(),
-        param_map: HashMap::new(),
+        body_owner_map: &FxHashMap::default(),
+        param_map: FxHashMap::default(),
         pending_closure_expectation: None,
         in_callee_position: false,
         unsafe_depth: 0,
@@ -161,9 +161,9 @@ pub fn empty_def_map() -> glyim_def_map::CrateDefMap {
         modules,
         krate: CrateId::from_raw(0),
         interner,
-        variant_map: HashMap::default(),
+        variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
-        def_to_module: HashMap::default(),
+        def_to_module: std::collections::HashMap::new(),
     }
 }
 
