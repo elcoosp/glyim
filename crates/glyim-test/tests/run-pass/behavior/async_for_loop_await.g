@@ -13,10 +13,20 @@
 // and returns the accumulated sum as the process exit code, which the
 // run-mode pins exactly (stdout matching would let a silent miscompile
 // that *adds* output slip past).
+//
+// GAP-0007 (backend divergence): on the native LLVM backend this program
+// dies by signal while the interpreter exits 3 — the class-b differential
+// disagreement filed in ledger/gaps/known/0007-differential-await-loop.toml
+// (the canonical strict-xfail witness is
+// `async_for_loop_await_differential_gap.g`). The `//@ known-gap:` header
+// makes this fixture a corroborating witness: the pinned exit holds on the
+// gam side, the native failure is the declared gap state, and a native run
+// that starts passing must retire the witness (GAP-0007 closed).
 //@ mode: run-pass
 //@ expect-exit: 3
 //@ feature: LANG-ASYNC-AWAIT, TOOL-TEST-RUN-PASS
 //@ backends: gam
+//@ known-gap: GAP-0007
 enum Poll<T> { Ready(T), Pending }
 trait Future {
     type Output;
