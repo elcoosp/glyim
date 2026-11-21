@@ -47,12 +47,17 @@ pub enum TestDiscoveryError {
         requirement: String,
     },
     /// M1.6/M1.7 strict-xfail witness contract (plan §3.3): the fixture
-    /// carries `//@ known-gap: GAP-NNNN` but its resolved mode has no
-    /// outcome the inversion can sharpen — the witness contract is
-    /// meaningful on `compile-fail` (the compiler rejected / accepted the
-    /// witness) and on the run modes (the pinned run behaviour held or
-    /// changed, M1.7). `compile-pass` and `ui` pin no run outcome, so a
-    /// witness there is annotation drift.
+    /// carries a known-gap witness tag (`//@ known-gap: GAP-NNNN` or
+    /// `//@ known-gap-backend-divergence: GAP-NNNN`) but its resolved
+    /// mode has no outcome the inversion can sharpen — the pinned
+    /// contract is meaningful on `compile-fail` (the compiler rejected /
+    /// accepted the witness, M1.6) and on the run modes (the pinned run
+    /// behaviour held or changed, M1.7); the backend-divergence contract
+    /// is meaningful only on the run modes (it pins a run-behaviour
+    /// disagreement between backends). `compile-pass` and `ui` pin no
+    /// outcome at all, so a witness there is annotation drift, and a
+    /// divergence tag on `compile-fail` would pin a compile-phase
+    /// disagreement the per-backend run contract cannot express.
     WitnessUnsupportedMode {
         /// The offending fixture.
         path: PathBuf,
@@ -96,11 +101,13 @@ impl std::fmt::Display for TestDiscoveryError {
             ),
             Self::WitnessUnsupportedMode { path, mode } => write!(
                 f,
-                "fixture {} declares `//@ known-gap:` but resolves to mode {mode:?}: \
+                "fixture {} declares a known-gap witness tag (`//@ known-gap:` or \
+                 `//@ known-gap-backend-divergence:`) but resolves to mode {mode:?}: \
                  a strict-xfail witness must pin an outcome the inversion can sharpen — \
-                 `compile-fail` (the compiler rejects or accepts the witness, M1.6) or \
-                 `run-pass`/`run-fail` (the pinned run behaviour holds or changes, M1.7) \
-                 (plan §3.3). Switch the mode or drop the `//@ known-gap:` header.",
+                 `compile-fail` (the compiler rejects or accepts the witness, M1.6, pinned \
+                 tag only) or `run-pass`/`run-fail` (the pinned run behaviour holds or \
+                 changes, M1.7; both tags) (plan §3.3). Switch the mode or drop the \
+                 witness header.",
                 path.display()
             ),
         }
