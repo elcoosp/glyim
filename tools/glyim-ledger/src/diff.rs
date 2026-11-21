@@ -1657,16 +1657,26 @@ mod tests {
             outcome.diffs
         );
 
-        // With a waiver covering the drop, the same pair passes.
+        // With a waiver covering the drop, the same pair passes. The face
+        // assesses with the real wall clock (`run_diff` takes no date —
+        // it reads `today_iso()`), so the fixture derives the expiry from
+        // that same clock; a pinned calendar date rotted the moment the
+        // suite ran past it (2026-11-20 did exactly that).
+        let fresh_expiry = NaiveDate::parse_iso(&crate::today_iso())
+            .expect("today_iso round-trips through parse_iso")
+            .plus_days(7)
+            .to_iso();
         std::fs::create_dir_all(root.join("ledger")).expect("mkdir ledger");
         std::fs::write(
             root.join("ledger/waivers.toml"),
-            "[[waiver]]\n\
-             id = \"W-SEED\"\n\
-             feature = \"LANG-A\"\n\
-             reason = \"fixture quarantine\"\n\
-             issue = \"https://example.com/issue/42\"\n\
-             expires = \"2026-11-20\"\n",
+            format!(
+                "[[waiver]]\n\
+                 id = \"W-SEED\"\n\
+                 feature = \"LANG-A\"\n\
+                 reason = \"fixture quarantine\"\n\
+                 issue = \"https://example.com/issue/42\"\n\
+                 expires = \"{fresh_expiry}\"\n"
+            ),
         )
         .expect("write waiver");
         let outcome = run_diff(root, &base_path, &head_path);
