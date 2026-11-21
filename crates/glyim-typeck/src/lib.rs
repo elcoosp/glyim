@@ -24,7 +24,7 @@ pub mod tyconv;
 mod unify;
 pub mod zonk;
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::{
@@ -53,14 +53,14 @@ pub struct TypeckResult {
     /// materialization). Populated during `typeck_crate` by const-evaluating
     /// each `const` initializer; consumed by MIR lowering (via `LowerCtx::
     /// const_value`) to fold `ConstRef` into a concrete `MirConstKind`.
-    pub const_values: HashMap<ConstDefId, glyim_const_eval::ConstValue>,
+    pub const_values: std::collections::HashMap<ConstDefId, glyim_const_eval::ConstValue>,
     /// Resolved type of each HIR expression, keyed by the owning function's
     /// `LocalDefId` and the expression's `ExprId`. Populated during
     /// `typeck_crate` from each `FnCtxt::expr_cache` (which records the type
     /// of every checked expression) after inference variables are fully
     /// resolved. Drives downstream consumers such as LSP completion
     /// filtering (Tier 6.4).
-    pub expr_types: HashMap<LocalDefId, HashMap<ExprId, Ty>>,
+    pub expr_types: std::collections::HashMap<LocalDefId, std::collections::HashMap<ExprId, Ty>>,
     /// Per-body list of spans whose `Ty` still carried an *unbound*
     /// `Infer(Ty(_))` after obligation fulfillment — the "type annotations
     /// needed" (rustc E0282) case. Collected here, but *not* emitted as a
@@ -71,14 +71,14 @@ pub struct TypeckResult {
     /// actually reachable — a `Result::Ok(5).unwrap()` at the top level
     /// will error; the same shape inside a never-instantiated stdlib body
     /// stays silent.
-    pub unresolved_ty_var_spans: HashMap<LocalDefId, Vec<glyim_span::Span>>,
+    pub unresolved_ty_var_spans: std::collections::HashMap<LocalDefId, Vec<glyim_span::Span>>,
     /// HIR `BodyId` → the `LocalDefId` typeck allocated for that body's
     /// owner. The two counters are independent (HIR lowers items in
     /// source order; typeck uses its own `alloc_local_def_id`), so
     /// consumers holding a HIR `BodyId` must translate through this map
     /// before querying [`TypeckResult::expr_ty`]. Populated by
     /// `typeck_crate` from its internal `body_owner_map`.
-    pub body_owners: HashMap<glyim_hir::BodyId, LocalDefId>,
+    pub body_owners: std::collections::HashMap<glyim_hir::BodyId, LocalDefId>,
 }
 
 #[derive(Clone, Debug)]
@@ -352,8 +352,12 @@ pub fn typeck_crate(
     let mut all_obligations: Vec<Obligation> = Vec::new();
     let trait_ctx = TraitContext::new();
     let mut thir_bodies: Vec<(LocalDefId, thir::Body)> = Vec::new();
-    let mut all_expr_types: HashMap<LocalDefId, HashMap<ExprId, Ty>> = HashMap::new();
-    let mut all_const_values: HashMap<ConstDefId, glyim_const_eval::ConstValue> = HashMap::new();
+    let mut all_expr_types: std::collections::HashMap<
+        LocalDefId,
+        std::collections::HashMap<ExprId, Ty>,
+    > = std::collections::HashMap::new();
+    let mut all_const_values: std::collections::HashMap<ConstDefId, glyim_const_eval::ConstValue> =
+        std::collections::HashMap::new();
 
     // Maps each impl-method `BodyId` (assigned by the HIR def-counter) to the
     // `LocalDefId` typeck allocates for that method's MIR body. The two
@@ -361,7 +365,8 @@ pub fn typeck_crate(
     // uses its own `alloc_local_def_id`), so resolving a trait method to its
     // concrete impl function must translate through this map to hit the MIR
     // body key actually stored during monomorphization.
-    let mut body_owner_map: HashMap<glyim_hir::BodyId, LocalDefId> = HashMap::new();
+    let mut body_owner_map: std::collections::HashMap<glyim_hir::BodyId, LocalDefId> =
+        std::collections::HashMap::new();
 
     let local_krate = def_map.krate;
 
@@ -554,7 +559,7 @@ pub fn typeck_crate(
                         Some((id, _, _)) => ConstDefId::from_raw(id.to_raw()),
                         None => return, // unregistered — later branch handles it
                     };
-                    let empty_params: HashMap<Name, Ty> = HashMap::new();
+                    let empty_params: FxHashMap<Name, Ty> = FxHashMap::default();
                     let mut local_diags = Vec::new();
                     let const_ty = tyconv::resolve_type_ref(
                         &mut ctx,
@@ -575,7 +580,7 @@ pub fn typeck_crate(
                             Some((id, _, _)) => StaticDefId::from_raw(id.to_raw()),
                             None => return,
                         };
-                    let empty_params: HashMap<Name, Ty> = HashMap::new();
+                    let empty_params: FxHashMap<Name, Ty> = FxHashMap::default();
                     let mut local_diags = Vec::new();
                     let static_ty = tyconv::resolve_type_ref(
                         &mut ctx,
@@ -776,8 +781,8 @@ pub fn typeck_crate(
                                     // param; there is no `FnDefId` for a trait
                                     // bound. `gp.span` is the type parameter's
                                     // own span (the closure has no `item`).
-                                    let empty: std::collections::HashMap<Name, Ty> =
-                                        std::collections::HashMap::new();
+                                    let empty: rustc_hash::FxHashMap<Name, Ty> =
+                                        rustc_hash::FxHashMap::default();
                                     let mut infer = glyim_solve::InferenceTable::new();
                                     let mut diags = Vec::new();
                                     let mut inputs: Vec<glyim_type::GenericArg> = Vec::new();
@@ -827,8 +832,8 @@ pub fn typeck_crate(
                             if let Some(glyim_hir::TypeRef::Fn { params: fp, ret }) =
                                 &bound.fn_shape
                             {
-                                let empty: std::collections::HashMap<Name, Ty> =
-                                    std::collections::HashMap::new();
+                                let empty: rustc_hash::FxHashMap<Name, Ty> =
+                                    rustc_hash::FxHashMap::default();
                                 let mut infer = glyim_solve::InferenceTable::new();
                                 let mut diags = Vec::new();
                                 let mut inputs: Vec<glyim_type::GenericArg> = Vec::new();
@@ -1167,7 +1172,8 @@ pub fn typeck_crate(
     // unbound var has been replaced by `Ty::ERROR` and the distinction
     // between "no annotation possible" and "explicit error sentinel" is
     // lost.
-    let mut unresolved_ty_var_spans: HashMap<LocalDefId, Vec<glyim_span::Span>> = HashMap::new();
+    let mut unresolved_ty_var_spans: std::collections::HashMap<LocalDefId, Vec<glyim_span::Span>> =
+        std::collections::HashMap::new();
     for (owner, body) in &thir_bodies {
         let spans = zonk::collect_unresolved_ty_var_spans(&infer, &frozen_ctx, body);
         if !spans.is_empty() {
@@ -1209,9 +1215,12 @@ pub fn typeck_crate(
 
     // Resolve inference variables in the collected per-expression types so the
     // public `expr_ty` query returns concrete types, not `TyKind::Infer(..)`.
-    let mut expr_types: HashMap<LocalDefId, HashMap<ExprId, Ty>> = HashMap::new();
+    let mut expr_types: std::collections::HashMap<
+        LocalDefId,
+        std::collections::HashMap<ExprId, Ty>,
+    > = std::collections::HashMap::new();
     for (body_id, raw) in &all_expr_types {
-        let mut resolved: HashMap<ExprId, Ty> = HashMap::new();
+        let mut resolved: std::collections::HashMap<ExprId, Ty> = std::collections::HashMap::new();
         for (eid, ty) in raw {
             let ty = infer.fully_resolve(&frozen_ctx, *ty).unwrap_or(*ty);
             resolved.insert(*eid, ty);
@@ -1361,7 +1370,7 @@ fn pre_allocate_impl_method_ids(
     item_ids: &[ItemId],
     module_id: ModuleId,
     next_local_def_id: &mut u32,
-    body_owner_map: &mut HashMap<glyim_hir::BodyId, LocalDefId>,
+    body_owner_map: &mut std::collections::HashMap<glyim_hir::BodyId, LocalDefId>,
 ) {
     for item_id in item_ids {
         let item = match hir.items.get(*item_id) {
@@ -1477,13 +1486,16 @@ fn check_fn_items_in_module(
     hir: &glyim_hir::CrateHir,
     local_krate: CrateId,
     trait_ctx: &TraitContext,
-    all_expr_types: &mut HashMap<LocalDefId, HashMap<ExprId, Ty>>,
+    all_expr_types: &mut std::collections::HashMap<
+        LocalDefId,
+        std::collections::HashMap<ExprId, Ty>,
+    >,
     thir_bodies: &mut Vec<(LocalDefId, thir::Body)>,
-    all_const_values: &mut HashMap<ConstDefId, glyim_const_eval::ConstValue>,
+    all_const_values: &mut std::collections::HashMap<ConstDefId, glyim_const_eval::ConstValue>,
     item_ids: &[ItemId],
     module_id: ModuleId,
     next_local_def_id: &mut u32,
-    body_owner_map: &mut HashMap<glyim_hir::BodyId, LocalDefId>,
+    body_owner_map: &mut std::collections::HashMap<glyim_hir::BodyId, LocalDefId>,
 ) {
     for item_id in item_ids {
         let item = match hir.items.get(*item_id) {
@@ -2087,7 +2099,7 @@ fn check_fn_items_in_module(
                     *next_local_def_id += 1;
                     StaticDefId::from_raw(id)
                 };
-                let empty_params: HashMap<Name, Ty> = HashMap::new();
+                let empty_params: FxHashMap<Name, Ty> = FxHashMap::default();
                 let static_ty = tyconv::resolve_type_ref(
                     ctx,
                     infer,
@@ -2217,7 +2229,7 @@ fn check_fn_items_in_module(
                     *next_local_def_id += 1;
                     ConstDefId::from_raw(id)
                 };
-                let empty_params: HashMap<Name, Ty> = HashMap::new();
+                let empty_params: FxHashMap<Name, Ty> = FxHashMap::default();
                 let const_ty = tyconv::resolve_type_ref(
                     ctx,
                     infer,
@@ -2325,8 +2337,8 @@ fn check_body(
     local_def_id: LocalDefId,
     def_map: &glyim_def_map::CrateDefMap,
     _trait_ctx: &TraitContext,
-    body_owner_map: &HashMap<glyim_hir::BodyId, LocalDefId>,
-    expr_types: &mut HashMap<LocalDefId, HashMap<ExprId, Ty>>,
+    body_owner_map: &std::collections::HashMap<glyim_hir::BodyId, LocalDefId>,
+    expr_types: &mut std::collections::HashMap<LocalDefId, std::collections::HashMap<ExprId, Ty>>,
     module_id: glyim_def_map::ModuleId,
     // Generic parameters in scope for this body (fn-level, plus impl-level for
     // methods). Threaded through so `check_expr` can resolve `TypeRef`s written
@@ -2366,7 +2378,7 @@ fn check_body(
         env,
         return_ty,
         owner,
-        expr_cache: std::collections::HashMap::default(),
+        expr_cache: rustc_hash::FxHashMap::default(),
         def_map,
         current_module,
         capture_log: Vec::new(),
