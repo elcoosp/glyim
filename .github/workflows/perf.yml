@@ -1,0 +1,69 @@
+# M2 CI perf job (plan §6 M2.5/M2.6, docs/roadmaps/glyim-master-plan.md).
+#
+# Runs the committed-corpus performance gate on every push to main (and on
+# demand): `just bench-ci` verifies the corpus SHA-256 identities (M2.3),
+# measures every committed corpus program end-to-end through the MIR
+# interpreter (`glyim --emit=run`, 10 iterations per program, wall source),
+# and enforces the absolute per-program budgets committed in
+# `perf/budgets.toml` (`glyim.bench-budgets/1`) — a wall-mean regression
+# past a program's bound fails the job. The relative matrix gate
+# (>2% per benchmark / >0.5% geo-mean) activates itself when the reports
+# carry instruction stats and the recorded history covers every program
+# (see the `just bench-ci` recipe); wall-only reports are guarded by the
+# absolute budgets instead, so no threshold is ever silently skipped.
+#
+# The bench reports and the appended perf history are uploaded as artifacts
+# so the recorded history accumulates across runs and the instruction-row
+# ratchet can be switched on without another bootstrap step.
+name: Perf
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref to save runner minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  bench-budgets:
+    name: Corpus check + measured runs + budget gate (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install LLVM 23
+        # glyim-cli links the LLVM backend; the bench measures its
+        # `--emit=run` interpreter path but the binary must build.
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 23
+          sudo apt-get install -y llvm-23-dev libpolly-23-dev
+          echo "LLVM_SYS_231_PREFIX=/usr/lib/llvm-23" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install just
+        uses: extractions/setup-just@v2
+      - name: Build the runtime staticlib
+        run: cargo build -p glyim-runtime
+      - name: Run the bench corpus + budget gate (just bench-ci)
+        run: just bench-ci
+      - name: Upload bench reports and perf history
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-reports
+          path: |
+            target/bench-reports/*.json
+            target/perf-history.jsonl
+          if-no-files-found: error
+          retention-days: 90
