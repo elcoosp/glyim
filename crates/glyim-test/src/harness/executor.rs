@@ -338,20 +338,19 @@ fn execute_test(
     tracing::info!(duration_ms = duration.as_millis(), "done");
 
     // M1.6/M1.7 strict-xfail witness inversion (plan §3.3): a fixture
-    // carrying `//@ known-gap: GAP-NNNN` is the reproducible witness of an
-    // open readiness gap. While the gap is open the pinned outcome holds
-    // (compile-fail: the compiler rejects the witness; run modes: the run
-    // behaviour matches its expectations) and the outcome passes through
-    // unchanged. When the pinned outcome NO LONGER holds, the generic
-    // mismatch would read as "test bug"; it actually means the gap may have
-    // CLOSED, and the strict-xfail contract demands a loud, self-describing
-    // failure that tells the author how to retire the witness. The run-mode
-    // inversion is backend-shaped (`ran_native`): a backend-divergence
-    // witness pins "gam passes, llvm fails" (the class-b differential
-    // disagreement), so on the native side the *failure* is the pass state
-    // and a passing native run means the gap closed.
+    // carrying `//@ known-gap: GAP-NNNN` (pinned) or
+    // `//@ known-gap-backend-divergence: GAP-NNNN` (class-b per-backend
+    // contract) is the reproducible witness of an open readiness gap.
+    // The witness SHAPE is declared by the annotation and resolved into a
+    // [`KnownGapWitness`] by the config, so the inversion dispatches on
+    // the declared contract instead of inferring one from whether a
+    // native executable happened to be produced. When the pinned outcome
+    // NO LONGER holds, the generic mismatch would read as "test bug"; it
+    // actually means the gap may have CLOSED, and the strict-xfail
+    // contract demands a loud, self-describing failure that tells the
+    // author how to retire the witness.
     let outcome = apply_witness_inversion(
-        test.config.known_gap.as_deref(),
+        test.config.known_gap_witness(),
         test.config.mode,
         outcome,
         &diagnostics,
@@ -368,29 +367,31 @@ fn execute_test(
 }
 
 /// Apply the M1.6/M1.7 strict-xfail inversion to a test outcome when the
-/// fixture is a `//@ known-gap:` witness. Passing the outcome through a named
+/// fixture is a known-gap witness. Passing the outcome through a named
 /// function (instead of inline branching) keeps the executor's happy path
 /// flat and gives the seam one tracing span.
 ///
-/// The inversion is mode-shaped (plan §3.3):
+/// The inversion dispatches on the declared witness contract
+/// ([`KnownGapWitness`]), not on a `ran_native` heuristic:
 ///
-/// - **compile-fail** (M1.6): the witness passes while the compiler
-///   *rejects* it; the compiler *accepting* it (no error diagnostics at
-///   all) means the gap closed.
-/// - **run-pass / run-fail** (M1.7): the witness passes while the pinned
-///   run behaviour holds; the run *failing* means the pinned behaviour
-///   changed and the gap may have closed, so the generic exit/output
-///   mismatch is sharpened into [`FailureReason::KnownGapClosed`] too. A
-///   witness that fails for an unrelated regression reads "retire or
-///   re-pin" — actionable either way. The shape is backend-aware
-///   (`ran_native`): for a **backend-divergence** witness (a class-b
-///   differential finding registered in `ledger/gaps/known/`) the pinned
-///   contract is "gam passes, llvm fails" — under the real LLVM backend
-///   the declared run-phase failure (`RunFailed`/`RunTimeout`/stdout/
-///   stderr mismatch) is the *pass* state (witnessed debt), while a
-///   *passing* native run means the gap closed and the witness must be
-///   retired. A compile-phase native failure is not the declared state
-///   and keeps the generic failure (an ICE is a different bug class).
+/// - **compile-fail** (M1.6, [`KnownGapWitness::Pinned`]): the witness
+///   passes while the compiler *rejects* it; the compiler *accepting* it
+///   (no error diagnostics at all) means the gap closed.
+/// - **run-pass / run-fail, pinned** (M1.7): the pinned run behaviour
+///   must hold on EVERY backend the fixture runs on — the interpreter
+///   and, when the real backend produced an executable, the native side
+///   alike. A run failure on either side sharpens into
+///   [`FailureReason::KnownGapClosed`] (the pinned behaviour changed;
+///   retire or re-pin); a passing run passes through.
+/// - **run-pass / run-fail, [`KnownGapWitness::BackendDivergence`]**: the
+///   class-b contract "gam passes, llvm fails". Under the real LLVM
+///   backend the declared run-phase failure (`RunFailed`/`RunTimeout`/
+///   stdout/stderr mismatch) is the *pass* state (witnessed debt), while
+///   a *passing* native run means the gap closed and the witness must be
+///   retired. On the interpreter side the ordinary pinned contract
+///   applies: a failure there sharpens too. A compile-phase native
+///   failure is not the declared state on either side and keeps the
+///   generic failure (an ICE is a different bug class).
 /// - **compile-pass / ui**: rejected at discovery (see the collector), so
 ///   the outcome passes through untouched here.
 ///
@@ -398,52 +399,79 @@ fn execute_test(
 /// (`crates/glyim-test/src/tests/harness_tests.rs`); the executor path
 /// above is the production caller.
 pub(crate) fn apply_witness_inversion(
-    known_gap: Option<&str>,
+    witness: Option<super::config::KnownGapWitness>,
     mode: super::config::TestMode,
     outcome: TestOutcome,
     diagnostics: &[GlyimDiagnostic],
     ran_native: bool,
 ) -> TestOutcome {
-    let Some(gap) = known_gap else {
+    use super::config::KnownGapWitness;
+
+    let Some(witness) = witness else {
         return outcome;
     };
-    let witness_span = tracing::info_span!("witness", gap = %gap);
+    let witness_span = tracing::info_span!("witness", gap = %witness.gap());
     let _enter = witness_span.enter();
 
-    match mode {
-        super::config::TestMode::CompileFail => {
+    match (witness, mode) {
+        // The pinned compile-fail contract (M1.6). A divergence tag can
+        // never reach this arm in production (the collector rejects it on
+        // compile-fail); the shape stays total so the inversion remains
+        // inert rather than wrong if one ever did.
+        (witness, super::config::TestMode::CompileFail) => {
             let compiler_accepted = diagnostics.iter().all(|d| !d.is_error());
             if compiler_accepted {
                 tracing::warn!(
-                    gap = %gap,
+                    gap = %witness.gap(),
                     "known-gap witness closed: the compiler accepted a fixture it must reject"
                 );
                 TestOutcome::Failed {
                     reason: FailureReason::KnownGapClosed {
-                        gap: gap.to_string(),
+                        gap: witness.gap().to_string(),
                     },
                 }
             } else {
                 outcome
             }
         }
-        super::config::TestMode::RunPass | super::config::TestMode::RunFail => {
+        // The pinned run contract (M1.7): the pinned behaviour must hold
+        // on every backend that ran the fixture.
+        (
+            KnownGapWitness::Pinned { gap },
+            super::config::TestMode::RunPass | super::config::TestMode::RunFail,
+        ) => {
+            if matches!(outcome, TestOutcome::Failed { .. }) {
+                tracing::warn!(
+                    gap = %gap,
+                    "known-gap witness closed: the pinned run behaviour changed"
+                );
+                TestOutcome::Failed {
+                    reason: FailureReason::KnownGapClosed { gap },
+                }
+            } else {
+                outcome
+            }
+        }
+        // The class-b divergence contract (M1.7): "gam passes, llvm
+        // fails", per side.
+        (
+            KnownGapWitness::BackendDivergence { gap },
+            super::config::TestMode::RunPass | super::config::TestMode::RunFail,
+        ) => {
             if ran_native {
-                // Backend-divergence witness on the native (LLVM) side: the
-                // declared run-phase failure is the gap's pinned state —
-                // witnessed debt passes while the bug reproduces. A passing
-                // native run means the gap closed; sharpen it loudly. A
-                // compile-phase native failure is not the declared state.
+                // Native (LLVM) side: the declared run-phase failure is
+                // the gap's pinned state — witnessed debt passes while
+                // the bug reproduces. A passing native run means the gap
+                // closed; sharpen it loudly. A compile-phase native
+                // failure is not the declared state.
                 match outcome {
-                    TestOutcome::Failed { reason }
-                        if matches!(
-                            reason,
+                    TestOutcome::Failed {
+                        reason:
                             FailureReason::RunFailed { .. }
-                                | FailureReason::RunTimeout { .. }
-                                | FailureReason::StdoutMismatch { .. }
-                                | FailureReason::StderrMismatch { .. }
-                        ) =>
-                    {
+                            | FailureReason::RunTimeout { .. }
+                            | FailureReason::StdoutMismatch { .. }
+                            | FailureReason::StderrMismatch { .. },
+                    } => {
                         tracing::info!(
                             gap = %gap,
                             "backend-divergence witness holds: the native run failed as declared (witnessed class-b debt)"
@@ -456,22 +484,21 @@ pub(crate) fn apply_witness_inversion(
                             "known-gap witness closed: the native run now passes the pinned behaviour"
                         );
                         TestOutcome::Failed {
-                            reason: FailureReason::KnownGapClosed {
-                                gap: gap.to_string(),
-                            },
+                            reason: FailureReason::KnownGapClosed { gap },
                         }
                     }
                     other => other,
                 }
             } else if matches!(outcome, TestOutcome::Failed { .. }) {
+                // Interpreter (gam) side: the reference run must keep
+                // passing — a failure there means the pinned behaviour
+                // changed for the *reference* backend.
                 tracing::warn!(
                     gap = %gap,
-                    "known-gap witness closed: the pinned run behaviour changed"
+                    "known-gap witness closed: the reference run behaviour changed"
                 );
                 TestOutcome::Failed {
-                    reason: FailureReason::KnownGapClosed {
-                        gap: gap.to_string(),
-                    },
+                    reason: FailureReason::KnownGapClosed { gap },
                 }
             } else {
                 outcome
@@ -479,7 +506,7 @@ pub(crate) fn apply_witness_inversion(
         }
         // The collector rejects a witness on these modes at discovery;
         // the inversion stays inert should one ever reach this point.
-        super::config::TestMode::CompilePass | super::config::TestMode::Ui => outcome,
+        (_, super::config::TestMode::CompilePass | super::config::TestMode::Ui) => outcome,
     }
 }
 
