@@ -671,8 +671,20 @@ pub const CODE_TIER_TARGET: &str = "LEDGER-TIER-TARGET";
 /// documentation; dead pointers are a check failure).
 pub const CODE_SPEC_MISSING: &str = "LEDGER-SPEC-MISSING";
 
-/// Marker a witness fixture must carry (plan §3.3).
+/// Marker a witness fixture must carry (plan §3.3): the pinned-outcome
+/// witness shape (`KnownGapWitness::Pinned` on the harness side).
 pub const KNOWN_GAP_MARKER: &str = "//@ known-gap:";
+
+/// The class-b backend-divergence witness marker: the second first-class
+/// witness shape (`KnownGapWitness::BackendDivergence` on the harness
+/// side). Its fixture pins the per-backend disagreement exactly like a
+/// pinned witness pins the outcome, so the check face must recognize it —
+/// a divergence-tagged witness read as header-less would mint a spurious
+/// `LEDGER-WITNESS-HEADER` error (and flip the required CI gate red).
+pub const KNOWN_GAP_BACKEND_DIVERGENCE_MARKER: &str = "//@ known-gap-backend-divergence:";
+
+/// Every witness-header marker the check face accepts.
+pub const KNOWN_GAP_MARKERS: [&str; 2] = [KNOWN_GAP_MARKER, KNOWN_GAP_BACKEND_DIVERGENCE_MARKER];
 
 // ---------------------------------------------------------------------------
 // Registry loading
@@ -1129,7 +1141,10 @@ impl Registry {
     }
 
     /// Verify an existing witness fixture: the file must exist and carry a
-    /// `//@ known-gap: GAP-XXXX` header naming this gap.
+    /// witness header naming this gap — the pinned `//@ known-gap: GAP-XXXX`
+    /// marker or the class-b `//@ known-gap-backend-divergence: GAP-XXXX`
+    /// marker ([`KNOWN_GAP_MARKERS`]; the harness resolves the two spellings
+    /// into `KnownGapWitness::Pinned` / `BackendDivergence`).
     fn check_witness_fixture(
         &self,
         gap: &GapEntry,
@@ -1151,16 +1166,22 @@ impl Registry {
         };
         let headers: Vec<&str> = contents
             .lines()
-            .filter(|line| line.trim_start().starts_with(KNOWN_GAP_MARKER))
+            .filter(|line| {
+                KNOWN_GAP_MARKERS
+                    .iter()
+                    .any(|marker| line.trim_start().starts_with(marker))
+            })
             .collect();
         if headers.is_empty() || headers.iter().all(|line| !line.contains(gap.id.as_str())) {
             diagnostics.push(Diagnostic {
                 code: CODE_WITNESS_HEADER,
                 severity: Severity::Error,
                 message: format!(
-                    "gap {} witness fixture {} lacks a //@ known-gap: {} header",
+                    "gap {} witness fixture {} lacks a `//@ known-gap: {}` or \
+                     `//@ known-gap-backend-divergence: {}` header naming it",
                     gap.id,
                     path.display(),
+                    gap.id,
                     gap.id
                 ),
             });
@@ -1901,6 +1922,58 @@ mod tests {
         assert!(
             errors(&loaded.registry.validate()).is_empty(),
             "valid witness must produce no error"
+        );
+    }
+
+    #[test]
+    fn witnessed_gap_with_backend_divergence_witness_passes() {
+        // The class-b marker is a first-class witness header: the GAP-0007
+        // differential witness carries it, and a check face that ignored it
+        // would mint a spurious LEDGER-WITNESS-HEADER error (flipping the
+        // required CI gate red on a perfectly witnessed registry).
+        let root = temp_ledger();
+        write_file(root.path(), "features/lang/a.toml", &feature_toml("LANG-A"));
+        write_file(
+            root.path(),
+            "witnesses/divergence.g",
+            "//@ known-gap-backend-divergence: GAP-1\nprint(1)\n",
+        );
+        let raw = gap_toml("GAP-1", "LANG-A")
+            .replace("status = \"unwitnessed\"", "status = \"witnessed\"")
+            .replace(
+                "opened_in = \"v0.3.0\"",
+                "witness = \"witnesses/divergence.g\"\nopened_in = \"v0.3.0\"",
+            );
+        write_file(root.path(), "gaps/x.toml", &raw);
+        let loaded = load_ok(root.path());
+        assert!(
+            errors(&loaded.registry.validate()).is_empty(),
+            "a divergence-tagged witness must produce no error"
+        );
+    }
+
+    #[test]
+    fn witnessed_gap_with_divergence_marker_but_foreign_id_is_an_error() {
+        // The header must NAME the gap — the divergence marker alone does
+        // not satisfy the contract for a different gap ID.
+        let root = temp_ledger();
+        write_file(root.path(), "features/lang/a.toml", &feature_toml("LANG-A"));
+        write_file(
+            root.path(),
+            "witnesses/divergence.g",
+            "//@ known-gap-backend-divergence: GAP-9\nprint(1)\n",
+        );
+        let raw = gap_toml("GAP-1", "LANG-A")
+            .replace("status = \"unwitnessed\"", "status = \"witnessed\"")
+            .replace(
+                "opened_in = \"v0.3.0\"",
+                "witness = \"witnesses/divergence.g\"\nopened_in = \"v0.3.0\"",
+            );
+        write_file(root.path(), "gaps/x.toml", &raw);
+        let loaded = load_ok(root.path());
+        assert_eq!(
+            codes(&errors(&loaded.registry.validate())),
+            vec![CODE_WITNESS_HEADER]
         );
     }
 
