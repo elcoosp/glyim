@@ -61,7 +61,7 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `COMPILER-TI-BIDI` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `COMPILER-TI-OCCURS` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `COMPILER-TI-UNIFICATION` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
-| `LANG-ASYNC-AWAIT` | core | L5 | L0 | GAP-0006 | fuzz_cpu_hours, mutation_kill_rate_pct |
+| `LANG-ASYNC-AWAIT` | core | L5 | L0 | GAP-0006, GAP-0007 | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-BUILTIN-BOX` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-BUILTIN-OPTION` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-BUILTIN-PHANTOMDATA` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
@@ -85,7 +85,7 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `LANG-MACRO-BUILTIN-STR` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-MACRO-PROC-DECL` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-MACRO-RULES` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
-| `LANG-MATCH-GUARDS` | core | L5 | L1 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
+| `LANG-MATCH-GUARDS` | core | L5 | L1 | GAP-0008 | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SCOPE-ATTR-ALLOW` | core | L5 | L2 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SCOPE-MOD-DECL` | core | L5 | L4 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `LANG-SCOPE-SHADOWING` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
