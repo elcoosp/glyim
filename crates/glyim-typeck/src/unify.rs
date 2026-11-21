@@ -185,8 +185,8 @@ impl FnCtxt<'_> {
                 // the first segment that carries `generic_args`.
                 let explicit_args: Option<Vec<glyim_hir::TypeRef>> =
                     path.segments.iter().find_map(|s| s.generic_args.clone());
-                let mut subst_map: std::collections::HashMap<u32, GenericArg> =
-                    std::collections::HashMap::new();
+                let mut subst_map: rustc_hash::FxHashMap<u32, GenericArg> =
+                    rustc_hash::FxHashMap::default();
                 let mut subst_args: Vec<GenericArg> = Vec::with_capacity(arity);
                 for i in 0..arity {
                     let seeded =
@@ -292,7 +292,7 @@ impl FnCtxt<'_> {
                     self.def_map,
                     &mut Vec::new(),
                     &enum_path,
-                    &std::collections::HashMap::new(),
+                    &rustc_hash::FxHashMap::default(),
                     span,
                 ) {
                     if let glyim_type::TyKind::Adt(adt_id, _) = self.ctx.ty_kind(adt_ty) {
@@ -451,7 +451,7 @@ impl FnCtxt<'_> {
                 self.def_map,
                 &mut Vec::new(),
                 &adt_path,
-                &std::collections::HashMap::new(),
+                &rustc_hash::FxHashMap::default(),
                 span,
             ) {
                 Some(t) => t,
@@ -461,7 +461,7 @@ impl FnCtxt<'_> {
                     self.def_map,
                     &mut Vec::new(),
                     &adt_path,
-                    &std::collections::HashMap::new(),
+                    &rustc_hash::FxHashMap::default(),
                     span,
                 ),
             };
@@ -631,8 +631,8 @@ impl FnCtxt<'_> {
                     // generic substitution (so `Vec::new` yields `Vec<T>` with
                     // `T` left as a fresh inference variable, matching how the
                     // receiver-arg substitution works for method calls).
-                    let mut subst: std::collections::HashMap<u32, GenericArg> =
-                        std::collections::HashMap::new();
+                    let mut subst: rustc_hash::FxHashMap<u32, GenericArg> =
+                        rustc_hash::FxHashMap::default();
                     if let glyim_type::TyKind::Adt(_, s) = self.ctx.ty_kind(adt_ty) {
                         for (i, a) in self.ctx.substitution_args(*s).iter().enumerate() {
                             let concrete = match a {
@@ -703,8 +703,7 @@ impl FnCtxt<'_> {
                         continue; // inherent only
                     }
                     // Does this impl's Self resolve to the same ADT?
-                    let empty: std::collections::HashMap<Name, Ty> =
-                        std::collections::HashMap::new();
+                    let empty: rustc_hash::FxHashMap<Name, Ty> = rustc_hash::FxHashMap::default();
                     let self_ty = crate::tyconv::resolve_type_ref(
                         self.ctx,
                         self.infer,
@@ -742,8 +741,8 @@ impl FnCtxt<'_> {
                         // `impl<T> OO<T>`) with fresh inference vars, then
                         // substitute them through the method's signature so
                         // `OO::<T>::new() -> OO<T>` becomes `-> OO<?fresh>`.
-                        let mut subst: std::collections::HashMap<u32, GenericArg> =
-                            std::collections::HashMap::new();
+                        let mut subst: rustc_hash::FxHashMap<u32, GenericArg> =
+                            rustc_hash::FxHashMap::default();
                         for (impl_param_idx, _gp) in impl_item.generic_params.iter().enumerate() {
                             let v = self.infer.new_ty_var(self.ctx);
                             let fresh = self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(v)));
@@ -836,7 +835,7 @@ impl FnCtxt<'_> {
                 self.def_map,
                 &mut Vec::new(),
                 &enum_path,
-                &std::collections::HashMap::new(),
+                &rustc_hash::FxHashMap::default(),
                 span,
             );
             if let Some(adt_id) = enum_ty_resolved.and_then(|ty| {
@@ -991,7 +990,7 @@ impl FnCtxt<'_> {
                 self.def_map,
                 &mut Vec::new(),
                 &probe,
-                &std::collections::HashMap::new(),
+                &rustc_hash::FxHashMap::default(),
                 span,
             )
             .and_then(|adt_ty| {
@@ -1125,8 +1124,8 @@ impl FnCtxt<'_> {
             // `b` as `Adt1010<<error>>`. Sharing the vars makes the
             // registration idempotent with `check_path`'s (which already
             // substitutes) and stops this path from clobbering it.
-            let mut subst_map: std::collections::HashMap<u32, GenericArg> =
-                std::collections::HashMap::new();
+            let mut subst_map: rustc_hash::FxHashMap<u32, GenericArg> =
+                rustc_hash::FxHashMap::default();
             for (i, a) in self.ctx.substitution_args(substs).iter().enumerate() {
                 if let GenericArg::Ty(t) = a {
                     subst_map.insert(i as u32, GenericArg::Ty(*t));
@@ -1185,7 +1184,7 @@ impl FnCtxt<'_> {
         for (_id, item) in self.hir.items.iter_enumerated() {
             if let glyim_hir::ItemKind::Fn(fn_item) = &item.kind {
                 if let Some(return_ty_ref) = &fn_item.return_ty {
-                    let param_map = std::collections::HashMap::new();
+                    let param_map = rustc_hash::FxHashMap::default();
                     return crate::tyconv::resolve_type_ref(
                         self.ctx,
                         self.infer,
