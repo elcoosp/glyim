@@ -62,7 +62,7 @@ pub struct MonoCtx<'a> {
     items: IndexVec<MonoItemId, MonoItemData>,
     queue: std::collections::VecDeque<MonoItem>,
     seen: std::collections::HashSet<MonoItem>,
-    cache: std::collections::HashMap<MonoItem, MonoItemId>,
+    cache: rustc_hash::FxHashMap<MonoItem, MonoItemId>,
     drop_locals: Vec<glyim_mir::LocalIdx>,
     /// Optional type context, used to derive generic substitutions from call
     /// argument types during monomorphization (closes the single-await
@@ -98,7 +98,7 @@ impl<'a> MonoCtx<'a> {
             seen: std::collections::HashSet::new(),
             def_to_module: None,
             pre_subst_bodies: None,
-            cache: std::collections::HashMap::new(),
+            cache: rustc_hash::FxHashMap::default(),
             drop_locals: Vec::new(),
             ty_ctx: None,
         }
