@@ -73,13 +73,26 @@ pub struct FixtureAnnotations {
     pub revision_compile_flags: HashMap<String, Vec<String>>,
     /// M1.6 strict-xfail witness tag (`//@ known-gap: GAP-NNNN`, plan
     /// §3.3). `Some(id)` marks this fixture as the reproducible witness of
-    /// a readiness-ledger gap: while the gap is open, the compiler must
-    /// *reject* this program (the compile-fail expectations hold); when
-    /// the gap closes, the fixture fails with
+    /// a readiness-ledger gap: while the gap is open, the pinned outcome
+    /// must hold on every backend that runs the fixture; when it stops
+    /// holding, the fixture fails with
     /// [`crate::error::FailureReason::KnownGapClosed`] instead of a
     /// generic diagnostic mismatch, forcing the witness to be retired in
-    /// the same change that fixes the gap.
+    /// the same change that fixes the gap. Mutually exclusive with
+    /// `known_gap_backend_divergence` (a fixture witnesses exactly one
+    /// gap under exactly one contract).
     pub known_gap: Option<String>,
+    /// M1.7 backend-divergence witness tag
+    /// (`//@ known-gap-backend-divergence: GAP-NNNN`). `Some(id)` marks
+    /// this fixture as the reproducible witness of a **class-b backend
+    /// divergence** (a differential finding registered in
+    /// `ledger/gaps/known/`): the pinned contract is "the reference
+    /// interpreter passes the pinned run, the native backend reproduces
+    /// the declared failure". The declared shape makes the executor's
+    /// inversion explicit per side instead of inferred from whether a
+    /// native executable happened to run. Mutually exclusive with
+    /// `known_gap`.
+    pub known_gap_backend_divergence: Option<String>,
     /// True when at least one `//@` directive was present. This is the
     /// `M1.4` `DoD` bit: fixtures without any annotation are rejected by the
     /// collector.
@@ -331,12 +344,24 @@ fn parse_directive_body(
         }
         "known-gap" => {
             // M1.6 (plan §3.3): the strict-xfail witness tag. One fixture
-            // witnesses exactly one gap — duplicates are rejected even
-            // when the two IDs are equal, because the inversion semantics
-            // would be applied twice with no way to tell which tag the
-            // ledger should consume.
+            // witnesses exactly one gap under exactly one contract —
+            // duplicates are rejected even when the two IDs are equal,
+            // because the inversion semantics would be applied twice with
+            // no way to tell which tag the ledger should consume, and a
+            // fixture cannot simultaneously pin an outcome on every
+            // backend AND pin a per-backend divergence (the
+            // backend-divergence contract would silently shadow the
+            // pinned one).
             if out.known_gap.is_some() {
                 return err(lineno, "duplicate `known-gap:` directive");
+            }
+            if out.known_gap_backend_divergence.is_some() {
+                return err(
+                    lineno,
+                    "mutually exclusive directives: `known-gap:` (pinned on every backend) \
+                     and `known-gap-backend-divergence:` (per-backend contract) cannot both \
+                     be present — one fixture, one witness contract",
+                );
             }
             if !is_valid_gap_id(value) {
                 return err(
@@ -348,6 +373,37 @@ fn parse_directive_body(
                 );
             }
             out.known_gap = Some(value.to_string());
+            Ok(())
+        }
+        "known-gap-backend-divergence" => {
+            // M1.7 backend-divergence witnesses: the explicit, declared
+            // shape of the class-b differential debt. Same one-contract
+            // exclusivity rule as `known-gap:`, mirrored so the tags
+            // conflict in either declaration order.
+            if out.known_gap_backend_divergence.is_some() {
+                return err(
+                    lineno,
+                    "duplicate `known-gap-backend-divergence:` directive",
+                );
+            }
+            if out.known_gap.is_some() {
+                return err(
+                    lineno,
+                    "mutually exclusive directives: `known-gap:` (pinned on every backend) \
+                     and `known-gap-backend-divergence:` (per-backend contract) cannot both \
+                     be present — one fixture, one witness contract",
+                );
+            }
+            if !is_valid_gap_id(value) {
+                return err(
+                    lineno,
+                    format!(
+                        "malformed known-gap-backend-divergence ID `{value}` (expected `GAP-` \
+                         + 4 digits, matching a `[[gap]] id` under ledger/gaps/**)"
+                    ),
+                );
+            }
+            out.known_gap_backend_divergence = Some(value.to_string());
             Ok(())
         }
         other => err(
