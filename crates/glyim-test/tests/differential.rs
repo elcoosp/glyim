@@ -96,20 +96,21 @@ fn check_corpus_agreement(corpus: &str) {
             skipped.push(test.name.clone());
             continue;
         }
-        // M1.7 strict-xfail witnesses (plan §3.3): a `//@ known-gap:` fixture
-        // is the registered witness of an open gap (ledger/gaps/known/*.toml;
-        // a class-b entry for a backend divergence). Its disagreement IS the
-        // witnessed debt: the gam side passes the pinned run, the LLVM side
-        // reproduces the declared failure. Comparing them here would
-        // re-report filed debt as a release blocker, so record the witness
-        // and skip — exactly like the ledger's `gaps audit` face, which
-        // counts the witnessed entry instead of failing on it. If the LLVM
-        // side starts passing, the run-pass corpus fails the fixture with
-        // `known-gap closed` and the witness must be retired in the
-        // gap-closing change.
-        if let Some(gap) = test.config.known_gap.clone() {
+        // M1.7 strict-xfail witnesses (plan §3.3): a fixture carrying a
+        // known-gap tag (pinned `//@ known-gap:` or class-b
+        // `//@ known-gap-backend-divergence:`) is the registered witness
+        // of an open gap (ledger/gaps/known/*.toml). Its disagreement IS
+        // the witnessed debt — for the divergence shape the pinned
+        // contract is literally "gam passes, llvm fails", and a pinned
+        // run witness's behaviour change surfaces through the run corpus
+        // as `known-gap closed`. Comparing the backends here would
+        // re-report filed debt as a release blocker, so record the
+        // witness (naming its declared contract) and skip — exactly like
+        // the ledger's `gaps audit` face, which counts the witnessed
+        // entry instead of failing on it.
+        if let Some(witness) = test.config.known_gap_witness() {
             skipped.push(format!(
-                "{}: //@ known-gap: {gap} (witnessed class-b debt, gam passes / llvm fails)",
+                "{}: {witness:?} (witnessed debt, contract pins the backend disagreement)",
                 test.name
             ));
             continue;
