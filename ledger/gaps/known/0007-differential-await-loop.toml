@@ -1,0 +1,34 @@
+# GAP-0007 — class-b backend divergence found by the differential gate
+# (`just differential`: LLVM-native vs MIR interpreter over the run-pass
+# corpus). When the loop-await witnesses retired from xfail on 2026-11-17
+# (`24cc424f` + `82ef09b6`, interpreter-only proof) their shapes entered the
+# differential corpus and the native LLVM backend began dying by signal on
+# them while the reference interpreter runs the same programs to their
+# pinned exits:
+#
+#   behavior/async_for_loop_await.g: exit mismatch (interp=Some(3), llvm=None)
+#   behavior/async_loop_await.g: exit mismatch (interp=Some(11), llvm=None)
+#
+# (differential_red3.log, pristine tree at 6bb6d666, 232 compared). Per
+# AGENTS.md rule 6 a differential-found miscompile class outranks every
+# other queue item: the finding is registered here as witnessed class-b
+# debt, capped at L2, with the strict-xfail witness
+# `crates/glyim-test/tests/run-pass/behavior/async_for_loop_await_differential_gap.g`
+# plus the two corroborating retirement fixtures carrying the
+# `//@ known-gap: GAP-0007` header. The harness's backend-divergence
+# witness contract pins "gam passes, llvm fails": while the gap is open
+# the native failure is the declared state (witnessed debt, not a release
+# blocker — the differential gate skips registered witnesses); the moment
+# the native backend runs the witnesses to their pinned exits, the fixtures
+# fail with `known-gap GAP-0007 closed` and the witness must be retired in
+# the gap-closing change (plan §3.3, M1.7).
+
+[[gap]]
+id        = "GAP-0007"
+class     = "b"
+title     = "Async loop-await shapes die by signal on the native LLVM backend while the interpreter runs them to the pinned exit (differential backend divergence)"
+affects   = ["LANG-ASYNC-AWAIT"]
+caps      = "L2"
+opened_in = "v0.10.0"
+status    = "witnessed"
+witness   = "crates/glyim-test/tests/run-pass/behavior/async_for_loop_await_differential_gap.g"
