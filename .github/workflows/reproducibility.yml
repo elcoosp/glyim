@@ -1,0 +1,63 @@
+# M1.13 reproducibility job (plan §6 M1.13 "reproducibility CI job green";
+# the second slice after the in-process `verify` face): the ledger's
+# determinism self-check on a schedule. Every ledger pipeline (compute,
+# status, gates — text, JSON, snapshot) runs TWICE from two independent
+# load passes and any rendered-byte drift fails the job; the machine-
+# readable `glyim.ledger-verify/1` report is uploaded as an artifact so a
+# cross-machine byte comparison (the M1.13 "two machines" half) has its
+# committed artifact to diff.
+#
+# The job also runs the parser fuzz (plan §6 M1.13 "fuzz the TOML/JSONL
+# parsers"): the deterministic property fuzz over the registry TOML and
+# evidence JSONL parse surfaces — 1000+ generated documents per surface
+# per run, 0 panics allowed. It lives in THIS job (not CI) because it is
+# the same self-validation charter on the same schedule: a parser that
+# panics or silently accepts a malformed registry is a determinism bug
+# one step before the renderers drift.
+#
+# Warning diagnostics (e.g. witness debt) are displayed in the report and
+# do NOT fail the job — `verify`'s gate condition is error-severity
+# diagnostics + byte drift, the same contract the `release-check` face
+# composes. Nightly observes; it never mutates the registry.
+name: reproducibility
+
+on:
+  schedule:
+    # 04:33 UTC daily — after the nightly (03:17) so the full-evidence
+    # sweep it verifies is fresh, and off the top of the hour so shared
+    # runners are not stampeded.
+    - cron: '33 4 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  ledger-verify:
+    name: Ledger determinism self-check + parser fuzz (M1.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: glyim-ledger verify (every pipeline twice, byte-identical or fail)
+        run: |
+          cargo run -p glyim-ledger -- verify . --format json > /tmp/ledger-verify-report.json
+          cargo run -p glyim-ledger -- verify . --format text
+      - name: parser fuzz (1000+ generated documents per surface, 0 panics)
+        run: cargo test -p glyim-ledger parser_fuzz --release -- --nocapture
+      - name: Upload the verify report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-verify-report
+          path: /tmp/ledger-verify-report.json
