@@ -1,6 +1,6 @@
 //! Statement checking logic for `FnCtxt`.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use glyim_core::interner::Name;
 use glyim_core::primitives::Mutability;
@@ -136,7 +136,10 @@ impl FnCtxt<'_> {
         skip
     }
 
-    pub fn check(mut self, params: &[(Name, Ty, Span)]) -> (thir::Body, HashMap<ExprId, Ty>) {
+    pub fn check(
+        mut self,
+        params: &[(Name, Ty, Span)],
+    ) -> (thir::Body, std::collections::HashMap<ExprId, Ty>) {
         let mut thir_params = Vec::with_capacity(params.len());
         for (name, ty, span) in params {
             // CRITICAL: the THIR `Param.local` / `Param.pat.var_id` MUST use the
