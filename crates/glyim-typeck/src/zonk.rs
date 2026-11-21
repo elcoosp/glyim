@@ -400,7 +400,7 @@ fn zonk_ty(infer: &InferenceTable, ctx: &TyCtx, ty: Ty) -> Ty {
                     TyKind::Adt(_, s) => ctx.substitution_args(*s).to_vec(),
                     _ => Vec::new(),
                 };
-                let impl_map: std::collections::HashMap<u32, GenericArg> = impl_subst_args
+                let impl_map: rustc_hash::FxHashMap<u32, GenericArg> = impl_subst_args
                     .iter()
                     .enumerate()
                     .map(|(i, a)| (i as u32, a.clone()))
