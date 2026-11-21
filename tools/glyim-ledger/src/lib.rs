@@ -180,6 +180,11 @@ pub mod status;
 pub mod verify;
 pub mod waivers;
 
+/// M1.13 parser fuzz: a deterministic property fuzz over the registry
+/// TOML and evidence JSONL parse surfaces (`#[cfg(test)]` — test-only).
+#[cfg(test)]
+mod parser_fuzz;
+
 pub use inventory::{
     FileIgnoreRewriter, FileIgnoreSink, INVENTORY_IGNORE_SCHEMA, INVENTORY_IGNORE_TARGET,
     INVENTORY_UNIGNORE_SCHEMA, IgnoreRewriter, IgnoreSink, InMemoryIgnoreRewriter,
