@@ -1,6 +1,6 @@
 //! Coherence checker: orphan rules, overlap detection, and negative impls.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use glyim_core::def_id::TraitDefId;
 use glyim_core::interner::Name;
@@ -29,7 +29,7 @@ struct RegisteredImpl {
 
 pub struct CoherenceChecker<'a> {
     def_map: &'a glyim_def_map::CrateDefMap,
-    registered: HashMap<TraitDefId, Vec<RegisteredImpl>>,
+    registered: FxHashMap<TraitDefId, Vec<RegisteredImpl>>,
     negative_impls: Vec<(TraitDefId, Ty)>,
 }
 
@@ -37,7 +37,7 @@ impl<'a> CoherenceChecker<'a> {
     pub fn new(def_map: &'a glyim_def_map::CrateDefMap) -> Self {
         Self {
             def_map,
-            registered: HashMap::new(),
+            registered: FxHashMap::default(),
             negative_impls: Vec::new(),
         }
     }
