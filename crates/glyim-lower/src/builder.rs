@@ -37,21 +37,21 @@ pub struct MirBuilder<'a> {
         glyim_type::Substitution,
         glyim_mir::Body,
     )>,
-    pub(crate) var_map: std::collections::HashMap<Name, LocalIdx>,
-    pub(crate) capture_map: std::collections::HashMap<thir::LocalVarId, LocalIdx>,
+    pub(crate) var_map: rustc_hash::FxHashMap<Name, LocalIdx>,
+    pub(crate) capture_map: rustc_hash::FxHashMap<thir::LocalVarId, LocalIdx>,
     /// HIR-31: captures whose environment field holds a *reference* into the
     /// enclosing frame (`ByRef`/`ByRef(Mut)`). A closure-body `VarRef` to one
     /// of these must be auto-deref'd: the capture local is typed `&T`/`&mut T`
     /// while the body's THIR types the variable as `T`.
     pub(crate) byref_capture_vars: std::collections::HashSet<thir::LocalVarId>,
-    pub(crate) param_map: std::collections::HashMap<thir::LocalVarId, LocalIdx>,
+    pub(crate) param_map: rustc_hash::FxHashMap<thir::LocalVarId, LocalIdx>,
     /// Maps a type-checker `LocalVarId` (carried by `VarRef` and by
     /// `PatternKind::Binding::var_id`) to the MIR `LocalIdx` this builder
     /// allocated for that binding. The type-checker's `LocalVarId` space and
     /// the MIR local-index space are NOT aligned (temporaries interleave
     /// between user-variable allocations), so `VarRef(local_var_id)` must be
     /// resolved through this map rather than `LocalIdx::from_raw(var_id)`.
-    pub(crate) local_var_map: std::collections::HashMap<thir::LocalVarId, LocalIdx>,
+    pub(crate) local_var_map: rustc_hash::FxHashMap<thir::LocalVarId, LocalIdx>,
     /// T121-PATCHED [BCK-1]: true while lowering an argument of a `Call`.
     /// `&mut x` produced as a direct call argument becomes a *two-phase
     /// borrow* so that `f(&mut x, x)` type-checks (the shared read of `x`
@@ -79,7 +79,7 @@ pub struct MirBuilder<'a> {
     /// separately. Until move-semantics land, the map stays empty and the
     /// guard degrades to the pre-existing unconditional-drop behavior (always
     /// sound). See `docs/plans/v0.1.0/feature-gaps/part2.md` §1.8.
-    pub(crate) drop_flags: std::collections::HashMap<LocalIdx, LocalIdx>,
+    pub(crate) drop_flags: rustc_hash::FxHashMap<LocalIdx, LocalIdx>,
     /// Stack of locals declared in each currently-open *block* scope.
     ///
     /// `let` bindings inside an `ExprKind::Block` are dropped at that block's
@@ -113,15 +113,15 @@ impl<'a> MirBuilder<'a> {
             span: thir.span,
             diagnostics: Vec::new(),
             closure_bodies: Vec::new(),
-            var_map: std::collections::HashMap::new(),
-            capture_map: std::collections::HashMap::new(),
+            var_map: rustc_hash::FxHashMap::default(),
+            capture_map: rustc_hash::FxHashMap::default(),
             byref_capture_vars: std::collections::HashSet::new(),
-            param_map: std::collections::HashMap::new(),
-            local_var_map: std::collections::HashMap::new(),
+            param_map: rustc_hash::FxHashMap::default(),
+            local_var_map: rustc_hash::FxHashMap::default(),
             lowering_call_arg: false,
             current_block: None,
             loop_stack: Vec::new(),
-            drop_flags: std::collections::HashMap::new(),
+            drop_flags: rustc_hash::FxHashMap::default(),
             block_scopes: Vec::new(),
             dropped_at_block_scope: std::collections::HashSet::new(),
         }
