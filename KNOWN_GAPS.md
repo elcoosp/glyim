@@ -12,7 +12,7 @@ registry holds only *open* gaps; closed entries retire to the git history
 of this file and of the registry (the RG-10 verdict's contract, see
 `tools/glyim-ledger/src/gates.rs`).
 
-Registry snapshot: 5 open gaps — 2 witnessed, 3 unwitnessed (witness debt,
+Registry snapshot: 7 open gaps — 4 witnessed, 3 unwitnessed (witness debt,
 plan §3.3: allowed, but never silent).
 
 ## Witness debt
@@ -63,5 +63,24 @@ plan §3.3: allowed, but never silent).
 - status: witnessed
 - witness: `crates/glyim-test/tests/compile-fail/async-await-in-non-range-for-known-gap.g` (strict xfail)
 - expect: witness must produce diagnostic `T0060`
+
+## GAP-0007 — Async loop-await shapes die by signal on the native LLVM backend while the interpreter runs them to the pinned exit (differential backend divergence)
+
+- class: `b` (silent wrong behaviour — always first in the work queue)
+- affects: `LANG-ASYNC-AWAIT`
+- caps affected features at `L2`
+- opened in: v0.10.0
+- status: witnessed
+- witness: `crates/glyim-test/tests/run-pass/behavior/async_for_loop_await_differential_gap.g` (strict xfail)
+
+## GAP-0008 — Leading `|` on a match arm emits a spurious [P0001] 'expected pattern' (FE-11: parse_pat never consumes a leading pipe)
+
+- class: `a` (diagnosed: every use site gets a diagnostic)
+- affects: `LANG-MATCH-GUARDS`
+- caps affected features at `L2`
+- opened in: v0.10.0
+- status: witnessed
+- witness: `crates/glyim-test/tests/compile-fail/match-arm-leading-or-known-gap.g` (strict xfail)
+- expect: witness must produce diagnostic `P0001`
 
 <!-- ledger:known-gaps:end -->
