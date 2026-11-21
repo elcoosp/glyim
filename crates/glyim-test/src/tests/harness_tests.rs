@@ -769,6 +769,7 @@ fn run_mode_witness_inversion_matrix() {
             TestMode::RunPass,
             TestOutcome::Passed,
             &[],
+            false,
         ),
         TestOutcome::Passed
     ));
@@ -779,7 +780,7 @@ fn run_mode_witness_inversion_matrix() {
             expected_exit_code: Some(1),
         },
     };
-    match apply_witness_inversion(Some("GAP-0004"), TestMode::RunFail, failed, &[]) {
+    match apply_witness_inversion(Some("GAP-0004"), TestMode::RunFail, failed, &[], false) {
         TestOutcome::Failed {
             reason: crate::error::FailureReason::KnownGapClosed { gap },
         } => assert_eq!(gap, "GAP-0004"),
@@ -794,8 +795,123 @@ fn run_mode_witness_inversion_matrix() {
         },
     };
     assert!(matches!(
-        apply_witness_inversion(Some("GAP-0004"), TestMode::CompilePass, failed_cp, &[],),
+        apply_witness_inversion(
+            Some("GAP-0004"),
+            TestMode::CompilePass,
+            failed_cp,
+            &[],
+            false,
+        ),
         TestOutcome::Failed { .. }
+    ));
+}
+
+#[test]
+fn backend_divergence_witness_inversion_matrix() {
+    use crate::harness::config::TestMode;
+    use crate::harness::executor::{TestOutcome, apply_witness_inversion};
+
+    // M1.7 backend-divergence witnesses (class-b differential findings):
+    // the pinned contract is "gam passes, llvm fails". On the native side
+    // (`ran_native = true`) a declared run-phase failure is the gap's
+    // pinned state — witnessed debt passes — and a *passing* native run
+    // means the gap closed (loud `KnownGapClosed`). A compile-phase native
+    // failure (an ICE) is not the declared state and keeps the generic
+    // failure. On the interpreter side (`ran_native = false`) the run
+    // witness keeps the ordinary contract: the pinned run holding passes
+    // through, the pinned behaviour changing sharpens into
+    // `KnownGapClosed`.
+    let native_run_failed = TestOutcome::Failed {
+        reason: crate::error::FailureReason::RunFailed {
+            exit_code: None, // died by signal
+            expected_exit_code: Some(0),
+        },
+    };
+    assert!(matches!(
+        apply_witness_inversion(
+            Some("GAP-0007"),
+            TestMode::RunPass,
+            native_run_failed.clone(),
+            &[],
+            true,
+        ),
+        TestOutcome::Passed
+    ));
+
+    let native_timeout = TestOutcome::Failed {
+        reason: crate::error::FailureReason::RunTimeout { timeout_secs: 30 },
+    };
+    assert!(matches!(
+        apply_witness_inversion(
+            Some("GAP-0007"),
+            TestMode::RunPass,
+            native_timeout,
+            &[],
+            true,
+        ),
+        TestOutcome::Passed
+    ));
+
+    // A passing native run = the gap closed; the witness must be retired.
+    match apply_witness_inversion(
+        Some("GAP-0007"),
+        TestMode::RunPass,
+        TestOutcome::Passed,
+        &[],
+        true,
+    ) {
+        TestOutcome::Failed {
+            reason: crate::error::FailureReason::KnownGapClosed { gap },
+        } => assert_eq!(gap, "GAP-0007"),
+        other => panic!("expected KnownGapClosed, got {other:?}"),
+    }
+
+    // A compile-phase native failure is NOT the declared run failure.
+    let native_compile_ice = TestOutcome::Failed {
+        reason: crate::error::FailureReason::CompilationFailed {
+            phase: "codegen".to_string(),
+            message: "fn_abi_of failed".to_string(),
+        },
+    };
+    assert!(matches!(
+        apply_witness_inversion(
+            Some("GAP-0007"),
+            TestMode::RunPass,
+            native_compile_ice,
+            &[],
+            true,
+        ),
+        TestOutcome::Failed { .. }
+    ));
+
+    // The gam side keeps the ordinary witness contract.
+    let interp_failed = TestOutcome::Failed {
+        reason: crate::error::FailureReason::RunFailed {
+            exit_code: Some(2),
+            expected_exit_code: Some(0),
+        },
+    };
+    match apply_witness_inversion(
+        Some("GAP-0007"),
+        TestMode::RunPass,
+        interp_failed,
+        &[],
+        false,
+    ) {
+        TestOutcome::Failed {
+            reason: crate::error::FailureReason::KnownGapClosed { gap },
+        } => assert_eq!(gap, "GAP-0007"),
+        other => panic!("expected KnownGapClosed, got {other:?}"),
+    }
+    assert!(matches!(
+        apply_witness_inversion(
+            Some("GAP-0007"),
+            TestMode::RunPass,
+            native_run_failed,
+            &[],
+            false,
+        ),
+        TestOutcome::Passed
     ));
 }
 
