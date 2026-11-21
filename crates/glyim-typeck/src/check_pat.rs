@@ -487,7 +487,7 @@ impl FnCtxt<'_> {
                                 let subst = match self.ctx.ty_kind(adt_expected) {
                                     TyKind::Adt(_, sub) => {
                                         let args = self.ctx.substitution_args(*sub);
-                                        let mut m = std::collections::HashMap::new();
+                                        let mut m = rustc_hash::FxHashMap::default();
                                         for (idx, arg) in args.iter().enumerate() {
                                             if let glyim_type::GenericArg::Ty(t) = arg {
                                                 m.insert(
@@ -498,7 +498,7 @@ impl FnCtxt<'_> {
                                         }
                                         m
                                     }
-                                    _ => std::collections::HashMap::new(),
+                                    _ => rustc_hash::FxHashMap::default(),
                                 };
                                 let resolved = self.ctx.subst_ty(formal, &subst);
                                 // Rust default binding mode: a binding inside
@@ -534,11 +534,11 @@ impl FnCtxt<'_> {
                     //
                     // Build the subst map from the scrutinee type, peeling
                     // ref layers off so `&Wrapper<u64>` also works.
-                    let subst: std::collections::HashMap<u32, glyim_type::GenericArg> =
+                    let subst: rustc_hash::FxHashMap<u32, glyim_type::GenericArg> =
                         match self.ctx.ty_kind(expected_ty) {
                             TyKind::Adt(_, sub) => {
                                 let args = self.ctx.substitution_args(*sub);
-                                let mut m = std::collections::HashMap::new();
+                                let mut m = rustc_hash::FxHashMap::default();
                                 for (idx, arg) in args.iter().enumerate() {
                                     if let glyim_type::GenericArg::Ty(t) = arg {
                                         m.insert(idx as u32, glyim_type::GenericArg::Ty(*t));
@@ -549,7 +549,7 @@ impl FnCtxt<'_> {
                             TyKind::Ref(_, inner, _) => match self.ctx.ty_kind(*inner) {
                                 TyKind::Adt(_, sub) => {
                                     let args = self.ctx.substitution_args(*sub);
-                                    let mut m = std::collections::HashMap::new();
+                                    let mut m = rustc_hash::FxHashMap::default();
                                     for (idx, arg) in args.iter().enumerate() {
                                         if let glyim_type::GenericArg::Ty(t) = arg {
                                             m.insert(idx as u32, glyim_type::GenericArg::Ty(*t));
@@ -557,9 +557,9 @@ impl FnCtxt<'_> {
                                     }
                                     m
                                 }
-                                _ => std::collections::HashMap::new(),
+                                _ => rustc_hash::FxHashMap::default(),
                             },
-                            _ => std::collections::HashMap::new(),
+                            _ => rustc_hash::FxHashMap::default(),
                         };
                     for (field_name, field_pat_id) in fields {
                         let field_ty = if adt_known {
