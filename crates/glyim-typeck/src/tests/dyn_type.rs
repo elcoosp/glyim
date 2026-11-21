@@ -17,7 +17,7 @@ use glyim_type::object_safety::{MethodSelfKind, MethodSignature, TraitObjectSafe
 use glyim_type::{
     GenericArg, ImplPolarity, Predicate, Region, TraitDef, TraitPredicate, TraitRef, Ty, TyKind,
 };
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 /// Build a def map that resolves `trait_name` to a `TraitDefId`.
 fn def_map_with_trait(interner: &mut Interner, trait_name: &str) -> (CrateDefMap, TraitDefId) {
@@ -45,9 +45,9 @@ fn def_map_with_trait(interner: &mut Interner, trait_name: &str) -> (CrateDefMap
         modules,
         krate: CrateId::from_raw(0),
         interner: interner.clone(),
-        variant_map: HashMap::default(),
+        variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
-        def_to_module: HashMap::default(),
+        def_to_module: std::collections::HashMap::new(),
     };
     (def_map, TraitDefId::from_raw(0))
 }
@@ -88,7 +88,7 @@ fn dyn_trait_resolves_to_dynamic_type() {
 
     let mut infer = InferenceTable::new();
     let mut diagnostics = Vec::new();
-    let param_map: HashMap<glyim_core::Name, Ty> = HashMap::new();
+    let param_map: FxHashMap<glyim_core::Name, Ty> = FxHashMap::default();
 
     let dyn_ty = resolve_type_ref(
         &mut ctx,
@@ -159,9 +159,9 @@ fn dyn_trait_non_object_safe_reports_diagnostic() {
                 modules,
                 krate: CrateId::from_raw(0),
                 interner: inter.clone(),
-                variant_map: HashMap::default(),
+                variant_map: std::collections::HashMap::new(),
                 max_local_def_id: 0,
-                def_to_module: HashMap::default(),
+                def_to_module: std::collections::HashMap::new(),
             },
             TraitDefId::from_raw(0),
         )
@@ -192,7 +192,7 @@ fn dyn_trait_non_object_safe_reports_diagnostic() {
 
     let mut infer = InferenceTable::new();
     let mut diagnostics = Vec::new();
-    let param_map: HashMap<glyim_core::Name, Ty> = HashMap::new();
+    let param_map: FxHashMap<glyim_core::Name, Ty> = FxHashMap::default();
 
     let dyn_ty = resolve_type_ref(
         &mut ctx,
@@ -299,9 +299,9 @@ fn def_map_with_nested_trait(
         modules,
         krate: CrateId::from_raw(0),
         interner: interner.clone(),
-        variant_map: HashMap::default(),
+        variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
-        def_to_module: HashMap::default(),
+        def_to_module: std::collections::HashMap::new(),
     }
 }
 
@@ -345,7 +345,7 @@ fn dyn_trait_multi_segment_path_resolves() {
 
     let mut infer = InferenceTable::new();
     let mut diagnostics = Vec::new();
-    let param_map: HashMap<glyim_core::Name, Ty> = HashMap::new();
+    let param_map: FxHashMap<glyim_core::Name, Ty> = FxHashMap::default();
 
     // `dyn zoo::Animal` — a multi-segment trait path.
     let mut path = Path::from_single(inter.intern(trait_name));
@@ -410,7 +410,7 @@ fn adt_multi_segment_path_resolves_to_adt() {
     let mut ctx = glyim_type::TyCtxMut::new(inter.clone());
     let mut infer = InferenceTable::new();
     let mut diagnostics = Vec::new();
-    let param_map: HashMap<glyim_core::Name, Ty> = HashMap::new();
+    let param_map: FxHashMap<glyim_core::Name, Ty> = FxHashMap::default();
 
     // `zoo::Animal` — a multi-segment ADT path (no traits registered).
     let mut path = Path::from_single(inter.intern(adt_name));
