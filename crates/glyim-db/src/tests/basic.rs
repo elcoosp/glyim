@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::query::QueryContext;
 use crate::{CrateConfig, Database};
 
 #[test]
@@ -49,6 +50,29 @@ fn test_database_vfs_content() {
     let file_id = db
         .vfs()
         .add_file_content(&std::path::PathBuf::from("main.g"), content.clone());
-    let retrieved = db.vfs().file_content(file_id).unwrap();
+    // M6: read through the QueryContext::file_text query rather than reaching
+    // into the VFS struct directly.
+    let retrieved = db.file_text(file_id).unwrap();
     assert_eq!(&*retrieved, "fn main() {}");
+}
+
+#[test]
+fn test_query_context_file_text_dispatches_to_vfs() {
+    // M6 scaffolding: `Database: QueryContext` must resolve `file_text` to the
+    // same content `Vfs::file_content` holds, and report `None` for an id the
+    // VFS has no content for (so the later salsa-backed impl keeps the same
+    // trait contract).
+    let db = Database::new(CrateConfig {
+        name: "test".to_string(),
+        target_triple: "x86_64-unknown-linux-gnu".to_string(),
+        opt_level: 0,
+    });
+    let file_id = db.vfs().add_file_content(
+        &std::path::PathBuf::from("main.g"),
+        Arc::from("fn main() -> i32 { 0 }"),
+    );
+    assert_eq!(&*db.file_text(file_id).unwrap(), "fn main() -> i32 { 0 }");
+    // A FileId the VFS never registered content for yields `None`, not a panic.
+    let unknown = glyim_span::FileId::from_usize(9_999);
+    assert!(db.file_text(unknown).is_none());
 }
