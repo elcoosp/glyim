@@ -6,9 +6,9 @@ use std::sync::Arc;
 #[test]
 fn test_lex_error_constructor() {
     let span = Span::new(
-        FileId::from_raw(1),
+        FileId::from_usize(1),
         ByteIdx::ZERO,
-        ByteIdx::from_raw(5),
+        ByteIdx::from_usize(5),
         glyim_span::SyntaxContext::ROOT,
     );
     let diag = GlyimDiagnostic::lex_error(span, "invalid token");
