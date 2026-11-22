@@ -34,7 +34,7 @@ fn dummy_span() -> Span {
     Span::new(
         FileId::BOGUS,
         ByteIdx::ZERO,
-        ByteIdx::from_raw(1),
+        ByteIdx::from_usize(1),
         SyntaxContext::ROOT,
     )
 }
@@ -124,8 +124,8 @@ fn build_attr_syntax(attr_name: &str) -> (SyntaxNode, Span) {
     let end: u32 = last_tok.text_range().end().into();
     let span = Span::new(
         FileId::BOGUS,
-        ByteIdx::from_raw(start),
-        ByteIdx::from_raw(end),
+        ByteIdx::from_usize(start),
+        ByteIdx::from_usize(end),
         SyntaxContext::ROOT,
     );
 
