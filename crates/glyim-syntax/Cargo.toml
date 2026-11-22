@@ -12,11 +12,23 @@ version.workspace = true
 
 [dependencies]
 rowan = { workspace = true }
-glyim-core = { workspace = true }
 num_enum = { workspace = true }
 
-[dev-dependencies]
-glyim-test = { workspace = true }
-# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+# M3.1 Round 2 baseline-unblock + M0.8 dead-weight: the `glyim-test`
+# dev-dependency was never imported anywhere in src/tests/benches/examples
+# (no `use glyim_test` / `glyim_test::` reference exists in the crate), yet
+# it pulled the entire LLVM toolchain (glyim-test → glyim-pipeline →
+# glyim-codegen-llvm → inkwell → llvm-sys 231) into `cargo test -p
+# glyim-syntax --all-features`. glyim-syntax is a leaf frontend crate (CST
+# kinds/trees) with no LLVM coupling. Dropping it makes the syntax crate
+# locally verifiable without LLVM — the same unblock the M3.3 work applied
+# to glyim-diag and this round applied to glyim-span/glyim-core.
+#
+# `glyim-core` was likewise listed as a direct dependency but never
+# imported (the CST kinds/trees ride on `rowan` + `num_enum` only); once the
+# LLVM-pulling dev-dep was gone, cargo flagged it as unused under
+# `clippy --all-targets`. Dropping it closes that warning with no code
+# change — `glyim-core` remains available transitively where downstream
+# crates need it.
 [lints]
 workspace = true
