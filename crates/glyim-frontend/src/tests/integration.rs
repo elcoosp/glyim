@@ -4,21 +4,21 @@ use glyim_syntax::SyntaxKind;
 
 #[test]
 fn lex_returns_lex_result() {
-    let result: LexResult = lex("fn main() {}", FileId::from_raw(0));
+    let result: LexResult = lex("fn main() {}", FileId::from_usize(0));
     assert!(!result.tokens.is_empty());
     assert!(result.diagnostics.is_empty());
 }
 
 #[test]
 fn lex_result_has_tokens_and_diagnostics_fields() {
-    let result = lex("42 \u{00A9}", FileId::from_raw(0));
+    let result = lex("42 \u{00A9}", FileId::from_usize(0));
     assert!(!result.tokens.is_empty());
     assert!(!result.diagnostics.is_empty());
 }
 
 #[test]
 fn token_has_kind_span_text_fields() {
-    let result = lex("fn", FileId::from_raw(0));
+    let result = lex("fn", FileId::from_usize(0));
     let token = &result.tokens[0];
     assert_eq!(token.kind, SyntaxKind::KwFn);
     assert_eq!(token.text, "fn");
@@ -28,20 +28,20 @@ fn token_has_kind_span_text_fields() {
 #[test]
 fn token_new_constructor() {
     let span = Span::new(
-        FileId::from_raw(1),
-        ByteIdx::from_raw(0),
-        ByteIdx::from_raw(2),
+        FileId::from_usize(1),
+        ByteIdx::from_usize(0),
+        ByteIdx::from_usize(2),
         SyntaxContext::ROOT,
     );
     let token = Token::new(SyntaxKind::KwFn, span, "fn");
     assert_eq!(token.kind, SyntaxKind::KwFn);
     assert_eq!(token.text, "fn");
-    assert_eq!(token.span.file, FileId::from_raw(1));
+    assert_eq!(token.span.file, FileId::from_usize(1));
 }
 
 #[test]
 fn token_is_clone_and_debug() {
-    let result = lex("fn", FileId::from_raw(0));
+    let result = lex("fn", FileId::from_usize(0));
     let token = result.tokens[0].clone();
     assert_eq!(token.kind, SyntaxKind::KwFn);
     let debug_str = format!("{token:?}");
@@ -50,7 +50,7 @@ fn token_is_clone_and_debug() {
 
 #[test]
 fn lex_result_is_clone_and_debug() {
-    let result = lex("fn", FileId::from_raw(0));
+    let result = lex("fn", FileId::from_usize(0));
     let cloned = result.clone();
     assert_eq!(cloned.tokens.len(), result.tokens.len());
     let debug_str = format!("{result:?}");
@@ -59,7 +59,7 @@ fn lex_result_is_clone_and_debug() {
 
 #[test]
 fn file_id_propagated_to_all_tokens() {
-    let fid = FileId::from_raw(99);
+    let fid = FileId::from_usize(99);
     let result = lex("fn main() { let x = 42; }", fid);
     for token in &result.tokens {
         assert_eq!(
@@ -71,7 +71,7 @@ fn file_id_propagated_to_all_tokens() {
 
 #[test]
 fn file_id_propagated_to_diagnostics() {
-    let fid = FileId::from_raw(77);
+    let fid = FileId::from_usize(77);
     let result = lex("\u{00A9}", fid);
     assert!(!result.diagnostics.is_empty());
     for diag in &result.diagnostics {
@@ -84,7 +84,7 @@ fn file_id_propagated_to_diagnostics() {
 
 #[test]
 fn comment_inside_string_is_not_comment() {
-    let result = lex("\"// not a comment\"", FileId::from_raw(0));
+    let result = lex("\"// not a comment\"", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     assert_eq!(result.tokens[0].kind, SyntaxKind::StringLit);
     assert_eq!(result.tokens[0].text, "\"// not a comment\"");
@@ -92,7 +92,7 @@ fn comment_inside_string_is_not_comment() {
 
 #[test]
 fn block_comment_inside_string_is_not_comment() {
-    let result = lex("\"/* not a comment */\"", FileId::from_raw(0));
+    let result = lex("\"/* not a comment */\"", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     assert_eq!(result.tokens[0].kind, SyntaxKind::StringLit);
     assert_eq!(result.tokens[0].text, "\"/* not a comment */\"");
@@ -100,21 +100,21 @@ fn block_comment_inside_string_is_not_comment() {
 
 #[test]
 fn string_after_comment() {
-    let result = lex("// comment\n\"hello\"", FileId::from_raw(0));
+    let result = lex("// comment\n\"hello\"", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     assert_eq!(result.tokens[0].kind, SyntaxKind::StringLit);
 }
 
 #[test]
 fn comment_after_string() {
-    let result = lex("\"hello\"// comment", FileId::from_raw(0));
+    let result = lex("\"hello\"// comment", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     assert_eq!(result.tokens[0].kind, SyntaxKind::StringLit);
 }
 
 #[test]
 fn float_dot_int_interaction() {
-    let result = lex("1.2.3", FileId::from_raw(0));
+    let result = lex("1.2.3", FileId::from_usize(0));
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
@@ -127,7 +127,7 @@ fn float_dot_int_interaction() {
 
 #[test]
 fn int_dot_dot_int_is_range() {
-    let result = lex("1..3", FileId::from_raw(0));
+    let result = lex("1..3", FileId::from_usize(0));
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
@@ -137,7 +137,7 @@ fn int_dot_dot_int_is_range() {
 
 #[test]
 fn int_dot_dot_eq_int_is_inclusive_range() {
-    let result = lex("1..=3", FileId::from_raw(0));
+    let result = lex("1..=3", FileId::from_usize(0));
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
@@ -147,7 +147,7 @@ fn int_dot_dot_eq_int_is_inclusive_range() {
 
 #[test]
 fn float_dot_dot_int() {
-    let result = lex("1.0..3", FileId::from_raw(0));
+    let result = lex("1.0..3", FileId::from_usize(0));
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
@@ -158,7 +158,7 @@ fn float_dot_dot_int() {
 
 #[test]
 fn method_call_on_int() {
-    let result = lex("1.abs()", FileId::from_raw(0));
+    let result = lex("1.abs()", FileId::from_usize(0));
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
@@ -174,7 +174,7 @@ fn method_call_on_int() {
 
 #[test]
 fn method_call_on_float() {
-    let result = lex("1.0.abs()", FileId::from_raw(0));
+    let result = lex("1.0.abs()", FileId::from_usize(0));
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
@@ -190,7 +190,7 @@ fn method_call_on_float() {
 
 #[test]
 fn field_access_on_int_dot() {
-    let result = lex("1 .field", FileId::from_raw(0));
+    let result = lex("1 .field", FileId::from_usize(0));
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
@@ -200,7 +200,7 @@ fn field_access_on_int_dot() {
 
 #[test]
 fn consecutive_strings() {
-    let result = lex("\"hello\" \"world\"", FileId::from_raw(0));
+    let result = lex("\"hello\" \"world\"", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 2);
     assert_eq!(result.tokens[0].kind, SyntaxKind::StringLit);
     assert_eq!(result.tokens[1].kind, SyntaxKind::StringLit);
@@ -208,7 +208,7 @@ fn consecutive_strings() {
 
 #[test]
 fn consecutive_chars() {
-    let result = lex("'a' 'b'", FileId::from_raw(0));
+    let result = lex("'a' 'b'", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 2);
     assert_eq!(result.tokens[0].kind, SyntaxKind::CharLit);
     assert_eq!(result.tokens[1].kind, SyntaxKind::CharLit);
@@ -216,7 +216,7 @@ fn consecutive_chars() {
 
 #[test]
 fn string_then_ident() {
-    let result = lex("\"hello\"world", FileId::from_raw(0));
+    let result = lex("\"hello\"world", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 2);
     assert_eq!(result.tokens[0].kind, SyntaxKind::StringLit);
     assert_eq!(result.tokens[1].kind, SyntaxKind::Ident);
@@ -224,7 +224,7 @@ fn string_then_ident() {
 
 #[test]
 fn ident_then_string() {
-    let result = lex("foo\"bar\"", FileId::from_raw(0));
+    let result = lex("foo\"bar\"", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 2);
     assert_eq!(result.tokens[0].kind, SyntaxKind::Ident);
     assert_eq!(result.tokens[1].kind, SyntaxKind::StringLit);
@@ -232,7 +232,7 @@ fn ident_then_string() {
 
 #[test]
 fn int_then_ident_no_space() {
-    let result = lex("42abc", FileId::from_raw(0));
+    let result = lex("42abc", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     assert_eq!(result.tokens[0].kind, SyntaxKind::IntLit);
     assert_eq!(result.tokens[0].text, "42abc");
@@ -240,7 +240,7 @@ fn int_then_ident_no_space() {
 
 #[test]
 fn ident_then_int_no_space() {
-    let result = lex("abc42", FileId::from_raw(0));
+    let result = lex("abc42", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     assert_eq!(result.tokens[0].kind, SyntaxKind::Ident);
     assert_eq!(result.tokens[0].text, "abc42");
@@ -248,21 +248,21 @@ fn ident_then_int_no_space() {
 
 #[test]
 fn zero_then_dot_then_zero() {
-    let result = lex("0.0", FileId::from_raw(0));
+    let result = lex("0.0", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     assert_eq!(result.tokens[0].kind, SyntaxKind::FloatLit);
 }
 
 #[test]
 fn negative_not_lexed() {
-    let result = lex("-42", FileId::from_raw(0));
+    let result = lex("-42", FileId::from_usize(0));
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert_eq!(kinds, vec![SyntaxKind::Minus, SyntaxKind::IntLit]);
 }
 
 #[test]
 fn double_negation() {
-    let result = lex("--x", FileId::from_raw(0));
+    let result = lex("--x", FileId::from_usize(0));
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert_eq!(
         kinds,
@@ -272,11 +272,11 @@ fn double_negation() {
 
 #[test]
 fn not_equals_vs_not_then_eq() {
-    let result1 = lex("!=", FileId::from_raw(0));
+    let result1 = lex("!=", FileId::from_usize(0));
     assert_eq!(result1.tokens.len(), 1);
     assert_eq!(result1.tokens[0].kind, SyntaxKind::BangEq);
 
-    let result2 = lex("! =", FileId::from_raw(0));
+    let result2 = lex("! =", FileId::from_usize(0));
     assert_eq!(result2.tokens.len(), 2);
     assert_eq!(result2.tokens[0].kind, SyntaxKind::Bang);
     assert_eq!(result2.tokens[1].kind, SyntaxKind::Eq);
@@ -284,11 +284,11 @@ fn not_equals_vs_not_then_eq() {
 
 #[test]
 fn less_equal_vs_less_then_eq() {
-    let result1 = lex("<=", FileId::from_raw(0));
+    let result1 = lex("<=", FileId::from_usize(0));
     assert_eq!(result1.tokens.len(), 1);
     assert_eq!(result1.tokens[0].kind, SyntaxKind::LtEq);
 
-    let result2 = lex("< =", FileId::from_raw(0));
+    let result2 = lex("< =", FileId::from_usize(0));
     assert_eq!(result2.tokens.len(), 2);
     assert_eq!(result2.tokens[0].kind, SyntaxKind::Lt);
     assert_eq!(result2.tokens[1].kind, SyntaxKind::Eq);
@@ -296,11 +296,11 @@ fn less_equal_vs_less_then_eq() {
 
 #[test]
 fn greater_equal_vs_greater_then_eq() {
-    let result1 = lex(">=", FileId::from_raw(0));
+    let result1 = lex(">=", FileId::from_usize(0));
     assert_eq!(result1.tokens.len(), 1);
     assert_eq!(result1.tokens[0].kind, SyntaxKind::GtEq);
 
-    let result2 = lex("> =", FileId::from_raw(0));
+    let result2 = lex("> =", FileId::from_usize(0));
     assert_eq!(result2.tokens.len(), 2);
     assert_eq!(result2.tokens[0].kind, SyntaxKind::Gt);
     assert_eq!(result2.tokens[1].kind, SyntaxKind::Eq);
@@ -308,11 +308,11 @@ fn greater_equal_vs_greater_then_eq() {
 
 #[test]
 fn and_and_vs_and_then_and() {
-    let result1 = lex("&&", FileId::from_raw(0));
+    let result1 = lex("&&", FileId::from_usize(0));
     assert_eq!(result1.tokens.len(), 1);
     assert_eq!(result1.tokens[0].kind, SyntaxKind::AndAnd);
 
-    let result2 = lex("& &", FileId::from_raw(0));
+    let result2 = lex("& &", FileId::from_usize(0));
     assert_eq!(result2.tokens.len(), 2);
     assert_eq!(result2.tokens[0].kind, SyntaxKind::And);
     assert_eq!(result2.tokens[1].kind, SyntaxKind::And);
@@ -320,11 +320,11 @@ fn and_and_vs_and_then_and() {
 
 #[test]
 fn or_or_vs_or_then_or() {
-    let result1 = lex("||", FileId::from_raw(0));
+    let result1 = lex("||", FileId::from_usize(0));
     assert_eq!(result1.tokens.len(), 1);
     assert_eq!(result1.tokens[0].kind, SyntaxKind::OrOr);
 
-    let result2 = lex("| |", FileId::from_raw(0));
+    let result2 = lex("| |", FileId::from_usize(0));
     assert_eq!(result2.tokens.len(), 2);
     assert_eq!(result2.tokens[0].kind, SyntaxKind::Or);
     assert_eq!(result2.tokens[1].kind, SyntaxKind::Or);
@@ -332,51 +332,51 @@ fn or_or_vs_or_then_or() {
 
 #[test]
 fn underscore_alone_is_keyword() {
-    let result = lex("_", FileId::from_raw(0));
+    let result = lex("_", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     assert_eq!(result.tokens[0].kind, SyntaxKind::Underscore);
 }
 
 #[test]
 fn underscore_prefix_is_ident() {
-    let result = lex("_foo", FileId::from_raw(0));
+    let result = lex("_foo", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     assert_eq!(result.tokens[0].kind, SyntaxKind::Ident);
 }
 
 #[test]
 fn underscore_digit_is_ident() {
-    let result = lex("_1", FileId::from_raw(0));
+    let result = lex("_1", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     assert_eq!(result.tokens[0].kind, SyntaxKind::Ident);
 }
 
 #[test]
 fn double_underscore_is_ident() {
-    let result = lex("__", FileId::from_raw(0));
+    let result = lex("__", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     assert_eq!(result.tokens[0].kind, SyntaxKind::Ident);
 }
 
 #[test]
 fn double_underscore_prefix_is_ident() {
-    let result = lex("__init", FileId::from_raw(0));
+    let result = lex("__init", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     assert_eq!(result.tokens[0].kind, SyntaxKind::Ident);
 }
 
 #[test]
 fn multiple_file_ids_independent() {
-    let result1 = lex("fn", FileId::from_raw(1));
-    let result2 = lex("fn", FileId::from_raw(2));
-    assert_eq!(result1.tokens[0].span.file, FileId::from_raw(1));
-    assert_eq!(result2.tokens[0].span.file, FileId::from_raw(2));
+    let result1 = lex("fn", FileId::from_usize(1));
+    let result2 = lex("fn", FileId::from_usize(2));
+    assert_eq!(result1.tokens[0].span.file, FileId::from_usize(1));
+    assert_eq!(result2.tokens[0].span.file, FileId::from_usize(2));
 }
 
 #[test]
 fn multiple_file_ids_same_source_same_tokens() {
-    let result1 = lex("fn main() {}", FileId::from_raw(1));
-    let result2 = lex("fn main() {}", FileId::from_raw(2));
+    let result1 = lex("fn main() {}", FileId::from_usize(1));
+    let result2 = lex("fn main() {}", FileId::from_usize(2));
     assert_eq!(result1.tokens.len(), result2.tokens.len());
     for (t1, t2) in result1.tokens.iter().zip(result2.tokens.iter()) {
         assert_eq!(t1.kind, t2.kind);
@@ -387,7 +387,7 @@ fn multiple_file_ids_same_source_same_tokens() {
 #[test]
 fn lex_empty_multiple_times() {
     for _ in 0..10 {
-        let result = lex("", FileId::from_raw(0));
+        let result = lex("", FileId::from_usize(0));
         assert!(result.tokens.is_empty());
         assert!(result.diagnostics.is_empty());
     }
@@ -396,8 +396,8 @@ fn lex_empty_multiple_times() {
 #[test]
 fn lex_same_source_idempotent() {
     let source = "fn main() -> i32 { return 42; }";
-    let result1 = lex(source, FileId::from_raw(0));
-    let result2 = lex(source, FileId::from_raw(0));
+    let result1 = lex(source, FileId::from_usize(0));
+    let result2 = lex(source, FileId::from_usize(0));
     assert_eq!(result1.tokens.len(), result2.tokens.len());
     for (t1, t2) in result1.tokens.iter().zip(result2.tokens.iter()) {
         assert_eq!(t1.kind, t2.kind);
@@ -407,13 +407,13 @@ fn lex_same_source_idempotent() {
 
 #[test]
 fn span_root_context() {
-    let result = lex("fn", FileId::from_raw(0));
+    let result = lex("fn", FileId::from_usize(0));
     assert_eq!(result.tokens[0].span.ctx, SyntaxContext::ROOT);
 }
 
 #[test]
 fn incomplete_exponent_then_more_code() {
-    let result = lex("1e + 2", FileId::from_raw(0));
+    let result = lex("1e + 2", FileId::from_usize(0));
     assert!(!result.diagnostics.is_empty());
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert!(kinds.contains(&SyntaxKind::IntLit));
@@ -422,7 +422,7 @@ fn incomplete_exponent_then_more_code() {
 
 #[test]
 fn incomplete_exponent_backtrack_text() {
-    let result = lex("1e+", FileId::from_raw(0));
+    let result = lex("1e+", FileId::from_usize(0));
     assert!(!result.diagnostics.is_empty());
     assert_eq!(result.tokens[0].text, "1");
     assert_eq!(result.tokens[0].kind, SyntaxKind::IntLit);
@@ -430,7 +430,7 @@ fn incomplete_exponent_backtrack_text() {
 
 #[test]
 fn float_incomplete_exponent_backtrack_text() {
-    let result = lex("1.5e", FileId::from_raw(0));
+    let result = lex("1.5e", FileId::from_usize(0));
     assert!(!result.diagnostics.is_empty());
     assert_eq!(result.tokens[0].text, "1.5");
     assert_eq!(result.tokens[0].kind, SyntaxKind::FloatLit);
@@ -438,7 +438,7 @@ fn float_incomplete_exponent_backtrack_text() {
 
 #[test]
 fn line_comment_ends_at_newline_not_before() {
-    let result = lex("1 // comment\n2", FileId::from_raw(0));
+    let result = lex("1 // comment\n2", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 2);
     assert_eq!(result.tokens[0].text, "1");
     assert_eq!(result.tokens[1].text, "2");
@@ -446,7 +446,7 @@ fn line_comment_ends_at_newline_not_before() {
 
 #[test]
 fn block_comment_with_newlines() {
-    let result = lex("1 /* line1\nline2 */ 2", FileId::from_raw(0));
+    let result = lex("1 /* line1\nline2 */ 2", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 2);
     assert_eq!(result.tokens[0].text, "1");
     assert_eq!(result.tokens[1].text, "2");
@@ -454,14 +454,14 @@ fn block_comment_with_newlines() {
 
 #[test]
 fn empty_source_with_only_newlines() {
-    let result = lex("\n\n\n", FileId::from_raw(0));
+    let result = lex("\n\n\n", FileId::from_usize(0));
     assert!(result.tokens.is_empty());
     assert!(result.diagnostics.is_empty());
 }
 
 #[test]
 fn source_with_only_brackets() {
-    let result = lex("()[]{}", FileId::from_raw(0));
+    let result = lex("()[]{}", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 6);
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert_eq!(
@@ -480,7 +480,7 @@ fn source_with_only_brackets() {
 #[test]
 fn deeply_nested_brackets() {
     let source = "(((())))".to_string();
-    let result = lex(&source, FileId::from_raw(0));
+    let result = lex(&source, FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 8);
     let parens: Vec<_> = result
         .tokens
@@ -493,7 +493,7 @@ fn deeply_nested_brackets() {
 #[test]
 fn all_single_char_punctuation_in_one_source() {
     let source = "(){}[],;.: +-*/%=! <>&|^@#$~?";
-    let result = lex(source, FileId::from_raw(0));
+    let result = lex(source, FileId::from_usize(0));
     assert!(!result.tokens.is_empty());
     assert!(
         result.diagnostics.is_empty(),
@@ -503,7 +503,7 @@ fn all_single_char_punctuation_in_one_source() {
 
 #[test]
 fn number_then_string() {
-    let result = lex("42\"hello\"", FileId::from_raw(0));
+    let result = lex("42\"hello\"", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 2);
     assert_eq!(result.tokens[0].kind, SyntaxKind::IntLit);
     assert_eq!(result.tokens[1].kind, SyntaxKind::StringLit);
@@ -511,7 +511,7 @@ fn number_then_string() {
 
 #[test]
 fn string_then_number() {
-    let result = lex("\"hello\"42", FileId::from_raw(0));
+    let result = lex("\"hello\"42", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 2);
     assert_eq!(result.tokens[0].kind, SyntaxKind::StringLit);
     assert_eq!(result.tokens[1].kind, SyntaxKind::IntLit);
@@ -519,7 +519,7 @@ fn string_then_number() {
 
 #[test]
 fn char_then_ident() {
-    let result = lex("'a'bc", FileId::from_raw(0));
+    let result = lex("'a'bc", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 2);
     assert_eq!(result.tokens[0].kind, SyntaxKind::CharLit);
     assert_eq!(result.tokens[1].kind, SyntaxKind::Ident);
@@ -527,7 +527,7 @@ fn char_then_ident() {
 
 #[test]
 fn multiple_errors_with_valid_code_interleaved() {
-    let result = lex("fn \u{00A9} foo(\u{00AE}) {}", FileId::from_raw(0));
+    let result = lex("fn \u{00A9} foo(\u{00AE}) {}", FileId::from_usize(0));
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert_eq!(result.diagnostics.len(), 2);
     assert!(kinds.contains(&SyntaxKind::KwFn));
