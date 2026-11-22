@@ -58,7 +58,7 @@ pub fn check_function_body(
         def_map,
         current_module: glyim_def_map::ModuleId::from_raw(0),
         capture_log: Vec::new(),
-        body_owner_map: &FxHashMap::default(),
+        body_owner_map: &std::collections::HashMap::default(),
         param_map: FxHashMap::default(),
         pending_closure_expectation: None,
         in_callee_position: false,
