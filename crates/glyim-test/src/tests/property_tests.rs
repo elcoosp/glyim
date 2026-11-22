@@ -70,3 +70,54 @@ fn test_check_ty_property_failure() {
     let result = check_ty_property(42, 10, |_ctx, _ty| Err("bad type".to_string()));
     assert!(result.is_err());
 }
+
+#[test]
+fn property_unify_ty_with_itself_always_succeeds() {
+    // M4 oracle (M4.11 naive-unifier direction): unifying a type with itself
+    // always succeeds and yields the same type. Run over 128 generated types
+    // — past the 100-iteration bar — exercising the generator's full variant
+    // range (bool/never/unit/Int/Uint/Float/Ref/Slice at depth). The
+    // inference table's `a == b` fast path must short-circuit to `Ok` for
+    // every generated `Ty`.
+    const N: usize = 128;
+    let mut ctx = test_ty_ctx();
+    let mut infer = glyim_solve::InferenceTable::new();
+    let mut generator = property::arbitrary::Generator::new(2026);
+    for i in 0..N {
+        let ty = generator.generate_ty(&mut ctx, 0);
+        let result = infer.unify(&mut ctx, ty, ty, glyim_span::Span::DUMMY);
+        assert!(
+            result.is_ok(),
+            "case {i}: unify(ty, ty) should succeed but failed: {:?}",
+            result.err()
+        );
+    }
+}
+
+#[test]
+fn property_mir_every_used_local_is_declared() {
+    // M4 oracle (M5.5 def-before-use slice): every local a MIR statement
+    // references is declared in `body.locals`. The generator produces
+    // well-formed bodies by construction, so the declaredness validator must
+    // accept all 128 of them; the negative partner proves the validator
+    // catches an injected undeclared local rather than rubber-stamping them.
+    const N: usize = 128;
+    let mut body_gen = property::mir::MirBodyGenerator::new(4242);
+    let owner = glyim_core::def_id::DefId::new(
+        glyim_core::def_id::CrateId::from_raw(0),
+        glyim_core::def_id::LocalDefId::from_raw(0),
+    );
+    for i in 0..N {
+        let body = body_gen.generate_well_formed_body(owner);
+        assert!(
+            glyim_mir::validate::check_local_declaredness(&body).is_ok(),
+            "case {i}: well-formed body rejected by the declaredness oracle"
+        );
+    }
+    // Negative: an undeclared local must be caught.
+    let bad = body_gen.generate_undeclared_local_body(owner);
+    assert!(
+        glyim_mir::validate::check_local_declaredness(&bad).is_err(),
+        "undeclared local was not caught by the declaredness oracle"
+    );
+}
