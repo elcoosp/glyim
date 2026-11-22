@@ -8,7 +8,7 @@ use glyim_lang_std::{std_source, std_source_all};
 use glyim_span::FileId;
 
 fn parse(name: &str, src: &str) -> bool {
-    let r = parse_to_syntax(src, FileId::from_raw(1));
+    let r = parse_to_syntax(src, FileId::from_usize(1));
     if r.diagnostics.is_empty() {
         true
     } else {
