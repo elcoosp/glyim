@@ -24,8 +24,7 @@ pub fn resolve_type_ref<S: std::hash::BuildHasher>(
 ) -> Ty {
     // The internal walk is keyed on the Fx-hashed map; callers may hold the
     // table under any hasher, so re-key once at the boundary (cold path).
-    let fx_param_map: FxHashMap<Name, Ty> =
-        param_map.iter().map(|(k, v)| (*k, *v)).collect();
+    let fx_param_map: FxHashMap<Name, Ty> = param_map.iter().map(|(k, v)| (*k, *v)).collect();
     let param_map = &fx_param_map;
     match ty_ref {
         glyim_hir::TypeRef::Path(path) => {
