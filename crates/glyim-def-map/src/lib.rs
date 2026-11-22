@@ -1034,9 +1034,14 @@ fn extract_ident(node: &SyntaxNode) -> String {
                 if token.kind() == SyntaxKind::KwAs {
                     found_as = true;
                 } else if token.kind() == SyntaxKind::Ident {
-                    last_ident = Some(token.text().to_string());
+                    let text = token.text().to_string();
+                    last_ident = Some(text.clone());
                     if found_as {
-                        return last_ident.unwrap();
+                        // `last_ident` was just assigned from `text`, so
+                        // return it directly instead of `.unwrap()`-ing the
+                        // Option we just populated (micro-debt: eliminate the
+                        // bare panic path on a provably-`Some` value).
+                        return text;
                     }
                 }
             }
@@ -1479,7 +1484,10 @@ pub fn insert_use_edit(source: &str, import_path: &str) -> Option<(usize, String
         Some((offset, new_text))
     } else {
         // Append after the last existing `use` line (newline-terminated already).
-        let last_use = *use_lines.last().unwrap();
+        // The `else` is reached only when `use_lines` is non-empty, so `last()`
+        // is `Some`; `unwrap_or` makes that contract explicit instead of a bare
+        // `.unwrap()` panic path (micro-debt eradication).
+        let last_use = *use_lines.last().unwrap_or(&0);
         let offset = lines.iter().take(last_use + 1).map(|l| l.len() + 1).sum();
         Some((offset, new_text))
     }
