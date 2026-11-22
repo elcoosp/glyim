@@ -2,7 +2,7 @@ use crate::parser::parse_to_syntax;
 use glyim_span::FileId;
 
 fn file_id() -> FileId {
-    FileId::from_raw(1)
+    FileId::from_usize(1)
 }
 
 // ─── Negative tests (should parse without crash, may produce diagnostics) ───
