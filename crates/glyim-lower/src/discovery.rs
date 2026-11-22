@@ -125,8 +125,8 @@ fn token_span(tok: &SyntaxToken) -> Span {
     let range = tok.text_range();
     Span::new(
         glyim_span::FileId::BOGUS,
-        glyim_span::ByteIdx::from_raw(range.start().into()),
-        glyim_span::ByteIdx::from_raw(range.end().into()),
+        glyim_span::ByteIdx::from_usize(u32::from(range.start()) as usize),
+        glyim_span::ByteIdx::from_usize(u32::from(range.end()) as usize),
         glyim_span::SyntaxContext::ROOT,
     )
 }
