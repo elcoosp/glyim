@@ -25,6 +25,7 @@
 //! further change. The trait is intentionally minimal: signature/body queries
 //! (`def_map`, `typeck`, `mir_build`) arrive in later M6 work items once the
 //! durability model (M6.1/M6.2) settles.
+use glyim_core::Fingerprint;
 use glyim_core::def_id::CrateId;
 use glyim_core::interner::Interner;
 use glyim_span::FileId;
@@ -54,4 +55,16 @@ pub trait QueryContext {
     /// Replaces ad-hoc `db.vfs().file_content(id)` call sites: the query
     /// boundary (not the VFS struct) is now the thing callers name.
     fn file_text(&self, file: FileId) -> Option<Arc<str>>;
+
+    /// M6.3 item-tree fingerprint: a 128-bit hash of a file's signature-only
+    /// item summary (item paths and signatures, never bodies), built with the
+    /// M6.1 [`glyim_core::StableHasher`]. A body-only edit leaves this
+    /// fingerprint unchanged — the M6.3 definition of done — so a signature
+    /// query keyed on it is a cache hit across body edits. Today the
+    /// [`Database`](crate::Database) impl computes this from a body-agnostic
+    /// signature summary of the file's source (see
+    /// [`incremental::item_tree_fingerprint_of`]); a parser-backed item tree
+    /// (plan §6 M6.3 / PF-4) replaces the line heuristic when the def-collection
+    /// query lands, without changing this trait surface.
+    fn item_tree_fingerprint(&self, file: FileId) -> Fingerprint;
 }
