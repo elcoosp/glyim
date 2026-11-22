@@ -8,7 +8,7 @@ use glyim_span::FileId;
 #[test]
 fn test_struct_record() {
     let source = "struct Point { x: i32, y: i32 }";
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let parse_result = parse_to_syntax(source, file_id);
     let root = parse_result.root;
     let mut interner = Interner::new();
@@ -32,7 +32,7 @@ fn test_struct_record() {
 #[test]
 fn test_struct_unit() {
     let source = "struct Unit;";
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let parse_result = parse_to_syntax(source, file_id);
     let root = parse_result.root;
     let mut interner = Interner::new();
