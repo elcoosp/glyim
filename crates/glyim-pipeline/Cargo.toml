@@ -16,6 +16,7 @@ glyim-span = { workspace = true }
 glyim-diag = { workspace = true }
 glyim-vfs = { workspace = true }
 glyim-frontend = { workspace = true }
+glyim-syntax = { workspace = true }
 glyim-def-map = { workspace = true }
 glyim-hir = { workspace = true }
 glyim-type = { workspace = true }
@@ -24,7 +25,7 @@ glyim-lower = { workspace = true }
 glyim-borrowck = { workspace = true }
 glyim-opt = { workspace = true }
 glyim-codegen = { workspace = true }
-glyim-codegen-llvm = { workspace = true }
+glyim-codegen-llvm = { workspace = true, optional = true }
 glyim-const-eval = { workspace = true }
 glyim-solve = { workspace = true }
 glyim-db = { workspace = true }
@@ -35,6 +36,17 @@ tracing = { workspace = true }
 # Phase-profile renderers (`--self-profile` Chrome trace + `--emit=stats`
 # JSON). Workspace pin; no new version surface.
 serde_json = { workspace = true }
+
+[features]
+# The LLVM backend (`glyim-codegen-llvm` -> `inkwell` `llvm23-1` -> `llvm-sys`
+# 231) is opt-in so the typed pipeline (parse -> def-map -> hir -> typeck ->
+# lower -> borrowck -> opt -> mono) builds and tests without LLVM 23.1 dev
+# headers. Enabled by default to preserve the existing build surface for
+# downstream consumers (`glyim-cli`, the `glyim-test` `real-llvm` runtime
+# job); build with `--no-default-features` for the LLVM-free path exercised
+# by the local test gate.
+default = ["llvm-codegen"]
+llvm-codegen = ["dep:glyim-codegen-llvm"]
 
 [dev-dependencies]
 glyim-bytecode-vm = { workspace = true }
