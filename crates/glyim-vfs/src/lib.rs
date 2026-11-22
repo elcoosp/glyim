@@ -93,7 +93,7 @@ impl Vfs {
             }
             return id;
         }
-        let id = FileId::from_raw(inner.next_id);
+        let id = FileId::from_usize(inner.next_id as usize);
         inner.next_id += 1;
         inner.files.push(VfsFile {
             path: path.to_path_buf(),
