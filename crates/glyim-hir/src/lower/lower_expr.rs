@@ -2,7 +2,13 @@ use crate::TypeRef;
 use glyim_core::interner::{Interner, Name};
 use glyim_core::path::PathKind;
 use glyim_core::primitives::*;
-use glyim_diag::GlyimDiagnostic;
+// M3.3(a): `emit_diag` pushes the diagnostic and mints an
+// `ErrorGuaranteed` token (plan §6 M3.3 / §5.2 CT-5). The HIR lowerer
+// emits type errors when lowering struct literals with missing fields;
+// binding the token proves at the type level that the error was
+// reported, so the MIR lowerer consuming this HIR cannot silently treat
+// the partially-lowered struct as well-formed.
+use glyim_diag::{GlyimDiagnostic, emit_diag};
 use glyim_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 use std::collections::HashMap;
 
@@ -781,14 +787,22 @@ fn lower_struct_expr(
             let span = node_span(node);
             let resolved = struct_name
                 .map_or_else(|| "<none>".to_string(), |n| interner.resolve(n).to_string());
-            diags.push(GlyimDiagnostic::type_error(
-                span,
-                format!(
-                    "missing field(s) in struct literal `{}`: {}",
-                    resolved,
-                    missing_names.join(", ")
+            // M3.3(a): the `ErrorGuaranteed` token proves a struct-literal
+            // type error was emitted; the partially-lowered struct flows
+            // on but the token is the proof the user has been told. The
+            // MIR lowerer will consult this proof when M3.4 lands.
+            let _guaranteed = emit_diag(
+                diags,
+                GlyimDiagnostic::type_error(
+                    span,
+                    format!(
+                        "missing field(s) in struct literal `{}`: {}",
+                        resolved,
+                        missing_names.join(", ")
+                    ),
                 ),
-            ));
+            );
+            let _ = _guaranteed;
         }
     }
 
