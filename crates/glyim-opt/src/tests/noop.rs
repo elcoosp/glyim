@@ -107,7 +107,7 @@ fn noop_body_is_unchanged() {
     let (ctx, body) = with_fresh_ty_ctx(make_minimal_body);
     let original = body.clone();
     let body = Arc::new(body);
-    let optimized = optimize(&ctx, &body);
+    let optimized = optimize(&ctx, &body).unwrap();
     assert_eq!(
         optimized.body.basic_blocks.len(),
         original.basic_blocks.len(),
@@ -128,9 +128,9 @@ fn noop_body_is_unchanged() {
 fn idempotent_optimization() {
     let (ctx, body) = with_fresh_ty_ctx(make_body_optimization_resistant);
     let body = Arc::new(body);
-    let opt1 = optimize(&ctx, &body);
+    let opt1 = optimize(&ctx, &body).unwrap();
     let body2 = Arc::new(opt1.body.clone());
-    let opt2 = optimize(&ctx, &body2);
+    let opt2 = optimize(&ctx, &body2).unwrap();
     assert_eq!(
         opt1.body.basic_blocks.len(),
         opt2.body.basic_blocks.len(),
@@ -154,7 +154,7 @@ fn idempotent_optimization() {
 fn non_empty_body_preserves_semantics() {
     let (ctx, body) = with_fresh_ty_ctx(make_body_optimization_resistant);
     let body = Arc::new(body);
-    let optimized = optimize(&ctx, &body);
+    let optimized = optimize(&ctx, &body).unwrap();
     let total_stmts: usize = optimized
         .body
         .basic_blocks
@@ -253,9 +253,9 @@ fn make_loop_body(ctx: &mut glyim_type::TyCtxMut) -> Body {
 fn loop_idempotent() {
     let (ctx, body) = with_fresh_ty_ctx(make_loop_body);
     let body = Arc::new(body);
-    let opt1 = optimize(&ctx, &body);
+    let opt1 = optimize(&ctx, &body).unwrap();
     let body2 = Arc::new(opt1.body.clone());
-    let opt2 = optimize(&ctx, &body2);
+    let opt2 = optimize(&ctx, &body2).unwrap();
     assert_eq!(
         opt1.body.basic_blocks.len(),
         opt2.body.basic_blocks.len(),
@@ -347,7 +347,7 @@ fn many_locals_stress() {
         body
     });
     let body = Arc::new(body);
-    let optimized = optimize(&ctx, &body);
+    let optimized = optimize(&ctx, &body).unwrap();
     // After constant propagation, the chain may collapse; at least the final assignment must survive.
     let total_stmts: usize = optimized
         .body
