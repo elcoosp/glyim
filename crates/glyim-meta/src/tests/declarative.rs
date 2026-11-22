@@ -219,9 +219,9 @@ fn expand_api_with_builtin_file_macro() {
     });
 
     let call_site = Span::new(
-        FileId::from_raw(42),
-        ByteIdx::from_raw(0),
-        ByteIdx::from_raw(7),
+        FileId::from_usize(42),
+        ByteIdx::from_usize(0),
+        ByteIdx::from_usize(7),
         SyntaxContext::ROOT,
     );
 
