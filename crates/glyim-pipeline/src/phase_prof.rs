@@ -240,7 +240,7 @@ fn share_percent(micros: u64, total: u64) -> f64 {
 /// The recorder lives inside `prepare_compilation` and accumulates phase
 /// durations; [`PhaseRecorder::profile`] snapshots it into a
 /// [`PhaseProfile`] when the compile finishes.
-pub(crate) struct PhaseRecorder {
+pub struct PhaseRecorder {
     micros: [Cell<u64>; PHASE_COUNT],
     hits: [Cell<u32>; PHASE_COUNT],
 }
