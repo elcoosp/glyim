@@ -3,7 +3,7 @@ use glyim_span::FileId;
 use glyim_syntax::SyntaxKind;
 
 fn lex_tokens(source: &str) -> Vec<crate::lexer::Token> {
-    lex(source, FileId::from_raw(0)).tokens
+    lex(source, FileId::from_usize(0)).tokens
 }
 
 #[test]
@@ -97,7 +97,7 @@ fn int_not_float_without_fraction() {
 
 #[test]
 fn float_error_incomplete_exponent_1e() {
-    let result = lex("1e", FileId::from_raw(0));
+    let result = lex("1e", FileId::from_usize(0));
     assert!(
         !result.diagnostics.is_empty(),
         "1e should produce an error diagnostic"
@@ -117,7 +117,7 @@ fn float_error_incomplete_exponent_1e() {
 
 #[test]
 fn float_error_exponent_sign_only_1e_plus() {
-    let result = lex("1e+", FileId::from_raw(0));
+    let result = lex("1e+", FileId::from_usize(0));
     assert!(
         !result.diagnostics.is_empty(),
         "1e+ should produce an error diagnostic"
@@ -137,7 +137,7 @@ fn float_error_exponent_sign_only_1e_plus() {
 
 #[test]
 fn float_error_incomplete_exponent_with_fraction() {
-    let result = lex("1.0e", FileId::from_raw(0));
+    let result = lex("1.0e", FileId::from_usize(0));
     assert!(
         !result.diagnostics.is_empty(),
         "1.0e should produce an error diagnostic"
