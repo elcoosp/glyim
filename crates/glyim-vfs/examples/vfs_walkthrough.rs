@@ -52,7 +52,7 @@ fn main() {
         .file_content(buffer_id)
         .expect("buffer still registered");
     assert!(current.contains("42"), "content updated in place");
-    let bogus = glyim_span::FileId::from_raw(999);
+    let bogus = glyim_span::FileId::from_usize(999);
     let refused = vfs
         .set_file_content(bogus, Arc::from("never lands"))
         .expect_err("an unknown id is refused, never silently dropped");
