@@ -8,8 +8,8 @@ use rowan::Language;
 fn dummy_span(file_id: FileId, lo: u32) -> Span {
     Span::new(
         file_id,
-        ByteIdx::from_raw(lo),
-        ByteIdx::from_raw(lo + 1),
+        ByteIdx::from_usize(lo),
+        ByteIdx::from_usize(lo + 1),
         SyntaxContext::ROOT,
     )
 }
