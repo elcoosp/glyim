@@ -57,6 +57,20 @@ impl Interner {
     pub fn lookup(&self, s: &str) -> Option<Name> {
         self.inner.get(s).map(|symbol| Name { symbol })
     }
+
+    /// Number of interned symbols (M6: query-engine cache-sizing input — a
+    /// salsa-backed `Database` sizes its interner-keyed query caches from
+    /// this count rather than re-measuring the arena on every lookup).
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Whether no symbols have been interned yet (companion to [`len`](Self::len)).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
 }
 
 impl Clone for Interner {
