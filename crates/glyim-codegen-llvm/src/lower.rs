@@ -9725,7 +9725,7 @@ pub(crate) fn lower_body<'ctx>(
         None
     };
     if let Some(ref mut di) = debug_ctx {
-        di.set_function(context, &function, &fn_name, FileId::from_raw(0), 1);
+        di.set_function(context, &function, &fn_name, FileId::from_usize(0), 1);
     }
     let entry_block = context.append_basic_block(function, "entry");
     let builder = context.create_builder();
