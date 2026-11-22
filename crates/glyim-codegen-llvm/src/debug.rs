@@ -231,7 +231,7 @@ impl<'ctx> DebugInfoCtx<'ctx> {
             return *cached;
         }
 
-        let file = self.get_file(FileId::from_raw(0));
+        let file = self.get_file(FileId::from_usize(0));
         let di_type = match ty_ctx.ty_kind(ty) {
             TyKind::Bool => self
                 .builder
