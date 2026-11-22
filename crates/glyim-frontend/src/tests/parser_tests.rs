@@ -4,7 +4,7 @@ use glyim_syntax::SyntaxKind;
 use glyim_test::assert_no_errors;
 
 fn test_parse(source: &str) {
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let result = parse_to_syntax(source, file_id);
     assert_no_errors(&result.diagnostics);
     // Root should not be an error node
