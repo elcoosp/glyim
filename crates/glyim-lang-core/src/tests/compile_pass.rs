@@ -10,7 +10,7 @@ use glyim_frontend::{lex, parse_to_syntax};
 use glyim_span::FileId;
 
 fn file_id() -> FileId {
-    FileId::from_raw(99)
+    FileId::from_usize(99)
 }
 
 /// Helper: lex a core module source and assert no errors.
