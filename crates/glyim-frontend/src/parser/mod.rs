@@ -288,7 +288,7 @@ pub fn try_parse_fragment(kind: &str, src: &str) -> Option<()> {
         return is_fragment_tt(src).then_some(());
     }
     use glyim_syntax::SyntaxKind;
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     // Wrap the fragment in a context that makes it a single top-level construct
     // of the requested kind, then inspect the parse tree.
     let wrapped = match kind {
@@ -400,7 +400,7 @@ pub fn try_parse_fragment(kind: &str, src: &str) -> Option<()> {
 /// De-stubbing plan §5.1: `:lifetime` fragment — exactly one lifetime token (`'a`).
 fn is_fragment_lifetime(src: &str) -> bool {
     use glyim_syntax::SyntaxKind;
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let tokens: Vec<_> = crate::lexer::lex(src, file_id)
         .tokens
         .into_iter()
@@ -413,7 +413,7 @@ fn is_fragment_lifetime(src: &str) -> bool {
 /// unary-minus literal (`-1`).
 fn is_fragment_literal(src: &str) -> bool {
     use glyim_syntax::SyntaxKind;
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let tokens: Vec<_> = crate::lexer::lex(src, file_id)
         .tokens
         .into_iter()
@@ -435,7 +435,7 @@ fn is_fragment_vis(src: &str) -> bool {
     if s.is_empty() {
         return true; // vis matches nothing
     }
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let tokens: Vec<_> = crate::lexer::lex(src, file_id)
         .tokens
         .into_iter()
@@ -465,7 +465,7 @@ fn is_fragment_vis(src: &str) -> bool {
 /// leaf token, or one balanced `(...)`/`[...]`/`{...}` delimited group.
 fn is_fragment_tt(src: &str) -> bool {
     use glyim_syntax::SyntaxKind;
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let tokens: Vec<_> = crate::lexer::lex(src, file_id)
         .tokens
         .into_iter()
@@ -510,7 +510,7 @@ fn is_fragment_tt(src: &str) -> bool {
 fn validate_meta_fragment(src: &str) -> bool {
     use crate::lexer::lex;
     use glyim_syntax::SyntaxKind;
-    let file_id = glyim_span::FileId::from_raw(0);
+    let file_id = glyim_span::FileId::from_usize(0);
     let tokens = lex(src, file_id)
         .tokens
         .into_iter()
