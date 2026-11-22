@@ -188,11 +188,11 @@ fn test_diag_sink_extend() {
 /// Helper: build a `GlyimDiagnostic::type_error` at a given
 /// `(file, lo, hi)` so the test's sort key is fully determined by the
 /// span and not by the message.
-fn ty_diag_at(file: u32, lo: u32, hi: u32, msg: &str) -> GlyimDiagnostic {
+fn ty_diag_at(file: usize, lo: usize, hi: usize, msg: &str) -> GlyimDiagnostic {
     let span = Span::new(
-        FileId::from_raw(file),
-        ByteIdx::from_raw(lo),
-        ByteIdx::from_raw(hi),
+        FileId::from_usize(file),
+        ByteIdx::from_usize(lo),
+        ByteIdx::from_usize(hi),
         glyim_span::SyntaxContext::ROOT,
     );
     GlyimDiagnostic::type_error(span, msg)
