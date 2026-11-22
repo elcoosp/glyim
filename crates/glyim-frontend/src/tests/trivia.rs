@@ -3,11 +3,11 @@ use glyim_span::FileId;
 use glyim_syntax::SyntaxKind;
 
 fn lex_tokens(source: &str) -> Vec<crate::lexer::Token> {
-    lex(source, FileId::from_raw(0)).tokens
+    lex(source, FileId::from_usize(0)).tokens
 }
 
 fn lex_result(source: &str) -> crate::lexer::LexResult {
-    lex(source, FileId::from_raw(0))
+    lex(source, FileId::from_usize(0))
 }
 
 #[test]
