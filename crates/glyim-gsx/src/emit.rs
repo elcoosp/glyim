@@ -638,7 +638,7 @@ mod tests {
 
     fn build(src: &str) -> Vir {
         let wrapped = format!("fn __g() {{ {src} }}");
-        let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
+        let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_usize(0));
         let g = crate::ast::gsx_from_parse(&parsed);
         let schemas = SchemaRegistry::standard();
         VirBuilder::new(VirOptions::default(), &schemas).build(g.root.as_ref().unwrap())
