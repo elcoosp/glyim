@@ -15,14 +15,16 @@
 //! cargo run -p glyim-span --example span_walkthrough
 //! ```
 
-use glyim_span::{ByteIdx, ExpnId, FileId, MultiSpan, Span, SyntaxContext};
+use glyim_span::{
+    ByteIdx, ExpnId, FileId, HygieneCtx, Mark, MultiSpan, Span, SyntaxContext, Transparency,
+};
 
 fn main() {
     // The compiler's file table hands out `FileId`s; a diagnostic consumer
     // receives them inside spans and maps them back to paths. `BOGUS` is
     // the sentinel for "no file" (synthetic constructs).
-    let src = FileId::from_raw(0);
-    let lib = FileId::from_raw(1);
+    let src = FileId::from_usize(0);
+    let lib = FileId::from_usize(1);
     println!(
         "files: src={src:?} lib={lib:?} bogus-sentinel={:?}",
         FileId::BOGUS
@@ -30,8 +32,8 @@ fn main() {
 
     // Byte offsets are `ByteIdx` handles, not raw `usize`s, so a span
     // cannot mix up a byte index with a line number by accident.
-    let lo = ByteIdx::from_raw(20);
-    let hi = ByteIdx::from_raw(34);
+    let lo = ByteIdx::from_usize(20);
+    let hi = ByteIdx::from_usize(34);
     let call_site = Span::new(src, lo, hi, SyntaxContext::ROOT);
     println!(
         "call site span: {:?} range={:?} len={} bytes, root hygiene={}",
@@ -53,8 +55,8 @@ fn main() {
     // resulting span would attribute one file's text to another.
     let receiver = Span::new(
         src,
-        ByteIdx::from_raw(20),
-        ByteIdx::from_raw(26),
+        ByteIdx::from_usize(20),
+        ByteIdx::from_usize(26),
         SyntaxContext::ROOT,
     );
     let merged = receiver.to(call_site);
@@ -64,15 +66,33 @@ fn main() {
     );
 
     // Macro hygiene: an expanded token carries a non-root `SyntaxContext`,
-    // so a resolver can tell `x` written by the user from `x` produced by
-    // a macro even though both spell the same identifier.
-    let macro_ctx = SyntaxContext::from_raw(1);
-    let macro_span = Span::new(lib, ByteIdx::from_raw(4), ByteIdx::from_raw(9), macro_ctx);
+    // so a resolver can tell `x` written by the user from `x` produced by a
+    // macro even though both spell the same identifier. After the M3.1
+    // Round 2 opacity pass a non-root `SyntaxContext` can no longer be
+    // minted with `from_raw` from outside the crate — the only sanctioned
+    // path is the `HygieneCtx` arena, whose `apply_mark` hands out a fresh
+    // context per expansion site. (The mark's `expn_id` is `ROOT` here only
+    // to keep the walkthrough self-contained; a real macro would first
+    // `push_expansion` to mint a non-root `ExpnId`, which is likewise
+    // arena-issued and opaque externally.)
+    let mut hygiene = HygieneCtx::new();
+    let macro_span = hygiene.apply_mark(
+        Span::new(
+            lib,
+            ByteIdx::from_usize(4),
+            ByteIdx::from_usize(9),
+            SyntaxContext::ROOT,
+        ),
+        Mark {
+            expn_id: ExpnId::ROOT,
+            transparency: Transparency::Opaque,
+        },
+    );
     println!(
-        "macro span hygiene: ctx={} (root={}?) expn={}",
+        "macro span hygiene: ctx={} (root={}?) associated expn={:?}",
         macro_span.ctx.to_raw(),
         macro_span.ctx.is_root(),
-        ExpnId::from_raw(macro_span.ctx.to_raw()).to_raw()
+        macro_span.ctx.expn_id()
     );
 
     // The diagnostic renderer's currency is `miette`'s `SourceSpan`; a
