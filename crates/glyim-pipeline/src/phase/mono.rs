@@ -74,7 +74,10 @@ impl CompilerPhase for MonoPhase<'_> {
     fn run(&self, ctx: &mut PhaseCtx) -> CompResult<Self::Output> {
         let (mono_roots, discovery_diags) = {
             let _guard = ctx.recorder.enter(Phase::Mono);
-            let mut ty_ctx_mut_for_discovery = glyim_type::TyCtxMut::new(ctx.db.interner().clone());
+            // M6.3: reach the interner through the `QueryContext` trait, not
+            // the `Database` struct — the query boundary is the thing named.
+            let mut ty_ctx_mut_for_discovery =
+                glyim_type::TyCtxMut::new(glyim_db::QueryContext::interner(&*ctx.db).clone());
             glyim_lower::discovery::discover_mono_roots(
                 self.parse_root,
                 self.hir,
