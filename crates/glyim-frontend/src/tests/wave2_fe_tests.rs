@@ -6,7 +6,7 @@ use glyim_span::FileId;
 use glyim_syntax::SyntaxKind;
 
 fn parse_ok(source: &str) -> Vec<glyim_diag::GlyimDiagnostic> {
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let lex_result = lex(source, file_id);
     let parse_result = parse_to_syntax(source, file_id);
     let mut diags = lex_result.diagnostics;
@@ -15,7 +15,7 @@ fn parse_ok(source: &str) -> Vec<glyim_diag::GlyimDiagnostic> {
 }
 
 fn has_kind(source: &str, kind: SyntaxKind) -> bool {
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let parse_result = parse_to_syntax(source, file_id);
     parse_result.root.descendants().any(|n| n.kind() == kind)
 }
