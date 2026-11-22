@@ -13,9 +13,15 @@ version.workspace = true
 [dependencies]
 glyim-core = { workspace = true }
 miette = { workspace = true }
-tracing = { workspace = true }
-[dev-dependencies]
-glyim-test = { workspace = true }
-# Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
+# M3.1 Round 2 baseline-unblock + M0.8 dead-weight: `tracing` was listed but
+# never imported anywhere in src/tests/benches/examples (cargo flagged it as
+# an unused dependency), and the `glyim-test` dev-dependency was dead weight
+# that pulled the entire LLVM toolchain (glyim-test → glyim-pipeline →
+# glyim-codegen-llvm → inkwell → llvm-sys 231) into `cargo test -p
+# glyim-span --all-features`, even though glyim-span is a leaf frontend crate
+# with no LLVM coupling. Dropping both makes the M3.1 local baseline gate
+# (`cargo test -p glyim-span --all-features`) green on LLVM-less hosts, the
+# same unblock the M3.3 work applied to glyim-diag. No src/tests/benches/
+# examples file referenced either dependency.
 [lints]
 workspace = true
