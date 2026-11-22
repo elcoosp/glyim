@@ -7,7 +7,7 @@ use glyim_syntax::SyntaxKind;
 use glyim_test::assert_no_errors;
 
 fn test_lex(source: &str) -> Vec<Token> {
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let result = lex(source, file_id);
     assert_no_errors(&result.diagnostics);
     result.tokens
@@ -181,7 +181,7 @@ fn lex_number_suffix_valid() {
 use crate::lexer::LexResult;
 
 fn lex_single(source: &str) -> LexResult {
-    lex(source, FileId::from_raw(1))
+    lex(source, FileId::from_usize(1))
 }
 
 #[test]
@@ -334,7 +334,7 @@ fn float_with_exponent_and_suffix() {
 #[test]
 fn invalid_suffix_diagnostic_span_is_correct() {
     let source = "42xyz";
-    let result = lex(source, FileId::from_raw(1));
+    let result = lex(source, FileId::from_usize(1));
     assert_eq!(result.diagnostics.len(), 1);
     let diag = &result.diagnostics[0];
     let span = diag.span.primary;
