@@ -1,8 +1,10 @@
 //! Crate root.
 pub mod cache;
 pub mod cache_metrics;
+pub mod incremental;
 pub mod query;
 
+pub use incremental::{ConfigFingerprint, Durability, SourceFile};
 pub use query::QueryContext;
 
 use glyim_core::def_id::CrateId;
@@ -165,6 +167,18 @@ impl query::QueryContext for Database {
 
     fn file_text(&self, file: FileId) -> Option<Arc<str>> {
         self.vfs.file_content(file)
+    }
+
+    fn item_tree_fingerprint(&self, file: FileId) -> glyim_core::Fingerprint {
+        // Compute from the file's body-agnostic signature summary (M6.3). A
+        // body-only edit leaves this unchanged; `item_tree_fingerprint_of`
+        // cuts each signature at the first `{` so the body never enters the
+        // hash. Reading through `file_text` (the trait query) keeps this impl
+        // independent of the VFS struct.
+        match self.file_text(file) {
+            Some(content) => incremental::item_tree_fingerprint_of(&content),
+            None => glyim_core::Fingerprint::from_bytes([0; 16]),
+        }
     }
 }
 
