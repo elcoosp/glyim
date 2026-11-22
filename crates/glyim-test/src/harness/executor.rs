@@ -13,7 +13,7 @@ use std::time::Duration;
 static NEXT_FILE_ID: AtomicU32 = AtomicU32::new(1);
 
 fn next_file_id() -> FileId {
-    FileId::from_raw(NEXT_FILE_ID.fetch_add(1, Ordering::Relaxed))
+    FileId::from_usize(NEXT_FILE_ID.fetch_add(1, Ordering::Relaxed) as usize)
 }
 
 #[derive(Clone, Debug)]
