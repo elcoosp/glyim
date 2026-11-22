@@ -27,10 +27,17 @@ fn main() {
         match a.as_str() {
             "--write" => write = true,
             "--verify-ids" => {
-                verify_ids = Some(
-                    args.next()
-                        .unwrap_or_else(|| panic!("--verify-ids requires a directory argument")),
-                );
+                // M3.1/M3.5 micro-debt eradication: a missing CLI argument is a
+                // usage error, not a panic. Print to stderr and exit with the
+                // conventional usage-error code (2) instead of aborting via
+                // `panic!` (which would emit a backtrace and exit 101).
+                verify_ids = match args.next() {
+                    Some(dir) => Some(dir),
+                    None => {
+                        eprintln!("--verify-ids requires a directory argument");
+                        std::process::exit(2);
+                    }
+                };
             }
             other => {
                 root = PathBuf::from(other);
