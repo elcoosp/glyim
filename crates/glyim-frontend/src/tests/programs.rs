@@ -3,7 +3,7 @@ use glyim_span::FileId;
 use glyim_syntax::SyntaxKind;
 
 fn lex_tokens(source: &str) -> Vec<crate::lexer::Token> {
-    lex(source, FileId::from_raw(0)).tokens
+    lex(source, FileId::from_usize(0)).tokens
 }
 
 fn lex_kinds(source: &str) -> Vec<SyntaxKind> {
