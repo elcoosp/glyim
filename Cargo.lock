@@ -1311,6 +1311,7 @@ dependencies = [
  "glyim-proc-macro",
  "glyim-solve",
  "glyim-span",
+ "glyim-syntax",
  "glyim-test",
  "glyim-type",
  "glyim-typeck",
