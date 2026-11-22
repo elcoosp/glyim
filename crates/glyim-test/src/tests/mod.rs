@@ -8,4 +8,5 @@ mod harness_tests;
 mod mock_tests;
 mod phase_tests;
 mod property_tests;
+mod stable_identity_tests;
 mod ty_tests;
