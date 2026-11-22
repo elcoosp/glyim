@@ -11,7 +11,7 @@ use glyim_syntax::SyntaxKind;
 /// expression-ish nodes of that body.
 fn parse_body(src: &str) -> Vec<glyim_syntax::SyntaxNode> {
     let wrapped = format!("fn __g() {{ {src} }}");
-    let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
+    let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_usize(0));
     let block = parsed
         .root
         .children()
@@ -309,7 +309,7 @@ fn binary_lt_is_not_gsx() {
 #[test]
 fn prefix_lt_without_ident_is_an_error() {
     let wrapped = "fn __g() { let _x = < 3; }".to_string();
-    let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
+    let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_usize(0));
     assert!(
         !parsed.diagnostics.is_empty(),
         "expected a diagnostic for `< 3`"
@@ -321,7 +321,7 @@ fn prefix_lt_without_ident_is_an_error() {
 #[test]
 fn gsx_unterminated_element_recovers() {
     let wrapped = "fn __g() { let _x = <div>\"hi\"; }".to_string();
-    let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
+    let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_usize(0));
     assert!(
         !parsed.diagnostics.is_empty(),
         "expected a diagnostic for missing close tag"
@@ -349,7 +349,7 @@ fn gsx_deep_nesting_is_bounded() {
         src.push_str("</div>");
     }
     let wrapped = format!("fn __g() {{ {src} }}");
-    let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
+    let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_usize(0));
     // Either parses fine or reports bounded diagnostics; must not panic/hang.
     let _ = parsed.diagnostics.len();
 }
@@ -359,7 +359,7 @@ fn gsx_deep_nesting_is_bounded() {
 fn gsx_tree_is_lossless() {
     let src = "<section class=\"counter\" aria-label=\"Counter\"><h1>\"Hi\"</h1></section>";
     let wrapped = format!("fn __g() {{ {src} }}");
-    let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
+    let parsed = crate::parse_to_syntax(&wrapped, glyim_span::FileId::from_usize(0));
     let full = parsed.root.to_string();
     assert!(full.contains(src), "source text must survive: {full}");
 }
