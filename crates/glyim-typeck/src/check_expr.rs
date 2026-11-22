@@ -26,7 +26,14 @@ pub(crate) mod dbg_flags {
 use glyim_core::def_id::{AdtId, ClosureId, FnDefId, TraitDefId};
 use glyim_core::interner::Name;
 use glyim_core::primitives::*;
-use glyim_diag::GlyimDiagnostic;
+// M3.3(a): `emit_diag` is the `glyim-diag`-side helper that pushes a
+// diagnostic into a `&mut Vec<GlyimDiagnostic>` *and* mints an
+// `ErrorGuaranteed` token when the diagnostic is an error (plan §6
+// M3.3 / §5.2 CT-5). Call sites that bind the token prove at the type
+// level that an error was reported, so a downstream phase cannot
+// silently treat a `Ty::ERROR` sentinel as "no error yet". This is the
+// seam M3.4 will tighten into `Ty::Error(ErrorGuaranteed)`.
+use glyim_diag::{GlyimDiagnostic, emit_diag};
 use glyim_hir::*;
 use glyim_span::Span;
 use glyim_type::display::PrintTy;
@@ -215,10 +222,21 @@ impl FnCtxt<'_> {
                         ) {
                             inner_ty
                         } else {
-                            self.diagnostics.push(GlyimDiagnostic::type_error(
-                                span,
-                                "cannot apply unary negation to non-numeric type",
-                            ));
+                            // M3.3(a): name the `ErrorGuaranteed` token
+                            // returned by `emit_diag` so the "an error
+                            // was reported" fact is bound at the type
+                            // level — `Ty::ERROR` is the sentinel we hand
+                            // to downstream code, and the token is the
+                            // proof it is *justified*. M3.4 will tighten
+                            // this into `Ty::Error(ErrorGuaranteed)`.
+                            let _guaranteed = emit_diag(
+                                self.diagnostics,
+                                GlyimDiagnostic::type_error(
+                                    span,
+                                    "cannot apply unary negation to non-numeric type",
+                                ),
+                            );
+                            let _ = _guaranteed;
                             Ty::ERROR
                         }
                     }
@@ -2480,20 +2498,36 @@ impl FnCtxt<'_> {
                                     .unwrap_or_else(|| ctx.error_ty());
                                 Some((elem, false, is_ref))
                             } else {
-                                diagnostics.push(GlyimDiagnostic::type_error(
-                                    span,
-                                    "indexing operation requires array, slice, Vec, or str type",
-                                ));
+                                // M3.3(a): the `ErrorGuaranteed` token
+                                // proves an error was emitted before
+                                // we hand back `None` (the "no element
+                                // type" sentinel). Without it, a caller
+                                // could read `None` as "indexing not
+                                // applicable" and skip the error path.
+                                let _guaranteed = emit_diag(
+                                    diagnostics,
+                                    GlyimDiagnostic::type_error(
+                                        span,
+                                        "indexing operation requires array, slice, Vec, or str type",
+                                    ),
+                                );
+                                let _ = _guaranteed;
                                 None
                             }
                         }
                         // str indexes to u8
                         TyKind::String => Some((ctx.mk_ty(TyKind::Uint(UintTy::U8)), true, is_ref)),
                         _ => {
-                            diagnostics.push(GlyimDiagnostic::type_error(
-                                span,
-                                "indexing operation requires array, slice, Vec, or str type",
-                            ));
+                            // M3.3(a): second emit site in this match —
+                            // same pattern, same proof token.
+                            let _guaranteed = emit_diag(
+                                diagnostics,
+                                GlyimDiagnostic::type_error(
+                                    span,
+                                    "indexing operation requires array, slice, Vec, or str type",
+                                ),
+                            );
+                            let _ = _guaranteed;
                             None
                         }
                     }
