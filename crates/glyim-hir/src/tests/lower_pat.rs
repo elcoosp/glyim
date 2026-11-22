@@ -5,7 +5,7 @@ use glyim_frontend::parse_to_syntax;
 use glyim_span::FileId;
 
 fn get_body_hir(source: &str) -> (crate::CrateHir, Interner, BodyId) {
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let parse_result = parse_to_syntax(source, file_id);
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
@@ -45,7 +45,7 @@ fn test_pat_binding() {
 fn test_pat_struct() {
     let src = "struct Point { x: i32, y: i32 }
                fn f(p: Point) { let Point { x, y } = p; }";
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let parse_result = parse_to_syntax(src, file_id);
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
