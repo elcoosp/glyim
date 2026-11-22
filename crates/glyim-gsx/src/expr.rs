@@ -802,7 +802,7 @@ mod tests {
     /// Parse a source expression and extract its model.
     fn model(src: &str) -> Expr {
         let wrapped = format!("fn __g() {{ let _x = {src}; }}");
-        let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
+        let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_usize(0));
         let block = parsed
             .root
             .children()
@@ -915,7 +915,7 @@ mod tests {
     #[test]
     fn for_with_by_key() {
         let wrapped = "fn __g() { <p>{for item in s.history.iter() by item.id { 1 }}</p> }";
-        let parsed = glyim_frontend::parse_to_syntax(wrapped, glyim_span::FileId::from_raw(0));
+        let parsed = glyim_frontend::parse_to_syntax(wrapped, glyim_span::FileId::from_usize(0));
         let block_child = parsed
             .root
             .descendants()
