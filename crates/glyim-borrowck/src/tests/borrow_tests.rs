@@ -244,14 +244,14 @@ fn t05_borrow_expires_after_last_use_no_error() {
 fn t07_error_diagnostics_include_span() {
     let span1 = Span::new(
         glyim_span::FileId::BOGUS,
-        glyim_span::ByteIdx::from_raw(0),
-        glyim_span::ByteIdx::from_raw(5),
+        glyim_span::ByteIdx::from_usize(0),
+        glyim_span::ByteIdx::from_usize(5),
         glyim_span::SyntaxContext::ROOT,
     );
     let span2 = Span::new(
         glyim_span::FileId::BOGUS,
-        glyim_span::ByteIdx::from_raw(10),
-        glyim_span::ByteIdx::from_raw(15),
+        glyim_span::ByteIdx::from_usize(10),
+        glyim_span::ByteIdx::from_usize(15),
         glyim_span::SyntaxContext::ROOT,
     );
     let (ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
