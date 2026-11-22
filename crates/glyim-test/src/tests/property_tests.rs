@@ -121,3 +121,52 @@ fn property_mir_every_used_local_is_declared() {
         "undeclared local was not caught by the declaredness oracle"
     );
 }
+
+/// M5.5 / M4 fuzz: throw 10 000 mutated MIR bodies at the unified validator
+/// and assert (a) zero panics — the loop completing is the proof, since a
+/// panic would fail the test — and (b) every rejection is a typed
+/// [`glyim_mir::validate::Violation`] (the return type is `Vec<Violation>`,
+/// so an `Err` always carries typed violations by construction).
+///
+/// [`property::mir::MirBodyGenerator::generate_malformed_body`] injects one
+/// of six historical bug classes (audit MIR-7/10/28/30/31 plus storage
+/// pairing and cleanup-edge validity) per body. Both validator entry points
+/// are exercised: [`glyim_mir::validate::validate_body`] (the always-on
+/// invariants) and [`glyim_mir::validate::validate_no_subslice`] (the
+/// `slice_desugar` post-condition) — the latter catches the `Subslice` class
+/// that the former intentionally accepts pre-`slice_desugar`.
+#[test]
+fn property_mir_validator_never_panics_on_10k_malformed_bodies() {
+    const N: usize = 10_000;
+    let ctx = test_ty_ctx();
+    let frozen = ctx.freeze();
+    let mut body_gen = property::mir::MirBodyGenerator::new(2026);
+    let owner = glyim_core::def_id::DefId::new(
+        glyim_core::def_id::CrateId::from_raw(0),
+        glyim_core::def_id::LocalDefId::from_raw(0),
+    );
+    let mut rejected = 0usize;
+    for _ in 0..N {
+        let body = body_gen.generate_malformed_body(owner);
+        // Both validator entry points must complete without panicking.
+        let r1 = glyim_mir::validate::validate_body(&frozen, &body);
+        let r2 = glyim_mir::validate::validate_no_subslice(&body);
+        for r in [r1, r2] {
+            if let Err(violations) = r {
+                // Every rejection is a typed Violation batch (never empty,
+                // never a panic).
+                assert!(
+                    !violations.is_empty(),
+                    "a rejection must carry at least one typed Violation"
+                );
+                rejected += 1;
+            }
+        }
+    }
+    // At least one of the 10 000 malformed bodies must be rejected — the
+    // sanity guard that the generator actually injected violations.
+    assert!(
+        rejected > 0,
+        "at least some malformed bodies must be rejected by the validator"
+    );
+}
