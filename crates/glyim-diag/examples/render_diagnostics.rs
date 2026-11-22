@@ -21,9 +21,9 @@ use glyim_span::{ByteIdx, FileId, MultiSpan, Span};
 
 fn main() {
     let span = Span::new(
-        FileId::from_raw(0),
-        ByteIdx::from_raw(4),
-        ByteIdx::from_raw(12),
+        FileId::from_usize(0),
+        ByteIdx::from_usize(4),
+        ByteIdx::from_usize(12),
         glyim_span::SyntaxContext::ROOT,
     );
     let diags = vec![
