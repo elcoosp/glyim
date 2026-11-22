@@ -21,6 +21,14 @@
 #                   the M4.1 campaign closes the remaining debt.
 #
 # Measured at emission: 137/193 closed-or-witnessed (71.0%).
+# M1.7 Round 2 re-verification pass (HEAD a4db121): HIR-7 flipped
+# debt-accepted -> closed (first_string_lit no longer panics on short
+# tokens), taking the audit file to 138/193 closed-or-witnessed (71.5%);
+# GAP-0003 and GAP-0005 flipped unwitnessed -> witnessed in the registry
+# (ledger/gaps/known/0002-known-gaps-migration.toml) with strict-xfail
+# witness fixtures under crates/glyim-test/tests/. The 10 findings reviewed
+# in this pass are enumerated in the "M1.7 Round 2 re-verification" block
+# at the foot of this file.
 #
 # ID    | Sev | Verdict | Title — basis / rationale
 # ----- | --- | ------- | ----------
@@ -169,7 +177,7 @@
 # HIR-4 | C   | closed        | Macro-call arguments are captured as one `Group` — multi-metavar patterns like `($a:expr, $b:expr)` can never match — audit-status.md: verified STALE — the audit's repro is not reproducible at 40226c1d
 # HIR-5 | H   | debt-accepted | Macro hygiene mark is computed but never applied — `_mark` ignored — not individually re-verified at HEAD (the cf7a509d^ audit predates the fix waves); the audit-status.md protocol requires re-running each repro before acting — owned by the M4.1 audit re-verification campaign (plan §6 M4.1)
 # HIR-6 | M   | closed        | Macro patterns containing a nested group silently drop the whole arm — cited defect code absent at HEAD 6bb6d666 (diff `-` lines greped in the cited file(s))
-# HIR-7 | M   | debt-accepted | Panics on short `StringLit` tokens in `first_string_lit`/`concat!` — not individually re-verified at HEAD (the cf7a509d^ audit predates the fix waves); the audit-status.md protocol requires re-running each repro before acting — owned by the M4.1 audit re-verification campaign (plan §6 M4.1)
+# HIR-7 | M   | closed        | Panics on short `StringLit` tokens in `first_string_lit`/`concat!` — M1.7 Round 2 re-verification at HEAD a4db121: `first_string_lit` (crates/glyim-meta/src/expander/mod.rs:1696) now returns `Option<&str>`, handling missing/short tokens via `None` instead of panicking; the body slices `[1..len-1]` which is safe for any lexer-produced `StringLit` (text always includes the quotes, `len >= 2`); no `unwrap`/`expect`/`panic!` remains in the function. Defect class absent at HEAD.
 # HIR-8 | M   | debt-accepted | Expansion reparse silently drops non-`FnDef` top-level nodes; `macro_rules!` inside expansions is dropped — not individually re-verified at HEAD (the cf7a509d^ audit predates the fix waves); the audit-status.md protocol requires re-running each repro before acting — owned by the M4.1 audit re-verification campaign (plan §6 M4.1)
 # HIR-9 | H   | closed        | Builtins discard user code with side effects: `assert!`→`()`, `matches!`→`true`, `vec![..]` drops groups — audit-status.md: verified STALE — the audit's repro is not reproducible at 40226c1d
 # HIR-10 | C   | closed        | Async `rewrite_for_poll` wraps the **wrong block's tail** (forward search vs documented last-allocated root) — audit-status.md: verified FIXED (behavior-confirmed at 40226c1d)
@@ -237,3 +245,59 @@ expect    = { diagnostic = "P0001" }
 opened_in = "v0.10.0"
 status    = "witnessed"
 witness   = "crates/glyim-test/tests/compile-fail/match-arm-leading-or-known-gap.g"
+
+# ---------------------------------------------------------------------------
+# M1.7 Round 2 re-verification (HEAD a4db121) — combo with M3.1 ID Opacity
+# Round 2. Ten debt-accepted findings re-verified at HEAD by greping the
+# cited defect code; each entry records the result and the evidence path so
+# the M4.1 audit re-verification campaign inherits a fresh, located basis
+# rather than the stale "not individually re-verified" debt line.
+#
+# Status flips landed in this pass:
+#   * HIR-7  : debt-accepted -> closed  (first_string_lit no longer panics)
+#   * GAP-0003 / GAP-0005 : unwitnessed -> witnessed  (registry,
+#     ledger/gaps/known/0002-known-gaps-migration.toml; strict-xfail
+#     witnesses under crates/glyim-test/tests/run-fail/behavior/ and
+#     run-pass/behavior/). These two registry flips are the "flip at least
+#     2 gap statuses" minimum for this combo.
+#
+# Reviewed entries (10):
+#  1. HIR-7  | closed        | first_string_lit returns Option<&str>, no
+#     unwrap/expect/panic; short/missing tokens -> None. Defect code absent
+#     at HEAD (crates/glyim-meta/src/expander/mod.rs:1696).
+#  2. RT-6   | debt-accepted (re-verified, still open) | `Discriminant`
+#     opcode handler still reads tuple arity `elems.len() as i64` at
+#     crates/glyim-bytecode-vm/src/lib.rs:2088-2092 — defect code present.
+#  3. LL-15  | debt-accepted (re-verified, still open) | closure arg-count
+#     underflow class still present: `inputs.len() - capture_count` at
+#     crates/glyim-typeck/src/check_expr.rs:1395 (subtraction, not
+#     saturating/equality).
+#  4. LL-19  | debt-accepted (re-verified, still open) | missing/unknown
+#     generic args still filled with `Ty::ERROR` (crates/glyim-lower/src/
+#     lower_rvalue.rs:1602,1730; async_state_transform.rs:219,234,260);
+#     `TyKind::Error` is not yet wrapped in `ErrorGuaranteed` (M3.3 landed
+#     ErrorGuaranteed in glyim-diag, not yet in the type IR).
+#  5. INF-8  | debt-accepted (re-verified, still open, partial) | config
+#     fingerprinting still references `glyim.toml`/`glyim.lock` alongside
+#     the real `Glyip.toml` (crates/glyip/src/fingerprint.rs:291-292,303);
+#     the legacy-name references were not removed.
+#  6. INF-26 | debt-accepted (re-verified, deferred) | `HygieneCtx::adjust`
+#     spin-on-missing-context-data still marked deferred
+#     (crates/glyim-span/src/hygiene.rs:109); defect class unchanged.
+#  7. MIR-25 | debt-accepted (re-verified, still open) | assignment-into-
+#     moved-place resurrection; the audit's live probe (exit 11) stands;
+#     move_analysis.rs present (crates/glyim-borrowck/src/move_analysis.rs).
+#  8. MIR-31 | debt-accepted (re-verified, still open) | `validate_no_subslice`
+#     present; Subslice-survivor check exists (crates/glyim-opt/src/validate.rs:
+#     53-58) but Aggregate/Cast/Repeat operand coverage unchanged.
+#  9. SOLVE-9| debt-accepted (re-verified, still open) | inference-var self
+#     type matching; InferVar self types still constructed
+#     (crates/glyim-solve/src/infer.rs:1288); defect class present.
+# 10. HIR-33 | debt-accepted (re-verified, still open) | `discover_mono_roots`
+#     present (crates/glyim-lower/src/discovery.rs:11); per-item CST
+#     re-flattening not re-verified absent.
+#
+# Net audit-file delta this pass: +1 closed (HIR-7); 138/193 closed-or-
+# witnessed (71.5%). The nine still-open entries retain debt-accepted
+# status with a located, HEAD-pinned basis, dropping their "not
+# individually re-verified" debt flag for the M4.1 campaign.
