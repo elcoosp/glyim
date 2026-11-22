@@ -22,15 +22,15 @@ use glyim_span::{ByteIdx, FileId, MultiSpan, Span};
 /// odd index a warning over a dummy span.
 fn synthetic_batch() -> Vec<GlyimDiagnostic> {
     let primary = Span::new(
-        FileId::from_raw(1),
+        FileId::from_usize(1),
         ByteIdx::ZERO,
-        ByteIdx::from_raw(64),
+        ByteIdx::from_usize(64),
         glyim_span::SyntaxContext::ROOT,
     );
     let secondary = Span::new(
-        FileId::from_raw(1),
-        ByteIdx::from_raw(80),
-        ByteIdx::from_raw(144),
+        FileId::from_usize(1),
+        ByteIdx::from_usize(80),
+        ByteIdx::from_usize(144),
         glyim_span::SyntaxContext::ROOT,
     );
     let type_code = ErrorCode {
