@@ -352,7 +352,7 @@ fn test_pipeline_compiler_surfaces_mir_artifacts() {
     let output = compiler.compile(
         source,
         std::path::Path::new("test.g"),
-        FileId::from_raw(777),
+        FileId::from_usize(777),
         &[],
     );
 
@@ -486,7 +486,7 @@ fn test_pipeline_compiler_populates_executable_path_field() {
     let output = compiler.compile(
         "fn main() {}",
         std::path::Path::new("test.g"),
-        FileId::from_raw(888),
+        FileId::from_usize(888),
         &[],
     );
     assert!(
