@@ -5,7 +5,7 @@ use crate::parser::parse_to_syntax;
 use glyim_span::FileId;
 
 fn parse_ok(source: &str) -> Vec<glyim_diag::GlyimDiagnostic> {
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let lex_result = lex(source, file_id);
     let parse_result = parse_to_syntax(source, file_id);
     let mut diags = lex_result.diagnostics;
