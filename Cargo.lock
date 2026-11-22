@@ -998,7 +998,6 @@ dependencies = [
 name = "glyim-core"
 version = "0.10.0"
 dependencies = [
- "glyim-test",
  "lasso",
  "smallvec",
 ]
@@ -1041,7 +1040,6 @@ dependencies = [
  "glyim-span",
  "miette",
  "serde_json",
- "tracing",
 ]
 
 [[package]]
@@ -1358,17 +1356,13 @@ name = "glyim-span"
 version = "0.10.0"
 dependencies = [
  "glyim-core",
- "glyim-test",
  "miette",
- "tracing",
 ]
 
 [[package]]
 name = "glyim-syntax"
 version = "0.10.0"
 dependencies = [
- "glyim-core",
- "glyim-test",
  "num_enum",
  "rowan",
 ]
