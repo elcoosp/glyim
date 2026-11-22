@@ -70,11 +70,15 @@ impl Generator {
                 let var = infer.new_int_var(ctx);
                 ctx.mk_ty(TyKind::Infer(InferVar::Int(var)))
             }
-            10 => {
+            // M3.1/M3.5 micro-debt eradication: the prior `_ => unreachable!()`
+            // panicked on a value `random_range(0..11)` can never yield. Fold
+            // the float-var arm into the catch-all so a hypothetical generator
+            // bug surfaces a wrong-shaped type instead of a panic; the range
+            // is bounded, so this arm only ever fires for `10`.
+            _ => {
                 let var = infer.new_float_var(ctx);
                 ctx.mk_ty(TyKind::Infer(InferVar::Float(var)))
             }
-            _ => unreachable!(),
         }
     }
 
@@ -100,11 +104,13 @@ impl Generator {
                 let var = infer.new_int_var(ctx);
                 ctx.mk_ty(TyKind::Infer(InferVar::Int(var)))
             }
-            5 => {
+            // M3.1/M3.5 micro-debt eradication: fold the float-var arm into
+            // the catch-all (replacing `_ => unreachable!()`); `random_range(0..6)`
+            // is bounded so this arm only ever fires for `5`.
+            _ => {
                 let var = infer.new_float_var(ctx);
                 ctx.mk_ty(TyKind::Infer(InferVar::Float(var)))
             }
-            _ => unreachable!(),
         }
     }
 
