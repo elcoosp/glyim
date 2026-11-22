@@ -1361,9 +1361,9 @@ fn split_int_literal(s: &str) -> (String, Option<String>) {
 fn token_span(token: &SyntaxToken) -> Span {
     let range = token.text_range();
     Span::new(
-        glyim_span::FileId::from_raw(1),
-        glyim_span::ByteIdx::from_raw(u32::from(range.start())),
-        glyim_span::ByteIdx::from_raw(u32::from(range.end())),
+        glyim_span::FileId::from_usize(1),
+        glyim_span::ByteIdx::from_usize(u32::from(range.start()) as usize),
+        glyim_span::ByteIdx::from_usize(u32::from(range.end()) as usize),
         glyim_span::SyntaxContext::ROOT,
     )
 }
