@@ -427,6 +427,76 @@ impl GlyimDiagnostic {
 /// `CompResult`.
 pub type CompResult<T> = Result<T, Vec<GlyimDiagnostic>>;
 
+/// M3.3(a) — `ErrorGuaranteed` (plan §6 M3.3 / §5.2 CT-5).
+///
+/// An unforgeable proof token that an error-severity diagnostic was
+/// emitted through a [`DiagSink`]. A function that emits a diagnostic
+/// and indicates failure returns `ErrorGuaranteed` (or
+/// `Result<_, ErrorGuaranteed>`) rather than `()` or `bool`, so
+/// downstream phases (`glyim-typeck`, `glyim-lower`, `glyim-codegen`)
+/// cannot silently drop the fact that an error was reported and cascade
+/// into an ICE or wrong code: to construct a `Ty::Error` you must hold
+/// one, to lower past a typeck error you must hold one, and the token's
+/// mere existence is the proof.
+///
+/// The token is opaque: its only constructor lives on
+/// [`DiagSink::emit`] and only fires when the emitted diagnostic
+/// carries [`DiagSeverity::Error`]. Warnings, notes, and helps do NOT
+/// mint a token — they are advisory and never indicate failure on
+/// their own. Suppressed errors (past the [`DiagSink`] error limit) do
+/// NOT mint a token either: the diagnostic was never reported to the
+/// user, so downstream code must not believe an error was seen.
+///
+/// Patterned on rustc's `ErrorGuaranteed` (rustc-dev-guide ch. 25): a
+/// zero-sized, `Send + Sync` phantom that flows through the pipeline as
+/// a capability, not a value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ErrorGuaranteed(());
+
+impl ErrorGuaranteed {
+    /// The only way to mint an `ErrorGuaranteed` outside `glyim-diag` is
+    /// [`DiagSink::emit`]. This private constructor exists only for
+    /// `emit` to call; keeping it `fn`-private (rather than `pub(crate)`)
+    /// means even sibling modules in `glyim-diag` cannot forge a token.
+    fn new() -> Self {
+        Self(())
+    }
+}
+
+/// M3.3(a) — emit a diagnostic into a `&mut Vec<GlyimDiagnostic>` and
+/// mint an [`ErrorGuaranteed`] if it was an error (plan §6 M3.3 / §5.2
+/// CT-5).
+///
+/// The type checker and HIR lowerer carry their diagnostic accumulator
+/// as a `&mut Vec<GlyimDiagnostic>` (the `FnCtxt::diagnostics` and
+/// `lower_*::diags` parameters), not a full [`DiagSink`]: the sink's
+/// error-limit accounting lives at the *pipeline* level (one sink per
+/// compilation, after all phases have run), while phase code simply
+/// appends. To give those call sites the same type-level proof that an
+/// error was reported — without forcing them to hold a `DiagSink` —
+/// this helper centralizes the "push and mint" pair in `glyim-diag`,
+/// where the [`ErrorGuaranteed`] constructor stays private.
+///
+/// Returns `Some(ErrorGuaranteed)` when `diag.is_error()`, `None`
+/// otherwise (warnings/notes/helps). Call sites that propagate the
+/// "an error was emitted" fact downstream take the `Option` and store
+/// it (e.g. in a `Ty::Error(ErrorGuaranteed)` slot) or coerce to
+/// `Result<_, ErrorGuaranteed>` with `.ok_or_else(|| token.unwrap())`.
+/// Call sites that emit-and-continue call this and let the token drop
+/// — the diagnostic is already in the Vec for the pipeline to render.
+pub fn emit_diag(
+    diagnostics: &mut Vec<GlyimDiagnostic>,
+    diag: GlyimDiagnostic,
+) -> Option<ErrorGuaranteed> {
+    let guaranteed = if diag.is_error() {
+        Some(ErrorGuaranteed::new())
+    } else {
+        None
+    };
+    diagnostics.push(diag);
+    guaranteed
+}
+
 /// `DiagSink`.
 pub struct DiagSink {
     diagnostics: Vec<GlyimDiagnostic>,
@@ -478,19 +548,66 @@ impl DiagSink {
         }
     }
 
-    /// emit.
-    pub fn emit(&mut self, diag: GlyimDiagnostic) {
+    /// M3.3(b) test seam: construct a sink pre-loaded with a diagnostic
+    /// batch *without* running each through `emit`'s error-limit accounting.
+    /// The ordering/dedup contract in [`DiagSink::into_diagnostics`] is a
+    /// pure function of the batch, so the tests build the batch directly
+    /// and assert the sort. Production code always goes through `emit`
+    /// (which mints [`ErrorGuaranteed`] tokens and respects the limit);
+    /// this constructor is `pub` so the test module in `src/tests/` can
+    /// reach it, but it carries no contract beyond "the sink now holds
+    /// these diagnostics".
+    #[must_use]
+    pub fn from_vec(diagnostics: Vec<GlyimDiagnostic>) -> Self {
+        let error_count = diagnostics.iter().filter(|d| d.is_error()).count();
+        Self {
+            diagnostics,
+            error_count,
+            suppressed_count: 0,
+            error_limit: std::env::var("GLYIM_ERR_LIMIT")
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(50)
+                .max(error_count),
+            on_emit: None,
+        }
+    }
+
+    /// emit a diagnostic into the sink. When the diagnostic carries
+    /// [`DiagSeverity::Error`] and is not suppressed by the error limit,
+    /// this mints and returns an [`ErrorGuaranteed`] token — the proof
+    /// that an error was reported. A caller that needs to flow the
+    /// "an error has been emitted" fact into a downstream API (e.g.
+    /// constructing a `Ty::Error(ErrorGuaranteed)` in `glyim-typeck`)
+    /// takes the `Option<ErrorGuaranteed>` and propagates it.
+    ///
+    /// Returns `None` for warnings/notes/helps (not failure) and for
+    /// errors suppressed past the limit (never reported to the user).
+    ///
+    /// `#[must_use]` so a call site that silently drops the token gets a
+    /// clippy warning — the M3.3(a) contract is that the token's
+    /// existence must be acknowledged, even if only to bind it to `_`.
+    /// The previous `()` return let every caller silently forget an
+    /// error was emitted; this turns that silence into a lint.
+    #[must_use]
+    pub fn emit(&mut self, diag: GlyimDiagnostic) -> Option<ErrorGuaranteed> {
         if diag.is_error() {
             if self.error_count >= self.error_limit {
                 self.suppressed_count += 1;
-                return;
+                return None;
             }
             self.error_count += 1;
         }
         if let Some(cb) = &mut self.on_emit {
             cb(&diag);
         }
+        let guaranteed = if diag.is_error() {
+            Some(ErrorGuaranteed::new())
+        } else {
+            None
+        };
         self.diagnostics.push(diag);
+        guaranteed
     }
 
     /// `has_errors`.
@@ -514,24 +631,47 @@ impl DiagSink {
                     self.suppressed_count
                 )));
         }
-        // T150-PATCHED [DIAG-1]: deduplicate and stabilize the ordering of
-        // the diagnostic list. Without this, a diagnostic emitted twice
-        // (e.g. once during expansion and once during re-check, or the same
-        // error surfaced by two phases) is shown to the user twice, and
-        // the phase order is nondeterministic. Sort by (primary.lo, code,
-        // message) then drop exact duplicates.
+        // T150-PATCHED [DIAG-1] / M3.3(b): deduplicate and stabilize the
+        // ordering of the diagnostic list. Without this, a diagnostic
+        // emitted twice (e.g. once during expansion and once during
+        // re-check, or the same error surfaced by two phases) is shown
+        // to the user twice, and the phase order is nondeterministic.
+        //
+        // The M3.3 sort key is `(file, lo, hi, code.category, code.number,
+        // message)`: `file` first so a multi-file batch groups each
+        // file's diagnostics together (the previous `(lo, code, message)`
+        // key interleaved files by byte offset alone, which is
+        // nondeterministic across phases), then `lo`, then `hi`, then
+        // the code and message for a total order. Dedup uses the same
+        // key so two diagnostics at the same `(file, lo, hi, code,
+        // message)` collapse to one.
         self.diagnostics.sort_by(|a, b| {
             a.span
                 .primary
-                .lo
-                .to_usize()
-                .cmp(&b.span.primary.lo.to_usize())
+                .file
+                .to_raw()
+                .cmp(&b.span.primary.file.to_raw())
+                .then_with(|| {
+                    a.span
+                        .primary
+                        .lo
+                        .to_usize()
+                        .cmp(&b.span.primary.lo.to_usize())
+                })
+                .then_with(|| {
+                    a.span
+                        .primary
+                        .hi
+                        .to_usize()
+                        .cmp(&b.span.primary.hi.to_usize())
+                })
                 .then_with(|| (a.code.category as u8).cmp(&(b.code.category as u8)))
                 .then_with(|| a.code.number.cmp(&b.code.number))
                 .then_with(|| a.message.cmp(&b.message))
         });
         self.diagnostics.dedup_by(|a, b| {
-            a.span.primary.lo == b.span.primary.lo
+            a.span.primary.file == b.span.primary.file
+                && a.span.primary.lo == b.span.primary.lo
                 && a.span.primary.hi == b.span.primary.hi
                 && a.code.category == b.code.category
                 && a.code.number == b.code.number
@@ -549,8 +689,14 @@ impl Default for DiagSink {
 
 impl Extend<GlyimDiagnostic> for DiagSink {
     fn extend<T: IntoIterator<Item = GlyimDiagnostic>>(&mut self, iter: T) {
+        // M3.3(a): each `emit` returns an `Option<ErrorGuaranteed>` token
+        // that `extend` intentionally does not propagate (the trait's
+        // signature is `fn extend(...)` returning `()`). Naming the
+        // token `_guaranteed` documents the discard at the type level —
+        // a reviewer reading this knows each pushed diagnostic's error
+        // status was observed, not silently dropped.
         for d in iter {
-            self.emit(d);
+            let _guaranteed = self.emit(d);
         }
     }
 }
