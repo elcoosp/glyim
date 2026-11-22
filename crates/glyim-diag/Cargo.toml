@@ -13,8 +13,14 @@ version.workspace = true
 [dependencies]
 glyim-span = { workspace = true }
 miette = { workspace = true }
-tracing = { workspace = true }
 serde_json = { workspace = true }
+
+# M3.1 Round 2 zero-warnings + M0.8 dead-weight: `tracing` was listed but
+# never imported anywhere in src/tests/benches/examples (the only mentions
+# are prose in a `lib.rs` doc comment); cargo flagged it as an unused
+# dependency under `clippy --all-targets`. Dropping it closes that warning
+# without touching any code. (The M3.3 cleanup below already removed the
+# LLVM-pulling `glyim-test` dev-dependency for the same reason.)
 
 # M3.3 micro-debt cleanup: the `glyim-test` dev-dependency was dead weight
 # here — none of `src/`, `tests/`, `benches/`, or `examples/` imports it. It
