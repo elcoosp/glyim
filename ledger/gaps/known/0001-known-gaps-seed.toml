@@ -8,8 +8,18 @@
 # witness retired into `tests/run-pass/behavior/async_for_loop_await.g`,
 # and the remaining loop shapes re-registered as GAP-0006 in
 # `0003-await-loop-shapes.toml` (with its own strict-xfail witness).
-# GAP-0002 remains `unwitnessed` witness debt (plan §3.3): it is
-# Windows-only (SEH) and has no cross-platform reproducible fixture yet.
+#
+# M3.3(c): GAP-0002 witness landed. The gap is Windows-SEH-shaped in its
+# title, but the *observable* behaviour — no lowering site sets cleanup
+# edges, so a panic exits 101 without running destructors — is
+# cross-platform. The witness
+# `crates/glyim-test/tests/run-fail/behavior/seh_cleanup_edges_unreachable_known_gap.g`
+# pins that observable on Linux: a `Pair` with a `Drop` impl that is in
+# scope when `panic!` fires must NOT have its destructor run, so the
+# `DROPS` counter stays `0` (printed before the panic) and the exit code
+# is `101`. When cleanup edges land, `Pair::drop` runs, the counter
+# becomes `1`, and the fixture fails with `known-gap GAP-0002 closed`
+# (strict xfail, plan §3.3). This retires the witness debt for GAP-0002.
 
 [[gap]]
 id        = "GAP-0002"
@@ -18,4 +28,6 @@ title     = "Windows SEH cleanup edges are unreachable: no lowering site sets cl
 affects   = ["LANG-UNWIND-CLEANUP"]
 caps      = "L2"
 opened_in = "v0.3.0"
-status    = "unwitnessed"
+status    = "witnessed"
+witness   = "crates/glyim-test/tests/run-fail/behavior/seh_cleanup_edges_unreachable_known_gap.g"
+
