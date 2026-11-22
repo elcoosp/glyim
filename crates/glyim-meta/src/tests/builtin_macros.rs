@@ -10,8 +10,8 @@ use crate::{BuiltinMacro, Expander, MacroDef, MacroKind};
 fn dummy_span(file_id: FileId, lo: u32) -> Span {
     Span::new(
         file_id,
-        ByteIdx::from_usize(lo),
-        ByteIdx::from_usize(lo + 1),
+        ByteIdx::from_usize(lo as usize),
+        ByteIdx::from_usize(lo as usize + 1),
         SyntaxContext::ROOT,
     )
 }
