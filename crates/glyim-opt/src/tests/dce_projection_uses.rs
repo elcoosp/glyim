@@ -6,7 +6,7 @@
 //! was marked used, `i` was not, and DCE deleted `i = 1` — the later index
 //! read then hit an uninitialized local (`index local N not initialized`).
 //! Observed via `s.as_bytes()[0]`, which made all byte-indexed str/array code
-//! panic under the pipeline that runs `optimize()`.
+//! panic under the pipeline that runs `optimize().unwrap()`.
 
 use super::testutil::{build_test_body, const_int, ty_i32};
 use glyim_core::primitives::Mutability;
@@ -99,10 +99,12 @@ fn dce_keeps_local_read_only_through_index_projection() {
     assert_eq!(run_interp(&ctx, &body), 20, "unoptimized");
 
     // Optimized must give the same — DCE must NOT have removed `local2 = 1`.
-    let optimized = crate::optimize(&ctx, &std::sync::Arc::new(body.clone())).body;
+    let optimized = crate::optimize(&ctx, &std::sync::Arc::new(body.clone()))
+        .unwrap()
+        .body;
     assert_eq!(
         run_interp(&ctx, &optimized),
         20,
-        "optimize() broke an index read — DCE removed the index local's store"
+        "optimize().unwrap() broke an index read — DCE removed the index local's store"
     );
 }
