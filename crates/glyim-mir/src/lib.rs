@@ -5,6 +5,10 @@
 //! fields (`Ty`, `Substitution`) without cloning the entire `TyKind`.
 #![warn(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+
+/// MIR well-formedness validator (M5.5): local-declaredness invariant.
+pub mod validate;
+
 use glyim_core::arena::IndexVec;
 use glyim_core::def_id::*;
 use glyim_core::def_id::{ConstDefId, FnDefId};
