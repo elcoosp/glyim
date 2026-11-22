@@ -20,7 +20,7 @@ fn probe(fixture: &str, flags: &[&str]) {
     let src = std::fs::read_to_string(&path).expect("read fixture");
     let flag_vec: Vec<String> = flags.iter().map(|s| s.to_string()).collect();
     let compiler = PipelineCompiler::new(Arc::new(MockCodegen::new())).with_real_llvm();
-    let out = compiler.compile(&src, &path, glyim_span::FileId::from_raw(0), &flag_vec);
+    let out = compiler.compile(&src, &path, glyim_span::FileId::from_usize(0), &flag_vec);
     for d in &out.diagnostics {
         if d.is_error() {
             eprintln!("COMPILE ERROR: {}", d.message);
