@@ -3,7 +3,7 @@ use glyim_span::FileId;
 use glyim_syntax::SyntaxKind;
 
 fn parse(source: &str) -> glyim_syntax::SyntaxNode {
-    parse_to_syntax(source, FileId::from_raw(0)).root
+    parse_to_syntax(source, FileId::from_usize(0)).root
 }
 
 fn has_descendant(node: &glyim_syntax::SyntaxNode, kind: SyntaxKind) -> bool {
