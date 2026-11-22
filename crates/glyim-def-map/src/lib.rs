@@ -1206,8 +1206,8 @@ fn visibility_of_node(node: &SyntaxNode, interner: &Interner) -> Visibility {
 /// Create a `Span` from a syntax node's text range.
 fn node_span(node: &SyntaxNode) -> Span {
     let range = node.text_range();
-    let lo = ByteIdx::from_raw(u32::from(range.start()));
-    let hi = ByteIdx::from_raw(u32::from(range.end()));
+    let lo = ByteIdx::from_usize(u32::from(range.start()) as usize);
+    let hi = ByteIdx::from_usize(u32::from(range.end()) as usize);
     Span::new(FileId::BOGUS, lo, hi, SyntaxContext::ROOT)
 }
 
