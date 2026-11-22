@@ -5,13 +5,16 @@
 # audit (verification recipes, closed-entry history) and points here for
 # the machine-checked status; `glyim-ledger gaps` renders the report.
 #
-# Witness coverage after this slice: GAP-0001 and GAP-0004 are witnessed
-# (strict-xfail fixtures under `crates/glyim-test/tests/`); GAP-0002,
-# GAP-0003 and GAP-0005 are explicit witness debt with the reason recorded
-# per entry (Windows-only repro, OutputCheck contract, unobservable from
-# source). The M1.7 exit gate (>= 90% witnessed) applies to the full
-# milestone — the remaining sources (HANDOFF §2, playbook Appendix A) are
-# still pending migration.
+# Witness coverage after this slice: GAP-0001, GAP-0004, GAP-0003 and
+# GAP-0005 are witnessed (strict-xfail fixtures under
+# `crates/glyim-test/tests/`); only GAP-0002 in this file was witnessed
+# earlier (M3.3, in `0001-known-gaps-seed.toml`). The M3.1 Round 2 +
+# M1.7 closeout pass landed the GAP-0003 (runtime no-unwind, panic
+# propagation through a call frame) and GAP-0005 (generic-Param
+# `needs_drop` conservative `false` -> drop glue skipped) witnesses,
+# flipping both from `unwitnessed` to `witnessed`. The M1.7 exit gate
+# (>= 90% witnessed) applies to the full milestone — the remaining
+# sources (HANDOFF §2, playbook Appendix A) are still pending migration.
 
 [[gap]]
 id        = "GAP-0003"
@@ -20,7 +23,8 @@ title     = "`panic!` does not unwind: `glyim_panic` exits 101 without running d
 affects   = ["LANG-UNWIND-CLEANUP"]
 caps      = "L2"
 opened_in = "v0.3.0"
-status    = "unwitnessed"
+status    = "witnessed"
+witness   = "crates/glyim-test/tests/run-fail/behavior/panic_no_unwind_exit_101_known_gap.g"
 
 [[gap]]
 id        = "GAP-0004"
@@ -39,4 +43,5 @@ title     = "`TyCtx::needs_drop` is conservative for `dyn Trait`/generic/project
 affects   = ["COMPILER-LAYOUT-SIZE-ALIGN"]
 caps      = "L2"
 opened_in = "v0.3.0"
-status    = "unwitnessed"
+status    = "witnessed"
+witness   = "crates/glyim-test/tests/run-pass/behavior/needs_drop_conservative_generic_known_gap.g"
