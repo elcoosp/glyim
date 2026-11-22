@@ -16,8 +16,14 @@ miette = { workspace = true }
 tracing = { workspace = true }
 serde_json = { workspace = true }
 
-[dev-dependencies]
-glyim-test = { workspace = true }
+# M3.3 micro-debt cleanup: the `glyim-test` dev-dependency was dead weight
+# here — none of `src/`, `tests/`, `benches/`, or `examples/` imports it. It
+# forced the entire LLVM toolchain (glyim-test → glyim-pipeline →
+# glyim-codegen-llvm → inkwell → llvm-sys 231) into `cargo test -p
+# glyim-diag`, even though glyim-diag is leaf-side of the type-safety
+# refactor and is locally verifiable without LLVM (plan M3.3 DoD). Dropping
+# it unblocks the M3.3 local baseline gate (cargo test -p glyim-diag) on
+# hosts without LLVM 23 installed.
 
 [[bench]]
 name = "json_render"
