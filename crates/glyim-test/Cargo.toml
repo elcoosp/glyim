@@ -21,7 +21,7 @@ default = []
 # `test-linux-runtime` job runs the M5 fixtures strictly (real LLVM codegen
 # + link + run, CompilationFailed is a hard failure) and must stay green
 # (see .github/workflows/ci.yml).
-real-llvm = ["glyim-codegen-llvm"]
+real-llvm = ["glyim-codegen-llvm", "glyim-pipeline/llvm-codegen", "glyim-cli"]
 
 [dependencies]
 tempfile = { workspace = true }
@@ -43,8 +43,8 @@ glyim-borrowck   = { workspace = true }
 glyim-codegen    = { workspace = true }
 glyim-codegen-llvm = { workspace = true, optional = true }
 glyim-db         = { workspace = true }
-glyim-pipeline   = { workspace = true }
-glyim-cli        = { workspace = true }
+glyim-pipeline   = { workspace = true, default-features = false }
+glyim-cli        = { workspace = true, optional = true }
 glyim-lang-std   = { workspace = true }
 glyim-meta       = { workspace = true }
 glyim-proc-macro = { workspace = true }
