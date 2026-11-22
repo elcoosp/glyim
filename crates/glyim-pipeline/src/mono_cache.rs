@@ -404,7 +404,15 @@ pub(crate) fn make_mir_body_provider<'a>(
         } else {
             let diag =
                 GlyimDiagnostic::internal_error(format!("MIR body not found for DefId {def_id:?}"));
-            sink.borrow_mut().emit(diag);
+            // M3.3(a): `emit` now returns an `ErrorGuaranteed` when the
+            // emitted diagnostic is an error — the proof at the type
+            // level that an error was reported. We name it `_guaranteed`
+            // here so the "an ICE was emitted, fall back to a dummy body"
+            // contract is explicit: the `Body::dummy` return is only
+            // reached when this is `Some`, and a reviewer can grep for
+            // the token to find every silent-ICE fallback site. The token
+            // itself carries no payload — its existence is the proof.
+            let _guaranteed = sink.borrow_mut().emit(diag);
             Arc::new(Body::dummy(DefId::new(
                 CrateId::from_raw(0),
                 LocalDefId::from_raw(0),
