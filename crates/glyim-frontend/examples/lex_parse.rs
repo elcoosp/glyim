@@ -41,7 +41,7 @@ fn main() {
         ),
         None => (PROGRAM.to_string(), "example.g".to_string()),
     };
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     println!("source: {name} ({} bytes)", source.len());
 
     // Face 1: the lexer. `lex_with_trivia` keeps trivia (the parser's
