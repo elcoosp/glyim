@@ -1,20 +1,29 @@
-//! Typed compilation phases (M5.1 Phase 1: trait extraction).
+//! Typed compilation phases (M5.1 Phase 1 + Phase 2: trait extraction +
+//! core pipeline extraction).
 //!
 //! Introduces the [`CompilerPhase`] trait that encapsulates a single
-//! compilation stage, and extracts the front-end stages (lex+parse,
-//! expand+def-map) out of the `prepare_compilation` monolith into phase
-//! structs that implement it. The driver chains the phases in order; each
-//! phase threads shared state through [`PhaseCtx`] and returns a typed
+//! compilation stage. Phase 1 extracted the front-end stages (lex+parse,
+//! expand+def-map); Phase 2 extracts the core MIR pipeline slice:
+//! [`lower::LowerPhase`] (the per-body THIR→MIR lowering + borrow check +
+//! optimization + closure recursion loop) and [`mono::MonoPhase`]
+//! (monomorphization root discovery, collection, polymorphization dedup,
+//! and post-mono semantic checks). The driver chains the phases in order;
+//! each phase threads shared state through [`PhaseCtx`] and returns a typed
 //! output, so the data flow is explicit rather than buried in one
 //! ~640-line function.
 //!
-//! Phase 1 extracts the two cleanest, least-coupled front-end stages. The
-//! typeck/lower/borrowck/opt/mono stages remain inline pending the later
-//! M5.1 sub-items (typed `PhaseContext` hardening, `≤60`-line driver, no
-//! `Option`-filled-later state).
+//! The typeck-setup + `typeck_crate` block and the CGU partition + symbol
+//! pairing tail remain inline pending the later M5.1 sub-items (typed
+//! `PhaseContext` hardening, `≤60`-line driver, no `Option`-filled-later
+//! state): the typeck block mutates `TyCtxMut`/`TraitContext` in place across
+//! several registration passes with no clean single output, and the CGU tail
+//! aggregates `mono_items` + `mir_bodies_map` + `closure_bodies_codegen` from
+//! three different phases.
 
 pub mod def_map;
 pub mod lex_parse;
+pub mod lower;
+pub mod mono;
 
 use crate::phase_prof::PhaseRecorder;
 use glyim_db::Database;
