@@ -999,6 +999,7 @@ name = "glyim-core"
 version = "0.10.0"
 dependencies = [
  "lasso",
+ "sha2",
  "smallvec",
 ]
 
