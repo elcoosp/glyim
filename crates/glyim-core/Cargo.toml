@@ -13,6 +13,10 @@ version.workspace = true
 [dependencies]
 lasso = { workspace = true, features = ["multi-threaded"] }
 smallvec = { workspace = true }
+# M6.1 stable identity: `StableHasher`/`DefPathHash` reuse the workspace
+# `sha2` crate (SHA-256) — no new external dependency — so def identities are
+# position-independent (a body edit never renumbers another item).
+sha2 = { workspace = true }
 
 # M3.1 Round 2 baseline-unblock + M0.8 dead-weight: the `glyim-test`
 # dev-dependency was never imported anywhere in src/tests/benches/examples
