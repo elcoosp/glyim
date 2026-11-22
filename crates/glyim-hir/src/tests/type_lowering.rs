@@ -7,7 +7,7 @@ use glyim_span::FileId;
 #[test]
 fn test_type_ref_slice() {
     let source = "fn f() -> [i32] { unimplemented!() }";
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let parse_result = parse_to_syntax(source, file_id);
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
