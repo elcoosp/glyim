@@ -147,9 +147,9 @@ pub fn empty_def_map() -> glyim_def_map::CrateDefMap {
         scope: ItemScope::default(),
         origin: ModuleOrigin::CrateRoot,
         span: Span::new(
-            FileId::from_raw(0),
-            ByteIdx::from_raw(0),
-            ByteIdx::from_raw(0),
+            FileId::from_usize(0),
+            ByteIdx::from_usize(0),
+            ByteIdx::from_usize(0),
             SyntaxContext::ROOT,
         ),
         def_id: glyim_core::def_id::LocalDefId::from_raw(0),
