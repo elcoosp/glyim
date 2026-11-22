@@ -1087,7 +1087,12 @@ pub fn emit_mir(
     // ordering.
     let mut out = String::new();
     for (_symbol, body) in &prepared.pre_opt_bodies {
-        out.push_str(&format_body(body, &prepared.ty_ctx));
+        let formatted = format_body(body, &prepared.ty_ctx).map_err(|_| {
+            vec![GlyimDiagnostic::internal_error(
+                "MIR dump format failed".to_string(),
+            )]
+        })?;
+        out.push_str(&formatted);
         out.push_str("\n\n");
     }
     std::fs::write(output, out)
@@ -1210,28 +1215,31 @@ pub fn compile_stats(
     })
 }
 
-fn format_body(body: &Body, ctx: &glyim_type::TyCtx) -> String {
+fn format_body(body: &Body, ctx: &glyim_type::TyCtx) -> Result<String, std::fmt::Error> {
     use std::fmt::Write;
     let mut s = String::new();
-    writeln!(s, "fn {}() {{", body.owner).unwrap();
+    // M2(d) micro-debt: writing to a `String` is infallible, so the prior
+    // `.unwrap()` calls were panic-equivalents on an impossible error. They
+    // now propagate via `?`, so a future change to a fallible sink (a writer
+    // that can fail) needs no further edit here.
+    writeln!(s, "fn {}() {{", body.owner)?;
     for (idx, local) in body.locals.iter_enumerated() {
         writeln!(
             s,
             "  ${}: {}",
             idx.to_raw(),
             glyim_type::PrintTy::new(local.ty, ctx)
-        )
-        .unwrap();
+        )?;
     }
     for (idx, block) in body.basic_blocks.iter_enumerated() {
-        writeln!(s, "bb{}:", idx.to_raw()).unwrap();
+        writeln!(s, "bb{}:", idx.to_raw())?;
         for stmt in &block.statements {
-            writeln!(s, "  {:?}", stmt.kind).unwrap();
+            writeln!(s, "  {:?}", stmt.kind)?;
         }
-        writeln!(s, "  {:?}", block.terminator.kind).unwrap();
+        writeln!(s, "  {:?}", block.terminator.kind)?;
     }
-    writeln!(s, "}}").unwrap();
-    s
+    writeln!(s, "}}")?;
+    Ok(s)
 }
 
 #[cfg(test)]
