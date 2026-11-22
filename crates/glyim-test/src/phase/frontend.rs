@@ -12,7 +12,7 @@ pub struct FrontendTester {
 impl FrontendTester {
     /// new.
     pub fn new(source: impl Into<String>) -> Self {
-        let file_id = FileId::from_raw(NEXT_FE_ID.fetch_add(1, Ordering::Relaxed));
+        let file_id = FileId::from_usize(NEXT_FE_ID.fetch_add(1, Ordering::Relaxed) as usize);
         Self {
             source: source.into(),
             file_id,
