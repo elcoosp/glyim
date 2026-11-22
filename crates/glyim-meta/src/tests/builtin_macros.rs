@@ -10,8 +10,8 @@ use crate::{BuiltinMacro, Expander, MacroDef, MacroKind};
 fn dummy_span(file_id: FileId, lo: u32) -> Span {
     Span::new(
         file_id,
-        ByteIdx::from_raw(lo),
-        ByteIdx::from_raw(lo + 1),
+        ByteIdx::from_usize(lo),
+        ByteIdx::from_usize(lo + 1),
         SyntaxContext::ROOT,
     )
 }
@@ -83,7 +83,7 @@ fn test_file_macro() {
     let mut expander = Expander::new(&mut hygiene);
     register_builtin(&mut expander, "file", BuiltinMacro::File);
 
-    let file_id = FileId::from_raw(42);
+    let file_id = FileId::from_usize(42);
     let span = dummy_span(file_id, 10);
     let args = string_lit_token(""); // file! takes no arguments
     let name = expander.interner().intern("file");
