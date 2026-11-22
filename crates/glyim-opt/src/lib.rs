@@ -34,13 +34,13 @@ pub struct Optimized {
 /// `unreachable_elim`). Compiles that honor the caller's `--opt-level`
 /// go through [`optimize_at_level`] instead.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics when the input body fails [`validate_body`] or when a `Subslice`
-/// projection survives `slice_desugar`. Both are compiler bugs, not
-/// user-facing errors; the driver's ICE handler renders them.
-#[must_use]
-pub fn optimize(ctx: &TyCtx, body: &Arc<Body>) -> Optimized {
+/// Returns `Err` when the input body fails [`validate_body`] or when a
+/// `Subslice` projection survives `slice_desugar` — both are compiler bugs
+/// surfaced as a [`MirValidationError`] rather than an ICE (M5.10
+/// panic-ratchet: MIR passes are `Result`-returning).
+pub fn optimize(ctx: &TyCtx, body: &Arc<Body>) -> Result<Optimized, MirValidationError> {
     optimize_with_plan(ctx, body, &PassPlan::for_opt_level(2))
 }
 
@@ -57,35 +57,34 @@ pub fn optimize(ctx: &TyCtx, body: &Arc<Body>) -> Optimized {
 /// three stages later in codegen as the `internal compiler error: Subslice
 /// projection …` panic.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics when the input body fails [`validate_body`] or when a `Subslice`
-/// projection survives the plan (which, for any plan including
-/// `slice_desugar`, can only mean a pass reintroduced one).
-#[must_use]
-pub fn optimize_with_plan(ctx: &TyCtx, body: &Arc<Body>, plan: &PassPlan) -> Optimized {
+/// Returns `Err` when the input body fails [`validate_body`] or when a
+/// `Subslice` projection survives the plan (which, for any plan including
+/// `slice_desugar`, can only mean a pass reintroduced one). Both are
+/// compiler bugs surfaced as a [`MirValidationError`] rather than an ICE
+/// (M5.10 panic-ratchet: MIR passes are `Result`-returning).
+pub fn optimize_with_plan(
+    ctx: &TyCtx,
+    body: &Arc<Body>,
+    plan: &PassPlan,
+) -> Result<Optimized, MirValidationError> {
     let mut body = (**body).clone();
     // Validate well-formedness up front (de-stubbing plan §8.8). Runs
     // unconditionally so release builds also catch any later pass that
     // produces an ill-formed body.
-    {
-        if let Err(e) = validate::validate_body(ctx, &body) {
-            panic!("MIR failed validation before optimization: {e:?}");
-        }
-    }
+    validate::validate_body(ctx, &body)?;
     for pass in plan.passes() {
         pass.run(ctx, &mut body);
     }
     // Post-condition (de-stubbing plan §8.7): codegen (glyim-codegen-llvm)
-    // treats a surviving `Subslice` as a `panic!` ICE, so a release build
+    // treats a surviving `Subslice` as a compiler bug, so a release build
     // must never hand one over. For plans that include `slice_desugar`
     // this is exactly the check `optimize` has always run right after
     // that pass; for plans that skip it, this is the guard that turns a
     // would-be codegen ICE into the same precise error here.
-    if let Err(e) = validate::validate_no_subslice(&body) {
-        panic!("MIR failed validation after optimization: {e:?}");
-    }
-    Optimized { body }
+    validate::validate_no_subslice(&body)?;
+    Ok(Optimized { body })
 }
 
 /// Run the plan [`PassPlan::for_opt_level`] selects for `opt_level` over
@@ -94,9 +93,12 @@ pub fn optimize_with_plan(ctx: &TyCtx, body: &Arc<Body>, plan: &PassPlan) -> Opt
 /// `-O0` runs only `slice_desugar` (the pass codegen structurally
 /// requires); `-O1`..`-O3` and anything larger run the full pipeline
 /// [`optimize`] runs. See [`PassPlan::for_opt_level`] for the level
-/// semantics and [`optimize_with_plan`] for the panics.
-#[must_use]
-pub fn optimize_at_level(ctx: &TyCtx, body: &Arc<Body>, opt_level: u8) -> Optimized {
+/// semantics and [`optimize_with_plan`] for the errors.
+pub fn optimize_at_level(
+    ctx: &TyCtx,
+    body: &Arc<Body>,
+    opt_level: u8,
+) -> Result<Optimized, MirValidationError> {
     optimize_with_plan(ctx, body, &PassPlan::for_opt_level(opt_level))
 }
 
