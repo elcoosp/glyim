@@ -594,7 +594,7 @@ pub fn split_text_holes(text: &str) -> Vec<TextPiece> {
 /// Parse one hole's source text through the frontend and extract the model.
 fn parse_hole_expr(src: &str) -> Expr {
     let wrapped = format!("fn __g() {{ let _h = {src}; }}");
-    let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
+    let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_usize(0));
     parsed
         .root
         .descendants()
@@ -612,7 +612,7 @@ mod tests {
     /// Parse GSX source and return (root, diagnostics).
     fn parse_gsx(src: &str) -> (Option<GsxNode>, Vec<GsxDiagnostic>) {
         let wrapped = format!("fn __g() {{ {src} }}");
-        let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
+        let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_usize(0));
         let g = gsx_from_parse(&parsed);
         (g.root, g.diagnostics)
     }
