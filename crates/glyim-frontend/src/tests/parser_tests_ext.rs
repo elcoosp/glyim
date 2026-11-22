@@ -3,7 +3,7 @@ use glyim_span::FileId;
 use glyim_syntax::{SyntaxKind, SyntaxNode};
 
 fn file_id() -> FileId {
-    FileId::from_raw(1)
+    FileId::from_usize(1)
 }
 
 fn assert_child_node(node: &SyntaxNode, kind: SyntaxKind) -> SyntaxNode {
