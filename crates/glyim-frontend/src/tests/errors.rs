@@ -4,7 +4,7 @@ use glyim_syntax::SyntaxKind;
 
 #[test]
 fn unexpected_unicode_produces_error() {
-    let result = lex("\u{00A9}", FileId::from_raw(0));
+    let result = lex("\u{00A9}", FileId::from_usize(0));
     assert!(
         !result.diagnostics.is_empty(),
         "unicode char should produce a diagnostic"
@@ -15,7 +15,7 @@ fn unexpected_unicode_produces_error() {
 
 #[test]
 fn unexpected_char_span_covers_char() {
-    let result = lex("\u{00A9}", FileId::from_raw(0));
+    let result = lex("\u{00A9}", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     let span = result.tokens[0].span;
     assert_eq!(span.range().start, 0);
@@ -24,7 +24,7 @@ fn unexpected_char_span_covers_char() {
 
 #[test]
 fn multiple_unexpected_chars() {
-    let result = lex("\u{00A9}\u{00AE}", FileId::from_raw(0));
+    let result = lex("\u{00A9}\u{00AE}", FileId::from_usize(0));
     assert!(
         result.diagnostics.len() >= 2,
         "two unexpected chars should produce at least 2 diagnostics, got {}",
@@ -34,7 +34,7 @@ fn multiple_unexpected_chars() {
 
 #[test]
 fn error_recovery_continues_lexing() {
-    let result = lex("42 \u{00A9} 99", FileId::from_raw(0));
+    let result = lex("42 \u{00A9} 99", FileId::from_usize(0));
     let kinds: Vec<_> = result.tokens.iter().map(|t| t.kind).collect();
     assert!(
         kinds.contains(&SyntaxKind::IntLit),
@@ -48,7 +48,7 @@ fn error_recovery_continues_lexing() {
 
 #[test]
 fn unexpected_char_diagnostic_message() {
-    let result = lex("\u{00A9}", FileId::from_raw(0));
+    let result = lex("\u{00A9}", FileId::from_usize(0));
     assert!(!result.diagnostics.is_empty());
     let msg = &result.diagnostics[0].message;
     assert!(
