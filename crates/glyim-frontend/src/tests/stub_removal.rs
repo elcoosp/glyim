@@ -2,7 +2,7 @@ use crate::parser::parse_to_syntax;
 use glyim_span::FileId;
 
 fn parse_no_errors(source: &str) {
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let result = parse_to_syntax(source, file_id);
     let errors: Vec<_> = result
         .diagnostics
@@ -76,7 +76,7 @@ fn function_pointer_type_parses_cleanly() {
 #[test]
 fn labeled_loop_parses_with_expected_errors() {
     // FE-10: labels now lex and parse correctly -- no errors.
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let result = parse_to_syntax("fn main() { 'outer: loop { break; } }", file_id);
     let errors: Vec<_> = result.diagnostics.iter().filter(|d| d.is_error()).collect();
     assert!(
@@ -87,7 +87,7 @@ fn labeled_loop_parses_with_expected_errors() {
 
 #[test]
 fn labeled_while_parses_with_expected_errors() {
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let result = parse_to_syntax("fn main() { 'lbl: while true { break; } }", file_id);
     assert_eq!(
         result.diagnostics.iter().filter(|d| d.is_error()).count(),
@@ -99,7 +99,7 @@ fn labeled_while_parses_with_expected_errors() {
 
 #[test]
 fn labeled_for_parses_with_expected_errors() {
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let result = parse_to_syntax("fn main() { 'lbl: for i in 0..3 { break; } }", file_id);
     assert_eq!(
         result.diagnostics.iter().filter(|d| d.is_error()).count(),
@@ -111,7 +111,7 @@ fn labeled_for_parses_with_expected_errors() {
 
 #[test]
 fn labeled_block_parses_with_expected_errors() {
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let result = parse_to_syntax("fn main() { 'lbl: { break 'lbl; } }", file_id);
     assert_eq!(
         result.diagnostics.iter().filter(|d| d.is_error()).count(),
@@ -124,7 +124,7 @@ fn labeled_block_parses_with_expected_errors() {
 use glyim_syntax::SyntaxKind;
 
 fn parse_and_collect(source: &str) -> glyim_syntax::SyntaxNode {
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let result = parse_to_syntax(source, file_id);
     // No errors expected for these tests
     let errors: Vec<_> = result.diagnostics.iter().filter(|d| d.is_error()).collect();
