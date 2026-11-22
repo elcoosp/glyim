@@ -70,7 +70,20 @@ fn main() {
         Path::new("walkthrough/main.g"),
         std::sync::Arc::from(source),
     );
-    let _ = file_id;
+    // M6: the `QueryContext` trait is the interface frontend queries resolve
+    // against. Today `Database` is the only impl; reading source text through
+    // `file_text` (rather than `vfs().file_content`) means the later
+    // salsa-backed `Database` keeps the same call sites. The interner length
+    // sizes query caches once the durability model (M6.2) lands.
+    use glyim_db::query::QueryContext;
+    let fetched = database
+        .file_text(file_id)
+        .expect("source was just registered");
+    println!(
+        "query: file_text -> {} byte(s) via QueryContext, {} symbol(s) interned",
+        fetched.len(),
+        database.interner().len(),
+    );
     println!(
         "database session: crate {:?}, target {:?}, {} file(s) interned",
         database.config().name,
