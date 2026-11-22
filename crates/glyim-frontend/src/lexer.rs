@@ -57,8 +57,8 @@ impl<'a> Lexer<'a> {
     fn span(&self, start: usize, end: usize) -> Span {
         Span::new(
             self.file_id,
-            ByteIdx::from_raw(start as u32),
-            ByteIdx::from_raw(end as u32),
+            ByteIdx::from_usize(start),
+            ByteIdx::from_usize(end),
             SyntaxContext::ROOT,
         )
     }
@@ -669,8 +669,8 @@ impl<'a> Lexer<'a> {
                 self.diagnostics.push(GlyimDiagnostic::lex_error(
                     Span::new(
                         self.file_id,
-                        ByteIdx::from_raw(suffix_start as u32),
-                        ByteIdx::from_raw(self.pos as u32),
+                        ByteIdx::from_usize(suffix_start),
+                        ByteIdx::from_usize(self.pos),
                         SyntaxContext::ROOT,
                     ),
                     format!("invalid number suffix: '{suffix}'"),
