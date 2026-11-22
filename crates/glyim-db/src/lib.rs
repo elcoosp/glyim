@@ -1,9 +1,13 @@
 //! Crate root.
 pub mod cache;
 pub mod cache_metrics;
+pub mod query;
+
+pub use query::QueryContext;
 
 use glyim_core::def_id::CrateId;
 use glyim_core::interner::Interner;
+use glyim_span::FileId;
 use glyim_vfs::Vfs;
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -143,6 +147,24 @@ impl Default for Database {
             target_triple: "x86_64-unknown-linux-gnu".to_string(),
             opt_level: 0,
         })
+    }
+}
+
+impl query::QueryContext for Database {
+    fn interner(&self) -> &Interner {
+        Database::interner(self)
+    }
+
+    fn vfs(&self) -> &Vfs {
+        Database::vfs(self)
+    }
+
+    fn krate(&self) -> CrateId {
+        Database::krate(self)
+    }
+
+    fn file_text(&self, file: FileId) -> Option<Arc<str>> {
+        self.vfs.file_content(file)
     }
 }
 
