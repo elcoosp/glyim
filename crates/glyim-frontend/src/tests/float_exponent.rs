@@ -5,7 +5,7 @@ use glyim_span::FileId;
 #[test]
 fn test_incomplete_float_exponent() {
     let source = "1e";
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let result = lex(source, file_id);
     assert!(!result.diagnostics.is_empty());
     let has_exp_error = result
