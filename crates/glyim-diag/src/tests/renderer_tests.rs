@@ -8,15 +8,15 @@ use std::sync::Arc;
 /// span 10..20 — the smallest diagnostic that exercises every JSON field.
 fn sample_error() -> GlyimDiagnostic {
     let primary = Span::new(
-        FileId::from_raw(1),
+        FileId::from_usize(1),
         ByteIdx::ZERO,
-        ByteIdx::from_raw(5),
+        ByteIdx::from_usize(5),
         glyim_span::SyntaxContext::ROOT,
     );
     let secondary = Span::new(
-        FileId::from_raw(1),
-        ByteIdx::from_raw(10),
-        ByteIdx::from_raw(20),
+        FileId::from_usize(1),
+        ByteIdx::from_usize(10),
+        ByteIdx::from_usize(20),
         glyim_span::SyntaxContext::ROOT,
     );
     GlyimDiagnostic::new(
