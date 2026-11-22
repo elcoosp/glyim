@@ -73,7 +73,7 @@ fn add_file_content_updates_existing_path() {
 #[test]
 fn set_file_content_rejects_unknown_file_id() {
     let vfs = Vfs::new();
-    let bogus_id = FileId::from_raw(999);
+    let bogus_id = FileId::from_usize(999);
     let err = vfs
         .set_file_content(bogus_id, Arc::from("refused"))
         .expect_err("an unknown id never silently loses the write");
