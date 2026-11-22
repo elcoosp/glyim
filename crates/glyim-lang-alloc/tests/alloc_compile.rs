@@ -19,7 +19,7 @@ use glyim_span::FileId;
 #[test]
 fn alloc_g_is_well_formed_g_and_defines_allocator() {
     let src = alloc_source("alloc").expect("alloc.g must be embedded");
-    let result = parse_to_syntax(src, FileId::from_raw(1));
+    let result = parse_to_syntax(src, FileId::from_usize(1));
     assert!(
         result.diagnostics.is_empty(),
         "alloc.g must parse as well-formed .g; diagnostics: {:?}",
