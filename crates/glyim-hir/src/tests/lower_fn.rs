@@ -7,7 +7,7 @@ use glyim_span::FileId;
 #[test]
 fn test_fn_with_params() {
     let source = "fn add(x: i32, y: i32) -> i32 { x + y }";
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let parse_result = parse_to_syntax(source, file_id);
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
@@ -31,7 +31,7 @@ fn test_extern_c_fn_gets_c_abi() {
     // `extern "C" fn` is a single FFI function declaration (unstub-5 Phase 4):
     // it must lower to a `FnItem` whose `abi` is `Some("C")`.
     let source = "extern \"C\" fn add(a: i32, b: i32) -> i32 { a + b }";
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let parse_result = parse_to_syntax(source, file_id);
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
@@ -54,7 +54,7 @@ fn test_bare_extern_fn_defaults_to_c_abi() {
     // A bare `extern fn` (no ABI string) also denotes the C calling
     // convention (unstub-5 Phase 4).
     let source = "extern fn sub(a: i32, b: i32) -> i32 { a - b }";
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let parse_result = parse_to_syntax(source, file_id);
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
@@ -79,7 +79,7 @@ fn unsafe_fn_sets_is_unsafe() {
     use glyim_span::FileId;
 
     let src = "unsafe fn f() {}";
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let parse_result = parse_to_syntax(src, file_id);
     let mut interner = Interner::new();
     let hir = crate::lower::lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
@@ -103,7 +103,7 @@ fn plain_fn_is_not_unsafe() {
     use glyim_span::FileId;
 
     let src = "fn f() {}";
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let parse_result = parse_to_syntax(src, file_id);
     let mut interner = Interner::new();
     let hir = crate::lower::lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
