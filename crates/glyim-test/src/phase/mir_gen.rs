@@ -27,6 +27,8 @@ impl MirGenTester {
         ctx: &glyim_type::TyCtx,
         body: &std::sync::Arc<glyim_mir::Body>,
     ) -> glyim_mir::Body {
-        glyim_opt::optimize(ctx, body).body
+        glyim_opt::optimize(ctx, body)
+            .expect("MIR optimization failed: body failed validation")
+            .body
     }
 }
