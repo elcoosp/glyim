@@ -78,7 +78,7 @@ fn compiler_never_panics_on_no_ice_corpus() {
             let _out: CompileOutput = compiler.compile(
                 &source_clone,
                 &file_clone,
-                glyim_span::FileId::from_raw(1),
+                glyim_span::FileId::from_usize(1),
                 &[],
             );
         }));
