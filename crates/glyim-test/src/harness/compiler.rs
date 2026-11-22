@@ -441,24 +441,39 @@ impl TestCompiler for PipelineCompiler {
                 // previously called `invoke_linker` (which doesn't add the
                 // runtime lib) and silently `.ok()`-swallowed the error, so
                 // every stdlib-using fixture appeared as "interp-only".
-                let executable_path = match glyim_cli::linker::find_runtime_staticlib() {
-                    Some(runtime_lib) => {
-                        let mut link_args = glyim_cli::linker::LinkArgs::default();
-                        link_args.objects.push(runtime_lib);
-                        glyim_cli::linker::link_with_args(
-                            &output_path,
-                            &exe_path,
-                            &link_args,
-                            None,
-                            Some(&target_triple),
-                        )
-                        .ok()
-                        .map(|()| exe_path.clone())
+                let executable_path = {
+                    #[cfg(feature = "real-llvm")]
+                    {
+                        match glyim_cli::linker::find_runtime_staticlib() {
+                            Some(runtime_lib) => {
+                                let mut link_args = glyim_cli::linker::LinkArgs::default();
+                                link_args.objects.push(runtime_lib);
+                                glyim_cli::linker::link_with_args(
+                                    &output_path,
+                                    &exe_path,
+                                    &link_args,
+                                    None,
+                                    Some(&target_triple),
+                                )
+                                .ok()
+                                .map(|()| exe_path.clone())
+                            }
+                            None => {
+                                // No runtime staticlib → cannot link an executable.
+                                // Leave `executable_path` as `None`; the differential
+                                // test records the fixture as "interp-only".
+                                None
+                            }
+                        }
                     }
-                    None => {
-                        // No runtime staticlib → cannot link an executable.
-                        // Leave `executable_path` as `None`; the differential
-                        // test records the fixture as "interp-only".
+                    #[cfg(not(feature = "real-llvm"))]
+                    {
+                        // No real LLVM backend in this build configuration: the
+                        // mock codegen path emits no object file to link, so
+                        // there is no executable to return (the differential
+                        // records the fixture as "interp-only"). `exe_path` is
+                        // otherwise unused on this path.
+                        let _ = &exe_path;
                         None
                     }
                 };
