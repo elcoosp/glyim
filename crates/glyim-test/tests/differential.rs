@@ -123,7 +123,7 @@ fn check_corpus_agreement(corpus: &str) {
             }
         }
 
-        let file_id = glyim_span::FileId::from_raw(0);
+        let file_id = glyim_span::FileId::from_usize(0);
         // Per-fixture panic fence: the LLVM backend is currently known to ICE
         // on some monomorphizations (`fn_abi_of failed: UnknownType(Ty(NNN))`).
         // Without this, the first ICE aborts the whole test and we can't see
