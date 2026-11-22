@@ -3,7 +3,7 @@ use glyim_span::FileId;
 use glyim_syntax::SyntaxKind;
 
 fn file_id() -> FileId {
-    FileId::from_raw(1)
+    FileId::from_usize(1)
 }
 
 // ─── Closures ───
