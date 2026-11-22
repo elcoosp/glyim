@@ -15,7 +15,7 @@ fn test_frontend_only_compiler() {
     let output = compiler.compile(
         "fn main() {}",
         std::path::Path::new("test.g"),
-        glyim_span::FileId::from_raw(9999),
+        glyim_span::FileId::from_usize(9999),
         &[],
     );
     assert!(output.syntax_tree.is_some());
@@ -63,7 +63,7 @@ fn test_pipeline_runs_macro_expansion_builtin() {
     let out = compiler.compile(
         src,
         std::path::Path::new("test.g"),
-        glyim_span::FileId::from_raw(1),
+        glyim_span::FileId::from_usize(1),
         &[],
     );
     assert!(
@@ -108,7 +108,7 @@ fn test_pipeline_runs_proc_macro_via_registry() {
     let out = compiler.compile(
         src,
         std::path::Path::new("test.g"),
-        glyim_span::FileId::from_raw(1),
+        glyim_span::FileId::from_usize(1),
         &[],
     );
     assert!(
