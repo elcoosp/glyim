@@ -18,7 +18,8 @@ impl AnalysisTester {
     #[must_use]
     pub fn run_def_map(self) -> super::CompilationTrace {
         let mut trace = super::CompilationTrace::default();
-        let parse = glyim_frontend::parse_to_syntax(&self.source, glyim_span::FileId::from_raw(0));
+        let parse =
+            glyim_frontend::parse_to_syntax(&self.source, glyim_span::FileId::from_usize(0));
         trace.parse_diagnostics = parse.diagnostics;
         trace.parse_tree = Some(parse.root);
         let _db = TestDbBuilder::new()
