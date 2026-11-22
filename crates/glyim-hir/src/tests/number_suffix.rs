@@ -7,7 +7,7 @@ use glyim_syntax::SyntaxKind;
 
 fn token_from_literal(src: &str) -> glyim_syntax::SyntaxToken {
     let full_src = format!("fn main() {{ {src} }}");
-    let parse = parse_to_syntax(&full_src, FileId::from_raw(1));
+    let parse = parse_to_syntax(&full_src, FileId::from_usize(1));
     let fn_def = parse
         .root
         .children()
