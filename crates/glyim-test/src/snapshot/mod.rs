@@ -4,8 +4,8 @@ pub mod format;
 static SNAPSHOT_FILE_ID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1000);
 
 fn next_snapshot_file_id() -> glyim_span::FileId {
-    glyim_span::FileId::from_raw(
-        SNAPSHOT_FILE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+    glyim_span::FileId::from_usize(
+        SNAPSHOT_FILE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as usize,
     )
 }
 
