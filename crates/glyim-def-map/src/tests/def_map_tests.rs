@@ -7,7 +7,7 @@ use glyim_span::FileId;
 use std::fmt::Write as _;
 
 fn build_map(source: &str) -> (CrateDefMap, Vec<GlyimDiagnostic>) {
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let parse_result = parse_to_syntax(source, file_id);
     build_def_map(
         &parse_result.root,
