@@ -4,7 +4,7 @@ use glyim_span::FileId;
 #[test]
 fn token_spans_cover_their_text() {
     let source = "fn main() {}";
-    let result = lex(source, FileId::from_raw(0));
+    let result = lex(source, FileId::from_usize(0));
     for token in &result.tokens {
         let range = token.span.range();
         let extracted = &source[range];
@@ -19,7 +19,7 @@ fn token_spans_cover_their_text() {
 #[test]
 fn spans_are_monotonically_increasing() {
     let source = "fn main() { let x = 42; }";
-    let result = lex(source, FileId::from_raw(0));
+    let result = lex(source, FileId::from_usize(0));
     let mut prev_end = 0usize;
     for token in &result.tokens {
         let range = token.span.range();
@@ -37,14 +37,14 @@ fn spans_are_monotonically_increasing() {
 
 #[test]
 fn span_file_id_preserved() {
-    let fid = FileId::from_raw(42);
+    let fid = FileId::from_usize(42);
     let result = lex("fn", fid);
     assert_eq!(result.tokens[0].span.file, fid);
 }
 
 #[test]
 fn empty_input_no_tokens_no_diagnostics() {
-    let result = lex("", FileId::from_raw(0));
+    let result = lex("", FileId::from_usize(0));
     assert!(
         result.tokens.is_empty(),
         "empty input should produce no tokens"
@@ -57,7 +57,7 @@ fn empty_input_no_tokens_no_diagnostics() {
 
 #[test]
 fn whitespace_only_no_tokens_no_diagnostics() {
-    let result = lex("   \n\t\r  ", FileId::from_raw(0));
+    let result = lex("   \n\t\r  ", FileId::from_usize(0));
     assert!(
         result.tokens.is_empty(),
         "whitespace-only input should produce no tokens"
@@ -70,7 +70,7 @@ fn whitespace_only_no_tokens_no_diagnostics() {
 
 #[test]
 fn comment_only_no_tokens_no_diagnostics() {
-    let result = lex("// just a comment\n/* block */", FileId::from_raw(0));
+    let result = lex("// just a comment\n/* block */", FileId::from_usize(0));
     assert!(
         result.tokens.is_empty(),
         "comment-only input should produce no tokens"
@@ -84,7 +84,7 @@ fn comment_only_no_tokens_no_diagnostics() {
 #[test]
 fn spans_for_source_without_whitespace() {
     let source = "1+2";
-    let result = lex(source, FileId::from_raw(0));
+    let result = lex(source, FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 3);
 
     assert_eq!(result.tokens[0].text, "1");
@@ -103,7 +103,7 @@ fn spans_for_source_without_whitespace() {
 #[test]
 fn contiguous_tokens_cover_entire_source() {
     let source = "1+2*3";
-    let result = lex(source, FileId::from_raw(0));
+    let result = lex(source, FileId::from_usize(0));
     if let Some(last) = result.tokens.last() {
         let range = last.span.range();
         assert_eq!(
