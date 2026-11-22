@@ -43,7 +43,10 @@ impl CompilerPhase for DefMapPhase<'_> {
             // Without these the expander sees `FileId::BOGUS` and no VFS, so
             // a relative `include!("items.g")` cannot find its target.
             expander.set_source_file(self.file_id);
-            expander.set_vfs(ctx.db.vfs());
+            // M6.3: reach the VFS through the `QueryContext` trait, not the
+            // `Database` struct — the call site names the query boundary, so
+            // a future salsa-backed `Database` keeps this code unchanged.
+            expander.set_vfs(glyim_db::QueryContext::vfs(&*ctx.db));
             if let Some(reg) = self.proc_registry
                 && !reg.is_empty()
             {
@@ -58,7 +61,14 @@ impl CompilerPhase for DefMapPhase<'_> {
         };
         let (def_map, def_diagnostics) = {
             let _guard = ctx.recorder.enter(Phase::DefMap);
-            glyim_def_map::build_def_map(&expanded_root, ctx.db.krate(), ctx.db.interner().clone())
+            // M6.3: reach `krate` and `interner` through the `QueryContext`
+            // trait rather than the `Database` struct, so this phase depends
+            // on the query boundary (and a salsa-backed `Database` later).
+            glyim_def_map::build_def_map(
+                &expanded_root,
+                glyim_db::QueryContext::krate(&*ctx.db),
+                glyim_db::QueryContext::interner(&*ctx.db).clone(),
+            )
         };
         ctx.sink.borrow_mut().extend(def_diagnostics);
         if ctx.sink.borrow().has_errors() {
