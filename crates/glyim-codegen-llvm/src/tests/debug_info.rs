@@ -35,9 +35,9 @@ fn make_test_body(ctx: &TyCtxMut, var_name: Name) -> Body {
         ty: unit_ty,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::new(
-            FileId::from_raw(0),
-            ByteIdx::from_raw(0),
-            ByteIdx::from_raw(0),
+            FileId::from_usize(0),
+            ByteIdx::from_usize(0),
+            ByteIdx::from_usize(0),
             SyntaxContext::ROOT,
         )),
     });
@@ -45,9 +45,9 @@ fn make_test_body(ctx: &TyCtxMut, var_name: Name) -> Body {
         ty: bool_ty,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::new(
-            FileId::from_raw(0),
-            ByteIdx::from_raw(10),
-            ByteIdx::from_raw(15),
+            FileId::from_usize(0),
+            ByteIdx::from_usize(10),
+            ByteIdx::from_usize(15),
             SyntaxContext::ROOT,
         )),
     });
@@ -65,17 +65,17 @@ fn make_test_body(ctx: &TyCtxMut, var_name: Name) -> Body {
                 kind: MirConstKind::Bool(false),
                 ty: bool_ty,
                 span: Span::new(
-                    FileId::from_raw(0),
-                    ByteIdx::from_raw(12),
-                    ByteIdx::from_raw(17),
+                    FileId::from_usize(0),
+                    ByteIdx::from_usize(12),
+                    ByteIdx::from_usize(17),
                     SyntaxContext::ROOT,
                 ),
             })),
         ),
         source_info: SourceInfo::new(Span::new(
-            FileId::from_raw(0),
-            ByteIdx::from_raw(10),
-            ByteIdx::from_raw(17),
+            FileId::from_usize(0),
+            ByteIdx::from_usize(10),
+            ByteIdx::from_usize(17),
             SyntaxContext::ROOT,
         )),
     }];
@@ -85,9 +85,9 @@ fn make_test_body(ctx: &TyCtxMut, var_name: Name) -> Body {
         terminator: Terminator {
             kind: TerminatorKind::Return,
             source_info: SourceInfo::new(Span::new(
-                FileId::from_raw(0),
-                ByteIdx::from_raw(18),
-                ByteIdx::from_raw(19),
+                FileId::from_usize(0),
+                ByteIdx::from_usize(18),
+                ByteIdx::from_usize(19),
                 SyntaxContext::ROOT,
             )),
         },
@@ -103,7 +103,7 @@ fn make_test_body(ctx: &TyCtxMut, var_name: Name) -> Body {
 fn make_source_map(source: &str) -> HashMap<FileId, (String, String)> {
     let mut map = HashMap::new();
     map.insert(
-        FileId::from_raw(0),
+        FileId::from_usize(0),
         ("test.g".to_string(), source.to_string()),
     );
     map
@@ -248,11 +248,11 @@ fn test_debug_info_multiple_files() {
 
     let mut source_map = HashMap::new();
     source_map.insert(
-        FileId::from_raw(0),
+        FileId::from_usize(0),
         ("main.g".to_string(), source_main.to_string()),
     );
     source_map.insert(
-        FileId::from_raw(1),
+        FileId::from_usize(1),
         ("lib.g".to_string(), source_lib.to_string()),
     );
 
@@ -336,9 +336,9 @@ fn test_debug_info_var_debug_const_value() {
             ty: unit_ty,
             mutability: Mutability::Not,
             source_info: SourceInfo::new(Span::new(
-                FileId::from_raw(0),
-                ByteIdx::from_raw(0),
-                ByteIdx::from_raw(0),
+                FileId::from_usize(0),
+                ByteIdx::from_usize(0),
+                ByteIdx::from_usize(0),
                 SyntaxContext::ROOT,
             )),
         });
@@ -492,11 +492,11 @@ fn resolve_span_to_location_returns_call_site_for_macro_span() {
     // one as the other. With the fix, callers go through `apply_mark` so a
     // proper `syntax_contexts` entry exists.
     let mut hygiene = HygieneCtx::new();
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let call_site = Span::new(
         file_id,
-        ByteIdx::from_raw(10),
-        ByteIdx::from_raw(20),
+        ByteIdx::from_usize(10),
+        ByteIdx::from_usize(20),
         SyntaxContext::ROOT,
     );
     let expn_id = ExpnId::from_raw(1);
@@ -511,8 +511,8 @@ fn resolve_span_to_location_returns_call_site_for_macro_span() {
     hygiene.push_expansion(expn_data);
     let base_span = Span::new(
         file_id,
-        ByteIdx::from_raw(15),
-        ByteIdx::from_raw(25),
+        ByteIdx::from_usize(15),
+        ByteIdx::from_usize(25),
         SyntaxContext::ROOT,
     );
     let expanded_span = hygiene.apply_mark(
@@ -532,11 +532,11 @@ fn resolve_span_to_location_returns_call_site_for_macro_span() {
 #[test]
 fn resolve_span_to_location_returns_unchanged_for_root_span() {
     let hygiene = HygieneCtx::new();
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let root_span = Span::new(
         file_id,
-        ByteIdx::from_raw(10),
-        ByteIdx::from_raw(20),
+        ByteIdx::from_usize(10),
+        ByteIdx::from_usize(20),
         SyntaxContext::ROOT,
     );
     let resolved = crate::debug::resolve_span_to_location(root_span, &hygiene);
@@ -553,12 +553,12 @@ fn resolve_span_to_location_returns_dummy_for_dummy_span() {
 #[test]
 fn macro_defined_function_has_correct_line_numbers_in_ir() {
     let mut hygiene = HygieneCtx::new();
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let source = "line1\nline2\nline3\nline4\nline5".to_string();
     let call_site = Span::new(
         file_id,
-        ByteIdx::from_raw(0),
-        ByteIdx::from_raw(5),
+        ByteIdx::from_usize(0),
+        ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
     let expn_id = ExpnId::from_raw(2);
@@ -574,8 +574,8 @@ fn macro_defined_function_has_correct_line_numbers_in_ir() {
     let macro_ctx = SyntaxContext::from_raw(expn_id.to_raw());
     let macro_span = Span::new(
         file_id,
-        ByteIdx::from_raw(10),
-        ByteIdx::from_raw(15),
+        ByteIdx::from_usize(10),
+        ByteIdx::from_usize(15),
         macro_ctx,
     );
     let mut source_map = HashMap::new();
@@ -630,12 +630,12 @@ fn macro_defined_function_has_correct_line_numbers_in_ir() {
 #[test]
 fn nested_macro_expansions_produce_correct_inline_locations() {
     let mut hygiene = HygieneCtx::new();
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let source = "line1\nline2\nline3\nline4\nline5".to_string();
     let outer_call_site = Span::new(
         file_id,
-        ByteIdx::from_raw(0),
-        ByteIdx::from_raw(5),
+        ByteIdx::from_usize(0),
+        ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
     let outer_expn_id = ExpnId::from_raw(3);
@@ -652,8 +652,8 @@ fn nested_macro_expansions_produce_correct_inline_locations() {
 
     let inner_call_site = Span::new(
         file_id,
-        ByteIdx::from_raw(10),
-        ByteIdx::from_raw(15),
+        ByteIdx::from_usize(10),
+        ByteIdx::from_usize(15),
         SyntaxContext::ROOT,
     );
     let inner_expn_id = ExpnId::from_raw(4);
@@ -670,8 +670,8 @@ fn nested_macro_expansions_produce_correct_inline_locations() {
 
     let inner_span = Span::new(
         file_id,
-        ByteIdx::from_raw(20),
-        ByteIdx::from_raw(25),
+        ByteIdx::from_usize(20),
+        ByteIdx::from_usize(25),
         inner_ctx,
     );
     let mut source_map = HashMap::new();
@@ -745,7 +745,7 @@ fn tier5_2_reference_debug_type_is_real_pointer() {
     let context = Context::create();
     let module = context.create_module("tier5_2_debug_types");
     let source_map: HashMap<FileId, (String, String)> = HashMap::from([(
-        FileId::from_raw(0),
+        FileId::from_usize(0),
         ("test.g".to_string(), "fn main() {}".to_string()),
     )]);
     let mut debug_ctx = crate::debug::DebugInfoCtx::new(&context, &module, source_map, true, None);
@@ -845,7 +845,7 @@ fn phase6_2_closure_debug_type_has_capture_members() {
     let context = Context::create();
     let module = context.create_module("phase6_2_closure_dbg");
     let source_map: HashMap<FileId, (String, String)> = HashMap::from([(
-        FileId::from_raw(0),
+        FileId::from_usize(0),
         ("test.g".to_string(), "fn main() {}".to_string()),
     )]);
     let mut debug_ctx = crate::debug::DebugInfoCtx::new(&context, &module, source_map, true, None);
