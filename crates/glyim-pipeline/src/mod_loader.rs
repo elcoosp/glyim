@@ -364,8 +364,8 @@ fn module_error(
     use glyim_span::{ByteIdx, SyntaxContext};
     let span = Span::new(
         ctx.file_id,
-        ByteIdx::from_raw(start as u32),
-        ByteIdx::from_raw(end as u32),
+        ByteIdx::from_usize(start),
+        ByteIdx::from_usize(end),
         SyntaxContext::ROOT,
     );
     GlyimDiagnostic::new(
