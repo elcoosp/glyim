@@ -6,7 +6,7 @@ use glyim_syntax::SyntaxKind;
 #[test]
 fn test_unterminated_string() {
     let source = "\"unclosed";
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let result = lex(source, file_id);
     assert!(!result.diagnostics.is_empty());
     let has_unterm_error = result
