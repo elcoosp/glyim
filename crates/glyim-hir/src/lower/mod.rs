@@ -130,7 +130,7 @@ thread_local! {
     /// scoped thread-local set on entry to `lower_crate` keeps those call
     /// sites untouched.
     ///
-    /// This previously hardcoded `FileId::from_raw(1)`, which is not the id
+    /// This previously hardcoded `FileId::from_usize(1)`, which is not the id
     /// the frontend assigns to the parsed source (that is the VFS's id for
     /// the file, typically 0). Every HIR span therefore claimed a file that
     /// did not exist in the VFS — harmless while nothing read `Span::file`,
@@ -152,8 +152,8 @@ pub(crate) fn with_file_id<R>(file_id: FileId, f: impl FnOnce() -> R) -> R {
 
 pub(crate) fn node_span(node: &SyntaxNode) -> Span {
     let range = node.text_range();
-    let lo = ByteIdx::from_raw(u32::from(range.start()));
-    let hi = ByteIdx::from_raw(u32::from(range.end()));
+    let lo = ByteIdx::from_usize(u32::from(range.start()) as usize);
+    let hi = ByteIdx::from_usize(u32::from(range.end()) as usize);
     let file = CURRENT_FILE_ID.with(std::cell::Cell::get);
     Span::new(file, lo, hi, SyntaxContext::ROOT)
 }
