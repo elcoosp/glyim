@@ -25,3 +25,6 @@ dump.txt
 skills/
 scripts/gen_ship_toml.py
 scripts/build_ship_zip.py
+
+# Agent-sandbox scaffolding (download/ is the sandbox deliverable dir)
+download/
