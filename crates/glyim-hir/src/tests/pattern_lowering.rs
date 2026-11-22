@@ -7,7 +7,7 @@ use glyim_span::FileId;
 #[test]
 fn test_pattern_or_lowering() {
     let source = "fn f(x: i32) { match x { 0 | 1 => 2, _ => 3 } }";
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let parse_result = parse_to_syntax(source, file_id);
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
