@@ -278,14 +278,14 @@ fn test_debug_declare_local_emits_intrinsic() {
     let context = Context::create();
     let module = context.create_module("test_debug");
     let source_map: HashMap<FileId, (String, String)> = HashMap::from([(
-        FileId::from_raw(0),
+        FileId::from_usize(0),
         ("test.g".to_string(), "fn main() {}".to_string()),
     )]);
     let mut debug_ctx = crate::debug::DebugInfoCtx::new(&context, &module, source_map, true, None);
     let fn_type = context.void_type().fn_type(&[], false);
     let func = module.add_function("test_fn", fn_type, None);
     let bb = context.append_basic_block(func, "entry");
-    debug_ctx.set_function(&context, &func, "test_fn", FileId::from_raw(0), 1);
+    debug_ctx.set_function(&context, &func, "test_fn", FileId::from_usize(0), 1);
     let builder = context.create_builder();
     builder.position_at_end(bb);
     let alloca = builder
