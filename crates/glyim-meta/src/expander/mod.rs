@@ -442,9 +442,9 @@ impl<'a> ExpanderImpl<'a> {
             // `Span::DUMMY`.
             let range = node.text_range();
             let span = glyim_span::Span::new(
-                glyim_span::FileId::from_raw(u32::MAX),
-                glyim_span::ByteIdx::from_raw(u32::from(range.start())),
-                glyim_span::ByteIdx::from_raw(u32::from(range.end())),
+                glyim_span::FileId::from_usize(u32::MAX as usize),
+                glyim_span::ByteIdx::from_usize(u32::from(range.start()) as usize),
+                glyim_span::ByteIdx::from_usize(u32::from(range.end()) as usize),
                 glyim_span::SyntaxContext::ROOT,
             );
             return (
@@ -1533,8 +1533,8 @@ impl<'a> ExpanderImpl<'a> {
         let range = node.text_range();
         Span::new(
             self.file_id_from_node(node),
-            ByteIdx::from_raw(range.start().into()),
-            ByteIdx::from_raw(range.end().into()),
+            ByteIdx::from_usize(u32::from(range.start()) as usize),
+            ByteIdx::from_usize(u32::from(range.end()) as usize),
             SyntaxContext::ROOT,
         )
     }
