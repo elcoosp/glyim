@@ -1,7 +1,5 @@
 //! Statement checking logic for `FnCtxt`.
 
-use rustc_hash::FxHashMap;
-
 use glyim_core::interner::Name;
 use glyim_core::primitives::Mutability;
 use glyim_hir::{Expr, ExprId};
