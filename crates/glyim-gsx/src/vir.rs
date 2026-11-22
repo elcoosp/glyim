@@ -1124,7 +1124,7 @@ mod tests {
 
     fn parse_gsx(src: &str) -> ast::GsxNode {
         let wrapped = format!("fn __g() {{ {src} }}");
-        let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
+        let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_usize(0));
         let g = ast::gsx_from_parse(&parsed);
         assert!(g.diagnostics.is_empty(), "{:?}", g.diagnostics);
         g.root.expect("gsx root")
@@ -1288,7 +1288,7 @@ mod tests {
                 build: Rc::new(|_call| {
                     let wrapped = "fn __g() { <p class=\"c\">\"static child\"</p> }";
                     let parsed =
-                        glyim_frontend::parse_to_syntax(wrapped, glyim_span::FileId::from_raw(0));
+                        glyim_frontend::parse_to_syntax(wrapped, glyim_span::FileId::from_usize(0));
                     ast::gsx_from_parse(&parsed).root.unwrap()
                 }),
                 inline_never: false,
@@ -1317,7 +1317,7 @@ mod tests {
                 build: Rc::new(|_call| {
                     let wrapped = "fn __g() { <p>\"x\"</p> }";
                     let parsed =
-                        glyim_frontend::parse_to_syntax(wrapped, glyim_span::FileId::from_raw(0));
+                        glyim_frontend::parse_to_syntax(wrapped, glyim_span::FileId::from_usize(0));
                     ast::gsx_from_parse(&parsed).root.unwrap()
                 }),
                 inline_never: true,
