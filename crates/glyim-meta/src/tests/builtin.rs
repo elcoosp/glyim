@@ -132,9 +132,9 @@ fn builtin_file_expand_api() {
     let args_root = parse(args_source);
 
     let call_site = Span::new(
-        FileId::from_raw(7),
-        ByteIdx::from_raw(10),
-        ByteIdx::from_raw(17),
+        FileId::from_usize(7),
+        ByteIdx::from_usize(10),
+        ByteIdx::from_usize(17),
         SyntaxContext::ROOT,
     );
 
@@ -173,9 +173,9 @@ fn builtin_line_expand_api() {
     let args_root = parse(args_source);
 
     let call_site = Span::new(
-        FileId::from_raw(1),
-        ByteIdx::from_raw(20),
-        ByteIdx::from_raw(27),
+        FileId::from_usize(1),
+        ByteIdx::from_usize(20),
+        ByteIdx::from_usize(27),
         SyntaxContext::ROOT,
     );
 
@@ -219,9 +219,9 @@ fn builtin_env_expand_api() {
     let args_root = parse(args_source);
 
     let call_site = Span::new(
-        FileId::from_raw(1),
-        ByteIdx::from_raw(0),
-        ByteIdx::from_raw(7),
+        FileId::from_usize(1),
+        ByteIdx::from_usize(0),
+        ByteIdx::from_usize(7),
         SyntaxContext::ROOT,
     );
 
