@@ -71,7 +71,7 @@ fn counter_state() -> Value {
 
 fn compile_counter() -> ViewRuntime {
     let wrapped = format!("fn CounterView(s: &Counter) -> View {{ {COUNTER_VIEW} }}");
-    let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
+    let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_usize(0));
     assert!(
         parsed.diagnostics.is_empty(),
         "source must parse cleanly: {:?}",
@@ -246,7 +246,7 @@ fn counter_history_region_reconciles() {
 #[test]
 fn counter_stream_flavor_has_no_patches() {
     let wrapped = format!("fn CounterView(s: &Counter) -> View {{ {COUNTER_VIEW} }}");
-    let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
+    let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_usize(0));
     let g = ast::gsx_from_parse(&parsed);
     let schemas = SchemaRegistry::standard();
     let vir = VirBuilder::new(VirOptions::default(), &schemas).build(g.root.as_ref().unwrap());
@@ -279,7 +279,7 @@ fn untrackable_reads_are_diagnosed() {
     use glyim_gsx::diag::GsxCode;
     let src = "<output>\"{s.cell.borrow().v}\"</output>";
     let wrapped = format!("fn V(s: &S) -> View {{ {src} }}");
-    let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_raw(0));
+    let parsed = glyim_frontend::parse_to_syntax(&wrapped, glyim_span::FileId::from_usize(0));
     let g = ast::gsx_from_parse(&parsed);
     let schemas = SchemaRegistry::standard();
     let vir = VirBuilder::new(VirOptions::default(), &schemas).build(g.root.as_ref().unwrap());
