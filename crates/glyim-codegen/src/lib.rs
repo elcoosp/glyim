@@ -820,13 +820,25 @@ impl BytecodeBackend {
         while k < instrs.len() {
             let op = instrs[k].op;
             if op == OP_LOAD_CONST {
-                let v = i64::from_le_bytes(instrs[k].operand[..8].try_into().unwrap());
+                let Some(v) = le_i64(&instrs[k].operand) else {
+                    // Truncated LOAD_CONST operand: keep the original
+                    // instruction rather than panicking on a short slice
+                    // (micro-debt: the previous `operand[..8].try_into()
+                    // .unwrap()` panicked on malformed bytecode).
+                    out.push(instrs[k].clone());
+                    k += 1;
+                    continue;
+                };
                 // LOAD_CONST(int a) ; LOAD_CONST(int b) ; foldable BINOP
                 if k + 2 < instrs.len()
                     && instrs[k + 1].op == OP_LOAD_CONST
                     && is_foldable_binop(instrs[k + 2].op)
                 {
-                    let v2 = i64::from_le_bytes(instrs[k + 1].operand[..8].try_into().unwrap());
+                    let Some(v2) = le_i64(&instrs[k + 1].operand) else {
+                        out.push(instrs[k].clone());
+                        k += 1;
+                        continue;
+                    };
                     if let Some(folded) = fold_int_binop(instrs[k + 2].op, v, v2) {
                         out.push(Instr {
                             op: OP_LOAD_CONST,
@@ -855,6 +867,25 @@ impl BytecodeBackend {
 struct Instr {
     op: u8,
     operand: Vec<u8>,
+}
+
+/// Read a little-endian `i64` from the first 8 bytes of `bytes`, or `None`
+/// if the slice is too short. Replaces the previous
+/// `bytes[..8].try_into().unwrap()` which panicked on a truncated operand
+/// (micro-debt eradication: a malformed bytecode stream now skips the
+/// peephole rule instead of aborting).
+fn le_i64(bytes: &[u8]) -> Option<i64> {
+    let arr: [u8; 8] = bytes.get(..8)?.try_into().ok()?;
+    Some(i64::from_le_bytes(arr))
+}
+
+/// Read a little-endian `u32` from the first 4 bytes of `bytes`, or `None`
+/// if the slice is too short. Companion to [`le_i64`]; the call sites gate
+/// on `cnt_bytes.len() == 4`, so this always succeeds on well-formed input,
+/// but the explicit `Option` removes the bare `.unwrap()` panic path.
+fn le_u32(bytes: &[u8]) -> Option<u32> {
+    let arr: [u8; 4] = bytes.get(..4)?.try_into().ok()?;
+    Some(u32::from_le_bytes(arr))
 }
 
 /// Decode a raw bytecode stream into a sequence of [`Instr`], using the
@@ -909,7 +940,7 @@ fn decode_operand(bc: &[u8], i: usize, op: u8) -> (Vec<u8>, usize) {
             let mut v = cnt_bytes.clone();
             let mut consumed = 4;
             if cnt_bytes.len() == 4 {
-                let count = u32::from_le_bytes(cnt_bytes.try_into().unwrap()) as usize;
+                let count = le_u32(&cnt_bytes).unwrap_or(0) as usize;
                 for _ in 0..count {
                     if i + consumed >= bc.len() {
                         break;
@@ -931,7 +962,7 @@ fn decode_operand(bc: &[u8], i: usize, op: u8) -> (Vec<u8>, usize) {
             let mut v = cnt_bytes.clone();
             let mut consumed = 4;
             if cnt_bytes.len() == 4 {
-                let count = u32::from_le_bytes(cnt_bytes.try_into().unwrap()) as usize;
+                let count = le_u32(&cnt_bytes).unwrap_or(0) as usize;
                 for _ in 0..count {
                     if i + consumed >= bc.len() {
                         break;
@@ -956,7 +987,7 @@ fn decode_operand(bc: &[u8], i: usize, op: u8) -> (Vec<u8>, usize) {
             let mut v = cnt_bytes.clone();
             let mut consumed = 4;
             if cnt_bytes.len() == 4 {
-                let count = u32::from_le_bytes(cnt_bytes.try_into().unwrap()) as usize;
+                let count = le_u32(&cnt_bytes).unwrap_or(0) as usize;
                 for _ in 0..count {
                     let (pair, c) = take(12);
                     v.extend(pair);
