@@ -1039,7 +1039,6 @@ name = "glyim-diag"
 version = "0.10.0"
 dependencies = [
  "glyim-span",
- "glyim-test",
  "miette",
  "serde_json",
  "tracing",
