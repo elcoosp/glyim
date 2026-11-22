@@ -16,7 +16,7 @@ use crate::{BodyId, CrateHir, Expr, Literal, Pat};
 /// Parse source code and lower it to HIR, returning the `CrateHir` and any
 /// diagnostics collected during lowering.
 fn parse_and_lower(source: &str) -> (CrateHir, Vec<glyim_diag::GlyimDiagnostic>) {
-    let result = parse_to_syntax(source, FileId::from_raw(1));
+    let result = parse_to_syntax(source, FileId::from_usize(1));
     let mut interner = Interner::new();
     crate::pipeline_api::lower_crate_for_pipeline(&result.root, &mut interner)
 }
