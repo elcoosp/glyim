@@ -125,7 +125,7 @@ fn main() {
             plan.passes().len(),
             plan.ids()
         );
-        let out = optimize_at_level(&ctx, &arc, level);
+        let out = optimize_at_level(&ctx, &arc, level).expect("optimize_at_level failed");
         println!(
             "  assign statements: {} -> {}",
             assign_count(&arc),
@@ -142,7 +142,7 @@ fn main() {
     ]);
     match custom {
         Some(plan) => {
-            let out = optimize_with_plan(&ctx, &arc, &plan);
+            let out = optimize_with_plan(&ctx, &arc, &plan).expect("optimize_with_plan failed");
             println!(
                 "\ncustom plan {:?}: {} assigns after",
                 plan.ids(),
