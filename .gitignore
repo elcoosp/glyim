@@ -17,3 +17,11 @@ dump.txt
 # Build-time backups
 *.bak
 *.orig
+
+# Agent-environment scaffolding (the `skills/` tree is mounted by the
+# development sandbox, not part of the glyim repo) and one-off delivery
+# tooling (the ship.toml + zip generators): excluded from the ship.toml
+# union check so `ship validate` does not flag them as dirty-but-unlisted.
+skills/
+scripts/gen_ship_toml.py
+scripts/build_ship_zip.py
