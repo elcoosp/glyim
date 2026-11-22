@@ -20,7 +20,7 @@ fn compile(src: &str) -> CompileOutput {
     compiler.compile(
         src,
         std::path::Path::new("test.g"),
-        FileId::from_raw(1),
+        FileId::from_usize(1),
         &[],
     )
 }
