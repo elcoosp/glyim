@@ -42,13 +42,57 @@
 use crate::Body;
 use glyim_type::TyCtx;
 
+/// A named MIR invariant a pass declares as a precondition (`REQUIRES`) or a
+/// postcondition (`ENSURES`). The pass manager (M5.11) checks the always-on
+/// `WellFormed` set via [`glyim_mir::validate::validate_body`] after every
+/// pass; a pass that establishes a phase-specific post-condition (only
+/// `slice_desugar` → `NoSubslice` today) declares it via [`MirPass::ensures`]
+/// so the manager runs the matching validator arm
+/// ([`glyim_mir::validate::validate_no_subslice`]) right after it — and after
+/// every subsequent pass, so a pass that *reintroduces* a `Subslice` is
+/// attributed precisely.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Invariant {
+    /// The body satisfies every always-on invariant
+    /// (`validate_body`: CFG edges, declaredness, storage pairing, arg
+    /// count, cleanup edges, drop glue, slice-projection terminality).
+    WellFormed,
+    /// No `ProjectionElem::Subslice` survives anywhere in the body (the
+    /// `slice_desugar` post-condition, audit MIR-31).
+    NoSubslice,
+}
+
+/// Per-pass deterministic statistics (M5.11). Every field is a structural
+/// count, never a wall-clock reading, so a run is reproducible across
+/// machines and the `--emit=stats` rows are deterministic. The manager
+/// records one entry per pass in the plan (passes beyond a bisect limit are
+/// `ran: false` with zero deltas).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PassStats {
+    /// The pass's stable id ([`MirPass::id`]).
+    pub name: &'static str,
+    /// Whether the pass ran (`false` under `optimize_with_bisect` beyond the
+    /// limit).
+    pub ran: bool,
+    /// Whether the pass changed the body (the structural signature
+    /// `(block_count, total_statements)` differs before vs after).
+    pub body_changed: bool,
+    /// Change in total statement count across all blocks (`after - before`).
+    pub stmt_delta: i64,
+    /// Change in basic-block count (`after - before`).
+    pub block_delta: i64,
+}
+
 /// Dispatch seam for one MIR optimization pass.
 ///
 /// A pass sees the (validated) body and the read-only type context; it
-/// mutates only `body`. Passes must preserve the invariants
-/// [`crate::validate_body`] checks — the pipeline re-validates nothing
-/// after arbitrary custom plans beyond the `Subslice` post-condition that
-/// codegen structurally requires (see [`crate::optimize_with_plan`]).
+/// mutates only `body`. The manager enforces the contract: it runs
+/// [`glyim_mir::validate::validate_body`] after every pass (the `WellFormed`
+/// `ENSURES` every pass must maintain) and attributes any violation to the
+/// pass that produced it ([`crate::PassViolation`]). A pass additionally
+/// declares its phase-specific post-conditions via [`MirPass::ensures`] (e.g.
+/// `slice_desugar` ensures `NoSubslice`); the manager runs the matching
+/// validator arm after that pass and after every subsequent pass.
 pub trait MirPass {
     /// Stable pass id — the string phase profiles and custom plans use to
     /// refer to this pass. Unique across [`BuiltinMirPass::ALL`].
@@ -56,6 +100,24 @@ pub trait MirPass {
 
     /// Run the pass over `body` in place.
     fn run(&self, ctx: &TyCtx, body: &mut Body);
+
+    /// Invariants the pass requires of its input (`REQUIRES`). Every builtin
+    /// pass requires a `WellFormed` body; the manager guarantees this by
+    /// validating up front and after every prior pass, so a pass never sees
+    /// an ill-formed input. Returning a narrower set than `WellFormed` is a
+    /// documented relaxation (none of the builtins do).
+    fn requires(&self) -> &'static [Invariant] {
+        &[Invariant::WellFormed]
+    }
+
+    /// Phase-specific post-conditions the pass establishes (`ENSURES`), beyond
+    /// the always-on `WellFormed` the manager checks after every pass. The
+    /// manager runs the matching validator arm after this pass and after
+    /// every subsequent pass in the plan, so a later pass that breaks the
+    /// post-condition is attributed, not the pass that established it.
+    fn ensures(&self) -> &'static [Invariant] {
+        &[]
+    }
 }
 
 /// Every MIR pass the optimizer ships, in registry order.
@@ -102,6 +164,21 @@ impl MirPass for BuiltinMirPass {
             Self::CfgSimplify => crate::cfg_simplify::run(ctx, body),
             Self::UnreachableElim => crate::unreachable_elim::run(ctx, body),
             Self::DropElaboration => crate::drop_elaboration::run(ctx, body),
+        }
+    }
+
+    /// `slice_desugar` is the one pass that establishes a phase-specific
+    /// post-condition: once it has run, no `Subslice` projection may survive
+    /// anywhere in the body (audit MIR-31). The other builtins preserve
+    /// `WellFormed` only, which the manager checks after every pass.
+    fn ensures(&self) -> &'static [Invariant] {
+        match self {
+            Self::SliceDesugar => &[Invariant::NoSubslice],
+            Self::ConstantProp
+            | Self::Dce
+            | Self::CfgSimplify
+            | Self::UnreachableElim
+            | Self::DropElaboration => &[],
         }
     }
 }
