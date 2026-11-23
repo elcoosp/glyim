@@ -96,6 +96,13 @@ pub struct CliArgs {
     /// compile-cache hit.
     #[arg(long = "self-profile", value_name = "FILE", require_equals = true, num_args = 0..=1, default_missing_value = "trace.json")]
     pub self_profile: Option<PathBuf>,
+    /// Print the query-recompute set to stderr after a successful compile:
+    /// one row per body/signature query showing whether it cache-hit, was
+    /// backdated (fingerprint matched, value reused), or recomputed (miss).
+    /// Plan M6.9: `--explain-rebuild`. On a compile-cache hit (object already
+    /// present) no query re-ran, so only a cache-hit note is printed.
+    #[arg(long = "explain-rebuild")]
+    pub explain_rebuild: bool,
 }
 
 /// Prepend the assembled minimal standard library to `input`'s VFS content.
@@ -619,7 +626,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
                 }),
             ]
         })?;
-        write_profile_outputs(&args, &report.profile)?;
+        write_profile_outputs(&args, &report.profile, &db)?;
         return Ok(0);
     }
     if emit == EmitKind::Mir {
@@ -630,12 +637,12 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             proc_registry_ref,
             args.opt_level,
         )?;
-        write_profile_outputs(&args, &profile)?;
+        write_profile_outputs(&args, &profile, &db)?;
         return Ok(0);
     } else if emit == EmitKind::Syntax {
         // Parse-only: no db/proc-registry involvement (see `emit_syntax`).
         let profile = glyim_pipeline::emit_syntax(input, &object_path)?;
-        write_profile_outputs(&args, &profile)?;
+        write_profile_outputs(&args, &profile, &db)?;
         return Ok(0);
     } else if emit == EmitKind::LlvmIr {
         let profile = glyim_pipeline::emit_llvm_ir(
@@ -645,7 +652,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             proc_registry_ref,
             args.opt_level,
         )?;
-        write_profile_outputs(&args, &profile)?;
+        write_profile_outputs(&args, &profile, &db)?;
         return Ok(0);
     } else if emit == EmitKind::Asm {
         let profile = glyim_pipeline::emit_asm(
@@ -655,7 +662,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             proc_registry_ref,
             args.opt_level,
         )?;
-        write_profile_outputs(&args, &profile)?;
+        write_profile_outputs(&args, &profile, &db)?;
         return Ok(0);
     } else if emit == EmitKind::Run {
         // M2.4: in-process execution. Derives from the shared front half
@@ -696,7 +703,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
         // Same warning-rendering rule as the code-producing modes: a
         // successful compile's non-error diagnostics must reach the user.
         print_diagnostics(&compilation.warnings, &args.error_format);
-        write_profile_outputs(&args, &compilation.profile)?;
+        write_profile_outputs(&args, &compilation.profile, &db)?;
         let bodies: Vec<_> = compilation.bodies.values().cloned().collect();
         let outcome =
             glyim_mir_interp::run_program(&bodies, compilation.ty_ctx.as_ref(), Some(entry_main));
@@ -901,7 +908,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             args.opt_level,
         )?;
         print_diagnostics(&artifacts.warnings, &args.error_format);
-        write_profile_outputs(&args, &artifacts.profile)?;
+        write_profile_outputs(&args, &artifacts.profile, &db)?;
         let bitcode_dir = object_path.with_extension("thin-bc");
         std::fs::create_dir_all(&bitcode_dir).map_err(|e| {
             vec![glyim_diag::GlyimDiagnostic::internal_error(format!(
@@ -995,7 +1002,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             args.opt_level,
         )?;
         print_diagnostics(&artifacts.warnings, &args.error_format);
-        write_profile_outputs(&args, &artifacts.profile)?;
+        write_profile_outputs(&args, &artifacts.profile, &db)?;
     } else {
         let backend: Box<dyn glyim_codegen::CodegenBackend> = Box::new(llvm);
         let artifacts = glyim_pipeline::Pipeline::compile_file_with_artifacts(
@@ -1008,7 +1015,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             args.opt_level,
         )?;
         print_diagnostics(&artifacts.warnings, &args.error_format);
-        write_profile_outputs(&args, &artifacts.profile)?;
+        write_profile_outputs(&args, &artifacts.profile, &db)?;
     }
 
     // Store the produced object in the cache for next time. Only reached
@@ -1093,17 +1100,21 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
     Ok(0)
 }
 
-/// M2.1: emit the phase-profile side outputs after a successful compile.
+/// M2.1 / M6.9: emit the phase-profile and query-rebuild side outputs after
+/// a successful compile.
 ///
 /// * `--self-profile[=FILE]`: write the Chrome Trace JSON event list.
-/// * `--time-passes`: print the fixed-width table on stderr.
+/// * `--time-passes`: print the fixed-width phase table on stderr.
+/// * `--explain-rebuild`: print the M6.9 query-recompute set on stderr.
 ///
-/// Both are best-effort-friendly for tracing but strict for I/O: a trace
+/// Both tracing outputs are best-effort-friendly but strict for I/O: a trace
 /// write failure is a real user error (the requested file could not be
-/// produced) and surfaces as a diagnostic with a fix suggestion.
+/// produced) and surfaces as a diagnostic with a fix suggestion. The rebuild
+/// report is pure-read off the `Database` query-rebuild trace and cannot fail.
 fn write_profile_outputs(
     args: &CliArgs,
     profile: &glyim_pipeline::PhaseProfile,
+    db: &Database,
 ) -> Result<(), Vec<glyim_diag::GlyimDiagnostic>> {
     if let Some(trace_path) = &args.self_profile {
         let json = profile.render_chrome_trace();
@@ -1126,6 +1137,9 @@ fn write_profile_outputs(
     if args.time_passes {
         eprint!("{}", profile.render_text());
     }
+    if args.explain_rebuild {
+        eprint!("{}", db.render_rebuild_report());
+    }
     Ok(())
 }
 
@@ -1144,6 +1158,13 @@ fn finalize_after_object(
     // users wondering where their table went.
     if args.time_passes || args.self_profile.is_some() {
         eprintln!("cache hit — no phase profile recorded for this compile");
+    }
+    // M6.9: a compile-cache hit means no body/signature query re-ran, so the
+    // rebuild trace is empty. Mirror `render_rebuild_report()`'s empty-trace
+    // line so `--explain-rebuild` output is consistent across the cache-hit
+    // and recompile paths.
+    if args.explain_rebuild {
+        eprintln!("--explain-rebuild: 0 queries recorded (cache hit — nothing recomputed)");
     }
     if emit == EmitKind::Exec || emit == EmitKind::Cdylib {
         let final_path = final_output_path.ok_or_else(|| {
@@ -1293,6 +1314,7 @@ fn compile_proc_macro_dep(
         deny: Vec::new(),
         time_passes: false,
         self_profile: None,
+        explain_rebuild: false,
     };
     run_with_args(args).map_err(|diags| {
         let msg = diags
