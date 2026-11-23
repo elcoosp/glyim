@@ -52,10 +52,7 @@ fn emit_warning_mints_no_token() {
 fn emit_note_mints_no_token() {
     let mut sink = DiagSink::new();
     let note = GlyimDiagnostic::new(
-        ErrorCode {
-            category: ErrorCategory::Internal,
-            number: 0,
-        },
+        ErrorCode::from_registered(ErrorCategory::Internal, 0),
         DiagSeverity::Note,
         "note",
         MultiSpan::from_span(Span::DUMMY),
