@@ -1,9 +1,11 @@
 //! Crate root.
+pub mod body_queries;
 pub mod cache;
 pub mod cache_metrics;
 pub mod incremental;
 pub mod query;
 
+pub use body_queries::{ErasedQueryEntry, QueryCache, QueryKind};
 pub use incremental::{ConfigFingerprint, Durability, SourceFile};
 pub use query::QueryContext;
 
@@ -12,6 +14,7 @@ use glyim_core::interner::Interner;
 use glyim_span::FileId;
 use glyim_vfs::Vfs;
 use parking_lot::RwLock;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Handle to share the `TyCtx` between the Database and `CodegenBackend`.
@@ -28,6 +31,9 @@ pub struct Database {
     config: CrateConfig,
     /// §3.5.30: per-lint levels.
     lints: glyim_core::lint::LintMap,
+    /// M6.4 type-erased body-query cache (`thir_body` / `mir_build` /
+    /// `def_map`). See [`body_queries`].
+    query_cache: QueryCache,
 }
 
 #[derive(Clone, Debug)]
@@ -58,6 +64,7 @@ impl Database {
             mono_cache: RwLock::new(None),
             config,
             lints: glyim_core::lint::LintMap::new(),
+            query_cache: parking_lot::RwLock::new(HashMap::new()),
         }
     }
 
