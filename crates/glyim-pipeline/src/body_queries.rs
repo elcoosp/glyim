@@ -119,15 +119,41 @@ impl BodyQueries for Database {
         let id = u64::from(def_id.to_raw());
         let body = compute();
         let hash = thir_body_fingerprint(&body);
+        let cached_hash = self.query_cache_hash(QueryKind::ThirBody, id);
         // Backdating: hash match → return cached Arc, NO downstream invalidation.
-        if self.query_cache_hash(QueryKind::ThirBody, id) == Some(hash)
+        if cached_hash == Some(hash)
             && let Some(cached) = self.query_cache_value(QueryKind::ThirBody, id)
             && let Ok(arc) = cached.downcast::<thir::Body>()
         {
             // M6.9: record the backdate so --explain-rebuild can show this
             // query did not recompute its downstream `mir_build`.
             self.record_rebuild(QueryKind::ThirBody, id, RebuildOutcome::Backdated);
+            // M6.8: when the verify seam is enabled, record `Verified` — the
+            // backdate recomputed the fingerprint and it matched the cached
+            // entry's hash, so the cached `Arc<thir::Body>` is what a clean
+            // recompute would produce. Zero-overhead when the env var is unset
+            // (the snapshot stays empty).
+            if self.incr_verify_enabled() {
+                self.record_incr_verify(
+                    QueryKind::ThirBody,
+                    id,
+                    glyim_db::IncrVerifyOutcome::Verified,
+                );
+            }
             return arc;
+        }
+        // M6.8: when the verify seam is enabled AND a cached entry existed but
+        // its hash no longer matches the recomputed fingerprint, record
+        // `Mismatch` before re-caching — the cached value was stale relative
+        // to what `compute` produces now (a backdating bug or cache poisoning).
+        // This is the load-bearing correctness check the nightly 10k-sequence
+        // harness (M2) fails CI on (plan M6.8 `DoD`: "0 disagreements").
+        if self.incr_verify_enabled() && cached_hash.is_some() && cached_hash != Some(hash) {
+            self.record_incr_verify(
+                QueryKind::ThirBody,
+                id,
+                glyim_db::IncrVerifyOutcome::Mismatch,
+            );
         }
         // Miss or content changed: cache new body + invalidate downstream mir_build.
         let arc = Arc::new(body);
@@ -172,6 +198,40 @@ impl BodyQueries for Database {
         {
             // M6.9: record the hit (compute did not run — the entry was present).
             self.record_rebuild(QueryKind::MirBuild, id, RebuildOutcome::Hit);
+            // M6.8: when the verify seam is enabled, re-run `compute`, validate
+            // the fresh body, and compare its `StableHasher` fingerprint to the
+            // cached `Arc<Body>`'s fingerprint. A match records `Verified`
+            // (the upstream `thir_body` backdate was correct); a mismatch
+            // records `Mismatch` (the cached body is stale — a backdating bug
+            // the nightly 10k-sequence harness fails CI on). The cached value
+            // is still returned (the seam is observational, not corrective),
+            // so a verify-enabled run produces identical diagnostics to a
+            // verify-disabled run.
+            if self.incr_verify_enabled() {
+                let outcome = match compute() {
+                    Ok((fresh, _)) => {
+                        // Validate the fresh body so a verify re-run cannot
+                        // mask an M5.5 validator regression — a fresh body
+                        // that fails validation is a Mismatch by definition.
+                        if glyim_mir::validate::validate_body(ty_ctx, &fresh).is_err() {
+                            glyim_db::IncrVerifyOutcome::Mismatch
+                        } else {
+                            let fresh_hash = mir_body_fingerprint(&fresh);
+                            let cached_hash = mir_body_fingerprint(&arc);
+                            if fresh_hash == cached_hash {
+                                glyim_db::IncrVerifyOutcome::Verified
+                            } else {
+                                glyim_db::IncrVerifyOutcome::Mismatch
+                            }
+                        }
+                    }
+                    // A fresh `compute` that now errors is a Mismatch: the
+                    // cached entry claims a successful compute that a clean
+                    // re-run does not reproduce.
+                    Err(_) => glyim_db::IncrVerifyOutcome::Mismatch,
+                };
+                self.record_incr_verify(QueryKind::MirBuild, id, outcome);
+            }
             return Ok((arc, diags));
         }
         // Miss: compute + validate (M5.5) + cache with diagnostics (M6.5).
@@ -237,6 +297,19 @@ impl BodyQueries for Database {
 /// (cache miss → invalidate downstream `mir_build`); an unrelated body edit
 /// leaves it untouched (cache hit → backdate).
 fn thir_body_fingerprint(body: &thir::Body) -> Fingerprint {
+    let mut h = StableHasher::new();
+    h.write_str(&format!("{body:?}"));
+    Fingerprint::from_bytes(h.finish())
+}
+
+/// The `StableHasher` fingerprint of a MIR `Body` (M6.8 verify-seam equality
+/// check). Mirrors [`thir_body_fingerprint`]: hashes the `Debug` rendering so
+/// two structurally identical bodies hash identically. Used only on the
+/// `GLYIM_INCR_VERIFY=1` `mir_build` cache-hit path to confirm the cached
+/// `Arc<Body>` is what a clean recompute would produce — `mir_build`'s
+/// backdating is keyed on `thir_body`'s hash (upstream), so the body's own
+/// fingerprint is the verify comparison, never the cache key.
+fn mir_body_fingerprint(body: &Body) -> Fingerprint {
     let mut h = StableHasher::new();
     h.write_str(&format!("{body:?}"));
     Fingerprint::from_bytes(h.finish())
