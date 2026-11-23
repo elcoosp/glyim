@@ -175,3 +175,125 @@ fn property_item_tree_fingerprint_invariant_under_body_only_edit() {
         "a signature change must move the item-tree fingerprint"
     );
 }
+
+/// M6.4 `DoD` (c): editing a function body does not invalidate the `def_map`
+/// query or `item_tree_fingerprint`. Over 50 seeded random body-only edits,
+/// the `def_map` query returns a pointer-identical `Arc<CrateDefMap>` (cache
+/// hit via the body-agnostic `item_tree_fingerprint` key) and the fingerprint
+/// is byte-identical before and after. A signature change (renaming an item)
+/// moves the fingerprint and cache-misses — the positive control that guards
+/// the property against being vacuous.
+///
+/// The `def_map` query lives on `Database` via the `BodyQueries` trait
+/// (`glyim-pipeline::body_queries`); its cache key is
+/// `QueryContext::item_tree_fingerprint` (M6.3), so a body-only edit is a
+/// cache hit: the `compute` closure (which would `panic!` on recompute) is
+/// never called.
+#[test]
+fn property_def_map_query_invariant_under_body_only_edits() {
+    use glyim_db::{CrateConfig, Database, QueryContext};
+    use glyim_def_map::build_def_map;
+    use glyim_frontend::parse_to_syntax;
+    use glyim_meta::Expander;
+    use glyim_pipeline::body_queries::BodyQueries;
+    use glyim_span::HygieneCtx;
+    use rand::rngs::StdRng;
+    use rand::{RngExt, SeedableRng};
+    use std::path::Path;
+    use std::sync::Arc as StdArc;
+
+    const N: usize = 50;
+    let mut rng = StdRng::seed_from_u64(0x6D64_0000);
+    let db = Database::new(CrateConfig {
+        name: "app".to_string(),
+        target_triple: "x86_64-unknown-linux-gnu".to_string(),
+        opt_level: 2,
+    });
+    let fns = ["foo", "bar", "baz", "qux", "quux"];
+    // Build the initial source: five `fn <name>() -> i32 { 0 }` items.
+    let mk_source = |bodies: &[u64]| -> StdArc<str> {
+        use std::fmt::Write;
+        let mut s = String::new();
+        for (n, b) in fns.iter().zip(bodies.iter()) {
+            writeln!(s, "fn {n}() -> i32 {{ {b} }}").expect("write into String is infallible");
+        }
+        StdArc::from(s)
+    };
+    let v1 = mk_source(&[0; 5]);
+    let path = Path::new("src.g");
+    let file = db.vfs().add_file_content(path, v1.clone());
+
+    // Build a real CrateDefMap (parse + expand + build_def_map). The compute
+    // closure runs only on a cache miss; on a body-only-edit cache hit it is
+    // never called (the panic closure passed in the loop guards that).
+    let build_def_map_for = |src: &str| {
+        let parse = parse_to_syntax(src, file);
+        let mut hygiene = HygieneCtx::new();
+        let mut expander = Expander::new(&mut hygiene);
+        expander.set_source_file(file);
+        expander.set_vfs(db.vfs());
+        let (expanded, _) = expander.expand_crate(&parse.root);
+        build_def_map(&expanded, db.krate(), db.interner().clone()).0
+    };
+
+    // Initial query: cache miss → compute → cache → Arc A.
+    let arc1 = db.def_map_query(file, || build_def_map_for(&v1));
+    let fp1 = db.item_tree_fingerprint(file);
+
+    for _ in 0..N {
+        // Pick a random function, edit its body only (signature unchanged).
+        let idx = rng.random_range(0..fns.len());
+        let new_body = rng.random_range(0..1_000_000);
+        let mut bodies = [0u64; 5];
+        bodies[idx] = new_body;
+        let edited = mk_source(&bodies);
+        db.vfs()
+            .set_file_content(file, edited.clone())
+            .expect("set content");
+
+        // def_map_query MUST cache-hit: the body-only edit left
+        // item_tree_fingerprint unchanged, so the compute closure (which
+        // panics) is never called and the same Arc is returned.
+        let arc_n = db.def_map_query(file, || panic!("body-only edit must cache-hit"));
+        assert!(
+            StdArc::ptr_eq(&arc1, &arc_n),
+            "def_map invalidated by a body-only edit on {}",
+            fns[idx]
+        );
+        let fp_n = db.item_tree_fingerprint(file);
+        assert_eq!(
+            fp1, fp_n,
+            "item_tree_fingerprint moved by a body-only edit on {}",
+            fns[idx]
+        );
+    }
+
+    // Positive control: a signature change (rename `foo` → `renamed`) moves the
+    // fingerprint → cache miss → compute runs → fresh Arc.
+    let v_rename: StdArc<str> = {
+        use std::fmt::Write;
+        let mut s = String::new();
+        for n in fns.iter() {
+            if *n == "foo" {
+                writeln!(s, "fn renamed() -> i32 {{ 0 }}")
+                    .expect("write into String is infallible");
+            } else {
+                writeln!(s, "fn {n}() -> i32 {{ 0 }}").expect("write into String is infallible");
+            }
+        }
+        StdArc::from(s)
+    };
+    db.vfs()
+        .set_file_content(file, v_rename.clone())
+        .expect("set content");
+    let arc_r = db.def_map_query(file, || build_def_map_for(&v_rename));
+    assert!(
+        !StdArc::ptr_eq(&arc1, &arc_r),
+        "a signature change must cache-miss (fresh Arc)"
+    );
+    let fp_r = db.item_tree_fingerprint(file);
+    assert_ne!(
+        fp1, fp_r,
+        "a signature change must move item_tree_fingerprint"
+    );
+}
