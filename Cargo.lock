@@ -1041,6 +1041,7 @@ dependencies = [
  "glyim-span",
  "miette",
  "serde_json",
+ "toml",
 ]
 
 [[package]]
