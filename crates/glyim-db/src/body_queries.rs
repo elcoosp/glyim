@@ -31,6 +31,7 @@
 //! typed layer).
 
 use glyim_core::Fingerprint;
+use glyim_diag::GlyimDiagnostic;
 use parking_lot::RwLock;
 use std::any::Any;
 use std::collections::HashMap;
@@ -38,7 +39,9 @@ use std::sync::Arc;
 
 /// The kind of M6.4 body/signature query a cache entry holds. The cache is
 /// keyed by `(QueryKind, u64)` so each query family has its own id space.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// `Ord` is derived so the M6.9 rebuild trace can sort events by `(kind, id)`
+/// for deterministic `--explain-rebuild` output.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum QueryKind {
     /// A THIR body query (`thir_body`). Downstream of `def_map`; upstream of
     /// `mir_build`.
@@ -52,8 +55,10 @@ pub enum QueryKind {
 }
 
 /// A type-erased cached query value paired with its content `Fingerprint`
-/// (M6.4). The fingerprint is the backdating equality check; the value is
-/// downcast at the typed call site in `glyim-pipeline`.
+/// (M6.4) and its accumulated diagnostics (M6.5). The fingerprint is the
+/// backdating equality check; the value is downcast at the typed call site
+/// in `glyim-pipeline`; the diagnostics are replayed verbatim on a cache
+/// hit so a cached run prints identical diagnostics to a fresh run.
 pub struct ErasedQueryEntry {
     /// The `StableHasher` / `item_tree_fingerprint` content hash. Two entries
     /// with the same hash are structurally identical — the backdating
@@ -63,6 +68,12 @@ pub struct ErasedQueryEntry {
     /// `Arc<CrateDefMap>`; the concrete type is recovered via
     /// `Arc::downcast::<T>()` at the typed call site).
     pub value: Arc<dyn Any + Send + Sync>,
+    /// The non-fatal diagnostics the query's `compute` closure emitted
+    /// (M6.5). Stored as an `Arc` so the typed accessor can hand the same
+    /// allocation back on a cache hit without cloning. Empty for queries
+    /// that produce no diagnostics; stable-sorted by the typed layer before
+    /// insertion so cached and fresh runs agree byte-for-byte.
+    pub diagnostics: Arc<Vec<GlyimDiagnostic>>,
 }
 
 /// The M6.4 query cache: `(QueryKind, u64)` → `ErasedQueryEntry`. Stored on
@@ -99,10 +110,11 @@ impl crate::Database {
             .map(|e| e.value.clone())
     }
 
-    /// Insert (or replace) a cached entry. The caller computes the
-    /// `Fingerprint` (via `StableHasher` for body queries, or
-    /// `item_tree_fingerprint` for the `def_map` query) and the type-erased
-    /// `Arc<T>` value.
+    /// Insert (or replace) a cached entry with no accumulated diagnostics.
+    /// Equivalent to [`Database::query_cache_insert_with_diags`] with an
+    /// empty diagnostic vector — kept for queries that produce no
+    /// diagnostics and for callers (tests, seeding) that do not care about
+    /// the M6.5 accumulator.
     pub fn query_cache_insert(
         &self,
         kind: QueryKind,
@@ -110,9 +122,47 @@ impl crate::Database {
         hash: Fingerprint,
         value: Arc<dyn Any + Send + Sync>,
     ) {
+        self.query_cache_insert_with_diags(kind, id, hash, value, Arc::new(Vec::new()));
+    }
+
+    /// Insert (or replace) a cached entry together with its accumulated
+    /// diagnostics (M6.5). The caller computes the `Fingerprint`, the
+    /// type-erased `Arc<T>` value, and the stable-sorted `Arc<Vec<GlyimDiagnostic>>`
+    /// the query's `compute` closure emitted. On a cache hit the typed
+    /// accessor replays this `Arc` verbatim — see
+    /// [`Database::query_cache_diagnostics`].
+    pub fn query_cache_insert_with_diags(
+        &self,
+        kind: QueryKind,
+        id: u64,
+        hash: Fingerprint,
+        value: Arc<dyn Any + Send + Sync>,
+        diagnostics: Arc<Vec<GlyimDiagnostic>>,
+    ) {
+        self.query_cache.write().insert(
+            (kind, id),
+            ErasedQueryEntry {
+                hash,
+                value,
+                diagnostics,
+            },
+        );
+    }
+
+    /// Read a cached entry's accumulated diagnostics (M6.5). Returns `None`
+    /// on a cache miss. On a hit the returned `Arc` is the same allocation
+    /// the typed query returned, so a cached run prints identical
+    /// diagnostics to a fresh run.
+    #[must_use]
+    pub fn query_cache_diagnostics(
+        &self,
+        kind: QueryKind,
+        id: u64,
+    ) -> Option<Arc<Vec<GlyimDiagnostic>>> {
         self.query_cache
-            .write()
-            .insert((kind, id), ErasedQueryEntry { hash, value });
+            .read()
+            .get(&(kind, id))
+            .map(|e| e.diagnostics.clone())
     }
 
     /// Invalidate a cached entry. Called when an upstream query's content
