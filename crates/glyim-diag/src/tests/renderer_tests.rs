@@ -20,10 +20,7 @@ fn sample_error() -> GlyimDiagnostic {
         glyim_span::SyntaxContext::ROOT,
     );
     GlyimDiagnostic::new(
-        ErrorCode {
-            category: ErrorCategory::Type,
-            number: 1,
-        },
+        ErrorCode::from_registered(ErrorCategory::Type, 1),
         DiagSeverity::Error,
         "mismatched types",
         MultiSpan::from_span(primary).with_secondary(secondary, "first defined here"),
@@ -90,10 +87,7 @@ fn json_severity_is_lowercase() {
     ];
     for (severity, expected) in batches {
         let diag = GlyimDiagnostic::new(
-            ErrorCode {
-                category: ErrorCategory::Type,
-                number: 1,
-            },
+            ErrorCode::from_registered(ErrorCategory::Type, 1),
             severity,
             "m",
             MultiSpan::from_span(span),
