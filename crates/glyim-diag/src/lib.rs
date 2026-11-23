@@ -3,8 +3,15 @@
 pub use glyim_span::{MultiSpan, Span};
 pub use miette::{Diagnostic as MietteDiagnostic, Report, Severity, SourceSpan};
 
+pub mod error_registry;
+pub mod ice;
 pub mod renderer;
 
+pub use self::error_registry::{ErrorCodeEntry, explain_code, registry_entries};
+pub use self::ice::{
+    REPO_URL, ReproBundle, format_ice_report, install_ice_handler, install_ice_handler_with,
+    set_last_repro_bundle,
+};
 pub use self::renderer::{DiagnosticRenderer, HumanDiagnosticRenderer, JsonDiagnosticRenderer};
 
 use std::fmt;
@@ -35,11 +42,59 @@ pub enum StructuredDiagnosticData {
 type EmitCallback = Box<dyn FnMut(&GlyimDiagnostic)>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// `ErrorCode`.
+///
+/// Constructable only through [`ErrorCode::from_registered`], which looks
+/// the code up in [`error_registry`] (`errors/codes.toml`) and panics for an
+/// unregistered `(category, number)`. The struct is `#[non_exhaustive]`, so
+/// external crates cannot build an `ErrorCode` with a struct literal (M3.3
+/// `DoD`: "ad-hoc `ErrorCode{..}` construction forbidden") — the registry is
+/// the single source of truth, and `--explain <code>` reads the same table.
+/// The fields stay `pub` so consumers can read `.category` / `.number`
+/// (pattern matching, equality assertions); only *construction* is
+/// restricted.
+#[non_exhaustive]
 pub struct ErrorCode {
     /// `Struct`.
     pub category: ErrorCategory,
     /// `Struct`.
     pub number: u16,
+}
+
+impl ErrorCode {
+    /// Construct an `ErrorCode` from a `(category, number)` pair, checking
+    /// the registry (`errors/codes.toml`). Panics if the pair is not a
+    /// registered code — introducing a new diagnostic code without
+    /// registering it is a caught programming error, not a silent ad-hoc
+    /// code (M3.3 `DoD`). This is a violated-invariant exit, not a user-facing
+    /// one: every `(category, number)` here is a compile-time literal in the
+    /// compiler, never user input.
+    ///
+    /// [`ErrorCode::explain`] reads the same registry, so a code constructed
+    /// here always has an `--explain` entry.
+    #[must_use]
+    pub fn from_registered(category: ErrorCategory, number: u16) -> Self {
+        assert!(
+            crate::error_registry::is_registered(category, number),
+            "error code {}{:04} is not registered; add it to \
+             crates/glyim-diag/errors/codes.toml before constructing a \
+             diagnostic with it (M3.3 DoD: ad-hoc ErrorCode construction forbidden)",
+            category.as_letter(),
+            number,
+        );
+        Self { category, number }
+    }
+
+    /// The `--explain` text for this code, read from the registry
+    /// (`errors/codes.toml`). Every code constructable through
+    /// [`from_registered`](Self::from_registered) is registered, so this
+    /// always returns the entry's non-empty explanation.
+    #[must_use]
+    pub fn explain(&self) -> &'static str {
+        crate::error_registry::lookup(self.category, self.number)
+            .expect("a from_registered ErrorCode is always in the registry")
+            .explanation
+            .as_str()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -63,6 +118,82 @@ pub enum ErrorCategory {
     Io,
     /// `Variant`.
     Internal,
+}
+
+impl ErrorCategory {
+    /// The variant name as a string (`"Lex"`, `"Type"`, …), the form used in
+    /// `errors/codes.toml`'s `category` field. Round-trips with [`from_str`].
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Lex => "Lex",
+            Self::Parse => "Parse",
+            Self::NameResolution => "NameResolution",
+            Self::Type => "Type",
+            Self::Lifetime => "Lifetime",
+            Self::Borrow => "Borrow",
+            Self::Comptime => "Comptime",
+            Self::Io => "Io",
+            Self::Internal => "Internal",
+        }
+    }
+
+    /// Parse a variant-name string back into an [`ErrorCategory`]. Returns
+    /// `None` for an unknown name rather than panicking — the registry
+    /// parser panics with a clearer message at the call site.
+    #[must_use]
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Lex" => Some(Self::Lex),
+            "Parse" => Some(Self::Parse),
+            "NameResolution" => Some(Self::NameResolution),
+            "Type" => Some(Self::Type),
+            "Lifetime" => Some(Self::Lifetime),
+            "Borrow" => Some(Self::Borrow),
+            "Comptime" => Some(Self::Comptime),
+            "Io" => Some(Self::Io),
+            "Internal" => Some(Self::Internal),
+            _ => None,
+        }
+    }
+
+    /// The single-letter prefix used in [`ErrorCode`]'s `Display` form
+    /// (`E`/`P`/`N`/`T`/`L`/`B`/`C`/`I`/`X`). Round-trips with
+    /// [`from_letter`]; the `--explain` parser uses the pair to read a code
+    /// string like `"T0060"`.
+    #[must_use]
+    pub fn as_letter(&self) -> char {
+        match self {
+            Self::Lex => 'E',
+            Self::Parse => 'P',
+            Self::NameResolution => 'N',
+            Self::Type => 'T',
+            Self::Lifetime => 'L',
+            Self::Borrow => 'B',
+            Self::Comptime => 'C',
+            Self::Io => 'I',
+            Self::Internal => 'X',
+        }
+    }
+
+    /// Parse a display-form prefix letter back into an [`ErrorCategory`].
+    /// Returns `None` for an unknown letter (the `--explain` surface rejects
+    /// typos gracefully).
+    #[must_use]
+    pub fn from_letter(letter: char) -> Option<Self> {
+        match letter {
+            'E' => Some(Self::Lex),
+            'P' => Some(Self::Parse),
+            'N' => Some(Self::NameResolution),
+            'T' => Some(Self::Type),
+            'L' => Some(Self::Lifetime),
+            'B' => Some(Self::Borrow),
+            'C' => Some(Self::Comptime),
+            'I' => Some(Self::Io),
+            'X' => Some(Self::Internal),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for ErrorCode {
@@ -302,10 +433,7 @@ impl GlyimDiagnostic {
     /// `lex_error`.
     pub fn lex_error(span: Span, message: impl Into<String>) -> Self {
         Self::new(
-            ErrorCode {
-                category: ErrorCategory::Lex,
-                number: 1,
-            },
+            ErrorCode::from_registered(ErrorCategory::Lex, 1),
             DiagSeverity::Error,
             message,
             MultiSpan::from_span(span),
@@ -314,10 +442,7 @@ impl GlyimDiagnostic {
     /// `parse_error`.
     pub fn parse_error(span: Span, message: impl Into<String>) -> Self {
         Self::new(
-            ErrorCode {
-                category: ErrorCategory::Parse,
-                number: 1,
-            },
+            ErrorCode::from_registered(ErrorCategory::Parse, 1),
             DiagSeverity::Error,
             message,
             MultiSpan::from_span(span),
@@ -326,10 +451,7 @@ impl GlyimDiagnostic {
     /// `type_error`.
     pub fn type_error(span: Span, message: impl Into<String>) -> Self {
         Self::new(
-            ErrorCode {
-                category: ErrorCategory::Type,
-                number: 1,
-            },
+            ErrorCode::from_registered(ErrorCategory::Type, 1),
             DiagSeverity::Error,
             message,
             MultiSpan::from_span(span),
@@ -356,10 +478,7 @@ impl GlyimDiagnostic {
             .collect::<Vec<_>>()
             .join(", ");
         let mut diag = Self::new(
-            ErrorCode {
-                category: ErrorCategory::Type,
-                number: 50,
-            },
+            ErrorCode::from_registered(ErrorCategory::Type, 50),
             DiagSeverity::Error,
             format!("non-exhaustive match: missing variants {list}"),
             MultiSpan::from_span(span),
@@ -379,10 +498,7 @@ impl GlyimDiagnostic {
         type_name: impl Into<String>,
     ) -> Self {
         Self::new(
-            ErrorCode {
-                category: ErrorCategory::Type,
-                number: 51,
-            },
+            ErrorCode::from_registered(ErrorCategory::Type, 51),
             DiagSeverity::Error,
             format!(
                 "trait `{}` is not implemented for `{}`",
@@ -395,10 +511,7 @@ impl GlyimDiagnostic {
     /// `borrow_error`.
     pub fn borrow_error(span: Span, message: impl Into<String>) -> Self {
         Self::new(
-            ErrorCode {
-                category: ErrorCategory::Borrow,
-                number: 1,
-            },
+            ErrorCode::from_registered(ErrorCategory::Borrow, 1),
             DiagSeverity::Error,
             message,
             MultiSpan::from_span(span),
@@ -407,10 +520,7 @@ impl GlyimDiagnostic {
     /// `internal_error`.
     pub fn internal_error(message: impl Into<String>) -> Self {
         Self::new(
-            ErrorCode {
-                category: ErrorCategory::Internal,
-                number: 0,
-            },
+            ErrorCode::from_registered(ErrorCategory::Internal, 0),
             DiagSeverity::Error,
             message,
             MultiSpan::from_span(Span::DUMMY),
@@ -420,10 +530,7 @@ impl GlyimDiagnostic {
     /// (§3.5.30). Severity `Warning` — the compiler continues past it.
     pub fn warning(span: Span, message: impl Into<String>) -> Self {
         Self::new(
-            ErrorCode {
-                category: ErrorCategory::Internal,
-                number: 0,
-            },
+            ErrorCode::from_registered(ErrorCategory::Internal, 0),
             DiagSeverity::Warning,
             message,
             MultiSpan::from_span(span),
@@ -433,10 +540,7 @@ impl GlyimDiagnostic {
     /// `macro_error`.
     pub fn macro_error(span: Span, message: impl Into<String>) -> Self {
         Self::new(
-            ErrorCode {
-                category: ErrorCategory::Comptime,
-                number: 1,
-            },
+            ErrorCode::from_registered(ErrorCategory::Comptime, 1),
             DiagSeverity::Error,
             message,
             MultiSpan::from_span(span),
