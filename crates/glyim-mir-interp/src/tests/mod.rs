@@ -27,6 +27,7 @@ mod r#loop;
 mod more_edges;
 mod nested_calls;
 mod nested_projections;
+mod observer;
 mod poison;
 mod program_run;
 mod projection_write;
