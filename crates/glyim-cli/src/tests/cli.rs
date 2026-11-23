@@ -25,6 +25,7 @@ mod tests {
             deny: Vec::new(),
             time_passes: false,
             self_profile: None,
+            explain_rebuild: false,
         };
         let result = run_with_args(args);
         assert!(result.is_err());
@@ -66,6 +67,7 @@ mod tests {
             deny: Vec::new(),
             time_passes: false,
             self_profile: None,
+            explain_rebuild: false,
         };
         let result = run_with_args(args);
         assert!(result.is_ok(), "emit_mir failed: {:?}", result.err());
@@ -101,6 +103,7 @@ mod tests {
             deny: Vec::new(),
             time_passes: false,
             self_profile: None,
+            explain_rebuild: false,
         };
         let result = run_with_args(args);
         assert!(result.is_ok(), "emit_llvm_ir failed: {:?}", result.err());
