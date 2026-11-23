@@ -31,9 +31,9 @@
 
 use glyim_core::def_id::{CrateId, DefId, LocalDefId};
 use glyim_core::{Fingerprint, StableHasher};
-use glyim_db::{Database, QueryContext, QueryKind};
+use glyim_db::{Database, QueryContext, QueryKind, RebuildOutcome};
 use glyim_def_map::CrateDefMap;
-use glyim_diag::{CompResult, GlyimDiagnostic};
+use glyim_diag::{CompResult, GlyimDiagnostic, sort_diagnostics};
 use glyim_mir::Body;
 use glyim_span::FileId;
 use glyim_type::TyCtx;
@@ -78,6 +78,25 @@ pub trait BodyQueries {
         compute: impl FnOnce() -> CompResult<Body>,
     ) -> CompResult<Arc<Body>>;
 
+    /// `mir_build` query with a diagnostic accumulator (M6.5): like
+    /// [`BodyQueries::mir_build_query`], but the `compute` closure also
+    /// returns the non-fatal diagnostics it emitted while building the body.
+    /// Those diagnostics are stable-sorted (RG-06), cached with the body,
+    /// and replayed verbatim on a cache hit — so a cached run prints
+    /// identical diagnostics to a fresh run (the M6.5 definition of done).
+    ///
+    /// On a cache hit the closure is **not** called: the cached `Arc<Body>`
+    /// and the cached `Arc<Vec<GlyimDiagnostic>>` (the same allocation the
+    /// first run returned) are handed back. On a miss the body is validated
+    /// (M5.5) before caching; a validation failure is surfaced as
+    /// `internal_error` diagnostics and the body is not cached.
+    fn mir_build_query_with_diags(
+        &self,
+        def_id: DefId,
+        ty_ctx: &TyCtx,
+        compute: impl FnOnce() -> CompResult<(Body, Vec<GlyimDiagnostic>)>,
+    ) -> CompResult<(Arc<Body>, Arc<Vec<GlyimDiagnostic>>)>;
+
     /// `def_map` query: compute (or cache-hit) the crate def map.
     ///
     /// The cache key is the body-agnostic `item_tree_fingerprint` (M6.3), so a
@@ -105,6 +124,9 @@ impl BodyQueries for Database {
             && let Some(cached) = self.query_cache_value(QueryKind::ThirBody, id)
             && let Ok(arc) = cached.downcast::<thir::Body>()
         {
+            // M6.9: record the backdate so --explain-rebuild can show this
+            // query did not recompute its downstream `mir_build`.
+            self.record_rebuild(QueryKind::ThirBody, id, RebuildOutcome::Backdated);
             return arc;
         }
         // Miss or content changed: cache new body + invalidate downstream mir_build.
@@ -114,6 +136,8 @@ impl BodyQueries for Database {
             QueryKind::MirBuild,
             mir_build_id(QueryContext::krate(self), def_id),
         );
+        // M6.9: record the miss (fresh content cached + downstream invalidated).
+        self.record_rebuild(QueryKind::ThirBody, id, RebuildOutcome::Miss);
         arc
     }
 
@@ -123,15 +147,35 @@ impl BodyQueries for Database {
         ty_ctx: &TyCtx,
         compute: impl FnOnce() -> CompResult<Body>,
     ) -> CompResult<Arc<Body>> {
+        // Delegate to the M6.5 accumulator variant with an empty diagnostic
+        // vector — a `mir_build` that emits no diagnostics is the common case,
+        // and the delegation keeps the two entry points from diverging.
+        let (arc, _diags) = self.mir_build_query_with_diags(def_id, ty_ctx, || {
+            compute().map(|body| (body, Vec::new()))
+        })?;
+        Ok(arc)
+    }
+
+    fn mir_build_query_with_diags(
+        &self,
+        def_id: DefId,
+        ty_ctx: &TyCtx,
+        compute: impl FnOnce() -> CompResult<(Body, Vec<GlyimDiagnostic>)>,
+    ) -> CompResult<(Arc<Body>, Arc<Vec<GlyimDiagnostic>>)> {
         let id = mir_build_id_from_def(def_id);
         // Cache hit? (thir_body was backdated → mir_build still valid.)
+        // Replay the cached diagnostics verbatim (M6.5): a cached run prints
+        // identical diagnostics to a fresh run, with no recompute.
         if let Some(cached) = self.query_cache_value(QueryKind::MirBuild, id)
             && let Ok(arc) = cached.downcast::<Body>()
+            && let Some(diags) = self.query_cache_diagnostics(QueryKind::MirBuild, id)
         {
-            return Ok(arc);
+            // M6.9: record the hit (compute did not run — the entry was present).
+            self.record_rebuild(QueryKind::MirBuild, id, RebuildOutcome::Hit);
+            return Ok((arc, diags));
         }
-        // Miss: compute + validate (M5.5) + cache.
-        let body = compute()?;
+        // Miss: compute + validate (M5.5) + cache with diagnostics (M6.5).
+        let (body, mut diags) = compute()?;
         glyim_mir::validate::validate_body(ty_ctx, &body).map_err(|violations| {
             violations
                 .into_iter()
@@ -142,17 +186,24 @@ impl BodyQueries for Database {
                 })
                 .collect::<Vec<GlyimDiagnostic>>()
         })?;
+        // Stable-sort the accumulator (RG-06) so cached and fresh runs agree
+        // byte-for-byte regardless of the order `compute` emitted diagnostics.
+        sort_diagnostics(&mut diags);
+        let diags = Arc::new(diags);
         let arc = Arc::new(body);
         // mir_build's backdating is keyed on thir_body's hash (upstream), so the
         // entry stores the sentinel fingerprint — its presence/absence is the
         // cache check, not its hash.
-        self.query_cache_insert(
+        self.query_cache_insert_with_diags(
             QueryKind::MirBuild,
             id,
             glyim_db::body_queries::sentinel_fingerprint(),
             arc.clone(),
+            diags.clone(),
         );
-        Ok(arc)
+        // M6.9: record the miss (compute + validate ran; fresh body cached).
+        self.record_rebuild(QueryKind::MirBuild, id, RebuildOutcome::Miss);
+        Ok((arc, diags))
     }
 
     fn def_map_query(
@@ -167,10 +218,14 @@ impl BodyQueries for Database {
             && let Some(cached) = self.query_cache_value(QueryKind::DefMap, id)
             && let Ok(arc) = cached.downcast::<CrateDefMap>()
         {
+            // M6.9: record the backdate (body-only edit → fingerprint unchanged).
+            self.record_rebuild(QueryKind::DefMap, id, RebuildOutcome::Backdated);
             return arc;
         }
         let arc = Arc::new(compute());
         self.query_cache_insert(QueryKind::DefMap, id, fp, arc.clone());
+        // M6.9: record the miss (signature change → fingerprint moved → recompute).
+        self.record_rebuild(QueryKind::DefMap, id, RebuildOutcome::Miss);
         arc
     }
 }
