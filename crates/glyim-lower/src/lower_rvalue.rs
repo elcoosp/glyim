@@ -1909,10 +1909,7 @@ impl MirBuilder<'_> {
             }
             thir::ExprKind::Err => {
                 self.diagnostics.push(GlyimDiagnostic::new(
-                    glyim_diag::ErrorCode {
-                        category: glyim_diag::ErrorCategory::Internal,
-                        number: 0,
-                    },
+                    glyim_diag::ErrorCode::from_registered(glyim_diag::ErrorCategory::Internal, 0),
                     glyim_diag::DiagSeverity::Warning,
                     "Err expression in THIR during lowering".to_string(),
                     glyim_diag::MultiSpan::from_span(expr.span),
