@@ -33,10 +33,7 @@ fn synthetic_batch() -> Vec<GlyimDiagnostic> {
         ByteIdx::from_usize(144),
         glyim_span::SyntaxContext::ROOT,
     );
-    let type_code = ErrorCode {
-        category: ErrorCategory::Type,
-        number: 50,
-    };
+    let type_code = ErrorCode::from_registered(ErrorCategory::Type, 50);
     (0..256)
         .map(|i| {
             if i % 2 == 0 {
