@@ -1,29 +1,22 @@
-//! Typed compilation phases (M5.1 Phase 1 + Phase 2: trait extraction +
-//! core pipeline extraction).
+//! Typed compilation phases (M5.1 Phase 1 + 2 + 3: trait extraction, core
+//! pipeline extraction, driver final extraction).
 //!
 //! Introduces the [`CompilerPhase`] trait that encapsulates a single
 //! compilation stage. Phase 1 extracted the front-end stages (lex+parse,
-//! expand+def-map); Phase 2 extracts the core MIR pipeline slice:
-//! [`lower::LowerPhase`] (the per-body THIR→MIR lowering + borrow check +
-//! optimization + closure recursion loop) and [`mono::MonoPhase`]
-//! (monomorphization root discovery, collection, polymorphization dedup,
-//! and post-mono semantic checks). The driver chains the phases in order;
-//! each phase threads shared state through [`PhaseCtx`] and returns a typed
-//! output, so the data flow is explicit rather than buried in one
-//! ~640-line function.
-//!
-//! The typeck-setup + `typeck_crate` block and the CGU partition + symbol
-//! pairing tail remain inline pending the later M5.1 sub-items (typed
-//! `PhaseContext` hardening, `≤60`-line driver, no `Option`-filled-later
-//! state): the typeck block mutates `TyCtxMut`/`TraitContext` in place across
-//! several registration passes with no clean single output, and the CGU tail
-//! aggregates `mono_items` + `mir_bodies_map` + `closure_bodies_codegen` from
-//! three different phases.
+//! expand+def-map); Phase 2 extracts the core MIR pipeline slice
+//! ([`lower::LowerPhase`], [`mono::MonoPhase`]); Phase 3 extracts the
+//! remaining inline slices ([`hir::HirPhase`], [`typeck::TypeckPhase`],
+//! [`emit::EmitPhase`]) so the driver is a ≤60-line phase chain. Each phase
+//! threads shared state through [`PhaseCtx`] and returns a typed output, so
+//! the data flow is explicit rather than buried in one ~464-line function.
 
 pub mod def_map;
+pub mod emit;
+pub mod hir;
 pub mod lex_parse;
 pub mod lower;
 pub mod mono;
+pub mod typeck;
 
 use crate::phase_prof::PhaseRecorder;
 use glyim_db::Database;
