@@ -1317,6 +1317,7 @@ dependencies = [
  "glyim-type",
  "glyim-typeck",
  "glyim-vfs",
+ "rand",
  "serde_json",
  "tempfile",
  "tracing",
