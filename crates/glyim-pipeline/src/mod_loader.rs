@@ -369,10 +369,7 @@ fn module_error(
         SyntaxContext::ROOT,
     );
     GlyimDiagnostic::new(
-        ErrorCode {
-            category: ErrorCategory::Type,
-            number: 0,
-        },
+        ErrorCode::from_registered(ErrorCategory::Type, 0),
         DiagSeverity::Error,
         message.to_string(),
         MultiSpan::from_span(span),
