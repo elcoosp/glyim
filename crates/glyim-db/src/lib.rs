@@ -2,11 +2,16 @@
 pub mod body_queries;
 pub mod cache;
 pub mod cache_metrics;
+pub mod incr_verify;
 pub mod incremental;
 pub mod query;
 pub mod rebuild_trace;
 
 pub use body_queries::{ErasedQueryEntry, QueryCache, QueryKind};
+pub use incr_verify::{
+    GLYIM_INCR_VERIFY, IncrVerifyEvent, IncrVerifyOutcome, IncrVerifyTrace, incr_verify_enabled,
+    incr_verify_enabled_for,
+};
 pub use incremental::{ConfigFingerprint, Durability, SourceFile};
 pub use query::QueryContext;
 pub use rebuild_trace::{QueryRebuildTrace, RebuildEvent, RebuildOutcome};
@@ -18,6 +23,7 @@ use glyim_vfs::Vfs;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 /// Handle to share the `TyCtx` between the Database and `CodegenBackend`.
 pub type TyCtxHandle = Arc<std::sync::RwLock<Option<Arc<glyim_type::TyCtx>>>>;
@@ -39,6 +45,17 @@ pub struct Database {
     /// M6.9 query-rebuild trace: one `RebuildEvent` per body/signature query
     /// call, read by `--explain-rebuild`. See [`rebuild_trace`].
     rebuild_trace: QueryRebuildTrace,
+    /// M6.8 incremental ≡ clean oracle trace: one `IncrVerifyEvent` per
+    /// cache-hit query call when `GLYIM_INCR_VERIFY=1`, read by the nightly
+    /// 10k-sequence harness. See [`incr_verify`].
+    incr_verify_trace: IncrVerifyTrace,
+    /// M6.8 verify-seam enable flag. Read from `GLYIM_INCR_VERIFY` once at
+    /// `Database::new` (so the hot path is a single `AtomicBool::load`, not a
+    /// `getenv` per query) and overridable per-`Database` via
+    /// [`Database::set_incr_verify_for_test`] so the behavior tests do not
+    /// race on process-global env mutation (edition 2024 made `set_var`
+    /// unsafe; the parallel test runner also makes env mutation flaky).
+    incr_verify_enabled: AtomicBool,
 }
 
 #[derive(Clone, Debug)]
@@ -71,6 +88,8 @@ impl Database {
             lints: glyim_core::lint::LintMap::new(),
             query_cache: parking_lot::RwLock::new(HashMap::new()),
             rebuild_trace: parking_lot::RwLock::new(Vec::new()),
+            incr_verify_trace: parking_lot::RwLock::new(Vec::new()),
+            incr_verify_enabled: AtomicBool::new(incr_verify::incr_verify_enabled()),
         }
     }
 
