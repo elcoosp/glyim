@@ -37,10 +37,7 @@ impl ConstEvalError {
     pub fn into_diagnostic(self) -> glyim_diag::GlyimDiagnostic {
         use glyim_diag::{DiagSeverity, ErrorCategory, ErrorCode};
         glyim_diag::GlyimDiagnostic::new(
-            ErrorCode {
-                category: ErrorCategory::Comptime,
-                number: 1,
-            },
+            ErrorCode::from_registered(ErrorCategory::Comptime, 1),
             DiagSeverity::Error,
             format!("const evaluation error: {}", self.message),
             self.span.into(),
