@@ -1,0 +1,86 @@
+# Glyim error-code registry (plan §6 M3.3, CT-5).
+#
+# Source of truth for every diagnostic code the compiler can emit. A code is
+# constructable ONLY through `ErrorCode::from_registered`, which looks it up
+# here and panics for an unregistered `(category, number)` — so introducing a
+# new diagnostic code without registering it in this file is a caught
+# programming error, not a silent ad-hoc code (M3.3 DoD: "ad-hoc
+# ErrorCode{..} construction forbidden"). `ErrorCode::explain` and
+# `explain_code` return each entry's `explanation`, which is the
+# `--explain <code>` surface.
+#
+# Adding a code: append a `[[code]]` block, keep the file sorted by
+# (category, number) — `registry_entries()` asserts that order (determinism,
+# plan §3.5) — and write a non-empty `explanation` (the `--explain` text).
+
+[[code]]
+category = "Lex"
+number = 1
+title = "lex error"
+explanation = "The lexer could not produce a token from the input at this span. Check for an unterminated literal, an invalid numeric suffix, or a character the lexer does not recognize; the message names the offending byte range."
+
+[[code]]
+category = "Parse"
+number = 1
+title = "parse error"
+explanation = "The parser did not expect this token in the current grammar position. A leading '|' on a match arm is one known trigger (GAP-0008): parse_pat does not consume a leading pipe, so the arm is rejected with P0001 until that gap closes."
+
+[[code]]
+category = "Type"
+number = 0
+title = "type error"
+explanation = "A generic type-check failure raised by a late pipeline stage (post-monomorphization checks or module loading) that does not yet have a dedicated code. The message carries the specific reason; file an issue if you hit this in normal code."
+
+[[code]]
+category = "Type"
+number = 1
+title = "type mismatch"
+explanation = "An expression's type did not match the type expected in that position. The message shows the expected and found types; adjust the expression or the annotation so they agree."
+
+[[code]]
+category = "Type"
+number = 2
+title = "type error"
+explanation = "A type error surfaced by the test harness's diagnostic fixtures. Production code should prefer a more specific code; this exists so harness fixtures can assert a distinct type code without aliasing T0001."
+
+[[code]]
+category = "Type"
+number = 50
+title = "non-exhaustive match"
+explanation = "A match over an enum did not cover every variant. Add arms for the listed missing variants; the structured diagnostic data carries each missing variant's name and shape so editors can synthesize the arms."
+
+[[code]]
+category = "Type"
+number = 51
+title = "trait not implemented"
+explanation = "A method or operation required a trait the receiver type does not implement. Implement the named trait for the named type, or call the operation on a type that already implements it."
+
+[[code]]
+category = "Type"
+number = 60
+title = "await in a non-range for iterable / destructuring loop pattern"
+explanation = ".await inside a non-range for iterable or a destructuring loop pattern is rejected by async lowering (GAP-0006). This is a diagnosed gap: every use site gets T0060, so the program is not silently miscompiled. Restructure the loop to await a range-based iterable."
+
+[[code]]
+category = "Type"
+number = 61
+title = "async lowering error"
+explanation = "The async lowering pass could not compile this async construct. The message names the construct; common causes are an unsupported await shape or a closure capture that crosses an async boundary."
+
+[[code]]
+category = "Borrow"
+number = 1
+title = "borrow check error"
+explanation = "The borrow checker found a violation of the aliasing rules: a mutable borrow aliasing another borrow, a use after a move, or a reference escaping its lifetime. The message identifies the conflicting borrows."
+
+[[code]]
+category = "Comptime"
+number = 1
+title = "comptime / macro error"
+explanation = "A macro expansion or compile-time evaluation failed. For macros, check the rule arity and the captured tokens; for const evaluation, check that the evaluated expression is constant and terminates within the step budget."
+
+[[code]]
+category = "Internal"
+number = 0
+title = "internal compiler error / warning"
+explanation = "An internal diagnostic: either a compiler ICE surfaced as a user-facing error (severity Error) or an internal warning (severity Warning). If you see this as an Error on valid input, it is a compiler bug — please file an issue with a reproduction."
