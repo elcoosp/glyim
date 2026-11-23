@@ -105,10 +105,7 @@ pub fn check_large_mono_set(items: &[MonoItemData], threshold: usize) -> Vec<Gly
             .find(|s| !s.is_dummy())
             .unwrap_or(Span::DUMMY);
         vec![GlyimDiagnostic::new(
-            glyim_diag::ErrorCode {
-                category: glyim_diag::ErrorCategory::Internal,
-                number: 0,
-            },
+            glyim_diag::ErrorCode::from_registered(glyim_diag::ErrorCategory::Internal, 0),
             DiagSeverity::Warning,
             msg,
             MultiSpan::from_span(span),
@@ -167,10 +164,7 @@ pub fn check_unused_generic_params(
                 };
                 let msg = format!("unused generic parameter(s) in function `{name}`");
                 diags.push(GlyimDiagnostic::new(
-                    glyim_diag::ErrorCode {
-                        category: glyim_diag::ErrorCategory::Type,
-                        number: 0,
-                    },
+                    glyim_diag::ErrorCode::from_registered(glyim_diag::ErrorCategory::Type, 0),
                     DiagSeverity::Warning,
                     msg,
                     MultiSpan::from_span(item.body.span),
