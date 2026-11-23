@@ -1,5 +1,7 @@
 mod body_queries_tests;
 mod builtin_trait_tests;
+mod diag_accumulator_tests;
 mod drop_glue_tests;
 mod mir_parity_tests;
 mod phase_prof_tests;
+mod rebuild_trace_tests;
