@@ -125,10 +125,7 @@ pub fn desugar_async(hir: &mut crate::CrateHir, diags: &mut Vec<GlyimDiagnostic>
                 })
                 .unwrap_or(Span::DUMMY);
             diags.push(GlyimDiagnostic::new(
-                ErrorCode {
-                    category: ErrorCategory::Type,
-                    number: 60,
-                },
+                ErrorCode::from_registered(ErrorCategory::Type, 60),
                 DiagSeverity::Error,
                 "`.await` inside a loop body is not yet supported by the async state-machine \
                  lowering for this shape (`for` over a non-range iterable, destructuring \
@@ -1016,10 +1013,7 @@ fn desugar_multi_async_fn(
             .and_then(|sp| work_body.expr_spans.get(sp.await_expr).copied())
             .unwrap_or(Span::DUMMY);
         diags.push(GlyimDiagnostic::new(
-            ErrorCode {
-                category: ErrorCategory::Type,
-                number: 61,
-            },
+            ErrorCode::from_registered(ErrorCategory::Type, 61),
             DiagSeverity::Error,
             "multi-`.await` body awaits a future whose concrete type is not statically \
              nameable at the HIR desugar stage (it is not a direct call to a desugared \
@@ -3131,10 +3125,7 @@ fn desugar_loop_async_fn(
 
     let emit_unsupported = |diags: &mut Vec<GlyimDiagnostic>, span: Span| {
         diags.push(GlyimDiagnostic::new(
-            ErrorCode {
-                category: ErrorCategory::Type,
-                number: 60,
-            },
+            ErrorCode::from_registered(ErrorCategory::Type, 60),
             DiagSeverity::Error,
             "`.await` inside a loop body is not yet supported by the async state-machine \
              lowering for this shape (`for` over a non-range iterable, destructuring \
