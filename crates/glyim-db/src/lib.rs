@@ -4,10 +4,12 @@ pub mod cache;
 pub mod cache_metrics;
 pub mod incremental;
 pub mod query;
+pub mod rebuild_trace;
 
 pub use body_queries::{ErasedQueryEntry, QueryCache, QueryKind};
 pub use incremental::{ConfigFingerprint, Durability, SourceFile};
 pub use query::QueryContext;
+pub use rebuild_trace::{QueryRebuildTrace, RebuildEvent, RebuildOutcome};
 
 use glyim_core::def_id::CrateId;
 use glyim_core::interner::Interner;
@@ -34,6 +36,9 @@ pub struct Database {
     /// M6.4 type-erased body-query cache (`thir_body` / `mir_build` /
     /// `def_map`). See [`body_queries`].
     query_cache: QueryCache,
+    /// M6.9 query-rebuild trace: one `RebuildEvent` per body/signature query
+    /// call, read by `--explain-rebuild`. See [`rebuild_trace`].
+    rebuild_trace: QueryRebuildTrace,
 }
 
 #[derive(Clone, Debug)]
@@ -65,6 +70,7 @@ impl Database {
             config,
             lints: glyim_core::lint::LintMap::new(),
             query_cache: parking_lot::RwLock::new(HashMap::new()),
+            rebuild_trace: parking_lot::RwLock::new(Vec::new()),
         }
     }
 
