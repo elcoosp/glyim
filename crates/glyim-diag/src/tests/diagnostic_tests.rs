@@ -88,10 +88,7 @@ fn test_is_error() {
     let err = GlyimDiagnostic::lex_error(span, "error");
     assert!(err.is_error());
     let warn = GlyimDiagnostic::new(
-        ErrorCode {
-            category: ErrorCategory::Internal,
-            number: 0,
-        },
+        ErrorCode::from_registered(ErrorCategory::Internal, 0),
         DiagSeverity::Warning,
         "warning",
         MultiSpan::from_span(span),
