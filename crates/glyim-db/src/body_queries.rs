@@ -179,6 +179,28 @@ impl crate::Database {
     pub fn query_cache_len(&self) -> usize {
         self.query_cache.read().len()
     }
+
+    /// **Test-only:** overwrite a cached entry's `Fingerprint` in place,
+    /// leaving the cached value and diagnostics untouched. Used by the M6.8
+    /// `GLYIM_INCR_VERIFY` recompute-and-compare tests to simulate a
+    /// backdating bug (a stale cached hash that no longer matches what
+    /// `compute` would produce now) so the verify seam's `Mismatch` path can
+    /// be exercised without a real cache-poisoning bug in production code.
+    ///
+    /// No-op (returns without writing) if the entry is absent — the verify
+    /// seam only runs on a cache hit, so a test that calls this must have
+    /// seeded the entry first.
+    ///
+    /// Production code MUST NOT call this: it breaks the M6.4 backdating
+    /// contract (the cached hash must equal the recomputed fingerprint). The
+    /// `_for_test` suffix and the module doc's "test-only" note are the only
+    /// guards; a future ratchet (plan M3.5 panic burn-down) will move this
+    /// behind a `test-support` feature.
+    pub fn overwrite_query_cache_hash_for_test(&self, kind: QueryKind, id: u64, hash: Fingerprint) {
+        if let Some(entry) = self.query_cache.write().get_mut(&(kind, id)) {
+            entry.hash = hash;
+        }
+    }
 }
 
 /// A sentinel fingerprint for cache entries whose backdating is keyed on a
