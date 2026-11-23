@@ -29,6 +29,14 @@ name = "run_program"
 harness = false
 path = "benches/run_program.rs"
 
+# M1: the `InterpObserver` seam overhead bench — same `harness = false`
+# shape as `run_program`. Prints per-run cost for no-observer, `NoopObserver`,
+# and `TraceCollector` so CI logs can track the seam's dispatch overhead.
+[[bench]]
+name = "interp_observer"
+harness = false
+path = "benches/interp_observer.rs"
+
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
