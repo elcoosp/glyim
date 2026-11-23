@@ -66,10 +66,7 @@ pub fn discover_mono_roots(
 
     if items.is_empty() {
         let warn = GlyimDiagnostic::new(
-            glyim_diag::ErrorCode {
-                category: glyim_diag::ErrorCategory::Internal,
-                number: 0,
-            },
+            glyim_diag::ErrorCode::from_registered(glyim_diag::ErrorCategory::Internal, 0),
             DiagSeverity::Warning,
             "no entry points found in crate (no `main`, `#[start]`, `#[no_mangle]`, or `#[used]` static)"
                 .to_string(),
