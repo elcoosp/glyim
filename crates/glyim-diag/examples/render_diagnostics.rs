@@ -28,10 +28,7 @@ fn main() {
     );
     let diags = vec![
         GlyimDiagnostic::new(
-            ErrorCode {
-                category: ErrorCategory::Type,
-                number: 1,
-            },
+            ErrorCode::from_registered(ErrorCategory::Type, 1),
             DiagSeverity::Error,
             "mismatched types: expected `i32`, found `&str`",
             MultiSpan::from_span(span),
