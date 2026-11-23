@@ -11,3 +11,38 @@
 [data-theme='dark'] .hero img[src*='logo-light'] {
   filter: invert(1);
 }
+
+:root {
+  --sl-color-accent-low: #d1fae5;
+  --sl-color-accent: #059669;
+  --sl-color-accent-high: #064e3b;
+}
+
+[data-theme='dark'] {
+  --sl-color-accent-low: #064e3b;
+  --sl-color-accent: #10b981;
+  --sl-color-accent-high: #6ee7b7;
+}
+
+.glyim-mascot-figure {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0.75rem 0 1.25rem;
+}
+
+.glyim-mascot-figure img {
+  max-height: 190px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+/* Remove default card background & drop-shadow around transparent hero mascot */
+.hero img,
+.hero picture img {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
