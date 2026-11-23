@@ -1,0 +1,201 @@
+//! M6.4 body queries: typed `thir_body`, `mir_build`, and `def_map` accessors
+//! on [`Database`] with early-cutoff backdating.
+//!
+//! The plan (§6 M6.4) lands signature + body queries on the query database so
+//! a body-only edit invalidates only the queries that transitively depend on
+//! it. This module is the **typed** layer: the type-erased cache storage lives
+//! on `Database` in [`glyim_db::body_queries`] (so `glyim-db` does not need to
+//! depend on `glyim-typeck`/`glyim-mir`/`glyim-def-map`); these methods
+//! downcast the erased values, run the backdating equality check, and handle
+//! downstream invalidation.
+//!
+//! # Backdating contract
+//!
+//! A `thir_body` re-run computes the body's `StableHasher` fingerprint
+//! (M6.1). If it matches the cached entry's fingerprint, the cached `Arc` is
+//! returned **unchanged** and the downstream `mir_build` cache for that def is
+//! NOT invalidated — so a `mir_build` query that follows is a cache hit. A
+//! body edit moves the fingerprint (cache miss → insert + invalidate
+//! `mir_build`); an unrelated body edit leaves it untouched (cache hit →
+//! backdate). The `def_map` query is keyed on the body-agnostic
+//! `item_tree_fingerprint` (M6.3), so a body-only edit is always a cache hit
+//! for it — the M6.4 definition of done.
+//!
+//! # Validator integration (M5.5)
+//!
+//! `mir_build_query` runs the unified MIR validator
+//! ([`glyim_mir::validate::validate_body`]) on every freshly-built body before
+//! caching it. A validation failure is surfaced as an `internal_error`
+//! diagnostic naming the def; the body is not cached (so a re-query recomputes
+//! + re-validates, never serving a known-bad body).
+
+use glyim_core::def_id::{CrateId, DefId, LocalDefId};
+use glyim_core::{Fingerprint, StableHasher};
+use glyim_db::{Database, QueryContext, QueryKind};
+use glyim_def_map::CrateDefMap;
+use glyim_diag::{CompResult, GlyimDiagnostic};
+use glyim_mir::Body;
+use glyim_span::FileId;
+use glyim_type::TyCtx;
+use glyim_typeck::thir;
+use std::sync::Arc;
+
+/// M6.4 body/signature queries with early-cutoff backdating. The caching/
+/// storage lives on `Database` (type-erased, in
+/// [`glyim_db::body_queries`]); these typed methods downcast the erased
+/// values, run the backdating equality check, and handle downstream
+/// invalidation.
+///
+/// Consumers should depend on `impl BodyQueries` (or `&dyn BodyQueries` for
+/// object-safe calls — note the methods are generic over `compute`, so the
+/// trait is not object-safe; call it through the concrete `Database` type).
+pub trait BodyQueries {
+    /// `thir_body` query: compute (or cache-hit) a THIR body for `def_id`.
+    ///
+    /// Early cutoff (backdating): if the recomputed body's `StableHasher`
+    /// fingerprint matches the cached entry, the cached `Arc` is returned
+    /// (byte-identical pointer) and the downstream `mir_build` cache for this
+    /// def is NOT invalidated. A body edit moves the fingerprint (cache miss →
+    /// insert + invalidate `mir_build`); an unrelated edit leaves it untouched
+    /// (cache hit → backdate).
+    fn thir_body_query(
+        &self,
+        def_id: LocalDefId,
+        compute: impl FnOnce() -> thir::Body,
+    ) -> Arc<thir::Body>;
+
+    /// `mir_build` query: lower a THIR body to MIR, validate it with the
+    /// unified MIR validator (M5.5), and cache.
+    ///
+    /// Cache hit returns the cached `Arc` (the `thir_body` backdating kept it
+    /// valid). On a miss, the `compute` closure builds the body, the validator
+    /// runs, and the validated body is cached. A validation failure is
+    /// surfaced as an `internal_error` diagnostic; the body is not cached.
+    fn mir_build_query(
+        &self,
+        def_id: DefId,
+        ty_ctx: &TyCtx,
+        compute: impl FnOnce() -> CompResult<Body>,
+    ) -> CompResult<Arc<Body>>;
+
+    /// `def_map` query: compute (or cache-hit) the crate def map.
+    ///
+    /// The cache key is the body-agnostic `item_tree_fingerprint` (M6.3), so a
+    /// body-only edit is a cache hit (early cutoff): the same `Arc<CrateDefMap>`
+    /// is returned (`Arc::ptr_eq` holds). A signature change (renaming/adding/
+    /// removing an item) moves the fingerprint → cache miss → recompute.
+    fn def_map_query(
+        &self,
+        file: FileId,
+        compute: impl FnOnce() -> CrateDefMap,
+    ) -> Arc<CrateDefMap>;
+}
+
+impl BodyQueries for Database {
+    fn thir_body_query(
+        &self,
+        def_id: LocalDefId,
+        compute: impl FnOnce() -> thir::Body,
+    ) -> Arc<thir::Body> {
+        let id = u64::from(def_id.to_raw());
+        let body = compute();
+        let hash = thir_body_fingerprint(&body);
+        // Backdating: hash match → return cached Arc, NO downstream invalidation.
+        if self.query_cache_hash(QueryKind::ThirBody, id) == Some(hash)
+            && let Some(cached) = self.query_cache_value(QueryKind::ThirBody, id)
+            && let Ok(arc) = cached.downcast::<thir::Body>()
+        {
+            return arc;
+        }
+        // Miss or content changed: cache new body + invalidate downstream mir_build.
+        let arc = Arc::new(body);
+        self.query_cache_insert(QueryKind::ThirBody, id, hash, arc.clone());
+        self.query_cache_invalidate(
+            QueryKind::MirBuild,
+            mir_build_id(QueryContext::krate(self), def_id),
+        );
+        arc
+    }
+
+    fn mir_build_query(
+        &self,
+        def_id: DefId,
+        ty_ctx: &TyCtx,
+        compute: impl FnOnce() -> CompResult<Body>,
+    ) -> CompResult<Arc<Body>> {
+        let id = mir_build_id_from_def(def_id);
+        // Cache hit? (thir_body was backdated → mir_build still valid.)
+        if let Some(cached) = self.query_cache_value(QueryKind::MirBuild, id)
+            && let Ok(arc) = cached.downcast::<Body>()
+        {
+            return Ok(arc);
+        }
+        // Miss: compute + validate (M5.5) + cache.
+        let body = compute()?;
+        glyim_mir::validate::validate_body(ty_ctx, &body).map_err(|violations| {
+            violations
+                .into_iter()
+                .map(|v| {
+                    GlyimDiagnostic::internal_error(format!(
+                        "MIR validation failed for {def_id:?}: {v}"
+                    ))
+                })
+                .collect::<Vec<GlyimDiagnostic>>()
+        })?;
+        let arc = Arc::new(body);
+        // mir_build's backdating is keyed on thir_body's hash (upstream), so the
+        // entry stores the sentinel fingerprint — its presence/absence is the
+        // cache check, not its hash.
+        self.query_cache_insert(
+            QueryKind::MirBuild,
+            id,
+            glyim_db::body_queries::sentinel_fingerprint(),
+            arc.clone(),
+        );
+        Ok(arc)
+    }
+
+    fn def_map_query(
+        &self,
+        file: FileId,
+        compute: impl FnOnce() -> CrateDefMap,
+    ) -> Arc<CrateDefMap> {
+        let id = u64::from(file.to_raw());
+        let fp = QueryContext::item_tree_fingerprint(self, file);
+        // Backdating: fingerprint match → return cached Arc (body-only edit → hit).
+        if self.query_cache_hash(QueryKind::DefMap, id) == Some(fp)
+            && let Some(cached) = self.query_cache_value(QueryKind::DefMap, id)
+            && let Ok(arc) = cached.downcast::<CrateDefMap>()
+        {
+            return arc;
+        }
+        let arc = Arc::new(compute());
+        self.query_cache_insert(QueryKind::DefMap, id, fp, arc.clone());
+        arc
+    }
+}
+
+/// The `StableHasher` fingerprint of a THIR body (M6.4 backdating equality
+/// check). Hashes the body's `Debug` rendering — derived `Debug` is
+/// deterministic for a given body value, so two structurally identical bodies
+/// hash identically. The hash is the sole backdating key: a body edit moves it
+/// (cache miss → invalidate downstream `mir_build`); an unrelated body edit
+/// leaves it untouched (cache hit → backdate).
+fn thir_body_fingerprint(body: &thir::Body) -> Fingerprint {
+    let mut h = StableHasher::new();
+    h.write_str(&format!("{body:?}"));
+    Fingerprint::from_bytes(h.finish())
+}
+
+/// The `mir_build` cache id for `(krate, local_def_id)`. Combines the two raw
+/// ids into a single `u64` key (krate in the high 32 bits, local in the low
+/// 32) so the `thir_body` query can invalidate the downstream `mir_build`
+/// entry by id without a separate lookup.
+fn mir_build_id(krate: CrateId, def_id: LocalDefId) -> u64 {
+    (u64::from(krate.to_raw()) << 32) | u64::from(def_id.to_raw())
+}
+
+/// `mir_build_id` from a full `DefId` (the `mir_build_query` call site).
+fn mir_build_id_from_def(def_id: DefId) -> u64 {
+    mir_build_id(def_id.krate, def_id.local_id)
+}
