@@ -1,18 +1,12 @@
-[data-theme='dark'] {
-  --sl-color-accent-low: hsl(0 0% 45%);
-  --sl-color-accent: hsl(0 0% 75%);
-  --sl-color-accent-high: hsl(0 0% 85%);
-}
-
-.site-title img {
-  max-height: 1.75rem;
-}
-
-[data-theme='dark'] .hero img[src*='logo-light'] {
-  filter: invert(1);
-}
+@import '@fontsource-variable/space-grotesk';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/700.css';
 
 :root {
+  --sl-font: 'Space Grotesk Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --sl-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
   --sl-color-accent-low: #d1fae5;
   --sl-color-accent: #059669;
   --sl-color-accent-high: #064e3b;
@@ -22,6 +16,26 @@
   --sl-color-accent-low: #064e3b;
   --sl-color-accent: #10b981;
   --sl-color-accent-high: #6ee7b7;
+}
+
+/* Crisp architectural letter-spacing on Space Grotesk headings */
+h1,
+h2,
+h3,
+h4,
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+.site-title {
+  letter-spacing: -0.02em;
+}
+
+.site-title img {
+  max-height: 1.75rem;
+}
+
+[data-theme='dark'] .hero img[src*='logo-light'] {
+  filter: invert(1);
 }
 
 .glyim-mascot-figure {
