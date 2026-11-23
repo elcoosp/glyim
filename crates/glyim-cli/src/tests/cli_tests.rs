@@ -28,6 +28,7 @@ fn test_compile_valid_file() {
         deny: Vec::new(),
         time_passes: false,
         self_profile: None,
+        explain_rebuild: false,
     };
     let result = run_with_args(args);
     assert!(
@@ -61,6 +62,7 @@ fn test_compile_invalid_file() {
         deny: Vec::new(),
         time_passes: false,
         self_profile: None,
+        explain_rebuild: false,
     };
     let result = run_with_args(args);
     assert!(result.is_err(), "Expected compilation to fail");
@@ -137,6 +139,7 @@ fn test_emit_asm_produces_assembly_file() {
         deny: Vec::new(),
         time_passes: false,
         self_profile: None,
+        explain_rebuild: false,
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "asm emit should succeed, got: {result:?}");
@@ -187,6 +190,7 @@ fn test_lto_fat_compiles_to_object() {
         deny: Vec::new(),
         time_passes: false,
         self_profile: None,
+        explain_rebuild: false,
     };
     let result = run_with_args(args);
     assert!(
@@ -237,6 +241,7 @@ fn test_lto_thin_is_no_longer_a_tracked_gap() {
         deny: Vec::new(),
         time_passes: false,
         self_profile: None,
+        explain_rebuild: false,
     };
     let result = run_with_args(args);
     // Two acceptable outcomes: success when llvm-lto2 is present, or a
@@ -294,6 +299,7 @@ fn test_emit_cdylib_produces_shared_library() {
         deny: Vec::new(),
         time_passes: false,
         self_profile: None,
+        explain_rebuild: false,
     };
     let result = run_with_args(args);
     assert!(
@@ -329,6 +335,7 @@ fn test_lto_invalid_value_rejected() {
         deny: Vec::new(),
         time_passes: false,
         self_profile: None,
+        explain_rebuild: false,
     };
     let result = run_with_args(args);
     assert!(result.is_err(), "invalid --lto value must be rejected");
@@ -372,6 +379,7 @@ fn exec_emit_links_and_runs() {
         deny: Vec::new(),
         time_passes: false,
         self_profile: None,
+        explain_rebuild: false,
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "glyim-cli --emit=exec failed: {result:?}");
@@ -460,6 +468,7 @@ fn test_emit_stats_writes_report() {
         deny: Vec::new(),
         time_passes: false,
         self_profile: None,
+        explain_rebuild: false,
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "--emit=stats failed: {result:?}");
@@ -515,6 +524,7 @@ fn test_self_profile_writes_trace_file() {
         deny: Vec::new(),
         time_passes: true,
         self_profile: Some(trace_path.clone()),
+        explain_rebuild: false,
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "profiled compile failed: {result:?}");
@@ -552,6 +562,7 @@ fn run_args(src_path: &std::path::Path, backend: &str, with_stdlib: bool) -> Cli
         deny: Vec::new(),
         time_passes: false,
         self_profile: None,
+        explain_rebuild: false,
     }
 }
 
