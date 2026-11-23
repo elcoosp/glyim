@@ -1,28 +1,21 @@
 //! Crate root.
-/// Typed compilation phases (M5.1 Phase 1: trait extraction).
+/// M6.4 body queries (`thir_body` / `mir_build` / `def_map`) with early-cutoff
+/// backdating, on `Database`.
+pub mod body_queries;
+/// Typed compilation phases (M5.1 Phase 1 + 2 + 3: trait extraction, core
+/// pipeline extraction, driver final extraction).
 pub mod phase;
 pub mod phase_prof;
 use glyim_codegen::CodegenBackend;
 #[cfg(feature = "llvm-codegen")]
 use glyim_codegen_llvm::LlvmBackend;
 use glyim_core::def_id::TraitDefId as SolveTraitDefId;
-use glyim_core::interner::Name;
 use glyim_db::{Database, QueryContext};
 use glyim_diag::{CompResult, DiagSink, GlyimDiagnostic};
-use glyim_lower::mono::MonoCtx;
-use glyim_lower::partition::partition;
 use glyim_mir::Body;
-use glyim_solve::solver::ImplDef;
 use glyim_solve::solver::{BuiltinTrait, TraitDef};
-use glyim_solve::{InferenceTable, SimpleTraitSolver};
-use glyim_type::ParamTy;
-use glyim_type::TraitRef;
-use glyim_type::Ty;
-use glyim_type::TyKind;
-use glyim_typeck::tyconv;
 pub use phase_prof::{Phase, PhaseProfile, PhaseRecorder, StatsReport};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -117,10 +110,143 @@ pub mod mod_loader;
 mod mono_cache;
 mod pipeline_context;
 use glyim_span::FileId;
-use mono_cache::{
-    PipelineMonoCache, compute_max_cgus, make_drop_glue_provider, make_mir_body_provider,
-};
 use phase::CompilerPhase;
+
+/// Thin builder chaining the extracted `CompilerPhase` structs (M5.1 Phase 3).
+///
+/// Holds the shared [`PhaseCtx`] and exposes one method per phase that
+/// constructs the phase struct + dispatches through [`CompilerPhase::run`].
+/// This absorbs the struct-literal line count — rustfmt's default
+/// `struct_lit_width = 18` forces every phase struct whose `{ … }` content
+/// exceeds 18 chars to multi-line, so constructing the phases inline in the
+/// driver busts the ≤60-line `DoD`. Method calls obey `fn_call_width` (60),
+/// not `struct_lit_width`, so each `chain.<phase>(…)` stays on one line.
+/// The driver still chains phases **via the trait**: every method body is a
+/// thin `Phase { … }.run(&mut self.pctx)` wrapper, so the dispatch is
+/// `CompilerPhase::run`, not a hand-rolled call.
+pub(crate) struct PipelineChain<'a> {
+    pctx: phase::PhaseCtx<'a>,
+}
+
+impl<'a> PipelineChain<'a> {
+    /// Construct the chain over the shared db/recorder/sink.
+    pub(crate) fn new(
+        db: &'a mut Database,
+        recorder: &'a phase_prof::PhaseRecorder,
+        sink: &'a RefCell<DiagSink>,
+    ) -> Self {
+        Self {
+            pctx: phase::PhaseCtx { db, recorder, sink },
+        }
+    }
+
+    /// Lex + parse (`LexParsePhase`).
+    pub(crate) fn lex_parse(
+        &mut self,
+        path: &Path,
+    ) -> CompResult<phase::lex_parse::LexParseOutput> {
+        phase::lex_parse::LexParsePhase { path }.run(&mut self.pctx)
+    }
+
+    /// Expand + build def map (`DefMapPhase`).
+    pub(crate) fn def_map(
+        &mut self,
+        root: &glyim_syntax::SyntaxNode,
+        file_id: FileId,
+        proc_registry: Option<&glyim_proc_macro::Registry>,
+    ) -> CompResult<phase::def_map::DefMapOutput> {
+        phase::def_map::DefMapPhase {
+            root,
+            file_id,
+            proc_registry,
+        }
+        .run(&mut self.pctx)
+    }
+
+    /// Lower to HIR (`HirPhase`).
+    pub(crate) fn hir(
+        &mut self,
+        expanded_root: &glyim_syntax::SyntaxNode,
+        file_id: FileId,
+    ) -> CompResult<phase::hir::HirOutput> {
+        phase::hir::HirPhase {
+            expanded_root,
+            file_id,
+        }
+        .run(&mut self.pctx)
+    }
+
+    /// Type-check (`TypeckPhase`); publishes the frozen `TyCtx` to the db.
+    pub(crate) fn typeck(
+        &mut self,
+        hir: &glyim_hir::CrateHir,
+        def_map: &glyim_def_map::CrateDefMap,
+    ) -> CompResult<phase::typeck::TypeckOutput> {
+        phase::typeck::TypeckPhase { hir, def_map }.run(&mut self.pctx)
+    }
+
+    /// Lower THIR → MIR + borrowck + opt (`LowerPhase`).
+    pub(crate) fn lower(
+        &mut self,
+        thir_bodies: &[(glyim_core::def_id::LocalDefId, glyim_typeck::thir::Body)],
+        hir: &glyim_hir::CrateHir,
+        const_values: &std::collections::HashMap<
+            glyim_core::def_id::ConstDefId,
+            glyim_const_eval::ConstValue,
+        >,
+        opt_level: u8,
+    ) -> CompResult<phase::lower::LowerOutput> {
+        phase::lower::LowerPhase {
+            thir_bodies,
+            hir,
+            const_values,
+            opt_level,
+        }
+        .run(&mut self.pctx)
+    }
+
+    /// Monomorphize + post-mono checks (`MonoPhase`).
+    pub(crate) fn mono(
+        &mut self,
+        parse_root: &glyim_syntax::SyntaxNode,
+        hir: &glyim_hir::CrateHir,
+        def_map: &glyim_def_map::CrateDefMap,
+        mir_bodies_map: &std::collections::HashMap<
+            glyim_core::def_id::DefId,
+            std::sync::Arc<glyim_mir::Body>,
+        >,
+    ) -> CompResult<phase::mono::MonoOutput> {
+        phase::mono::MonoPhase {
+            parse_root,
+            hir,
+            def_map,
+            mir_bodies_map,
+        }
+        .run(&mut self.pctx)
+    }
+
+    /// Post-mono emit-prep: annotation-needed + CGU + raw-generic filter (`EmitPhase`).
+    pub(crate) fn emit(
+        &mut self,
+        lower: &phase::lower::LowerOutput,
+        mono: &phase::mono::MonoOutput,
+        unresolved_ty_var_spans: &std::collections::HashMap<
+            glyim_core::def_id::LocalDefId,
+            Vec<glyim_span::Span>,
+        >,
+        codegen_units: Option<usize>,
+        emit_object: bool,
+    ) -> CompResult<phase::emit::EmitOutput> {
+        phase::emit::EmitPhase {
+            lower,
+            mono,
+            unresolved_ty_var_spans,
+            codegen_units,
+            emit_object,
+        }
+        .run(&mut self.pctx)
+    }
+}
 
 /// `Pipeline`.
 pub struct Pipeline;
@@ -421,462 +547,45 @@ impl Pipeline {
         path: &Path,
         codegen_units: Option<usize>,
         proc_registry: Option<&glyim_proc_macro::Registry>,
-        // P2-A4: whether the caller will emit a relocatable object. Only
-        // the object-emit path needs a self-contained artifact (no
-        // undefined `__glyim_fn_*` symbols). Analysis-only paths
-        // (`compile_file_to_mir`, `--emit=llvm-ir`, `--emit=mir`) pass
-        // `false` and keep the pre-P2-A4 fallback behavior, so library
-        // crates like stdlib are not forcibly monomorphized.
         emit_object: bool,
-        // The caller's `--opt-level`. Threaded into the Opt phase: the MIR
-        // pass plan (glyim_opt::PassPlan::for_opt_level) depends on it, so
-        // `-O0` skips the semantics-preserving passes (const-prop, DCE,
-        // CFG simplify, unreachable-elim) and runs only the codegen-required
-        // slice desugaring. The compile cache already keys on this value —
-        // before this parameter it invalidated the cache while producing
-        // byte-identical MIR.
         opt_level: u8,
     ) -> CompResult<PreparedCompilation> {
-        // M2.1: every phase below brackets itself with the recorder; the
-        // snapshot travels out on `PreparedCompilation` so the CLI (or any
-        // library consumer) can render `--time-passes` / trace files.
         let recorder = phase_prof::PhaseRecorder::new();
-        let sink = DiagSink::new();
-        let sink_cell = RefCell::new(sink);
-
-        // M5.1 Phase 1: the front-end stages (lex+parse, expand+def-map) are
-        // extracted into `CompilerPhase`-implementing structs
-        // (`phase::lex_parse` / `phase::def_map`) and chained here, out of the
-        // `prepare_compilation` monolith. Each phase threads shared state
-        // through `PhaseCtx` and returns a typed output its successor
-        // consumes; errors flow as `CompResult` (the `?` propagates the
-        // diagnostic vector). The block scope releases the `&mut Database`
-        // reborrow so the inline typeck / lower / borrowck / opt / mono
-        // stages below use `db` directly.
-        let (file_id, parse_result, expanded_root, def_map) = {
-            let mut pctx = phase::PhaseCtx {
-                db: &mut *db,
-                recorder: &recorder,
-                sink: &sink_cell,
-            };
-            let lp_out = phase::lex_parse::LexParsePhase { path }.run(&mut pctx)?;
-            let dm_out = phase::def_map::DefMapPhase {
-                root: &lp_out.parse_result.root,
-                file_id: lp_out.file_id,
-                proc_registry,
-            }
-            .run(&mut pctx)?;
-            (
-                lp_out.file_id,
-                lp_out.parse_result,
-                dm_out.expanded_root,
-                dm_out.def_map,
-            )
-        };
-
-        let (hir, hir_diags) = {
-            let _guard = recorder.enter(Phase::Hir);
-            glyim_hir::pipeline_api::lower_crate_for_pipeline_with_file_id(
-                &expanded_root,
-                db.intern_mut(),
-                file_id,
-            )
-        };
-
-        sink_cell.borrow_mut().extend(hir_diags.clone());
-
-        // Safety gate: a compiler must not emit a binary when HIR lowering
-        // produced an Error-severity diagnostic. Notably this makes the async
-        // desugar's `.await`-inside-a-loop guard (Error 60) fatal instead of a
-        // silent miscompile — the lowered body would otherwise fall through to
-        // the single-poll desugar whose `Pending` arm is an infinite `loop {}`
-        // that hangs if ever executed. HIR errors are always real, so fail fast.
-        if hir_diags
-            .iter()
-            .any(|d| matches!(d.severity, glyim_diag::DiagSeverity::Error))
-        {
-            return Err(sink_cell.into_inner().into_diagnostics());
-        }
-
-        // Plan unstub-5 P5: populate `glyim_solve::TraitContext` with the user's
-        // trait impls so `SimpleTraitSolver::prove_trait` can actually find them
-        // (previously `trait_ctx` was constructed empty, so every
-        // `impl Trait for T` was invisible to the solver and any bound like
-        // `F: Trait` resolved to `DefiniteNo`). This mirrors the impl
-        // registration done for `TyCtx` inside `typeck_crate`, but targets the
-        // solver's own `TraitContext`.
-        let resolver = db.interner().clone();
-        let mut ty_ctx_mut = glyim_type::TyCtxMut::new(resolver);
-        // §3.5.30 framework: forward per-lint levels from the Database.
-        ty_ctx_mut.set_lints(db.lints().clone());
-        let mut trait_ctx = glyim_solve::TraitContext::new();
-        {
-            // Impl-header/alias resolution feeds typeck; charge it to the
-            // typeck slot (accumulates with the `typeck_crate` call below).
-            let _guard = recorder.enter(Phase::Typeck);
-            register_builtin_traits(&mut trait_ctx, db.interner());
-        }
-        // Register every ADT's name -> id up front so the impl-header
-        // resolution below (which needs each impl's `Self` type to resolve,
-        // e.g. `impl Future for twoFuture` / `impl Future for depFuture`) can
-        // find forward-referenced ADTs. The async state-machine desugar emits
-        // a `FooState` enum whose variant field types reference *other*
-        // generated ADTs, and those may be registered later in item order;
-        // without this, their `impl Future` is invisible to the solver and
-        // downstream `.poll()` calls report "Future not implemented".
-        for (_id, item) in hir.items.iter_enumerated() {
-            if matches!(
-                &item.kind,
-                glyim_hir::ItemKind::Enum(_) | glyim_hir::ItemKind::Struct(_)
-            ) {
-                // Allocate a stable id for this ADT: prefer a def-map-derived
-                // id when the item came from source, otherwise mint a fresh
-                // synthetic id (mirroring `tyconv::adt_id_for_item`). The
-                // forward-reference correctness comes from registering the
-                // name->id mapping NOW, before impl-header resolution below.
-                // Search *every* module's type scope (not just root): the
-                // assembled stdlib wraps each module in `pub mod X { .. }`, so
-                // ADTs like `Error`/`Result`/`Path`/`File` live in their own
-                // module's scope, not the crate root. A root-only lookup would
-                // miss them and mint a spurious synthetic id (e.g.
-                // `Adt2000002`), which then mismatches the real id the
-                // type-checker assigned — the "Adt45 vs Adt2000002" errors.
-                // Script 499: register the NAME ONLY, not a placeholder
-                // empty AdtDef. `register_adt_with_name` inserts into both
-                // `adt_defs` and `adt_by_name`; writing an EMPTY AdtDef here
-                // shadowed the real definition that `typeck_crate` would
-                // later register. The typeck pass's `register_adt` call
-                // writes the real def, but the earlier empty one had
-                // already contributed to `adt_generation` and to
-                // interior-mutability invalidation — and in the assembled
-                // stdlib the empty def for `Option` (etc.) survived in a
-                // way that broke variant matching (`match self { Some, None }`
-                // → 'non-exhaustive match: missing variants None' plus
-                // 'Adt1010<T> vs T').
-                //
-                // The block's actual purpose — making forward-referenced
-                // ADTs visible to impl-header resolution below — only needs
-                // the name→id mapping, which is what we do here.
-                let adt_id = (0..def_map.modules.len())
-                    .find_map(|i| {
-                        def_map.modules[glyim_def_map::ModuleId::from_raw(i as u32)]
-                            .scope
-                            .types
-                            .get(&item.name)
-                    })
-                    .map(|(id, _, _)| glyim_core::def_id::AdtId::from_raw(id.to_raw()))
-                    .or_else(|| ty_ctx_mut.adt_id_by_name(item.name))
-                    .unwrap_or_else(|| ty_ctx_mut.next_synthetic_adt_id());
-                ty_ctx_mut.register_adt_name(item.name, adt_id);
-            }
-        }
-        // Register type aliases (e.g. `type Result<T> = Result<T, Error>`) so
-        // that 1-argument usages like `Result<usize>` expand to
-        // `Result<usize, Error>`. The RHS is resolved to a `Ty` template with
-        // the alias formals left as `TyKind::Param`, stored for later
-        // expansion by `resolve_name_to_adt_ty` (stdlib-completion).
-        {
-            let mut alias_infer = InferenceTable::new();
-            let mut alias_diags = Vec::new();
-            for (_id, item) in hir.items.iter_enumerated() {
-                if let glyim_hir::ItemKind::TypeAlias(alias) = &item.kind
-                    && let Some(rhs) = &alias.ty
-                {
-                    let mut param_map: HashMap<Name, Ty> = HashMap::new();
-                    let mut params: Vec<(u32, Name)> = Vec::new();
-                    for (i, gp) in alias.generic_params.iter().enumerate() {
-                        let pname = gp.name;
-                        let pty = ty_ctx_mut.mk_ty(TyKind::Param(ParamTy {
-                            index: i as u32,
-                            name: pname,
-                        }));
-                        param_map.insert(pname, pty);
-                        params.push((i as u32, pname));
-                    }
-                    let template = tyconv::resolve_type_ref(
-                        &mut ty_ctx_mut,
-                        &mut alias_infer,
-                        &def_map,
-                        &mut alias_diags,
-                        rhs,
-                        &param_map,
-                        item.span,
-                    );
-                    ty_ctx_mut.register_type_alias(item.name, params, template);
-                }
-            }
-        }
-
-        {
-            let mut infer = InferenceTable::new();
-            let mut impl_diags = Vec::new();
-            for (_id, item) in hir.items.iter_enumerated() {
-                if let glyim_hir::ItemKind::Impl(impl_item) = &item.kind {
-                    let header = tyconv::resolve_impl_header(
-                        &mut ty_ctx_mut,
-                        &mut infer,
-                        &def_map,
-                        &mut impl_diags,
-                        impl_item,
-                        item.span,
-                    );
-                    if let Some(trait_def_id) = header.trait_def_id {
-                        let impl_def_id = glyim_core::def_id::ImplDefId::from_raw(item.id.to_raw());
-                        let substs = ty_ctx_mut
-                            .intern_substitution(vec![glyim_type::GenericArg::Ty(header.self_ty)]);
-                        trait_ctx.register_impl(ImplDef {
-                            def_id: impl_def_id,
-                            trait_ref: TraitRef {
-                                def_id: trait_def_id,
-                                substs,
-                            },
-                            predicates: Vec::new(),
-                        });
-                    }
-                }
-            }
-        }
-        let mut solver = SimpleTraitSolver::new(&trait_ctx);
-        let (ty_ctx, typeck_result) = {
-            let _guard = recorder.enter(Phase::Typeck);
-            glyim_typeck::typeck_crate(ty_ctx_mut, &def_map, &hir, &mut solver)
-        };
-        sink_cell
-            .borrow_mut()
-            .extend(typeck_result.diagnostics.clone());
-        if sink_cell.borrow().has_errors() {
-            return Err(sink_cell.into_inner().into_diagnostics());
-        }
-
-        db.set_ty_ctx(ty_ctx);
-
-        // Each closure body is emitted by codegen with the plain
-        // `__glyim_fn_<closure_id>` symbol (see lower_call's closure arm);
-        // closures never have generic substitutions. Pair each with its
-        // symbol so the pipeline's all_bodies stays uniform.
-        // M5.1 Phase 2: the per-body THIR→MIR lowering + borrow check +
-        // optimization + closure recursion loop (`LowerPhase`) and the
-        // monomorphization discovery + collection + polymorphization dedup +
-        // post-mono checks (`MonoPhase`) are extracted into
-        // `CompilerPhase`-implementing structs (`phase::lower` /
-        // `phase::mono`) and chained here, out of the `prepare_compilation`
-        // monolith. Each phase threads shared state through `PhaseCtx` and
-        // returns a typed output its successor consumes; errors flow as
-        // `CompResult` (the `?` propagates the diagnostic vector). The block
-        // scope releases the `&mut Database` reborrow so the inline
-        // annotation-needed check + CGU tail below use `db` directly.
-        let (mir_bodies_map, pre_opt_bodies_map, closure_bodies_codegen, mono_items) = {
-            let mut pctx = phase::PhaseCtx {
-                db: &mut *db,
-                recorder: &recorder,
-                sink: &sink_cell,
-            };
-            let lower_out = phase::lower::LowerPhase {
-                thir_bodies: &typeck_result.thir_bodies,
-                hir: &hir,
-                const_values: &typeck_result.const_values,
-                opt_level,
-            }
-            .run(&mut pctx)?;
-            let mono_out = phase::mono::MonoPhase {
-                parse_root: &parse_result.root,
-                hir: &hir,
-                def_map: &def_map,
-                mir_bodies_map: &lower_out.mir_bodies_map,
-            }
-            .run(&mut pctx)?;
-            (
-                lower_out.mir_bodies_map,
-                lower_out.pre_opt_bodies_map,
-                lower_out.closure_bodies_codegen,
-                mono_out.mono_items,
-            )
-        };
-
-        // Type-annotation-needed (rustc E0282) diagnostic emission.
-        // Typeck collected, per-owner, the spans whose `Ty` still carried an
-        // unbound `Infer(Ty(_))` after obligation fulfillment. Emitting
-        // those for *every* owner would flag unused stdlib template bodies
-        // whose unbound generics never get instantiated (they are never
-        // monomorphized); those are benign. We emit only for owners that
-        // actually reached the mono set — the same set that would reach
-        // codegen and ICE on the unbound var. Owners of an unmonomorphized
-        // stdlib body are dropped here and stay silent.
-        {
-            // FnDefId and LocalDefId share a raw id space (see
-            // `MonoCtx::collect`), so a simple raw comparison suffices.
-            let reachable: std::collections::HashSet<u32> = mono_items
-                .iter()
-                .filter_map(|item| match &item.item {
-                    glyim_lower::mono::MonoItem::Fn { def_id, .. } => Some(def_id.to_raw()),
-                    _ => None,
-                })
-                .collect();
-            let mut ann_diags: Vec<GlyimDiagnostic> = Vec::new();
-            for (owner, spans) in &typeck_result.unresolved_ty_var_spans {
-                if !reachable.contains(&owner.to_raw()) {
-                    continue;
-                }
-                for span in spans {
-                    ann_diags.push(GlyimDiagnostic::type_error(
-                        *span,
-                        "type annotations needed",
-                    ));
-                }
-            }
-            if !ann_diags.is_empty() {
-                sink_cell.borrow_mut().extend(ann_diags);
-                return Err(sink_cell.into_inner().into_diagnostics());
-            }
-        }
-
-        let cache = PipelineMonoCache::from_items(&mono_items);
-        db.set_mono_cache(cache.symbols().to_vec());
-
-        let max_cgus = codegen_units.unwrap_or_else(compute_max_cgus);
-        let cgus = partition(&mono_items, max_cgus);
-
-        // Pair each body with its mangled symbol. The symbol must be the
-        // *same* string a call site's `lower_call` / `MirConstKind::Fn`
-        // arm computes for this `(FnDefId, Substitution)` — otherwise the
-        // linker sees an undefined reference and the ABI mismatches. The
-        // `MonoItemData.symbol` field already holds the mangled form (see
-        // `MonoCtx::collect`), so the CGU path just reads it; the empty-CGU
-        // fallback (no mono roots) uses the legacy plain form since those
-        // bodies were never substituted.
-        let all_bodies: Vec<(String, Arc<Body>)> = if cgus.is_empty() {
-            // P2-A4: library crate (no entry points). The primary mono pass
-            // above ran with an empty root set, so `mono_items` is empty and
-            // `cgus` is empty. Emitting pre-substitution bodies under plain
-            // `__glyim_fn_N` symbols leaves their generic call sites
-            // (`__glyim_fn_N_i_j`) undefined — see KNOWN_GAPS §3.5.20.
-            //
-            // Fix: run mono a second time with a synthetic root covering
-            // every body actually lowered (`mir_bodies_map` keys — valid
-            // `DefId`s, not HIR item indices; the HIR-index path was
-            // attempt 3's bug and produced a single dummy `LocalDefId(0)`
-            // symbol). Mono's normal transitive discovery then collects
-            // every generic instantiation a root body references, and
-            // `MonoItemData.symbol` carries the exact mangled form lowering
-            // emits for the call site.
-            //
-            // Gated on `emit_object` so analysis-only paths
-            // (`compile_file_to_mir` etc.) are unaffected — monomorphizing
-            // the full stdlib surface is not legal for those
-            // (`stdlib_full_probe` regression, KNOWN_GAPS §3.5.20).
-            let synthesized: Option<Vec<(String, Arc<Body>)>> = if emit_object {
-                let _guard = recorder.enter(Phase::Mono);
-                let ty_ctx_guard = ty_ctx_after_analysis(db, "monomorphization")?;
-                let ty_ctx_ref = ty_ctx_guard.as_ref();
-                let empty_subst = glyim_type::Substitution::empty();
-                let mut synthetic_roots: Vec<glyim_lower::mono::MonoItem> = Vec::new();
-                for def_id in mir_bodies_map.keys() {
-                    synthetic_roots.push(glyim_lower::mono::MonoItem::Fn {
-                        def_id: glyim_core::def_id::FnDefId::from_raw(def_id.local_id.to_raw()),
-                        substs: empty_subst,
-                    });
-                }
-                if synthetic_roots.is_empty() {
-                    None
-                } else {
-                    let mut synth_ctx = MonoCtx::new();
-                    synth_ctx.with_ty_ctx(ty_ctx_ref);
-                    let body_provider =
-                        make_mir_body_provider(&mir_bodies_map, &sink_cell, ty_ctx_ref);
-                    let drop_provider = make_drop_glue_provider(ty_ctx_ref);
-                    synth_ctx.with_pre_subst_bodies(&mir_bodies_map);
-                    synth_ctx.collect(&synthetic_roots, &body_provider, &drop_provider);
-                    Some(
-                        synth_ctx
-                            .items()
-                            .iter()
-                            .map(|item| (item.symbol.clone(), item.body.clone()))
-                            .collect(),
-                    )
-                }
-            } else {
-                None
-            };
-            match synthesized {
-                Some(v) if !v.is_empty() => v,
-                _ => mir_bodies_map
-                    .into_values()
-                    .map(|body| {
-                        let sym = format!("__glyim_fn_{}", body.owner.local_id.to_raw());
-                        (sym, body)
-                    })
-                    .collect(),
-            }
-        } else {
-            cgus.iter()
-                .flat_map(|cgu_indices| {
-                    cgu_indices.iter().map(|&idx| {
-                        let item = &mono_items[idx];
-                        (item.symbol.clone(), item.body.clone())
-                    })
-                })
-                .collect()
-        };
-        // Closure bodies are emitted after the functions that call them; LLVM
-        // resolves the call via a forward-declared symbol, so order is fine.
-        let mut all_bodies = all_bodies;
-        all_bodies.extend(closure_bodies_codegen);
-
-        // Step A (HANDOFF_SESSION_13_FINAL.md §2): drop *raw generic* bodies
-        // (return_ty is `Param`/`Bound`/`Projection`) before emission. These
-        // leak through mono and would ICE `fn_abi_of` on `UnknownType(Param)`.
-        // See `body_is_raw_generic` for why we only test the return type.
-        //
-        // P2-A3: a downstream link error (`undefined symbol
-        // __glyim_fn_XXX`) can be correlated with this filter; the interim
-        // `dropped_raw_generic` recording field was removed as dead code,
-        // so the `GLYIM_TMP_FILT` env-gated `eprintln!` trace is the only
-        // observation point until the follow-up lands with a consumer.
-        let mut dropped = 0usize;
-        {
-            let ty_ctx_guard = ty_ctx_after_analysis(db, "raw-generic filtering")?;
-            let ty_ctx_ref = ty_ctx_guard.as_ref();
-            let mut kept: Vec<(String, Arc<Body>)> = Vec::new();
-            for (sym, body) in std::mem::take(&mut all_bodies) {
-                if body_is_raw_generic(&body, ty_ctx_ref) {
-                    dropped += 1;
-                } else {
-                    kept.push((sym, body));
-                }
-            }
-            all_bodies = kept;
-            if dropped > 0 && std::env::var_os("GLYIM_TMP_FILT").is_some() {
-                eprintln!("[GLYIM_FILT] dropped {dropped} raw-generic bodies from all_bodies");
-            }
-        }
-
-        let ty_ctx = ty_ctx_after_analysis(db, "codegen")?;
-        // Any Error-severity diagnostic short-circuits above, so everything
-        // left in the sink is advisory. Surface it on the success value so the
-        // caller can render it. Sorted + deduped for a stable order.
-        let warnings = sink_cell.into_inner().into_diagnostics();
-        // For `--emit=mir`: use the pre-opt body when we have one, else
-        // the mono/opt body (generic fns have no pre-opt non-generic
-        // template in `pre_opt_bodies_map`, so fall back to the codegen
-        // version — still useful and consistent with codegen).
-        let pre_opt_bodies: Vec<(String, Arc<Body>)> = all_bodies
-            .iter()
-            .map(|(sym, b)| {
-                let pre = pre_opt_bodies_map
-                    .get(&b.owner)
-                    .cloned()
-                    .unwrap_or_else(|| b.clone());
-                (sym.clone(), pre)
-            })
-            .collect();
-
+        let sink = RefCell::new(DiagSink::new());
+        let mut chain = PipelineChain::new(db, &recorder, &sink);
+        let lp = chain.lex_parse(path)?;
+        let dm = chain.def_map(&lp.parse_result.root, lp.file_id, proc_registry)?;
+        let hir_out = chain.hir(&dm.expanded_root, lp.file_id)?;
+        let tck = chain.typeck(&hir_out.hir, &dm.def_map)?;
+        let lower = chain.lower(
+            &tck.typeck_result.thir_bodies,
+            &hir_out.hir,
+            &tck.typeck_result.const_values,
+            opt_level,
+        )?;
+        let mono = chain.mono(
+            &lp.parse_result.root,
+            &hir_out.hir,
+            &dm.def_map,
+            &lower.mir_bodies_map,
+        )?;
+        let emit = chain.emit(
+            &lower,
+            &mono,
+            &tck.typeck_result.unresolved_ty_var_spans,
+            codegen_units,
+            emit_object,
+        )?;
+        // `chain` is not referenced after the last method call, so NLL ends its
+        // lifetime here — releasing the `&mut Database` reborrow it holds before
+        // `ty_ctx_after_analysis` reads the ty_ctx the typeck phase published.
         Ok(PreparedCompilation {
-            def_map,
-            typeck_result,
-            ty_ctx,
-            all_bodies,
-            pre_opt_bodies,
-            warnings,
+            def_map: dm.def_map,
+            typeck_result: tck.typeck_result,
+            ty_ctx: ty_ctx_after_analysis(db, "codegen")?,
+            all_bodies: emit.all_bodies,
+            pre_opt_bodies: emit.pre_opt_bodies,
+            warnings: sink.into_inner().into_diagnostics(),
             profile: recorder.profile(),
         })
     }
@@ -1286,7 +995,7 @@ pub(crate) fn drop_raw_generic_err_warnings(
     diags.retain(|d| d.message != "Err expression in THIR during lowering");
 }
 
-fn body_is_raw_generic(body: &glyim_mir::Body, ctx: &glyim_type::TyCtx) -> bool {
+pub(crate) fn body_is_raw_generic(body: &glyim_mir::Body, ctx: &glyim_type::TyCtx) -> bool {
     use glyim_type::TyKind;
     matches!(
         ctx.ty_kind(body.return_ty),
