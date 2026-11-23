@@ -33,7 +33,7 @@ pub enum StructuredDiagnosticData {
 }
 
 type EmitCallback = Box<dyn FnMut(&GlyimDiagnostic)>;
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// `ErrorCode`.
 pub struct ErrorCode {
     /// `Struct`.
@@ -42,7 +42,7 @@ pub struct ErrorCode {
     pub number: u16,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// `ErrorCategory`.
 pub enum ErrorCategory {
     /// `Variant`.
@@ -105,7 +105,7 @@ pub struct GlyimDiagnostic {
     pub structured: Option<StructuredDiagnosticData>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 /// `DiagSeverity`.
 pub enum DiagSeverity {
     /// `Variant`.
@@ -226,6 +226,38 @@ impl MietteDiagnostic for GlyimDiagnostic {
     }
 }
 
+/// The deterministic comparison key for a [`GlyimDiagnostic`] (RG-06 / M6.5).
+///
+/// Orders diagnostics by `(file, span lo, code, severity, message)` so a
+/// cached query run emits byte-identical diagnostics to a fresh run
+/// regardless of the order a pass produced them. Borrows the `message` so
+/// sorting never allocates. Constructed only by
+/// [`GlyimDiagnostic::sort_key`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DiagnosticSortKey<'a> {
+    /// The primary span's file (`FileId(u32::MAX)` for `Span::DUMMY`, which
+    /// sorts span-less diagnostics last).
+    file: glyim_span::FileId,
+    /// The primary span's low byte offset.
+    lo: glyim_span::ByteIdx,
+    /// The diagnostic's error code.
+    code: ErrorCode,
+    /// The diagnostic's severity.
+    severity: DiagSeverity,
+    /// The diagnostic's prose message (the final tiebreaker).
+    message: &'a str,
+}
+
+/// Sort `diags` in place by each diagnostic's [`GlyimDiagnostic::sort_key`]
+/// (RG-06: stable, deterministic diagnostic ordering). The sort is *stable* —
+/// equal-key diagnostics keep their relative order — so a pass that emits
+/// several diagnostics at the same span/code still produces a deterministic
+/// sequence. The M6.5 query accumulator calls this before caching and on
+/// replay, so a cached run prints identical diagnostics to a fresh run.
+pub fn sort_diagnostics(diags: &mut [GlyimDiagnostic]) {
+    diags.sort_by(|a, b| a.sort_key().cmp(&b.sort_key()));
+}
+
 impl GlyimDiagnostic {
     /// new.
     pub fn new(
@@ -251,6 +283,20 @@ impl GlyimDiagnostic {
     pub fn with_source_code(mut self, source: Arc<str>) -> Self {
         self.source_code = Some(source);
         self
+    }
+
+    /// The deterministic order key for this diagnostic (RG-06 / M6.5): see
+    /// [`DiagnosticSortKey`]. Used by [`sort_diagnostics`] so the query
+    /// accumulator can replay cached diagnostics in stable order.
+    #[must_use]
+    pub fn sort_key(&self) -> DiagnosticSortKey<'_> {
+        DiagnosticSortKey {
+            file: self.span.primary.file,
+            lo: self.span.primary.lo,
+            code: self.code,
+            severity: self.severity,
+            message: &self.message,
+        }
     }
 
     /// `lex_error`.
