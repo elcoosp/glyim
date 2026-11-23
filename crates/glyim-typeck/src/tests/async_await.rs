@@ -203,15 +203,10 @@ fn multi_await_non_nameable_future_emits_async_v2() {
     ";
     let output = compile(src);
     assert!(
-        output.diagnostics.iter().any(|d| {
-            matches!(
-                &d.code,
-                ErrorCode {
-                    category: ErrorCategory::Type,
-                    number: 61
-                }
-            )
-        }),
+        output
+            .diagnostics
+            .iter()
+            .any(|d| d.code == ErrorCode::from_registered(ErrorCategory::Type, 61)),
         "non-nameable multi-await future must emit the async-v2 diagnostic (error 61), got: {:?}",
         output.diagnostics
     );
