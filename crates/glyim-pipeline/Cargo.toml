@@ -63,3 +63,8 @@ workspace = true
 name = "phase_prof"
 harness = false
 path = "benches/phase_prof.rs"
+
+[[bench]]
+name = "diag_replay"
+harness = false
+path = "benches/diag_replay.rs"
