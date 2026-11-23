@@ -55,6 +55,10 @@ glyim-test = { workspace = true }
 glyim-mir-interp = { workspace = true }
 glyim-core = { workspace = true }
 glyim-lang-std = { workspace = true }
+# M6.8 incremental ≡ clean oracle: seeded `StdRng` drives the random
+# edit-sequence property tests (mirrors `glyim-test`'s `rand = "0.10"` —
+# dev-only, never ships in the lib's public dep surface).
+rand = "0.10"
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
@@ -68,3 +72,13 @@ path = "benches/phase_prof.rs"
 name = "diag_replay"
 harness = false
 path = "benches/diag_replay.rs"
+
+[[bench]]
+name = "incr_verify"
+harness = false
+path = "benches/incr_verify.rs"
+
+[[bench]]
+name = "incr_oracle"
+harness = false
+path = "benches/incr_oracle.rs"
