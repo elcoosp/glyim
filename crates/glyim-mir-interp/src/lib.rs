@@ -9,10 +9,12 @@ use std::collections::HashMap;
 
 mod interp_error;
 mod interp_value;
+mod observer;
 mod run;
 
 pub use interp_error::InterpError;
 pub use interp_value::InterpValue;
+pub use observer::{InterpObserver, NoopObserver, TraceCollector, TraceEvent};
 pub use run::{RunKind, RunOutcome, run_program};
 
 /// `Interpreter`.
@@ -91,6 +93,13 @@ pub struct Interpreter<'tcx> {
     /// through a dead-frame ref still fail (`write_target_locals_mut` does
     /// not consult the archive): no live alias exists to observe them.
     dead_frames: std::collections::VecDeque<ArchivedFrame>,
+    /// Optional per-step observer (M1 observability seam — mirrors the
+    /// bytecode VM's `*Sink` convention). `None` is the zero-cost default:
+    /// the dispatch loop's `Option::is_some` branch falls through without a
+    /// vtable call. Installed via [`Self::with_observer`] /
+    /// [`Self::with_trace_collector`]; drained via [`Self::take_observer`]
+    /// / [`Self::take_trace`].
+    observer: Option<Box<dyn InterpObserver>>,
 }
 
 /// A popped interpreter frame retained so `Ref`s that escaped into the
@@ -165,6 +174,7 @@ impl<'tcx> Interpreter<'tcx> {
             pending_unwind: None,
             globals: std::cell::RefCell::new(std::collections::HashMap::new()),
             dead_frames: std::collections::VecDeque::new(),
+            observer: None,
         }
     }
 
@@ -214,6 +224,43 @@ impl<'tcx> Interpreter<'tcx> {
     pub fn with_panics_unwind(mut self, yes: bool) -> Self {
         self.panics_unwind = yes;
         self
+    }
+
+    /// Install a custom [`InterpObserver`] (M1 observability seam). Replaces
+    /// any previously installed observer. The interpreter holds it behind
+    /// `Option<Box<dyn InterpObserver>>`; the dispatch loop's `is_some`
+    /// branch is the only cost when no observer is installed.
+    #[must_use]
+    pub fn with_observer(mut self, observer: Box<dyn InterpObserver>) -> Self {
+        self.observer = Some(observer);
+        self
+    }
+
+    /// Install a [`TraceCollector`] — convenience for
+    /// `with_observer(Box::new(TraceCollector::new()))` that lets
+    /// [`Self::take_trace`] drain the recorded [`TraceEvent`]s without a
+    /// manual downcast.
+    #[must_use]
+    pub fn with_trace_collector(mut self) -> Self {
+        self.observer = Some(Box::new(TraceCollector::new()));
+        self
+    }
+
+    /// Take the installed observer back as its trait object. A consumer can
+    /// downcast via [`InterpObserver::as_any`] +
+    /// [`std::any::Any::downcast_ref`] to read a custom observer's state
+    /// after a run.
+    pub fn take_observer(&mut self) -> Option<Box<dyn InterpObserver>> {
+        self.observer.take()
+    }
+
+    /// Drain the recorded [`TraceEvent`]s from a [`TraceCollector`] installed
+    /// via [`Self::with_trace_collector`]. Returns `None` if no observer is
+    /// installed or the installed observer is not a `TraceCollector`.
+    pub fn take_trace(&mut self) -> Option<Vec<TraceEvent>> {
+        let obs = self.observer.as_mut()?;
+        let col = obs.as_any_mut().downcast_mut::<TraceCollector>()?;
+        Some(col.take_events())
     }
 
     /// `add_function`.
@@ -2059,6 +2106,10 @@ impl<'tcx> Interpreter<'tcx> {
                 return Err(InterpError::TimedOut);
             }
 
+            if let Some(obs) = self.observer.as_mut() {
+                obs.on_bb_enter(body.owner, bb_idx);
+            }
+
             // T-ICE-4: a lowering bug feeding an out-of-range block index
             // must surface as an InterpError, not a host panic.
             let bb = body.basic_blocks.get(bb_idx).ok_or_else(|| {
@@ -2159,6 +2210,9 @@ impl<'tcx> Interpreter<'tcx> {
                     bb_idx = next_bb;
                 }
                 TerminatorKind::Return => {
+                    if let Some(obs) = self.observer.as_mut() {
+                        obs.on_call_return(body.owner);
+                    }
                     if std::env::var("GLYIM_INTERP_TRACE").is_ok() {
                         let ret = self
                             .locals
@@ -2439,6 +2493,9 @@ impl<'tcx> Interpreter<'tcx> {
                     self.locals = callee_locals;
                     body = callee_body;
                     bb_idx = BasicBlockIdx::from_raw(0);
+                    if let Some(obs) = self.observer.as_mut() {
+                        obs.on_call_enter(body.owner);
+                    }
                 }
                 TerminatorKind::Assert {
                     cond,
@@ -2553,6 +2610,9 @@ impl<'tcx> Interpreter<'tcx> {
                     self.locals = callee_locals;
                     body = callee_body;
                     bb_idx = BasicBlockIdx::from_raw(0);
+                    if let Some(obs) = self.observer.as_mut() {
+                        obs.on_call_enter(body.owner);
+                    }
                 }
             }
         }
