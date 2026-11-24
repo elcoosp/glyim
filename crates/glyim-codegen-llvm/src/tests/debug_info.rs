@@ -499,16 +499,14 @@ fn resolve_span_to_location_returns_call_site_for_macro_span() {
         ByteIdx::from_usize(20),
         SyntaxContext::ROOT,
     );
-    let expn_id = ExpnId::from_raw(1);
-    let expn_data = ExpnData {
-        expn_id,
+    let expn_id = hygiene.push_expansion(ExpnData {
+        expn_id: ExpnId::ROOT,
         parent: ExpnId::ROOT,
         kind: ExpnKind::MacroRules { name: macro_name() },
         call_site,
         def_site: Span::DUMMY,
         transparency: Transparency::Transparent,
-    };
-    hygiene.push_expansion(expn_data);
+    });
     let base_span = Span::new(
         file_id,
         ByteIdx::from_usize(15),
@@ -561,17 +559,28 @@ fn macro_defined_function_has_correct_line_numbers_in_ir() {
         ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
-    let expn_id = ExpnId::from_raw(2);
-    let expn_data = ExpnData {
-        expn_id,
+    let expn_id = hygiene.push_expansion(ExpnData {
+        expn_id: ExpnId::ROOT,
         parent: ExpnId::ROOT,
         kind: ExpnKind::MacroRules { name: macro_name() },
         call_site,
         def_site: Span::DUMMY,
         transparency: Transparency::Transparent,
-    };
-    hygiene.push_expansion(expn_data);
-    let macro_ctx = SyntaxContext::from_raw(expn_id.to_raw());
+    });
+    let macro_ctx = hygiene
+        .apply_mark(
+            Span::new(
+                file_id,
+                ByteIdx::from_usize(0),
+                ByteIdx::from_usize(0),
+                SyntaxContext::ROOT,
+            ),
+            Mark {
+                expn_id,
+                transparency: Transparency::Transparent,
+            },
+        )
+        .ctx;
     let macro_span = Span::new(
         file_id,
         ByteIdx::from_usize(10),
@@ -638,17 +647,28 @@ fn nested_macro_expansions_produce_correct_inline_locations() {
         ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
-    let outer_expn_id = ExpnId::from_raw(3);
-    let outer_expn_data = ExpnData {
-        expn_id: outer_expn_id,
+    let outer_expn_id = hygiene.push_expansion(ExpnData {
+        expn_id: ExpnId::ROOT,
         parent: ExpnId::ROOT,
         kind: ExpnKind::MacroRules { name: macro_name() },
         call_site: outer_call_site,
         def_site: Span::DUMMY,
         transparency: Transparency::Transparent,
-    };
-    hygiene.push_expansion(outer_expn_data);
-    let _outer_ctx = SyntaxContext::from_raw(outer_expn_id.to_raw());
+    });
+    let outer_ctx = hygiene
+        .apply_mark(
+            Span::new(
+                file_id,
+                ByteIdx::from_usize(0),
+                ByteIdx::from_usize(0),
+                SyntaxContext::ROOT,
+            ),
+            Mark {
+                expn_id: outer_expn_id,
+                transparency: Transparency::Transparent,
+            },
+        )
+        .ctx;
 
     let inner_call_site = Span::new(
         file_id,
@@ -656,17 +676,28 @@ fn nested_macro_expansions_produce_correct_inline_locations() {
         ByteIdx::from_usize(15),
         SyntaxContext::ROOT,
     );
-    let inner_expn_id = ExpnId::from_raw(4);
-    let inner_expn_data = ExpnData {
-        expn_id: inner_expn_id,
+    let inner_expn_id = hygiene.push_expansion(ExpnData {
+        expn_id: ExpnId::ROOT,
         parent: outer_expn_id,
         kind: ExpnKind::MacroRules { name: macro_name() },
         call_site: inner_call_site,
         def_site: Span::DUMMY,
         transparency: Transparency::Transparent,
-    };
-    hygiene.push_expansion(inner_expn_data);
-    let inner_ctx = SyntaxContext::from_raw(inner_expn_id.to_raw());
+    });
+    let inner_ctx = hygiene
+        .apply_mark(
+            Span::new(
+                file_id,
+                ByteIdx::from_usize(0),
+                ByteIdx::from_usize(0),
+                outer_ctx,
+            ),
+            Mark {
+                expn_id: inner_expn_id,
+                transparency: Transparency::Transparent,
+            },
+        )
+        .ctx;
 
     let inner_span = Span::new(
         file_id,
