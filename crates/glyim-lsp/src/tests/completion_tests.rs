@@ -12,7 +12,7 @@ use url::Url;
 
 fn setup_test_db() -> (AnalysisDatabase, FileId, PathBuf) {
     let db = AnalysisDatabase::new();
-    let file_id = FileId::from_raw(0);
+    let file_id = FileId::from_usize(0);
     let path = PathBuf::from("/test/main.g");
     {
         let mut fm = db.file_map.write();
