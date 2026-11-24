@@ -77,8 +77,8 @@ fn main() {
                     file_id,
                     span: Span::new(
                         file_id,
-                        ByteIdx::from_raw(off as u32),
-                        ByteIdx::from_raw((off + "count".len()) as u32),
+                        ByteIdx::from_usize(off),
+                        ByteIdx::from_usize(off + "count".len()),
                         SyntaxContext::ROOT,
                     ),
                     is_definition,
