@@ -48,16 +48,14 @@ fn constant_prop_single_block() {
             Statement {
                 kind: StatementKind::Assign(
                     Place::new(local2),
-                    Rvalue::BinaryOp(
+                    Rvalue::binary_op(
                         glyim_core::primitives::BinOp::Add,
-                        Box::new((
-                            Operand::Copy(Place::new(local1)),
-                            Operand::Constant(MirConst {
-                                kind: MirConstKind::Int(1),
-                                ty: i32_ty,
-                                span: Span::DUMMY,
-                            }),
-                        )),
+                        Operand::Copy(Place::new(local1)),
+                        Operand::Constant(MirConst {
+                            kind: MirConstKind::Int(1),
+                            ty: i32_ty,
+                            span: Span::DUMMY,
+                        }),
                     ),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -87,7 +85,7 @@ fn constant_prop_single_block() {
             match rvalue {
                 Rvalue::BinaryOp(op, box_ops) => {
                     assert_eq!(*op, glyim_core::primitives::BinOp::Add);
-                    match (&box_ops.0, &box_ops.1) {
+                    match (&box_ops[0], &box_ops[1]) {
                         (Operand::Constant(lc), Operand::Constant(rc)) => {
                             match &lc.kind {
                                 MirConstKind::Int(5) => {}
