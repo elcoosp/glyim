@@ -82,7 +82,7 @@ fn line_extent(source: &str, needle: &str) -> (usize, usize) {
 /// with: the same `SourceMap` line/UTF-16-column mapping the request path
 /// uses, so the expectations cannot drift from the mapping under test.
 fn expected_range(source: &str, lo: usize, hi: usize) -> ((u32, u32), (u32, u32)) {
-    let sm = SourceMap::new(FileId::from_raw(0), source.to_string());
+    let sm = SourceMap::new(FileId::from_usize(0), source.to_string());
     sm.span_to_position(lo, hi)
         .map(|((l0, c0), (l1, c1))| ((l0 as u32, c0 as u32), (l1 as u32, c1 as u32)))
         .expect("fixture extents map to positions")
