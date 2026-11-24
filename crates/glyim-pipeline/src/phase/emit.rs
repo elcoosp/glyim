@@ -87,7 +87,7 @@ impl CompilerPhase for EmitPhase<'_> {
     fn name(&self) -> &'static str {
         "emit"
     }
-    #[allow(clippy::too_many_lines)] // verbatim parity-preserving extraction of the monolith's post-mono tail; splitting it would break the 1:1 structural correspondence the `M1` byte-identical-diagnostics `DoD` pins.
+    // Verbatim parity-preserving extraction of the monolith's post-mono tail; splitting it would break the 1:1 structural correspondence the `M1` byte-identical-diagnostics `DoD` pins.
     fn run(&self, ctx: &mut PhaseCtx) -> CompResult<Self::Output> {
         // Type-annotation-needed (rustc E0282) diagnostic emission.
         // Typeck collected, per-owner, the spans whose `Ty` still carried an
