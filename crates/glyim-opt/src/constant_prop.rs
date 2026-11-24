@@ -99,9 +99,9 @@ fn evaluate_rvalue_to_const(
 ) -> Option<MirConst> {
     match rv {
         Rvalue::Use(op) => operand_to_const(op, locals),
-        Rvalue::BinaryOp(op, box_ops) => {
-            let left = operand_to_const(&box_ops.0, locals)?;
-            let right = operand_to_const(&box_ops.1, locals)?;
+        Rvalue::BinaryOp(op, ops) => {
+            let left = operand_to_const(&ops[0], locals)?;
+            let right = operand_to_const(&ops[1], locals)?;
             match (left.kind, right.kind) {
                 (MirConstKind::Int(l), MirConstKind::Int(r)) => {
                     let result = match op {
@@ -345,9 +345,9 @@ fn replace_operand(op: &mut Operand, locals: &BlockMap) -> bool {
 fn replace_in_rvalue(rv: &mut Rvalue, locals: &BlockMap) -> bool {
     match rv {
         Rvalue::Use(op) => replace_operand(op, locals),
-        Rvalue::BinaryOp(_, box_ops) => {
-            let a = replace_operand(&mut box_ops.0, locals);
-            let b = replace_operand(&mut box_ops.1, locals);
+        Rvalue::BinaryOp(_, ops) => {
+            let a = replace_operand(&mut ops[0], locals);
+            let b = replace_operand(&mut ops[1], locals);
             a || b
         }
         Rvalue::UnaryOp(_, op) => replace_operand(op, locals),
