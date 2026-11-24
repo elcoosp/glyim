@@ -183,8 +183,8 @@ fn from_passes_rejects_duplicates() {
 #[test]
 fn optimize_equals_the_full_plan() {
     let (ctx, body) = with_fresh_ty_ctx(dead_store_body);
-    let via_optimize = optimize(&ctx, &Arc::new(body.clone())).unwrap();
-    let via_plan = optimize_with_plan(&ctx, &Arc::new(body), &PassPlan::for_opt_level(2)).unwrap();
+    let via_optimize = optimize(&ctx, Arc::new(body.clone())).unwrap();
+    let via_plan = optimize_with_plan(&ctx, Arc::new(body), &PassPlan::for_opt_level(2)).unwrap();
     assert_eq!(
         via_optimize.body.basic_blocks.len(),
         via_plan.body.basic_blocks.len()
@@ -201,13 +201,13 @@ fn optimize_equals_the_full_plan() {
 #[test]
 fn o0_preserves_the_dead_store_that_o2_erases() {
     let (ctx, body) = with_fresh_ty_ctx(dead_store_body);
-    let o0 = optimize_at_level(&ctx, &Arc::new(body.clone()), 0).unwrap();
+    let o0 = optimize_at_level(&ctx, Arc::new(body.clone()), 0).unwrap();
     assert_eq!(
         assign_count(&o0.body),
         3,
         "-O0 must not run DCE — the dead store survives"
     );
-    let o2 = optimize_at_level(&ctx, &Arc::new(body), 2).unwrap();
+    let o2 = optimize_at_level(&ctx, Arc::new(body), 2).unwrap();
     // const-prop first folds `_1 = 10; _0 = _1` into `_0 = 10`, which
     // makes the `_1` store dead too — so O2 erases *two* assigns, not
     // just the obvious dead store. (Plain DCE alone — see
