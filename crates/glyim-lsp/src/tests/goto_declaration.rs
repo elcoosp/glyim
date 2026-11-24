@@ -14,7 +14,7 @@ use crate::tests::helpers::make_span;
 use glyim_span::FileId;
 
 fn file(id: u32) -> FileId {
-    FileId::from_raw(id)
+    FileId::from_usize(id as usize)
 }
 
 /// In-memory declaration store: the policy-side test double. Import
