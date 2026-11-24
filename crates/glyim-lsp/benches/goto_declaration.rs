@@ -85,8 +85,11 @@ fn main() {
         let syntaxes = db.syntaxes.read();
         let green = syntaxes.get(&file_id).expect("corpus file is stored");
         let index = db.symbol_index.read();
-        let src =
-            ParseTreeDeclarationSource::new(green, FileId::from_raw(file_id.to_raw()), &index);
+        let src = ParseTreeDeclarationSource::new(
+            green,
+            FileId::from_usize(file_id.to_raw() as usize),
+            &index,
+        );
         let t0 = Instant::now();
         let mut hits = 0usize;
         for _ in 0..1_000 {
