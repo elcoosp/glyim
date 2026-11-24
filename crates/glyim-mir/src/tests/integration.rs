@@ -304,10 +304,10 @@ fn build_body_with_binary_op_rvalue() {
             Place::new(LocalIdx::from_raw(1)),
             Rvalue::BinaryOp(
                 BinOp::Add,
-                Box::new((
+                [
                     Operand::Copy(Place::new(LocalIdx::from_raw(2))),
                     Operand::Copy(Place::new(LocalIdx::from_raw(3))),
-                )),
+                ],
             ),
         ),
         source_info: make_source_info(),
