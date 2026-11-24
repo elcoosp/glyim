@@ -5,14 +5,17 @@ type: reference
 sidebar:
   order: 6
 ---
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
+import { Badge, LinkCard } from '@astrojs/starlight/components';
 
-import { Aside, Badge, LinkCard } from '@astrojs/starlight/components';
+<MascotFigure pose="gsx" alt="Glyim GSX syntax reference mascot" />
 
 GSX is Glyim's first-class, typed, host-agnostic view syntax: JSX's ergonomics, but a compiler-visible structure instead of a runtime function-call tree. Elements are data described by schemas, and the same source can target HTML, SSR strings, native widgets, terminals, and headless test hosts.
 
-<Aside type="caution">
+<MascotAside type="caution">
 GSX is experimental <Badge text="v0.1" variant="note" />. The parsing, type checking, and the `glyim-gsx` stage are implemented and tested, but the CLI driver does not run the GSX stage yet — see the [authoring guide](/guides/write-gsx-views/) for the current usage path.
-</Aside>
+</MascotAside>
 
 ## Grammar
 
