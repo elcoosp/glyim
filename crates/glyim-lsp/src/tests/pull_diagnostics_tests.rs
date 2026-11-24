@@ -147,9 +147,9 @@ fn pull_diagnostics_positions_match_the_push_mapping() {
     // `convert_diagnostics`, then publish) is the mapping the pull answer
     // carries, so a client mixing both paths sees identical coordinates
     // for the same problem.
-    let sm = SourceMap::new(FileId::from_raw(0), BROKEN_DOC.to_string());
-    let parse_result = glyim_frontend::parse_to_syntax(BROKEN_DOC, FileId::from_raw(0));
-    let pushed = convert_diagnostics(FileId::from_raw(0), &sm, &parse_result.diagnostics);
+    let sm = SourceMap::new(FileId::from_usize(0), BROKEN_DOC.to_string());
+    let parse_result = glyim_frontend::parse_to_syntax(BROKEN_DOC, FileId::from_usize(0));
+    let pushed = convert_diagnostics(FileId::from_usize(0), &sm, &parse_result.diagnostics);
     let pulled = &full.full_document_diagnostic_report.items;
     assert_eq!(pushed.len(), pulled.len(), "same set, same order");
     for (push, pull) in pushed.iter().zip(pulled.iter()) {
