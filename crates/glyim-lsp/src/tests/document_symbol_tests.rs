@@ -28,13 +28,13 @@ fn document_symbols_returns_hierarchy() {
     let span_foo = Span::new(
         file_id,
         ByteIdx::ZERO,
-        ByteIdx::from_raw(7),
+        ByteIdx::from_usize(7),
         SyntaxContext::ROOT,
     );
     let span_bar = Span::new(
         file_id,
-        ByteIdx::from_raw(10),
-        ByteIdx::from_raw(20),
+        ByteIdx::from_usize(10),
+        ByteIdx::from_usize(20),
         SyntaxContext::ROOT,
     );
     let foo_sym = SymbolInfo {
