@@ -27,7 +27,11 @@ impl MirGenTester {
         ctx: &glyim_type::TyCtx,
         body: &std::sync::Arc<glyim_mir::Body>,
     ) -> glyim_mir::Body {
-        glyim_opt::optimize(ctx, body)
+        // The harness keeps its own reference, so the copy-on-write entry
+        // deep-copies exactly once here (M2.7: `optimize` mutates in place
+        // through `Arc::make_mut`; a shared input pays the copy, a unique
+        // one pays nothing).
+        glyim_opt::optimize(ctx, std::sync::Arc::clone(body))
             .expect("MIR optimization failed: body failed validation")
             .body
     }
