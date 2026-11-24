@@ -5,8 +5,11 @@ type: explanation
 sidebar:
   order: 1
 ---
+import MascotFigure from '../../../../components/MascotFigure.astro';
+import MascotAside from '../../../../components/MascotAside.astro';
+import { LinkCard } from '@astrojs/starlight/components';
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+<MascotFigure pose="pipeline" alt="Mascotte architecture du compilateur Glyim" />
 
 L'architecture de Glyim suit une règle : chaque phase de compilation est une crate autonome avec une API publique étroite, donc chaque phase peut être étudiée et testée en isolation — et remplacée sans toucher au reste. Cette page explique les idées derrière cette règle et les mécanismes qui la font fonctionner.
 
@@ -72,9 +75,9 @@ Le pipeline distingue nettement les erreurs de programme et les bogues du compil
 
 Les builds release activent `overflow-checks`, donc un débordement arithmétique dans le compilateur est une ICE, jamais un wrap silencieux.
 
-<Aside type="note">
+<MascotAside type="note">
 La conception est fortement inspirée de l'architecture de rustc — IR allouées en arène, types internés, contextes à la requête, injection de dépendances par traits — mais écrite de zéro avec du code lisible et la testabilité comme priorités.
-</Aside>
+</MascotAside>
 
 ## Étapes suivantes
 
