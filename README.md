@@ -3,420 +3,52 @@
     <source media="(prefers-color-scheme: dark)" srcset="docs/branding/svg/logo-wordmark-dark.svg?v=2"/>
     <img src="docs/branding/svg/logo-wordmark.svg?v=2" alt="Glyim Logo" width="340"/>
   </picture>
-  <p>
-    <strong>A modular, from‑scratch compiler for a Rust‑like systems programming language, written in Rust.</strong><br/>
-    Implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference &amp; trait solving, borrow checking, optimizations, and multiple code generation backends (LLVM and a custom bytecode VM). The project is organised as a Cargo workspace with 39 members — 34 compiler/stdlib crates plus 5 tooling crates — designed for clarity, testability, and incremental development.
-  </p>
+
+  <p><strong>A real compiler for a Rust-like systems language</strong> — full type inference, NLL borrow checking, and dual LLVM/bytecode backends across 39 modular crates.</p>
+
+  <p>Most compiler side-projects stop at a parser or a tree-walking interpreter. Glyim implements the full pipeline — lexing, parsing, type inference, trait solving, NLL borrow checking, monomorphization, MIR optimization, and two code generation backends. Every stage is a self-contained crate with a narrow, trait-based public API.</p>
+
   <p>
     <img src="https://img.shields.io/badge/Rust-1.95%20%7C%202024-000000?style=flat-square&logo=rust" alt="Rust"/>
     <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License MIT"/>
     <img src="https://img.shields.io/badge/LLVM-23-262D3A?style=flat-square&logo=llvm" alt="LLVM"/>
     <img src="https://img.shields.io/badge/Crates-39-6F4E37?style=flat-square" alt="Crates"/>
-    <img src="https://img.shields.io/badge/Backend-LLVM%20%2B%20Bytecode-6A0DAD?style=flat-square" alt="Backend"/>
-    <img src="https://img.shields.io/badge/Language%20Server-LSP-4B32C3?style=flat-square" alt="LSP"/>
-    <img src="https://img.shields.io/badge/Testing-Snapshot%20%2B%20UI-00BFFF?style=flat-square" alt="Testing"/>
-    <img src="https://img.shields.io/badge/Borrow%20Checker-NLL-FF4500?style=flat-square" alt="Borrow Checker"/>
-    <img src="https://img.shields.io/badge/Optimizations-Const%20Prop%20%2B%20DCE-333333?style=flat-square" alt="Optimizations"/>
-    <img src="https://img.shields.io/badge/Type%20System-Inference%20%2B%20Traits-007ACC?style=flat-square" alt="Type System"/>
-    <img src="https://img.shields.io/badge/HIR%2FMIR-Full%20Support-228B22?style=flat-square" alt="HIR/MIR"/>
     <img src="https://img.shields.io/badge/Build-Passing-brightgreen?style=flat-square&logo=githubactions" alt="Build"/>
+    <img src="https://img.shields.io/badge/Backend-LLVM%20%2B%20Bytecode-6A0DAD?style=flat-square" alt="Backend"/>
+    <img src="https://img.shields.io/badge/Type%20System-Inference%20%2B%20Traits-007ACC?style=flat-square" alt="Type System"/>
+  </p>
+
+  <p>
+    <a href="#why-glyim">Why</a> •
+    <a href="#language-tour">Tour</a> •
+    <a href="#getting-started">Quickstart</a> •
+    <a href="#features">Features</a> •
+    <a href="#architecture">Architecture</a> •
+    <a href="#project-status">Status</a>
   </p>
 </div>
 
 ---
 
-# Glyim
-
-> [!NOTE]
-> Glyim is a research-grade compiler under active development. The pipeline is end-to-end functional for a substantial subset of the language, and the test harness verifies every stage from lexing through MIR interpretation. See [Project Status](#project-status) for what's wired up today versus what's still on the roadmap.
-
----
-
-## Table of Contents
-
-- [Why Glyim](#why-glyim)
-- [Features](#features)
-- [Architecture](#architecture)
-- [Getting Started](#getting-started)
-- [Usage](#usage)
-- [Language Tour](#language-tour)
-- [The `glyip` Build Tool](#the-glyip-build-tool)
-- [Development](#development)
-- [Testing](#testing)
-- [Project Status](#project-status)
-- [Acknowledgements](#acknowledgements)
-
----
-
 ## Why Glyim
 
-Most "toy compiler" projects stop at a parser or a tree-walking interpreter. Glyim is built to be a *real* compiler: it has a full type system with inference and trait solving, an NLL borrow checker, monomorphization, a MIR optimizer, and a production LLVM backend via `inkwell`. Every stage is a self-contained crate with a narrow public API, so each phase can be studied and tested in isolation — and replaced without touching the rest.
+Most compiler side-projects stop at a parser or a tree-walking interpreter. Glyim is built as a _real_ compiler: a complete pipeline from source through type inference, trait solving, NLL borrow checking, monomorphization, MIR optimization, and two code generation backends — LLVM via `inkwell`, and a custom stack-machine bytecode VM.
 
-The design is heavily inspired by rustc's architecture (arena-allocated IRs, interned types, query-style contexts, trait-based dependency injection), but written from scratch with a strong emphasis on readable code and testability.
-
-<!-- ledger:status:start (generated by `glyim-ledger status`; DO NOT EDIT) -->
-
-# Readiness status
-
-Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **254** features over **632** evidence record(s) (0 error(s), 3 warning(s)).
-
-| Level | Features |
-|---|---|
-| L0 | 241 |
-| L1 | 7 |
-| L2 | 2 |
-| L3 | 0 |
-| L4 | 4 |
-| L5 | 0 |
-<!-- ledger:status:end -->
-
----
-
-## Features
-
-### Language
-
-- **Rust-like syntax** with `fn`, `let`, `struct`, `enum`, `match`, `if`/`else`, `while`, `loop`, `for`, closures, `impl` blocks, and traits.
-- **Generics** with type parameters, generic bounds (`T: Trait`), and where-clauses.
-- **Traits** with default methods, associated types, and static dispatch.
-- **Pattern matching** with literals, ranges, or-patterns, slices, structs, tuples, enums, and `if` guards.
-- **`async`/`await`** with state-machine desugaring (straight-line, multi-await, and loop bodies: `.await` inside `while`, `for i in a..b`, and unbounded `loop` bodies suspends and resumes through a real `Start`/`S0`/`Done` machine, with depth-0 `break [v]`/`continue` translated to the machine's own transitions).
-- **Closures** with capture analysis (`ByValue` / `ByRef(Mut)` / `ByRef(Not)`).
-- **Macros**: declarative `macro_rules!` with fragment specifiers (`:expr`, `:ty`, `:pat`, `:tt`, …), plus built-in `file!`, `line!`, `column!`, `env!`, `option_env!`, `include!`, `include_str!`, `include_bytes!`, `concat!`, `concat_idents!`, `stringify!`, `format!`, `vec!`, `matches!`, `assert!`, `assert_eq!`, `assert_ne!`, `debug_assert!`, `debug_assert_eq!`, `debug_assert_ne!`, `write!`, `writeln!`; the stdlib additionally defines `println!`/`print!`/`eprintln!`/`eprint!`/`panic!` as declarative macros.
-- **Procedural macros** through a C-compatible token-stream ABI (`glyim-proc-macro`), with a `dlopen`-based cdylib loader.
-- **Ranges**, `Option`/`Result`/`Vec`/`String`/`Box`/`PhantomData`/`UnsafeCell` as compiler-known builtins.
-- **GSX view syntax**: first-class, typed, host-agnostic view elements (`<button on:click={…}>…</button>`) with a dedicated compiler stage — View IR, flat-`u32` blueprints, ownership-driven reactivity (mutation-specialized patches, no vdom/signals on the fast path), SSR emitter and a headless test host. See `docs/design/GSX-in-Glyim.md` and `docs/design/gsx-implementation.md`.
-
-### Compiler
-
-- **Non-lexical lifetime (NLL) borrow checking** with Polonius-style region inference, cross-block liveness analysis, and two-phase borrow support.
-- **Move analysis** with partial-move tracking and drop-flag elaboration.
-- **Type inference** with unification variables (general / integer / float), occurs-check, and bidirectional checking.
-- **Trait solving** via a fulfillment context with obligation queues, HRTB support (`for<'a>`), and auto-trait computation (`Send`/`Sync`/`Unpin`).
-- **Monomorphization** with polymorphization (unused generic params → canonical placeholder) and codegen-unit partitioning.
-- **MIR optimizations**: constant propagation, dead code elimination, CFG simplification, unreachable block elimination, slice desugaring, and drop elaboration.
-- **Layout computation** with ABI-aware argument passing (`sret`, `byval`, `Ignore`, `Direct`, `Split`).
-- **VTable generation** for trait objects.
-- **MIR interpreter** used for `const fn` evaluation and test execution.
-- **Incremental compilation** via SHA-256 fingerprinting of sources and build configuration, with a whole-crate content-addressed object cache whose lifecycle — hits, misses, stores, budget evictions — is observable through the `glyim_db::cache_metrics` sink seam (`CacheSink` / `CacheCollector` / `render_cache_report`).
-
-### Code Generation
-
-- **LLVM backend** (`glyim-codegen-llvm`) using `inkwell`/LLVM 23 — produces native object files with real ABI lowering, debug info, exception handling (Itanium + SEH), and Link-Time Optimization (`fat` / `thin`).
-- **Bytecode backend** (`glyim-codegen`) — a compact stack-machine bytecode used for testing and embedded execution, verified by the `glyim-bytecode-vm` crate; the emitter can assemble whole multi-function modules into the versioned, loadable `glyim.module-image/1` container (`generate_module_image`), which the VM validates and runs after a round trip. The VM executes the full emitted surface: IEEE-754 float arithmetic over `OP_LOAD_CONST_F64` constants, the interpreter's width-aware cast semantics (`OP_CAST` carries kind + target primitive), and string constants through the image's string pool (`OP_LOAD_CONST_STR` compares by content). The observability/safety seams complete the picture: an execution-trace hook (`glyim_bytecode_vm::trace` — a `TraceSink` the VM hands one step per dispatch to, with a capturing collector, a `tracing`-event sink, and a deterministic `render_trace` listing) and a fuel budget (`Vm::with_fuel` — an infinite loop in a loaded artifact stops with the explicit `VmError::FuelExhausted` instead of hanging the host) with its external counterpart, the host-interrupt gate (`glyim_bytecode_vm::interrupt` — an `Interrupt` veto armed through `Vm::with_interrupt` is consulted once per pending dispatch, just after the fuel gate, and a veto stops the run with the explicit `VmError::Interrupted` carrying the host's own reason: the built-in `Deadline` veto fires once the wall clock passes its arming instant and the `InterruptFn` adapter lets hosts veto from their own state; a vetoed dispatch never executes and never reaches the trace or fuel hooks, and the fuel gate outranks the veto). The integer counterpart of the float seam is the math seam (`glyim_bytecode_vm::math` — a `MathSink` the VM hands one `MathBinop` per executed `(Int, Int)` binop arm with the exact wrap verdict spelled per event (the wrapping semantics are the documented integer convention: `i64::MAX + 1` answers `i64::MIN`, shifts mask their shift amount), one `MathNeg` per `OP_NEG` over an integer (the `i64::MIN` negation is the one wrapped case), and one `MathNot` per `OP_NOT`; `MathCollector` folds the transcript into the per-opcode counts and the *where did the wrapping semantics engage* per-function tally, and `render_math` renders the deterministic listing). The aggregate view over the same stream is the execution-profile seam (`glyim_bytecode_vm::profile` — a `ProfileCollector` sink that folds the per-dispatch steps into per-opcode and per-function dispatch counts plus peak frame/stack depths in bounded memory, with a deterministic `render_profile` listing, a `hottest(n)` ranking, and a `from_steps` re-fold of a captured transcript; unknown opcode bytes land in their own displayed `unknown(0xNN)` bucket). The failure-time counterpart is the fault-backtrace seam (`glyim_bytecode_vm::backtrace` — a `FaultSink` the VM hands one `FaultReport` to when a run ends in a `VmError`: the fault site with its decoded opcode, the suspended caller chain innermost first, the dispatch count, and the fuel state, rendered deterministically by `render_backtrace`; a pre-execution fault reports the entry request with zero dispatches, and the fuel gate's refused dispatch is the reported site). The spatial aggregate is the instruction-coverage seam (`glyim_bytecode_vm::coverage` — a `CoverageCollector` sink that folds the same stream into a per-`(function, pc)` hit map over the disassembler's instruction-site inventory, with a deterministic `render_coverage` listing that separates the covered sites, the uncovered dead code, and any misaligned hit a corrupt block table produced, plus a `from_steps` re-fold of a captured transcript). The directional counterpart is the branch-history seam (`glyim_bytecode_vm::branches` — a `BranchCollector` sink that folds the same stream into per-decision-site histories keyed `(function, pc)`: for a `JumpIf`, the taken/fall-through split named by the step that follows the branch — the machine's next dispatch, the same follow-step trick the call graph uses — and for every decision opcode a landing map of where control went next; `Jump`, `SwitchInt`, and `Assert` transfer unconditionally on success, so their landing map is the whole outcome, and a decision whose resolving step never arrives (a fault at the branch itself, a fuel budget cut between the branch and its landing) reports through `unresolved_decisions` instead of dropping silently, with a deterministic `render_branches` listing and a `from_steps` re-fold of a captured transcript). The data-flow counterpart is the local-watch seam (`glyim_bytecode_vm::watch` — a `WatchSink` the VM hands one `WatchEvent` to for every value a local slot takes: the program's `OP_STORE_LOCAL` stores, the call-argument binds, and the callee-return dest write, each carrying the writer function, the slot, the value, the producing dispatch's site and number, the frame depth, and the write kind, captured in bounded memory by `WatchCollector` with a `slot_history` reader and a deterministic `render_watch` listing; a failed bounds store reports nothing, and a refused dispatch writes nothing). The read-side counterpart is the data-flow seam (`glyim_bytecode_vm::dataflow` — a `ReadSink` the VM hands one `ReadEvent` to for every successful `OP_LOAD_LOCAL`, paired by `DataFlowCollector`, a shared-state fold implementing both sink traits: attach the same collector through `Vm::with_watch` *and* the new `Vm::with_reads`, and each read is linked to the dispatch that last wrote its slot per `(function, frame depth, slot)` — the same key the watch events carry — while a read whose slot no write in its frame ever defined is reported through `uninitialized_reads` instead of silently consuming the frame's zero-init, with a bounded displayed list whose exact total survives the cap, a `FlowRecorder` capturing the interleaved write/read transcript replayable through `from_transcript`, and a deterministic `render_data_flow` listing; a failed bounds load reads nothing and reports nothing, and a fuel-refused dispatch reads nothing). The frame-lifecycle counterpart is the call-state seam (`glyim_bytecode_vm::state` — a `StateSink` the VM hands one `StateEvent` to at each frame boundary: the enter event with the freshly bound locals (the MIR ABI's zero return place at slot 0, the arguments at `1..=arg_count`) and the exit event with the frame's final local state, each carrying the frame's function index and 1-based depth so a recursion's nesting reads LIFO, captured in bounded memory by `StateCollector` with a displayed overflow flag and a deterministic `render_state` listing; an unbalanced tail — a fuel budget or a fault ending the run between the boundaries — is displayed, never silently paired away). The artifact-level change question is the module-image diff seam (`glyim_bytecode_vm::diff` — `render_module_diff` walks two decoded modules index by index and renders their differences deterministically: `-`/`+`/`~` function lines with the first-diff pc, the metadata pairs, the string-pool changes, and an explicit entry-move line; identical modules render the explicit `no differences` line, the regression gate a no-op rebuild must pass). The structural-dynamic counterpart is the call-graph seam (`glyim_bytecode_vm::callgraph` — a `CallGraphCollector` sink that folds the same stream into per-`(caller, callee)` edge dispatch counts; because the trace hook fires *before* a call executes and the `Call` payload carries no callee, the fold names the callee by the step that follows — the callee's entry instruction, exactly one frame deeper, so recursion disambiguates by depth — and a call whose callee never dispatches reports through `unresolved_calls` instead of dropping silently, with a deterministic `render_call_graph` listing and a `from_steps` re-fold of a captured transcript). The behavioral-change counterpart is the run-diff seam (`glyim_bytecode_vm::rundiff` — `render_run_diff` walks two captured transcripts dispatch by dispatch and renders where the two runs part ways deterministically: the `diverge at dispatch N:` site with both steps spelled in the trace's field shape and the honest tail counts, or the shorter run's explicit end line when one transcript is a strict prefix of the other (a fuel budget or a fault ends one run where the other continues); two identical runs render the explicit `no divergence` line, the determinism gate any no-op change must pass). And the call-tree counterpart is the inclusive-cost seam (`glyim_bytecode_vm::cost` — a `CostCollector` sink that folds the same stream into per-function **inclusive** and **exclusive** dispatch counts: inclusive credits go to every active call-stack frame per dispatch — the fold reconstructs the stack from the stream's `frame_depth` transitions, the call-graph seam's follow-step trick in its depth edition, so `OP_CALL` and `OP_CALL_INDIRECT` fold identically, a recursion's nesting earns one credit per active depth, and the root's inclusive count always equals the run's step total — exclusive credits to the executing function alone, with a deterministic `render_cost` listing, a `hottest_inclusive(n)` ranking, and a `from_steps` re-fold of a captured transcript; the flat profile says where each dispatch *executed*, the cost seam says which call subtree *caused* it). And the bounded-memory failure counterpart is the tail-window seam (`glyim_bytecode_vm::window` — a `WindowCollector` flight recorder: a fixed-size ring over the same stream that always holds the run's most recent `n` dispatches, newest entry = the run's final dispatch (the hook fires before the instruction executes, so a faulting `Call` and a fuel budget's last allowed dispatch land in the tail), the scroll-out counted in `dropped` — a *displayed* fact, never a silent drop — with a deterministic `render_window` listing in the trace's exact field shape, each line named by its absolute dispatch number, and a `from_tail` re-fold of a captured transcript; the trace records the whole run at O(steps) memory, the backtrace names the fault site, the window holds the run's last words at O(n).) And the invariant-observation counterpart is the assertion seam (`glyim_bytecode_vm::asserts` — an `AssertSink` the VM hands one `AssertEvent` to the moment an `OP_ASSERT`'s condition has been compared against the polarity the instruction asserted, passing or failing — the failing one fires *before* the fault the run ends on, so the event list's last entry is the failure — each event carrying the site (function index, opcode byte offset), the asserted polarity, the observed condition, and the verdict, captured in bounded memory by `AssertCollector` with a displayed overflow flag, `passed_count`/`failed_count` tallies, and a deterministic `render_asserts` listing; coverage says the assert's site executed and the branch history says where control went, the assertion seam says whether the program's own invariant actually held). And the destruction-side counterpart is the drop-observation seam (`glyim_bytecode_vm::drops` — a `DropSink` the VM hands one `DropEvent` to at each executed `OP_DROP`: the discard site (function index, opcode byte offset) and the popped value in full, the event taking the value the opcode already popped so the seam adds no clone on the fire path, captured in bounded memory by `DropCollector` with a displayed overflow flag and a deterministic `render_drops` listing in the watch render's value spellings; the watch says what values slots *took*, the call-state seam says what frames *held*, the drop seam says what the run *destroyed* —  The value-transformation counterpart is the cast seam (`glyim_bytecode_vm::casts` — a `CastSink` the VM hands one `CastEvent` to per executed `OP_CAST` — the cast site, the decoded kind/target pair, and the operand/result values in full — the audit that makes a silent lossy cast readable, with a deterministic `render_casts` listing). The memory-face counterpart is the memory seam (`glyim_bytecode_vm::memory` — a `MemSink` the VM hands one `MemWriteEvent` per executed `OP_STORE_FIELD` just after the store lands and one `MemReadEvent` per executed `OP_DEREF` just after the value is fetched — the site, the frame-relative address, and the value, with the unwritten-address reads a wrong field offset would surface through, and a deterministic `render_memory` listing). The call-ABI counterpart is the calls seam (`glyim_bytecode_vm::calls` — a `CallSink` the VM hands one `CallStarted` to per executed `OP_CALL`/`OP_CALL_INDIRECT` just after the callee's frame is pushed — the call site, the callee, the argument values in full, the destination local, and the resume target — and one `CallReturned` to per executed `OP_RETURN` just after the returning frame is popped, with the value it handed back; the call graph names edges over the post-hoc trace and the call-state seam snapshots frames, but the calls seam carries the call's operands, and a fault-or-fuel-ended run's open calls are displayed, never silently paired away, with a deterministic `render_calls` listing). The pool's runtime counterpart is the string-pool seam (`glyim_bytecode_vm::strings` — a `StringSink` the VM hands one `StringLoadEvent` to per executed `OP_LOAD_CONST_STR` just after the pool slot's byte string is resolved — the site, the pool slot, and the resolved value — the shared-slot re-resolutions counted per slot with a byte total, and a deterministic `render_strings` listing). The composite-construction counterpart is the aggregate seam (`glyim_bytecode_vm::aggregates` — an `AggregateSink` the VM hands one `AggregateBuilt` to per executed `OP_AGGREGATE` just after the fold has popped its operands — the site, the arity, and the folded elements in full — and one `RepeatBuilt` per executed `OP_REPEAT` just after the count and value have been popped — the site, the raw count (a negative count clamps to the empty tuple, and the display keeps the raw value instead of silently pairing the clamp away), and the replicated value — with the build/repeat tallies, the element-materialization total, and the arity high-water mark folded as it captures, and a deterministic `render_aggregates` listing). The composite-interrogation counterpart is the projection seam (`glyim_bytecode_vm::projections` — a `ProjectionSink` the VM hands one `LenRead` to per executed `OP_LEN` just after the operand has been fetched from its local slot — the site, the local index, the operand in full, and the answer — and one `DiscrRead` per executed `OP_DISCRIMINANT` just after the operand has been popped, with the same fields — the scalar-convention path (a projection over a non-aggregate answers `0`) counted in a dedicated `scalar_reads` fold so a lowering bug that projects a scalar stays visible, with a deterministic `render_projections` listing). The float-stream counterpart is the float seam (`glyim_bytecode_vm::floats` — a `FloatSink` the VM hands one `FloatConst` to per executed `OP_LOAD_CONST_F64` just after the payload has been decoded — the site and the constant — one `FloatBinop` per executed `(Float, Float)` binop just after the arm has computed its answer — the site, the opcode, the operands in full, and the answer: a `Float` for arithmetic, the machine's `Int` bool for comparisons — and one `FloatNeg` per executed `OP_NEG` over a float, with the NaN and infinite answers counted in dedicated `nan_results`/`inf_results` folds — the IEEE-754 specials are the convention path (`1.0 / 0.0` is `+inf`, never a fault, matching LLVM's `fdiv`), so a lowering bug that divides by a silently-zero float or poisons an operand lands in a tally instead of flowing through the run unexamined, with a deterministic `render_floats` listing). The movement-stream counterpart is the operand-stack seam (`glyim_bytecode_vm::stack` — a `StackSink` the VM hands one `Pushed` to just before a value lands on the operand stack and one `Popped` to just after a pop resolves — the site, the producing dispatch number, the frame depth, the depth the movement produces, and the value in full; every push and pop funnels through the machine's own `push_operand`/`pop` paths so the stream is total over the executed movements, while a failed pop (a `StackUnderflow`) and a unit-return's substituted `Unit` never ride the stack and report nothing — with the interleaved transcript captured in bounded memory by `StackCollector`, the two faces readable through `pushed_events`/`popped_events`, the `pushed_count`/`popped_count`/`net_growth`/`max_depth_seen` folds answering balance and high-water questions off one capture, and a deterministic `render_stack` listing in the watch render's value spellings). The budget-face counterpart is the fuel seam (`glyim_bytecode_vm::fuel` — a `FuelSink` the VM hands one `FuelTick` to per executed dispatch just after the budget for that dispatch has been spent and before the instruction executes, the same cadence as the trace hook — the site, the dispatch number, and the remaining budget (`None` = an unbounded run, still observable as burn); the fuel gate (`Vm::with_fuel`) stopped an infinite loop with the explicit `VmError::FuelExhausted` but reported nothing about the budget itself, and the seam answers the where-did-it-go question off the captured diary: `burn_by_function` folds the per-function dispatch counts deterministically (`BTreeMap`), `last_tick` names the last allowed dispatch — the site the refusal happened at for a budget that ran out — and `render_fuel` lists the header with the final remaining, the burn lines, and one line per tick, with the explicit `no fuel ticks` empty state).
-
-### Tooling
-
-- **`glyim` CLI** — compile with `--emit=obj|exec|mir|llvm-ir|asm|cdylib|syntax|stats|run`, choose a backend, set opt-level, target triple, LTO strategy, and codegen units; measure compiles with `--time-passes` and `--self-profile[=FILE]` (Chrome trace), and emit a schema-versioned JSON measurement report with `--emit=stats`.
-- **`glyip` build tool** — Cargo-like project manager with `new`, `build`, `test`, and `run`; dependency resolution with SemVer 2.0 matching, path deps, git deps (branch/tag/rev), lockfiles, and a registry client.
-- **Language Server** (`glyim-lsp`) — diagnostics (pushed; pulled per file, with related documents over the dependency graph; and pulled per workspace on demand), goto definition, goto type definition, goto declaration, goto implementation, hover, completion, find references, folding, formatting, range formatting (`textDocument/rangeFormatting` re-indents the whole lines a selection claims at the depth the unselected prefix leaves, through the same formatter core the full request reads), on-type formatting (a just-typed closing bracket dedents to its matching opener's indentation), rename (with `prepareRename`), workspace symbols, document symbols, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), type hierarchy (prepare a trait/struct/enum item and walk the traits implemented for it or the impls that implement it, over the recorded impl facts), signature help, inlay hints, code actions (add missing match arms, generate impl, remove unused imports), auto-import, code lenses (item-level definitions enumerate `textDocument/codeLens`, resolved with the live reference count, executable through `workspace/executeCommand`), document links (include-macro literals link to the files they name), linked editing ranges (same-scope occurrences edit together), monikers (`textDocument/moniker` answers the recorded identity of the cursor's symbol — the spelled use-path it sits on, the qualified module path of the definition it sits on, or the name-only resolution of a bare usage), inline values (`textDocument/inlineValue` answers the recorded `let` bindings of a requested range as variable lookups, for a debug adapter's inline rendering), save-time format edits (`textDocument/willSaveWaitUntil` answers the edits that bring the stored text to the shared formatter core's saved form — one edit over the changed region, never churn on an already-formatted document — so format-on-save composes with the same formatter the other shapes read), watched files (`workspace/didChangeWatchedFiles` refreshes what no editor ever opened: a non-open file's change on disk re-analyses from the file's content and the driver's dependent refresh follows, a deletion is forgotten), file operations (`workspace/didCreateFiles` indexes a created file no editor owns from disk, `workspace/didDeleteFiles` forgets a deleted one — the watched-files ownership rules over the client's declared operations), file renames (`workspace/didRenameFiles` re-points the session's path-keyed state — an editor-owned document re-keys in place so every fact keyed by its file id survives, a watched load follows the watched-files honest refresh from the new path, and the dependency graph's edges move with the file), workspace folders (`workspace.workspaceFolders` is served: the client's initialize folder set — the deprecated `rootUri` as the fallback — seeds the session's folder store, `workspace/didChangeWorkspaceFolders` re-derives it, and the folder queries answer which recorded folders contain a path; a folder whose URI does not resolve to a file path is skipped, never invented), document color (`textDocument/documentColor` answers every string literal that spells a hex color payload — `#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA` — as the swatch site an editor renders inline, and `textDocument/colorPresentation` answers the picker's recolor echo with the canonical lowercase hex spelling over the reported extent; one notation, one presentation), and an optional `--log-file` that tees the server's tracing events to a JSON-lines file.
-- **Test harness** (`glyim-test`) — compile-pass / compile-fail / UI / run-pass / run-fail modes with inline annotations (`//~ ERROR`, `//~| …`), snapshot testing (CST, def-map, MIR), mocking utilities for every compiler phase, and property-based type generation.
-
----
-
-## Architecture
-
-The compiler is split into small, single-responsibility crates. Each phase consumes the previous phase's IR and exposes a minimal trait-based interface so tests can substitute mocks.
-
-| Crate | Description |
-|-------|-------------|
-| `glyim-core` | Foundation types: index vectors, definition IDs, interner, paths, ABI constants. |
-| `glyim-span` | Source locations (file, byte index, span), hygiene contexts, multispan diagnostics. |
-| `glyim-diag` | Diagnostic types, error codes, `DiagSink`, `miette` integration. |
-| `glyim-vfs` | Virtual file system with in-memory file content tracking. |
-| `glyim-syntax` | CST definition (Rowan-based), `SyntaxKind` enum, AST node helpers. |
-| `glyim-frontend` | Lexer + parser (merged), produces `SyntaxNode`. |
-| `glyim-gsx` | GSX view syntax: parser, View IR (VIR), flat-`u32` blueprints, ownership-driven reactivity analysis, SSR emitter, headless test host. |
-| `glyim-def-map` | Module graph, item scopes, name resolution. |
-| `glyim-meta` | Macro expansion: `macro_rules!` declarative macros and built-in macros. |
-| `glyim-proc-macro` | C-compatible proc-macro ABI, registry, and `dlopen` loader. |
-| `glyim-hir` | High-level IR (untyped), lowering from CST. |
-| `glyim-type` | Type interning (`TyCtx`), type kinds, substitutions, regions, predicates, auto-traits, object safety, layout hints, printing. |
-| `glyim-solve` | `InferenceTable`, unification, trait solver, fulfillment context, HRTB. |
-| `glyim-typeck` | Type checker: HIR → THIR with inference and trait resolution. |
-| `glyim-const-eval` | Constant expression evaluator over HIR. |
-| `glyim-mir` | Mid-level IR (CFG), place types, statement/terminator kinds. |
-| `glyim-lower` | THIR → MIR lowering + monomorphization + CGU partitioning + polymorphization. |
-| `glyim-borrowck` | Borrow checker (NLL, two-phase borrows, move analysis). |
-| `glyim-opt` | MIR optimisation passes. |
-| `glyim-mir-interp` | Interpreter for MIR (used in tests and const-eval). |
-| `glyim-layout` | Type layout computation (size, alignment, ABI, vtables). |
-| `glyim-codegen` | Abstract code generation backend trait + bytecode backend. |
-| `glyim-codegen-llvm` | LLVM backend (via `inkwell`) with full ABI handling and LTO. |
-| `glyim-bytecode-vm` | Switch-dispatch VM executing the bytecode backend's output (IEEE-754 floats, width-aware casts, pooled string constants), plus the module-image container (`encode_module`/`decode_module`) that ships it across process boundaries, its disassembler (`render_module`/`render_function`: the deterministic, total instruction listing for a decoded artifact — unknown bytes list as `unknown(0xNN)`, truncated payloads as `<truncated>`), the execution-trace seam (`TraceSink`/`TraceCollector`/`render_trace`: one step per dispatch over the executed path), the execution-profile seam (`ProfileCollector`/`render_profile`: the per-opcode and per-function aggregate over the same stream, bounded memory, `hottest(n)`, `from_steps`), the fault-backtrace seam (`FaultSink`/`BacktraceCollector`/`render_backtrace`: one report per failed run — fault site, suspended caller chain, dispatch count, fuel state), the instruction-coverage seam (`CoverageCollector`/`render_coverage`: the per-`(function, pc)` hit map over the disassembler's site inventory, covered/uncovered/misaligned sections, `from_steps`), the branch-history seam (`BranchCollector`/`render_branches`: the per-decision-site directional history over the same stream — `JumpIf` taken/fall-through splits named by the following step, landing maps for every decision opcode, unresolved decisions displayed, `from_steps`), the call-state seam (`StateSink`/`StateCollector`/`render_state`: one event per frame boundary — enter with the freshly bound locals, exit with the final state — function index and depth per event, LIFO recursion pairing, bounded capture with a displayed overflow flag), the local-watch seam (`WatchCollector`/`render_watch`: one event per local write — program stores, call-argument binds, callee-return dest writes — with the value, the producing dispatch, the frame depth, and `slot_history`), the data-flow seam (`ReadSink`/`DataFlowCollector`/`render_data_flow`: one read event per `OP_LOAD_LOCAL` paired with the producing write dispatch per `(function, depth, slot)` — uninitialized reads displayed with an exact total over a bounded list, the interleaved `FlowRecorder` transcript, `from_transcript`), the call-graph seam (`CallGraphCollector`/`render_call_graph`: the per-`(caller, callee)` edge map over the same stream — the callee named by the following step's frame because the hook fires pre-execution, recursion disambiguated by depth, unresolved calls displayed, `from_steps`), the run-diff seam (`render_run_diff`: the deterministic behavioral diff of two captured transcripts — the first-divergence dispatch with both steps spelled, a prefix pair's honest end line, `no divergence` for identical runs), the module-image diff seam (`render_module_diff`: the deterministic structural diff of two decoded modules — functions with first-diff pcs, the string pool, the entry), the inclusive-cost seam (`CostCollector`/`render_cost`: the per-function inclusive/exclusive dispatch accounting over the same stream — inclusive credited to every active frame per dispatch, the root's inclusive count always the step total, `hottest_inclusive(n)`, `from_steps`), the tail-window seam (`WindowCollector`/`render_window`: the bounded flight-recorder ring over the same stream — the most recent `n` dispatches with their absolute dispatch numbers, the scroll-out displayed in `dropped`, `from_tail`), the assertion seam (`AssertSink`/`AssertCollector`/`render_asserts`: one event per evaluated `OP_ASSERT` — passing or failing, the failing one firing before the run's fault — with the site, the asserted polarity, the observed condition, and the verdict, bounded capture with a displayed overflow flag, `passed_count`/`failed_count` tallies), the drop-observation seam (`DropSink`/`DropCollector`/`render_drops`: one event per executed `OP_DROP` — the discard site and the popped value in full, the event taking the value the opcode already popped — bounded capture with a displayed overflow flag), the cast seam (`CastSink`/`CastCollector`/`render_casts`: one event per executed `OP_CAST` — the cast site, the decoded kind/target pair, and the operand/result values in full — bounded capture with a displayed overflow flag), the memory seam (`MemSink`/`MemCollector`/`render_memory`: one write event per executed `OP_STORE_FIELD` and one read event per executed `OP_DEREF` — the site, the frame-relative address, and the value in full — the interleaved transcript, the unwritten-address reads displayed, bounded capture with a displayed overflow flag), the calls seam (`CallSink`/`CallCollector`/`render_calls`: one start event per executed call — the site, the callee, the arguments in full, the destination local, the resume target — and one return event per executed return with the handed-back value, open calls displayed, bounded capture with a displayed overflow flag), the string-pool seam (`StringSink`/`StringCollector`/`render_strings`: one event per executed `OP_LOAD_CONST_STR` — the site, the pool slot, and the resolved value — per-slot resolution counts, bounded capture with a displayed overflow flag), the aggregate seam (`AggregateSink`/`AggregateCollector`/`render_aggregates`: one build event per executed `OP_AGGREGATE` — the site, the arity, and the folded elements in full — and one repeat event per executed `OP_REPEAT` — the site, the raw count displayed even when negative, and the replicated value — build/repeat tallies, the element-materialization total, and the arity high-water mark, bounded capture with a displayed overflow flag), the projection seam (`ProjectionSink`/`ProjectionCollector`/`render_projections`: one event per executed `OP_LEN` — the site, the local index, the operand in full, and the answer — and one per executed `OP_DISCRIMINANT` — the site, the popped operand, and the answer — the scalar-convention reads (a non-aggregate operand answers `0`) counted in a dedicated `scalar_reads` fold, bounded capture with a displayed overflow flag), the float seam (`FloatSink`/`FloatCollector`/`render_floats`: one event per executed float operation — the `OP_LOAD_CONST_F64` pushes, the `(Float, Float)` binops with the opcode, the operands in full, and the answer, and the `OP_NEG` negations — the NaN and infinite answers counted in dedicated specials folds, bounded capture with a displayed overflow flag), and the fuel budget (`Vm::with_fuel` → `VmError::FuelExhausted`). |
-| `glyim-runtime` | Runtime FFI: alloc, dealloc, drop glue, panic, fs/net/thread/time/process. |
-| `glyim-db` | Compilation database: interners, VFS, type context, trait context. |
-| `glyim-pipeline` | End-to-end compilation driver (lex → parse → def-map → HIR → typeck → lower → borrowck → opt → codegen). |
-| `glyim-cli` | Command-line interface (`clap`) and linker driver. |
-| `glyim-lsp` | Language Server Protocol implementation. |
-| `glyim-test` | Testing framework: discovery, execution, snapshots, mocks, property testing. |
-| `glyim-lang-core` | Core library source (`.g` files): `Option`, `Result`, `iter`, `slice`, `str`, `cell`, `mem`, `ptr`, `ops`, `cmp`, `marker`, `panic`, `hint`, `convert`, `default`, `future`, `parse`. |
-| `glyim-lang-alloc` | Alloc library source: `Box`, `Vec`, `String`, `Rc`, `RawVec`, plus the shared `alloc` module. |
-| `glyim-lang-std` | Standard library source: `io`, `fs`, `net`, `thread`, `sync`, `env`, `time`, `process`, `task`, plus integer/string formatting (`int_str`). |
-| `glyip` | Package manager / build tool. |
-| `tools/glyim-metrics` | Repo-health metrics (code lines, tests, doc coverage, inline-allow count) behind the CI metrics ratchet. |
-| `tools/glyim-pilot` | Agent orchestrator with gate bundles (clippy, fmt, contracts, coverage, mutation, ledger). |
-| `tools/ledger-schema` | `deny_unknown_fields` schemas shared by the readiness ledger and inventory extractors. |
-| `tools/glyim-ledger` | Readiness-ledger CLI: `check`, `gaps`, `gaps audit`, `gaps unwitness`, `gaps open`, `gaps witness`, `gaps retire`, `next`, `explain`, `compute`, `status`, `diff`, `gates`, `verify`, `render-gaps`, `evidence record`, `evidence check`, `evidence audit`, `evidence retract`, `waivers`, `waivers grant`, `waivers revoke`, `waivers extend`, `waivers prune`, `handoff`, `release-check`, `inventory`, `inventory ignore`, `inventory unignore`, `schema` — registry consistency gates run in CI; `next` renders the plan §3.9 deterministic work queue (`glyim.ledger-next/1` JSON) for agent consumers and `explain` resolves one registry ID against it; `compute` runs the plan M1.8 level engine — a pure function of the registry, `glyim.evidence/1` records, and `ledger/policy.toml` (`glyim.ledger-compute/1` JSON with `--format json`; `--snapshot PATH` persists the `glyim.ledger-snapshot/1` document); `status` renders the computed status as the marker-delimited Markdown block or the `glyim.status/1` JSON contract — `--out PATH` writes the rendered document (default `STATUS.md` / `STATUS.json` by face) and `--check` byte-compares the committed document against the computed status, the plan M1.10 "STATUS is up to date" gate; `diff` is the plan M1.10 readiness-regression gate between two snapshots — regressions block unless an unexpired `ledger/waivers.toml` waiver covers them (constitution C9); `gates` is the plan M1.12 release-gate report — every `RG-NN` gate declared in `ledger/gates.toml` with the `pass`/`fail`/`unmeasured` verdict the current evidence supports (`unmeasured` is displayed, never silently passed; `glyim.ledger-gates/1` JSON with `--format json`); `verify` is the plan M1.13 determinism self-check (first slice) — every ledger pipeline runs twice from independent load passes and any rendered-byte drift fails the command (`glyim.ledger-verify/1` JSON with `--format json`); `gaps open` is the opening stage of the lifecycle — it files a NEW gap entry into the registry: the engine enforces the canonical `GAP-NNNN` ID shape (the face mints IDs), a usable one-line `--title`/`--opened-in`, every `--affects` feature present in the registry, and a free ID (an open gap is never silently shadowed), renders the canonical `[[gap]]` block in the committed registry style with the explicit `status = "unwitnessed"` line (the serde default for a missing `status` key is `witnessed`, so an omitted line would mint silent debt), and appends it after one blank separator — minting the next numbered `ledger/gaps/known/NNNN-gaps-open.toml` by default or extending the existing registry file named by `--file`, through the `GapOpener` seam (`glyim.ledger-gaps-open/1` JSON with `--format json`); `gaps witness` is the gap-lifecycle write face — it attaches the witness fixture that reproduces one unwitnessed gap (`--id GAP-NNNN --witness PATH`), validates the path against the registry and the tree (relative, no `..` escape, fixture must exist), edits exactly the matched `[[gap]]` block through the `GapWitnessRewriter` seam (the `status` value flips, the aligned `witness` line is appended, the curated header prose survives byte-for-byte — the surgical counterpart of the waiver faces' canonical rewrite), never silently re-witnesses an already-witnessed gap, and the dispatch refreshes the generated `KNOWN_GAPS.md` in the same run (`glyim.ledger-gaps-witness/1` JSON with `--format json`); `gaps retire` is the closure half of the lifecycle — it removes one gap's `[[gap]]` block from its registry file entirely through the `GapRetirer` seam (the rendered document says closed entries retire to the git history of the file and of the registry; until this face the removal had no sanctioned command), refusing a registry that does not load cleanly and never leaving a partial write behind (`glyim.ledger-gaps-retire/1` JSON with `--format json`); `gaps audit` is the trust-loop closure over the gap-lifecycle write faces — it resolves every registered gap's witness fixture against the tree, one row per gap sorted by ID (`witnessed` = the fixture exists, `debt` = honest unwitnessed debt displayed never failed, `missing` = the registry claims a witness the tree no longer carries — silent debt surfaced, `unreadable` = the witness path is not a readable regular file), and any missing or unreadable row (or error-severity load diagnostic) fails the exit code after every finding is printed — the same finding gate `evidence audit` runs over the evidence store, applied to the witness paths the write faces record (`glyim.ledger-gaps-audit/1` JSON with `--format json`); `gaps unwitness` is the remedy half of that trust loop — it detaches one witnessed gap's witness (`--id GAP-NNNN`), flipping the matched block's `status` back to `unwitnessed` and removing the aligned `witness` line through the `GapWitnessDetacher` seam (the curated header prose survives byte-for-byte; the sanctioned counterpart of the witness face's "an already-witnessed gap is never silently re-witnessed" rejection — a stale or wrong witness path is detached and re-witnessed at its new spelling instead of hand-edited), refusing a registry that does not load cleanly and never leaving a partial write behind; the dispatch refreshes the generated `KNOWN_GAPS.md` in the same run (`glyim.ledger-gaps-unwitness/1` JSON with `--format json`); `evidence record` is the plan §3.4 store-curation face — it validates harness-emitted JSONL against the registry and merges it into the committed `ledger/evidence/` store (`glyim.ledger-evidence-record/1` JSON with `--format json`; whole-record dedupe, canonical order, idempotent re-record), and `evidence check` validates that committed store and reports its coverage (`glyim.ledger-evidence-check/1`; error diagnostics fail the exit code); `waivers` is the constitution-C9 waiver-health report — every `ledger/waivers.toml` entry with its expiry verdict (`glyim.ledger-waivers/1` JSON with `--format json`); expired waivers and load diagnostics fail the exit code, so an expired exception fails CI even when no regression needs covering — and `waivers grant` is the curated write face: it validates the request against the registry and the 14-day C9 horizon, composes the deterministic `WVR-<date>-<slug>` ID, and appends the canonical `[[waiver]]` block (never a silent overwrite); `evidence retract [ROOT] --fixture <PATH>` is the curation removal face — it removes every committed record whose `fixture_sha256` matches the recomputed digest of one fixture through the same `FixtureFingerprint` seam the audit face compares with (`glyim.ledger-evidence-retract/1` JSON with `--format json`): the audit face's `Drift` verdict is the finding, this face is the remedy — refusing a store that does not load cleanly (a corrupt line would be silently destroyed by the canonical rewrite), rejecting a fixture with nothing committed instead of silently no-oping, and rewriting the store canonically so the surviving records stay byte-deterministic; `evidence audit` recomputes every record's `fixture_sha256` against the tree and fails on missing, drifted, or unreadable fixtures (the `FixtureFingerprint` seam); `waivers revoke` is the retirement write face — it validates the exact `--id`, refuses to rewrite a document that does not load cleanly, and removes exactly the one matching block through the `WaiverRewriter` seam, rewriting the remaining entries canonically (never a silent partial write); `waivers extend` is the re-pin write face — it moves exactly the one matching block's expiry to `today + --days` (default 7, horizon 14) through the `WaiverExtender` seam, keeping the identity (never a silent partial write); `waivers prune` is the batch-retirement write face — it removes every expired `[[waiver]]` block through the `WaiverPruner` seam, rewriting the remaining entries canonically (a document that does not load cleanly is refused; a document with no expired waiver is never rewritten); `handoff` is the plan §3.7 session-handoff generator — it composes the compute, `next`, and `waivers` face outcomes into one short document (the readiness histogram, the top-N work queue with `--items N` (default 5, max 20), waiver health with the next expiring waiver, and witness debt; `glyim.ledger-handoff/1` JSON with `--format json`) — `--out PATH` writes the rendered document (default `HANDOFF.md` / `HANDOFF.json` by face) and `--check` byte-compares the committed document against the composed state, and an expired waiver or an error diagnostic fails the exit code exactly as the composed faces do; `release-check <VERSION>` is the plan §10 final release gate — it composes the M1.12 gate report, the M1.13 determinism self-check, and the C9 waiver health into one verdict for the named release: every declared gate green (`unmeasured` blocks — displayed, never silently passed), evidence reproducible, no waiver active or expired, and no error diagnostic across the composed faces, never greener than the faces it composes (`glyim.ledger-release-check/1` JSON with `--format json`; the `ReleaseCheckSource` seam runs `FileReleaseCheckSource` over the registry or an in-process state); `inventory ignore [ROOT] --item <KEY> --reason <TEXT>` is the §3.5 exemption write face — it files one `[[ignore]]` block into `ledger/inventory-ignore.toml` through the `IgnoreSink` seam, the sanctioned answer to a failing `LEDGER-INVENTORY-UNMAPPED` check: the key must be produced by an extractor *right now* (exact keys, never globs — a pre-registered phantom exemption would silently swallow future drift), must not be claimed by a feature (claimed-and-ignored is the `LEDGER-INVENTORY-CONFLICT` failure), and must not already be ignored (a re-file is a duplicate, never a silent overwrite); nothing is written on a rejected request (`glyim.ledger-inventory-ignore/1` JSON with `--format json`); `inventory unignore [ROOT] --item <KEY>` is the retirement half — it removes exactly the one matching block through the `IgnoreRewriter` seam and rewrites the remaining entries canonically (the item is unmapped again the moment the rewrite lands; the §3.5 gate is the loud follow-up that forces a feature claim before `ledger check` passes) (`glyim.ledger-inventory-unignore/1` JSON with `--format json`). |
-| `tools/glyim-bench` | M2.2 measurement harness: `perf stat`/callgrind instruction counts, wall time, child RSS, a counting allocator, the CoV stability gate, and the M2.3 deterministic corpus generators (`glyim.corpus/1` manifest); `run` measures one `glyim.bench/1` report over an arbitrary child command (`--iterations N`), `gate` is the per-metric CoV stability gate over a committed report (an unstable metric fails the exit code), and `diff` is the M2.5 perf-history gate between two `glyim.bench/1` reports, `scale` (M2.4) measures a `{size}`-parameterized command across input sizes and gates the fitted log-log scaling exponent, `budget` (M2.6) enforces the committed absolute `glyim.bench-budgets/1` budgets per benchmark — an exceeded mean, an unmeasured instruction bound, or an unbudgeted program fails the gate — and `history record`/`show`/`diff`/`trend` append runs to the append-only `glyim.bench-history/1` JSONL perf history (plan §6 M2.5), diff a current report against the latest recorded baseline, and measure the total drift across the last N recorded runs of a program (`glyim.bench-trend/1` — the accumulated-ratchet class no per-run diff sees); `matrix` (M2.5 remainder) diffs a whole benchmark set against the latest recorded baseline of each program and gates the per-benchmark deltas **and** their geo-mean (`glyim.bench-matrix/1`, plan §325: fail >2% per benchmark or >0.5% geo-mean — the aggregate clause that catches a uniform sub-budget drift no single row trips); `corpus write`/`check` (M2.3 remainder) materialize the committed corpora directory — one `<family>-<seed>-<size>.g` file per program plus the `glyim.corpus/1` `corpus.json` manifest through the `CorpusSink` seam — and re-hash every committed byte against the manifest on every check. |
-
-### Compilation Pipeline
-
-```
-source.g
-   │
-   ▼
-┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-│   Lexer      │──▶│   Parser     │──▶│   CST        │  (glyim-frontend, glyim-syntax)
-└──────────────┘   └──────────────┘   └──────────────┘
-                                             │
-                                             ▼
-┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-│  Macro       │◀──│   Def-Map    │◀──│   HIR        │  (glyim-meta, glyim-def-map, glyim-hir)
-│  Expansion   │   │  (name res.) │   │  (untyped)   │
-└──────────────┘   └──────────────┘   └──────────────┘
-                                             │
-                                             ▼
-┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-│  Trait       │◀──│   Typeck     │──▶│   THIR       │  (glyim-solve, glyim-typeck)
-│  Solving     │   │  (inference) │   │  (typed)     │
-└──────────────┘   └──────────────┘   └──────────────┘
-                                             │
-                                             ▼
-┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-│  Borrowck    │◀──│  Lowering    │──▶│   MIR        │  (glyim-lower, glyim-borrowck, glyim-mir)
-│  (NLL)       │   │ (monomorph.) │   │  (CFG)       │
-└──────────────┘   └──────────────┘   └──────────────┘
-                                             │
-                                             ▼
-┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-│  LLVM IR     │◀──│  Optimizer   │──▶│  Bytecode    │  (glyim-opt, glyim-codegen-llvm, glyim-codegen)
-│  → .o / exe  │   │  (MIR passes)│   │  → .gbc      │
-└──────────────┘   └──────────────┘   └──────────────┘
-                                             │
-                                             ▼
-                                       ┌──────────────┐
-                                       │  Interpreter │  (glyim-mir-interp)
-                                       └──────────────┘
-```
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- **Rust** — latest stable, 2024 edition (Rust 1.95+ recommended; the MSRV is pinned in `Cargo.toml` and enforced by the `msrv` CI job).
-- **LLVM 23** — a hard workspace dependency (there is no feature flag). Set `LLVM_SYS_231_PREFIX` to your LLVM installation prefix before building.
-- **`watchexec`** — optional, for the `justfile` recipes.
-
-> [!IMPORTANT]
-> The LLVM backend is a hard dependency of the pipeline — there is no
-> feature flag to build without it. Install LLVM 23 and set
-> `LLVM_SYS_231_PREFIX` (Homebrew: `$(brew --prefix llvm@23)`,
-> Debian/Ubuntu: `/usr/lib/llvm-23`).
-
-### Building
-
-```bash
-git clone https://github.com/elcoosp/glyim
-cd glyim
-cargo build --release
-```
-
-The compiler driver is then available at `target/release/glyim-cli` (invoke it as `glyim-cli`; rename or symlink to `glyim` if you prefer).
-
-### Quick Start
-
-```bash
-# Create a new project
-cargo run -p glyip -- new hello
-cd hello
-
-# Build it
-cargo run -p glyip -- build
-
-# Run it
-cargo run -p glyip -- run
-```
-
----
-
-## Usage
-
-### The `glyim` Compiler Driver
-
-```bash
-# Compile a source file to an object file using the LLVM backend (default)
-glyim input.g -o output.o
-
-# Emit LLVM IR instead of an object file
-glyim input.g --emit llvm-ir
-
-# Emit MIR (useful for debugging lowering)
-glyim input.g --emit mir
-
-# Emit assembly
-glyim input.g --emit asm
-
-# Use the bytecode backend
-glyim input.g --backend bytecode --emit obj
-
-# Compile to a runnable executable
-glyim input.g --emit exec -o hello
-
-# Compile to a cdylib (used for proc-macro crates)
-glyim proc_macro_dep.g --emit cdylib
-
-# Optimise at level 2 with thin LTO (fat LTO requires multi-CGU support,
-# which is not yet implemented; --lto fat errors cleanly)
-glyim input.g -O2 --lto thin
-
-# Cross-compile to AArch64 Linux
-glyim input.g --target aarch64-unknown-linux-gnu
-
-# Emit diagnostics as JSON (for editors / LSP)
-glyim input.g --error-format json
-```
-
-### Command-Line Flags
-
-| Flag | Description |
-|------|-------------|
-| `--emit <KIND>` | `obj` (default), `exec`, `mir`, `llvm-ir`, `asm`, `cdylib`, `syntax`, `stats`, `run` |
-| `--backend <NAME>` | `llvm` (default), `bytecode`, or `interp` (run mode only: executes through the in-process MIR interpreter) |
-| `-O, --opt-level <N>` | Optimisation level 0–3 |
-| `--target <TRIPLE>` | Target triple (default: the host triple, derived from `std::env::consts`) |
-| `--linker <PATH>` | Override the system linker |
-| `--link-flags <FLAGS>` | Extra flags passed to the linker |
-| `--lto <KIND>` | `off` (default), `fat`, `thin` |
-| `--codegen-units <N>` | Number of CGUs (default: available parallelism, capped at 16) |
-| `--proc-macro-deps <LIST>` | Comma-separated proc-macro dependency source files |
-| `--error-format <FMT>` | `human` (default) or `json` |
-| `--with-stdlib` | Prepend the assembled standard library (+ prelude) so `println`, `Vec`, `Option`, … resolve without `use` statements |
-| `-A/--allow, -W/--warn, -D/--deny <LINT>` | Lint level control (repeatable; `-W help` lists the lints) |
-| `--time-passes` | Print the per-phase wall-clock table to stderr after a successful compile |
-| `--self-profile[=FILE]` | Write the per-phase profile as a Chrome Trace JSON event list (default `./trace.json`; value is `=`-bound) |
-
-> [!IMPORTANT]
-> `--lto=thin` requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution `glyim-codegen-llvm` was built against. Requesting `thin` with `--backend bytecode` is an explicit error rather than a silent no-op.
-
-> [!TIP]
-> `--emit=run` executes the program in-process through the MIR interpreter (the interpreter run contract, M2.1 era) — no LLVM toolchain, no system linker, no `glyim-runtime` staticlib. The program's exit code (masked to `0xff`; panics exit 101) becomes the driver's exit code, so it is scriptable exactly like a linked `--emit=exec` binary:
->
-> ```bash
-> glyim input.g --emit=run --with-stdlib   # runs without a linker
-> glyim input.g --emit=run --backend=interp --time-passes
-> ```
-
-### The `glyip` Build Tool
-
-`glyip` is Cargo's counterpart for Glyim projects. It reads a `Glyip.toml` manifest, resolves dependencies (path, registry, and git), maintains a `Glyip.lock` lockfile, and drives the compiler.
-
-```bash
-glyip new my_project              # Scaffold a new binary project
-glyip new my_lib --lib            # Scaffold a new library project
-
-glyip build                       # Build the project (incremental)
-glyip build --release --opt-level 2  # Release build with optimisations
-glyip build --backend llvm        # Force the LLVM backend
-
-glyip test                        # Run all tests
-glyip test --filter parser        # Run only tests matching "parser"
-glyip test --compiled             # Compile each test to a native exe and run it
-
-glyip run -- --flag value         # Build and run with program arguments
-```
-
-### Manifest (`Glyip.toml`)
-
-```toml
-[package]
-name = "my_project"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-serde = "1.0"
-local_util = { path = "../local_util" }
-my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }
-
-[dev-dependencies]
-test_helpers = { path = "../test_helpers" }
-```
-
-> [!TIP]
-> The resolver performs real SemVer 2.0 matching (caret, tilde, wildcard, and comparison operators), detects dependency cycles, and reports version conflicts with the full set of requesters that disagree.
-
-#### Dependency resolution semantics
-
-`glyip`'s resolver is deliberately simpler than Cargo's. Knowing the
-differences up front saves debugging a resolution failure that is not a
-bug:
-
-**Greedy breadth-first, no backtracking.** The resolver walks the
-dependency graph breadth-first from the root manifest. When it encounters
-`foo = "1.0"`, it picks the highest version of `foo` that satisfies that
-requirement *at that moment*, records it, and moves on. If a later
-transitive dependency needs an incompatible version of `foo`, the resolver
-does **not** go back and try a lower version of the first requirement —
-it reports a conflict. Cargo's backtracking resolver would try
-alternatives; `glyip`'s does not.
-
-**One version per crate name.** Although `Glyip.lock` keys entries by
-`name-version` (so the data structure *could* hold `foo-1.0.0` and
-`foo-2.0.0` simultaneously, as Cargo's lockfile does), the conflict check
-that runs at the end of resolution looks up the first entry matching a
-crate name and verifies every requirement seen in the graph against it.
-In practice this enforces a single resolved version per name: two
-incompatible requirements for the same crate are a hard
-`DependencyConflict` error, not a multimapping.
-
-That error names the crate, every distinct requirement gathered, and
-every `(requester, requirement)` edge — so a diamond dependency where two
-crates disagree is diagnosable without re-running with extra logging.
-
-**Deterministic version selection.** "Highest matching version" is
-computed by parsing every candidate and sorting by SemVer precedence, not
-by trusting the registry index's JSON listing order. An unparseable or
-unsatisfiable requirement surfaces as `DependencyNotFound` rather than
-silently falling back to "latest" — a typo in a version string is an
-error, not a surprise upgrade.
-
-**Cycle detection.** The visited set is keyed by
-`name@path(path)` for path dependencies and `name-version(git)` for
-registry and git dependencies. A cycle (crate A path-depends on B, B
-path-depends on A) is caught by the visited check before infinite
-recursion. Two path dependencies with the same declared `[package] name`
-but different directories are correctly treated as distinct crates —
-they resolve independently rather than colliding on the name alone.
-
-**What this means in practice.** For the common shapes — a flat
-dependency list, or a diamond where everyone agrees on a major version —
-`glyip` resolves the same graph Cargo would. The divergence is when two
-dependents require mutually-incompatible versions: Cargo would compile
-both copies; `glyip` stops with an error naming both requesters. That is
-a deliberate scope limit, not an oversight.
+The architecture is heavily inspired by rustc (arena-allocated IRs, interned types, query-style contexts, trait-based dependency injection), but written from scratch with a strong emphasis on readable code and testability.
 
 ---
 
 ## Language Tour
 
 ```glyim
-// Structs, enums, generics, traits.
-struct Point<T> {
-    x: T,
-    y: T,
+trait Area {
+    fn area(&self) -> f64;
 }
 
 enum Shape {
     Circle(f64),
     Rectangle(f64, f64),
     Point,
-}
-
-trait Area {
-    fn area(&self) -> f64;
 }
 
 impl Area for Shape {
@@ -429,7 +61,6 @@ impl Area for Shape {
     }
 }
 
-// Pattern matching, ranges, guards.
 fn classify(n: i32) -> &str {
     match n {
         0 => "zero",
@@ -439,12 +70,6 @@ fn classify(n: i32) -> &str {
     }
 }
 
-// Closures and iterators.
-fn sum_of_squares(values: &[i32]) -> i32 {
-    values.iter().map(|x| *x * *x).sum()
-}
-
-// Async / await.
 async fn fetch_twice() -> i32 {
     let a = fetch_one().await;
     let b = fetch_one().await;
@@ -453,656 +78,307 @@ async fn fetch_twice() -> i32 {
 ```
 
 > [!NOTE]
-> The full grammar and standard library are still evolving. The `glyim-lang-core`, `glyim-lang-alloc`, and `glyim-lang-std` crates contain the current standard library source (written in Glyim) and serve as the compiler's own bootstrapping corpus.
+> The full grammar and standard library are still evolving. `glyim-lang-core`, `glyim-lang-alloc`, and `glyim-lang-std` contain the current stdlib source (written in Glyim) and serve as the compiler's bootstrapping corpus.
 
 ---
 
-## Development
+## Getting Started
 
-### Workspace Layout
+### Prerequisites
 
-Compiler crates live under `crates/`; the five tooling crates live under `tools/`. The workspace root `Cargo.toml` defines shared dependencies and members. The standard library lives under `glyim-lang-core/lib/`, `glyim-lang-alloc/lib/`, and `glyim-lang-std/lib/` as `.g` source files.
+- **Rust** — latest stable, 2024 edition (Rust 1.95+ recommended; MSRV pinned in `Cargo.toml`)
+- **LLVM 23** — a hard workspace dependency (no feature flag)
+- **`watchexec`** — optional, for the `justfile` recipes
 
-### Adding a New Crate
+> [!IMPORTANT]
+> The LLVM backend is a hard dependency — there is no feature flag to build without it. Install LLVM 23 and set `LLVM_SYS_231_PREFIX` before building (Homebrew: `$(brew --prefix llvm@23)`, Debian/Ubuntu: `/usr/lib/llvm-23`).
 
-1. Create the directory under `crates/<name>`.
-2. Add a `Cargo.toml` with `[package]` and `[dependencies]`.
-3. Register the crate in the workspace `members` list.
-4. If its public API is used by other crates, add its path to `[workspace.dependencies]`.
-
-### Design Conventions
-
-- **Context traits** — every phase defines a narrow trait (`LowerCtx`, `BorrowckCtx`, `TypeLookup`, `TraitSolver`) that the pipeline implements. This decouples core logic from the database and lets unit tests substitute mocks.
-- **Testing mocks** — `glyim-test` provides `MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen`, and `TestDbBuilder`.
-- **Arena-allocated IRs** — `IndexVec<I, T>` gives every IR node a typed, cheaply-copyable ID. Interning (`TyCtx`) makes type handles stable across phases.
-- **Diagnostics** — every phase returns `Vec<GlyimDiagnostic>`, which the driver renders with `miette` (human) or serialises to JSON.
-
-### Repository Rails: `bootstrap`, `ci-local`, `verify`
-
-The M0 rails (plan §6 M0.1 / M0.5) are three `just` recipes:
+### Building
 
 ```bash
-# One-time environment setup from a clean clone: the Rust stable toolchain
-# (rustfmt + clippy), LLVM 23 (apt.llvm.org on Linux, Homebrew on macOS,
-# or an existing LLVM_SYS_231_PREFIX is kept as-is), and the cargo tools
-# the CI gates use (cargo-nextest, cargo-deny, cargo-machete). Idempotent.
-just bootstrap
-
-# The PR-tier CI gates, locally, in CI's own order: fmt, clippy -D
-# warnings, warn-fallback heuristics, process templates, tests, the
-# metrics ratchet, the ledger gate suite (check, evidence check/audit,
-# STATUS byte-check, README block), waiver health, dead-code check, and
-# cargo-deny. NOT mirrored locally: the multi-OS jobs, coverage/mutation
-# advisories, MSRV (pinned by the dtolnay action), and `ledger diff`
-# (needs the PR base SHA).
-just ci-local
-
-# The universal definition of done's mechanical subset (plan §7.4):
-# fmt + clippy(deny) + tests + ledger check + evidence check + STATUS
-# byte-check + README generated-block drift check.
-just verify
+git clone https://github.com/elcoosp/glyim
+cd glyim
+cargo build --release
 ```
 
-The LLVM 23 note in [Prerequisites](#prerequisites) applies to every recipe
-below `bootstrap` too: set `LLVM_SYS_231_PREFIX` (or have `llvm-config-23`
-on `PATH`) before running `ci-local` or `verify`; the recipes fail with that
-remedy printed instead of an opaque `llvm-sys` build error.
+The compiler driver is at `target/release/glyim-cli`. Symlink or rename to `glyim` if you prefer.
 
-### The M0.6 metrics ratchet
-
-`tools/glyim-metrics` measures twelve cheap lexical properties of the tree —
-`rust_files`, `code_lines`, `public_items`, `documented_items`,
-`test_functions`, `workspace_members`, `inline_allows` (the M0 zero-allow
-policy), `unwrap_count` and `unsafe_count` (production code only:
-`#[cfg(test)]` regions, `#[test]` functions and `tests/` files are excluded
-lexically), `from_raw_count`, `public_IR_fields` (public fields on structs
-in `glyim-mir`/`glyim-hir`), and `HashMap_hot_sites` (`std::collections`
-`HashMap` uses under `crates/`, the M3.9 determinism ratchet's target). The
-committed `metrics/baseline.json` pins them; CI's `metrics-must-not-increase`
-and `metrics-ratchet` jobs fail when any counter moves in its worse
-direction (fewer lines/tests/docs, or ANY new unwrap/unsafe/from_raw/IR
-field/HashMap site/inline allow). Improvements are picked up by re-running
-with `--write` in the same PR (gates never weaken — constitution C9):
+### Quick Start
 
 ```bash
-# Check the tree against the baseline (what CI runs)
-cargo run -p glyim-metrics -- . --check metrics/baseline.json
+# Scaffold a new project
+cargo run -p glyip -- new hello
+cd hello
 
-# Re-pin after an improvement (same PR, never lazily)
-cargo run -p glyim-metrics -- . --write metrics/baseline.json
+# Build and run
+cargo run -p glyip -- build
+cargo run -p glyip -- run
 ```
 
-The measured baseline commit is tagged `v0.10.0-metrics-baseline`; the full
-test-suite run is recorded in `metrics/test-baseline.json`.
+That's the whole loop: scaffold, build, run. The project template is a working "hello, world" in Glyim.
 
-### Running a Subset of Tests
+---
 
-```bash
-# Run the whole suite
-cargo test
+## Features
 
-# Run only the glyim-test harness
-cargo test -p glyim-test
+### Language
 
-# Filter tests by path substring
-cargo test -p glyim-test -- --filter parser
+- **Rust-like syntax** — `fn`, `let`, `struct`, `enum`, `match`, `impl`, traits, generics, where-clauses, closures, `for`/`while`/`loop`
+- **Pattern matching** — literals, ranges, or-patterns, slices, structs, tuples, enums, `if` guards
+- **`async`/`await`** with real state-machine desugaring (straight-line, multi-await, and loop bodies)
+- **Macros** — declarative `macro_rules!` and procedural macros via C-ABI token-stream with `dlopen` loader
+- **GSX view syntax** — typed, host-agnostic view elements with a dedicated compiler stage (View IR, blueprints, SSR)
 
-# Verbose output
-GLYIM_TEST_SHOW_OUTPUT=1 cargo test -p glyim-test
+### Compiler
+
+- **NLL borrow checking** with Polonius-style region inference, cross-block liveness, and two-phase borrows
+- **Move analysis** with partial-move tracking and drop-flag elaboration
+- **Type inference** with unification variables, occurs-check, and bidirectional checking
+- **Trait solving** via fulfillment context, HRTB support, and auto-trait computation (`Send`/`Sync`/`Unpin`)
+- **Monomorphization** with polymorphization and CGU partitioning
+- **MIR optimizations** — constant propagation, DCE, CFG simplification, slice desugaring, drop elaboration
+
+### Backends
+
+- **LLVM backend** via `inkwell`/LLVM 23 — real ABI lowering, debug info, exception handling (Itanium + SEH), and LTO (`fat`/`thin`)
+- **Bytecode backend** — compact stack machine with a full-featured VM (IEEE-754 floats, width-aware casts, pooled strings, module-image container, disassembler)
+- **Extensive VM observability** — execution trace, profile, coverage, branch history, call graph, call state, data flow, assertions, drops, casts, memory, fuel, interrupts, and more
+
+### Tooling
+
+- **`glyim` CLI** — 9 emit kinds (`obj|exec|mir|llvm-ir|asm|cdylib|syntax|stats|run`), backend selection, opt-level, LTO, codegen units, `--time-passes`, `--self-profile`
+- **`glyip` build tool** — Cargo-like project manager with SemVer 2.0 resolution, path/git deps, lockfiles, registry client
+- **Full LSP** — pushed + pulled + workspace diagnostics, hover, completion, goto-definition/type-definition/declaration/implementation, references, rename, semantic tokens, call hierarchy, type hierarchy, inlay hints, and 30+ more capabilities
+- **Test harness** — compile-pass, compile-fail, run-pass, run-fail with inline annotations, snapshot testing (CST, def-map, MIR), mocks for every phase, property-based type generation
+
+---
+
+## Architecture
+
+Glyim is split into 39 single-responsibility crates across `crates/` and `tools/`. Each phase consumes the previous phase's IR and exposes a minimal trait-based interface so tests can substitute mocks.
+
+### Compilation Pipeline
+
+```mermaid
+flowchart TD
+    A[source.g] --> B[Lexer + Parser]
+    B --> C[CST]
+    C --> D[Macro Expansion]
+    D --> E[Name Resolution]
+    E --> F[HIR]
+    F --> G[Type Check + Trait Solving]
+    G --> H[THIR]
+    H --> I[Lowering + Monomorphization]
+    I --> J[MIR]
+    J --> K[Borrow Checker NLL]
+    K --> L[Optimizer]
+    L --> M[LLVM Backend]
+    L --> N[Bytecode Backend]
+    M --> O[.o / exe]
+    N --> P[.gbc]
+    P --> Q[Bytecode VM]
+    P --> R[MIR Interpreter]
 ```
 
-CI runs the same suite through `cargo-nextest` (the test jobs in `.github/workflows/ci.yml`); plain `cargo test` works everywhere else.
+### Crate Map
 
-### Library Examples
+| Crate                | Description                                                  |
+| -------------------- | ------------------------------------------------------------ |
+| `glyim-core`         | Foundation: index vectors, IDs, interner, paths              |
+| `glyim-span`         | Source locations, hygiene, multispan diagnostics             |
+| `glyim-diag`         | Diagnostics, error codes, `DiagSink`, `miette`               |
+| `glyim-vfs`          | Virtual file system                                          |
+| `glyim-syntax`       | CST (Rowan), `SyntaxKind`, AST helpers                       |
+| `glyim-frontend`     | Lexer + parser                                               |
+| `glyim-gsx`          | GSX view syntax: parser, VIR, blueprints, SSR                |
+| `glyim-def-map`      | Module graph, scopes, name resolution                        |
+| `glyim-meta`         | Declarative + built-in macro expansion                       |
+| `glyim-proc-macro`   | Proc-macro ABI, registry, `dlopen` loader                    |
+| `glyim-hir`          | High-level IR, CST lowering                                  |
+| `glyim-type`         | Type interning, substitutions, regions, predicates           |
+| `glyim-solve`        | Inference, unification, trait solver, HRTB                   |
+| `glyim-typeck`       | HIR → THIR with inference and trait resolution               |
+| `glyim-const-eval`   | Constant expression evaluator                                |
+| `glyim-mir`          | Mid-level IR (CFG), places, statements, terminators          |
+| `glyim-lower`        | THIR → MIR, monomorphization, CGU partitioning               |
+| `glyim-borrowck`     | NLL borrow checker, two-phase borrows, move analysis         |
+| `glyim-opt`          | MIR optimization passes                                      |
+| `glyim-mir-interp`   | MIR interpreter (const-eval, tests)                          |
+| `glyim-layout`       | Type layout (size, alignment, ABI, vtables)                  |
+| `glyim-codegen`      | Codegen backend trait + bytecode emitter                     |
+| `glyim-codegen-llvm` | LLVM backend (inkwell), full ABI, LTO                        |
+| `glyim-bytecode-vm`  | Bytecode VM, module image, disassembler, observability suite |
+| `glyim-runtime`      | Runtime FFI: alloc, drop glue, panic, fs/net/thread/time     |
+| `glyim-db`           | Compilation database: interners, VFS, type/trait contexts    |
+| `glyim-pipeline`     | End-to-end driver                                            |
+| `glyim-cli`          | CLI (`clap`) and linker driver                               |
+| `glyim-lsp`          | Language Server Protocol implementation                      |
+| `glyim-test`         | Test harness: discovery, snapshots, mocks, property testing  |
+| `glyim-lang-core`    | Core library source (`.g`): Option, Result, iter, ...        |
+| `glyim-lang-alloc`   | Alloc library source: Box, Vec, String, Rc, ...              |
+| `glyim-lang-std`     | Standard library source: io, fs, net, thread, ...            |
+| `glyip`              | Package manager / build tool                                 |
 
-The `examples/` directories show how to consume the compiler crates as
-libraries rather than through the CLI:
+> [!TIP]
+> `glyim-bytecode-vm` ships an unusually rich observability suite — trace, profile, coverage, branch history, call graph, call state, local watch, data flow, inclusive cost, tail window, assertions, drops, casts, memory, calls, strings, aggregates, projections, floats, stack, fuel, interrupts, and math seams. See `docs/` for the full seam inventory and `crates/glyim-bytecode-vm/examples/` for runnable walkthroughs.
+
+---
+
+## Usage
+
+### The `glyim` Compiler Driver
 
 ```bash
-# Drive the pipeline in-process: write a .g program, lower it to MIR.
+# Compile to object (LLVM backend, default)
+glyim input.g -o output.o
+
+# Emit LLVM IR
+glyim input.g --emit llvm-ir
+
+# Emit MIR (useful for debugging lowering)
+glyim input.g --emit mir
+
+# Use the bytecode backend
+glyim input.g --backend bytecode --emit obj
+
+# Native executable
+glyim input.g --emit exec -o hello
+
+# Optimize with thin LTO
+glyim input.g -O2 --lto thin
+
+# Cross-compile to AArch64 Linux
+glyim input.g --target aarch64-unknown-linux-gnu
+
+# Run in-process through the MIR interpreter (no linker needed)
+glyim input.g --emit=run --with-stdlib
+```
+
+> [!TIP]
+> `--emit=run` executes the program in-process through the MIR interpreter — no LLVM toolchain, no system linker, no `glyim-runtime` staticlib. The program's exit code becomes the driver's exit code, so it is scriptable exactly like a linked binary.
+
+### The `glyip` Build Tool
+
+```bash
+glyip new my_project              # scaffold a binary project
+glyip new my_lib --lib            # scaffold a library project
+glyip build                       # incremental build
+glyip build --release --opt-level 2
+glyip test                        # run all tests
+glyip test --filter parser        # filter by name
+glyip run -- --flag value         # build and run with args
+```
+
+Manifest (`Glyip.toml`):
+
+```toml
+[package]
+name = "my_project"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = "1.0"
+local_util = { path = "../local_util" }
+my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }
+```
+
+> [!NOTE]
+> `glyip`'s resolver is deliberately simpler than Cargo's: greedy breadth-first, no backtracking, one version per crate name, deterministic version selection. Two incompatible requirements for the same crate are a hard `DependencyConflict` error naming both requesters. See `docs/` for the full semantics.
+
+### Library Usage
+
+Every crate ships runnable examples demonstrating its public API:
+
+```bash
 cargo run -p glyim-pipeline --example hello_pipeline
-
-# Execute in-process via the interpreter run contract.
-cargo run -p glyim-pipeline --example run_interp
-
-# Walk the solver's bootstrap surface (the builtin-trait registry).
-cargo run -p glyim-pipeline --example builtin_trait_registry
-
-# Read the M2.1 per-phase profile the driver's --time-passes prints.
-cargo run -p glyim-pipeline --example phase_profile
-
-# Walk the async desugar's loop-await shapes: what `loop`/`for`/`while`
-# bodies desugar to (and which shapes stay diagnosed, GAP-0006).
-cargo run -p glyim-hir --example async_loop_desugar
-
-# The `for`-over-a-range variant of the same desugar walkthrough.
-cargo run -p glyim-hir --example async_for_loop_desugar
-
-# Round-trip the readiness ledger's evidence JSONL (M1.5 seam).
-cargo run -p glyim-test --example evidence_report
-
-# File a strict-xfail witness fixture against a registered gap (M1.6).
-cargo run -p glyim-test --example known_gap_witness
-
-# Drive the language server's request engines in-process — one
-# walkthrough per seam (declaration, implementation, pull diagnostics,
-# workspace diagnostics, related diagnostics,
-# inlay hints, call hierarchy, signature help, semantic tokens, selection
-# ranges, document highlight, document links, linked editing, type
-# definition, code lenses, on-type formatting, range formatting, type
-# hierarchy, execute command, monikers, inline values, save-time format
-# edits, watched files, file operations, file renames, workspace folders,
-# document color, and the --log-file sink):
 cargo run -p glyim-lsp --example goto_declaration_walkthrough
-cargo run -p glyim-lsp --example implementation_walkthrough
-cargo run -p glyim-lsp --example pull_diagnostics_walkthrough
-cargo run -p glyim-lsp --example workspace_diagnostics_walkthrough
-cargo run -p glyim-lsp --example related_diagnostics_walkthrough
-cargo run -p glyim-lsp --example inlay_hint_walkthrough
-cargo run -p glyim-lsp --example call_hierarchy_walkthrough
-cargo run -p glyim-lsp --example signature_help_walkthrough
-cargo run -p glyim-lsp --example semantic_tokens_walkthrough
-cargo run -p glyim-lsp --example selection_range_walkthrough
-cargo run -p glyim-lsp --example document_highlight_walkthrough
-cargo run -p glyim-lsp --example document_links_walkthrough
-cargo run -p glyim-lsp --example linked_editing_walkthrough
-cargo run -p glyim-lsp --example type_definition_walkthrough
-cargo run -p glyim-lsp --example code_lens_walkthrough
-cargo run -p glyim-lsp --example on_type_formatting_walkthrough
-cargo run -p glyim-lsp --example range_formatting_walkthrough
-cargo run -p glyim-lsp --example type_hierarchy_walkthrough
-cargo run -p glyim-lsp --example execute_command_walkthrough
-cargo run -p glyim-lsp --example moniker_walkthrough
-cargo run -p glyim-lsp --example inline_value_walkthrough
-cargo run -p glyim-lsp --example will_save_walkthrough
-cargo run -p glyim-lsp --example watched_files_walkthrough
-cargo run -p glyim-lsp --example file_operations_walkthrough
-cargo run -p glyim-lsp --example file_rename_walkthrough
-cargo run -p glyim-lsp --example workspace_folders_walkthrough
-cargo run -p glyim-lsp --example document_color_walkthrough
-cargo run -p glyim-lsp --example server_log_walkthrough
-
-# Measure a workload in-process: counting allocator + CoV gate (M2.2).
-cargo run -p glyim-bench --example measure_alloc
-
-# Render the gap registry's witness-debt report (M1.7 seam).
-cargo run -p glyim-ledger --example gap_report
-
-# Rank the plan §3.9 work queue over open gaps + the requires DAG.
-cargo run -p glyim-ledger --example next_queue
-
-# Explain one registry ID: why it is queued, what evidence moves it.
-cargo run -p glyim-ledger --example explain_entry -- GAP-0002
-
-# Compute per-feature readiness levels from evidence + policy (M1.8 seam).
-cargo run -p glyim-ledger --example compute_levels
-
-# Render the computed status block + JSON contract (M1.9 first slice).
-cargo run -p glyim-ledger --example status_report
-
-# Run the readiness-regression gate: unwaived regression fails, waiver passes (M1.10).
-cargo run -p glyim-ledger --example readiness_diff
-
-# Print all 24 RG release-gate verdicts from ledger/gates.toml (M1.12).
-cargo run -p glyim-ledger --example release_gates
-
-# Self-check determinism: every ledger pipeline twice, byte-identical or fail (M1.13).
-cargo run -p glyim-ledger --example verify_determinism
-
-# Generate KNOWN_GAPS.md from the gap registry; verify the committed copy (M1.9 remainder).
-cargo run -p glyim-ledger --example render_known_gaps
-
-# Curate a harness run into the evidence store, then validate the store (§3.4 face).
-cargo run -p glyim-ledger --example evidence_store
-
-# Compose the session handoff from the ledger state (plan §3.7 face).
-cargo run -p glyim-ledger --example handoff_report
-
-# Compose the final release verdict from the ledger state (plan §10 face).
-cargo run -p glyim-ledger --example release_check
-
-# Retire every expired C9 waiver in one call (waivers prune face).
-cargo run -p glyim-ledger --example waivers_prune
-
-# Re-pin one C9 waiver's expiry by exact ID (waivers extend face).
-cargo run -p glyim-ledger --example waivers_extend
-
-# Audit the committed evidence store against the tree (evidence audit face).
-cargo run -p glyim-ledger --example evidence_audit
-
-# Audit every gap's witness fixture against the tree (gaps audit face).
-cargo run -p glyim-ledger --example gaps_audit
-
-# Detach one witnessed gap's witness (gaps unwitness remedy face).
-cargo run -p glyim-ledger --example gaps_unwitness
-
-# Grant, then retire C9 waivers by exact ID (waivers grant/revoke faces).
-cargo run -p glyim-ledger --example waivers_revoke
-
-# Grant one C9 waiver through the curated write face (waivers grant face).
-cargo run -p glyim-ledger --example waivers_grant
-
-# The constitution-C9 waiver-health report (expired waivers fail).
-cargo run -p glyim-ledger --example waiver_health
-
-# Open a NEW gap entry into the registry (the gap lifecycle's first stage).
-cargo run -p glyim-ledger --example gaps_open
-
-# Attach a witness fixture to one unwitnessed gap (the write face).
-cargo run -p glyim-ledger --example gaps_witness
-
-# Remove one gap's block from its registry (the closure face).
-cargo run -p glyim-ledger --example gaps_retire
-
-# Retract every committed record of one fixture by its digest.
-cargo run -p glyim-ledger --example evidence_retract
-
-# File one §3.5 inventory exemption, then unignore it.
-cargo run -p glyim-ledger --example inventory_ignore_lifecycle
-
-# Build + verify a corpus manifest over the 7 generator families (M2.3).
-cargo run -p glyim-bench --example corpus_walk
-
-# Commit a corpus directory + manifest, then catch a hand-edited program (M2.3 remainder).
-cargo run -p glyim-bench --example corpus_commit
-
-# Fit a stored report history + a live run into a scaling exponent (M2.4).
-cargo run -p glyim-bench --example scaling_fit
-
-# Enforce committed absolute budgets over written reports (M2.6).
-cargo run -p glyim-bench --example budget_check
-
-# Append runs to the perf history; diff against the latest baseline (M2.5).
-cargo run -p glyim-bench --example history_baseline
-
-# Gate a benchmark matrix against the history; catch uniform sub-budget drift with the geo-mean budget (M2.5 remainder).
-cargo run -p glyim-bench --example matrix_gate
-
-# Measure total drift across a program's committed history window (M2.5 complement).
-cargo run -p glyim-bench --example history_trend
-
-# Disassemble a decoded module image: the deterministic instruction
-# listing (unknown bytes list as unknown(0xNN), truncation as <truncated>).
-cargo run -p glyim-bytecode-vm --example module_disasm_walkthrough
-
-# Round-trip the loadable module image: encode, decode, run (v2 format).
-cargo run -p glyim-bytecode-vm --example module_image_walkthrough
-
-# Float arithmetic and width-aware casts in the VM (the interpreter's
-# MIR-14 cast semantics).
-cargo run -p glyim-bytecode-vm --example float_casts_walkthrough
-
-# Trace what a decoded module actually executed: per-dispatch steps,
-# frame-depth transitions, bounded capture, and the fuel budget that
-# stops an infinite loop with an explicit error.
 cargo run -p glyim-bytecode-vm --example execution_trace_walkthrough
-
-# Aggregate what a decoded module spent its dispatches on: per-opcode and
-# per-function counts, peak depths, hottest-opcode ranking, and the
-# from_steps re-fold of a captured transcript.
-cargo run -p glyim-bytecode-vm --example execution_profile_walkthrough
-
-# Read where a failing run stopped: the fault site, the suspended caller
-# chain (innermost first), the dispatch count, and the fuel state — the
-# failure-time counterpart of the trace.
-cargo run -p glyim-bytecode-vm --example fault_backtrace_walkthrough
-
-# Read which instruction sites a run executed and which are dead: the
-# per-(function, pc) hit map over the disassembler's site inventory, with
-# the from_steps re-fold of a captured transcript.
-cargo run -p glyim-bytecode-vm --example coverage_walkthrough
-
-# Read which way each branch actually went: the per-decision-site
-# directional history over the same dispatch stream — the JumpIf
-# taken/fall-through split, every decision's landing map, the unresolved
-# decisions a faulting branch leaves, and the from_steps re-fold.
-cargo run -p glyim-bytecode-vm --example branch_history_walkthrough
-
-# Read what every frame's locals held when it began and when it ended:
-# one StateEvent per frame boundary — the argument landing at the enter,
-# the mutated slots at the exit, LIFO recursion depths.
-cargo run -p glyim-bytecode-vm --example call_state_walkthrough
-
-# Read what values a run's local slots took: the program stores, the
-# call-argument binds, and the callee-return dest writes, each with the
-# producing dispatch and the frame depth.
-cargo run -p glyim-bytecode-vm --example local_watch_walkthrough
-
-# Pair the VM's local reads with their producing writes (and display zero-init reads).
-cargo run -p glyim-bytecode-vm --example data_flow_walkthrough
-
-# Diff two decoded module images: the no-op rebuild's no-differences gate
-# and the divergent rebuild's per-function / per-pool listing.
-cargo run -p glyim-bytecode-vm --example module_diff_walkthrough
-
-# Read who called whom and how often: the per-(caller, callee) edge map
-# over the same dispatch stream, the self-edge recursion accumulates, the
-# unresolved calls a faulting callee leaves, and the from_steps re-fold.
-cargo run -p glyim-bytecode-vm --example call_graph_walkthrough
-
-# Diff two captured runs: the no-op rebuild's no-divergence gate, the
-# emitter tweak's first-divergence dispatch, and the fuel-budget prefix
-# pair's honest end.
-cargo run -p glyim-bytecode-vm --example run_diff_walkthrough
-
-# Read which call subtree a run's dispatches went to: the per-function
-# inclusive/exclusive counts over the same dispatch stream — inclusive
-# credited to every active frame (a nesting's depths each earn their
-# credit), the hottest ranking, the from_steps re-fold, and the honest
-# executed prefix a fuel cut leaves.
-cargo run -p glyim-bytecode-vm --example inclusive_cost_walkthrough
-
-# Read what a failing run's last dispatches looked like: the bounded
-# flight-recorder window over the same dispatch stream — the faulting
-# dispatch as the newest entry, the fuel cut ending at the executed
-# count, the scroll-out displayed, the from_tail re-fold.
-cargo run -p glyim-bytecode-vm --example fault_window_walkthrough
-
-# See what every assert a run evaluated observed: the passing ones and
-# the failing one, per site — the asserted polarity against the observed
-# condition, the pass/fail tallies, the bounded capture (the assertion
-# seam).
-cargo run -p glyim-bytecode-vm --example assertions_walkthrough
-
-# See what a run discarded: the destroyed aggregates and the discarded
-# addresses, each with its site (the drop-observation seam).
-cargo run -p glyim-bytecode-vm --example drops_walkthrough
-
-# See what every executed cast did to its value: the narrowing wraps, the
-# float truncations, the identities, each with its site (the cast seam).
-cargo run -p glyim-bytecode-vm --example casts_walkthrough
-
-# See what the run's frame memory held: the field stores, the reads, and
-# the reads that never saw a write (the memory seam).
-cargo run -p glyim-bytecode-vm --example memory_walkthrough
-
-# Read the call ABI after the fact: the calls, their arguments, and
-# what came back, with the open calls a fault leaves behind (the calls seam).
-cargo run -p glyim-bytecode-vm --example calls_walkthrough
-
-# See which pool slots a run resolved, from which sites, and how often
-# (the strings seam).
-cargo run -p glyim-bytecode-vm --example strings_walkthrough
-
-# See what composite values a run built: the folds, the replications,
-# and the raw repeat counts, clamps included (the aggregate seam).
-cargo run -p glyim-bytecode-vm --example aggregates_walkthrough
-
-# See what a run asked about its composite values: the length reads,
-# the discriminant reads, and the scalar-convention zeros (the
-# projection seam).
-cargo run -p glyim-bytecode-vm --example projections_walkthrough
-
-# See what float arithmetic a run executed: the constant pushes, the
-# binops, the negations, and the IEEE-754 specials (the float seam).
-cargo run -p glyim-bytecode-vm --example floats_walkthrough
-
-# See what a run moved through its operand stack: the pushes, the pops,
-# the balance folds, and the movement rules (the stack seam).
-cargo run -p glyim-bytecode-vm --example stack_walkthrough
-
-# See where an execution budget went: the per-dispatch checkpoints, the
-# per-function burn, and the exhaustion site (the fuel seam).
-cargo run -p glyim-bytecode-vm --example fuel_walkthrough
-
-# Stop a machine from outside it: arm a deadline or a closure veto and
-# watch the run stop with the host's own reason (the interrupt gate).
-cargo run -p glyim-bytecode-vm --example interrupt_walkthrough
-
-# See where the wrapping semantics engaged: the integer binop stream
-# with the wrap verdict per event (the math seam).
-cargo run -p glyim-bytecode-vm --example math_walkthrough
-
-# Emit MIR bodies into a loadable module image (the assembler seam).
-cargo run -p glyim-codegen --example module_assembly_walkthrough
-
-# Construct diagnostics and render them (human / JSON faces).
-cargo run -p glyim-diag --example render_diagnostics
-
-# Drive the lexer and parser over a small program.
-cargo run -p glyim-frontend --example lex_parse
-
-# Dump the assembled core / alloc / std library sources the compiler
-# consumes as its bootstrapping corpus.
-cargo run -p glyim-lang-core --example core_modules_walkthrough
-cargo run -p glyim-lang-alloc --example alloc_modules_walkthrough
-cargo run -p glyim-lang-std --example dump_assembled
-
-# The opt-level pass plan (which MIR passes run at which level).
-cargo run -p glyim-opt --example pass_plans
-
-# Check the repo-health metrics ratchet against its baseline (M0.6).
-cargo run -p glyim-metrics --example baseline_check
-
-# Persist two bench reports and diff them (the M2.5 gate over files).
-cargo run -p glyim-bench --example diff_reports
-
-# Walk the virtual filesystem seam every driver sits on.
-cargo run -p glyim-vfs --example vfs_walkthrough
-
-# Walk the content-addressed compile cache and the session-state bundle.
-cargo run -p glyim-db --example compile_cache_walkthrough
-
-# Watch the compile cache report what it did: misses, hits, stores, and
-# budget evictions folded into one deterministic report.
-cargo run -p glyim-db --example cache_metrics_walkthrough
-
-# Compose the source-location vocabulary every diagnostic rides on:
-# files, byte spans, hygiene contexts, the miette conversion, MultiSpan.
-cargo run -p glyim-span --example span_walkthrough
+# 100+ more in crates/*/examples/
 ```
-
----
-
-## Testing
-
-Glyim's test harness (`glyim-test`) is a first-class part of the project. It discovers `.g` files under `tests/` and runs them in one of five modes, selected by an inline header or the containing directory name:
-
-| Mode | Meaning |
-|------|---------|
-| `compile-pass` | The source must compile without errors. |
-| `compile-fail` | The source must produce specific errors, checked against inline annotations. |
-| `ui` | The full compiler output (CST, def-map, typeck, diagnostics) must match an `.expected` snapshot. |
-| `run-pass` | The compiled program must exit successfully and match its expected stdout/stderr. |
-| `run-fail` | The compiled program must fail with a specific exit code and output. |
-
-### Inline Annotations
-
-```glyim
-fn main() {
-    let x: i32 = "hello";
-    //~^ ERROR mismatched types
-    //~| expected i32, found str
-}
-```
-
-- `//~ ERROR <pattern>` — the annotated line must produce an error whose message contains `<pattern>`.
-- `//~| ERROR <pattern>` — a continuation of the previous annotation (used for multi-line diagnostic blocks).
-- `//~^`, `//~^^`, … — point at earlier lines.
-- `//~~` — fuzzy matching (allow the diagnostic to land within ±1 line).
-- `//~? ERROR …` — the diagnostic is optional; the test still passes if it is absent.
-
-### Fixture Annotations
-
-Every `.g` fixture carries a machine-readable `//@` header (plan M1.4). The harness rejects fixtures with no `//@` annotations, and run fixtures must pin an explicit outcome:
-
-```glyim
-//@ mode: run-pass
-//@ expect-exit: 42
-//@ feature: LANG-SYN-OPERATORS, TOOL-TEST-RUN-PASS
-//@ backends: gam, llvm
-
-fn main() -> i32 { 42 }
-```
-
-- `//@ mode:` — explicit test mode (`run-pass`, `compile-fail`, …).
-- `//@ expect-exit:` / `//@ expect-stdout:` / `//@ expect-stderr:` — the outcome a run fixture must produce.
-- `//@ expect-error:` — a diagnostic substring a `compile-fail` fixture must produce (in addition to inline `//~` annotations).
-- `//@ feature:` — readiness-ledger registry IDs the fixture exercises (joined against `ledger/features/**` by `ledger compute`).
-- `//@ backends:` — which backends the fixture is verified on (`gam`, `llvm`, `cranelift`, `bytecode`).
-- `//@ needs-llvm`, `//@ ignore`, `//@ only-target:`, `//@ compile-flags:`, `//@ aux-file:`, `//@ timeout:`, `//@ min-version:` — harness gates.
-
-The legacy `// key: value` spelling is still parsed, but a fixture must not mix the two forms, and re-tagging is mechanical: `cargo run -p glyim-test --bin glyim-tag-fixtures -- --write`.
-
-### Snapshot Testing
-
-Snapshot tests for the CST, def-map, and MIR are written with `insta`:
-
-```rust
-snapshot_cst("my_syntax_case", source);
-snapshot_mir("my_mir_case", &ctx, &body);
-```
-
-Update snapshots with:
-
-```bash
-GLYIM_BLESS=1 cargo test -p glyim-test
-# or, for interactive review
-cargo insta review
-```
-
-### Property-Based Testing
-
-`glyim-test`'s `property` module generates random types (with and without inference variables) and checks invariants such as "unification of a type with itself succeeds" and "unification of two distinct types fails".
 
 ---
 
 ## Project Status
 
+Glyim is research-grade and under active development. The pipeline is end-to-end functional for a substantial language subset, and the test harness verifies every stage from lexing through MIR interpretation.
+
 ### Working end-to-end
 
-- Lexing, parsing, CST, error recovery.
-- Module graph, name resolution, `use` imports, visibility checks.
-- Declarative and built-in macro expansion.
-- HIR lowering, including `async fn` / `.await` desugaring.
-- Type inference, unification, auto-trait computation, trait solving with HRTB.
-- THIR → MIR lowering, monomorphization, polymorphization.
-- NLL borrow checking with two-phase borrows and move analysis.
-- MIR optimisation passes (const prop, DCE, CFG simplify, unreachable elimination, slice desugar, drop elaboration).
-- LLVM codegen for scalar and aggregate types, with real ABI lowering.
-- Bytecode codegen and the bytecode VM, including multi-function module-image assembly (`generate_module_image` → `decode_module` → run) verified against the MIR interpreter by the differential suite, over the MIR call-frame ABI (local 0 return place, args at `locals[1..=arg_count]`); the differential also pins float arithmetic/casts and pooled string equality bit-for-bit against the interpreter. The VM additionally carries the execution-trace seam (per-dispatch `TraceSink` steps with a deterministic `render_trace` listing), the fault-backtrace seam (one `FaultReport` per failed run: fault site, suspended caller chain, dispatch count, fuel state, rendered deterministically), the instruction-coverage seam (per-`(function, pc)` hit maps over the disassembler's site inventory), the branch-history seam (per-decision-site directional histories over the same stream: `JumpIf` taken/fall-through splits, landing maps for every decision, unresolved decisions displayed, `from_steps`), the call-state seam (one `StateEvent` per frame boundary — enter with the freshly bound locals, exit with the final state — LIFO recursion depths, bounded capture with a displayed overflow flag), the local-watch seam (one `WatchEvent` per local write — program stores, argument binds, callee-return dest writes — with a `slot_history` reader and a deterministic `render_watch` listing), the data-flow seam (`ReadSink`/`DataFlowCollector`: one `ReadEvent` per `OP_LOAD_LOCAL` paired with the producing write per `(function, depth, slot)`, uninitialized reads displayed, the interleaved `FlowRecorder` transcript with a `from_transcript` re-fold), the call-graph seam (per-`(caller, callee)` edge maps over the same stream — the callee named by the following step's frame, recursion disambiguated by depth, unresolved calls displayed), the run-diff seam (the deterministic behavioral diff of two captured transcripts: the first-divergence dispatch with both steps spelled in the trace's field shape, a fuel-budget prefix pair's honest end, `no divergence` for identical runs), the inclusive-cost seam (`CostCollector`/`render_cost`: per-function inclusive/exclusive dispatch counts over the same stream — inclusive credited to every active call-stack frame per dispatch, the root's inclusive count always the step total, `hottest_inclusive(n)`, `from_steps`), the tail-window seam (`WindowCollector`/`render_window`: the bounded flight-recorder ring over the same stream — the most recent `n` dispatches, the scroll-out displayed in `dropped`, `from_tail`), the assertion seam (`AssertSink`/`AssertCollector`: one event per evaluated `OP_ASSERT` — passing or failing — with the site, the asserted polarity, the observed condition, and the verdict, bounded capture with a displayed overflow flag), the drop-observation seam (`DropSink`/`DropCollector`: one event per executed `OP_DROP` — the discard site and the popped value in full — bounded capture with a displayed overflow flag), the cast seam (`CastSink`/`CastCollector`: one event per executed `OP_CAST` — the cast site, the decoded kind/target pair, and the operand/result values in full — bounded capture with a displayed overflow flag, `events_of_kind`, `changed_count`), the memory seam (`MemSink`/`MemCollector`: one write event per executed `OP_STORE_FIELD` and one read event per executed `OP_DEREF` — the site, the frame-relative address, and the value in full — the interleaved transcript, the unwritten-address reads displayed, bounded capture with a displayed overflow flag), the calls seam (`CallSink`/`CallCollector`: one start event per executed `OP_CALL`/`OP_CALL_INDIRECT` just after the callee's frame is pushed — the site, the callee, the argument values in full, the destination local, and the resume target — and one return event per executed `OP_RETURN` just after the frame is popped, with the handed-back value; open calls displayed, bounded capture with a displayed overflow flag), the string-pool seam (`StringSink`/`StringCollector`: one event per executed `OP_LOAD_CONST_STR` — the site, the pool slot, and the resolved value — per-slot resolution counts and byte totals, bounded capture with a displayed overflow flag), the aggregate seam (`AggregateSink`/`AggregateCollector`: one build event per executed `OP_AGGREGATE` — the site, the arity, and the folded elements in full — and one repeat event per executed `OP_REPEAT` — the site, the raw count displayed even when negative, and the replicated value — build/repeat tallies, the element-materialization total, and the arity high-water mark, bounded capture with a displayed overflow flag), the projection seam (`ProjectionSink`/`ProjectionCollector`: one event per executed `OP_LEN` — the site, the local index, the operand in full, and the answer — and one per executed `OP_DISCRIMINANT` — the site, the popped operand, and the answer — the scalar-convention reads counted in a dedicated `scalar_reads` fold, bounded capture with a displayed overflow flag), the float seam (`FloatSink`/`FloatCollector`: one event per executed float operation — the `OP_LOAD_CONST_F64` pushes, the `(Float, Float)` binops with the opcode, the operands in full, and the answer, and the `OP_NEG` negations — the NaN and infinite answers counted in dedicated specials folds, bounded capture with a displayed overflow flag), and the fuel budget (`Vm::with_fuel`, `VmError::FuelExhausted`), so a traced, budgeted, coverage-mapped, value-watched, call-graphed, cost-accounted, windowed run over a decoded image is scriptable end to end — with the fault chain reported when it fails, the rebuilt artifact's changes readable through the deterministic module-image diff (`render_module_diff`), and the rebuilt artifact's *behavior* gated by the deterministic run diff (`render_run_diff`).
-- MIR interpreter used for `const fn` evaluation and `run-*` tests.
-- LSP with pushed, per-file-pull (with related documents), and workspace-pull diagnostics, hover, completion, goto-definition, goto-type-definition, goto-declaration, goto-implementation, references, document highlight, selection ranges, semantic tokens, call hierarchy (incoming/outgoing calls), type hierarchy (prepare a trait/struct/enum item and walk the recorded impl facts), signature help, inlay hints, inline values, rename (with `prepareRename`), folding, formatting, range formatting, on-type formatting, code actions (add missing match arms, generate impl, remove unused imports), auto-import, code lenses (with a live-count resolve, executable through `workspace/executeCommand`), document links, linked editing ranges, monikers, workspace/document symbols, save-time format edits (`willSaveWaitUntil`), watched files, file operations (`didCreateFiles`/`didDeleteFiles`), file renames (`didRenameFiles`), workspace folders (`workspaceFolders` served with change notifications), document color (`documentColor` swatch sites over hex string literals, `colorPresentation` recolor echo), and an optional JSON-lines server log (`--log-file`).
-- `glyip` build tool: project scaffolding, incremental builds, dependency resolution (path / registry / git), lockfiles, and compiled test execution.
+- Lexing, parsing, CST, error recovery
+- Name resolution, macros, HIR lowering
+- Type inference, trait solving, NLL borrow checking
+- Monomorphization, MIR optimizations
+- LLVM codegen, bytecode VM
+- LSP with 30+ capabilities
+- `glyip` build tool
 
-### Tracked gaps
+### Known gaps
 
-The compiler's development is tracked against an internal de-stubbing plan.
-Status is a property of the **readiness ledger**, not of prose: the open gaps
-live in `ledger/gaps/known/*.toml` (GAP-0002…GAP-0006), are validated by CI's
-`ledger check` job, and carry strict-xfail witness fixtures under
-`crates/glyim-test/tests/` where one is reproducible. Render the coverage
-report with `cargo run -p glyim-ledger -- gaps`. Notable open items include:
+- `.await` in non-range `for` loops and destructuring loop patterns (diagnosed, tracked as GAP-0006)
+- `panic!` does not unwind — writes to stderr and exits 101 without running destructors
+- Partial moves out of `Drop` types suppress the parent destructor (sound, but leaks siblings)
+- Windows SEH cleanup edges are implemented but structurally unreachable until a lowering site populates `cleanup:`
+- Some builtin methods lower to synthetic `FnDefId`s; unimplemented ones produce an explicit compiler error
 
-- `.await` inside a loop body works for `while`, `for`-over-range, and
-  unbounded `loop` bodies (a real suspend/resume machine; GAP-0001 closed,
-  and the GAP-0006 `loop` shape closed). The remaining loop shapes — `for`
-  over a non-range iterable and destructuring loop patterns — stay a
-  deliberate, diagnosed hard error (`[T0060]`, GAP-0006, witnessed) until
-  the rest of the async state-machine v2 lands.
-- `panic!` does not unwind: `glyim_panic` writes the message to stderr and
-  exits 101 without running destructors (GAP-0003, intentional and
-  documented).
-- A partial move out of a `Drop`-implementing type suppresses the parent
-  destructor entirely — sound (over-retains, never double-frees) but it
-  leaks the still-initialized siblings (GAP-0004, witnessed by a run-pass
-  fixture that will fail loudly when fine-grained guards land).
-- Windows SEH cleanup edges are implemented but structurally unreachable
-  until a lowering site populates `cleanup:` (GAP-0002, Windows-only, so
-  explicit witness debt).
-- Some builtin methods on `Vec`/`String`/`Result`/`Option` lower to
-  synthetic `FnDefId`s whose bodies the LLVM backend must intrinsic-lower;
-  unimplemented ones produce an explicit compiler error rather than wrong
-  code.
-- `--lto=thin` requires `llvm-lto2` from the matching LLVM distribution.
-- Procedural macros are supported via the C-ABI bridge, but the two-stage
-  host compile is wired into the default `glyim-cli` flow through `--proc-macro-deps`.
+### Not yet self-hosting
 
-See `KNOWN_GAPS.md` for the full per-entry audit (verification recipes,
-closed-entry history) and `docs/archive/session-log-s16-s18.md` for the raw
-session log.
+The standard library is written in Glyim and consumed by the compiler as a test corpus. The compiler itself is Rust.
 
-> [!WARNING]
-> Glyim is not yet self-hosting. The standard library is written in Glyim and consumed by the compiler as a test corpus, but the compiler itself is Rust.
+---
+
+## Development
+
+### Rails
+
+```bash
+just bootstrap    # one-time: Rust stable, LLVM 23, cargo tools (nextest, deny, machete)
+just ci-local     # PR-tier CI gates locally, in CI's own order
+just verify       # mechanical definition of done: fmt + clippy + tests + ledger + STATUS check
+```
+
+### Metrics ratchet
+
+`tools/glyim-metrics` pins twelve lexical properties of the tree (code lines, tests, doc coverage, zero inline allows, unwrap/unsafe/from_raw counts, public IR fields, HashMap sites). CI fails on any regression; improvements are re-pinned with `--write` in the same PR.
+
+```bash
+cargo run -p glyim-metrics -- . --check metrics/baseline.json
+cargo run -p glyim-metrics -- . --write metrics/baseline.json
+```
+
+### Testing
+
+```bash
+cargo test                                     # full suite
+cargo test -p glyim-test -- --filter parser    # filter by path substring
+GLYIM_TEST_SHOW_OUTPUT=1 cargo test -p glyim-test  # verbose
+```
+
+CI runs the same suite through `cargo-nextest`. Five test modes: `compile-pass`, `compile-fail`, `ui`, `run-pass`, `run-fail` — selected by inline header or directory name.
+
+### Library examples
+
+```bash
+cargo run -p glyim-pipeline --example hello_pipeline
+cargo run -p glyim-pipeline --example run_interp
+cargo run -p glyim-lsp --example goto_declaration_walkthrough
+cargo run -p glyim-bytecode-vm --example execution_trace_walkthrough
+cargo run -p glyim-ledger --example compute_levels
+# 100+ more in crates/*/examples/ and tools/*/examples/
+```
 
 ---
 
 ## Repository Map & Gates
 
-- `docs/roadmaps/` — the milestone plans; the current one is
-  `glyim-master-plan.md`. The workstream state: M0 (rails + metrics) is
-  landed, the M1 readiness-ledger slices (M1.1 registry → M1.6
-  strict-xfail witnesses) are landed, the M1.7 gap-registry migration is
-  landed for the `KNOWN_GAPS.md` §§1–8 sources (`ledger/gaps/known/*.toml`
-  plus the `glyim-ledger gaps` witness-debt report), and the M2.1 phase
-  instrumentation (`tracing` spans, `--time-passes`, `--self-profile`,
-  `--emit=stats`) is landed together with the M2.2 measurement harness
-  (`tools/glyim-bench`: instruction counts, wall, child RSS, counting
-  allocator, CoV stability gate), and the M2.3 slice 1 corpus substrate is
-  landed (`tools/glyim-bench` `corpus` module: the seven deterministic
-  generator families, the `glyim.corpus/1` manifest, and the
-  identity-verify contract behind "corpora committed with hashes"), the
-  M1.8 level-computation engine and M1.9 status renderers are landed
-  (`tools/glyim-ledger` `compute`/`status`), the M2.5 perf-history diff
-  gate is landed (`tools/glyim-bench` `diff`), and the M1.10
-  readiness-regression gate (first slice: `glyim-ledger diff` over
-  `glyim.ledger-snapshot/1` documents with `ledger/waivers.toml` waivers
-  inside the 14-day C9 horizon) plus the M2.4 scaling analyzer (first
-  slice: `glyim-bench scale` with the log-log fit) are landed, and the
-  M2.6 absolute budget gate (first slice: `glyim-bench budget` over a
-  committed `glyim.bench-budgets/1` TOML file through the `BudgetStore`
-  seam) is landed, and the M2.5 perf-history store (first slice:
-  `glyim-bench history record`/`show`/`diff` over append-only
-  `glyim.bench-history/1` JSONL files with the latest-record baseline
-  selection) is landed, and the M2.5 remainder — the matrix gate
-  (`glyim-bench matrix` over a `glyim.bench-matrix/1` outcome, the
-  `BaselineSource` seam over the history, and the plan §325 "fail >2% per
-  benchmark or >0.5% geo-mean" aggregate budget) plus its complement, the
-  windowed trend analyzer (`glyim-bench history trend` over a
-  `glyim.bench-trend/1` report, the accumulated-drift ratchet no per-run
-  diff sees) — are landed, and the M1.12 release-gate report
-  (`glyim-ledger gates` over `ledger/gates.toml`, all 24 `RG-NN` gates
-  with `unmeasured` displayed, never silently passed) and the M1.13
-  determinism self-check (`glyim-ledger verify`) are landed, and the M1.9
-  renderers remainder is landed for the generated `KNOWN_GAPS.md`
-  (`glyim-ledger render-gaps`: the document is a pure function of
-  `ledger/gaps/known/*.toml` through the `KnownGapsRenderer` seam, with
-  the `--check` byte-comparison drift gate and the `glyim.known-gaps/1`
-  JSON face for the readiness page), and the M2.3 remainder is landed for
-  the committed corpora directory (`glyim-bench corpus write`/`check`
-  through the `CorpusSink` seam: one `<family>-<seed>-<size>.g` file per
-  program plus the `glyim.corpus/1` `corpus.json` manifest, re-hashed on
-  every check). The next
-  plan items are the M1.9 Astro readiness page (the `glyim.known-gaps/1`
-  face's consumer), and the evidence wiring that
-  fills the harness's reserved `instructions`/`rss_kb` columns.
-- `docs/archive/` — historical session documents (`HANDOFF.md`,
-  `FIXES.md`) kept for provenance; the root stays navigation-focused.
-- `docs/adr/` — the ADR framework (plan M0.4): ADR-001…015 as *proposed*
-  stubs carrying the §8 decision register's defaults, indexed in
-  `docs/adr/README.md`; register completeness is test-enforced
-  (`tools/glyim-metrics/tests/adr_registry.rs`).
-- `AGENTS.md` — the §7 agent operating protocol (work loop, rules, review
-  checklist, universal definition of done); `.github/PULL_REQUEST_TEMPLATE.md`
-  points at it, and CI's `check-templates` job enforces the pair.
-- `metrics/baseline.json` — the M0.6 repo-health baseline (the full
-  12-key set: file/line/test counts, doc coverage, inline-allow count
-  pinned at 0, and the `unwrap_count`/`unsafe_count`/`from_raw_count`/
-  `public_IR_fields`/`HashMap_hot_sites` ratchets). CI's
-  `metrics-ratchet` and `metrics-must-not-increase` jobs fail on any
-  regression and allow improvement; bump it deliberately with
-  `cargo run -p glyim-metrics -- . --write metrics/baseline.json`.
-- `metrics/test-baseline.json` — the recorded full-suite run (M0.2).
-- `.github/workflows/ci.yml` — the enforced gates: fmt + pedantic clippy
-  (`-D warnings`, zero inline allows), the test matrix, supply-chain,
-  MSRV, the ledger check/diff suite, process templates (`check-templates`),
-  and the metrics ratchet.
-- `.github/workflows/nightly.yml` — the nightly tier (M0.7/M2a): the full
-  workspace suite, the real-LLVM 23 corpus runs, the GAM + LLVM evidence
-  sweeps (`GLYIM_TEST_EVIDENCE` JSONL per corpus) curated through
-  `glyim-ledger evidence record` and uploaded as artifacts, the
-  differential release-blocker gate, waiver health, and the ledger
-  determinism self-check; triggered on schedule and `workflow_dispatch`.
+- **[Roadmaps](docs/roadmaps/)** — milestone plans; current: `glyim-master-plan.md`
+- **[Architecture Decision Records](docs/adr/)** — ADR framework (ADR-001..015), indexed in the ADR README
+- **[Archive](docs/archive/)** — historical session documents
+- **[Agent Protocol](AGENTS.md)** — agent operating protocol (§7)
+- **[Known Gaps](KNOWN_GAPS.md)** — full per-entry gap audit with verification recipes
+- **[Metrics Baseline](metrics/baseline.json)** — M0.6 repo-health baseline (12 keys, zero inline allows)
+- **[CI Workflow](.github/workflows/ci.yml)** — fmt, pedantic clippy, test matrix, supply-chain, MSRV, ledger suite, metrics ratchet
+- **[Nightly Workflow](.github/workflows/nightly.yml)** — full suite, real-LLVM corpus runs, GAM + LLVM evidence sweeps, differential release-blocker gate
 
 ---
 
@@ -1110,12 +386,12 @@ session log.
 
 Glyim stands on the shoulders of excellent open-source projects:
 
-- [Rowan](https://github.com/rust-analyzer/rowan) — lossless syntax trees.
-- [Inkwell](https://github.com/TheDan64/inkwell) — safe LLVM bindings.
-- [Miette](https://github.com/zkat/miette) — beautiful diagnostics.
-- [Insta](https://insta.rs/) — snapshot testing.
-- [Lasso](https://github.com/Kixiron/lasso) — string interning.
-- The Rust compiler team, whose architecture and documentation were a constant source of design inspiration.
+- [Rowan](https://github.com/rust-analyzer/rowan) — lossless syntax trees
+- [Inkwell](https://github.com/TheDan64/inkwell) — safe LLVM bindings
+- [Miette](https://github.com/zkat/miette) — beautiful diagnostics
+- [Insta](https://insta.rs/) — snapshot testing
+- [Lasso](https://github.com/Kixiron/lasso) — string interning
+- The Rust compiler team, whose architecture and documentation were a constant source of design inspiration
 
 ---
 
