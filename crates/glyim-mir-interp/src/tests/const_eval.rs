@@ -30,7 +30,7 @@ fn const_eval_additive_constant() {
         let mut blocks = IndexVec::new();
         let rvalue = Rvalue::BinaryOp(
             BinOp::Add,
-            Box::new((
+            [
                 Operand::Constant(MirConst {
                     kind: MirConstKind::Int(3),
                     ty: i32_ty,
@@ -41,7 +41,7 @@ fn const_eval_additive_constant() {
                     ty: i32_ty,
                     span: Span::DUMMY,
                 }),
-            )),
+            ],
         );
         let stmt = Statement {
             kind: StatementKind::Assign(Place::new(ret_local), rvalue),
@@ -93,7 +93,7 @@ fn const_eval_division_by_zero_is_error() {
         let mut blocks = IndexVec::new();
         let rvalue = Rvalue::BinaryOp(
             BinOp::Div,
-            Box::new((
+            [
                 Operand::Constant(MirConst {
                     kind: MirConstKind::Int(10),
                     ty: i32_ty,
@@ -104,7 +104,7 @@ fn const_eval_division_by_zero_is_error() {
                     ty: i32_ty,
                     span: Span::DUMMY,
                 }),
-            )),
+            ],
         );
         let stmt = Statement {
             kind: StatementKind::Assign(Place::new(ret_local), rvalue),
