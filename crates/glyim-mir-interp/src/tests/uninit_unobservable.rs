@@ -126,10 +126,10 @@ fn storage_live_on_back_edge_preserves_loop_carried_value() {
                     2,
                     Rvalue::BinaryOp(
                         BinOp::Add,
-                        Box::new((
+                        [
                             Operand::Copy(Place::new(LocalIdx::from_raw(2))),
                             const_i32(1, i32_ty),
-                        )),
+                        ],
                     ),
                 ),
             ],
@@ -252,10 +252,10 @@ fn uninit_never_temp_read_yields_unit() {
                 1,
                 Rvalue::BinaryOp(
                     BinOp::Add,
-                    Box::new((
+                    [
                         Operand::Copy(Place::new(LocalIdx::from_raw(1))),
                         const_i32(1, i32_ty),
-                    )),
+                    ],
                 ),
             )],
             Terminator {
