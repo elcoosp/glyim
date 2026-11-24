@@ -259,5 +259,5 @@ fn an_unopened_document_answers_null() {
 fn wire_method_is_pinned() {
     use lsp_types::request::Request;
     assert_eq!(MonikerRequest::METHOD, "textDocument/moniker");
-    let _ = FileId::from_raw(0); // keep the span crate in the test's deps
+    let _ = FileId::from_usize(0); // keep the span crate in the test's deps
 }
