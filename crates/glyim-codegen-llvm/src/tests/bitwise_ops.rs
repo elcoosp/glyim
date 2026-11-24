@@ -10,7 +10,7 @@ fn test_bitand_i32() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_i32(0b1100, i32_ty);
     let rhs = const_operand_i32(0b1010, i32_ty);
-    let rv = Rvalue::BinaryOp(BinOp::BitAnd, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::BitAnd, lhs, rhs);
     let body = simple_mir_body(i32_ty, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
@@ -28,7 +28,7 @@ fn test_bitor_i32() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_i32(0b1100, i32_ty);
     let rhs = const_operand_i32(0b1010, i32_ty);
-    let rv = Rvalue::BinaryOp(BinOp::BitOr, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::BitOr, lhs, rhs);
     let body = simple_mir_body(i32_ty, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
@@ -49,7 +49,7 @@ fn test_bitxor_i32() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_i32(0b1100, i32_ty);
     let rhs = const_operand_i32(0b1010, i32_ty);
-    let rv = Rvalue::BinaryOp(BinOp::BitXor, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::BitXor, lhs, rhs);
     let body = simple_mir_body(i32_ty, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
@@ -67,7 +67,7 @@ fn test_shl_i32() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_i32(1, i32_ty);
     let rhs = const_operand_i32(3, i32_ty);
-    let rv = Rvalue::BinaryOp(BinOp::Shl, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::Shl, lhs, rhs);
     let body = simple_mir_body(i32_ty, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
@@ -85,7 +85,7 @@ fn test_shr_i32() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_i32(16, i32_ty);
     let rhs = const_operand_i32(2, i32_ty);
-    let rv = Rvalue::BinaryOp(BinOp::Shr, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::Shr, lhs, rhs);
     let body = simple_mir_body(i32_ty, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
