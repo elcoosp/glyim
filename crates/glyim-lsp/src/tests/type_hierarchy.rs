@@ -31,7 +31,7 @@ impl MockSource {
             name: name.to_string(),
             kind,
             location: DefinitionLocation {
-                file_id: FileId::from_raw(file),
+                file_id: FileId::from_usize(file as usize),
                 span: span_of(file, lo, hi),
             },
         });
@@ -48,7 +48,7 @@ impl MockSource {
             trait_name: trait_name.map(str::to_string),
             self_ty_name: self_ty_name.map(str::to_string),
             location: DefinitionLocation {
-                file_id: FileId::from_raw(file),
+                file_id: FileId::from_usize(file as usize),
                 span: span_of(file, lo, hi),
             },
         });
@@ -57,9 +57,9 @@ impl MockSource {
 
 fn span_of(file: u32, lo: usize, hi: usize) -> Span {
     Span::new(
-        FileId::from_raw(file),
-        glyim_span::ByteIdx::from_raw(lo as u32),
-        glyim_span::ByteIdx::from_raw(hi as u32),
+        FileId::from_usize(file as usize),
+        glyim_span::ByteIdx::from_usize(lo),
+        glyim_span::ByteIdx::from_usize(hi),
         SyntaxContext::ROOT,
     )
 }
@@ -97,7 +97,7 @@ fn hierarchy_target_classifies_recorded_items() {
 
     let greet = hierarchy_target(&mock, "Greet").expect("trait prepares");
     assert_eq!(greet.kind, HierarchyItemKind::Trait);
-    assert_eq!(greet.location.file_id, FileId::from_raw(0));
+    assert_eq!(greet.location.file_id, FileId::from_usize(0));
     assert_eq!(greet.location.span.lo.to_usize(), 0);
 
     let p = hierarchy_target(&mock, "P").expect("struct prepares");
@@ -142,9 +142,9 @@ fn supertypes_are_ordered_and_deduped() {
     let members = compute_supertypes(&mock, "P");
     assert_eq!(members.len(), 2, "duplicate site collapses");
     assert_eq!(members[0].name, "Early");
-    assert_eq!(members[0].location.file_id, FileId::from_raw(0));
+    assert_eq!(members[0].location.file_id, FileId::from_usize(0));
     assert_eq!(members[1].name, "Late");
-    assert_eq!(members[1].location.file_id, FileId::from_raw(1));
+    assert_eq!(members[1].location.file_id, FileId::from_usize(1));
 }
 
 /// Inherent impls (`impl P`) record no trait: they are not supertypes of
@@ -185,9 +185,9 @@ fn subtypes_are_ordered_and_deduped() {
     let members = compute_subtypes(&mock, "Greet");
     assert_eq!(members.len(), 2, "duplicate site collapses, Other excluded");
     assert_eq!(members[0].name, "P");
-    assert_eq!(members[0].location.file_id, FileId::from_raw(0));
+    assert_eq!(members[0].location.file_id, FileId::from_usize(0));
     assert_eq!(members[1].name, "Q");
-    assert_eq!(members[1].location.file_id, FileId::from_raw(1));
+    assert_eq!(members[1].location.file_id, FileId::from_usize(1));
 }
 
 /// An impl site of the queried trait whose self type names nothing
@@ -208,7 +208,7 @@ fn subtypes_skip_unnamed_and_zero_width_sites() {
         HierarchyMember {
             name: "P".to_string(),
             location: DefinitionLocation {
-                file_id: FileId::from_raw(0),
+                file_id: FileId::from_usize(0),
                 span: span_of(0, 50, 80),
             },
         }
