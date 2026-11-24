@@ -37,7 +37,7 @@ fn call_span(src: &str, callee: &str, file: u32) -> Span {
             ')' | ']' | '}' => {
                 depth -= 1;
                 if depth == 0 {
-                    return make_span(FileId::from_raw(file), lo, open + i + 1);
+                    return make_span(FileId::from_usize(file as usize), lo, open + i + 1);
                 }
             }
             _ => {}
@@ -135,7 +135,7 @@ fn the_innermost_call_wins_on_nested_calls() {
     let (calls, sigs) = populated();
     let cursor = offset_of("y)");
 
-    let plan = compute_signature_help(&calls, &sigs, SRC, FileId::from_raw(1), cursor)
+    let plan = compute_signature_help(&calls, &sigs, SRC, FileId::from_usize(1), cursor)
         .expect("the cursor is inside a call");
 
     assert_eq!(plan.label, "fn inner(x: i32, y: i32) -> i32");
@@ -148,7 +148,7 @@ fn the_cursor_on_the_callee_name_resolves_the_call() {
     let (calls, sigs) = populated();
     let cursor = offset_of("add("); // the `add` token of line 0's call
 
-    let plan = compute_signature_help(&calls, &sigs, SRC, FileId::from_raw(1), cursor)
+    let plan = compute_signature_help(&calls, &sigs, SRC, FileId::from_usize(1), cursor)
         .expect("the cursor is on the callee name");
 
     assert_eq!(plan.label, "fn add(a: i32, b: i32) -> i32");
@@ -162,7 +162,7 @@ fn active_parameter_counts_top_level_commas_before_the_cursor() {
     let (calls, sigs) = populated();
     let cursor = offset_of("2)");
 
-    let plan = compute_signature_help(&calls, &sigs, SRC, FileId::from_raw(1), cursor)
+    let plan = compute_signature_help(&calls, &sigs, SRC, FileId::from_usize(1), cursor)
         .expect("the cursor is inside add(1, 2)");
 
     assert_eq!(plan.label, "fn add(a: i32, b: i32) -> i32");
@@ -175,7 +175,7 @@ fn the_first_argument_activates_parameter_zero() {
     let (calls, sigs) = populated();
     let cursor = offset_of("1,"); // the `1` of `add(1, 2)`
 
-    let plan = compute_signature_help(&calls, &sigs, SRC, FileId::from_raw(1), cursor)
+    let plan = compute_signature_help(&calls, &sigs, SRC, FileId::from_usize(1), cursor)
         .expect("the cursor is inside add(1, 2)");
 
     assert_eq!(plan.active_parameter, Some(0));
@@ -193,13 +193,13 @@ fn nested_call_commas_do_not_count_for_the_outer_call() {
     // `inner`, whose own comma count sees the same comma at depth 0.
     let (calls, sigs) = populated();
 
-    let plan = compute_signature_help(&calls, &sigs, SRC, FileId::from_raw(1), offset_of("z)"))
+    let plan = compute_signature_help(&calls, &sigs, SRC, FileId::from_usize(1), offset_of("z)"))
         .expect("the cursor is inside outer(...)");
     assert_eq!(plan.label, "fn outer(v: i32) -> i32");
     assert_eq!(plan.parameters.len(), 1);
     assert_eq!(plan.active_parameter, Some(0), "clamped to outer's arity");
 
-    let plan = compute_signature_help(&calls, &sigs, SRC, FileId::from_raw(1), offset_of("y)"))
+    let plan = compute_signature_help(&calls, &sigs, SRC, FileId::from_usize(1), offset_of("y)"))
         .expect("the cursor is inside inner(...)");
     assert_eq!(plan.label, "fn inner(x: i32, y: i32) -> i32");
     assert_eq!(plan.active_parameter, Some(1), "inner's second argument");
@@ -215,7 +215,7 @@ fn zero_parameter_calls_activate_nothing() {
     let mut sigs = MockSignatures::default();
     sigs.add("tick", "fn tick()", 0);
 
-    let plan = compute_signature_help(&calls, &sigs, src, FileId::from_raw(1), find_in(src, "("))
+    let plan = compute_signature_help(&calls, &sigs, src, FileId::from_usize(1), find_in(src, "("))
         .expect("the cursor is inside tick()");
 
     assert!(plan.parameters.is_empty(), "tick takes no parameters");
@@ -226,7 +226,7 @@ fn zero_parameter_calls_activate_nothing() {
 fn none_off_any_recorded_call() {
     let (calls, sigs) = populated();
     assert!(
-        compute_signature_help(&calls, &sigs, SRC, FileId::from_raw(1), 0).is_none(),
+        compute_signature_help(&calls, &sigs, SRC, FileId::from_usize(1), 0).is_none(),
         "a cursor outside every call (on the leading slashes) has no signature to show"
     );
 }
@@ -243,8 +243,14 @@ fn none_when_the_callee_has_no_recorded_signature() {
     let sigs = MockSignatures::default();
 
     assert!(
-        compute_signature_help(&calls, &sigs, src, FileId::from_raw(1), find_in(src, "arg"))
-            .is_none(),
+        compute_signature_help(
+            &calls,
+            &sigs,
+            src,
+            FileId::from_usize(1),
+            find_in(src, "arg")
+        )
+        .is_none(),
         "an unrecorded callee has no signature to show"
     );
 }
@@ -254,5 +260,5 @@ fn none_for_a_foreign_file_call() {
     // The recorded calls live in file 1; the request runs for file 2.
     let (calls, sigs) = populated();
     let cursor = offset_of("2)");
-    assert!(compute_signature_help(&calls, &sigs, SRC, FileId::from_raw(2), cursor).is_none());
+    assert!(compute_signature_help(&calls, &sigs, SRC, FileId::from_usize(2), cursor).is_none());
 }
