@@ -43,13 +43,19 @@ pub enum SessionCommands {
         /// Provider ID (deepseek, gemini, grok, etc.)
         #[arg(short = 'P', long, default_value = "deepseek")]
         provider: String,
-        /// Prompt to send
-        #[arg(
-            short = 'p',
-            long,
-            default_value = "Write a simple Rust function that adds two numbers"
-        )]
-        prompt: String,
+        /// Prompt to send (defaults when neither `--prompt` nor
+        /// `--from-queue` is given)
+        #[arg(short = 'p', long)]
+        prompt: Option<String>,
+        /// Take the task prompt from the ledger-ranked queue head
+        /// (plan M1.11: `ledger next` feeds the orchestrator task queue).
+        /// Mutually exclusive with `--prompt`.
+        #[arg(long)]
+        from_queue: bool,
+        /// Lane filter applied before picking the `--from-queue` head
+        /// (L/F/T/M/B/Q).
+        #[arg(short = 'l', long)]
+        lane: Option<String>,
         /// Optional session ID (auto-generated if not provided)
         #[arg(short, long)]
         session_id: Option<String>,
@@ -57,13 +63,30 @@ pub enum SessionCommands {
 }
 
 /// `handle_session_command`.
-pub async fn handle_session_command(cmd: SessionCommands) -> Result<(), anyhow::Error> {
+pub async fn handle_session_command(
+    cmd: SessionCommands,
+    project_root: &std::path::Path,
+) -> Result<(), anyhow::Error> {
     match cmd {
         SessionCommands::Start {
             provider,
             prompt,
+            from_queue,
+            lane,
             session_id,
         } => {
+            // M1.11: the orchestrator's task comes from the ledger queue
+            // (the ranked head, optionally lane-filtered) unless the
+            // caller dispatches an explicit task. A queue that cannot
+            // answer fails loudly — the pilot never picks work itself
+            // (plan C1).
+            let lane = lane.map(|l| crate::cli::parse_cli_lane(&l)).transpose()?;
+            let prompt = crate::queue::resolve_start_prompt(
+                prompt.as_deref(),
+                from_queue,
+                lane,
+                &crate::queue::LedgerQueueSource::new(project_root),
+            )?;
             let session_id = session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
             let client = Client::new();
             let resp = client
