@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GLYIM_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SRC_DIR="$SCRIPT_DIR/sources"
 SVG_DIR="$SCRIPT_DIR/svg"
@@ -10,108 +10,70 @@ ASSETS_DIR="$GLYIM_DIR/glyim-docs/src/assets"
 WRAITH_BIN="${WRAITH_BIN:-$HOME/Documents/Repos/wraith/target/release/wraith}"
 
 mkdir -p "$SVG_DIR" "$PUBLIC_DIR" "$ASSETS_DIR"
-
-if [ ! -x "$WRAITH_BIN" ]; then
-  echo "❌ wraith binary not found at $WRAITH_BIN" >&2
-  exit 1
-fi
+[ -x "$WRAITH_BIN" ] || { echo "❌ wraith binary not found at $WRAITH_BIN" >&2; exit 1; }
 
 count=0
 for src_png in "$SRC_DIR"/mascot*.png; do
   [ -f "$src_png" ] || continue
-  base="$(basename "$src_png" ".png")"
+  base="$(basename "$src_png" .png)"
   out_svg="$SVG_DIR/${base}.svg"
 
   "$WRAITH_BIN" "$src_png" \
-    -m color \
-    --engine geometric \
-    --gradients off \
-    --no-primitives \
-    --colors 16 \
-    --merge 0.042 \
-    --min-area 18 \
-    --corner-angle 24 \
-    --tolerance 0.20 \
-    --smooth 3 \
-    --trap 1.15 \
-    --refine 2 \
+    -m color --engine geometric \
+    --gradients off --no-primitives \
+    --colors 18 --merge 0.036 \
+    --min-area 20 --corner-angle 24 \
+    --tolerance 0.22 --smooth 3 \
+    --trap 2 --refine 2 --field-blur 1 \
     --precision 2 \
-    --background "#ffffff" \
-    --bg-tolerance 16 \
+    --background "#ffffff" --bg-tolerance 16 \
     -o "$out_svg"
 
-  swift - "$out_svg" "$PUBLIC_DIR/${base}.svg" "$ASSETS_DIR/${base}.svg" << 'SWIFT'
-import AppKit
-import Foundation
+  python3 - "$out_svg" << 'PY'
+import re, sys
 
-let args = Array(CommandLine.arguments.dropFirst())
-let outPath = args.first!
-let targets = Array(args.dropFirst())
-let url = URL(fileURLWithPath: outPath)
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+m = re.search(r'<svg[^>]*?width="(\d+)"[^>]*?height="(\d+)"', s)
+W, H = (int(m.group(1)), int(m.group(2))) if m else (1024, 1024)
 
-var raw = try String(contentsOf: url, encoding: .utf8)
+# Supprimer un éventuel rectangle pleine page
+s = re.sub(rf'<path[^>]*d="M0 0h{W}v{H}H0Z"[^>]*/?>', '', s)
 
-if let img = NSImage(contentsOf: url) {
-    let size = 512
-    if let rep = NSBitmapImageRep(
-        bitmapDataPlanes: nil,
-        pixelsWide: size,
-        pixelsHigh: size,
-        bitsPerSample: 8,
-        samplesPerPixel: 4,
-        hasAlpha: true,
-        isPlanar: false,
-        colorSpaceName: .deviceRGB,
-        bytesPerRow: size * 4,
-        bitsPerPixel: 32
-    ) {
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-        NSColor.clear.setFill()
-        NSRect(x: 0, y: 0, width: size, height: size).fill()
-        img.draw(in: NSRect(x: 0, y: 0, width: size, height: size))
-        NSGraphicsContext.restoreGraphicsState()
+# Calcul rapide de la bounding box via les points de départ M(x,y) et coordonnées absolues
+minx, miny, maxx, maxy = float(W), float(H), 0.0, 0.0
+found = False
+for d in re.findall(r'd="([^"]+)"', s):
+    # Extraire tous les M x y (point d'ancrage exact de chaque sous-tracé)
+    for mx, my in re.findall(r'M\s*(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)', d):
+        x, y = float(mx), float(my)
+        if 0 <= x <= W and 0 <= y <= H:
+            minx, miny = min(minx, x), min(miny, y)
+            maxx, maxy = max(maxx, x), max(maxy, y)
+            found = True
 
-        if let data = rep.bitmapData {
-            var minX = size, minY = size, maxX = -1, maxY = -1
-            for y in 0..<size {
-                for x in 0..<size {
-                    if data[(y * size + x) * 4 + 3] > 8 {
-                        if x < minX { minX = x }
-                        if x > maxX { maxX = x }
-                        if y < minY { minY = y }
-                        if y > maxY { maxY = y }
-                    }
-                }
-            }
-            if maxX >= minX && maxY >= minY {
-                let scale = 2
-                let pad = 24
-                let vx = max(0, minX * scale - pad)
-                let vy = max(0, minY * scale - pad)
-                let vw = min(1024 - vx, (maxX - minX + 1) * scale + pad * 2)
-                let vh = min(1024 - vy, (maxY - minY + 1) * scale + pad * 2)
-                raw = raw.replacingOccurrences(
-                    of: #"<svg([^>]*?)width="\d+"\s+height="\d+"\s+viewBox="[^"]+""#,
-                    with: "<svg$1width=\"\(vw)\" height=\"\(vh)\" viewBox=\"\(vx) \(vy) \(vw) \(vh)\"",
-                    options: .regularExpression
-                )
-            }
-        }
-    }
-}
+if found and maxx > minx and maxy > miny:
+    pad = 24
+    vx = max(0, int(minx) - pad)
+    vy = max(0, int(miny) - pad)
+    vw = min(W - vx, int(maxx - minx) + pad * 2 + 1)
+    vh = min(H - vy, int(maxy - miny) + pad * 2 + 1)
+    s = re.sub(
+        r'<svg([^>]*?)width="\d+"\s+height="\d+"\s+viewBox="[^"]+"',
+        rf'<svg\1width="{vw}" height="{vh}" viewBox="{vx} {vy} {vw} {vh}"',
+        s,
+        count=1,
+    )
 
-try raw.write(to: url, atomically: true, encoding: .utf8)
-for targetPath in targets {
-    if targetPath.hasSuffix("/mascot.svg") || targetPath.contains("/public/") {
-        try raw.write(to: URL(fileURLWithPath: targetPath), atomically: true, encoding: .utf8)
-    }
-}
-SWIFT
+open(p, "w", encoding="utf-8").write(s)
+PY
 
-  sz_kb=$(awk "BEGIN {printf \"%.1f\", $(wc -c < "$out_svg") / 1024}")
-  echo "✓ ${base}.svg (${sz_kb} KB)"
+  cp "$out_svg" "$PUBLIC_DIR/${base}.svg"
+  if [ "$base" = "mascot" ]; then
+    cp "$out_svg" "$ASSETS_DIR/${base}.svg"
+  fi
+
+  echo "✓ ${base}.svg ($(du -k "$out_svg" | cut -f1) KB)"
   count=$((count + 1))
 done
-
-echo "✓ Vectorized all ${count} crisp cel-shaded mascot SVGs."
+echo "✓ Vectorized ${count} mascot SVGs."
