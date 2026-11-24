@@ -107,7 +107,7 @@ fn main() {
     // The splice: applying the answered edit re-spells the site in place.
     let edit = presentation.text_edit.as_ref().expect("the splice edit");
     let mut recolored = DOC.to_string();
-    let sm = SourceMap::new(FileId::from_raw(0), DOC.to_string());
+    let sm = SourceMap::new(FileId::from_usize(0), DOC.to_string());
     let start = sm
         .line_col_to_offset(
             edit.range.start.line as usize,
