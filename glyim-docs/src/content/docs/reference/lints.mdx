@@ -5,8 +5,11 @@ type: reference
 sidebar:
   order: 4
 ---
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
+import { Code } from '@astrojs/starlight/components';
 
-import { Aside, Code } from '@astrojs/starlight/components';
+<MascotFigure pose="warn" alt="Glyim compiler lints mascot" />
 
 The compiler's lint framework (§3.5.30 in the internal plan) assigns a severity level to named checks. This page documents every available lint and the flags that control them.
 
@@ -35,9 +38,9 @@ All three flags are repeatable, and later flags override earlier ones for the sa
 
 `glyim -W help` answers before argument parsing enforces the required input file, so it works as a standalone command.
 
-<Aside type="caution">
+<MascotAside type="caution">
 Unknown lint names are currently ignored silently by the flag parser. Attribute-based control (`#[allow(..)]` and friends) is not yet implemented; levels are set from the command line only.
-</Aside>
+</MascotAside>
 
 ## Next steps
 
