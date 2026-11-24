@@ -5,8 +5,11 @@ type: reference
 sidebar:
   order: 4
 ---
+import MascotFigure from '../../../../components/MascotFigure.astro';
+import MascotAside from '../../../../components/MascotAside.astro';
+import { Code } from '@astrojs/starlight/components';
 
-import { Aside, Code } from '@astrojs/starlight/components';
+<MascotFigure pose="warn" alt="Mascotte lints du compilateur Glyim" />
 
 Le framework de lint du compilateur (§3.5.30 dans le plan interne) attribue un niveau de sévérité à des vérifications nommées. Cette page documente chaque lint disponible et les drapeaux qui les contrôlent.
 
@@ -35,9 +38,9 @@ Les trois drapeaux sont répétables, et les drapeaux tardifs surchargent les pr
 
 `glyim -W help` répond avant que l'analyse d'arguments n'impose le fichier d'entrée requis, donc il fonctionne comme commande autonome.
 
-<Aside type="caution">
+<MascotAside type="caution">
 Les noms de lint inconnus sont actuellement ignorés silencieusement par le parseur de drapeaux. Le contrôle par attributs (`#[allow(..)]` et compagnie) n'est pas encore implémenté ; les niveaux se règlent uniquement depuis la ligne de commande.
-</Aside>
+</MascotAside>
 
 ## Étapes suivantes
 
