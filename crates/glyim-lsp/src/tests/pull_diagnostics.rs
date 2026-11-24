@@ -50,7 +50,7 @@ fn the_report_is_always_full_and_carries_the_recorded_items() {
     let mock = MockSource {
         recorded: vec![diag("first"), diag("second")],
     };
-    let report = pull_report(&mock, FileId::from_raw(0), None);
+    let report = pull_report(&mock, FileId::from_usize(0), None);
     let lsp_types::DocumentDiagnosticReportKind::Full(full) = report else {
         panic!("pull must answer a full report");
     };
@@ -75,7 +75,7 @@ fn a_client_echoed_result_id_is_never_honored() {
     let mock = MockSource {
         recorded: vec![diag("boom")],
     };
-    let report = pull_report(&mock, FileId::from_raw(0), Some("stale-id"));
+    let report = pull_report(&mock, FileId::from_usize(0), Some("stale-id"));
     let lsp_types::DocumentDiagnosticReportKind::Full(_) = report else {
         panic!("an echoed result id must not yield an unchanged report");
     };
@@ -89,7 +89,7 @@ fn a_clean_analysed_file_answers_an_empty_full_report() {
     let mock = MockSource {
         recorded: Vec::new(),
     };
-    let report = pull_report(&mock, FileId::from_raw(0), None);
+    let report = pull_report(&mock, FileId::from_usize(0), None);
     let lsp_types::DocumentDiagnosticReportKind::Full(full) = report else {
         panic!("a clean file must still answer a full report");
     };
@@ -220,7 +220,7 @@ fn related_reports_answer_empty_without_dependents() {
         &mock_affected,
         &mock_sets,
         &file_map,
-        FileId::from_raw(0),
+        FileId::from_usize(0),
     );
     assert!(related.is_empty());
 }
