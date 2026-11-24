@@ -83,10 +83,10 @@ fn body_div_by_zero(owner_raw: u32, tcx: &mut TyCtxMut) -> Body {
                 Place::new(LocalIdx::from_raw(0)),
                 Rvalue::BinaryOp(
                     BinOp::Div,
-                    Box::new((
+                    [
                         Operand::Constant(int_const(5)),
                         Operand::Constant(int_const(0)),
-                    )),
+                    ],
                 ),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
