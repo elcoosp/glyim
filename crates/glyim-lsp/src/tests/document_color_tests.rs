@@ -69,7 +69,7 @@ fn offset_of(src: &str, needle: &str) -> usize {
 /// with: the same `SourceMap` line/UTF-16-column mapping the request path
 /// uses, so the expectations cannot drift from the mapping under test.
 fn lsp_range(source: &str, lo: usize, hi: usize) -> lsp_types::Range {
-    let sm = crate::database::SourceMap::new(FileId::from_raw(0), source.to_string());
+    let sm = crate::database::SourceMap::new(FileId::from_usize(0), source.to_string());
     let ((start_line, start_col), (end_line, end_col)) = sm
         .span_to_position(lo, hi)
         .unwrap_or_else(|| panic!("fixture extent {lo}..{hi} is not char-boundary safe"));
@@ -191,7 +191,7 @@ fn presentations_answer_one_edit_over_the_reported_range() {
 
     // Applying the answered edit re-spells the site in place.
     let mut doc = DOC.to_string();
-    let sm = crate::database::SourceMap::new(FileId::from_raw(0), DOC.to_string());
+    let sm = crate::database::SourceMap::new(FileId::from_usize(0), DOC.to_string());
     let start = sm
         .line_col_to_offset(
             edit.range.start.line as usize,
