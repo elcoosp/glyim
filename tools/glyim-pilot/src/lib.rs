@@ -26,6 +26,8 @@ pub mod orchestrator;
 pub mod process;
 /// protocol.
 pub mod protocol;
+/// queue.
+pub mod queue;
 /// server.
 pub mod server;
 /// session.
@@ -39,3 +41,7 @@ pub use domain_types::{ApplyLimits, BannedPattern, DependencyRule};
 pub use error::PilotError;
 pub use protocol::parser::{extract_ops_blocks, parse_ops_block};
 pub use protocol::types::{FileOp, ParsedOps, PROTOCOL_VERSION};
+pub use queue::{
+    compose_task_prompt, head_task, resolve_start_prompt, LedgerQueueSource, QueuedTask,
+    TaskQueueSource, DEFAULT_START_PROMPT,
+};
