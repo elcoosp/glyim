@@ -124,8 +124,8 @@ fn build_attr_syntax(attr_name: &str) -> (SyntaxNode, Span) {
     let end: u32 = last_tok.text_range().end().into();
     let span = Span::new(
         FileId::BOGUS,
-        ByteIdx::from_usize(start),
-        ByteIdx::from_usize(end),
+        ByteIdx::from_usize(start as usize),
+        ByteIdx::from_usize(end as usize),
         SyntaxContext::ROOT,
     );
 
