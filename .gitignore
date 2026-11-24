@@ -28,3 +28,7 @@ scripts/build_ship_zip.py
 
 # Agent-sandbox scaffolding (download/ is the sandbox deliverable dir)
 download/
+
+# Ship manifest + PR body (AI delivery artifacts; ship validate runs on a dirty tree)
+ship.toml
+.github/pr-body.md
