@@ -36,10 +36,7 @@ pub fn build_add_body(_tcx: &TyCtxMut, lhs: i128, rhs: i128, ty: Ty) -> Body {
     let stmt = Statement {
         kind: StatementKind::Assign(
             Place::new(res_local),
-            Rvalue::BinaryOp(
-                BinOp::Add,
-                Box::new((Operand::Constant(c1), Operand::Constant(c2))),
-            ),
+            Rvalue::BinaryOp(BinOp::Add, [Operand::Constant(c1), Operand::Constant(c2)]),
         ),
         source_info: SourceInfo::new(Span::DUMMY),
     };
@@ -75,10 +72,7 @@ pub fn build_sub_body(_tcx: &TyCtxMut, lhs: i128, rhs: i128, ty: Ty) -> Body {
     let stmt = Statement {
         kind: StatementKind::Assign(
             Place::new(res_local),
-            Rvalue::BinaryOp(
-                BinOp::Sub,
-                Box::new((Operand::Constant(c1), Operand::Constant(c2))),
-            ),
+            Rvalue::BinaryOp(BinOp::Sub, [Operand::Constant(c1), Operand::Constant(c2)]),
         ),
         source_info: SourceInfo::new(Span::DUMMY),
     };
