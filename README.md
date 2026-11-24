@@ -78,7 +78,11 @@ async fn fetch_twice() -> i32 {
 ```
 
 > [!NOTE]
+> <img src="docs/branding/svg/mascot-note.svg" align="left" width="60" height="60" alt="Glyim note mascot" />
+>
 > The full grammar and standard library are still evolving. `glyim-lang-core`, `glyim-lang-alloc`, and `glyim-lang-std` contain the current stdlib source (written in Glyim) and serve as the compiler's bootstrapping corpus.
+>
+> <br clear="left" />
 
 ---
 
@@ -91,7 +95,11 @@ async fn fetch_twice() -> i32 {
 - **`watchexec`** — optional, for the `justfile` recipes
 
 > [!IMPORTANT]
+> <img src="docs/branding/svg/mascot-warn.svg" align="left" width="60" height="60" alt="Glyim warning mascot" />
+>
 > The LLVM backend is a hard dependency — there is no feature flag to build without it. Install LLVM 23 and set `LLVM_SYS_231_PREFIX` before building (Homebrew: `$(brew --prefix llvm@23)`, Debian/Ubuntu: `/usr/lib/llvm-23`).
+>
+> <br clear="left" />
 
 ### Building
 
@@ -220,7 +228,11 @@ flowchart TD
 | `glyip`              | Package manager / build tool                                 |
 
 > [!TIP]
+> <img src="docs/branding/svg/mascot-tip.svg" align="left" width="60" height="60" alt="Glyim tip mascot" />
+>
 > `glyim-bytecode-vm` ships an unusually rich observability suite — trace, profile, coverage, branch history, call graph, call state, local watch, data flow, inclusive cost, tail window, assertions, drops, casts, memory, calls, strings, aggregates, projections, floats, stack, fuel, interrupts, and math seams. See `docs/` for the full seam inventory and `crates/glyim-bytecode-vm/examples/` for runnable walkthroughs.
+>
+> <br clear="left" />
 
 ---
 
@@ -255,7 +267,11 @@ glyim input.g --emit=run --with-stdlib
 ```
 
 > [!TIP]
+> <img src="docs/branding/svg/mascot-speed.svg" align="left" width="60" height="60" alt="Glyim speed mascot" />
+>
 > `--emit=run` executes the program in-process through the MIR interpreter — no LLVM toolchain, no system linker, no `glyim-runtime` staticlib. The program's exit code becomes the driver's exit code, so it is scriptable exactly like a linked binary.
+>
+> <br clear="left" />
 
 ### The `glyip` Build Tool
 
@@ -284,7 +300,11 @@ my_crate = { git = "https://github.com/example/my_crate", tag = "v0.3.0" }
 ```
 
 > [!NOTE]
+> <img src="docs/branding/svg/mascot-glyip.svg" align="left" width="60" height="60" alt="Glyim package manager mascot" />
+>
 > `glyip`'s resolver is deliberately simpler than Cargo's: greedy breadth-first, no backtracking, one version per crate name, deterministic version selection. Two incompatible requirements for the same crate are a hard `DependencyConflict` error naming both requesters. See `docs/` for the full semantics.
+>
+> <br clear="left" />
 
 ### Library Usage
 
