@@ -1,0 +1,46 @@
+---
+export type MascotPose =
+  | 'default'
+  | '404'
+  | 'avatar'
+  | 'borrowck'
+  | 'community'
+  | 'concurrency'
+  | 'danger'
+  | 'ffi'
+  | 'glyip'
+  | 'gsx'
+  | 'guide'
+  | 'lsp'
+  | 'note'
+  | 'pipeline'
+  | 'speed'
+  | 'test'
+  | 'tip'
+  | 'warn';
+
+interface Props {
+  pose?: MascotPose;
+  alt: string;
+  size?: 'sm' | 'md' | 'lg' | '404';
+  caption?: string;
+}
+
+const { pose = 'default', alt, size = 'md', caption } = Astro.props;
+
+const src = pose === 'default' ? '/mascot.svg' : `/mascot-${pose}.svg`;
+const dimMap = { sm: 150, md: 200, lg: 240, '404': 260 } as const;
+const dim = dimMap[size];
+---
+
+<figure class={`glyim-mascot-figure glyim-mascot-figure--${size}`}>
+  <img
+    src={src}
+    alt={alt}
+    width={dim}
+    height={dim}
+    loading={size === '404' ? 'eager' : 'lazy'}
+    decoding="async"
+  />
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>

@@ -1,0 +1,28 @@
+---
+import { Aside } from '@astrojs/starlight/components';
+
+interface Props {
+  type?: 'note' | 'tip' | 'caution' | 'danger';
+  title?: string;
+}
+
+const { type = 'note', title } = Astro.props;
+
+const poseMap = {
+  note: '/mascot-note.svg',
+  tip: '/mascot-tip.svg',
+  caution: '/mascot-warn.svg',
+  danger: '/mascot-danger.svg',
+} as const;
+
+const src = poseMap[type];
+---
+
+<Aside type={type} title={title}>
+  <div class="glyim-aside-mascot">
+    <img src={src} alt="" width="76" height="76" loading="lazy" decoding="async" aria-hidden="true" />
+    <div class="glyim-aside-mascot__body">
+      <slot />
+    </div>
+  </div>
+</Aside>
