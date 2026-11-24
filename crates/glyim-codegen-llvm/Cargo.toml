@@ -15,7 +15,18 @@ inkwell = { workspace = true, features = ["llvm23-1"] }
 # Raw FFI bindings for the LLVM-C funclet (exception-handling) API, which
 # inkwell does not wrap. Version must match the llvm-sys instance inkwell
 # links (231.0.1) so the raw pointers resolve against the same libLLVM.
-llvm-sys = "231"
+#
+# `prefer-dynamic` links the shared `libLLVM-23.so` first and keeps the
+# static mode as the fallback (llvm-sys tries dynamic, then static). The
+# static first-pass breaks on hosts where `libz3-dev` is not installed:
+# Debian `llvm-config --system-libs --link-static` then resolves z3 to a
+# canonical absolute path whose unversioned file does not exist, and
+# llvm-sys's build script refuses it — while the shared mode's system-libs
+# list is empty and libLLVM carries its own deps (the shape the
+# LLVM_SYS_231_PREFIX workflow in `.cargo/config.toml` targets). CI
+# (apt llvm-23-dev) keeps the same behavior with the static fallback
+# intact.
+llvm-sys = { version = "231", features = ["prefer-dynamic"] }
 glyim-codegen = { workspace = true }
 glyim-mir = { workspace = true }
 glyim-diag = { workspace = true }
