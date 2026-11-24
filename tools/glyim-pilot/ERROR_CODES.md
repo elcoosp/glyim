@@ -16,6 +16,7 @@
 | E0700  | Session          | Session state error                                |
 | E0800  | I/O              | General I/O error                                  |
 | E0900  | Limits           | Apply limits exceeded                              |
+| E1000  | Queue            | Ledger task queue could not answer "what is next"  |
 
 ## Guidelines
 
