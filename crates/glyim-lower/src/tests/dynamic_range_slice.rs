@@ -132,8 +132,12 @@ fn inclusive_range_index_lowers_without_error() {
 fn has_add_one(result: &crate::lower::LowerResult) -> bool {
     result.body.basic_blocks.iter().any(|bb| {
         bb.statements.iter().any(|stmt| {
-            if let StatementKind::Assign(_, Rvalue::BinaryOp(BinOp::Add, boxed)) = &stmt.kind {
-                let (a, b) = &**boxed;
+            if let StatementKind::Assign(
+                _,
+                Rvalue::BinaryOp(BinOp::Add, [a, b, ..]),
+            ) = &stmt.kind
+            {
+                let (a, b) = (a, b);
                 let is_one = |op: &Operand| match op {
                     Operand::Constant(c) => matches!(c.kind, MirConstKind::Uint(1)),
                     _ => false,
