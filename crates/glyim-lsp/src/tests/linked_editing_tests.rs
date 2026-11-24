@@ -27,8 +27,8 @@ fn uri_for(path: &PathBuf) -> Uri {
 fn span_of(file_id: FileId, lo: u32, hi: u32) -> Span {
     Span::new(
         file_id,
-        ByteIdx::from_raw(lo),
-        ByteIdx::from_raw(hi),
+        ByteIdx::from_usize(lo as usize),
+        ByteIdx::from_usize(hi as usize),
         SyntaxContext::ROOT,
     )
 }
@@ -186,7 +186,7 @@ fn other_files_occurrences_do_not_leak_into_the_ranges() {
     let (db, file_map, path) = setup_test_db_with_foo();
     // A second file's occurrence of the same item-level name: linked
     // editing is per-document, so it must never appear.
-    let other_file = FileId::from_raw(7);
+    let other_file = FileId::from_usize(7);
     db.reference_graph.write().insert_test_reference(
         "foo",
         ref_at(other_file, 0, 3, false, AccessKind::Read, None, true),
