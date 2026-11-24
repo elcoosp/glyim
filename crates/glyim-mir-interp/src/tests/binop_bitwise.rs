@@ -58,10 +58,10 @@ fn build_binop_body_int(op: BinOp, left: i128, right: i128) -> Body {
                 return_place,
                 Rvalue::BinaryOp(
                     op,
-                    Box::new((
+                    [
                         Operand::Copy(Place::new(LocalIdx::from_raw(1))),
                         Operand::Copy(Place::new(LocalIdx::from_raw(2))),
-                    )),
+                    ],
                 ),
             ),
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -144,10 +144,10 @@ fn build_binop_body_uint(op: BinOp, left: u128, right: u128) -> Body {
                 return_place,
                 Rvalue::BinaryOp(
                     op,
-                    Box::new((
+                    [
                         Operand::Copy(Place::new(LocalIdx::from_raw(1))),
                         Operand::Copy(Place::new(LocalIdx::from_raw(2))),
-                    )),
+                    ],
                 ),
             ),
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -230,10 +230,10 @@ fn build_binop_body_bool(op: BinOp, left: bool, right: bool) -> Body {
                 return_place,
                 Rvalue::BinaryOp(
                     op,
-                    Box::new((
+                    [
                         Operand::Copy(Place::new(LocalIdx::from_raw(1))),
                         Operand::Copy(Place::new(LocalIdx::from_raw(2))),
-                    )),
+                    ],
                 ),
             ),
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
