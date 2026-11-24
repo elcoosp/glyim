@@ -114,10 +114,10 @@ fn t02_integer_constants_and_add_yields_loadconst_add_return() {
                     Place::new(LocalIdx::from_raw(2)),
                     Rvalue::BinaryOp(
                         BinOp::Add,
-                        Box::new((
+                        [
                             Operand::Copy(Place::new(LocalIdx::from_raw(0))),
                             Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                        )),
+                        ],
                     ),
                 )),
             ],
@@ -559,10 +559,10 @@ fn t18_arithmetic_stubs_do_not_crash() {
                         Place::new(LocalIdx::from_raw(2)),
                         Rvalue::BinaryOp(
                             *op,
-                            Box::new((
+                            [
                                 Operand::Copy(Place::new(LocalIdx::from_raw(0))),
                                 Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                            )),
+                            ],
                         ),
                     )),
                 ],
@@ -1273,10 +1273,10 @@ fn t41_add_exact_bytecode_sequence() {
                     Place::new(LocalIdx::from_raw(2)),
                     Rvalue::BinaryOp(
                         BinOp::Add,
-                        Box::new((
+                        [
                             Operand::Copy(Place::new(LocalIdx::from_raw(0))),
                             Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                        )),
+                        ],
                     ),
                 )),
             ],
@@ -1389,10 +1389,10 @@ fn t45_function_with_args() {
                 Place::new(LocalIdx::from_raw(2)),
                 Rvalue::BinaryOp(
                     BinOp::Add,
-                    Box::new((
+                    [
                         Operand::Copy(Place::new(LocalIdx::from_raw(0))),
                         Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                    )),
+                    ],
                 ),
             ))],
             term(TerminatorKind::Return),
@@ -1830,20 +1830,20 @@ fn t59_nested_binaryop_does_not_crash() {
                     Place::new(LocalIdx::from_raw(3)),
                     Rvalue::BinaryOp(
                         BinOp::Add,
-                        Box::new((
+                        [
                             Operand::Copy(Place::new(LocalIdx::from_raw(0))),
                             Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                        )),
+                        ],
                     ),
                 )),
                 stmt(StatementKind::Assign(
                     Place::new(LocalIdx::from_raw(4)),
                     Rvalue::BinaryOp(
                         BinOp::Add,
-                        Box::new((
+                        [
                             Operand::Copy(Place::new(LocalIdx::from_raw(3))),
                             Operand::Copy(Place::new(LocalIdx::from_raw(2))),
-                        )),
+                        ],
                     ),
                 )),
             ],
@@ -2189,10 +2189,10 @@ fn t71_comparison_ops_do_not_crash() {
                         Place::new(LocalIdx::from_raw(2)),
                         Rvalue::BinaryOp(
                             *op,
-                            Box::new((
+                            [
                                 Operand::Copy(Place::new(LocalIdx::from_raw(0))),
                                 Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                            )),
+                            ],
                         ),
                     )),
                 ],
@@ -2251,10 +2251,10 @@ fn t72_bitwise_shift_ops_do_not_crash() {
                         Place::new(LocalIdx::from_raw(2)),
                         Rvalue::BinaryOp(
                             *op,
-                            Box::new((
+                            [
                                 Operand::Copy(Place::new(LocalIdx::from_raw(0))),
                                 Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                            )),
+                            ],
                         ),
                     )),
                 ],
@@ -2592,10 +2592,10 @@ fn t80_all_opcodes_emitted_somewhere() {
                     Place::new(LocalIdx::from_raw(2)),
                     Rvalue::BinaryOp(
                         BinOp::Add,
-                        Box::new((
+                        [
                             Operand::Copy(Place::new(LocalIdx::from_raw(0))),
                             Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                        )),
+                        ],
                     ),
                 )),
             ],
@@ -2969,10 +2969,10 @@ fn t99_cross_backend_execution_computes_value() {
             Place::new(LocalIdx::from_raw(3)),
             Rvalue::BinaryOp(
                 BinOp::Add,
-                Box::new((
+                [
                     Operand::Copy(Place::new(LocalIdx::from_raw(1))),
                     Operand::Copy(Place::new(LocalIdx::from_raw(2))),
-                )),
+                ],
             ),
         )),
         stmt(StatementKind::Assign(
@@ -2987,10 +2987,10 @@ fn t99_cross_backend_execution_computes_value() {
             Place::new(LocalIdx::from_raw(5)),
             Rvalue::BinaryOp(
                 BinOp::Mul,
-                Box::new((
+                [
                     Operand::Copy(Place::new(LocalIdx::from_raw(3))),
                     Operand::Copy(Place::new(LocalIdx::from_raw(4))),
-                )),
+                ],
             ),
         )),
     ];
