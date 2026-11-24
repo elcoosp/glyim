@@ -5,12 +5,12 @@ type: explanation
 sidebar:
   order: 5
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-test.svg" alt="Glyim test harness mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../../components/MascotFigure.astro';
+import MascotAside from '../../../../components/MascotAside.astro';
 
+<MascotFigure pose="test" alt="Glyim test harness mascot" />
 
-import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+import { Code, LinkCard } from '@astrojs/starlight/components';
 
 Le harnais de test de Glyim (`glyim-test`) est une partie de première classe du projet, pas une réflexion après coup. Cette page explique le raisonnement derrière ses couches : pourquoi cinq modes de test, pourquoi chaque phase a un mock, et ce que les tests de propriétés ajoutent.
 
@@ -59,9 +59,9 @@ Les cas générés atteignent des coins que les tests écrits à la main ratent 
 
 Deux cibles cargo-fuzz sondent les frontières où l'entrée malformée rencontre la descente récursive : `fuzz_parse` (aller-retour lexer/parseur/CST) et `fuzz_compile` (un détecteur d'ICE à pipeline complet), avec des graines de corpus et un dictionnaire de jetons. Le fuzzing complète le corpus : le corpus encode le comportement connu, le fuzzing chasse les crashs inconnus.
 
-<Aside type="note">
+<MascotAside type="note">
 Le harnais tourne sur l'interpréteur MIR par défaut (`glyip test`), qui exécute les tests in-process ; `--compiled` fait tourner le même corpus en exécutables natifs via le backend LLVM, exerçant le pipeline complet. La suite différentielle CI compare les deux chemins d'exécution l'un contre l'autre.
-</Aside>
+</MascotAside>
 
 ## Étapes suivantes
 
