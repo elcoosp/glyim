@@ -5,8 +5,11 @@ type: reference
 sidebar:
   order: 3
 ---
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
+import { Code } from '@astrojs/starlight/components';
 
-import { Aside, Code } from '@astrojs/starlight/components';
+<MascotFigure pose="default" alt="Glyim language reference mascot" />
 
 Glyim is a Rust-like systems programming language with its own file extension, `.g`. This page lists the constructs the compiler accepts. The full grammar is still evolving — the `glyim-lang-core`, `glyim-lang-alloc`, and `glyim-lang-std` crates contain the current standard library source, written in Glyim, and serve as the compiler's bootstrapping corpus.
 
@@ -87,9 +90,9 @@ Procedural macros are supported through a C-compatible token-stream ABI (`glyim-
 | Collections | `Vec<T>`, `String` |
 | Smart pointers | `Box<T>`, `Rc`, `PhantomData<T>`, `UnsafeCell<T>` |
 
-<Aside type="note">
+<MascotAside type="note">
 Some builtin methods on `Vec`, `String`, `Result`, and `Option` lower to synthetic function bodies that the LLVM backend must intrinsic-lower; unimplemented ones produce an explicit compiler error rather than wrong code.
-</Aside>
+</MascotAside>
 
 ## Standard library
 
