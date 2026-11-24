@@ -27,7 +27,7 @@ fn test_many_statements_in_block() {
                 Place::new(local_sum),
                 Rvalue::BinaryOp(
                     BinOp::Add,
-                    Box::new((Operand::Copy(Place::new(local_sum)), const_int(i))),
+                    [Operand::Copy(Place::new(local_sum)), const_int(i)],
                 ),
             ),
         );
@@ -145,7 +145,7 @@ fn test_all_binary_ops_on_ints() {
             bb0,
             StatementKind::Assign(
                 Place::new(local_r),
-                Rvalue::BinaryOp(*op, Box::new((const_int(*a), const_int(*b)))),
+                Rvalue::binary_op(*op, const_int(*a), const_int(*b)),
             ),
         );
         let tcx = ctx.freeze();
@@ -190,7 +190,7 @@ fn test_comparison_ops() {
             bb0,
             StatementKind::Assign(
                 Place::new(local_r),
-                Rvalue::BinaryOp(*op, Box::new((const_int(*a), const_int(*b)))),
+                Rvalue::binary_op(*op, const_int(*a), const_int(*b)),
             ),
         );
         let tcx = ctx.freeze();
@@ -223,7 +223,7 @@ fn test_division_by_zero_panics() {
         bb0,
         StatementKind::Assign(
             Place::new(local_r),
-            Rvalue::BinaryOp(BinOp::Div, Box::new((const_int(42), const_int(0)))),
+            Rvalue::binary_op(BinOp::Div, const_int(42), const_int(0)),
         ),
     );
 
