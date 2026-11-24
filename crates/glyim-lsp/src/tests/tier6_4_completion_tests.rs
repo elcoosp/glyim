@@ -155,8 +155,8 @@ fn main() {
     let span_for = |lo: usize, hi: usize| {
         Span::new(
             file_id,
-            ByteIdx::from_raw(lo as u32),
-            ByteIdx::from_raw(hi as u32),
+            ByteIdx::from_usize(lo),
+            ByteIdx::from_usize(hi),
             ctx,
         )
     };
@@ -357,8 +357,8 @@ fn main() {
     let span_for = |lo: usize, hi: usize| {
         Span::new(
             file_id,
-            ByteIdx::from_raw(lo as u32),
-            ByteIdx::from_raw(hi as u32),
+            ByteIdx::from_usize(lo),
+            ByteIdx::from_usize(hi),
             ctx,
         )
     };
