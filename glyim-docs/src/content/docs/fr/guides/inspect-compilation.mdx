@@ -5,8 +5,11 @@ type: how-to
 sidebar:
   order: 4
 ---
+import MascotFigure from '../../../../components/MascotFigure.astro';
+import MascotAside from '../../../../components/MascotAside.astro';
+import { Code, LinkCard } from '@astrojs/starlight/components';
 
-import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+<MascotFigure pose="pipeline" alt="Mascotte inspection de compilation Glyim" />
 
 Ce guide montre comment regarder dans le compilateur pendant qu'il traite un seul fichier source : émettre des représentations intermédiaires, choisir des backends, régler le codegen et ajuster les niveaux de lint.
 
@@ -60,9 +63,9 @@ Compilez d'abord les sources de dépendances proc-macro en cdylibs hôte, puis r
 
 <Code lang="bash" title="Terminal" code={"glyim proc_macro_dep.g --emit cdylib\nglyim main.g --proc-macro-deps proc_macro_dep.g"} />
 
-<Aside type="caution">
+<MascotAside type="caution">
 La compilation hôte en deux étapes pour les macros procédurales est encore en cours de câblage dans le flux `glyim-cli` par défaut. La surface de drapeaux existe et le pont C-ABI (`glyim-proc-macro`, basé sur `dlopen`) est fonctionnel, mais attendez-vous à des aspérités.
-</Aside>
+</MascotAside>
 
 ## Ajuster les niveaux de lint
 
