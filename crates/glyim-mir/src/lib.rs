@@ -110,8 +110,10 @@ pub enum Rvalue {
     Use(Operand),
     /// `Ref`.
     Ref(Place, BorrowKind),
-    /// `BinaryOp`.
-    BinaryOp(BinOp, Box<(Operand, Operand)>),
+    /// `BinaryOp`. The operand pair is stored **inline** (plan PF-12 /
+    /// M2.7 quick win: no `Box<(Operand, Operand)>` heap allocation per
+    /// binary op). Construct through [`Rvalue::binary_op`].
+    BinaryOp(BinOp, [Operand; 2]),
     /// `UnaryOp`.
     UnaryOp(UnOp, Operand),
     /// `Aggregate`.
@@ -125,6 +127,19 @@ pub enum Rvalue {
     Cast(CastKind, Operand, Ty),
     /// `Repeat`.
     Repeat(Operand, MirConst),
+}
+
+impl Rvalue {
+    /// Smart constructor for [`Rvalue::BinaryOp`]: builds the inline
+    /// `[Operand; 2]` payload (plan PF-12 / M2.7 quick win) without any
+    /// heap allocation for the pair itself.
+    ///
+    /// Keeping every construction site on this constructor keeps the
+    /// operand-pair representation replaceable: a later MIR-diet slice can
+    /// change the payload shape without touching producers.
+    pub fn binary_op(op: BinOp, lhs: Operand, rhs: Operand) -> Rvalue {
+        Rvalue::BinaryOp(op, [lhs, rhs])
+    }
 }
 
 #[derive(Clone, Debug)]
