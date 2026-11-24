@@ -41,9 +41,9 @@ fn test_rename_text_fallback_skips_string_and_comment() {
     // only the real identifier and leave the string/comment occurrences alone.
     let content =
         "let target = 1;\nlet s = \"target in a string\";\n// target in a comment\ntarget = 2;\n";
-    let sm = SourceMap::new(FileId::from_raw(0), content.to_string());
+    let sm = SourceMap::new(FileId::from_usize(0), content.to_string());
 
-    let edits = rename_text_fallback(&sm, FileId::from_raw(0), "target", "renamed")
+    let edits = rename_text_fallback(&sm, FileId::from_usize(0), "target", "renamed")
         .expect("expected fallback edits for the real identifier occurrences");
 
     // Exactly two identifier occurrences: `let target` and `target = 2`.
@@ -71,9 +71,9 @@ fn test_rename_text_fallback_target_only_in_string_is_none() {
     // identifier occurrence — so the fallback must produce no edits (and must
     // NOT corrupt the string/comment text).
     let content = "let s = \"target in a string\";\n// target in a comment\n";
-    let sm = SourceMap::new(FileId::from_raw(0), content.to_string());
+    let sm = SourceMap::new(FileId::from_usize(0), content.to_string());
 
-    let edits = rename_text_fallback(&sm, FileId::from_raw(0), "target", "renamed");
+    let edits = rename_text_fallback(&sm, FileId::from_usize(0), "target", "renamed");
     assert!(
         edits.is_none(),
         "name only in string/comment must yield no fallback edits"
