@@ -51,7 +51,7 @@ fn run_binop_kind(
     });
     body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
         statements: vec![Statement {
-            kind: StatementKind::Assign(Place::new(res), Rvalue::BinaryOp(op, Box::new((c1, c2)))),
+            kind: StatementKind::Assign(Place::new(res), Rvalue::binary_op(op, c1, c2)),
             source_info: SourceInfo::new(Span::DUMMY),
         }],
         terminator: Terminator {
