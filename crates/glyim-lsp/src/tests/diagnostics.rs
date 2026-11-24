@@ -5,7 +5,7 @@ use lsp_types::{DiagnosticSeverity, Range};
 
 #[test]
 fn test_convert_diagnostics() {
-    let file_id = glyim_span::FileId::from_raw(1);
+    let file_id = glyim_span::FileId::from_usize(1);
     let source_map = &crate::SourceMap::new(file_id, "fn main() {}".to_string());
 
     let glyim_diags = vec![
