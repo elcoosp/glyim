@@ -30,10 +30,10 @@ fn test_t10_nested_function_calls() {
             Place::new(LocalIdx::from_raw(0)),
             Rvalue::BinaryOp(
                 BinOp::Add,
-                Box::new((
+                [
                     Operand::Copy(Place::new(param0)),
                     Operand::Copy(Place::new(param1)),
-                )),
+                ],
             ),
         ),
     );
