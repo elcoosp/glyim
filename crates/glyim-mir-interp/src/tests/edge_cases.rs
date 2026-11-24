@@ -44,7 +44,7 @@ fn build_bool_binop_body(op: BinOp, left: bool, right: bool) -> Body {
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
-                Rvalue::BinaryOp(op, Box::new((Operand::Constant(c1), Operand::Constant(c2)))),
+                Rvalue::binary_op(op, Operand::Constant(c1), Operand::Constant(c2)),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         }],
@@ -142,14 +142,14 @@ fn build_callee_with_args_body(tcx: &mut TyCtxMut) -> Body {
                 Place::new(ret_local),
                 Rvalue::BinaryOp(
                     BinOp::Mul,
-                    Box::new((
+                    [
                         Operand::Copy(Place::new(arg_local)),
                         Operand::Constant(MirConst {
                             kind: MirConstKind::Int(2),
                             ty: i32_ty,
                             span: Span::DUMMY,
                         }),
-                    )),
+                    ],
                 ),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -638,10 +638,7 @@ fn sequential_binary_ops() {
             Statement {
                 kind: StatementKind::Assign(
                     Place::new(loc_a),
-                    Rvalue::BinaryOp(
-                        BinOp::Add,
-                        Box::new((Operand::Constant(c10), Operand::Constant(c3))),
-                    ),
+                    Rvalue::BinaryOp(BinOp::Add, [Operand::Constant(c10), Operand::Constant(c3)]),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
@@ -651,7 +648,7 @@ fn sequential_binary_ops() {
                     Place::new(loc_b),
                     Rvalue::BinaryOp(
                         BinOp::Mul,
-                        Box::new((Operand::Copy(Place::new(loc_a)), Operand::Constant(c2))),
+                        [Operand::Copy(Place::new(loc_a)), Operand::Constant(c2)],
                     ),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -662,14 +659,14 @@ fn sequential_binary_ops() {
                     Place::new(loc_result),
                     Rvalue::BinaryOp(
                         BinOp::Sub,
-                        Box::new((
+                        [
                             Operand::Copy(Place::new(loc_b)),
                             Operand::Constant(MirConst {
                                 kind: MirConstKind::Int(6),
                                 ty: i32_ty,
                                 span: Span::DUMMY,
                             }),
-                        )),
+                        ],
                     ),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
