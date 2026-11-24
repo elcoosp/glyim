@@ -5,12 +5,12 @@ type: explanation
 sidebar:
   order: 4
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-gsx.svg" alt="Glyim GSX reactivity mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../../components/MascotFigure.astro';
+import MascotAside from '../../../../components/MascotAside.astro';
 
+<MascotFigure pose="gsx" alt="Glyim GSX reactivity mascot" />
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { LinkCard } from '@astrojs/starlight/components';
 
 La plupart des frameworks de vues optimisent les mises à jour en diffant un DOM virtuel à l'exécution, ou en câblant des signaux qui notifient les abonnés. GSX prend une troisième voie, disponible parce que Glyim possède le compilateur et le vérificateur d'emprunts : **le compilateur prouve qui peut écrire quoi, et spécialise le code de mise à jour à l'avance.** Cette page explique l'idée et sa machinerie.
 
@@ -51,9 +51,9 @@ Parce que les patches sont en ligne droite et choisis par ensemble d'écriture, 
 
 L'analyse d'ownership couvre les formes courantes : état local, écritures de handler, composants inline composés comme compositions de lentilles. Quand une valeur est réellement aliasée et mutable — une cellule partagée que plusieurs propriétaires peuvent écrire — l'analyse ne peut pas prouver d'ensemble d'écriture. C'est l'échappatoire : le compilateur émet le diagnostic `Signal<T>` (G0201) avec un fix-it, et l'hôte retombe sur des bits de signal pour ce slot. Les signaux sont le chemin d'exception, pas le chemin rapide.
 
-<Aside type="note">
+<MascotAside type="note">
 GSX est expérimental : l'étage est implémenté et testé comme bibliothèque, et le câblage du pilote CLI n'a pas encore atterri. Voir la référence GSX pour la table de statut exacte.
-</Aside>
+</MascotAside>
 
 ## Étapes suivantes
 
