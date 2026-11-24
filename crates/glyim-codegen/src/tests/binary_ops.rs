@@ -18,7 +18,7 @@ fn make_body(op: BinOp) -> Body {
             Place::new(dest_local),
             Rvalue::BinaryOp(
                 op,
-                Box::new((
+                [
                     Operand::Constant(MirConst {
                         kind: MirConstKind::Int(3),
                         ty: Ty::ERROR,
@@ -29,7 +29,7 @@ fn make_body(op: BinOp) -> Body {
                         ty: Ty::ERROR,
                         span: Span::DUMMY,
                     }),
-                )),
+                ],
             ),
         ),
         source_info: SourceInfo::new(Span::DUMMY),
