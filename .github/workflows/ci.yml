@@ -207,6 +207,27 @@ jobs:
           key: msrv-1.95
       - name: cargo check (MSRV 1.95)
         run: cargo check --workspace --all-targets
+  # M1.13 reproducibility: the ledger renders are byte-stable across
+  # machines. The committed golden (`ledger/verify-golden.json`) pins
+  # every check's digest; this job is the "second machine" the plan's
+  # determinism contract names (M1.13: "run `compute` twice and on two
+  # machines → identical bytes"), plus the policy-mutation gate (the
+  # mutation harness must keep killing every catalogue mutant). The job
+  # builds only the ledger, so it needs no LLVM.
+  reproducibility:
+    name: Reproducibility (ledger golden + policy mutation)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: reproducibility
+      - name: Verify the committed golden (cross-machine byte equality)
+        run: cargo run --locked -p glyim-ledger -- verify --golden ledger/verify-golden.json
+      - name: Policy-mutation gate (every catalogue mutant must kill)
+        run: cargo run --locked -p glyim-ledger -- policy-mutation
   miri-check:
     name: Miri (nightly, type/check crates)
     runs-on: ubuntu-latest
