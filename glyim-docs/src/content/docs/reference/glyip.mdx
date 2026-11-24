@@ -5,12 +5,12 @@ type: reference
 sidebar:
   order: 2
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-glyip.svg" alt="Glyim package manager mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
 
+<MascotFigure pose="glyip" alt="Glyim package manager mascot" />
 
-import { Aside, Badge, Code } from '@astrojs/starlight/components';
+import { Badge, Code } from '@astrojs/starlight/components';
 
 `glyip` is Cargo's counterpart for Glyim projects. It reads a `Glyip.toml` manifest, resolves dependencies with SemVer 2.0 matching, maintains a `Glyip.lock` lockfile, and drives the compiler.
 
@@ -107,9 +107,9 @@ Exactly one git ref is active; without `branch`, `tag`, or `rev`, the repository
 
 `glyip` maintains `Glyip.lock` with entries keyed by `name-version`, so repeated builds resolve the same graph. The conflict check enforces one resolved version per crate name — see [manage dependencies](/guides/manage-dependencies/) for the resolver's exact semantics.
 
-<Aside type="tip">
+<MascotAside type="tip">
 A typo in a version string is an error (`DependencyNotFound`), not a silent fallback to the latest version.
-</Aside>
+</MascotAside>
 
 ## Next steps
 
