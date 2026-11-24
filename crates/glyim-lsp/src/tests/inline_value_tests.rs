@@ -195,5 +195,5 @@ fn an_unopened_document_answers_null() {
     let path = PathBuf::from("/test/never_opened.g");
     let params = params_at(&path, 0, 10);
     assert!(inline_values(&db, &file_map, &params).is_none());
-    let _ = FileId::from_raw(0); // keep the span crate in the test's deps
+    let _ = FileId::from_usize(0); // keep the span crate in the test's deps
 }
