@@ -161,11 +161,11 @@ fn main() {
     let arc = Arc::new(body);
 
     let t2 = Instant::now();
-    let o0 = optimize_at_level(&frozen, &arc, 0).expect("optimize_at_level failed");
+    let o0 = optimize_at_level(&frozen, Arc::clone(&arc), 0).expect("optimize_at_level failed");
     let o0_us = t2.elapsed();
 
     let t3 = Instant::now();
-    let o2 = optimize_at_level(&frozen, &arc, 2).expect("optimize_at_level failed");
+    let o2 = optimize_at_level(&frozen, Arc::clone(&arc), 2).expect("optimize_at_level failed");
     let o2_us = t3.elapsed();
 
     println!("glyim-opt pass-plan cost (512-block synthetic body)");
