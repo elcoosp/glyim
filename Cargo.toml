@@ -61,6 +61,11 @@ exclude = ["fuzz"]
 [workspace.dependencies]
 semver = "1.0"
 glyim-const-eval = { path = "crates/glyim-const-eval" }
+# `glyim-pilot` consumes the ledger queue as a library (plan M1.11's
+# orchestrator task-queue seam); the `glyim.ledger-next/1` JSON contract
+# stays the CLI/wire face.
+glyim-ledger = { path = "tools/glyim-ledger" }
+ledger-schema = { path = "tools/ledger-schema" }
 glyim-bytecode-vm = { path = "crates/glyim-bytecode-vm" }
 glyim-proc-macro = { path = "crates/glyim-proc-macro" }
 glyim-core = { path = "crates/glyim-core" }
