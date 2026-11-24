@@ -175,9 +175,8 @@ fn desugar_rvalue(
     match rvalue {
         Rvalue::Use(op) => desugar_operand(ctx, body, op, prelude, span),
         Rvalue::BinaryOp(_, operands) => {
-            let (l, r) = operands.as_mut();
-            desugar_operand(ctx, body, l, prelude, span);
-            desugar_operand(ctx, body, r, prelude, span);
+            desugar_operand(ctx, body, &mut operands[0], prelude, span);
+            desugar_operand(ctx, body, &mut operands[1], prelude, span);
         }
         Rvalue::UnaryOp(_, op) => desugar_operand(ctx, body, op, prelude, span),
         Rvalue::Ref(place, _) => {
