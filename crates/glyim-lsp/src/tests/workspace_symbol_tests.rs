@@ -29,7 +29,7 @@ fn analysis_with_symbols(names: &[&str]) -> (AnalysisDatabase, FileId) {
     let span = Span::new(
         file_id,
         ByteIdx::ZERO,
-        ByteIdx::from_raw(5),
+        ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
     let mut index = analysis.symbol_index.write();
