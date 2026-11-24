@@ -23,13 +23,13 @@ for src_png in "$SRC_DIR"/mascot*.png; do
 
     "$WRAITH_BIN" "$src_png" \
         -m color --engine geometric \
-        --gradients off --no-primitives \
-        --colors 18 --merge 0.036 \
-        --min-area 20 --corner-angle 24 \
-        --tolerance 0.22 --smooth 3 \
+        --gradients linear-radial --prefilter \
+        --colors 28 --merge 0.038 \
+        --min-area 18 --corner-angle 28 \
+        --tolerance 0.35 --smooth 3 \
         --trap 2 --refine 2 --field-blur 1 \
         --precision 2 \
-        --background "#ffffff" --bg-tolerance 16 \
+        --background "#ffffff" --bg-tolerance 28 \
         -o "$out_svg"
 
     python3 - "$out_svg" <<'PY'
