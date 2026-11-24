@@ -5,12 +5,12 @@ type: tutorial
 sidebar:
   order: 1
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-guide.svg" alt="Glyim getting started guide mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
 
+<MascotFigure pose="guide" alt="Glyim getting started guide mascot" />
 
-import { Aside, Code, LinkCard, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+import { Code, LinkCard, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
 
 In this tutorial you build the Glyim compiler from source, create a new project with the `glyip` build tool, and run a Glyim program. You finish with a working toolchain and a mental model of the build workflow.
 
@@ -31,9 +31,9 @@ Before building, set `LLVM_SYS_231_PREFIX` to your LLVM 23 installation prefix:
    </TabItem>
 </Tabs>
 
-<Aside type="tip">
+<MascotAside type="tip">
 Add the `export` line to your shell profile so every future session picks it up. The CI pipeline installs LLVM 23 with the `llvm.sh 23` script if you need a reproducible reference setup.
-</Aside>
+</MascotAside>
 
 ## Build the compiler
 
