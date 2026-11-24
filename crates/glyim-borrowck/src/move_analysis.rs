@@ -518,10 +518,9 @@ fn collect_rvalue_move_operands(
             collect_operand_move(operand, move_paths, moves, ctx, local_decls);
         }
         Rvalue::Ref(_, _) => {}
-        Rvalue::BinaryOp(_, pair) => {
-            let (left, right) = pair.as_ref();
-            collect_operand_move(left, move_paths, moves, ctx, local_decls);
-            collect_operand_move(right, move_paths, moves, ctx, local_decls);
+        Rvalue::BinaryOp(_, ops) => {
+            collect_operand_move(&ops[0], move_paths, moves, ctx, local_decls);
+            collect_operand_move(&ops[1], move_paths, moves, ctx, local_decls);
         }
         Rvalue::UnaryOp(_, operand) => {
             collect_operand_move(operand, move_paths, moves, ctx, local_decls);
@@ -735,12 +734,11 @@ fn collect_rvalue_used_places<'a>(rvalue: &'a Rvalue, places: &mut SmallVec<[Use
         Rvalue::Ref(place, _) => {
             places.push(UsedPlace::Borrow(place));
         }
-        Rvalue::BinaryOp(_, pair) => {
-            let (left, right) = pair.as_ref();
-            if let Operand::Copy(p) | Operand::Move(p) = left {
+        Rvalue::BinaryOp(_, ops) => {
+            if let Operand::Copy(p) | Operand::Move(p) = &ops[0] {
                 places.push(UsedPlace::Operand(p));
             }
-            if let Operand::Copy(p) | Operand::Move(p) = right {
+            if let Operand::Copy(p) | Operand::Move(p) = &ops[1] {
                 places.push(UsedPlace::Operand(p));
             }
         }
