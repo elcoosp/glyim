@@ -36,8 +36,8 @@ fn uri_for(path: &PathBuf) -> Uri {
 fn span_of(file_id: FileId, lo: u32, hi: u32) -> Span {
     Span::new(
         file_id,
-        ByteIdx::from_raw(lo),
-        ByteIdx::from_raw(hi),
+        ByteIdx::from_usize(lo as usize),
+        ByteIdx::from_usize(hi as usize),
         SyntaxContext::ROOT,
     )
 }
@@ -120,7 +120,7 @@ fn offs() -> Offsets {
 /// under test (a definition on line 1 answers `character = column`, not
 /// the global byte offset).
 fn lsp_range(lo: u32, hi: u32) -> lsp_types::Range {
-    let sm = crate::database::SourceMap::new(FileId::from_raw(0), SRC.to_string());
+    let sm = crate::database::SourceMap::new(FileId::from_usize(0), SRC.to_string());
     let ((start_line, start_col), (end_line, end_col)) = sm
         .span_to_position(lo as usize, hi as usize)
         .unwrap_or_else(|| panic!("fixture extent {lo}..{hi} is not char-boundary safe"));
