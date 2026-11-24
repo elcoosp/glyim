@@ -385,10 +385,9 @@ fn mark_used_params_in_rvalue(
 ) {
     match rv {
         Rvalue::Use(op) => mark_used_params_in_operand(op, local_decls, ctx, used),
-        Rvalue::BinaryOp(_, boxed) => {
-            let (l, r) = boxed.as_ref();
-            mark_used_params_in_operand(l, local_decls, ctx, used);
-            mark_used_params_in_operand(r, local_decls, ctx, used);
+        Rvalue::BinaryOp(_, ops) => {
+            mark_used_params_in_operand(&ops[0], local_decls, ctx, used);
+            mark_used_params_in_operand(&ops[1], local_decls, ctx, used);
         }
         Rvalue::UnaryOp(_, op) => mark_used_params_in_operand(op, local_decls, ctx, used),
         Rvalue::Aggregate(kind, ops) => {
