@@ -191,8 +191,8 @@ fn binding_name_of_leaf(tree: &SyntaxNode) -> Option<String> {
 fn span_of(file_id: FileId, range: rowan::TextRange) -> Span {
     Span::new(
         file_id,
-        ByteIdx::from_raw(u32::from(range.start())),
-        ByteIdx::from_raw(u32::from(range.end())),
+        ByteIdx::from_usize(u32::from(range.start()) as usize),
+        ByteIdx::from_usize(u32::from(range.end()) as usize),
         SyntaxContext::ROOT,
     )
 }
