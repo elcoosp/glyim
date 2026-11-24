@@ -24,9 +24,9 @@ fn create_dummy_hir(interner: &Interner) -> CrateHir {
         }),
         visibility: Visibility::Public,
         span: Span::new(
-            FileId::from_raw(1),
+            FileId::from_usize(1),
             ByteIdx::ZERO,
-            ByteIdx::from_raw(10),
+            ByteIdx::from_usize(10),
             SyntaxContext::ROOT,
         ),
     };
@@ -42,7 +42,7 @@ fn create_dummy_hir(interner: &Interner) -> CrateHir {
 #[test]
 fn build_from_hir_adds_function_symbol() {
     let mut index = SymbolIndex::new();
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let interner = Interner::default();
     let hir = create_dummy_hir(&interner);
     index.build_from_hir(file_id, &hir, &interner);
@@ -55,19 +55,19 @@ fn build_from_hir_adds_function_symbol() {
 #[test]
 fn multi_file_symbols() {
     let mut index = SymbolIndex::new();
-    let file1 = FileId::from_raw(10);
-    let file2 = FileId::from_raw(20);
+    let file1 = FileId::from_usize(10);
+    let file2 = FileId::from_usize(20);
 
     let span1 = Span::new(
         file1,
         ByteIdx::ZERO,
-        ByteIdx::from_raw(5),
+        ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
     let span2 = Span::new(
         file2,
         ByteIdx::ZERO,
-        ByteIdx::from_raw(5),
+        ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
 
@@ -108,11 +108,11 @@ fn multi_file_symbols() {
 #[test]
 fn query_prefix_and_contains() {
     let mut index = SymbolIndex::new();
-    let file = FileId::from_raw(1);
+    let file = FileId::from_usize(1);
     let span = Span::new(
         file,
         ByteIdx::ZERO,
-        ByteIdx::from_raw(5),
+        ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
 
