@@ -5,12 +5,12 @@ type: explanation
 sidebar:
   order: 3
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-borrowck.svg" alt="Glyim borrow checker shield mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../../components/MascotFigure.astro';
+import MascotAside from '../../../../components/MascotAside.astro';
 
+<MascotFigure pose="borrowck" alt="Glyim borrow checker shield mascot" />
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { LinkCard } from '@astrojs/starlight/components';
 
 Glyim implémente un vérificateur d'emprunts à durées de vie non lexicales (NLL), la même famille de conception que rustc utilise en production. Cette page explique ce que cela signifie pour les programmes que vous écrivez et comment le vérificateur fonctionne en interne.
 
@@ -53,9 +53,9 @@ Affecter une valeur non-`Copy` la déplace. L'analyse de déplacement suit cela 
 - La demande du vérificateur d'emprunts pour des drapeaux de drop est répondue par l'élaboration des drops dans l'optimiseur.
 - Les diagnostics portent des spans jusqu'à la source, rendus par `miette` dans la CLI et publiés via LSP dans l'éditeur.
 
-<Aside type="note">
+<MascotAside type="note">
 Deux limites connues façonnent le comportement actuel : `panic!` avorte sans déroulement (code de sortie 101), et le déroulement inter-frames dans l'interpréteur MIR ne supporte jusqu'ici que le nettoyage d'une seule frame — les deux sont des manques suivis dans le plan de développement, pas des décisions de conception.
-</Aside>
+</MascotAside>
 
 ## Étapes suivantes
 
