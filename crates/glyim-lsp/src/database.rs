@@ -126,7 +126,7 @@ impl FileMap {
         if let Some(id) = self.path_to_id.get(path) {
             return *id;
         }
-        let id = FileId::from_raw(self.next_id);
+        let id = FileId::from_usize(self.next_id as usize);
         self.next_id += 1;
         self.path_to_id.insert(path.clone(), id);
         self.id_to_path.insert(id, path.clone());
@@ -374,7 +374,7 @@ mod source_map_tests {
     use glyim_span::FileId;
 
     fn sm(content: &str) -> SourceMap {
-        SourceMap::new(FileId::from_raw(1), content.to_string())
+        SourceMap::new(FileId::from_usize(1), content.to_string())
     }
 
     /// INF-11: LSP columns are UTF-16 code units. Round-trip on ASCII.
