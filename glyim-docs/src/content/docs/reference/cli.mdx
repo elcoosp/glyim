@@ -5,8 +5,11 @@ type: reference
 sidebar:
   order: 1
 ---
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
+import { Code } from '@astrojs/starlight/components';
 
-import { Aside, Code } from '@astrojs/starlight/components';
+<MascotFigure pose="guide" alt="Glyim CLI reference mascot" />
 
 The `glyim` compiler driver (built as `glyim-cli`) compiles a single `.g` source file. This page documents the complete command-line surface, verified against the argument parser in `crates/glyim-cli`.
 
@@ -69,9 +72,9 @@ When the compiler itself panics, the driver catches the unwind and prints a stru
 |----------|---------|
 | `LLVM_SYS_231_PREFIX` | LLVM 23 installation prefix, required to build the workspace. Homebrew: `$(brew --prefix llvm@23)`; Debian/Ubuntu: `/usr/lib/llvm-23`. |
 
-<Aside type="caution">
+<MascotAside type="caution">
 The LLVM backend is a hard dependency of the pipeline — there is no feature flag to build without it.
-</Aside>
+</MascotAside>
 
 ## Examples
 
