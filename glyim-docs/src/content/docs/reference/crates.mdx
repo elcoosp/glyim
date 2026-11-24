@@ -5,8 +5,11 @@ type: reference
 sidebar:
   order: 5
 ---
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
+import { LinkCard } from '@astrojs/starlight/components';
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+<MascotFigure pose="ffi" alt="Glyim workspace crates mascot" />
 
 Glyim is organized as a Cargo workspace of small, single-responsibility crates. Each phase consumes the previous phase's IR and exposes a minimal trait-based interface, so tests can substitute mocks for any phase. All crates live under `crates/`.
 
@@ -97,9 +100,9 @@ the readiness ledger and measurement toolchain the CI jobs run:
 | `glyim-lang-alloc` | Allocation library source: `Box`, `Vec`, `String`, `Rc`, `RawVec`. |
 | `glyim-lang-std` | Standard library source: `io`, `fs`, `net`, `thread`, `sync`, `env`, `time`, `process`, `task`. |
 
-<Aside type="note">
+<MascotAside type="note">
 The standard library is written in Glyim and consumed by the compiler as its bootstrapping corpus. The compiler itself is Rust — Glyim is not yet self-hosting.
-</Aside>
+</MascotAside>
 
 ## Next steps
 
