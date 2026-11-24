@@ -5,12 +5,12 @@ type: how-to
 sidebar:
   order: 2
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-glyip.svg" alt="Glyim dependency management mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
 
+<MascotFigure pose="glyip" alt="Glyim dependency management mascot" />
 
-import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+import { Code, LinkCard } from '@astrojs/starlight/components';
 
 This guide shows how to declare dependencies in `Glyip.toml`, how `glyip` resolves them, and how to read a resolution failure.
 
@@ -30,9 +30,9 @@ Development-only dependencies go into `[dev-dependencies]` and use the same synt
 
 <Code lang="toml" title="Cargo.toml" code={"[dev-dependencies]\ntest_helpers = { path = \"../test_helpers\" }"} />
 
-<Aside type="tip">
+<MascotAside type="tip">
 Unknown keys in `Glyip.toml` are rejected — the manifest parser uses `deny_unknown_fields`, so a typo such as `dependecies` fails loudly instead of being ignored.
-</Aside>
+</MascotAside>
 
 ## Understand the lockfile
 
