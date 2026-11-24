@@ -37,11 +37,11 @@ impl OccurrenceSource for MockSource {
 
 /// The file every in-document fixture lives in.
 fn main_file() -> FileId {
-    FileId::from_raw(1)
+    FileId::from_usize(1)
 }
 /// A second file, used to assert cross-file occurrences are excluded.
 fn other_file() -> FileId {
-    FileId::from_raw(2)
+    FileId::from_usize(2)
 }
 
 /// Local-scoped occurrence: owner `owner`, not item-level.
