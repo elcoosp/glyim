@@ -29,9 +29,9 @@ impl MockSource {
 
 fn span_of(lo: usize, hi: usize) -> Span {
     Span::new(
-        FileId::from_raw(0),
-        glyim_span::ByteIdx::from_raw(lo as u32),
-        glyim_span::ByteIdx::from_raw(hi as u32),
+        FileId::from_usize(0),
+        glyim_span::ByteIdx::from_usize(lo),
+        glyim_span::ByteIdx::from_usize(hi),
         SyntaxContext::ROOT,
     )
 }
