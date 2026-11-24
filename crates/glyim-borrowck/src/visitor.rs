@@ -29,10 +29,9 @@ pub(crate) fn walk_rvalue_reads(rvalue: &Rvalue, visitor: &mut dyn ReadVisitor) 
     match rvalue {
         Rvalue::Use(operand) => walk_operand_reads(operand, visitor),
         Rvalue::Ref(place, _) => visitor.visit_read(place),
-        Rvalue::BinaryOp(_, pair) => {
-            let (left, right) = pair.as_ref();
-            walk_operand_reads(left, visitor);
-            walk_operand_reads(right, visitor);
+        Rvalue::BinaryOp(_, ops) => {
+            walk_operand_reads(&ops[0], visitor);
+            walk_operand_reads(&ops[1], visitor);
         }
         Rvalue::UnaryOp(_, operand) => walk_operand_reads(operand, visitor),
         Rvalue::Aggregate(_, operands) => {
