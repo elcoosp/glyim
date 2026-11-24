@@ -99,7 +99,7 @@ fn dce_keeps_local_read_only_through_index_projection() {
     assert_eq!(run_interp(&ctx, &body), 20, "unoptimized");
 
     // Optimized must give the same — DCE must NOT have removed `local2 = 1`.
-    let optimized = crate::optimize(&ctx, &std::sync::Arc::new(body.clone()))
+    let optimized = crate::optimize(&ctx, std::sync::Arc::new(body.clone()))
         .unwrap()
         .body;
     assert_eq!(
