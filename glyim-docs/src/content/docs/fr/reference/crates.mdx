@@ -5,8 +5,11 @@ type: reference
 sidebar:
   order: 5
 ---
+import MascotFigure from '../../../../components/MascotFigure.astro';
+import MascotAside from '../../../../components/MascotAside.astro';
+import { LinkCard } from '@astrojs/starlight/components';
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+<MascotFigure pose="ffi" alt="Mascotte crates du workspace Glyim" />
 
 Glyim est organisé comme un espace de travail Cargo de petites crates à responsabilité unique. Chaque phase consomme l'IR de la phase précédente et expose une interface minimale basée sur des traits, donc les tests peuvent substituer des mocks pour chaque phase. Toutes les crates vivent sous `crates/`.
 
@@ -98,9 +101,9 @@ de CI exécutent :
 | `glyim-lang-alloc` | Source de la bibliothèque d'allocation : `Box`, `Vec`, `String`, `Rc`, `RawVec`. |
 | `glyim-lang-std` | Source de la bibliothèque standard : `io`, `fs`, `net`, `thread`, `sync`, `env`, `time`, `process`, `task`. |
 
-<Aside type="note">
+<MascotAside type="note">
 La bibliothèque standard est écrite en Glyim et consommée par le compilateur comme son corpus d'amorçage. Le compilateur lui-même est en Rust — Glyim n'est pas encore auto-hébergeur.
-</Aside>
+</MascotAside>
 
 ## Étapes suivantes
 
