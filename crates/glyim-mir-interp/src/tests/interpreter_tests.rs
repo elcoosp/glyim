@@ -68,7 +68,7 @@ fn test_shift_left() {
     let (ctx, int_ty) = with_fresh_ty_ctx(|c| c.mk_ty(TyKind::Int(IntTy::I32)));
     let left = Operand::Constant(create_const_int(1, int_ty));
     let right = Operand::Constant(create_const_int(2, int_ty));
-    let rvalue = Rvalue::BinaryOp(BinOp::Shl, Box::new((left, right)));
+    let rvalue = Rvalue::binary_op(BinOp::Shl, left, right);
     let result = eval_single_rvalue(&ctx, rvalue, int_ty).unwrap();
     assert_eq!(result, InterpValue::Int(4));
 }
