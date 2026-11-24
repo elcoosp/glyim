@@ -188,10 +188,10 @@ fn multiple_sequential_calls_accumulate() {
                     Place::new(sum),
                     Rvalue::BinaryOp(
                         BinOp::Add,
-                        Box::new((
+                        [
                             Operand::Copy(Place::new(tmp1)),
                             Operand::Copy(Place::new(tmp2)),
-                        )),
+                        ],
                     ),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
