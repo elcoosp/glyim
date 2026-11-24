@@ -29,7 +29,7 @@ fn fold_body(op: BinOp, a: i128, b: i128) -> Body {
             Place::new(LocalIdx::from_raw(1)),
             Rvalue::BinaryOp(
                 op,
-                Box::new((
+                [
                     Operand::Constant(MirConst {
                         kind: MirConstKind::Int(a),
                         ty: Ty::ERROR,
@@ -40,7 +40,7 @@ fn fold_body(op: BinOp, a: i128, b: i128) -> Body {
                         ty: Ty::ERROR,
                         span: Span::DUMMY,
                     }),
-                )),
+                ],
             ),
         ),
         source_info: SourceInfo::new(Span::DUMMY),
