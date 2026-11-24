@@ -125,7 +125,8 @@ fn main() {
             plan.passes().len(),
             plan.ids()
         );
-        let out = optimize_at_level(&ctx, &arc, level).expect("optimize_at_level failed");
+        let out =
+            optimize_at_level(&ctx, Arc::clone(&arc), level).expect("optimize_at_level failed");
         println!(
             "  assign statements: {} -> {}",
             assign_count(&arc),
@@ -142,7 +143,8 @@ fn main() {
     ]);
     match custom {
         Some(plan) => {
-            let out = optimize_with_plan(&ctx, &arc, &plan).expect("optimize_with_plan failed");
+            let out = optimize_with_plan(&ctx, Arc::clone(&arc), &plan)
+                .expect("optimize_with_plan failed");
             println!(
                 "\ncustom plan {:?}: {} assigns after",
                 plan.ids(),
