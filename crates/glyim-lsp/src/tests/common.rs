@@ -14,5 +14,5 @@ pub fn compile_to_hir(
 }
 
 pub fn create_test_file_id(raw: u32) -> FileId {
-    FileId::from_raw(raw)
+    FileId::from_usize(raw as usize)
 }
