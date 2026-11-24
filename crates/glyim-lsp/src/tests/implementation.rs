@@ -15,16 +15,16 @@ use glyim_span::{ByteIdx, FileId, Span, SyntaxContext};
 
 fn span(file: u32, lo: usize, hi: usize) -> Span {
     Span::new(
-        FileId::from_raw(file),
-        ByteIdx::from_raw(lo as u32),
-        ByteIdx::from_raw(hi as u32),
+        FileId::from_usize(file as usize),
+        ByteIdx::from_usize(lo),
+        ByteIdx::from_usize(hi),
         SyntaxContext::ROOT,
     )
 }
 
 fn location(file: u32, lo: usize, hi: usize) -> DefinitionLocation {
     DefinitionLocation {
-        file_id: FileId::from_raw(file),
+        file_id: FileId::from_usize(file as usize),
         span: span(file, lo, hi),
     }
 }
