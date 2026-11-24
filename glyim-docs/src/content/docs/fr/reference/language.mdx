@@ -5,8 +5,11 @@ type: reference
 sidebar:
   order: 3
 ---
+import MascotFigure from '../../../../components/MascotFigure.astro';
+import MascotAside from '../../../../components/MascotAside.astro';
+import { Code } from '@astrojs/starlight/components';
 
-import { Aside, Code } from '@astrojs/starlight/components';
+<MascotFigure pose="default" alt="Mascotte référence du langage Glyim" />
 
 Glyim est un langage de programmation système de type Rust avec sa propre extension de fichier, `.g`. Cette page liste les constructions que le compilateur accepte. La grammaire complète évolue encore — les crates `glyim-lang-core`, `glyim-lang-alloc` et `glyim-lang-std` contiennent le source actuel de la bibliothèque standard, écrit en Glyim, et servent de corpus d'amorçage au compilateur.
 
@@ -87,9 +90,9 @@ Les macros procédurales sont supportées via une ABI de flux de jetons compatib
 | Collections | `Vec<T>`, `String` |
 | Pointeurs intelligents | `Box<T>`, `Rc`, `PhantomData<T>`, `UnsafeCell<T>` |
 
-<Aside type="note">
+<MascotAside type="note">
 Certaines méthodes intégrées sur `Vec`, `String`, `Result` et `Option` s'abaissent en corps de fonction synthétiques que le backend LLVM doit abaisser en intrinsics ; celles qui ne sont pas implémentées produisent une erreur explicite du compilateur plutôt que du code faux.
-</Aside>
+</MascotAside>
 
 ## Bibliothèque standard
 
