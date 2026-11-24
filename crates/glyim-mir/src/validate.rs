@@ -584,9 +584,8 @@ fn locals_in_rvalue(rvalue: &Rvalue) -> Vec<(LocalIdx, ErrorSite)> {
             out.push((place.local, ErrorSite::Operand));
         }
         Rvalue::BinaryOp(_, ops) => {
-            let (a, b) = &**ops;
-            out.extend(locals_in_operand(a));
-            out.extend(locals_in_operand(b));
+            out.extend(locals_in_operand(&ops[0]));
+            out.extend(locals_in_operand(&ops[1]));
         }
         Rvalue::Aggregate(_, ops) => {
             for op in ops {
@@ -723,8 +722,8 @@ fn scan_rvalue_places(rvalue: &Rvalue, on_place: &mut impl FnMut(&Place)) {
         }
         Rvalue::Ref(p, _) => on_place(p),
         Rvalue::BinaryOp(_, ops) => {
-            visit(&ops.0);
-            visit(&ops.1);
+            visit(&ops[0]);
+            visit(&ops[1]);
         }
         Rvalue::Aggregate(_, operands) => {
             for op in operands {
