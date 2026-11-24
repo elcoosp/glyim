@@ -39,8 +39,8 @@ fn graphed(name: &str) -> MockSource {
     src.add(
         name,
         Reference {
-            file_id: FileId::from_raw(1),
-            span: make_span(FileId::from_raw(1), 3, 6),
+            file_id: FileId::from_usize(1),
+            span: make_span(FileId::from_usize(1), 3, 6),
             is_definition: true,
             kind: ReferenceKind::Definition,
             access: AccessKind::Read,
@@ -55,7 +55,7 @@ fn graphed(name: &str) -> MockSource {
 #[test]
 fn known_identifier_yields_its_extent_and_placeholder() {
     let src = graphed("foo");
-    let target = rename_target(&src, "foo", make_span(FileId::from_raw(1), 3, 6))
+    let target = rename_target(&src, "foo", make_span(FileId::from_usize(1), 3, 6))
         .expect("a graphed symbol is renameable");
     assert_eq!(target.0.lo.to_usize(), 3);
     assert_eq!(target.0.hi.to_usize(), 6);
@@ -66,7 +66,7 @@ fn known_identifier_yields_its_extent_and_placeholder() {
 fn unknown_identifier_is_not_renameable() {
     let src = graphed("foo");
     // `fn` is an identifier-shaped token but has no occurrences.
-    assert!(rename_target(&src, "fn", make_span(FileId::from_raw(1), 0, 2)).is_none());
+    assert!(rename_target(&src, "fn", make_span(FileId::from_usize(1), 0, 2)).is_none());
 }
 
 #[test]
@@ -83,8 +83,8 @@ fn production_source_reads_the_shared_graph() {
     graph.insert_test_reference(
         "foo",
         Reference {
-            file_id: FileId::from_raw(1),
-            span: make_span(FileId::from_raw(1), 3, 6),
+            file_id: FileId::from_usize(1),
+            span: make_span(FileId::from_usize(1), 3, 6),
             is_definition: true,
             kind: ReferenceKind::Definition,
             access: AccessKind::Read,
