@@ -132,7 +132,7 @@ fn optimize_with_bisect_records_per_pass_stats() {
     let (ctx, body) = trivial_body();
     let plan = PassPlan::for_opt_level(2);
     let n = plan.passes().len();
-    let (_opt, stats) = optimize_with_bisect(&ctx, &Arc::new(body), &plan, n).unwrap();
+    let (_opt, stats) = optimize_with_bisect(&ctx, Arc::new(body), &plan, n).unwrap();
     assert_eq!(stats.len(), n);
     assert!(stats.iter().all(|s| s.ran));
     assert_eq!(stats[0].name, "slice_desugar");
@@ -147,7 +147,7 @@ fn optimize_with_bisect_limit_marks_tail_passes_not_ran() {
     let plan = PassPlan::for_opt_level(2);
     let n = plan.passes().len();
     // Run only the first pass (slice_desugar).
-    let (_opt, stats) = optimize_with_bisect(&ctx, &Arc::new(body), &plan, 1).unwrap();
+    let (_opt, stats) = optimize_with_bisect(&ctx, Arc::new(body), &plan, 1).unwrap();
     assert_eq!(stats.len(), n);
     assert!(stats[0].ran);
     assert!(stats[1..].iter().all(|s| !s.ran));
