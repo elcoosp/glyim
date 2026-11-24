@@ -836,10 +836,10 @@ fn v10_t11_use_after_move_in_binary_op_error() {
                         Place::new(LocalIdx::from_raw(4)),
                         Rvalue::BinaryOp(
                             glyim_core::primitives::BinOp::Add,
-                            Box::new((
+                            [
                                 Operand::Copy(field_place(LocalIdx::from_raw(1), 0)),
                                 Operand::Copy(Place::new(LocalIdx::from_raw(3))),
-                            )),
+                            ],
                         ),
                     ),
                     source_info: SourceInfo::new(Span::DUMMY),
