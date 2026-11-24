@@ -4,11 +4,11 @@ use glyim_span::{ByteIdx, FileId, Span, SyntaxContext};
 #[test]
 fn test_lookup_by_name_returns_correct_symbol() {
     let mut index = SymbolIndex::new();
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let span = Span::new(
         file_id,
         ByteIdx::ZERO,
-        ByteIdx::from_raw(10),
+        ByteIdx::from_usize(10),
         SyntaxContext::ROOT,
     );
     let def_loc = DefinitionLocation { file_id, span };
@@ -40,11 +40,11 @@ fn test_lookup_by_name_returns_correct_symbol() {
 #[test]
 fn test_query_prefix_returns_matching_symbols() {
     let mut index = SymbolIndex::new();
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let span = Span::new(
         file_id,
         ByteIdx::ZERO,
-        ByteIdx::from_raw(10),
+        ByteIdx::from_usize(10),
         SyntaxContext::ROOT,
     );
     let def_loc = DefinitionLocation { file_id, span };
@@ -95,11 +95,11 @@ fn test_query_prefix_returns_matching_symbols() {
 #[test]
 fn test_query_fallback_contains() {
     let mut index = SymbolIndex::new();
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let span = Span::new(
         file_id,
         ByteIdx::ZERO,
-        ByteIdx::from_raw(10),
+        ByteIdx::from_usize(10),
         SyntaxContext::ROOT,
     );
     let def_loc = DefinitionLocation { file_id, span };
