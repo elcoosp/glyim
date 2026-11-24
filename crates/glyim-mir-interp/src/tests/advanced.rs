@@ -39,7 +39,7 @@ fn build_binop_body(tcx: &mut TyCtxMut, op: BinOp, lhs: i128, rhs: i128) -> Body
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
-                Rvalue::BinaryOp(op, Box::new((Operand::Constant(c1), Operand::Constant(c2)))),
+                Rvalue::binary_op(op, Operand::Constant(c1), Operand::Constant(c2)),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         }],
@@ -107,7 +107,7 @@ fn build_cmp_body(tcx: &mut TyCtxMut, op: BinOp, lhs: i128, rhs: i128) -> Body {
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
-                Rvalue::BinaryOp(op, Box::new((Operand::Constant(c1), Operand::Constant(c2)))),
+                Rvalue::binary_op(op, Operand::Constant(c1), Operand::Constant(c2)),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         }],
@@ -309,14 +309,14 @@ fn build_nested_call_bodies(tcx: &mut TyCtxMut) -> (Body, Body, Body, DefId, Def
                     Place::new(LocalIdx::from_raw(0)),
                     Rvalue::BinaryOp(
                         BinOp::Add,
-                        Box::new((
+                        [
                             Operand::Copy(Place::new(LocalIdx::from_raw(1))),
                             Operand::Constant(MirConst {
                                 kind: MirConstKind::Int(50),
                                 ty: i32_ty,
                                 span: Span::DUMMY,
                             }),
-                        )),
+                        ],
                     ),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
