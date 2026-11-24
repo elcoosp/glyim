@@ -18,8 +18,8 @@ hero:
       icon: external
       variant: minimal
 ---
-
-import { Aside, Badge, Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
+import MascotAside from '../../../components/MascotAside.astro';
+import { Badge, Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
 
 Glyim implémente un pipeline de compilation complet : lexing, parsing, résolution de noms, HIR, MIR, inférence de types et résolution de traits, vérification d'emprunts, optimisations, et deux backends de génération de code (LLVM et une VM bytecode personnalisée). Le projet est organisé comme un espace de travail Cargo avec plus de 30 crates, conçu pour la clarté, la testabilité et le développement incrémental. Chaque étage est une crate autonome avec une API publique étroite, donc vous pouvez étudier et tester chaque phase en isolation.
 
@@ -50,9 +50,9 @@ Glyim implémente un pipeline de compilation complet : lexing, parsing, résolut
 - **Chaîne d'outils complète** — le pilote de compilateur `glyim`, l'outil de build `glyip` façon Cargo avec résolution de dépendances et lockfiles, un serveur de langage, et un harnais de test à cinq modes.
 - **Syntaxe de vue GSX** <Badge text="experimental" variant="caution" /> — éléments de vue typés de première classe avec un étage de compilateur dédié, réactivité pilotée par l'ownership, et un émetteur SSR.
 
-<Aside type="note">
+<MascotAside type="note">
 Glyim est un compilateur de niveau recherche en développement actif. Le pipeline est fonctionnel de bout en bout pour un sous-ensemble substantiel du langage, et Glyim n'est pas encore auto-hébergeur : le compilateur est écrit en Rust, tandis que la bibliothèque standard est écrite en Glyim.
-</Aside>
+</MascotAside>
 
 ## Étapes suivantes
 
