@@ -5,12 +5,12 @@ type: how-to
 sidebar:
   order: 3
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-test.svg" alt="Glyim testing mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../../components/MascotFigure.astro';
+import MascotAside from '../../../../components/MascotAside.astro';
 
+<MascotFigure pose="test" alt="Glyim testing mascot" />
 
-import { Aside, Code, LinkCard, Steps } from '@astrojs/starlight/components';
+import { Code, LinkCard, Steps } from '@astrojs/starlight/components';
 
 Ce guide montre comment lancer les tests d'un projet Glyim, comment le harnais du compilateur classifie les tests, et comment annoter les diagnostics attendus inline.
 
@@ -66,9 +66,9 @@ Pour voir la sortie capturée des programmes des tests run-pass/run-fail, régle
 
 <Code lang="bash" title="Terminal" code={"GLYIM_TEST_SHOW_OUTPUT=1 cargo test -p glyim-test"} />
 
-<Aside type="note">
+<MascotAside type="note">
 Le harnais livre aussi des utilitaires de mock pour chaque phase du compilateur (`MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen`, `TestDbBuilder`) et un module de propriétés qui génère des types aléatoires pour vérifier des invariants comme « l'unification d'un type avec lui-même réussit ».
-</Aside>
+</MascotAside>
 
 ## Étapes suivantes
 
