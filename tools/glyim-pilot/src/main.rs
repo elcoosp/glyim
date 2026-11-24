@@ -2,6 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use glyim_pilot::cli::agent::{handle_agent_command, AgentCommands};
+use glyim_pilot::cli::queue::{handle_queue_command, QueueCommands};
 use glyim_pilot::cli::session::{handle_session_command, SessionCommands};
 use glyim_pilot::cli::{render_status_table, run_preflight};
 use glyim_pilot::config::{self, PilotConfig};
@@ -45,6 +46,10 @@ enum Commands {
     Session(SessionCommands),
     #[command(subcommand)]
     Agent(AgentCommands),
+    /// The ledger-ranked task queue (plan M1.11) the orchestrator
+    /// dispatches from.
+    #[command(subcommand)]
+    Queue(QueueCommands),
 }
 
 #[tokio::main]
@@ -54,6 +59,21 @@ async fn main() {
         .init();
 
     let cli = Cli::parse();
+    let command = cli.command;
+
+    // The queue face reads the project's `ledger/` registry directly
+    // (plan M1.11): it needs no pilot deployment config, so a repository
+    // without `.glyim-pilot.toml` can still ask the ledger "what is
+    // next". Every other subcommand keeps the load-before-dispatch
+    // contract.
+    if let Commands::Queue(cmd) = command {
+        if let Err(e) = handle_queue_command(cmd, &cli.project_root).await {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     let config = match config::load_config(&cli.project_root) {
         Ok(c) => Arc::new(c),
         Err(e) => {
@@ -62,7 +82,7 @@ async fn main() {
         }
     };
 
-    match cli.command {
+    match command {
         // The serve/status commands route failures through the same
         // error seam as the session/agent commands (a corrupt pilot
         // state file or an unusable bind address is a clean CLI error,
@@ -81,13 +101,19 @@ async fn main() {
         }
         Commands::Preflight => run_preflight(&config).await,
         Commands::Session(cmd) => {
-            if let Err(e) = handle_session_command(cmd).await {
+            if let Err(e) = handle_session_command(cmd, &cli.project_root).await {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
         }
         Commands::Agent(cmd) => {
             if let Err(e) = handle_agent_command(cmd, &config, &cli.project_root).await {
+                eprintln!("Error: {e}");
+                std::process::exit(1);
+            }
+        }
+        Commands::Queue(cmd) => {
+            if let Err(e) = handle_queue_command(cmd, &cli.project_root).await {
                 eprintln!("Error: {e}");
                 std::process::exit(1);
             }
