@@ -1037,10 +1037,10 @@ fn t28_binary_op_with_borrowed_operands_no_conflict() {
                         Place::new(LocalIdx::from_raw(3)),
                         Rvalue::BinaryOp(
                             glyim_core::primitives::BinOp::Add,
-                            Box::new((
+                            [
                                 Operand::Copy(Place::new(LocalIdx::from_raw(1))),
                                 Operand::Copy(Place::new(LocalIdx::from_raw(2))),
-                            )),
+                            ],
                         ),
                     ),
                     source_info: SourceInfo::new(Span::DUMMY),
