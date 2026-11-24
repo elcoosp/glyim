@@ -43,7 +43,7 @@ fn cfg_merge_goto_chain() {
         build_test_body(locals, vec![block0, block1], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
 
     assert_eq!(
         optimized.body.basic_blocks.len(),
@@ -83,7 +83,7 @@ fn cfg_merge_three_block_chain() {
         build_test_body(locals, vec![block0, block1, block2], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
 
     assert_eq!(
         optimized.body.basic_blocks.len(),
@@ -134,7 +134,7 @@ fn cfg_no_merge_multiple_preds() {
         build_test_body(locals, vec![block0, block1, block2, block3], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
 
     // bb3 has 2 preds (bb1 and bb2), so it won't merge.
     // bb1 is single-pred from bb0, but bb0 doesn't Goto bb1 (it SwitchInt).
@@ -177,7 +177,7 @@ fn unreachable_block_eliminated() {
         build_test_body(locals, vec![block0, block1], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
 
     assert_eq!(
         optimized.body.basic_blocks.len(),
@@ -201,7 +201,7 @@ fn start_block_always_kept() {
         build_test_body(locals, vec![block0], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
 
     assert_eq!(
         optimized.body.basic_blocks.len(),
@@ -250,7 +250,7 @@ fn cfg_remap_after_elimination() {
         build_test_body(locals, vec![block0, block1, block2], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
 
     // All 3 blocks should remain — all are reachable
     assert_eq!(
