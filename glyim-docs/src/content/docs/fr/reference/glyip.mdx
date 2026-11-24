@@ -5,12 +5,12 @@ type: reference
 sidebar:
   order: 2
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-glyip.svg" alt="Glyim package manager mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../../components/MascotFigure.astro';
+import MascotAside from '../../../../components/MascotAside.astro';
 
+<MascotFigure pose="glyip" alt="Glyim package manager mascot" />
 
-import { Aside, Badge, Code } from '@astrojs/starlight/components';
+import { Badge, Code } from '@astrojs/starlight/components';
 
 `glyip` est l'homologue de Cargo pour les projets Glyim. Il lit un manifeste `Glyip.toml`, résout les dépendances avec une correspondance SemVer 2.0, maintient un lockfile `Glyip.lock` et pilote le compilateur.
 
@@ -107,9 +107,9 @@ Un seul ref git est actif ; sans `branch`, `tag` ou `rev`, la pointe de la branc
 
 `glyip` maintient `Glyip.lock` avec des entrées indexées par `name-version`, donc les builds répétés résolvent le même graphe. La vérification de conflit impose une version résolue par nom de crate — voir [gérer les dépendances](/guides/manage-dependencies/) pour la sémantique exacte du résolveur.
 
-<Aside type="tip">
+<MascotAside type="tip">
 Une faute dans une chaîne de version est une erreur (`DependencyNotFound`), pas un repli silencieux vers la dernière version.
-</Aside>
+</MascotAside>
 
 ## Étapes suivantes
 
