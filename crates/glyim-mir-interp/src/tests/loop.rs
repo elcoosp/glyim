@@ -51,7 +51,7 @@ fn test_t08_while_loop() {
             Place::new(local_cond),
             Rvalue::BinaryOp(
                 BinOp::Lt,
-                Box::new((Operand::Copy(Place::new(local_i)), const_int(3))),
+                [Operand::Copy(Place::new(local_i)), const_int(3)],
             ),
         ),
     );
@@ -74,7 +74,7 @@ fn test_t08_while_loop() {
             Place::new(local_i),
             Rvalue::BinaryOp(
                 BinOp::Add,
-                Box::new((Operand::Copy(Place::new(local_i)), const_int(1))),
+                [Operand::Copy(Place::new(local_i)), const_int(1)],
             ),
         ),
     );
@@ -139,7 +139,7 @@ fn test_t09_break_and_continue() {
             Place::new(local_cond),
             Rvalue::BinaryOp(
                 BinOp::GtEq,
-                Box::new((Operand::Copy(Place::new(local_i)), const_int(5))),
+                [Operand::Copy(Place::new(local_i)), const_int(5)],
             ),
         ),
     );
@@ -162,7 +162,7 @@ fn test_t09_break_and_continue() {
             Place::new(local_i),
             Rvalue::BinaryOp(
                 BinOp::Add,
-                Box::new((Operand::Copy(Place::new(local_i)), const_int(1))),
+                [Operand::Copy(Place::new(local_i)), const_int(1)],
             ),
         ),
     );
