@@ -323,9 +323,10 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
                         *op = substitute_operand(op.clone(), substs, &mut sub_ctx, ty_ctx);
                     }
                     Rvalue::BinaryOp(_, operands) => {
-                        let (l, r) = operands.as_mut();
-                        *l = substitute_operand(l.clone(), substs, &mut sub_ctx, ty_ctx);
-                        *r = substitute_operand(r.clone(), substs, &mut sub_ctx, ty_ctx);
+                        operands[0] =
+                            substitute_operand(operands[0].clone(), substs, &mut sub_ctx, ty_ctx);
+                        operands[1] =
+                            substitute_operand(operands[1].clone(), substs, &mut sub_ctx, ty_ctx);
                     }
                     Rvalue::UnaryOp(_, op) => {
                         *op = substitute_operand(op.clone(), substs, &mut sub_ctx, ty_ctx);
@@ -904,10 +905,10 @@ fn generate_slice_drop_glue(body: &mut Body, place: &Place, _elem_ty: Ty, _ty_ct
                 Place::new(cond_local),
                 Rvalue::BinaryOp(
                     glyim_core::primitives::BinOp::Lt,
-                    Box::new((
+                    [
                         Operand::Copy(Place::new(idx_local)),
                         Operand::Copy(Place::new(len_local)),
-                    )),
+                    ],
                 ),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -930,14 +931,14 @@ fn generate_slice_drop_glue(body: &mut Body, place: &Place, _elem_ty: Ty, _ty_ct
                 Place::new(idx_local),
                 Rvalue::BinaryOp(
                     glyim_core::primitives::BinOp::Add,
-                    Box::new((
+                    [
                         Operand::Copy(Place::new(idx_local)),
                         Operand::Constant(MirConst {
                             kind: MirConstKind::Uint(1),
                             ty: Ty::USIZE,
                             span: Span::DUMMY,
                         }),
-                    )),
+                    ],
                 ),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
