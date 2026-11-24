@@ -1133,10 +1133,10 @@ fn t25_two_phase_reservation_binary_op_read() {
                     Place::new(LocalIdx::from_raw(3)),
                     Rvalue::BinaryOp(
                         glyim_core::BinOp::Add,
-                        Box::new((
+                        [
                             Operand::Copy(Place::new(LocalIdx::from_raw(1))),
                             Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                        )),
+                        ],
                     ),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
