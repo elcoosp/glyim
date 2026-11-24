@@ -579,16 +579,14 @@ fn emit_array_drop_loop(
     let dec_stmt = Statement {
         kind: StatementKind::Assign(
             idx_place.clone(),
-            Rvalue::BinaryOp(
+            Rvalue::binary_op(
                 BinOp::Sub,
-                Box::new((
-                    Operand::Copy(idx_place.clone()),
-                    Operand::Constant(MirConst {
-                        kind: MirConstKind::Uint(1),
-                        ty: count_ty,
-                        span: span.span,
-                    }),
-                )),
+                Operand::Copy(idx_place.clone()),
+                Operand::Constant(MirConst {
+                    kind: MirConstKind::Uint(1),
+                    ty: count_ty,
+                    span: span.span,
+                }),
             ),
         ),
         source_info: span.clone(),
