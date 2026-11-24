@@ -131,7 +131,7 @@ impl CompilerPhase for LowerPhase<'_> {
 
             let opt_body = {
                 let _guard = ctx.recorder.enter(Phase::Opt);
-                glyim_opt::optimize_at_level(ty_ctx_ref, &mir_arc, self.opt_level).map_err(|e| {
+                glyim_opt::optimize_at_level(ty_ctx_ref, mir_arc, self.opt_level).map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
                         "MIR optimization failed for {owner:?}: {e:?}"
                     ))]
@@ -165,7 +165,7 @@ impl CompilerPhase for LowerPhase<'_> {
                 }
                 let c_opt = {
                     let _guard = ctx.recorder.enter(Phase::Opt);
-                    glyim_opt::optimize_at_level(ty_ctx_ref, &c_mir_arc, self.opt_level).map_err(
+                    glyim_opt::optimize_at_level(ty_ctx_ref, c_mir_arc, self.opt_level).map_err(
                         |e| {
                             vec![GlyimDiagnostic::internal_error(format!(
                                 "MIR optimization failed for closure body: {e:?}"
