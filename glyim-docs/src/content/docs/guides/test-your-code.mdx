@@ -5,12 +5,12 @@ type: how-to
 sidebar:
   order: 3
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-test.svg" alt="Glyim testing mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
 
+<MascotFigure pose="test" alt="Glyim testing mascot" />
 
-import { Aside, Code, LinkCard, Steps } from '@astrojs/starlight/components';
+import { Code, LinkCard, Steps } from '@astrojs/starlight/components';
 
 This guide shows how to run tests for a Glyim project, how the compiler's own test harness classifies tests, and how to annotate expected diagnostics inline.
 
@@ -66,9 +66,9 @@ To see captured program output from run-pass/run-fail tests, set `GLYIM_TEST_SHO
 
 <Code lang="bash" title="Terminal" code={"GLYIM_TEST_SHOW_OUTPUT=1 cargo test -p glyim-test"} />
 
-<Aside type="note">
+<MascotAside type="note">
 The harness also ships mocking utilities for every compiler phase (`MockLowerCtx`, `MockBorrowckCtx`, `MockSolver`, `MockCodegen`, `TestDbBuilder`) and a property module that generates random types to check invariants such as "unification of a type with itself succeeds".
-</Aside>
+</MascotAside>
 
 ## Next steps
 
