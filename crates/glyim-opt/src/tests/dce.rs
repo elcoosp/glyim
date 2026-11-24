@@ -45,10 +45,7 @@ fn make_body_multi_dead(ctx: &mut glyim_type::TyCtxMut) -> Body {
         Statement {
             kind: StatementKind::Assign(
                 make_place(3),
-                Rvalue::BinaryOp(
-                    glyim_core::BinOp::Add,
-                    Box::new((make_copy(0), make_copy(0))),
-                ),
+                Rvalue::BinaryOp(glyim_core::BinOp::Add, [make_copy(0), make_copy(0)]),
             ),
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
         },
@@ -229,10 +226,7 @@ fn eliminates_single_dead_store() {
             Statement {
                 kind: StatementKind::Assign(
                     make_place(2),
-                    Rvalue::BinaryOp(
-                        glyim_core::BinOp::Add,
-                        Box::new((make_copy(0), make_copy(0))),
-                    ),
+                    Rvalue::BinaryOp(glyim_core::BinOp::Add, [make_copy(0), make_copy(0)]),
                 ),
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
             },
@@ -357,10 +351,7 @@ fn storage_live_dead_kept() {
             Statement {
                 kind: StatementKind::Assign(
                     make_place(2),
-                    Rvalue::BinaryOp(
-                        glyim_core::BinOp::Add,
-                        Box::new((make_copy(0), make_copy(0))),
-                    ),
+                    Rvalue::BinaryOp(glyim_core::BinOp::Add, [make_copy(0), make_copy(0)]),
                 ),
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
             },
@@ -580,7 +571,7 @@ fn dead_store_with_live_operands() {
                     make_place(3),
                     Rvalue::BinaryOp(
                         glyim_core::BinOp::Add,
-                        Box::new((make_copy(2), Operand::Constant(make_const(1, int_ty)))),
+                        [make_copy(2), Operand::Constant(make_const(1, int_ty))],
                     ),
                 ),
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
