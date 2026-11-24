@@ -18,6 +18,13 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 glyim-test = { workspace = true }
+
+# Dependency-free cost harness for the inline binary-op operand payload
+# (plan PF-12 / M2.7 quick win) — see `benches/binary_op_inline.rs`.
+[[bench]]
+name = "binary_op_inline"
+harness = false
+
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
