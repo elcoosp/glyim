@@ -38,7 +38,7 @@ fn rvalue_all_binary_ops() {
     for op in ops {
         let lhs = Operand::Copy(Place::new(LocalIdx::from_raw(0)));
         let rhs = Operand::Copy(Place::new(LocalIdx::from_raw(1)));
-        let rv = Rvalue::BinaryOp(op, Box::new((lhs, rhs)));
+        let rv = Rvalue::binary_op(op, lhs, rhs);
         assert!(matches!(rv, Rvalue::BinaryOp(o, _) if o == op));
     }
 }
