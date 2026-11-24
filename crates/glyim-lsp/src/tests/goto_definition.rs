@@ -27,7 +27,7 @@ fn goto_definition_returns_location() {
     let span = Span::new(
         file_id,
         ByteIdx::ZERO,
-        ByteIdx::from_raw(5),
+        ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
     let sym = SymbolInfo {
@@ -88,8 +88,8 @@ fn goto_definition_cross_file() {
 
     let span_def = Span::new(
         file_id2,
-        ByteIdx::from_raw(5),
-        ByteIdx::from_raw(8),
+        ByteIdx::from_usize(5),
+        ByteIdx::from_usize(8),
         SyntaxContext::ROOT,
     );
     let sym = SymbolInfo {
@@ -115,8 +115,8 @@ fn goto_definition_cross_file() {
 
     let usage_span = Span::new(
         file_id1,
-        ByteIdx::from_raw(15),
-        ByteIdx::from_raw(21),
+        ByteIdx::from_usize(15),
+        ByteIdx::from_usize(21),
         SyntaxContext::ROOT,
     );
     let reference = Reference {
