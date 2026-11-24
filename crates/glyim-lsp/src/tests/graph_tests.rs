@@ -6,11 +6,11 @@ use glyim_span::{ByteIdx, FileId, Span, SyntaxContext};
 #[test]
 fn build_from_hir_records_definitions_and_references() {
     let interner = Interner::new();
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let span = Span::new(
         file_id,
-        ByteIdx::from_raw(0),
-        ByteIdx::from_raw(10),
+        ByteIdx::from_usize(0),
+        ByteIdx::from_usize(10),
         SyntaxContext::ROOT,
     );
     let fn_name = interner.intern("my_function");
