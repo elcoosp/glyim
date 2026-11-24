@@ -6,12 +6,12 @@ cover:
   image: ../../blog/welcome-cover.jpg
 image: ../../blog/welcome-cover.jpg
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-community.svg" alt="Glyim community mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../../components/MascotFigure.astro';
+import MascotAside from '../../../../components/MascotAside.astro';
 
+<MascotFigure pose="community" alt="Glyim community mascot" />
 
-import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+import { Card, CardGrid } from '@astrojs/starlight/components';
 
 La plupart des compilateurs expérimentaux s'arrêtent après l'analyse syntaxique. Pas Glyim.
 
@@ -58,9 +58,9 @@ Nous ne voulions pas limiter le langage aux seuls outils en ligne de commande. N
 
 Puisque nous concevions un langage, il nous fallait un gestionnaire de paquets. `glyip` utilise un résolveur glouton en largeur avec correspondance SemVer 2.0, dépendances git et chemins locaux, ainsi que des fichiers de verrouillage.
 
-<Aside type="caution" title="Le compromis">
+<MascotAside type="caution" title="Le compromis">
 `glyip` n'effectue pas de retour arrière (backtracking). Une dépendance en diamant avec des versions incompatibles provoque une erreur franche plutôt qu'une recherche exhaustive à la manière de Cargo. Nous avons fait ce choix pour garder le résolveur prévisible et rapide, mais c'est une contrainte sensible dans les grands graphes de dépendances.
-</Aside>
+</MascotAside>
 
 ## Ce que cela a coûté
 
