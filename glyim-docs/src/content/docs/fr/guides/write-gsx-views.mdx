@@ -5,18 +5,18 @@ type: how-to
 sidebar:
   order: 6
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-gsx.svg" alt="Glyim GSX views mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../../components/MascotFigure.astro';
+import MascotAside from '../../../../components/MascotAside.astro';
 
+<MascotFigure pose="gsx" alt="Glyim GSX views mascot" />
 
-import { Aside, Badge, Code, LinkCard } from '@astrojs/starlight/components';
+import { Badge, Code, LinkCard } from '@astrojs/starlight/components';
 
 Ce guide montre comment écrire des vues avec la syntaxe GSX de Glyim : éléments, trous de texte, directives d'événement et de liaison, et itération à clé — et comment le compilateur les transforme en blueprints avec patches spécialisés par mutation.
 
-<Aside type="caution">
+<MascotAside type="caution">
 GSX est expérimental. Le parseur, le vérificateur de types et l'étage `glyim-gsx` sont implémentés et testés (l'exemple Counter phare tourne de bout en bout via l'API de bibliothèque), mais le pilote `glyim-cli` ne fait pas encore tourner l'étage GSX : un corps contenant du GSX termine la vérification de types avec un diagnostic de passation propre. Tant que le câblage du pilote n'arrive pas, vous exercez GSX via l'API de bibliothèque de `glyim-gsx`, comme le font les tests propres de la crate.
-</Aside>
+</MascotAside>
 
 ## Écrire une vue
 
@@ -61,9 +61,9 @@ Pour les listes, ajoutez une expression de clé `by` — un mot-clé contextuel 
 
 L'étage `glyim-gsx` est une bibliothèque : il abaisse les expressions GSX typées à travers View IR (squelette + slots + régions), l'analyse de lecture/écriture avec interférence de préfixe, et des fonctions de patch spécialisées par mutation, puis émet des blueprints plats en `u32` plus une chaîne SSR. L'hôte sans tête à enregistrement d'ops monte, patche et dispatche les vues pour que les tests puissent affirmer les coûts de mise à jour exacts — le test Counter dans `crates/glyim-gsx/tests/counter.rs` est la visite de référence.
 
-<Aside type="tip">
+<MascotAside type="tip">
 Si une valeur ne peut pas être suivie par l'analyse d'ownership — une cellule mutable partagée derrière un aliasing façon `Rc<RefCell<T>>` — le compilateur émet le diagnostic `Signal<T>` (G0201) avec un fix-it, et l'hôte retombe sur des bits de signal pour ce slot.
-</Aside>
+</MascotAside>
 
 ## Étapes suivantes
 
