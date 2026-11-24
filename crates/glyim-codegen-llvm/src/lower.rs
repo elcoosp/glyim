@@ -1654,11 +1654,10 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
         match rvalue {
             Rvalue::Use(operand) => Ok(self.lower_operand(operand)?),
             Rvalue::BinaryOp(op, operands) => {
-                let (left, right) = operands.as_ref();
-                let l = self.lower_operand(left)?;
-                let r = self.lower_operand(right)?;
-                let operand_ty = self.operand_ty(left);
-                let r_ty = self.operand_ty(right);
+                let l = self.lower_operand(&operands[0])?;
+                let r = self.lower_operand(&operands[1])?;
+                let operand_ty = self.operand_ty(&operands[0]);
+                let r_ty = self.operand_ty(&operands[1]);
                 self.lower_binop(*op, l, r, operand_ty, r_ty)
             }
             Rvalue::UnaryOp(op, operand) => {
