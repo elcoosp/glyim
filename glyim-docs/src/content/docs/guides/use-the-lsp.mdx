@@ -5,12 +5,12 @@ type: how-to
 sidebar:
   order: 5
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-lsp.svg" alt="Glyim LSP inspection mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
 
+<MascotFigure pose="lsp" alt="Glyim LSP inspection mascot" />
 
-import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+import { Code, LinkCard } from '@astrojs/starlight/components';
 
 This guide shows how to start the Glyim language server and wire it into an editor that speaks the Language Server Protocol.
 
@@ -28,9 +28,9 @@ Point your editor's LSP client at the `glyim-lsp` binary. Most editors expose th
 
 <Code lang="json" code={"{\n  \"languageserver\": {\n    \"glyim\": {\n      \"command\": \"/absolute/path/to/glyim/target/release/glyim-lsp\",\n      \"args\": [],\n      \"filetypes\": [\"glyim\"]\n    }\n  }\n}"} />
 
-<Aside type="tip">
+<MascotAside type="tip">
 Use an absolute path to the binary. The server needs to find the compiler's components, and a relative path resolves against the editor's working directory, not yours.
-</Aside>
+</MascotAside>
 
 ## Available capabilities
 
