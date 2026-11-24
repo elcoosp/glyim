@@ -35,6 +35,11 @@ ignore = "0.4"
 strip-ansi-escapes = "0.2"
 uuid = { version = "1", features = ["v4"] }
 prometheus = { version = "0.14", optional = true }
+# M1.11 orchestrator task queue: the ledger's §3.9 work queue consumed as
+# a library (`run_next`/`filter`); the `glyim.ledger-next/1` JSON contract
+# remains the CLI/wire face.
+glyim-ledger = { workspace = true }
+ledger-schema = { workspace = true }
 
 [dev-dependencies]
 proptest = "1.12"
