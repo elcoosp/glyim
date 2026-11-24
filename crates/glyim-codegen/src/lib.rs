@@ -1077,10 +1077,9 @@ impl BytecodeBackend {
     ) -> CompResult<()> {
         match rvalue {
             Rvalue::Use(operand) => self.emit_operand(bc, operand, local_tys),
-            Rvalue::BinaryOp(op, operands_box) => {
-                let (left, right) = operands_box.as_ref();
-                self.emit_operand(bc, left, local_tys)?;
-                self.emit_operand(bc, right, local_tys)?;
+            Rvalue::BinaryOp(op, operands) => {
+                self.emit_operand(bc, &operands[0], local_tys)?;
+                self.emit_operand(bc, &operands[1], local_tys)?;
                 let opcode = match op {
                     BinOp::Add => OP_ADD,
                     BinOp::Sub => OP_SUB,
