@@ -37,7 +37,7 @@ fn const_prop_assign_propagates_constant() {
         build_test_body(locals, vec![block0], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
 
     // After const prop + DCE: _0 = 5, _1 and _2 are dead and removed
     let block = &optimized.body.basic_blocks[bb(0)];
@@ -87,7 +87,7 @@ fn const_prop_binary_op_operands_replaced() {
                     Place::new(local(3)),
                     Rvalue::BinaryOp(
                         glyim_core::primitives::BinOp::Add,
-                        Box::new((copy_op(local(1)), copy_op(local(2)))),
+                        [copy_op(local(1)), copy_op(local(2))],
                     ),
                 ),
                 assign_stmt(Place::new(local(0)), Rvalue::Use(copy_op(local(3)))),
@@ -98,7 +98,7 @@ fn const_prop_binary_op_operands_replaced() {
         build_test_body(locals, vec![block0], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
     let block = &optimized.body.basic_blocks[bb(0)];
 
     // Either the BinaryOp still exists with constant operands, or it has been folded
@@ -116,11 +116,11 @@ fn const_prop_binary_op_operands_replaced() {
             .unwrap();
         if let StatementKind::Assign(_, Rvalue::BinaryOp(_, ops)) = &binop_stmt.kind {
             assert!(
-                matches!(ops.0, Operand::Constant(_)),
+                matches!(ops[0], Operand::Constant(_)),
                 "lhs of BinaryOp should be constant after propagation"
             );
             assert!(
-                matches!(ops.1, Operand::Constant(_)),
+                matches!(ops[1], Operand::Constant(_)),
                 "rhs of BinaryOp should be constant after propagation"
             );
         }
@@ -179,7 +179,7 @@ fn const_prop_invalidation_on_non_const_assign() {
         build_test_body(locals, vec![block0], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
     let block = &optimized.body.basic_blocks[bb(0)];
 
     // _0 should be constant 5 (propagated from _1 through _2)
@@ -228,7 +228,7 @@ fn const_prop_unsigned_constant() {
         build_test_body(locals, vec![block0], 0, u32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
     let block = &optimized.body.basic_blocks[bb(0)];
 
     // _0 = 42u32 (propagated)
@@ -277,7 +277,7 @@ fn const_prop_bool_constant() {
         build_test_body(locals, vec![block0], 0, bool_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
     let block = &optimized.body.basic_blocks[bb(0)];
 
     // _0 = true (propagated)
