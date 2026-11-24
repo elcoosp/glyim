@@ -124,7 +124,7 @@ impl std::error::Error for OptError {}
 /// produces an ill-formed body, or when a `Subslice` projection survives the
 /// plan — all are compiler bugs surfaced as an [`OptError`] rather than an
 /// ICE (M5.10 panic-ratchet: MIR passes are `Result`-returning).
-pub fn optimize(ctx: &TyCtx, body: &Arc<Body>) -> Result<Optimized, OptError> {
+pub fn optimize(ctx: &TyCtx, body: Arc<Body>) -> Result<Optimized, OptError> {
     optimize_with_plan(ctx, body, &PassPlan::for_opt_level(2))
 }
 
@@ -142,18 +142,28 @@ pub fn optimize(ctx: &TyCtx, body: &Arc<Body>) -> Result<Optimized, OptError> {
 /// build catches any pass that produces an ill-formed body at the pass
 /// boundary, not three stages later in codegen.
 ///
+/// The `Arc<Body>` is consumed **by value** (M2.7 quick win / PF-12:
+/// `optimize` without whole-`Body` clone): the passes mutate in place
+/// through [`optimize_in_place`], and `Arc::make_mut` turns the entry into
+/// copy-on-write — a uniquely-owned `Arc` optimizes with **zero**
+/// whole-`Body` clones, while a shared `Arc` pays exactly the deep copy the
+/// old `&Arc` API paid unconditionally and leaves the shared original
+/// untouched.
+///
 /// # Errors
 ///
 /// See [`optimize`].
 pub fn optimize_with_plan(
     ctx: &TyCtx,
-    body: &Arc<Body>,
+    body: Arc<Body>,
     plan: &PassPlan,
 ) -> Result<Optimized, OptError> {
-    let mut body = (**body).clone();
+    let mut arc = body;
     let passes: Vec<&dyn MirPass> = plan.passes().iter().map(|p| p as &dyn MirPass).collect();
-    run_plan_with_verification(ctx, &mut body, &passes, None)?;
-    Ok(Optimized { body })
+    run_plan_with_verification(ctx, Arc::make_mut(&mut arc), &passes, None)?;
+    Ok(Optimized {
+        body: Arc::unwrap_or_clone(arc),
+    })
 }
 
 /// Run the plan [`PassPlan::for_opt_level`] selects for `opt_level` over
@@ -165,7 +175,7 @@ pub fn optimize_with_plan(
 /// semantics and [`optimize_with_plan`] for the errors.
 pub fn optimize_at_level(
     ctx: &TyCtx,
-    body: &Arc<Body>,
+    body: Arc<Body>,
     opt_level: u8,
 ) -> Result<Optimized, OptError> {
     optimize_with_plan(ctx, body, &PassPlan::for_opt_level(opt_level))
@@ -194,14 +204,38 @@ pub fn optimize_at_level(
 /// pass that ran produced an ill-formed body.
 pub fn optimize_with_bisect(
     ctx: &TyCtx,
-    body: &Arc<Body>,
+    body: Arc<Body>,
     plan: &PassPlan,
     limit: usize,
 ) -> Result<(Optimized, Vec<PassStats>), OptError> {
-    let mut body = (**body).clone();
+    let mut arc = body;
     let passes: Vec<&dyn MirPass> = plan.passes().iter().map(|p| p as &dyn MirPass).collect();
-    let stats = run_plan_with_verification(ctx, &mut body, &passes, Some(limit))?;
-    Ok((Optimized { body }, stats))
+    let stats = run_plan_with_verification(ctx, Arc::make_mut(&mut arc), &passes, Some(limit))?;
+    Ok((
+        Optimized {
+            body: Arc::unwrap_or_clone(arc),
+        },
+        stats,
+    ))
+}
+
+/// Optimize `body` **in place** (M2.7 quick win / PF-12: no whole-`Body`
+/// clone anywhere in the call): the caller keeps ownership and the passes
+/// mutate the very body they were handed. This is the seam the `Arc`-taking
+/// entries ([`optimize_with_plan`], [`optimize_at_level`],
+/// [`optimize_with_bisect`]) are thin copy-on-write wrappers around, and
+/// the entry callers that already own a `&mut Body` (or embedders threading
+/// a body through their own arena) should prefer: it validates up front,
+/// runs each pass in plan order with verify-after-each-pass attribution
+/// (M5.11), and runs the final `Subslice`-survived safety net.
+///
+/// # Errors
+///
+/// See [`optimize`].
+pub fn optimize_in_place(ctx: &TyCtx, body: &mut Body, plan: &PassPlan) -> Result<(), OptError> {
+    let passes: Vec<&dyn MirPass> = plan.passes().iter().map(|p| p as &dyn MirPass).collect();
+    run_plan_with_verification(ctx, body, &passes, None)?;
+    Ok(())
 }
 
 /// The shared pass-manager core: validate up front, run each pass with
