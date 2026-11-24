@@ -5,12 +5,12 @@ type: explanation
 sidebar:
   order: 4
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-gsx.svg" alt="Glyim GSX reactivity mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
 
+<MascotFigure pose="gsx" alt="Glyim GSX reactivity mascot" />
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { LinkCard } from '@astrojs/starlight/components';
 
 Most view frameworks optimize updates by diffing a virtual DOM at runtime, or by wiring signals that notify subscribers. GSX takes a third path, available because Glyim owns the compiler and the borrow checker: **the compiler proves who can write to what, and specializes the update code in advance.** This page explains the idea and its machinery.
 
@@ -51,9 +51,9 @@ Because patches are straight-line and chosen by write-set, the update cost is st
 
 Ownership analysis covers the common shapes: local state, handler writes, inlined components composed as lens compositions. When a value is genuinely aliased and mutable — a shared cell that several owners can write — the analysis cannot prove a write-set. That is the escape hatch: the compiler emits the `Signal<T>` diagnostic (G0201) with a fix-it, and the host falls back to signal bits for that slot. Signals are the exception path, not the fast path.
 
-<Aside type="note">
+<MascotAside type="note">
 GSX is experimental: the stage is implemented and tested as a library, and CLI driver wiring has not landed yet. See the GSX reference for the exact status table.
-</Aside>
+</MascotAside>
 
 ## Next steps
 
