@@ -5,12 +5,12 @@ type: explanation
 sidebar:
   order: 5
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-test.svg" alt="Glyim test harness mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
 
+<MascotFigure pose="test" alt="Glyim test harness mascot" />
 
-import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+import { Code, LinkCard } from '@astrojs/starlight/components';
 
 Glyim's test harness (`glyim-test`) is a first-class part of the project, not an afterthought. This page explains the reasoning behind its layers: why there are five test modes, why every phase has a mock, and what property tests add.
 
@@ -59,9 +59,9 @@ Generated cases reach corners that hand-written tests miss — exotic substituti
 
 Two cargo-fuzz targets probe the boundaries where malformed input meets recursive descent: `fuzz_parse` (lexer/parser/CST round-trip) and `fuzz_compile` (a full-pipeline internal-compiler-error detector), with corpus seeds and a token dictionary. Fuzzing complements the corpus: the corpus encodes known behavior, fuzzing hunts unknown crashes.
 
-<Aside type="note">
+<MascotAside type="note">
 The harness runs on the MIR interpreter by default (`glyip test`), which executes tests in-process; `--compiled` runs the same corpus as native executables through the LLVM backend, exercising the full pipeline. The CI differential suite compares both execution paths against each other.
-</Aside>
+</MascotAside>
 
 ## Next steps
 
