@@ -18,8 +18,8 @@ hero:
       icon: external
       variant: minimal
 ---
-
-import { Aside, Badge, Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
+import MascotAside from '../../components/MascotAside.astro';
+import { Badge, Card, CardGrid, LinkButton, LinkCard } from '@astrojs/starlight/components';
 import { DiataxisGrid } from '@elcoosp/docs-toolkit/components';
 
 Glyim implements a complete compilation pipeline: lexing, parsing, name resolution, HIR, MIR, type inference and trait solving, borrow checking, optimizations, and two code generation backends (LLVM and a custom bytecode VM). The project is organized as a Cargo workspace with more than 30 crates, designed for clarity, testability, and incremental development. Every stage is a self-contained crate with a narrow public API, so you can study and test each phase in isolation.
@@ -63,9 +63,9 @@ Glyim implements a complete compilation pipeline: lexing, parsing, name resoluti
 - **Full toolchain** — the `glyim` compiler driver, the Cargo-like `glyip` build tool with dependency resolution and lockfiles, a language server, and a five-mode test harness.
 - **GSX view syntax** <Badge text="experimental" variant="caution" /> — first-class, typed view elements with a dedicated compiler stage, ownership-driven reactivity, and an SSR emitter.
 
-<Aside type="note">
+<MascotAside type="note">
 Glyim is a research-grade compiler under active development. The pipeline is end-to-end functional for a substantial subset of the language, and Glyim is not yet self-hosting: the compiler is written in Rust, while the standard library is written in Glyim.
-</Aside>
+</MascotAside>
 
 ## Next steps
 
