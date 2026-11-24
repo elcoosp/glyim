@@ -81,7 +81,7 @@ impl CompilerPhase for TypeckPhase<'_> {
     fn name(&self) -> &'static str {
         "typeck"
     }
-    #[allow(clippy::too_many_lines)] // verbatim parity-preserving extraction of the monolith's typeck block; splitting it into helpers would break the 1:1 structural correspondence the `M1` byte-identical-diagnostics `DoD` pins.
+    // Verbatim parity-preserving extraction of the monolith's typeck block (splitting it into helpers would break the 1:1 structural correspondence the M1 byte-identical-diagnostics contract pins).
     fn run(&self, ctx: &mut PhaseCtx) -> CompResult<Self::Output> {
         // Plan unstub-5 P5: populate `glyim_solve::TraitContext` with the user's
         // trait impls so `SimpleTraitSolver::prove_trait` can actually find them
