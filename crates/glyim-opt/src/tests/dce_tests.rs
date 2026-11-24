@@ -37,7 +37,7 @@ fn dce_removes_dead_store() {
         build_test_body(locals, vec![block0], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
 
     let block = &optimized.body.basic_blocks[bb(0)];
 
@@ -79,7 +79,7 @@ fn dce_keeps_used_store() {
         build_test_body(locals, vec![block0], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
 
     let block = &optimized.body.basic_blocks[bb(0)];
 
@@ -127,7 +127,7 @@ fn dce_removes_multiple_dead_stores() {
         build_test_body(locals, vec![block0], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
 
     let block = &optimized.body.basic_blocks[bb(0)];
 
@@ -187,7 +187,7 @@ fn dce_keeps_store_used_in_terminator() {
         build_test_body(locals, vec![block0, block1, block2], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
 
     // _1 = true should NOT be removed — it's used in the SwitchInt terminator.
     let block0 = &optimized.body.basic_blocks[bb(0)];
@@ -234,7 +234,7 @@ fn dce_preserves_storage_statements() {
         build_test_body(locals, vec![block0], 0, i32_ty)
     });
 
-    let optimized = optimize(&ctx, &Arc::new(body)).unwrap();
+    let optimized = optimize(&ctx, Arc::new(body)).unwrap();
 
     let block = &optimized.body.basic_blocks[bb(0)];
 
