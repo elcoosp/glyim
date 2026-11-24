@@ -173,6 +173,7 @@ pub mod gaps;
 pub mod gates;
 pub mod handoff;
 pub mod inventory;
+pub mod mutation;
 pub mod next;
 pub mod release;
 pub mod render;
@@ -247,6 +248,10 @@ pub use handoff::{
     HandoffSource, HandoffState, InMemoryHandoffSource, JsonHandoffRenderer, TextHandoffRenderer,
     format_handoff_json, format_handoff_text, render_handoff, run_handoff, run_handoff_out,
 };
+pub use mutation::{
+    MUTATION_SCHEMA, MutantVerdict, MutationOutcome, PolicyMutant, format_mutation_json,
+    format_mutation_text, policy_mutants, run_policy_mutation,
+};
 pub use next::{
     FeatureSource, GapSource, NEXT_SCHEMA, NextOutcome, WorkItem, WorkItemSource, WorkKind,
     build_queue, feature_depths, filter, format_next_json, format_next_report, parse_lane,
@@ -269,8 +274,10 @@ pub use status::{
     run_status_out,
 };
 pub use verify::{
-    CHECK_NAMES, VERIFY_SCHEMA, VerifyOutcome, format_verify_json, format_verify_text,
-    verify_determinism,
+    CHECK_NAMES, GoldenCheck, GoldenDrift, GoldenOutcome, VERIFY_GOLDEN_SCHEMA, VERIFY_SCHEMA,
+    VerifyGolden, VerifyOutcome, format_golden_json, format_golden_text, format_verify_json,
+    format_verify_text, render_verify_golden, verify_against_golden_path, verify_determinism,
+    write_verify_golden,
 };
 pub use waivers::{
     FileWaiverExtender, FileWaiverPruner, FileWaiverRewriter, FileWaiverSink, FileWaiverSource,
@@ -432,6 +439,11 @@ pub enum LedgerCliError {
     VerifyMissingValue {
         /// The flag that was missing its value (`--evidence` or `--format`).
         flag: String,
+        /// The usage text.
+        usage: String,
+    },
+    /// `verify --golden` and `verify --write-golden` were both passed.
+    VerifyGoldenConflict {
         /// The usage text.
         usage: String,
     },
@@ -1195,6 +1207,12 @@ impl fmt::Display for LedgerCliError {
             Self::VerifyMissingValue { flag, usage } => {
                 write!(f, "{flag} expects a value (a path, or text|json)\n{usage}")
             }
+            Self::VerifyGoldenConflict { usage } => {
+                write!(
+                    f,
+                    "--golden and --write-golden are mutually exclusive\n{usage}"
+                )
+            }
             Self::SnapshotWrite { path, detail } => {
                 write!(f, "cannot write compute snapshot {path}: {detail}")
             }
@@ -1607,6 +1625,7 @@ impl miette::Diagnostic for LedgerCliError {
             Self::GatesMissingValue { .. } => "glyim-ledger::gates_missing_value",
             Self::VerifyBadFormat { .. } => "glyim-ledger::verify_bad_format",
             Self::VerifyMissingValue { .. } => "glyim-ledger::verify_missing_value",
+            Self::VerifyGoldenConflict { .. } => "glyim-ledger::verify_golden_conflict",
             Self::SnapshotWrite { .. } => "glyim-ledger::snapshot_write",
             Self::ExplainMissingId { .. } => "glyim-ledger::explain_missing_id",
             Self::RenderBadFormat { .. } => "glyim-ledger::render_bad_format",
@@ -1817,6 +1836,12 @@ impl miette::Diagnostic for LedgerCliError {
             Self::VerifyMissingValue { .. } => Some(Box::new(
                 "the flag needs its value on the same command line, e.g. \
                  `--evidence run.jsonl` or `--format json`"
+                    .to_string(),
+            )),
+            Self::VerifyGoldenConflict { .. } => Some(Box::new(
+                "compare against the committed golden with `verify --golden \
+                 ledger/verify-golden.json`; regenerate it with `verify --write-golden \
+                 ledger/verify-golden.json` only when the change is intended"
                     .to_string(),
             )),
             Self::SnapshotWrite { .. } => Some(Box::new(
@@ -2593,6 +2618,32 @@ pub enum Command {
         evidence: Option<PathBuf>,
         /// Output format; [`VerifyFormat::Text`] by default.
         format: VerifyFormat,
+        /// Compare today's renders against this committed golden artifact
+        /// (the M1.13 two-machine reproducibility half). Mutually
+        /// exclusive with `--write-golden`.
+        golden: Option<PathBuf>,
+        /// Render every check once and write its digest golden to this
+        /// path (regenerate the committed `ledger/verify-golden.json`).
+        /// Mutually exclusive with `--golden`.
+        write_golden: Option<PathBuf>,
+    },
+    /// `policy-mutation [ROOT] [--evidence PATH] [--format text|json]` —
+    /// the plan M1.13 mutation slice: a deterministic catalogue of policy
+    /// mutants (rules dropped, counts inflated, outcomes flipped) is
+    /// evaluated through the level engine over the same registry and
+    /// evidence the production compute pass sees; every mutant must be
+    /// killed (change at least one feature's outcome). A surviving mutant
+    /// names a policy surface the evaluation ignores, and the command
+    /// fails (gate, not report).
+    PolicyMutation {
+        /// Project directory containing the `ledger/` registry (`.` by
+        /// default).
+        root: PathBuf,
+        /// Explicit evidence JSONL path (overrides `ledger/evidence/*.jsonl`).
+        evidence: Option<PathBuf>,
+        /// Output format; [`VerifyFormat::Text`] by default (the
+        /// mutation report shares the verify face's text|json spellings).
+        format: VerifyFormat,
     },
     /// `render-gaps [ROOT] [--format md|json] [--out PATH] [--check]` —
     /// the plan §6 M1.9 remainder: generate `KNOWN_GAPS.md` (or the
@@ -2916,7 +2967,23 @@ pub enum IgnoresFormat {
 /// Usage text returned with argument errors.
 #[must_use]
 pub fn usage() -> String {
-    "usage: glyim-ledger check [ROOT]\n   or: glyim-ledger gaps [ROOT]\n   or: glyim-ledger gaps audit [ROOT] [--format text|json]\n   or: glyim-ledger gaps unwitness [ROOT] --id <GAP-ID> [--format text|json]\n   or: glyim-ledger gaps open [ROOT] --id <GAP-NNNN> --class <a|b|c> --title <TEXT> --affects <ID[,ID...]> --caps <L0..L5> --opened-in <TAG> [--file ledger/gaps/.../FILE.toml] [--format text|json]\n   or: glyim-ledger gaps witness [ROOT] --id <GAP-ID> --witness <PATH> [--format text|json]\n   or: glyim-ledger gaps retire [ROOT] --id <GAP-ID> [--format text|json]\n   or: glyim-ledger next [ROOT] [--lane L] [--n N]\n   or: glyim-ledger explain <ID> [ROOT]\n   or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n   or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n   or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]\n   or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger evidence audit [ROOT] [--format text|json]\n   or: glyim-ledger evidence retract [ROOT] --fixture <PATH> [--out PATH] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger waivers revoke [ROOT] --id <WVR-ID> [--format text|json]\n   or: glyim-ledger waivers extend [ROOT] --id <WVR-ID> [--days N] [--format text|json]\n   or: glyim-ledger waivers prune [ROOT] [--format text|json]\n   or: glyim-ledger handoff [ROOT] [--items N] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger release-check <VERSION> [ROOT] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n   or: glyim-ledger inventory ignore [ROOT] --item <KEY> --reason <TEXT> [--format text|json]\n   or: glyim-ledger inventory unignore [ROOT] --item <KEY> [--format text|json]\n\
+    "usage: glyim-ledger check [ROOT]\n\
+     or: glyim-ledger gaps [ROOT]\n\
+     or: glyim-ledger gaps audit [ROOT] [--format text|json]\n\
+     or: glyim-ledger gaps unwitness [ROOT] --id <GAP-ID> [--format text|json]\n\
+     or: glyim-ledger gaps open [ROOT] --id <GAP-NNNN> --class <a|b|c> --title <TEXT> --affects <ID[,ID...]> --caps <L0..L5> --opened-in <TAG> [--file ledger/gaps/.../FILE.toml] [--format text|json]\n\
+     or: glyim-ledger gaps witness [ROOT] --id <GAP-ID> --witness <PATH> [--format text|json]\n\
+     or: glyim-ledger gaps retire [ROOT] --id <GAP-ID> [--format text|json]\n\
+     or: glyim-ledger next [ROOT] [--lane L] [--n N]\n\
+     or: glyim-ledger explain <ID> [ROOT]\n\
+     or: glyim-ledger compute [ROOT] [--evidence PATH] [--format text|json] [--snapshot PATH]\n\
+     or: glyim-ledger status [ROOT] [--evidence PATH] [--format md|json] [--out PATH] [--check]\n\
+     or: glyim-ledger diff <BASE> <CURRENT> [ROOT] [--format text|json]\n\
+     or: glyim-ledger gates [ROOT] [--evidence PATH] [--format text|json]\n\
+     or: glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json] [--golden PATH]\n\
+     or: glyim-ledger verify [ROOT] [--write-golden PATH]\n\
+     or: glyim-ledger policy-mutation [ROOT] [--evidence PATH] [--format text|json]\n\
+     or: glyim-ledger render-gaps [ROOT] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger evidence record [--out PATH] [--format text|json] <SRC...>\n   or: glyim-ledger evidence check [ROOT] [--format text|json]\n   or: glyim-ledger evidence audit [ROOT] [--format text|json]\n   or: glyim-ledger evidence retract [ROOT] --fixture <PATH> [--out PATH] [--format text|json]\n   or: glyim-ledger waivers [ROOT] [--format text|json]\n   or: glyim-ledger waivers grant [ROOT] --feature <ID> --reason <TEXT> --issue <URL> [--days N] [--format text|json]\n   or: glyim-ledger waivers revoke [ROOT] --id <WVR-ID> [--format text|json]\n   or: glyim-ledger waivers extend [ROOT] --id <WVR-ID> [--days N] [--format text|json]\n   or: glyim-ledger waivers prune [ROOT] [--format text|json]\n   or: glyim-ledger handoff [ROOT] [--items N] [--format md|json] [--out PATH] [--check]\n   or: glyim-ledger release-check <VERSION> [ROOT] [--format text|json]\n   or: glyim-ledger schema [OUT]\n   or: glyim-ledger inventory [ROOT]\n   or: glyim-ledger inventory ignore [ROOT] --item <KEY> --reason <TEXT> [--format text|json]\n   or: glyim-ledger inventory unignore [ROOT] --item <KEY> [--format text|json]\n\
      \x20 ROOT defaults to the current directory; with no subcommand `check`\n\
      \x20 is assumed. `schema` writes to OUT or stdout; `next` filters by\n\
      \x20 lane (L|F|T|M|B|Q) and prints the glyim.ledger-next/1 JSON queue;\n\
@@ -2935,7 +3002,12 @@ pub fn usage() -> String {
      \x20 release-gate verdicts declared in `ledger/gates.toml` —\n\
      \x20 unmeasured gates are displayed, never silently passed; `verify`\n\
      \x20 runs every ledger pipeline twice from independent load passes\n\
-     \x20 and fails on any rendered-byte drift (plan M1.13);\n\
+     \x20 and fails on any rendered-byte drift (plan M1.13); `--golden PATH`\n\
+     \x20 compares today's renders against a committed digest golden (the\n\
+     \x20 two-machine reproducibility half) and `--write-golden PATH`\n\
+     \x20 regenerates it (the two are mutually exclusive); `policy-mutation`\n\
+     \x20 evaluates a fixed catalogue of policy mutants through the level\n\
+     \x20 engine and fails on any surviving mutant (plan M1.13);\n\
      \x20 `render-gaps` generates KNOWN_GAPS.md (or the glyim.known-gaps/1\n\
      \x20 JSON face) from the gap registry — `--out PATH` writes it,\n\
      \x20 `--check` fails on drift (plan M1.9); `gaps audit` resolves\n\
@@ -3028,12 +3100,15 @@ where
         }),
         Some(
             "check" | "gaps" | "schema" | "inventory" | "next" | "explain" | "compute" | "status"
-            | "diff" | "gates" | "verify" | "render-gaps" | "evidence" | "waivers" | "handoff"
-            | "release-check",
+            | "diff" | "gates" | "verify" | "policy-mutation" | "render-gaps" | "evidence"
+            | "waivers" | "handoff" | "release-check",
         ) => {
             let rest = &items[1..];
             if items[0] == "next" {
                 return parse_next(rest);
+            }
+            if items[0] == "policy-mutation" {
+                return parse_policy_mutation(rest);
             }
             if items[0] == "explain" {
                 return parse_explain(rest);
@@ -4540,6 +4615,73 @@ fn parse_verify(rest: &[String]) -> Result<Command, LedgerCliError> {
     let mut root: Option<PathBuf> = None;
     let mut evidence: Option<PathBuf> = None;
     let mut format = VerifyFormat::Text;
+    let mut golden: Option<PathBuf> = None;
+    let mut write_golden: Option<PathBuf> = None;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--evidence" | "--format" | "--golden" | "--write-golden" => {
+                let flag = rest[index].as_str();
+                let Some(value) = rest.get(index + 1) else {
+                    return Err(LedgerCliError::VerifyMissingValue {
+                        flag: flag.to_string(),
+                        usage: usage(),
+                    });
+                };
+                match flag {
+                    "--evidence" => evidence = Some(PathBuf::from(value)),
+                    "--golden" => golden = Some(PathBuf::from(value)),
+                    "--write-golden" => write_golden = Some(PathBuf::from(value)),
+                    _ => {
+                        format = match value.as_str() {
+                            "text" => VerifyFormat::Text,
+                            "json" => VerifyFormat::Json,
+                            other => {
+                                return Err(LedgerCliError::VerifyBadFormat {
+                                    value: other.to_string(),
+                                    usage: usage(),
+                                });
+                            }
+                        };
+                    }
+                }
+                index += 2;
+            }
+            flag if flag.starts_with('-') => {
+                return Err(LedgerCliError::UnknownFlag {
+                    flag: flag.to_string(),
+                    usage: usage(),
+                });
+            }
+            positional => {
+                if root.is_some() {
+                    return Err(LedgerCliError::ExtraArgument {
+                        arg: positional.to_string(),
+                        usage: usage(),
+                    });
+                }
+                root = Some(PathBuf::from(positional));
+                index += 1;
+            }
+        }
+    }
+    if golden.is_some() && write_golden.is_some() {
+        return Err(LedgerCliError::VerifyGoldenConflict { usage: usage() });
+    }
+    Ok(Command::Verify {
+        root: root.unwrap_or_else(|| PathBuf::from(".")),
+        evidence,
+        format,
+        golden,
+        write_golden,
+    })
+}
+
+/// Parse the `policy-mutation` subcommand (plan M1.13 mutation slice).
+fn parse_policy_mutation(rest: &[String]) -> Result<Command, LedgerCliError> {
+    let mut root: Option<PathBuf> = None;
+    let mut evidence: Option<PathBuf> = None;
+    let mut format = VerifyFormat::Text;
     let mut index = 0;
     while index < rest.len() {
         match rest[index].as_str() {
@@ -4585,7 +4727,7 @@ fn parse_verify(rest: &[String]) -> Result<Command, LedgerCliError> {
             }
         }
     }
-    Ok(Command::Verify {
+    Ok(Command::PolicyMutation {
         root: root.unwrap_or_else(|| PathBuf::from(".")),
         evidence,
         format,
@@ -5593,6 +5735,8 @@ mod tests {
                 root: PathBuf::from("."),
                 evidence: None,
                 format: VerifyFormat::Text,
+                golden: None,
+                write_golden: None,
             }
         );
     }
@@ -5614,7 +5758,69 @@ mod tests {
                 root: PathBuf::from("r"),
                 evidence: Some(PathBuf::from("e.jsonl")),
                 format: VerifyFormat::Json,
+                golden: None,
+                write_golden: None,
             }
+        );
+    }
+
+    #[test]
+    fn verify_parses_golden_and_write_golden_flags() {
+        let compare =
+            parse_args(args(&["verify", "--golden", "ledger/verify-golden.json"])).expect("parse");
+        assert_eq!(
+            compare,
+            Command::Verify {
+                root: PathBuf::from("."),
+                evidence: None,
+                format: VerifyFormat::Text,
+                golden: Some(PathBuf::from("ledger/verify-golden.json")),
+                write_golden: None,
+            }
+        );
+        let write = parse_args(args(&["verify", "--write-golden", "g.json"])).expect("parse");
+        assert!(
+            matches!(write, Command::Verify { write_golden: Some(ref path), .. } if path == &PathBuf::from("g.json")),
+            "{write:?}"
+        );
+        // The two golden faces are mutually exclusive.
+        let conflict = parse_args(args(&[
+            "verify",
+            "--golden",
+            "a.json",
+            "--write-golden",
+            "b.json",
+        ]))
+        .expect_err("conflict rejected");
+        assert!(
+            matches!(conflict, LedgerCliError::VerifyGoldenConflict { .. }),
+            "{conflict}"
+        );
+    }
+
+    #[test]
+    fn policy_mutation_parses_root_evidence_and_format() {
+        let cmd = parse_args(args(&[
+            "policy-mutation",
+            "some/root",
+            "--evidence",
+            "e.jsonl",
+            "--format",
+            "json",
+        ]))
+        .expect("parse");
+        assert_eq!(
+            cmd,
+            Command::PolicyMutation {
+                root: PathBuf::from("some/root"),
+                evidence: Some(PathBuf::from("e.jsonl")),
+                format: VerifyFormat::Json,
+            }
+        );
+        let default = parse_args(args(&["policy-mutation"])).expect("parse");
+        assert!(
+            matches!(default, Command::PolicyMutation { ref root, evidence: None, format: VerifyFormat::Text } if root.as_path() == std::path::Path::new(".")),
+            "{default:?}"
         );
     }
 
