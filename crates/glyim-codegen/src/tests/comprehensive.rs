@@ -27,7 +27,7 @@ fn binary_op_zero_values() {
                 Place::new(dest),
                 Rvalue::BinaryOp(
                     BinOp::Add,
-                    Box::new((
+                    [
                         Operand::Constant(MirConst {
                             kind: MirConstKind::Int(0),
                             ty: Ty::ERROR,
@@ -38,7 +38,7 @@ fn binary_op_zero_values() {
                             ty: Ty::ERROR,
                             span: Span::DUMMY,
                         }),
-                    )),
+                    ],
                 ),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -69,7 +69,7 @@ fn binary_op_negative_values() {
                 Place::new(dest),
                 Rvalue::BinaryOp(
                     BinOp::Mul,
-                    Box::new((
+                    [
                         Operand::Constant(MirConst {
                             kind: MirConstKind::Int(-1),
                             ty: Ty::ERROR,
@@ -80,7 +80,7 @@ fn binary_op_negative_values() {
                             ty: Ty::ERROR,
                             span: Span::DUMMY,
                         }),
-                    )),
+                    ],
                 ),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -110,7 +110,7 @@ fn binary_op_large_values() {
                 Place::new(dest),
                 Rvalue::BinaryOp(
                     BinOp::BitAnd,
-                    Box::new((
+                    [
                         Operand::Constant(MirConst {
                             kind: MirConstKind::Int(i128::from(i64::MAX)),
                             ty: Ty::ERROR,
@@ -121,7 +121,7 @@ fn binary_op_large_values() {
                             ty: Ty::ERROR,
                             span: Span::DUMMY,
                         }),
-                    )),
+                    ],
                 ),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -470,7 +470,7 @@ fn multiple_statements_in_block() {
             Place::new(c),
             Rvalue::BinaryOp(
                 BinOp::Add,
-                Box::new((Operand::Copy(Place::new(a)), Operand::Copy(Place::new(b)))),
+                [Operand::Copy(Place::new(a)), Operand::Copy(Place::new(b))],
             ),
         ),
         source_info: SourceInfo::new(Span::DUMMY),
