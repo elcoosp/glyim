@@ -5,8 +5,11 @@ type: explanation
 sidebar:
   order: 1
 ---
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
+import { LinkCard } from '@astrojs/starlight/components';
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+<MascotFigure pose="pipeline" alt="Glyim compiler architecture mascot" />
 
 Glyim's architecture follows one rule: every compilation phase is a self-contained crate with a narrow public API, so each phase can be studied and tested in isolation — and replaced without touching the rest. This page explains the ideas behind that rule and the mechanisms that make it work.
 
@@ -72,9 +75,9 @@ The pipeline distinguishes sharply between program errors and compiler bugs:
 
 Release builds enable `overflow-checks`, so arithmetic overflow inside the compiler is an ICE, never a silent wrap.
 
-<Aside type="note">
+<MascotAside type="note">
 The design is heavily inspired by rustc's architecture — arena-allocated IRs, interned types, query-style contexts, trait-based dependency injection — but written from scratch with readable code and testability as the priorities.
-</Aside>
+</MascotAside>
 
 ## Next steps
 
