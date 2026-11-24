@@ -141,11 +141,6 @@ pub fn const_operand_bool(value: bool) -> Operand {
     })
 }
 
-/// Box a pair of operands for `BinaryOp`.
-pub fn box_operands(lhs: Operand, rhs: Operand) -> Box<(Operand, Operand)> {
-    Box::new((lhs, rhs))
-}
-
 /// Create a simple MIR body that computes a single rvalue and returns it.
 pub fn simple_mir_body(return_ty: Ty, rvalue: Rvalue) -> Body {
     let mut builder = BodyBuilder::new(return_ty);
