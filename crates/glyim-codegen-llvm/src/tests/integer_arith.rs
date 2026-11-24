@@ -10,7 +10,7 @@ fn test_binop_i32(op: BinOp, lhs_val: i64, rhs_val: i64, expected_store_val: i32
 
     let lhs = const_operand_i32(lhs_val, i32_ty);
     let rhs = const_operand_i32(rhs_val, i32_ty);
-    let rv = Rvalue::BinaryOp(op, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(op, lhs, rhs);
 
     let body = simple_mir_body(i32_ty, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
@@ -32,7 +32,7 @@ fn test_binop_u32(op: BinOp, lhs_val: u64, rhs_val: u64, expected_store_val: u32
 
     let lhs = const_operand_u32(lhs_val, u32_ty);
     let rhs = const_operand_u32(rhs_val, u32_ty);
-    let rv = Rvalue::BinaryOp(op, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(op, lhs, rhs);
 
     let body = simple_mir_body(u32_ty, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
