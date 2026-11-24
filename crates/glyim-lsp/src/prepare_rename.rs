@@ -80,8 +80,8 @@ pub fn prepare_rename(
     let identifier = &source[start..end];
     let token = Span::new(
         file_id,
-        ByteIdx::from_raw(start as u32),
-        ByteIdx::from_raw(end as u32),
+        ByteIdx::from_usize(start),
+        ByteIdx::from_usize(end),
         SyntaxContext::ROOT,
     );
 
