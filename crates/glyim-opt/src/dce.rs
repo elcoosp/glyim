@@ -81,9 +81,9 @@ fn collect_projection_locals(proj: &[ProjectionElem], used: &mut HashSet<LocalId
 fn collect_uses_in_rvalue(rv: &Rvalue, used: &mut HashSet<LocalIdx>) {
     match rv {
         Rvalue::Use(op) => collect_operand_uses(op, used),
-        Rvalue::BinaryOp(_, box_ops) => {
-            collect_operand_uses(&box_ops.0, used);
-            collect_operand_uses(&box_ops.1, used);
+        Rvalue::BinaryOp(_, ops) => {
+            collect_operand_uses(&ops[0], used);
+            collect_operand_uses(&ops[1], used);
         }
         Rvalue::Ref(place, _) => {
             used.insert(place.local);
