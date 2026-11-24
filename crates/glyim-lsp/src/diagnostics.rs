@@ -63,13 +63,13 @@ mod tests {
     #[test]
     fn converts_glyim_diagnostics_with_mapped_positions() {
         let source = "fn broken( {\n}\n";
-        let sm = crate::database::SourceMap::new(FileId::from_raw(0), source.to_string());
-        let parse_result = glyim_frontend::parse_to_syntax(source, FileId::from_raw(0));
+        let sm = crate::database::SourceMap::new(FileId::from_usize(0), source.to_string());
+        let parse_result = glyim_frontend::parse_to_syntax(source, FileId::from_usize(0));
         assert!(
             !parse_result.diagnostics.is_empty(),
             "fixture must be broken"
         );
-        let out = convert_diagnostics(FileId::from_raw(0), &sm, &parse_result.diagnostics);
+        let out = convert_diagnostics(FileId::from_usize(0), &sm, &parse_result.diagnostics);
         assert_eq!(out.len(), parse_result.diagnostics.len());
         for diag in &out {
             assert_eq!(diag.source.as_deref(), Some("glyim"));
