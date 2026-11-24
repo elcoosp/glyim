@@ -46,7 +46,7 @@ fn build_binop_body_signed(tcx: &mut TyCtxMut, op: BinOp, lhs: i128, rhs: i128) 
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
-                Rvalue::BinaryOp(op, Box::new((Operand::Constant(c1), Operand::Constant(c2)))),
+                Rvalue::binary_op(op, Operand::Constant(c1), Operand::Constant(c2)),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         }],
@@ -82,7 +82,7 @@ fn build_binop_body_uint(tcx: &mut TyCtxMut, op: BinOp, lhs: u128, rhs: u128) ->
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
-                Rvalue::BinaryOp(op, Box::new((Operand::Constant(c1), Operand::Constant(c2)))),
+                Rvalue::binary_op(op, Operand::Constant(c1), Operand::Constant(c2)),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         }],
@@ -221,7 +221,7 @@ fn build_binop_body_float(tcx: &mut TyCtxMut, op: BinOp, lhs: f64, rhs: f64) -> 
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
-                Rvalue::BinaryOp(op, Box::new((Operand::Constant(c1), Operand::Constant(c2)))),
+                Rvalue::binary_op(op, Operand::Constant(c1), Operand::Constant(c2)),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         }],
