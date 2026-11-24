@@ -8,6 +8,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Pilot task-queue seam (plan §6 M1.11 remainder — "`ledger next` feeds
+  the orchestrator task queue; pilot run consumes queue end-to-end on a
+  sample item")**: `tools/glyim-pilot/src/queue/` turns the ledger's
+  deterministic `glyim.ledger-next/1` work queue into the pilot's task
+  list. `TaskQueueSource` is the seam (any source slots in without
+  touching the dispatch flow); `LedgerQueueSource` runs the §3.9 engine
+  (`run_next`/`filter`, consumed as a library) over the project registry
+  and maps every `WorkItem` to a `QueuedTask`; `compose_task_prompt`
+  renders the deterministic dispatch prompt (rank, title, kind, why,
+  evidence needed, suggested files, lane, related IDs — the same fields
+  the JSON contract carries, so the table, the JSON face, and the
+  prompt can never disagree about "what is next"); `head_task` is the
+  plan §7.1 work-loop step 1 as a function. The CLI gains `glyim-pilot
+  queue show [--lane L] [-n N] [--json]` (config-free — it reads the
+  ledger registry, not the pilot deployment config) and `session start
+  --from-queue [--lane L]` dispatches the ranked head as the task prompt
+  (mutually exclusive with `--prompt`; an empty queue or an unresolvable
+  registry fails loudly through the new `PilotError::Queue`/`E1000`
+  instead of picking work itself — plan C1). Eight queue tests plus the
+  end-to-end CLI test consume the real repository registry; a consumer
+  walkthrough (`examples/queue_walkthrough`) prints the table, the head
+  prompt, and the JSON contract for the same run.
+- **Policy-mutation gate (plan §6 M1.13 — "mutation-test `policy`
+  evaluation")**: `tools/glyim-ledger/src/mutation.rs` + the
+  `glyim-ledger policy-mutation [ROOT]` subcommand. A fixed catalogue of
+  nine policy mutants (per-level rule lists dropped, counts inflated
+  1 → 999, outcomes flipped passed → failed, the L2 negative-fixture
+  rule dropped) is evaluated through the pure `compute_levels` engine
+  over the same registry and evidence the production compute pass sees;
+  every mutant must be killed — change at least one feature's
+  `FeatureLevel` — because that is exactly the drift the committed
+  STATUS goldens catch through the M1.10 up-to-date gate. A surviving
+  mutant names a policy surface the evaluation ignores and fails the
+  exit code (gate, not report). Backend-pin and hardening-threshold
+  mutants are excluded with documented rationale (unobservable by the
+  policy's own semantics today), keeping the shipped catalogue strict:
+  a green run means every rule surface is load-bearing. On the committed
+  store all nine mutants kill (e.g. `drop-l2-negative-rule` lifts
+  `COMPILER-MONO-MONOMORPHIZE` L1 → L4); the report is byte-deterministic
+  (pinned by a double-run test). Ships with a bench
+  (`benches/mutation`: 9 mutants × 500 features in ~61 ms) and a
+  consumer walkthrough (`examples/policy_mutation`).
+- **Reproducibility golden (plan §6 M1.13 two-machine half)**:
+  `ledger verify --golden PATH` compares today's six render faces
+  against a committed digest golden and fails on any drift;
+  `ledger verify --write-golden PATH` regenerates it (mutually
+  exclusive). The committed artifact `ledger/verify-golden.json`
+  (`glyim.ledger-verify-golden/1`: per-check byte length + SHA-256 of
+  the compute text/JSON/snapshot, status Markdown, and gates text/JSON
+  renders) pins cross-machine byte equality — the in-process double run
+  already pinned within-machine determinism, and the new CI
+  `reproducibility` job (golden verify + policy-mutation, ledger-only,
+  no LLVM) is the second machine the plan names. Golden round-trip,
+  tampering (a flipped digest is a named drift), foreign-schema, and
+  missing-artifact behaviours are unit-tested; the committed-golden test
+  runs the same comparison CI runs. A consumer walkthrough
+  (`examples/verify_golden`) ships with it.
 - **M0 rails (plan §6 M0.1/M0.4–M0.7)**: ADR-001…015 stubs from the §8
   register + index (completeness test), `AGENTS.md`, enforced PR template +
   CI `check-templates`, `just bootstrap`/`ci-local`/`verify`, and the metrics
