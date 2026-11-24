@@ -51,7 +51,7 @@ fn analysed(
     diagnostics: Vec<Diagnostic>,
 ) -> AnalysedFile {
     AnalysedFile {
-        file_id: FileId::from_raw(file_id),
+        file_id: FileId::from_usize(file_id as usize),
         path: PathBuf::from(format!("/test/{name}.g")),
         version,
         diagnostics,
