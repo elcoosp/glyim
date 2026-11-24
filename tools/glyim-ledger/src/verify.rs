@@ -37,7 +37,8 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use ledger_schema::{Diagnostic, Severity};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::compute::{ComputeOutcome, format_compute_json, format_compute_report, run_compute};
 use crate::diff::ComputeSnapshot;
@@ -113,6 +114,31 @@ fn snapshot_bytes(outcome: &ComputeOutcome) -> String {
     text
 }
 
+/// One rendered face of a single load pass: the check name (one of
+/// [`CHECK_NAMES`]) and the exact rendered bytes.
+type RenderedCheck = (&'static str, String);
+
+/// Renders every ledger pipeline once over `root` — one independent load
+/// pass — and returns the checks in [`CHECK_NAMES`] order.
+///
+/// Shared by the double-run self-check ([`verify_determinism`]) and the
+/// golden faces ([`write_verify_golden`]/[`verify_against_golden_path`]):
+/// the same renderer feeds both, so the golden can never pin bytes the
+/// self-check would not compare.
+fn render_pass(root: &Path, evidence: Option<&Path>) -> Vec<RenderedCheck> {
+    let compute = run_compute(root, evidence);
+    let status = run_status(root, evidence);
+    let gates = run_gates(root, evidence);
+    vec![
+        (CHECK_NAMES[0], format_compute_report(&compute)),
+        (CHECK_NAMES[1], format_compute_json(&compute)),
+        (CHECK_NAMES[2], snapshot_bytes(&compute)),
+        (CHECK_NAMES[3], format_status_markdown(&status.compute)),
+        (CHECK_NAMES[4], format_gates_text(&gates)),
+        (CHECK_NAMES[5], format_gates_json(&gates)),
+    ]
+}
+
 /// Runs every ledger pipeline twice over `root` — two independent load
 /// passes each — and compares the rendered bytes per check.
 ///
@@ -125,63 +151,32 @@ pub fn verify_determinism(root: &Path, evidence: Option<&Path>) -> VerifyOutcome
     let span = tracing::info_span!("verify", root = %root.display());
     let _enter = span.enter();
 
-    let mut diagnostics = Vec::new();
+    let pass_a = render_pass(root, evidence);
+    let pass_b = render_pass(root, evidence);
 
-    // Pass A and pass B are structurally identical; writing them as two
-    // blocks keeps the two *independent* load passes visible (no shared
-    // intermediate), which is the property under test.
-    let compute_a = run_compute(root, evidence);
-    let status_a = run_status(root, evidence);
-    let gates_a = run_gates(root, evidence);
-
+    // Diagnostics come from the second pass (the executors reload
+    // everything; a second pass reports the same stream as the first).
     let compute_b = run_compute(root, evidence);
-    let status_b = run_status(root, evidence);
     let gates_b = run_gates(root, evidence);
-
+    let mut diagnostics: Vec<Diagnostic> = Vec::new();
     diagnostics.extend(compute_b.diagnostics.iter().cloned());
     diagnostics.extend(gates_b.diagnostics.iter().cloned());
     diagnostics.sort_by(|a, b| a.code.cmp(b.code).then(a.message.cmp(&b.message)));
     diagnostics.dedup();
 
-    let pairs = [
-        (
-            CHECK_NAMES[0],
-            format_compute_report(&compute_a),
-            format_compute_report(&compute_b),
-        ),
-        (
-            CHECK_NAMES[1],
-            format_compute_json(&compute_a),
-            format_compute_json(&compute_b),
-        ),
-        (
-            CHECK_NAMES[2],
-            snapshot_bytes(&compute_a),
-            snapshot_bytes(&compute_b),
-        ),
-        (
-            CHECK_NAMES[3],
-            format_status_markdown(&status_a.compute),
-            format_status_markdown(&status_b.compute),
-        ),
-        (
-            CHECK_NAMES[4],
-            format_gates_text(&gates_a),
-            format_gates_text(&gates_b),
-        ),
-        (
-            CHECK_NAMES[5],
-            format_gates_json(&gates_a),
-            format_gates_json(&gates_b),
-        ),
-    ];
-
-    let checks: Vec<DeterminismCheck> = pairs
-        .into_iter()
-        .map(|(name, a, b)| DeterminismCheck {
-            name: name.to_string(),
-            identical: a == b,
-            bytes: b.len(),
+    let checks: Vec<DeterminismCheck> = CHECK_NAMES
+        .iter()
+        .zip(pass_a.iter())
+        .map(|(name, (rendered_name, bytes))| {
+            debug_assert_eq!(name, rendered_name);
+            let twin = pass_b
+                .iter()
+                .find(|(other_name, _)| other_name == rendered_name);
+            DeterminismCheck {
+                name: (*name).to_string(),
+                identical: twin.is_some_and(|(_, other)| other == bytes),
+                bytes: bytes.len(),
+            }
         })
         .collect();
 
@@ -266,10 +261,312 @@ pub fn format_verify_text(outcome: &VerifyOutcome) -> String {
     text
 }
 
+// -- reproducibility golden (M1.13 two-machine half) -------------------------
+
+/// Schema tag of the committed golden artifact (`ledger/verify-golden.json`).
+pub const VERIFY_GOLDEN_SCHEMA: &str = "glyim.ledger-verify-golden/1";
+
+/// Digest record for one rendered check inside a [`VerifyGolden`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GoldenCheck {
+    /// The check name (one of [`CHECK_NAMES`]).
+    pub name: String,
+    /// Rendered byte length.
+    pub bytes: usize,
+    /// SHA-256 of the rendered bytes (hex). Digests are the transportable
+    /// form of the byte-equality property: two machines compare digests,
+    /// and equal SHA-256 over equal byte lengths is the byte equality the
+    /// plan pins (the same fixture digest discipline the evidence store
+    /// uses).
+    pub sha256: String,
+}
+
+/// The committed reproducibility artifact: per-check digests of every
+/// ledger render, pinned in-tree and re-verified in CI (the plan M1.13
+/// "two machines" half — the in-process double run pins determinism
+/// within a machine, the golden pins it across machines and commits).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerifyGolden {
+    /// Schema tag; must equal [`VERIFY_GOLDEN_SCHEMA`].
+    pub schema: String,
+    /// One digest per rendered check, in [`CHECK_NAMES`] order.
+    pub checks: Vec<GoldenCheck>,
+}
+
+/// Result of comparing today's renders against a committed [`VerifyGolden`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoldenOutcome {
+    /// The golden artifact path the renders were compared against.
+    pub path: String,
+    /// Per-check drift verdicts, in [`CHECK_NAMES`] order (only checks
+    /// that appear in both the golden and the render are compared).
+    pub drifts: Vec<GoldenDrift>,
+    /// Load/validation diagnostics (a missing or malformed golden, an
+    /// errored render pass) — errors fail the command like `verify` does.
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+impl GoldenOutcome {
+    /// True when every check matched the golden and no error diagnostic
+    /// was produced. This is the M1.13 reproducibility-gate condition.
+    #[must_use]
+    pub fn is_ok(&self) -> bool {
+        self.diagnostics
+            .iter()
+            .all(|d| d.severity != Severity::Error)
+            && self.drifts.is_empty()
+    }
+}
+
+/// One drifted check: the golden's digest vs today's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GoldenDrift {
+    /// The check name that drifted.
+    pub name: String,
+    /// Byte length pinned in the golden.
+    pub golden_bytes: usize,
+    /// SHA-256 pinned in the golden.
+    pub golden_sha256: String,
+    /// Byte length rendered today.
+    pub actual_bytes: usize,
+    /// SHA-256 rendered today.
+    pub actual_sha256: String,
+}
+
+/// SHA-256 of `bytes` as lowercase hex.
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
+}
+
+/// Renders every check once over `root` and digests them into a
+/// [`VerifyGolden`] — the exact artifact `ledger verify --write-golden
+/// PATH` commits.
+#[must_use]
+pub fn render_verify_golden(root: &Path, evidence: Option<&Path>) -> VerifyGolden {
+    let checks = render_pass(root, evidence)
+        .into_iter()
+        .map(|(name, bytes)| GoldenCheck {
+            name: name.to_string(),
+            bytes: bytes.len(),
+            sha256: sha256_hex(bytes.as_bytes()),
+        })
+        .collect();
+    VerifyGolden {
+        schema: VERIFY_GOLDEN_SCHEMA.to_string(),
+        checks,
+    }
+}
+
+/// Renders the golden and writes it to `path` (pretty JSON + trailing
+/// newline), returning the golden that was written.
+///
+/// # Errors
+///
+/// Serialization or file IO failures become error-severity diagnostics on
+/// the returned outcome (the exit-code contract stays in `main.rs`).
+pub fn write_verify_golden(root: &Path, evidence: Option<&Path>, path: &Path) -> GoldenOutcome {
+    let mut diagnostics = Vec::new();
+    let golden = render_verify_golden(root, evidence);
+    let text = match serde_json::to_string_pretty(&golden) {
+        Ok(mut text) => {
+            text.push('\n');
+            text
+        }
+        Err(err) => {
+            diagnostics.push(Diagnostic {
+                code: "E-LEDGER-GOLDEN-WRITE",
+                message: format!(
+                    "cannot serialize the verify golden for {}: {err}",
+                    path.display()
+                ),
+                severity: Severity::Error,
+            });
+            return GoldenOutcome {
+                path: path.display().to_string(),
+                drifts: Vec::new(),
+                diagnostics,
+            };
+        }
+    };
+    if let Err(err) = std::fs::write(path, &text) {
+        diagnostics.push(Diagnostic {
+            code: "E-LEDGER-GOLDEN-WRITE",
+            message: format!("cannot write the verify golden {}: {err}", path.display()),
+            severity: Severity::Error,
+        });
+    }
+    GoldenOutcome {
+        path: path.display().to_string(),
+        drifts: Vec::new(),
+        diagnostics,
+    }
+}
+
+/// Loads a committed golden from `path` and compares today's renders
+/// against it, per check, in [`CHECK_NAMES`] order.
+///
+/// Every failure mode — unreadable file, unparsable JSON, foreign schema
+/// tag, a golden missing a check the renderer produces — is an
+/// error-severity diagnostic (a golden that cannot be trusted must fail
+/// the gate, never silently pass).
+#[must_use]
+pub fn verify_against_golden_path(
+    root: &Path,
+    evidence: Option<&Path>,
+    path: &Path,
+) -> GoldenOutcome {
+    let mut diagnostics = Vec::new();
+    let path_string = path.display().to_string();
+    let loaded = std::fs::read_to_string(path).map_err(|err| Diagnostic {
+        code: "E-LEDGER-GOLDEN-LOAD",
+        message: format!("cannot read the verify golden {path_string}: {err}"),
+        severity: Severity::Error,
+    });
+    let golden = match loaded {
+        Ok(text) => match serde_json::from_str::<VerifyGolden>(&text) {
+            Ok(golden) if golden.schema == VERIFY_GOLDEN_SCHEMA => golden,
+            Ok(golden) => {
+                diagnostics.push(Diagnostic {
+                    code: "E-LEDGER-GOLDEN-SCHEMA",
+                    message: format!(
+                        "verify golden {path_string} carries schema {:?}, expected {VERIFY_GOLDEN_SCHEMA:?}",
+                        golden.schema
+                    ),
+                    severity: Severity::Error,
+                });
+                return GoldenOutcome {
+                    path: path_string,
+                    drifts: Vec::new(),
+                    diagnostics,
+                };
+            }
+            Err(err) => {
+                diagnostics.push(Diagnostic {
+                    code: "E-LEDGER-GOLDEN-SCHEMA",
+                    message: format!("verify golden {path_string} does not parse: {err}"),
+                    severity: Severity::Error,
+                });
+                return GoldenOutcome {
+                    path: path_string,
+                    drifts: Vec::new(),
+                    diagnostics,
+                };
+            }
+        },
+        Err(diagnostic) => {
+            return GoldenOutcome {
+                path: path_string,
+                drifts: Vec::new(),
+                diagnostics: vec![diagnostic],
+            };
+        }
+    };
+
+    let mut drifts = Vec::new();
+    for (name, bytes) in render_pass(root, evidence) {
+        let actual_sha = sha256_hex(bytes.as_bytes());
+        match golden.checks.iter().find(|check| check.name == name) {
+            Some(check) => {
+                if check.sha256 != actual_sha || check.bytes != bytes.len() {
+                    drifts.push(GoldenDrift {
+                        name: name.to_string(),
+                        golden_bytes: check.bytes,
+                        golden_sha256: check.sha256.clone(),
+                        actual_bytes: bytes.len(),
+                        actual_sha256: actual_sha,
+                    });
+                }
+            }
+            None => diagnostics.push(Diagnostic {
+                code: "E-LEDGER-GOLDEN-SCHEMA",
+                message: format!(
+                    "verify golden {path_string} pins no digest for check {name:?} — regenerate it"
+                ),
+                severity: Severity::Error,
+            }),
+        }
+    }
+    GoldenOutcome {
+        path: path_string,
+        drifts,
+        diagnostics,
+    }
+}
+
+/// Renders the human-readable golden report (write face or compare face).
+#[must_use]
+pub fn format_golden_text(outcome: &GoldenOutcome) -> String {
+    let mut text = String::new();
+    let _ = writeln!(
+        text,
+        "Verify golden report for {} (plan M1.13 reproducibility)",
+        outcome.path
+    );
+    for drift in &outcome.drifts {
+        let _ = writeln!(
+            text,
+            "  DRIFT {}: golden {} bytes sha256:{} vs actual {} bytes sha256:{}",
+            drift.name,
+            drift.golden_bytes,
+            drift.golden_sha256,
+            drift.actual_bytes,
+            drift.actual_sha256
+        );
+    }
+    for diagnostic in &outcome.diagnostics {
+        let _ = writeln!(
+            text,
+            "  {}: {}",
+            diagnostic.severity.as_str(),
+            diagnostic.message
+        );
+    }
+    let _ = writeln!(
+        text,
+        "Gate: {}",
+        if outcome.is_ok() {
+            "every rendered check matches the committed golden — renders are reproducible across machines"
+        } else {
+            "golden drift or a load failure — regenerate with `verify --write-golden` only when the change is intended"
+        }
+    );
+    text
+}
+
+/// JSON document rendered by [`format_golden_json`].
+#[derive(Serialize)]
+struct GoldenJson<'a> {
+    schema: &'static str,
+    path: &'a str,
+    ok: bool,
+    drifts: &'a [GoldenDrift],
+}
+
+/// Renders the `glyim.ledger-golden-verdict/1` JSON contract.
+#[must_use]
+pub fn format_golden_json(outcome: &GoldenOutcome) -> String {
+    let document = GoldenJson {
+        schema: "glyim.ledger-golden-verdict/1",
+        path: &outcome.path,
+        ok: outcome.is_ok(),
+        drifts: &outcome.drifts,
+    };
+    let mut text = serde_json::to_string_pretty(&document)
+        .unwrap_or_else(|err| format!("{{\"error\":\"{err}\"}}"));
+    text.push('\n');
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ledger_schema::Severity;
+    use std::path::PathBuf;
 
     fn outcome(checks: Vec<DeterminismCheck>) -> VerifyOutcome {
         VerifyOutcome {
@@ -458,5 +755,94 @@ mod tests {
         let parsed = verify_determinism(dir.path(), None);
         assert!(!parsed.is_ok(), "missing registry must fail the gate");
         assert_eq!(parsed.checks.len(), CHECK_NAMES.len());
+    }
+
+    /// M1.13 two-machine half, locally provable: a golden written from
+    /// one render pass matches a fresh render pass byte-for-byte, and
+    /// any tampering with the golden produces a named drift.
+    #[test]
+    fn golden_round_trips_and_detects_tampering() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let path = dir.path().join("verify-golden.json");
+
+        let written = write_verify_golden(dir.path(), None, &path);
+        assert!(
+            written.is_ok(),
+            "a clean synthetic root writes its golden: {:?}",
+            written.diagnostics
+        );
+        assert!(path.exists(), "the golden artifact lands on disk");
+
+        // The freshly written golden matches a fresh render — the
+        // cross-machine comparison, exercised in-process.
+        let verdict = verify_against_golden_path(dir.path(), None, &path);
+        assert!(
+            verdict.is_ok(),
+            "the committed golden must match the renders: drifts={:?} diags={:?}",
+            verdict.drifts,
+            verdict.diagnostics
+        );
+
+        // Tampering with one digest is a named drift, not a pass.
+        let mut tampered: VerifyGolden =
+            serde_json::from_str(&std::fs::read_to_string(&path).expect("read golden"))
+                .expect("parse golden");
+        tampered.checks[0].sha256 = "0".repeat(64);
+        std::fs::write(
+            &path,
+            serde_json::to_string_pretty(&tampered).expect("serialize"),
+        )
+        .expect("write tampered");
+        let verdict = verify_against_golden_path(dir.path(), None, &path);
+        assert!(!verdict.is_ok(), "a tampered digest must fail the gate");
+        assert_eq!(verdict.drifts.len(), 1);
+        assert_eq!(verdict.drifts[0].name, CHECK_NAMES[0]);
+    }
+
+    #[test]
+    fn golden_refuses_a_missing_or_foreign_artifact() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let missing = verify_against_golden_path(dir.path(), None, &dir.path().join("absent.json"));
+        assert!(!missing.is_ok(), "a missing golden fails the gate");
+        assert!(
+            missing
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "E-LEDGER-GOLDEN-LOAD")
+        );
+
+        let foreign = dir.path().join("foreign.json");
+        std::fs::write(&foreign, "{\"schema\":\"glyim.status/1\",\"checks\":[]}").expect("write");
+        let verdict = verify_against_golden_path(dir.path(), None, &foreign);
+        assert!(!verdict.is_ok(), "a foreign schema fails the gate");
+        assert!(
+            verdict
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "E-LEDGER-GOLDEN-SCHEMA")
+        );
+    }
+
+    /// The committed golden in the repository tree matches the renders —
+    /// the same comparison the reproducibility CI job runs.
+    #[test]
+    fn the_committed_verify_golden_matches_the_renders() {
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("ledger crate lives under <repo>/tools/")
+            .to_path_buf();
+        let golden_path = repo_root.join("ledger/verify-golden.json");
+        assert!(
+            golden_path.exists(),
+            "the committed golden must exist (regenerate with `ledger verify --write-golden`)"
+        );
+        let verdict = verify_against_golden_path(&repo_root, None, &golden_path);
+        assert!(
+            verdict.is_ok(),
+            "committed golden drifted: {:?} {:?}",
+            verdict.drifts,
+            verdict.diagnostics
+        );
     }
 }
