@@ -24,7 +24,7 @@ fn hover_shows_type_signature_and_doc() {
     let span = Span::new(
         file_id,
         ByteIdx::ZERO,
-        ByteIdx::from_raw(10),
+        ByteIdx::from_usize(10),
         SyntaxContext::ROOT,
     );
     let source_map = crate::SourceMap::new(
@@ -103,7 +103,7 @@ fn hover_includes_definition_preview() {
     let span = Span::new(
         file_id,
         ByteIdx::ZERO,
-        ByteIdx::from_raw(39),
+        ByteIdx::from_usize(39),
         SyntaxContext::ROOT,
     );
     let source_map = crate::SourceMap::new(file_id, source);
