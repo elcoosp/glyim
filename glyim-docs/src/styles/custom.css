@@ -60,3 +60,150 @@ h4,
   box-shadow: none !important;
   filter: none !important;
 }
+
+/* Reusable MascotFigure & MascotAside styles */
+.glyim-mascot-figure {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin: 0.75rem 0 1.35rem;
+}
+
+.glyim-mascot-figure img {
+  max-height: 190px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  transition: transform 180ms ease;
+}
+
+.glyim-mascot-figure--sm img {
+  max-height: 145px;
+}
+
+.glyim-mascot-figure--lg img {
+  max-height: 225px;
+}
+
+.glyim-mascot-figure--404 {
+  margin: 1.5rem 0;
+}
+
+.glyim-mascot-figure--404 img {
+  max-height: 250px;
+}
+
+.glyim-mascot-figure figcaption {
+  margin-top: 0.45rem;
+  font-size: 0.85rem;
+  color: var(--sl-color-gray-3);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .glyim-mascot-figure img:hover {
+    transform: translateY(-2px) scale(1.02);
+  }
+}
+
+.glyim-aside-mascot {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.glyim-aside-mascot > img {
+  flex-shrink: 0;
+  width: 68px;
+  height: 68px;
+  object-fit: contain;
+  margin-top: 0.1rem;
+}
+
+.glyim-aside-mascot__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.glyim-aside-mascot__body > :first-child {
+  margin-top: 0;
+}
+
+.glyim-aside-mascot__body > :last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 540px) {
+  .glyim-aside-mascot {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .glyim-aside-mascot > img {
+    width: 54px;
+    height: 54px;
+  }
+}
+
+/* Centered 404 splash layout */
+.glyim-404 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 62vh;
+  padding: 2rem 1rem 3rem;
+}
+
+.glyim-404 .glyim-mascot-figure--404 {
+  margin: 0 0 1rem;
+}
+
+.glyim-404 .glyim-mascot-figure--404 img {
+  max-height: 230px;
+}
+
+.glyim-404__code {
+  display: inline-block;
+  font-family: var(--sl-font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--sl-color-accent);
+  background: var(--sl-color-accent-low);
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  margin-bottom: 0.6rem;
+}
+
+.glyim-404 h1 {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.75rem, 3vw, 2.35rem);
+  line-height: 1.15;
+}
+
+.glyim-404 p {
+  margin: 0 0 1.4rem;
+  max-width: 34ch;
+  color: var(--sl-color-gray-2);
+}
+
+.glyim-404__cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 1.25rem;
+  border-radius: 999px;
+  background: var(--sl-color-accent);
+  color: #ffffff !important;
+  font-weight: 600;
+  text-decoration: none !important;
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+
+.glyim-404__cta:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
