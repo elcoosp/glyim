@@ -63,7 +63,7 @@ fn offset_of(src: &str, needle: &str) -> usize {
 /// with: the same `SourceMap` line/UTF-16-column mapping the request path
 /// uses, so the expectations cannot drift from the mapping under test.
 fn expected_range(source: &str, lo: usize, hi: usize) -> ((usize, usize), (usize, usize)) {
-    let sm = crate::database::SourceMap::new(FileId::from_raw(0), source.to_string());
+    let sm = crate::database::SourceMap::new(FileId::from_usize(0), source.to_string());
     sm.span_to_position(lo, hi)
         .unwrap_or_else(|| panic!("fixture extent {lo}..{hi} is not char-boundary safe"))
 }
