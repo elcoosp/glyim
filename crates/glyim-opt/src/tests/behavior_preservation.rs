@@ -37,7 +37,7 @@ fn assert_optimization_preserves(
     let ctx = ctx_mut.freeze();
 
     let before = run_interp(&ctx, &body);
-    let optimized = crate::optimize(&ctx, &std::sync::Arc::new(body.clone()))
+    let optimized = crate::optimize(&ctx, std::sync::Arc::new(body.clone()))
         .unwrap()
         .body;
     let after = run_interp(&ctx, &optimized);
@@ -217,7 +217,7 @@ fn dce_removes_unused_assignment_still_preserves() {
     let ctx = ctx_mut.freeze();
 
     let before = run_interp(&ctx, &body);
-    let optimized = crate::optimize(&ctx, &std::sync::Arc::new(body.clone()))
+    let optimized = crate::optimize(&ctx, std::sync::Arc::new(body.clone()))
         .unwrap()
         .body;
     let after = run_interp(&ctx, &optimized);
