@@ -49,6 +49,13 @@ pub enum PilotError {
     /// `Session`.
     Session(String),
 
+    /// The ledger task queue could not answer "what is next" (plan M1.11):
+    /// a registry load/validation failure, or a dispatch request the
+    /// queue cannot satisfy (empty head, mixed prompt sources).
+    #[error("task queue error: {0}")]
+    /// `Queue`.
+    Queue(String),
+
     /// An apply-limits violation.
     #[error("apply limits exceeded: {0}")]
     Limits(String),
@@ -70,6 +77,7 @@ impl PilotError {
             Self::Gate { .. } => "E0500",
             Self::Config(_) => "E0600",
             Self::Session(_) => "E0700",
+            Self::Queue(_) => "E1000",
             Self::Limits(_) => "E0900",
             Self::Io(_) => "E0800",
         }
@@ -183,7 +191,7 @@ mod tests {
     fn test_all_error_codes_documented() {
         let codes = [
             "E0100", "E0201", "E0202", "E0203", "E0204", "E0205", "E0206", "E0300", "E0400",
-            "E0500", "E0600", "E0700", "E0800", "E0900",
+            "E0500", "E0600", "E0700", "E0800", "E0900", "E1000",
         ];
         let md = include_str!("../ERROR_CODES.md");
         for code in codes {
