@@ -23,7 +23,7 @@ fn w1_c03_t01_left_shift() {
         let mut blocks = IndexVec::new();
         let rvalue = Rvalue::BinaryOp(
             BinOp::Shl,
-            Box::new((
+            [
                 Operand::Constant(MirConst {
                     kind: MirConstKind::Int(1),
                     ty: i32_ty,
@@ -34,7 +34,7 @@ fn w1_c03_t01_left_shift() {
                     ty: i32_ty,
                     span: Span::DUMMY,
                 }),
-            )),
+            ],
         );
         let stmt = Statement {
             kind: StatementKind::Assign(Place::new(ret_local), rvalue),
@@ -79,7 +79,7 @@ fn bitwise_and() {
         let mut blocks = IndexVec::new();
         let rvalue = Rvalue::BinaryOp(
             BinOp::BitAnd,
-            Box::new((
+            [
                 Operand::Constant(MirConst {
                     kind: MirConstKind::Int(0b1100),
                     ty: i32_ty,
@@ -90,7 +90,7 @@ fn bitwise_and() {
                     ty: i32_ty,
                     span: Span::DUMMY,
                 }),
-            )),
+            ],
         );
         let stmt = Statement {
             kind: StatementKind::Assign(Place::new(ret_local), rvalue),
@@ -139,7 +139,7 @@ fn bitwise_or() {
         let mut blocks = IndexVec::new();
         let rvalue = Rvalue::BinaryOp(
             BinOp::BitOr,
-            Box::new((
+            [
                 Operand::Constant(MirConst {
                     kind: MirConstKind::Int(0b1100),
                     ty: i32_ty,
@@ -150,7 +150,7 @@ fn bitwise_or() {
                     ty: i32_ty,
                     span: Span::DUMMY,
                 }),
-            )),
+            ],
         );
         let stmt = Statement {
             kind: StatementKind::Assign(Place::new(ret_local), rvalue),
@@ -199,7 +199,7 @@ fn bitwise_xor() {
         let mut blocks = IndexVec::new();
         let rvalue = Rvalue::BinaryOp(
             BinOp::BitXor,
-            Box::new((
+            [
                 Operand::Constant(MirConst {
                     kind: MirConstKind::Int(0b1100),
                     ty: i32_ty,
@@ -210,7 +210,7 @@ fn bitwise_xor() {
                     ty: i32_ty,
                     span: Span::DUMMY,
                 }),
-            )),
+            ],
         );
         let stmt = Statement {
             kind: StatementKind::Assign(Place::new(ret_local), rvalue),
@@ -259,7 +259,7 @@ fn right_shift() {
         let mut blocks = IndexVec::new();
         let rvalue = Rvalue::BinaryOp(
             BinOp::Shr,
-            Box::new((
+            [
                 Operand::Constant(MirConst {
                     kind: MirConstKind::Int(16),
                     ty: i32_ty,
@@ -270,7 +270,7 @@ fn right_shift() {
                     ty: i32_ty,
                     span: Span::DUMMY,
                 }),
-            )),
+            ],
         );
         let stmt = Statement {
             kind: StatementKind::Assign(Place::new(ret_local), rvalue),
