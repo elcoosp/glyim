@@ -21,7 +21,7 @@ struct MockSource {
 
 impl MockSource {
     fn add(&mut self, name: &str, kind: SymbolKind, file: u32, lo: usize, hi: usize) {
-        let file_id = FileId::from_raw(file);
+        let file_id = FileId::from_usize(file as usize);
         self.entries.push((
             name.to_string(),
             kind,
@@ -54,7 +54,7 @@ fn struct_beats_same_named_function() {
 
     let target = type_target(&src, "Foo").expect("a struct is recorded");
 
-    assert_eq!(target.file_id, FileId::from_raw(1));
+    assert_eq!(target.file_id, FileId::from_usize(1));
     assert_eq!(target.span.lo.to_usize(), 7, "the struct site, not the fn");
 }
 
@@ -65,7 +65,7 @@ fn enum_qualifies_as_a_type_definition() {
 
     let target = type_target(&src, "Shape").expect("an enum is recorded");
 
-    assert_eq!(target.file_id, FileId::from_raw(2));
+    assert_eq!(target.file_id, FileId::from_usize(2));
     assert_eq!(target.span.lo.to_usize(), 3);
 }
 
@@ -100,6 +100,6 @@ fn first_recorded_type_symbol_wins() {
 
     let target = type_target(&src, "Pair").expect("structs are recorded");
 
-    assert_eq!(target.file_id, FileId::from_raw(1), "first recording");
+    assert_eq!(target.file_id, FileId::from_usize(1), "first recording");
     assert_eq!(target.span.lo.to_usize(), 5);
 }
