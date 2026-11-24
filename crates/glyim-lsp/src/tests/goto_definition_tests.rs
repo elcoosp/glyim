@@ -4,7 +4,7 @@ use glyim_span::{FileId, Span};
 #[test]
 fn test_goto_definition_on_method_jumps_to_impl() {
     let mut symbol_index = SymbolIndex::new();
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
     let def_span = Span::DUMMY; // In real test would be actual span
     let sym = SymbolInfo {
         name: "method_name".to_string(),
@@ -48,8 +48,8 @@ fn goto_definition_reports_exact_token_extents() {
                 file_id,
                 span: Span::new(
                     file_id,
-                    ByteIdx::from_raw(3),
-                    ByteIdx::from_raw(6),
+                    ByteIdx::from_usize(3),
+                    ByteIdx::from_usize(6),
                     SyntaxContext::ROOT,
                 ),
             },
