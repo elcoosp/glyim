@@ -1,6 +1,7 @@
 mod aggregate_kind;
 mod assert_message;
 mod basic_block;
+mod binary_operands_inline;
 mod body;
 mod body_edge_cases;
 mod body_stress;
