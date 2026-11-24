@@ -69,7 +69,7 @@ fn rvalue_ref_unique() {
 fn rvalue_binary_op() {
     let lhs = Operand::Copy(Place::new(LocalIdx::from_raw(0)));
     let rhs = Operand::Copy(Place::new(LocalIdx::from_raw(1)));
-    let rv = Rvalue::BinaryOp(BinOp::Add, Box::new((lhs, rhs)));
+    let rv = Rvalue::binary_op(BinOp::Add, lhs, rhs);
     assert!(matches!(rv, Rvalue::BinaryOp(BinOp::Add, _)));
 }
 
