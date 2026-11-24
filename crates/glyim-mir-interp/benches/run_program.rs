@@ -106,7 +106,7 @@ fn loop_sum_body(owner_raw: u32, n: i128, ty: Ty) -> Body {
         block(
             vec![stmt(StatementKind::Assign(
                 tmp(),
-                Rvalue::BinaryOp(BinOp::Eq, Box::new((Operand::Copy(i()), int_const(ty, n)))),
+                Rvalue::binary_op(BinOp::Eq, Operand::Copy(i()), int_const(ty, n)),
             ))],
             TerminatorKind::SwitchInt {
                 discr: Operand::Copy(tmp()),
@@ -120,14 +120,11 @@ fn loop_sum_body(owner_raw: u32, n: i128, ty: Ty) -> Body {
             vec![
                 stmt(StatementKind::Assign(
                     sum(),
-                    Rvalue::BinaryOp(
-                        BinOp::Add,
-                        Box::new((Operand::Copy(sum()), Operand::Copy(i()))),
-                    ),
+                    Rvalue::binary_op(BinOp::Add, Operand::Copy(sum()), Operand::Copy(i())),
                 )),
                 stmt(StatementKind::Assign(
                     i(),
-                    Rvalue::BinaryOp(BinOp::Add, Box::new((Operand::Copy(i()), one))),
+                    Rvalue::binary_op(BinOp::Add, Operand::Copy(i()), one),
                 )),
             ],
             TerminatorKind::Goto { target: head },
@@ -187,7 +184,7 @@ fn fib_body(owner_raw: u32, ty: Ty) -> Body {
         block(
             vec![stmt(StatementKind::Assign(
                 tmp(2),
-                Rvalue::BinaryOp(BinOp::Lt, Box::new((Operand::Copy(n()), int_const(ty, 2)))),
+                Rvalue::binary_op(BinOp::Lt, Operand::Copy(n()), int_const(ty, 2)),
             ))],
             TerminatorKind::SwitchInt {
                 discr: Operand::Copy(tmp(2)),
@@ -205,7 +202,7 @@ fn fib_body(owner_raw: u32, ty: Ty) -> Body {
         block(
             vec![stmt(StatementKind::Assign(
                 tmp(3),
-                Rvalue::BinaryOp(BinOp::Sub, Box::new((Operand::Copy(n()), int_const(ty, 1)))),
+                Rvalue::binary_op(BinOp::Sub, Operand::Copy(n()), int_const(ty, 1)),
             ))],
             call_fib(Operand::Copy(tmp(3)), 5, call1_bb),
         ),
@@ -214,17 +211,14 @@ fn fib_body(owner_raw: u32, ty: Ty) -> Body {
         block(
             vec![stmt(StatementKind::Assign(
                 tmp(4),
-                Rvalue::BinaryOp(BinOp::Sub, Box::new((Operand::Copy(n()), int_const(ty, 2)))),
+                Rvalue::binary_op(BinOp::Sub, Operand::Copy(n()), int_const(ty, 2)),
             ))],
             call_fib(Operand::Copy(tmp(4)), 6, call2_bb),
         ),
         block(
             vec![stmt(StatementKind::Assign(
                 ret(),
-                Rvalue::BinaryOp(
-                    BinOp::Add,
-                    Box::new((Operand::Copy(tmp(5)), Operand::Copy(tmp(6)))),
-                ),
+                Rvalue::binary_op(BinOp::Add, Operand::Copy(tmp(5)), Operand::Copy(tmp(6))),
             ))],
             TerminatorKind::Return,
         ),
