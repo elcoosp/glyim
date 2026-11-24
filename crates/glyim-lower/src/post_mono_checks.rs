@@ -252,9 +252,8 @@ fn operand_contains_param(op: &Operand, ctx: &TyCtx) -> bool {
 fn rvalue_contains_param(rv: &Rvalue, ctx: &TyCtx) -> bool {
     match rv {
         Rvalue::Use(op) => operand_contains_param(op, ctx),
-        Rvalue::BinaryOp(_, boxed) => {
-            let (lhs, rhs) = boxed.as_ref();
-            operand_contains_param(lhs, ctx) || operand_contains_param(rhs, ctx)
+        Rvalue::BinaryOp(_, ops) => {
+            operand_contains_param(&ops[0], ctx) || operand_contains_param(&ops[1], ctx)
         }
         Rvalue::UnaryOp(_, op) => operand_contains_param(op, ctx),
         Rvalue::Ref(_, _) => false,
