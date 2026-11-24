@@ -377,7 +377,7 @@ impl MirBuilder<'_> {
                 }
                 let lhs_op = self.lower_expr_to_operand(lhs);
                 let rhs_op = self.lower_expr_to_operand(rhs);
-                glyim_mir::Rvalue::BinaryOp(*op, Box::new((lhs_op, rhs_op)))
+                glyim_mir::Rvalue::BinaryOp(*op, [lhs_op, rhs_op])
             }
             thir::ExprKind::Unary { op, operand } => {
                 let op_val = self.lower_expr_to_operand(operand);
@@ -1165,10 +1165,10 @@ impl MirBuilder<'_> {
                             Place::new(cond_local),
                             Rvalue::BinaryOp(
                                 BinOp::Lt,
-                                Box::new((
+                                [
                                     Operand::Copy(Place::new(idx_local)),
                                     Operand::Copy(Place::new(len_local)),
-                                )),
+                                ],
                             ),
                         ),
                         expr.span,
@@ -1263,14 +1263,14 @@ impl MirBuilder<'_> {
                                 Place::new(idx_local),
                                 Rvalue::BinaryOp(
                                     BinOp::Add,
-                                    Box::new((
+                                    [
                                         Operand::Copy(Place::new(idx_local)),
                                         Operand::Constant(MirConst {
                                             kind: MirConstKind::Uint(1),
                                             ty: usize_ty,
                                             span: expr.span,
                                         }),
-                                    )),
+                                    ],
                                 ),
                             ),
                             expr.span,
@@ -3060,10 +3060,10 @@ impl MirBuilder<'_> {
                 let const_op = self.literal_to_mir_const(lit, scrut_ty, span)?;
                 let cmp = glyim_mir::Rvalue::BinaryOp(
                     BinOp::Eq,
-                    Box::new((
+                    [
                         glyim_mir::Operand::Copy(scrut_place.clone()),
                         glyim_mir::Operand::Constant(const_op),
-                    )),
+                    ],
                 );
                 let bool_ty = self.ctx.ty_ctx().bool_ty();
                 let out = self.alloc_local(bool_ty, glyim_core::primitives::Mutability::Not, span);
@@ -3092,10 +3092,10 @@ impl MirBuilder<'_> {
                     if let Some(c) = self.literal_to_mir_const(s, scrut_ty, span) {
                         let cmp = glyim_mir::Rvalue::BinaryOp(
                             BinOp::GtEq,
-                            Box::new((
+                            [
                                 glyim_mir::Operand::Copy(scrut_place.clone()),
                                 glyim_mir::Operand::Constant(c),
-                            )),
+                            ],
                         );
                         let l = self.alloc_local(
                             bool_ty,
@@ -3115,10 +3115,10 @@ impl MirBuilder<'_> {
                         let op = if *inclusive { BinOp::LtEq } else { BinOp::Lt };
                         let cmp = glyim_mir::Rvalue::BinaryOp(
                             op,
-                            Box::new((
+                            [
                                 glyim_mir::Operand::Copy(scrut_place.clone()),
                                 glyim_mir::Operand::Constant(c),
-                            )),
+                            ],
                         );
                         let l = self.alloc_local(
                             bool_ty,
@@ -3178,10 +3178,10 @@ impl MirBuilder<'_> {
                     };
                     let cmp = glyim_mir::Rvalue::BinaryOp(
                         BinOp::Eq,
-                        Box::new((
+                        [
                             glyim_mir::Operand::Copy(glyim_mir::Place::new(discr_local)),
                             glyim_mir::Operand::Constant(idx_const),
-                        )),
+                        ],
                     );
                     let bool_ty = self.ctx.ty_ctx().bool_ty();
                     let discr_eq =
@@ -3262,10 +3262,10 @@ impl MirBuilder<'_> {
                 };
                 let cmp = glyim_mir::Rvalue::BinaryOp(
                     BinOp::Eq,
-                    Box::new((
+                    [
                         glyim_mir::Operand::Copy(glyim_mir::Place::new(len_local)),
                         glyim_mir::Operand::Constant(expected_const),
-                    )),
+                    ],
                 );
                 let bool_ty = self.ctx.ty_ctx().bool_ty();
                 let out = self.alloc_local(bool_ty, glyim_core::primitives::Mutability::Not, span);
@@ -3293,16 +3293,14 @@ impl MirBuilder<'_> {
         self.push_stmt(
             glyim_mir::StatementKind::Assign(
                 glyim_mir::Place::new(dest),
-                glyim_mir::Rvalue::BinaryOp(
+                glyim_mir::Rvalue::binary_op(
                     // `BinOp::And` (logical), not `BitAnd`: the interpreter
                     // implements bool short-circuit `And`/`Or` and rejects
                     // `BitAnd`/`BitOr` on `Bool` operands with
                     // "unsupported bool binop".
                     BinOp::And,
-                    Box::new((
-                        glyim_mir::Operand::Copy(glyim_mir::Place::new(lhs)),
-                        glyim_mir::Operand::Copy(glyim_mir::Place::new(rhs)),
-                    )),
+                    glyim_mir::Operand::Copy(glyim_mir::Place::new(lhs)),
+                    glyim_mir::Operand::Copy(glyim_mir::Place::new(rhs)),
                 ),
             ),
             span,
@@ -3321,10 +3319,10 @@ impl MirBuilder<'_> {
                 glyim_mir::Rvalue::BinaryOp(
                     // `BinOp::Or` (logical), not `BitOr`; see `and_bool`.
                     BinOp::Or,
-                    Box::new((
+                    [
                         glyim_mir::Operand::Copy(glyim_mir::Place::new(lhs)),
                         glyim_mir::Operand::Copy(glyim_mir::Place::new(rhs)),
-                    )),
+                    ],
                 ),
             ),
             span,
@@ -3621,7 +3619,7 @@ impl MirBuilder<'_> {
                 };
                 let add_rval = Rvalue::BinaryOp(
                     BinOp::Add,
-                    Box::new((Operand::Copy(Place::new(end_local)), Operand::Constant(one))),
+                    [Operand::Copy(Place::new(end_local)), Operand::Constant(one)],
                 );
                 self.push_stmt(
                     StatementKind::Assign(Place::new(eff_end_local), add_rval),
@@ -3635,10 +3633,10 @@ impl MirBuilder<'_> {
                 };
                 let end_le_max = Rvalue::BinaryOp(
                     BinOp::LtEq,
-                    Box::new((
+                    [
                         Operand::Copy(Place::new(end_local)),
                         Operand::Constant(max_minus_one),
-                    )),
+                    ],
                 );
                 let end_le_max_local =
                     self.alloc_local(self.ctx.ty_ctx().bool_ty(), Mutability::Not, span);
@@ -3698,8 +3696,7 @@ impl MirBuilder<'_> {
         let done_bb = self.new_block();
 
         // Check start <= end
-        let start_le_end =
-            Rvalue::BinaryOp(BinOp::LtEq, Box::new((start_val.clone(), end_val.clone())));
+        let start_le_end = Rvalue::BinaryOp(BinOp::LtEq, [start_val.clone(), end_val.clone()]);
         let start_le_end_local =
             self.alloc_local(self.ctx.ty_ctx().bool_ty(), Mutability::Not, span);
         self.push_stmt(StatementKind::StorageLive(start_le_end_local), span);
@@ -3725,7 +3722,7 @@ impl MirBuilder<'_> {
         // Check end <= len
         let end_le_len = Rvalue::BinaryOp(
             BinOp::LtEq,
-            Box::new((end_val.clone(), Operand::Copy(Place::new(len_local)))),
+            [end_val.clone(), Operand::Copy(Place::new(len_local))],
         );
         let end_le_len_local = self.alloc_local(self.ctx.ty_ctx().bool_ty(), Mutability::Not, span);
         self.push_stmt(StatementKind::StorageLive(end_le_len_local), span);
@@ -3873,7 +3870,7 @@ impl MirBuilder<'_> {
         };
         let start_op = Operand::Copy(Place::new(start_local));
         let size_op = Operand::Constant(elem_size_const);
-        let byte_offset = Rvalue::BinaryOp(BinOp::Mul, Box::new((start_op, size_op)));
+        let byte_offset = Rvalue::BinaryOp(BinOp::Mul, [start_op, size_op]);
         let byte_offset_local = self.alloc_local(Ty::USIZE, Mutability::Not, span);
         self.push_stmt(StatementKind::StorageLive(byte_offset_local), span);
         self.push_stmt(
@@ -3883,10 +3880,10 @@ impl MirBuilder<'_> {
 
         let data_ptr_rvalue = Rvalue::BinaryOp(
             BinOp::Add,
-            Box::new((
+            [
                 Operand::Copy(Place::new(data_ptr_ptr)),
                 Operand::Copy(Place::new(byte_offset_local)),
-            )),
+            ],
         );
         self.push_stmt(
             StatementKind::Assign(Place::new(data_ptr_local), data_ptr_rvalue),
@@ -3895,7 +3892,7 @@ impl MirBuilder<'_> {
 
         let new_len_rvalue = Rvalue::BinaryOp(
             BinOp::Sub,
-            Box::new((end_val, Operand::Copy(Place::new(start_local)))),
+            [end_val, Operand::Copy(Place::new(start_local))],
         );
         self.push_stmt(
             StatementKind::Assign(Place::new(new_len_local), new_len_rvalue),
