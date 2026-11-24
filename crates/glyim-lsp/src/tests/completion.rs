@@ -28,9 +28,9 @@ fn test_provide_completions() {
             definition: DefinitionLocation {
                 file_id,
                 span: Span::new(
-                    FileId::from_raw(0),
-                    ByteIdx::from_raw(0),
-                    ByteIdx::from_raw(10),
+                    FileId::from_usize(0),
+                    ByteIdx::from_usize(0),
+                    ByteIdx::from_usize(10),
                     SyntaxContext::ROOT,
                 ),
             },
@@ -116,9 +116,9 @@ fn test_auto_import_offers_symbol_from_other_file() {
             definition: DefinitionLocation {
                 file_id: file_id_b,
                 span: Span::new(
-                    FileId::from_raw(0),
-                    ByteIdx::from_raw(0),
-                    ByteIdx::from_raw(10),
+                    FileId::from_usize(0),
+                    ByteIdx::from_usize(0),
+                    ByteIdx::from_usize(10),
                     SyntaxContext::ROOT,
                 ),
             },
