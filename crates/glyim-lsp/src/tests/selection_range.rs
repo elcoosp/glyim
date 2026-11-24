@@ -25,7 +25,7 @@ impl MockSource {
     fn add(&mut self, offset: usize, chain: &[(usize, usize)]) {
         let spans: Vec<glyim_span::Span> = chain
             .iter()
-            .map(|&(lo, hi)| make_span(FileId::from_raw(1), lo, hi))
+            .map(|&(lo, hi)| make_span(FileId::from_usize(1), lo, hi))
             .collect();
         self.entries.push((offset, spans));
     }
