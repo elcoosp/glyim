@@ -34,11 +34,19 @@
 //! `glyim-ledger verify [ROOT] [--evidence PATH] [--format text|json]` is
 //! the plan M1.13 determinism self-check: every ledger pipeline runs
 //! twice from independent load passes and any rendered-byte drift fails
-//! the command. `glyim-ledger render-gaps [ROOT] [--format md|json]
-//! [--out PATH] [--check]` is the plan M1.9 remainder: it generates
-//! `KNOWN_GAPS.md` (or the `glyim.known-gaps/1` JSON face) from the gap
-//! registry — `--out` writes the rendered document, `--check` fails on
-//! any drift between the committed document and the render.
+//! the command; `--golden PATH` additionally compares today's renders
+//! against a committed digest golden (the M1.13 two-machine
+//! reproducibility half, re-verified by the CI `reproducibility` job) and
+//! `--write-golden PATH` regenerates it. `glyim-ledger policy-mutation
+//! [ROOT] [--evidence PATH] [--format text|json]` is the plan M1.13
+//! mutation slice: a fixed catalogue of policy mutants runs through the
+//! level engine and any surviving mutant — a policy surface the
+//! evaluation ignores — fails the command. `glyim-ledger render-gaps
+//! [ROOT] [--format md|json] [--out PATH] [--check]` is the plan M1.9
+//! remainder: it generates `KNOWN_GAPS.md` (or the `glyim.known-gaps/1`
+//! JSON face) from the gap registry — `--out` writes the rendered
+//! document, `--check` fails on any drift between the committed document
+//! and the render.
 //! `glyim-ledger gaps audit [ROOT] [--format text|json]` is the
 //! trust-loop closure over the gap-lifecycle write faces: it resolves
 //! every registered gap's witness fixture against the tree, one row per
@@ -530,19 +538,79 @@ fn main() -> ExitCode {
             root,
             evidence,
             format,
+            golden,
+            write_golden,
         } => {
-            let outcome = glyim_ledger::verify_determinism(&root, evidence.as_deref());
-            match format {
-                glyim_ledger::VerifyFormat::Text => {
-                    print!("{}", glyim_ledger::format_verify_text(&outcome));
+            // The golden faces share the exit contract: a drifted digest,
+            // an untrustworthy golden, or an error diagnostic fails the
+            // command (plan M1.13 — reproducibility is a gate).
+            let writing = write_golden.is_some();
+            if let Some(golden_path) = golden.or(write_golden) {
+                let outcome = if writing {
+                    glyim_ledger::write_verify_golden(&root, evidence.as_deref(), &golden_path)
+                } else {
+                    glyim_ledger::verify_against_golden_path(
+                        &root,
+                        evidence.as_deref(),
+                        &golden_path,
+                    )
+                };
+                match format {
+                    glyim_ledger::VerifyFormat::Text => {
+                        print!("{}", glyim_ledger::format_golden_text(&outcome));
+                    }
+                    glyim_ledger::VerifyFormat::Json => {
+                        print!("{}", glyim_ledger::format_golden_json(&outcome));
+                    }
                 }
-                glyim_ledger::VerifyFormat::Json => {
-                    print!("{}", glyim_ledger::format_verify_json(&outcome));
+                if outcome.is_ok() {
+                    if writing {
+                        println!(
+                            "verify golden written to {} — commit it; CI re-verifies it",
+                            golden_path.display()
+                        );
+                    }
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
+                }
+            } else {
+                let outcome = glyim_ledger::verify_determinism(&root, evidence.as_deref());
+                match format {
+                    glyim_ledger::VerifyFormat::Text => {
+                        print!("{}", glyim_ledger::format_verify_text(&outcome));
+                    }
+                    glyim_ledger::VerifyFormat::Json => {
+                        print!("{}", glyim_ledger::format_verify_json(&outcome));
+                    }
+                }
+                // The self-check *is* a gate: a drifted check or an
+                // error-severity diagnostic fails the command (plan M1.13 —
+                // "run compute twice → identical bytes").
+                if outcome.is_ok() {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
                 }
             }
-            // The self-check *is* a gate: a drifted check or an
-            // error-severity diagnostic fails the command (plan M1.13 —
-            // "run compute twice → identical bytes").
+        }
+        Command::PolicyMutation {
+            root,
+            evidence,
+            format,
+        } => {
+            let outcome = glyim_ledger::run_policy_mutation(&root, evidence.as_deref());
+            match format {
+                glyim_ledger::VerifyFormat::Text => {
+                    print!("{}", glyim_ledger::format_mutation_text(&outcome));
+                }
+                glyim_ledger::VerifyFormat::Json => {
+                    print!("{}", glyim_ledger::format_mutation_json(&outcome));
+                }
+            }
+            // The mutation check *is* a gate: a surviving mutant names a
+            // policy surface the level evaluation ignores (plan M1.13 —
+            // "mutation-test `policy` evaluation").
             if outcome.is_ok() {
                 ExitCode::SUCCESS
             } else {
