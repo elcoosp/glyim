@@ -20,8 +20,8 @@ fn setup_test_db_with_references() -> (Arc<AnalysisDatabase>, FileMap, PathBuf) 
     let mut graph = ReferenceGraph::new();
     let span = Span::new(
         file_id,
-        ByteIdx::from_raw(0),
-        ByteIdx::from_raw(5),
+        ByteIdx::from_usize(0),
+        ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
     let def_ref = Reference {
