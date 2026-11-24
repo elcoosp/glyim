@@ -5,12 +5,12 @@ type: explanation
 sidebar:
   order: 3
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-borrowck.svg" alt="Glyim borrow checker shield mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
 
+<MascotFigure pose="borrowck" alt="Glyim borrow checker shield mascot" />
 
-import { Aside, LinkCard } from '@astrojs/starlight/components';
+import { LinkCard } from '@astrojs/starlight/components';
 
 Glyim implements a non-lexical lifetime (NLL) borrow checker, the same family of design that rustc uses in production. This page explains what that means for the programs you write and how the checker works internally.
 
@@ -53,9 +53,9 @@ Assigning a non-`Copy` value moves it. Move analysis tracks this per place, incl
 - The borrow checker's demand for drop flags is answered by drop elaboration in the optimizer.
 - Diagnostics carry spans back to the source, rendered by `miette` in the CLI and published over LSP in the editor.
 
-<Aside type="note">
+<MascotAside type="note">
 Two known limits shape current behavior: `panic!` aborts without unwinding (exit code 101), and cross-frame unwinding in the MIR interpreter supports single-frame cleanup so far — both are tracked gaps in the development plan, not design decisions.
-</Aside>
+</MascotAside>
 
 ## Next steps
 
