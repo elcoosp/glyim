@@ -212,10 +212,10 @@ fn interpret_direct_closure_call_with_capture() {
         // _0 = _1 + _2
         let sum = Rvalue::BinaryOp(
             glyim_core::primitives::BinOp::Add,
-            Box::new((
+            [
                 Operand::Copy(Place::new(LocalIdx::from_raw(1))),
                 Operand::Copy(Place::new(LocalIdx::from_raw(2))),
-            )),
+            ],
         );
         body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
             statements: vec![Statement {
