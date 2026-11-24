@@ -10,7 +10,7 @@ fn test_ult_u32_true() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_u32(5u64, u32_ty);
     let rhs = const_operand_u32(10u64, u32_ty);
-    let rv = Rvalue::BinaryOp(BinOp::Lt, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::Lt, lhs, rhs);
     let body = simple_mir_body(Ty::BOOL, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
@@ -31,7 +31,7 @@ fn test_ult_u32_false() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_u32(10u64, u32_ty);
     let rhs = const_operand_u32(5u64, u32_ty);
-    let rv = Rvalue::BinaryOp(BinOp::Lt, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::Lt, lhs, rhs);
     let body = simple_mir_body(Ty::BOOL, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
@@ -52,7 +52,7 @@ fn test_ugt_u32_true() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_u32(10u64, u32_ty);
     let rhs = const_operand_u32(5u64, u32_ty);
-    let rv = Rvalue::BinaryOp(BinOp::Gt, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::Gt, lhs, rhs);
     let body = simple_mir_body(Ty::BOOL, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
@@ -73,7 +73,7 @@ fn test_ule_u32_true() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_u32(5u64, u32_ty);
     let rhs = const_operand_u32(5u64, u32_ty);
-    let rv = Rvalue::BinaryOp(BinOp::LtEq, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::LtEq, lhs, rhs);
     let body = simple_mir_body(Ty::BOOL, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
@@ -94,7 +94,7 @@ fn test_uge_u32_true() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_u32(10u64, u32_ty);
     let rhs = const_operand_u32(5u64, u32_ty);
-    let rv = Rvalue::BinaryOp(BinOp::GtEq, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::GtEq, lhs, rhs);
     let body = simple_mir_body(Ty::BOOL, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
@@ -115,7 +115,7 @@ fn test_slt_negative_i32() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_i32(-5, i32_ty);
     let rhs = const_operand_i32(10, i32_ty);
-    let rv = Rvalue::BinaryOp(BinOp::Lt, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::Lt, lhs, rhs);
     let body = simple_mir_body(Ty::BOOL, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
@@ -136,7 +136,7 @@ fn test_slt_negative_i32_false() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_i32(10, i32_ty);
     let rhs = const_operand_i32(-5, i32_ty);
-    let rv = Rvalue::BinaryOp(BinOp::Lt, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::Lt, lhs, rhs);
     let body = simple_mir_body(Ty::BOOL, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
