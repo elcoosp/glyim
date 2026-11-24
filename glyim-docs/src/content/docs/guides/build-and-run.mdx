@@ -5,8 +5,11 @@ type: how-to
 sidebar:
   order: 1
 ---
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
+import { Code, LinkCard } from '@astrojs/starlight/components';
 
-import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+<MascotFigure pose="guide" alt="Glyim build and run guide mascot" />
 
 This guide shows how to drive the day-to-day build workflow with `glyip`: debug and release builds, backend selection, optimization levels, link-time optimization, and running the result.
 
@@ -26,9 +29,9 @@ Combine `--release` with an explicit optimization level and LTO strategy when yo
 
 <Code lang="bash" title="Terminal" code={"glyip build --release --opt-level 2 --lto thin"} />
 
-<Aside type="caution">
+<MascotAside type="caution">
 `fat` LTO is rejected with an explicit error (full fat LTO needs the multi-CGU compilation driver, a tracked gap — it never compiles silently as `off`). `thin` LTO requires the LLVM backend and the `llvm-lto2` tool from the same LLVM distribution that `glyim-codegen-llvm` was built against; requesting `thin` with the bytecode backend is an explicit error rather than a silent no-op.
-</Aside>
+</MascotAside>
 
 ## Choose a backend
 
