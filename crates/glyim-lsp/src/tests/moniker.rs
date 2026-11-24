@@ -27,14 +27,14 @@ impl MockSource {
             name: name.to_string(),
             qualified_path: path.map(str::to_string),
             location: DefinitionLocation {
-                file_id: FileId::from_raw(file),
+                file_id: FileId::from_usize(file as usize),
                 span: span_of(file, lo, hi),
             },
         });
     }
     fn import(&mut self, file: u32, name: &str, path: &str, lo: usize, hi: usize) {
         self.imports.push((
-            FileId::from_raw(file),
+            FileId::from_usize(file as usize),
             SpelledImport {
                 path: path.to_string(),
                 span: span_of(file, lo, hi),
@@ -46,9 +46,9 @@ impl MockSource {
 
 fn span_of(file: u32, lo: usize, hi: usize) -> Span {
     Span::new(
-        FileId::from_raw(file),
-        glyim_span::ByteIdx::from_raw(lo as u32),
-        glyim_span::ByteIdx::from_raw(hi as u32),
+        FileId::from_usize(file as usize),
+        glyim_span::ByteIdx::from_usize(lo),
+        glyim_span::ByteIdx::from_usize(hi),
         SyntaxContext::ROOT,
     )
 }
@@ -79,7 +79,7 @@ fn cursor_on_the_import_answers_the_spelled_path() {
     mock.import(0, "Point", "crate::shapes::Point", 0, 28);
     mock.symbol("Point", Some("Point"), 1, 5, 20);
 
-    let facts = crate::moniker::monikers_at(&mock, FileId::from_raw(0), 14, "Point");
+    let facts = crate::moniker::monikers_at(&mock, FileId::from_usize(0), 14, "Point");
     assert_eq!(facts.len(), 1);
     assert_eq!(facts[0].kind, FactKind::Import);
     assert_eq!(facts[0].identifier, "crate::shapes::Point");
@@ -94,7 +94,7 @@ fn cursor_on_a_definition_answers_the_export() {
     mock.import(0, "Point", "crate::shapes::Point", 0, 28);
     mock.symbol("Point", Some("Point"), 0, 30, 45);
 
-    let facts = crate::moniker::monikers_at(&mock, FileId::from_raw(0), 35, "Point");
+    let facts = crate::moniker::monikers_at(&mock, FileId::from_usize(0), 35, "Point");
     assert_eq!(facts.len(), 1);
     assert_eq!(facts[0].kind, FactKind::Export);
     assert_eq!(facts[0].identifier, "Point");
@@ -108,7 +108,7 @@ fn a_bare_usage_of_an_imported_name_answers_the_import() {
     let mut mock = MockSource::default();
     mock.import(0, "Point", "crate::shapes::Point", 0, 28);
 
-    let facts = crate::moniker::monikers_at(&mock, FileId::from_raw(0), 100, "Point");
+    let facts = crate::moniker::monikers_at(&mock, FileId::from_usize(0), 100, "Point");
     assert_eq!(facts.len(), 1);
     assert_eq!(facts[0].kind, FactKind::Import);
     assert_eq!(facts[0].identifier, "crate::shapes::Point");
@@ -120,7 +120,7 @@ fn a_bare_usage_of_an_imported_name_answers_the_import() {
 fn a_bare_usage_of_a_recorded_name_answers_the_export() {
     let mut mock = MockSource::default();
     mock.symbol("helper", Some("helper"), 0, 40, 52);
-    let facts = crate::moniker::monikers_at(&mock, FileId::from_raw(0), 90, "helper");
+    let facts = crate::moniker::monikers_at(&mock, FileId::from_usize(0), 90, "helper");
     assert_eq!(facts.len(), 1);
     assert_eq!(facts[0].kind, FactKind::Export);
     assert_eq!(facts[0].identifier, "helper");
@@ -131,7 +131,7 @@ fn a_bare_usage_of_a_recorded_name_answers_the_export() {
 #[test]
 fn unrecorded_names_answer_nothing() {
     let mock = MockSource::default();
-    assert!(crate::moniker::monikers_at(&mock, FileId::from_raw(0), 10, "ghost").is_empty());
+    assert!(crate::moniker::monikers_at(&mock, FileId::from_usize(0), 10, "ghost").is_empty());
 }
 
 /// A recorded symbol whose extent is zero-width (the index records body
@@ -141,7 +141,7 @@ fn unrecorded_names_answer_nothing() {
 fn zero_width_recorded_extents_are_skipped() {
     let mut mock = MockSource::default();
     mock.symbol("p", Some("p"), 0, 44, 44);
-    assert!(crate::moniker::monikers_at(&mock, FileId::from_raw(0), 60, "p").is_empty());
+    assert!(crate::moniker::monikers_at(&mock, FileId::from_usize(0), 60, "p").is_empty());
 }
 
 /// A recorded symbol with no qualified path recorded (the fact store
@@ -151,7 +151,7 @@ fn zero_width_recorded_extents_are_skipped() {
 fn symbols_without_a_recorded_path_are_skipped() {
     let mut mock = MockSource::default();
     mock.symbol("Shadow", None, 0, 10, 30);
-    assert!(crate::moniker::monikers_at(&mock, FileId::from_raw(0), 60, "Shadow").is_empty());
+    assert!(crate::moniker::monikers_at(&mock, FileId::from_usize(0), 60, "Shadow").is_empty());
 }
 
 /// A blank spelled path (a degenerate use statement) cannot identify an
@@ -160,7 +160,7 @@ fn symbols_without_a_recorded_path_are_skipped() {
 fn blank_import_paths_are_skipped() {
     let mut mock = MockSource::default();
     mock.import(0, "Point", "", 0, 28);
-    assert!(crate::moniker::monikers_at(&mock, FileId::from_raw(0), 10, "Point").is_empty());
+    assert!(crate::moniker::monikers_at(&mock, FileId::from_usize(0), 10, "Point").is_empty());
 }
 
 /// Duplicate identities collapse: two session files recording the same
@@ -176,7 +176,7 @@ fn duplicates_collapse_and_exports_order_deterministically() {
     mock.symbol("P", Some("P"), 0, 44, 60);
     mock.symbol("P", Some("P"), 0, 44, 60);
 
-    let facts = crate::moniker::monikers_at(&mock, FileId::from_raw(0), 200, "P");
+    let facts = crate::moniker::monikers_at(&mock, FileId::from_usize(0), 200, "P");
     assert_eq!(facts.len(), 1, "identical identifiers collapse");
     assert_eq!(facts[0].kind, FactKind::Export);
 }
@@ -189,7 +189,7 @@ fn distinct_import_spellings_answer_in_source_order() {
     let mut mock = MockSource::default();
     mock.import(0, "P", "late::P", 50, 60);
     mock.import(0, "P", "early::P", 0, 20);
-    let facts = crate::moniker::monikers_at(&mock, FileId::from_raw(0), 200, "P");
+    let facts = crate::moniker::monikers_at(&mock, FileId::from_usize(0), 200, "P");
     let identifiers: Vec<&str> = facts.iter().map(|f| f.identifier.as_str()).collect();
     assert_eq!(identifiers, vec!["early::P", "late::P"]);
     assert!(facts.iter().all(|f| f.kind == FactKind::Import));
