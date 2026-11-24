@@ -217,7 +217,7 @@ fn bitwise_and_on_integers() {
             Place::new(result_local),
             Rvalue::BinaryOp(
                 BinOp::BitAnd,
-                Box::new((
+                [
                     Operand::Constant(MirConst {
                         kind: MirConstKind::Int(0b1100),
                         ty: i32_ty,
@@ -228,7 +228,7 @@ fn bitwise_and_on_integers() {
                         ty: i32_ty,
                         span: Span::DUMMY,
                     }),
-                )),
+                ],
             ),
         ),
         source_info: dummy_source_info(),
