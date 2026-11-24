@@ -1,0 +1,35 @@
+{
+  "schema": "glyim.ledger-verify-golden/1",
+  "checks": [
+    {
+      "name": "compute-text",
+      "bytes": 33756,
+      "sha256": "487385506ab8e11f9fa72476d196484e134a3559e73545d53f70af92be98bde0"
+    },
+    {
+      "name": "compute-json",
+      "bytes": 74527,
+      "sha256": "fcf1e7cf7c640d738d1217fe5f231a48c401ca3ac49d0641e689ef9557d4d457"
+    },
+    {
+      "name": "compute-snapshot",
+      "bytes": 38413,
+      "sha256": "263c29cba332d7b37fcd075ea35800908c1b035b4fc6308530873e1833aa7490"
+    },
+    {
+      "name": "status-markdown",
+      "bytes": 17714,
+      "sha256": "18f8d6908fb1b053ed70ebf6972a6771583d88cdc5dd1430cc24bd79de907667"
+    },
+    {
+      "name": "gates-text",
+      "bytes": 4941,
+      "sha256": "360d4f59ac46bf65d699fceee8a17f27e879d3ab1cfcbbb29b3211035ed6544d"
+    },
+    {
+      "name": "gates-json",
+      "bytes": 7021,
+      "sha256": "fb13138d4948241af4958f58d78da717a53a5df5f0ce425d84f4b3f9c006e11f"
+    }
+  ]
+}
