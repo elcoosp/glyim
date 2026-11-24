@@ -30,7 +30,7 @@ fn completions_include_function_name() {
     let span = Span::new(
         file_id,
         ByteIdx::ZERO,
-        ByteIdx::from_raw(3),
+        ByteIdx::from_usize(3),
         SyntaxContext::ROOT,
     );
     let foo_info = SymbolInfo {
