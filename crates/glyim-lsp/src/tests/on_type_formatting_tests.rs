@@ -87,7 +87,7 @@ fn brace_closer_dedents_to_its_opener_line_indent() {
     // The typed `}` sits at byte 42 (line 3, column 12 — after a 12-space
     // auto-indent run); the reported position is *after* it: (3, 13).
     let typed_char = offset_of(DOC, "            }") + 12;
-    let sm = SourceMap::new(FileId::from_raw(0), DOC.to_string());
+    let sm = SourceMap::new(FileId::from_usize(0), DOC.to_string());
     let ((line, col), _) = sm.span_to_position(typed_char, typed_char).unwrap();
 
     let edits = on_type_formatting(
@@ -113,7 +113,7 @@ fn outer_brace_dedents_to_the_empty_fn_indent() {
     let (db, file_map, uri, _file_id) = populated_db(DOC, &path);
     // The outer `}` sits at byte 48 (line 4, column 4); position (4, 5).
     let outer = offset_of(DOC, "\n    }\n") + 5;
-    let sm = SourceMap::new(FileId::from_raw(0), DOC.to_string());
+    let sm = SourceMap::new(FileId::from_usize(0), DOC.to_string());
     let ((line, col), _) = sm.span_to_position(outer, outer).unwrap();
     assert_eq!((line, col), (4, 4), "fixture drifted");
 
