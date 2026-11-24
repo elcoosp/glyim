@@ -97,7 +97,7 @@ fn loop_sum_body(owner_raw: u32, n: i128, ty: Ty) -> Body {
         block(
             vec![stmt(StatementKind::Assign(
                 tmp(),
-                Rvalue::BinaryOp(BinOp::Eq, Box::new((Operand::Copy(i()), int_const(ty, n)))),
+                Rvalue::binary_op(BinOp::Eq, Operand::Copy(i()), int_const(ty, n)),
             ))],
             TerminatorKind::SwitchInt {
                 discr: Operand::Copy(tmp()),
@@ -109,14 +109,11 @@ fn loop_sum_body(owner_raw: u32, n: i128, ty: Ty) -> Body {
             vec![
                 stmt(StatementKind::Assign(
                     sum(),
-                    Rvalue::BinaryOp(
-                        BinOp::Add,
-                        Box::new((Operand::Copy(sum()), Operand::Copy(i()))),
-                    ),
+                    Rvalue::binary_op(BinOp::Add, Operand::Copy(sum()), Operand::Copy(i())),
                 )),
                 stmt(StatementKind::Assign(
                     i(),
-                    Rvalue::BinaryOp(BinOp::Add, Box::new((Operand::Copy(i()), one))),
+                    Rvalue::binary_op(BinOp::Add, Operand::Copy(i()), one),
                 )),
             ],
             TerminatorKind::Goto { target: head },
