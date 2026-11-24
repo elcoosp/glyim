@@ -4,14 +4,14 @@ use glyim_span::{ByteIdx, FileId, Span, SyntaxContext};
 #[test]
 fn test_insert_and_find() {
     let mut graph = ReferenceGraph::new();
-    let file_id = FileId::from_raw(1);
+    let file_id = FileId::from_usize(1);
 
     let ref1 = Reference {
         file_id,
         span: Span::new(
             file_id,
-            ByteIdx::from_raw(0),
-            ByteIdx::from_raw(3),
+            ByteIdx::from_usize(0),
+            ByteIdx::from_usize(3),
             SyntaxContext::ROOT,
         ),
         is_definition: true,
