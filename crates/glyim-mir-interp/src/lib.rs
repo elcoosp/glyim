@@ -2727,9 +2727,8 @@ impl<'tcx> Interpreter<'tcx> {
         match rvalue {
             Rvalue::Use(operand) => self.eval_operand(operand),
             Rvalue::BinaryOp(op, operands) => {
-                let (left, right) = operands.as_ref();
-                let l = self.eval_operand(left)?;
-                let r = self.eval_operand(right)?;
+                let l = self.eval_operand(&operands[0])?;
+                let r = self.eval_operand(&operands[1])?;
                 self.eval_binary_op(*op, &l, &r, dest_ty)
             }
             Rvalue::UnaryOp(op, operand) => {
