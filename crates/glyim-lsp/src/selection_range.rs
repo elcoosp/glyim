@@ -98,8 +98,8 @@ fn is_trivia(kind: SyntaxKind) -> bool {
 fn span_of(file_id: FileId, range: TextRange) -> Span {
     Span::new(
         file_id,
-        ByteIdx::from_raw(u32::from(range.start())),
-        ByteIdx::from_raw(u32::from(range.end())),
+        ByteIdx::from_usize(u32::from(range.start()) as usize),
+        ByteIdx::from_usize(u32::from(range.end()) as usize),
         SyntaxContext::ROOT,
     )
 }
