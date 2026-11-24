@@ -46,8 +46,8 @@ fn synthetic_graph(file_id: FileId, scopes: usize) -> ReferenceGraph {
                     file_id,
                     span: Span::new(
                         file_id,
-                        ByteIdx::from_raw((base + off) as u32),
-                        ByteIdx::from_raw((base + off + 1) as u32),
+                        ByteIdx::from_usize(base + off),
+                        ByteIdx::from_usize(base + off + 1),
                         SyntaxContext::ROOT,
                     ),
                     is_definition: slot == 0,
