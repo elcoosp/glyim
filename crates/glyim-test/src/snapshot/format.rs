@@ -170,8 +170,8 @@ fn format_rvalue(
             format!(
                 "BinaryOp({:?}, {}, {})",
                 op,
-                format_operand(&pair.0, verbose, ctx, locals),
-                format_operand(&pair.1, verbose, ctx, locals)
+                format_operand(&pair[0], verbose, ctx, locals),
+                format_operand(&pair[1], verbose, ctx, locals)
             )
         }
         glyim_mir::Rvalue::UnaryOp(op, val) => {
