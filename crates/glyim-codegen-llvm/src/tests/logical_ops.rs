@@ -9,7 +9,7 @@ fn test_and_bool() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_bool(true);
     let rhs = const_operand_bool(false);
-    let rv = Rvalue::BinaryOp(BinOp::And, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::And, lhs, rhs);
     let body = simple_mir_body(Ty::BOOL, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
@@ -30,7 +30,7 @@ fn test_or_bool() {
     let frozen = ctx_mut.freeze();
     let lhs = const_operand_bool(true);
     let rhs = const_operand_bool(false);
-    let rv = Rvalue::BinaryOp(BinOp::Or, box_operands(lhs, rhs));
+    let rv = Rvalue::binary_op(BinOp::Or, lhs, rhs);
     let body = simple_mir_body(Ty::BOOL, rv);
     let backend = crate::LlvmBackend::new().with_ty_ctx(frozen);
     let context = inkwell::context::Context::create();
