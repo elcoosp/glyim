@@ -6,12 +6,12 @@ cover:
   image: ./welcome-cover.jpg
 image: ./welcome-cover.jpg
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-community.svg" alt="Glyim community mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
 
+<MascotFigure pose="community" alt="Glyim community mascot" />
 
-import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+import { Card, CardGrid } from '@astrojs/starlight/components';
 
 Most toy compilers stop after the parser. Glyim doesn't.
 
@@ -58,9 +58,9 @@ We didn't want the language to be purely for CLI tools. We added GSX: typed, hos
 
 Because we were building a language, we needed a package manager. `glyip` uses a greedy breadth-first resolver with SemVer 2.0 matching, git and path dependencies, and lockfiles.
 
-<Aside type="caution" title="The Trade-off">
+<MascotAside type="caution" title="The Trade-off">
 `glyip` doesn't backtrack. A diamond dependency with incompatible versions is a hard error rather than a Cargo-style search. We chose this to keep the resolver predictable and fast, but it's a constraint you feel in large graphs.
-</Aside>
+</MascotAside>
 
 ## What it cost
 
