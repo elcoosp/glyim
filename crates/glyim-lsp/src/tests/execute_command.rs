@@ -29,7 +29,7 @@ impl MockSource {
     fn reference(&mut self, name: &str, file: u32, lo: usize, hi: usize) {
         self.refs.push((
             name.to_string(),
-            FileId::from_raw(file),
+            FileId::from_usize(file as usize),
             span_of(file, lo, hi),
         ));
     }
@@ -37,9 +37,9 @@ impl MockSource {
 
 fn span_of(file: u32, lo: usize, hi: usize) -> Span {
     Span::new(
-        FileId::from_raw(file),
-        ByteIdx::from_raw(lo as u32),
-        ByteIdx::from_raw(hi as u32),
+        FileId::from_usize(file as usize),
+        ByteIdx::from_usize(lo),
+        ByteIdx::from_usize(hi),
         SyntaxContext::ROOT,
     )
 }
@@ -154,9 +154,9 @@ fn reference_targets_are_ordered_and_deduped() {
     mock.reference("helper", 0, 44, 50);
     let targets = compute_reference_targets(&mock, "helper");
     assert_eq!(targets.len(), 2, "duplicate record collapses");
-    assert_eq!(targets[0].file_id, FileId::from_raw(0));
+    assert_eq!(targets[0].file_id, FileId::from_usize(0));
     assert_eq!(targets[0].span.lo.to_usize(), 44);
-    assert_eq!(targets[1].file_id, FileId::from_raw(1));
+    assert_eq!(targets[1].file_id, FileId::from_usize(1));
 }
 
 /// A zero-width recorded extent cannot name a jump target and is
