@@ -31,9 +31,9 @@ fn test_provide_hover() {
             definition: DefinitionLocation {
                 file_id,
                 span: Span::new(
-                    FileId::from_raw(0),
-                    ByteIdx::from_raw(0),
-                    ByteIdx::from_raw(4),
+                    FileId::from_usize(0),
+                    ByteIdx::from_usize(0),
+                    ByteIdx::from_usize(4),
                     SyntaxContext::ROOT,
                 ),
             },
