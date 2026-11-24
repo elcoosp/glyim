@@ -5,12 +5,12 @@ type: explanation
 sidebar:
   order: 2
 ---
-<div class="glyim-mascot-figure">
-  <img src="/mascot-pipeline.svg" alt="Glyim compiler pipeline mascot" width="240" height="240" loading="lazy" />
-</div>
+import MascotFigure from '../../../components/MascotFigure.astro';
+import MascotAside from '../../../components/MascotAside.astro';
 
+<MascotFigure pose="pipeline" alt="Glyim compiler pipeline mascot" />
 
-import { Aside, Code, LinkCard } from '@astrojs/starlight/components';
+import { Code, LinkCard } from '@astrojs/starlight/components';
 
 This page walks through Glyim's compilation pipeline stage by stage — what each stage consumes, what it produces, and why it exists. The pipeline is end-to-end functional for a substantial subset of the language.
 
@@ -65,9 +65,9 @@ The **MIR interpreter** (`glyim-mir-interp`) executes MIR directly: it powers `c
 
 The CLI driver links produced object files into executables, honoring `--linker` and `--link-flags`. `glyip run` wraps the whole flow — build, then execute, then exit with the child's status — and the standard library (`glyim-lang-core`, `glyim-lang-alloc`, `glyim-lang-std`) supplies the `Option`/`Vec`/`io`/`thread` layer written in Glyim itself.
 
-<Aside type="note">
+<MascotAside type="note">
 Incremental compilation spans this whole map: SHA-256 fingerprints of sources and build configuration decide what recompiles, and the monomorphization cache reuses specialized items across compilations.
-</Aside>
+</MascotAside>
 
 ## Next steps
 
