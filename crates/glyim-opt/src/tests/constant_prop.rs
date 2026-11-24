@@ -42,7 +42,7 @@ fn make_body_two_const_chain(ctx: &mut glyim_type::TyCtxMut) -> Body {
                 make_place(3),
                 Rvalue::BinaryOp(
                     glyim_core::BinOp::Add,
-                    Box::new((make_copy(2), Operand::Constant(make_const(5, int_ty)))),
+                    [make_copy(2), Operand::Constant(make_const(5, int_ty))],
                 ),
             ),
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -92,7 +92,7 @@ fn make_body_overwrite(ctx: &mut glyim_type::TyCtxMut) -> Body {
                 make_place(2),
                 Rvalue::BinaryOp(
                     glyim_core::BinOp::Add,
-                    Box::new((make_copy(1), Operand::Constant(make_const(1, int_ty)))),
+                    [make_copy(1), Operand::Constant(make_const(1, int_ty))],
                 ),
             ),
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -191,7 +191,7 @@ fn propagate_int_constants() {
                     make_place(2),
                     Rvalue::BinaryOp(
                         glyim_core::BinOp::Add,
-                        Box::new((make_copy(1), Operand::Constant(make_const(10, int_ty)))),
+                        [make_copy(1), Operand::Constant(make_const(10, int_ty))],
                     ),
                 ),
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -230,7 +230,7 @@ fn propagate_int_constants() {
     );
     if let StatementKind::Assign(_, Rvalue::BinaryOp(_, box_ops)) = &block.statements[1].kind {
         assert!(
-            matches!(box_ops.0, Operand::Constant(_)),
+            matches!(box_ops[0], Operand::Constant(_)),
             "left operand should be a constant after propagation"
         );
     } else {
@@ -245,11 +245,11 @@ fn propagate_through_chain() {
     let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
     if let StatementKind::Assign(_, Rvalue::BinaryOp(_, box_ops)) = &block.statements[2].kind {
         assert!(
-            matches!(box_ops.0, Operand::Constant(_)),
+            matches!(box_ops[0], Operand::Constant(_)),
             "left operand should be constant after chain propagation"
         );
         assert!(
-            matches!(box_ops.1, Operand::Constant(_)),
+            matches!(box_ops[1], Operand::Constant(_)),
             "right operand should be constant"
         );
     } else {
@@ -264,7 +264,7 @@ fn overwrite_removes_from_const_map() {
     let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
     if let StatementKind::Assign(_, Rvalue::BinaryOp(_, box_ops)) = &block.statements[2].kind {
         assert!(
-            matches!(box_ops.0, Operand::Copy(_)),
+            matches!(box_ops[0], Operand::Copy(_)),
             "left operand should NOT be constant after overwrite"
         );
     } else {
@@ -316,7 +316,7 @@ fn re_constant_after_overwrite_propagates() {
                     make_place(2),
                     Rvalue::BinaryOp(
                         glyim_core::BinOp::Add,
-                        Box::new((make_copy(1), Operand::Constant(make_const(1, int_ty)))),
+                        [make_copy(1), Operand::Constant(make_const(1, int_ty))],
                     ),
                 ),
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -350,7 +350,7 @@ fn re_constant_after_overwrite_propagates() {
     let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
     if let StatementKind::Assign(_, Rvalue::BinaryOp(_, box_ops)) = &block.statements[3].kind {
         assert!(
-            matches!(box_ops.0, Operand::Constant(_)),
+            matches!(box_ops[0], Operand::Constant(_)),
             "left operand should be constant 20 after re-constant"
         );
     } else {
@@ -387,7 +387,7 @@ fn cross_block_constant_propagation() {
                     make_place(2),
                     Rvalue::BinaryOp(
                         glyim_core::BinOp::Add,
-                        Box::new((make_copy(1), Operand::Constant(make_const(1, int_ty)))),
+                        [make_copy(1), Operand::Constant(make_const(1, int_ty))],
                     ),
                 ),
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -433,7 +433,7 @@ fn cross_block_constant_propagation() {
     let block1 = &body.basic_blocks[BasicBlockIdx::from_raw(1)];
     if let StatementKind::Assign(_, Rvalue::BinaryOp(_, box_ops)) = &block1.statements[0].kind {
         assert!(
-            matches!(box_ops.0, Operand::Constant(_)),
+            matches!(box_ops[0], Operand::Constant(_)),
             "left operand in block1 should be constant propagated from block0"
         );
     } else {
