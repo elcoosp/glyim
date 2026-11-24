@@ -30,7 +30,7 @@ struct MockSource {
 
 impl MockSource {
     fn add_fn(&mut self, name: &str, owner: u32, file: u32, lo: usize, hi: usize) {
-        let file_id = FileId::from_raw(file);
+        let file_id = FileId::from_usize(file as usize);
         self.fns.push(ItemDefinition {
             name: name.to_string(),
             owner_item_id: owner,
@@ -40,7 +40,7 @@ impl MockSource {
     }
 
     fn add_site(&mut self, callee: &str, owner: u32, file: u32, lo: usize, hi: usize) {
-        let file_id = FileId::from_raw(file);
+        let file_id = FileId::from_usize(file as usize);
         self.sites.push(CallSite {
             callee: callee.to_string(),
             owner_item_id: owner,
@@ -116,7 +116,7 @@ fn prepare_lands_on_the_function_definition_under_the_cursor() {
     // the prepare target.
     let src = populated_source();
 
-    let target = prepare_target(&src, FileId::from_raw(1), 80, "helper")
+    let target = prepare_target(&src, FileId::from_usize(1), 80, "helper")
         .expect("the cursor sits on helper's definition");
 
     assert_eq!(target.name, "helper");
@@ -131,7 +131,7 @@ fn prepare_resolves_a_call_site_to_the_callee() {
     // caller's (the caller is what the incoming side already answers).
     let src = populated_source();
 
-    let target = prepare_target(&src, FileId::from_raw(1), 145, "helper")
+    let target = prepare_target(&src, FileId::from_usize(1), 145, "helper")
         .expect("the cursor sits on a helper call site");
 
     assert_eq!(target.name, "helper");
@@ -151,7 +151,7 @@ fn prepare_definition_site_beats_the_call_site_rule() {
     let mut src = populated_source();
     src.add_site("leaf", 0, 1, 55, 62);
 
-    let target = prepare_target(&src, FileId::from_raw(1), 58, "leaf").expect("recursive call");
+    let target = prepare_target(&src, FileId::from_usize(1), 58, "leaf").expect("recursive call");
 
     assert_eq!(target.owner_item_id, 0, "leaf's own item");
 }
@@ -169,7 +169,7 @@ fn prepare_none_when_the_name_is_not_a_function() {
     src.add_site("Config", 2, 1, 0, 10);
 
     assert!(
-        prepare_target(&src, FileId::from_raw(1), 5, "Config").is_none(),
+        prepare_target(&src, FileId::from_usize(1), 5, "Config").is_none(),
         "a non-function name is not a call-hierarchy target"
     );
 }
@@ -177,7 +177,7 @@ fn prepare_none_when_the_name_is_not_a_function() {
 #[test]
 fn prepare_none_off_any_recorded_name() {
     let src = populated_source();
-    assert!(prepare_target(&src, FileId::from_raw(1), 80, "ghost").is_none());
+    assert!(prepare_target(&src, FileId::from_usize(1), 80, "ghost").is_none());
 }
 
 #[test]
@@ -189,7 +189,7 @@ fn prepare_none_for_a_foreign_file_definition() {
     // the cursor either. Answering the other file's item from a cursor
     // that never touched it would be a lie.
     let src = populated_source();
-    assert!(prepare_target(&src, FileId::from_raw(1), 20, "leaf").is_none());
+    assert!(prepare_target(&src, FileId::from_usize(1), 20, "leaf").is_none());
 }
 
 #[test]
