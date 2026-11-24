@@ -367,9 +367,8 @@ impl<'a> MonoCtx<'a> {
         match rvalue {
             Rvalue::Use(operand) => self.scan_operand(operand),
             Rvalue::BinaryOp(_, operands) => {
-                let (lhs, rhs) = operands.as_ref();
-                self.scan_operand(lhs);
-                self.scan_operand(rhs);
+                self.scan_operand(&operands[0]);
+                self.scan_operand(&operands[1]);
             }
             Rvalue::UnaryOp(_, operand) => self.scan_operand(operand),
             Rvalue::Aggregate(_, operands) => {
