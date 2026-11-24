@@ -1,6 +1,7 @@
 mod behavior_preservation;
 mod cfg_simplify;
 mod cfg_simplify_tests;
+mod clone_free;
 mod const_prop_tests;
 mod constant_prop;
 mod constant_prop_tests;
