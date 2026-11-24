@@ -303,7 +303,7 @@ fn test_step_limit_enforced() {
             Place::new(local_i),
             Rvalue::BinaryOp(
                 BinOp::Add,
-                Box::new((Operand::Copy(Place::new(local_i)), const_int(1))),
+                [Operand::Copy(Place::new(local_i)), const_int(1)],
             ),
         ),
     );
