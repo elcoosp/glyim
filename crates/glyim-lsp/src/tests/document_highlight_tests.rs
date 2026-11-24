@@ -28,8 +28,8 @@ fn uri_for(path: &PathBuf) -> Uri {
 fn span_of(file_id: FileId, lo: u32, hi: u32) -> Span {
     Span::new(
         file_id,
-        ByteIdx::from_raw(lo),
-        ByteIdx::from_raw(hi),
+        ByteIdx::from_usize(lo as usize),
+        ByteIdx::from_usize(hi as usize),
         SyntaxContext::ROOT,
     )
 }
