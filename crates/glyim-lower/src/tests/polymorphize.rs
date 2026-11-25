@@ -18,7 +18,7 @@ fn intern_name(ctx: &mut TyCtxMut, s: &str) -> Name {
 }
 
 fn dummy_span() -> Span {
-    Span::new(
+    Span::range(
         FileId::BOGUS,
         ByteIdx::ZERO,
         ByteIdx::ZERO,
