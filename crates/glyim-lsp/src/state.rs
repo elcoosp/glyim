@@ -44,10 +44,21 @@ impl LspState {
 
     /// `did_open`.
     pub fn did_open(&mut self, path: PathBuf, content: String, version: i32) {
-        let file_id = self
+        // The M3.2 VFS length gate can refuse an oversized source; the LSP
+        // answers with a log line and keeps its state untouched (no file id,
+        // no open-file entry) rather than indexing a document no span in it
+        // could address.
+        let file_id = match self
             .db
             .vfs()
-            .add_file_content(&path, Arc::from(content.clone()));
+            .add_file_content(&path, Arc::from(content.clone()))
+        {
+            Ok(id) => id,
+            Err(err) => {
+                tracing::warn!("refusing to open source past the length gate: {err}");
+                return;
+            }
+        };
         self.open_files.insert(path.clone(), (file_id, version));
         if let Some(tx) = &self.driver_tx {
             if let Err(err) = tx.try_send(AnalysisMessage::FileChanged {
