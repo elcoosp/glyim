@@ -56,7 +56,7 @@ impl MockSource {
 }
 
 fn span_of(file: u32, lo: usize, hi: usize) -> Span {
-    Span::new(
+    Span::range(
         FileId::from_usize(file as usize),
         glyim_span::ByteIdx::from_usize(lo),
         glyim_span::ByteIdx::from_usize(hi),
@@ -98,7 +98,7 @@ fn hierarchy_target_classifies_recorded_items() {
     let greet = hierarchy_target(&mock, "Greet").expect("trait prepares");
     assert_eq!(greet.kind, HierarchyItemKind::Trait);
     assert_eq!(greet.location.file_id, FileId::from_usize(0));
-    assert_eq!(greet.location.span.lo.to_usize(), 0);
+    assert_eq!(greet.location.span.lo().to_usize(), 0);
 
     let p = hierarchy_target(&mock, "P").expect("struct prepares");
     assert_eq!(p.kind, HierarchyItemKind::Struct);
