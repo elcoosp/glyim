@@ -29,8 +29,8 @@ fn s15_tuple_single_i32() {
     let layout = computer
         .layout_of(tuple_ty)
         .expect("tuple layout should succeed");
-    assert_eq!(layout.size, Size::bytes(4));
-    assert_eq!(layout.align, Align::from_bytes(4));
+    assert_eq!(layout.size.as_u64(), 4);
+    assert_eq!(layout.align.as_u64(), 4);
 }
 
 #[test]
@@ -47,8 +47,8 @@ fn s15_tuple_two_i32() {
     let layout = computer
         .layout_of(tuple_ty)
         .expect("tuple layout should succeed");
-    assert_eq!(layout.size, Size::bytes(8));
-    assert_eq!(layout.align, Align::from_bytes(4));
+    assert_eq!(layout.size.as_u64(), 8);
+    assert_eq!(layout.align.as_u64(), 4);
 }
 
 #[test]
@@ -67,11 +67,11 @@ fn s15_tuple_bool_and_i32() {
         .layout_of(tuple_ty)
         .expect("tuple layout should succeed");
     assert_eq!(
-        layout.size,
-        Size::bytes(8),
+        layout.size.as_u64(),
+        8,
         "tuple (bool, i32) size = 8 with padding"
     );
-    assert_eq!(layout.align, Align::from_bytes(4));
+    assert_eq!(layout.align.as_u64(), 4);
 }
 
 #[test]
@@ -88,8 +88,8 @@ fn s15_tuple_array_layout() {
     let layout = computer
         .layout_of(arr_ty)
         .expect("array layout should succeed");
-    assert_eq!(layout.size, Size::bytes(16), "[i32; 4] size = 16");
-    assert_eq!(layout.align, Align::from_bytes(4), "[i32; 4] align = 4");
+    assert_eq!(layout.size.as_u64(), 16, "[i32; 4] size = 16");
+    assert_eq!(layout.align.as_u64(), 4, "[i32; 4] align = 4");
     match &layout.fields {
         FieldsShape::Array { stride, count } => {
             assert_eq!(*stride, Size::bytes(4));
