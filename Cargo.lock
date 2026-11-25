@@ -1344,6 +1344,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "glyim-smith"
+version = "0.10.0"
+dependencies = [
+ "glyim-db",
+ "glyim-mir-interp",
+ "glyim-pipeline",
+ "tempfile",
+]
+
+[[package]]
 name = "glyim-solve"
 version = "0.10.0"
 dependencies = [
@@ -1394,6 +1404,7 @@ dependencies = [
  "glyim-opt",
  "glyim-pipeline",
  "glyim-proc-macro",
+ "glyim-smith",
  "glyim-solve",
  "glyim-span",
  "glyim-syntax",
