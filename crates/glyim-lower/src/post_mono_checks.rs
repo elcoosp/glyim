@@ -135,7 +135,7 @@ pub fn check_large_mono_set(items: &[MonoItemData], threshold: usize) -> Vec<Gly
 pub fn check_unused_generic_params(
     items: &[MonoItemData],
     pre_mono_bodies: Option<
-        &std::collections::HashMap<glyim_core::def_id::DefId, std::sync::Arc<glyim_mir::Body>>,
+        &std::collections::BTreeMap<glyim_core::def_id::DefId, std::sync::Arc<glyim_mir::Body>>,
     >,
     ctx: &TyCtx,
 ) -> Vec<GlyimDiagnostic> {
