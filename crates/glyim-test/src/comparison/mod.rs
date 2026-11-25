@@ -36,7 +36,7 @@ impl NormalizedDiag {
     /// `from_glyim_diag`.
     #[must_use]
     pub fn from_glyim_diag(diag: &GlyimDiagnostic, source: &str) -> Self {
-        let line = byte_offset_to_line(source, diag.span.primary.lo.to_usize());
+        let line = byte_offset_to_line(source, diag.span.primary.lo().to_usize());
         Self {
             severity: diag.severity,
             line,
