@@ -87,10 +87,10 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
                 let layout = layout_computer
                     .layout_of(ty)
                     .unwrap_or_else(|_| glyim_layout::Layout::unit());
-                if layout.size.0 == 0 {
+                if layout.size.as_u64() == 0 {
                     context.struct_type(&[], false).into()
                 } else {
-                    opaque_sized_type(context, layout.size.0, layout.align.0)
+                    opaque_sized_type(context, layout.size.as_u64(), layout.align.as_u64())
                 }
             }
         }
@@ -197,10 +197,10 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
             }
             let layout_computer = FullLayoutComputer::new(ctx, target_info.clone());
             if let Ok(layout) = layout_computer.layout_of(ty) {
-                if layout.size.0 == 0 {
+                if layout.size.as_u64() == 0 {
                     return Ok(context.struct_type(&[], false).into());
                 }
-                opaque_sized_type(context, layout.size.0, layout.align.0)
+                opaque_sized_type(context, layout.size.as_u64(), layout.align.as_u64())
             } else {
                 context.struct_type(&[], false).into()
             }
@@ -208,10 +208,10 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
         TyKind::Closure(_closure_id, _subst) => {
             let layout_computer = FullLayoutComputer::new(ctx, target_info.clone());
             if let Ok(layout) = layout_computer.layout_of(ty) {
-                if layout.size.0 == 0 {
+                if layout.size.as_u64() == 0 {
                     return Ok(context.struct_type(&[], false).into());
                 }
-                opaque_sized_type(context, layout.size.0, layout.align.0)
+                opaque_sized_type(context, layout.size.as_u64(), layout.align.as_u64())
             } else {
                 context.struct_type(&[], false).into()
             }
@@ -225,10 +225,10 @@ pub(crate) fn llvm_type_for_ty<'ctx>(
         TyKind::Opaque(_, _subst) => {
             let layout_computer = FullLayoutComputer::new(ctx, target_info.clone());
             if let Ok(layout) = layout_computer.layout_of(ty) {
-                if layout.size.0 == 0 {
+                if layout.size.as_u64() == 0 {
                     return Ok(context.struct_type(&[], false).into());
                 }
-                opaque_sized_type(context, layout.size.0, layout.align.0)
+                opaque_sized_type(context, layout.size.as_u64(), layout.align.as_u64())
             } else {
                 context.struct_type(&[], false).into()
             }
