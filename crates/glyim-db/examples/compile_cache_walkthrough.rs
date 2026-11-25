@@ -66,10 +66,13 @@ fn main() {
         target_triple: "x86_64-unknown-linux-gnu".to_string(),
         opt_level: 0,
     });
-    let file_id = database.vfs().add_file_content(
-        Path::new("walkthrough/main.g"),
-        std::sync::Arc::from(source),
-    );
+    let file_id = database
+        .vfs()
+        .add_file_content(
+            Path::new("walkthrough/main.g"),
+            std::sync::Arc::from(source),
+        )
+        .expect("fixture sources are far below the VFS length gate");
     // M6: the `QueryContext` trait is the interface frontend queries resolve
     // against. Today `Database` is the only impl; reading source text through
     // `file_text` (rather than `vfs().file_content`) means the later
