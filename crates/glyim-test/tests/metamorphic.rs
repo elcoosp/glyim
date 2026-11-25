@@ -49,6 +49,15 @@ fn fixture_sample() -> Vec<(String, PathBuf)> {
             !source.contains("needs-llvm")
                 && !source.contains("compile-flags: --with-stdlib")
                 && source.contains("mode: run-pass")
+                // Registered strict-xfail witnesses (plan §3.3,
+                // `//@ known-gap:`) pin a KNOWN-divergent state by
+                // design — GAP-0009's witness, for instance, pins the
+                // silent `-O2` fold while `-O0` panics, which is exactly
+                // what `OptLevelInvariance` would report as a fresh
+                // violation. The same rule the differential gate
+                // applies: witnessed debt is counted, never re-reported
+                // as a new disagreement.
+                && !source.contains("//@ known-gap")
         })
         .take(FIXTURE_SAMPLE)
         .map(|path| {
