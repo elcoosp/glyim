@@ -189,7 +189,7 @@ fn binding_name_of_leaf(tree: &SyntaxNode) -> Option<String> {
 }
 
 fn span_of(file_id: FileId, range: rowan::TextRange) -> Span {
-    Span::new(
+    Span::range(
         file_id,
         ByteIdx::from_usize(u32::from(range.start()) as usize),
         ByteIdx::from_usize(u32::from(range.end()) as usize),
@@ -228,7 +228,7 @@ pub fn declaration_target(
         .definitions_of(name)
         .into_iter()
         .find(|(_, definition)| {
-            definition.file_id == file_id && definition.span.lo != definition.span.hi
+            definition.file_id == file_id && definition.span.lo() != definition.span.hi()
         })
         .map(|(_, definition)| definition)
 }
@@ -277,7 +277,7 @@ pub fn goto_declaration(
     // answers `null` (via `?`) rather than a silent line-0/col-0
     // fallback, which would aim every client at the top of the file.
     let ((start_line, start_col), (end_line, end_col)) =
-        def_sm.span_to_position(target.span.lo.to_usize(), target.span.hi.to_usize())?;
+        def_sm.span_to_position(target.span.lo().to_usize(), target.span.hi().to_usize())?;
     let target_path = file_map.path(target.file_id)?;
     let target_uri = Url::from_file_path(target_path).ok()?;
     tracing::debug!(
