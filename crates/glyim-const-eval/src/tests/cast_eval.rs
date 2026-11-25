@@ -9,7 +9,7 @@ use glyim_span::{ByteIdx, FileId, Span};
 use glyim_type::TyCtxMut;
 
 fn dummy_span() -> Span {
-    Span::new(
+    Span::range(
         FileId::BOGUS,
         ByteIdx::ZERO,
         ByteIdx::ZERO,
