@@ -1,0 +1,27 @@
+[package]
+documentation = "https://glyim.vercel.app"
+
+description = "M4.5 glyim-reduce v1: CST delta-debugging with token fallback, wired to the in-process driver seam."
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
+name = "glyim-reduce"
+keywords = ["delta-debugging", "test-reduction", "compiler", "testing"]
+license.workspace = true
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+glyim-db = { workspace = true }
+glyim-frontend = { workspace = true }
+glyim-mir-interp = { workspace = true }
+glyim-pipeline = { workspace = true, default-features = false }
+glyim-span = { workspace = true }
+glyim-syntax = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "reduce"
+harness = false
