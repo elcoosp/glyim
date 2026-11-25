@@ -78,7 +78,7 @@ pub fn prepare_rename(
     // Byte-offset, char-boundary-safe identifier extent (INF-12).
     let (start, end) = crate::navigation::identifier_extent_at_offset(source, offset)?;
     let identifier = &source[start..end];
-    let token = Span::new(
+    let token = Span::range(
         file_id,
         ByteIdx::from_usize(start),
         ByteIdx::from_usize(end),
