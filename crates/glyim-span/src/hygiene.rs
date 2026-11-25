@@ -113,27 +113,24 @@ impl HygieneCtx {
         self.syntax_contexts.push(SyntaxContextData {
             outer_expn: mark.expn_id,
             outer_transparency: mark.transparency,
-            parent: span.ctx,
+            parent: span.ctx(),
         });
-        Span::new(span.file, span.lo, span.hi, new_ctx)
+        span.with_ctx(new_ctx)
     }
 
     /// `remove_mark`.
     #[must_use]
     pub fn remove_mark(&self, span: Span) -> (Span, Option<Mark>) {
-        if span.ctx.is_root() {
+        if span.ctx().is_root() {
             return (span, None);
         }
-        let idx = span.ctx.to_raw() as usize - 1;
+        let idx = span.ctx().to_raw() as usize - 1;
         if let Some(ctx_data) = self.syntax_contexts.get(idx) {
             let mark = Mark {
                 expn_id: ctx_data.outer_expn,
                 transparency: ctx_data.outer_transparency,
             };
-            (
-                Span::new(span.file, span.lo, span.hi, ctx_data.parent),
-                Some(mark),
-            )
+            (span.with_ctx(ctx_data.parent), Some(mark))
         } else {
             (span, None)
         }
@@ -151,7 +148,7 @@ impl HygieneCtx {
     /// must not capture a use-site `tmp`). `SyntaxContext` *is* the id.
     #[must_use]
     pub fn syntax_context(&self, span: Span) -> SyntaxContext {
-        span.ctx
+        span.ctx()
     }
 
     /// T149-PATCHED [SPAN-1]: return the expansion id actually associated
@@ -174,7 +171,7 @@ impl HygieneCtx {
     /// adjust.
     pub fn adjust(&mut self, span: Span, scope_ctx: SyntaxContext) -> Span {
         let mut current = span;
-        while current.ctx != scope_ctx && !current.ctx.is_root() {
+        while current.ctx() != scope_ctx && !current.ctx().is_root() {
             let (next, _) = self.remove_mark(current);
             current = next;
         }
