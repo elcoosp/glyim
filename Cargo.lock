@@ -1333,6 +1333,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "glyim-reduce"
+version = "0.10.0"
+dependencies = [
+ "glyim-db",
+ "glyim-frontend",
+ "glyim-mir-interp",
+ "glyim-pipeline",
+ "glyim-span",
+ "glyim-syntax",
+ "tempfile",
+]
+
+[[package]]
 name = "glyim-runtime"
 version = "0.10.0"
 dependencies = [
