@@ -304,13 +304,16 @@ impl TestCompiler for PipelineCompiler {
         // Capture the id the VFS actually assigned. Parsing with the
         // *caller-supplied* `file_id` instead leaves every span pointing at a
         // file the VFS has no path for, so `include!` (which resolves a
-        // relative path against `vfs.file_path(call_site.file)`) cannot find
+        // relative path against `vfs.file_path(call_site.file())`) cannot find
         // its target and falls back to a cwd-relative path.
         // Keep the caller-supplied id for artifact paths (tests assert it),
-        // and use the VFS-assigned id for parsing so `vfs.file_path(span.file)`
+        // and use the VFS-assigned id for parsing so `vfs.file_path(span.file())`
         // resolves — `include!` needs that to find a relative target.
         let caller_file_id = file_id;
-        let vfs_file_id = db.vfs().add_file_content(&path, Arc::from(source));
+        let vfs_file_id = db
+            .vfs()
+            .add_file_content(&path, Arc::from(source))
+            .expect("fixture sources are far below the VFS length gate");
         let file_id = vfs_file_id;
 
         // Phase 9.2: run macro expansion over the parsed source *before* the
@@ -342,7 +345,9 @@ impl TestCompiler for PipelineCompiler {
             // separators (walking the green token stream so token boundaries
             // are preserved) so rowan reparses it faithfully (Phase 9.2).
             let expanded_src = glyim_meta::join_tokens_with_spaces(&expanded);
-            db.vfs().add_file_content(&path, Arc::from(expanded_src));
+            db.vfs()
+                .add_file_content(&path, Arc::from(expanded_src))
+                .expect("fixture sources are far below the VFS length gate");
         }
 
         // Per-compile temp dir. Previously the .o and exe went straight
