@@ -14,6 +14,24 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.std.env.CONSTS",
+    "stdlib.std.env.HomeDirError",
+    "stdlib.std.env.OS_SEPARATOR",
+    "stdlib.std.env.OsConsts",
+    "stdlib.std.env.args",
+    "stdlib.std.env.current_dir",
+    "stdlib.std.env.current_exe",
+    "stdlib.std.env.home_dir",
+    "stdlib.std.env.is_unix",
+    "stdlib.std.env.is_windows",
+    "stdlib.std.env.remove_var",
+    "stdlib.std.env.set_current_dir",
+    "stdlib.std.env.set_var",
+    "stdlib.std.env.temp_dir",
+    "stdlib.std.env.var",
+    "stdlib.std.env.vars",
+]
 
 [[feature]]
 id            = "STD-STD-FS"
@@ -24,6 +42,33 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.std.fs.DirBuilder",
+    "stdlib.std.fs.DirEntry",
+    "stdlib.std.fs.File",
+    "stdlib.std.fs.FileType",
+    "stdlib.std.fs.Metadata",
+    "stdlib.std.fs.MetadataRaw",
+    "stdlib.std.fs.OpenOptions",
+    "stdlib.std.fs.Permissions",
+    "stdlib.std.fs.ReadDir",
+    "stdlib.std.fs.canonicalize",
+    "stdlib.std.fs.copy",
+    "stdlib.std.fs.create_dir",
+    "stdlib.std.fs.create_dir_all",
+    "stdlib.std.fs.exists",
+    "stdlib.std.fs.is_dir",
+    "stdlib.std.fs.is_file",
+    "stdlib.std.fs.metadata",
+    "stdlib.std.fs.read",
+    "stdlib.std.fs.read_to_string",
+    "stdlib.std.fs.remove_dir",
+    "stdlib.std.fs.remove_dir_all",
+    "stdlib.std.fs.remove_file",
+    "stdlib.std.fs.rename",
+    "stdlib.std.fs.symlink_metadata",
+    "stdlib.std.fs.write",
+]
 
 [[feature]]
 id            = "STD-STD-INT-STR"
@@ -34,6 +79,12 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.std.int_str.i32_to_string",
+    "stdlib.std.int_str.i64_to_string",
+    "stdlib.std.int_str.u32_to_string",
+    "stdlib.std.int_str.u64_to_string",
+]
 
 [[feature]]
 id            = "STD-STD-IO"
@@ -44,6 +95,33 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.std.io.BufRead",
+    "stdlib.std.io.BufReader",
+    "stdlib.std.io.BufWriter",
+    "stdlib.std.io.Empty",
+    "stdlib.std.io.Error",
+    "stdlib.std.io.ErrorKind",
+    "stdlib.std.io.Read",
+    "stdlib.std.io.RepeatBytes",
+    "stdlib.std.io.Result",
+    "stdlib.std.io.Sink",
+    "stdlib.std.io.Stderr",
+    "stdlib.std.io.Stdin",
+    "stdlib.std.io.Stdout",
+    "stdlib.std.io.Write",
+    "stdlib.std.io.copy",
+    "stdlib.std.io.empty",
+    "stdlib.std.io.eprint",
+    "stdlib.std.io.eprintln",
+    "stdlib.std.io.print",
+    "stdlib.std.io.println",
+    "stdlib.std.io.repeat",
+    "stdlib.std.io.sink",
+    "stdlib.std.io.stderr",
+    "stdlib.std.io.stdin",
+    "stdlib.std.io.stdout",
+]
 
 [[feature]]
 id            = "STD-STD-NET"
@@ -54,6 +132,27 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.std.net.IpAddr",
+    "stdlib.std.net.Ipv4Addr",
+    "stdlib.std.net.Ipv6Addr",
+    "stdlib.std.net.ReadFuture",
+    "stdlib.std.net.SocketAddr",
+    "stdlib.std.net.SocketAddrV4",
+    "stdlib.std.net.SocketAddrV6",
+    "stdlib.std.net.TcpListener",
+    "stdlib.std.net.TcpStream",
+    "stdlib.std.net.UdpSocket",
+    "stdlib.std.net.WriteFuture",
+    "stdlib.std.net.parse_ip_addr",
+    "stdlib.std.net.parse_ip_addr_full",
+    "stdlib.std.net.parse_ipv6_range",
+    "stdlib.std.net.parse_socket_addr",
+    "stdlib.std.net.parse_u16_dec",
+    "stdlib.std.net.parse_u16_hex",
+    "stdlib.std.net.parse_u8_dec",
+    "stdlib.std.net.split_host_port",
+]
 
 [[feature]]
 id            = "STD-STD-PROCESS"
@@ -64,6 +163,20 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.std.process.Child",
+    "stdlib.std.process.ChildStderr",
+    "stdlib.std.process.ChildStdin",
+    "stdlib.std.process.ChildStdout",
+    "stdlib.std.process.Command",
+    "stdlib.std.process.ExitStatus",
+    "stdlib.std.process.Output",
+    "stdlib.std.process.Stdio",
+    "stdlib.std.process.abort",
+    "stdlib.std.process.exit",
+    "stdlib.std.process.id",
+    "stdlib.std.process.parent_id",
+]
 
 [[feature]]
 id            = "STD-STD-SYNC"
@@ -74,6 +187,26 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.std.sync.Arc",
+    "stdlib.std.sync.ArcInner",
+    "stdlib.std.sync.AtomicBool",
+    "stdlib.std.sync.AtomicU8",
+    "stdlib.std.sync.AtomicUsize",
+    "stdlib.std.sync.Barrier",
+    "stdlib.std.sync.BarrierWaitResult",
+    "stdlib.std.sync.Condvar",
+    "stdlib.std.sync.Exclusive",
+    "stdlib.std.sync.Mutex",
+    "stdlib.std.sync.MutexGuard",
+    "stdlib.std.sync.MutexInner",
+    "stdlib.std.sync.OnceLock",
+    "stdlib.std.sync.Ordering",
+    "stdlib.std.sync.RwLock",
+    "stdlib.std.sync.RwLockInner",
+    "stdlib.std.sync.RwLockReadGuard",
+    "stdlib.std.sync.RwLockWriteGuard",
+]
 
 [[feature]]
 id            = "STD-STD-TASK"
@@ -84,6 +217,11 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "M"
+inventory    = [
+    "stdlib.std.task.Reactor",
+    "stdlib.std.task.Sleep",
+    "stdlib.std.task.block_on",
+]
 
 [[feature]]
 id            = "STD-STD-THREAD"
@@ -94,6 +232,28 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.std.thread.Builder",
+    "stdlib.std.thread.DEFAULT_STACK_SIZE",
+    "stdlib.std.thread.JoinHandle",
+    "stdlib.std.thread.MAX_THREADS",
+    "stdlib.std.thread.ResultSlot",
+    "stdlib.std.thread.SpawnPayload",
+    "stdlib.std.thread.Thread",
+    "stdlib.std.thread.ThreadId",
+    "stdlib.std.thread.available_parallelism",
+    "stdlib.std.thread.current",
+    "stdlib.std.thread.current_id",
+    "stdlib.std.thread.hint_spin_loop",
+    "stdlib.std.thread.park",
+    "stdlib.std.thread.park_timeout",
+    "stdlib.std.thread.sleep",
+    "stdlib.std.thread.spawn",
+    "stdlib.std.thread.spawn_impl",
+    "stdlib.std.thread.thread_trampoline",
+    "stdlib.std.thread.unpark",
+    "stdlib.std.thread.yield_now",
+]
 
 [[feature]]
 id            = "STD-STD-TIME"
@@ -104,3 +264,10 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.std.time.Duration",
+    "stdlib.std.time.Instant",
+    "stdlib.std.time.SystemTime",
+    "stdlib.std.time.UNIX_EPOCH",
+    "stdlib.std.time.system_time_since_epoch",
+]
