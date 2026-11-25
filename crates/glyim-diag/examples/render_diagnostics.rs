@@ -20,7 +20,7 @@ use glyim_diag::{DiagSeverity, ErrorCategory, ErrorCode, GlyimDiagnostic, SubDia
 use glyim_span::{ByteIdx, FileId, MultiSpan, Span};
 
 fn main() {
-    let span = Span::new(
+    let span = Span::range(
         FileId::from_usize(0),
         ByteIdx::from_usize(4),
         ByteIdx::from_usize(12),
