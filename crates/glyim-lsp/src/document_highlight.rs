@@ -126,8 +126,8 @@ pub fn compute_highlights(
     let cursor_ref = occurrences.iter().find(|r| {
         !r.span.is_dummy()
             && r.file_id == file_id
-            && r.span.lo.to_usize() <= cursor_offset
-            && cursor_offset < r.span.hi.to_usize()
+            && r.span.lo().to_usize() <= cursor_offset
+            && cursor_offset < r.span.hi().to_usize()
     })?;
     let scope_owner: Option<u32> = if cursor_ref.is_item_level {
         None
@@ -158,7 +158,7 @@ pub fn compute_highlights(
         })
         .collect();
     // Deterministic response order: by byte offset (then span width).
-    highlights.sort_by_key(|h| (h.span.lo.to_usize(), h.span.hi.to_usize()));
+    highlights.sort_by_key(|h| (h.span.lo().to_usize(), h.span.hi().to_usize()));
     if highlights.is_empty() {
         None
     } else {
@@ -212,7 +212,7 @@ pub fn document_highlights(
         // highlights are in `file_id`, whose SourceMap was already read,
         // so this only guards against an in-flight invalidation race.
         let Some(((start_line, start_col), (end_line, end_col))) =
-            sm.span_to_position(h.span.lo.to_usize(), h.span.hi.to_usize())
+            sm.span_to_position(h.span.lo().to_usize(), h.span.hi().to_usize())
         else {
             continue;
         };
