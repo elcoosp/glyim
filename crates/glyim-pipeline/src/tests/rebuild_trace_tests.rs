@@ -85,7 +85,8 @@ fn def_map_records_miss_then_backdated() {
     let src: Arc<str> = Arc::from("fn foo() -> i32 { 1 }\n");
     let file = db
         .vfs()
-        .add_file_content(std::path::Path::new("m6_9.g"), src.clone());
+        .add_file_content(std::path::Path::new("m6_9.g"), src.clone())
+        .expect("fixture sources are far below the VFS length gate");
 
     // Fresh: fingerprint computed, no cached entry → compute + cache + Miss.
     db.def_map_query(file, || build_def_map(&db, &src, file));
