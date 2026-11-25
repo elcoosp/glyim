@@ -9,6 +9,8 @@ pub mod assertions;
 pub mod comparison;
 /// error.
 pub mod error;
+/// Per-operator exhaustive oracle (plan M4.8).
+pub mod exhaustive;
 /// fixtures.
 pub mod fixtures;
 /// harness.
