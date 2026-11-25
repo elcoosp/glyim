@@ -186,7 +186,7 @@ fn test_diag_sink_extend() {
 /// `(file, lo, hi)` so the test's sort key is fully determined by the
 /// span and not by the message.
 fn ty_diag_at(file: usize, lo: usize, hi: usize, msg: &str) -> GlyimDiagnostic {
-    let span = Span::new(
+    let span = Span::range(
         FileId::from_usize(file),
         ByteIdx::from_usize(lo),
         ByteIdx::from_usize(hi),
@@ -212,7 +212,7 @@ fn into_diagnostics_sorts_by_file_then_byte_offset() {
     let out = DiagSink::from_vec(diags).into_diagnostics();
     let order: Vec<(u32, u32)> = out
         .iter()
-        .map(|d| (d.span.primary.file.to_raw(), d.span.primary.lo.to_raw()))
+        .map(|d| (d.span.primary.file().to_raw(), d.span.primary.lo().to_raw()))
         .collect();
     assert_eq!(
         order,
@@ -263,8 +263,8 @@ fn into_diagnostics_is_order_independent() {
         .iter()
         .map(|d| {
             (
-                d.span.primary.file.to_raw(),
-                d.span.primary.lo.to_raw(),
+                d.span.primary.file().to_raw(),
+                d.span.primary.lo().to_raw(),
                 d.message.clone(),
             )
         })
@@ -274,8 +274,8 @@ fn into_diagnostics_is_order_independent() {
         .iter()
         .map(|d| {
             (
-                d.span.primary.file.to_raw(),
-                d.span.primary.lo.to_raw(),
+                d.span.primary.file().to_raw(),
+                d.span.primary.lo().to_raw(),
                 d.message.clone(),
             )
         })
