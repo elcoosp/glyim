@@ -195,7 +195,7 @@ pub fn compute_reference_targets(
 ) -> Vec<DefinitionLocation> {
     let mut kept: Vec<DefinitionLocation> = Vec::new();
     for location in source.references_of(name) {
-        if location.span.lo == location.span.hi {
+        if location.span.lo() == location.span.hi() {
             continue;
         }
         if kept.contains(&location) {
@@ -206,8 +206,8 @@ pub fn compute_reference_targets(
     kept.sort_by_key(|location| {
         (
             location.file_id.to_raw(),
-            location.span.lo.to_usize(),
-            location.span.hi.to_usize(),
+            location.span.lo().to_usize(),
+            location.span.hi().to_usize(),
         )
     });
     kept
@@ -274,7 +274,7 @@ pub fn execute_command(
             continue;
         };
         let Some(((start_line, start_col), (end_line, end_col))) =
-            sm.span_to_position(target.span.lo.to_usize(), target.span.hi.to_usize())
+            sm.span_to_position(target.span.lo().to_usize(), target.span.hi().to_usize())
         else {
             continue;
         };
