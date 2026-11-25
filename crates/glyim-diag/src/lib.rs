@@ -301,7 +301,7 @@ impl fmt::Display for GlyimDiagnostic {
         // every error was just `[CODE] message` with no location — making
         // it impossible to tell which of 28 concatenated stdlib modules
         // produced the error.
-        let r = self.span.primary.range();
+        let r = self.span.primary.byte_range();
         write!(
             f,
             "[{}] {} @{}..{}",
@@ -422,8 +422,8 @@ impl GlyimDiagnostic {
     #[must_use]
     pub fn sort_key(&self) -> DiagnosticSortKey<'_> {
         DiagnosticSortKey {
-            file: self.span.primary.file,
-            lo: self.span.primary.lo,
+            file: self.span.primary.file(),
+            lo: self.span.primary.lo(),
             code: self.code,
             severity: self.severity,
             message: &self.message,
@@ -798,31 +798,31 @@ impl DiagSink {
         self.diagnostics.sort_by(|a, b| {
             a.span
                 .primary
-                .file
+                .file()
                 .to_raw()
-                .cmp(&b.span.primary.file.to_raw())
+                .cmp(&b.span.primary.file().to_raw())
                 .then_with(|| {
                     a.span
                         .primary
-                        .lo
+                        .lo()
                         .to_usize()
-                        .cmp(&b.span.primary.lo.to_usize())
+                        .cmp(&b.span.primary.lo().to_usize())
                 })
                 .then_with(|| {
                     a.span
                         .primary
-                        .hi
+                        .hi()
                         .to_usize()
-                        .cmp(&b.span.primary.hi.to_usize())
+                        .cmp(&b.span.primary.hi().to_usize())
                 })
                 .then_with(|| (a.code.category as u8).cmp(&(b.code.category as u8)))
                 .then_with(|| a.code.number.cmp(&b.code.number))
                 .then_with(|| a.message.cmp(&b.message))
         });
         self.diagnostics.dedup_by(|a, b| {
-            a.span.primary.file == b.span.primary.file
-                && a.span.primary.lo == b.span.primary.lo
-                && a.span.primary.hi == b.span.primary.hi
+            a.span.primary.file() == b.span.primary.file()
+                && a.span.primary.lo() == b.span.primary.lo()
+                && a.span.primary.hi() == b.span.primary.hi()
                 && a.code.category == b.code.category
                 && a.code.number == b.code.number
                 && a.message == b.message
