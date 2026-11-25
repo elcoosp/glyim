@@ -27,7 +27,7 @@ fn completions_include_function_name() {
         crate::SourceMap::new(file_id, "fn foo() {}\nfn main() { foo(); }".to_string());
     analysis.source_maps.write().insert(file_id, source_map);
 
-    let span = Span::new(
+    let span = Span::range(
         file_id,
         ByteIdx::ZERO,
         ByteIdx::from_usize(3),
