@@ -14,6 +14,14 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.alloc.alloc.GLOBAL",
+    "stdlib.alloc.alloc.Global",
+    "stdlib.alloc.alloc.GlobalAlloc",
+    "stdlib.alloc.alloc.Layout",
+    "stdlib.alloc.alloc.LayoutError",
+    "stdlib.alloc.alloc.handle_alloc_error",
+]
 
 [[feature]]
 id            = "STD-ALLOC-BOX"
@@ -24,6 +32,9 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.alloc.boxed.Box",
+]
 
 [[feature]]
 id            = "STD-ALLOC-RAWVEC"
@@ -34,6 +45,9 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.alloc.raw_vec.RawVec",
+]
 
 [[feature]]
 id            = "STD-ALLOC-VEC"
@@ -44,6 +58,10 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.alloc.vec.Vec",
+    "stdlib.alloc.vec.VecIntoIter",
+]
 
 [[feature]]
 id            = "STD-ALLOC-STRING"
@@ -54,6 +72,9 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.alloc.string.String",
+]
 
 [[feature]]
 id            = "STD-ALLOC-RC"
@@ -64,3 +85,7 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "B"
+inventory    = [
+    "stdlib.alloc.rc.Rc",
+    "stdlib.alloc.rc.RcInner",
+]
