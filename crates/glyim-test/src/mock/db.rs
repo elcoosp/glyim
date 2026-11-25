@@ -57,7 +57,9 @@ impl TestDbBuilder {
         };
         let db = Database::new(config);
         for (path, content) in &self.files {
-            db.vfs().add_file_content(path, Arc::clone(content));
+            db.vfs()
+                .add_file_content(path, Arc::clone(content))
+                .expect("fixture sources are far below the VFS length gate");
         }
         db
     }
