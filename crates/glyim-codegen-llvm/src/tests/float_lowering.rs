@@ -17,7 +17,7 @@ fn build_f32_body(ctx: &mut TyCtxMut) -> Body {
     locals.push(LocalDecl {
         ty: f32_ty,
         mutability: Mutability::Not,
-        source_info: SourceInfo::new(Span::new(
+        source_info: SourceInfo::new(Span::range(
             FileId::BOGUS,
             ByteIdx::ZERO,
             ByteIdx::ZERO,
@@ -64,7 +64,7 @@ fn build_f64_body(ctx: &mut TyCtxMut) -> Body {
     locals.push(LocalDecl {
         ty: f64_ty,
         mutability: Mutability::Not,
-        source_info: SourceInfo::new(Span::new(
+        source_info: SourceInfo::new(Span::range(
             FileId::BOGUS,
             ByteIdx::ZERO,
             ByteIdx::ZERO,
