@@ -1009,7 +1009,6 @@ version = "0.10.0"
 dependencies = [
  "glyim-core",
  "glyim-diag",
- "glyim-solve",
  "glyim-span",
  "glyim-test",
  "glyim-type",
@@ -1054,7 +1053,6 @@ dependencies = [
  "glyim-test",
  "rowan",
  "smol_str",
- "tracing",
 ]
 
 [[package]]
@@ -1460,7 +1458,6 @@ dependencies = [
  "glyim-test",
  "parking_lot 0.13.0",
  "tempfile",
- "tracing",
 ]
 
 [[package]]
@@ -1955,6 +1952,9 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 name = "ledger-schema"
 version = "0.10.0"
 dependencies = [
+ "glyim-frontend",
+ "glyim-span",
+ "glyim-syntax",
  "serde",
  "serde_json",
  "syn 2.0.119",
