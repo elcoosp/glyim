@@ -20,6 +20,10 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 glyim-test = { workspace = true }
+# M3.10 "property tests for foundations": the `InferenceTable` unification
+# laws (reflexivity, symmetry, var binding, occurs check) are property-
+# tested here.
+proptest = { workspace = true }
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
