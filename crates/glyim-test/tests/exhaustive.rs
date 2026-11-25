@@ -33,8 +33,8 @@
 //! lives in the module docs of `crates/glyim-test/src/exhaustive.rs`.
 
 use glyim_test::exhaustive::{
-    BINARY_SWEEPS, CAST_SWEEPS, SweepOutcome, UNARY_SWEEPS, check_const_leg, check_sweep,
-    sampled_const_pairs,
+    BINARY_SWEEPS, CAST_SWEEPS, SweepCase, SweepOutcome, UNARY_SWEEPS, check_const_leg,
+    check_sweep, sampled_const_pairs,
 };
 use glyim_test::metamorphic::MetamorphicRunner;
 
@@ -178,7 +178,7 @@ fn native_backend_matches_the_model_on_the_sweeps() {
             };
             let native = ProgramRunner::new(exe).run(std::time::Duration::from_secs(30));
             let expected = sweep.ground_truth_exit();
-            if native.exit_code != expected {
+            if native.exit_code != Some(expected) {
                 failures.push(format!(
                     "{} [{flag}]: exit mismatch (native={:?}, pinned={expected})",
                     sweep.op_id, native.exit_code
