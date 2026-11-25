@@ -6,7 +6,7 @@ fn token_spans_cover_their_text() {
     let source = "fn main() {}";
     let result = lex(source, FileId::from_usize(0));
     for token in &result.tokens {
-        let range = token.span.range();
+        let range = token.span.byte_range();
         let extracted = &source[range];
         assert_eq!(
             extracted, token.text,
@@ -22,7 +22,7 @@ fn spans_are_monotonically_increasing() {
     let result = lex(source, FileId::from_usize(0));
     let mut prev_end = 0usize;
     for token in &result.tokens {
-        let range = token.span.range();
+        let range = token.span.byte_range();
         assert!(
             range.start >= prev_end,
             "token '{}' at {}..{} overlaps with previous ending at {}",
@@ -39,7 +39,7 @@ fn spans_are_monotonically_increasing() {
 fn span_file_id_preserved() {
     let fid = FileId::from_usize(42);
     let result = lex("fn", fid);
-    assert_eq!(result.tokens[0].span.file, fid);
+    assert_eq!(result.tokens[0].span.file(), fid);
 }
 
 #[test]
@@ -88,16 +88,16 @@ fn spans_for_source_without_whitespace() {
     assert_eq!(result.tokens.len(), 3);
 
     assert_eq!(result.tokens[0].text, "1");
-    assert_eq!(result.tokens[0].span.range().start, 0);
-    assert_eq!(result.tokens[0].span.range().end, 1);
+    assert_eq!(result.tokens[0].span.byte_range().start, 0);
+    assert_eq!(result.tokens[0].span.byte_range().end, 1);
 
     assert_eq!(result.tokens[1].text, "+");
-    assert_eq!(result.tokens[1].span.range().start, 1);
-    assert_eq!(result.tokens[1].span.range().end, 2);
+    assert_eq!(result.tokens[1].span.byte_range().start, 1);
+    assert_eq!(result.tokens[1].span.byte_range().end, 2);
 
     assert_eq!(result.tokens[2].text, "2");
-    assert_eq!(result.tokens[2].span.range().start, 2);
-    assert_eq!(result.tokens[2].span.range().end, 3);
+    assert_eq!(result.tokens[2].span.byte_range().start, 2);
+    assert_eq!(result.tokens[2].span.byte_range().end, 3);
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn contiguous_tokens_cover_entire_source() {
     let source = "1+2*3";
     let result = lex(source, FileId::from_usize(0));
     if let Some(last) = result.tokens.last() {
-        let range = last.span.range();
+        let range = last.span.byte_range();
         assert_eq!(
             range.end,
             source.len(),
