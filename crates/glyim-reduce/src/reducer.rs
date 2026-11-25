@@ -210,7 +210,7 @@ impl<'a, C: ReproCheck + ?Sized> Reducer<'a, C> {
     }
 }
 
-/// Removes `source[lo..hi]` exactly. Line-structural widening (indent
+/// Removes `source[lo..hi()]` exactly. Line-structural widening (indent
 /// and blank-line swallowing) happens in [`line_aligned`] when the
 /// chunkers build the ranges; the token tier passes raw token spans.
 /// A degenerate range (which cannot arise from the chunkers' own
@@ -331,8 +331,8 @@ fn token_chunks(source: &str) -> Vec<(usize, usize)> {
         .filter(|token| !token.kind.is_trivia())
         .map(|token| {
             (
-                token.span.lo.to_raw() as usize,
-                token.span.hi.to_raw() as usize,
+                token.span.lo().to_raw() as usize,
+                token.span.hi().to_raw() as usize,
             )
         })
         .collect()
