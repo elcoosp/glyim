@@ -155,7 +155,7 @@ pub(crate) fn node_span(node: &SyntaxNode) -> Span {
     let lo = ByteIdx::from_usize(u32::from(range.start()) as usize);
     let hi = ByteIdx::from_usize(u32::from(range.end()) as usize);
     let file = CURRENT_FILE_ID.with(std::cell::Cell::get);
-    Span::new(file, lo, hi, SyntaxContext::ROOT)
+    Span::range(file, lo, hi, SyntaxContext::ROOT)
 }
 
 fn next_local_def_id(counter: &mut u32) -> LocalDefId {
