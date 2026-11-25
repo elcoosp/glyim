@@ -67,9 +67,9 @@ impl CallSiteSource for MockCallSites {
     fn call_site_at(&self, file_id: FileId, offset: usize) -> Option<CalledFunction> {
         self.sites
             .iter()
-            .filter(|s| s.span.file == file_id)
-            .filter(|s| s.span.lo.to_usize() <= offset && offset < s.span.hi.to_usize())
-            .min_by_key(|s| s.span.hi.to_usize() - s.span.lo.to_usize())
+            .filter(|s| s.span.file() == file_id)
+            .filter(|s| s.span.lo().to_usize() <= offset && offset < s.span.hi().to_usize())
+            .min_by_key(|s| s.span.hi().to_usize() - s.span.lo().to_usize())
             .cloned()
     }
 }
