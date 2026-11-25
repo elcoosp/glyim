@@ -28,7 +28,7 @@ impl MockSource {
 }
 
 fn span_of(lo: usize, hi: usize) -> Span {
-    Span::new(
+    Span::range(
         FileId::from_usize(0),
         glyim_span::ByteIdx::from_usize(lo),
         glyim_span::ByteIdx::from_usize(hi),
@@ -53,7 +53,7 @@ fn overlapping_bindings_answer_in_span_order() {
     let facts = compute_inline_values(&mock, 8, 50);
     let names: Vec<&str> = facts.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(names, vec!["early", "late"]);
-    assert_eq!(facts[0].span.lo.to_usize(), 10);
+    assert_eq!(facts[0].span.lo().to_usize(), 10);
 }
 
 /// A binding outside the requested range answers nothing — the request
