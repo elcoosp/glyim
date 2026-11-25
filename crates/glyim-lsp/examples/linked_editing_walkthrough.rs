@@ -75,7 +75,7 @@ fn main() {
                 "count",
                 Reference {
                     file_id,
-                    span: Span::new(
+                    span: Span::range(
                         file_id,
                         ByteIdx::from_usize(off),
                         ByteIdx::from_usize(off + "count".len()),
