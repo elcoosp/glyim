@@ -22,10 +22,10 @@ pub(crate) fn resolve_span_to_location(mut span: Span, hygiene: &HygieneCtx) -> 
     if span.is_dummy() {
         return Span::DUMMY;
     }
-    while !span.ctx.is_root() {
+    while !span.ctx().is_root() {
         // T149-PATCHED [SPAN-1]: look up the expansion id *through* the
         // hygiene context, not by reinterpreting the syntax-context index.
-        let expn_id = hygiene.expn_id_of(span.ctx);
+        let expn_id = hygiene.expn_id_of(span.ctx());
         match hygiene.expn_data(expn_id) {
             Some(expn_data) => span = expn_data.call_site,
             None => break,
@@ -198,9 +198,9 @@ impl<'ctx> DebugInfoCtx<'ctx> {
         if span.is_dummy() {
             return None;
         }
-        let file_id = span.file;
+        let file_id = span.file();
         let (_path, _source) = self.source_map.get(&file_id)?;
-        let offset: usize = span.lo.to_usize();
+        let offset: usize = span.lo().to_usize();
 
         // Use the precomputed line table.
         let starts = self.line_tables.get(&file_id)?;
@@ -358,8 +358,8 @@ impl<'ctx> DebugInfoCtx<'ctx> {
                 }
                 let name = format!("({})", field_types.len());
                 let layout = layout_computer.layout_of(ty).unwrap_or(Layout::unit());
-                let size_bits = layout.size.0 * 8;
-                let align_bits = layout.align.0 * 8;
+                let size_bits = layout.size.as_u64() * 8;
+                let align_bits = layout.align.as_u64() * 8;
                 self.builder
                     .create_struct_type(
                         self.compile_unit_scope,
@@ -381,8 +381,8 @@ impl<'ctx> DebugInfoCtx<'ctx> {
                 let adt_def_opt = ty_ctx.adt_def(*adt_id);
                 let name = format!("Adt{}", adt_id.to_raw());
                 let layout = layout_computer.layout_of(ty).unwrap_or(Layout::unit());
-                let size_bits = layout.size.0 * 8;
-                let align_bits = layout.align.0 * 8;
+                let size_bits = layout.size.as_u64() * 8;
+                let align_bits = layout.align.as_u64() * 8;
                 if let Some(adt_def) = adt_def_opt {
                     if adt_def.variants.len() == 1 {
                         let variant = &adt_def.variants[0];
@@ -513,8 +513,8 @@ impl<'ctx> DebugInfoCtx<'ctx> {
                     let adt_def_opt = ty_ctx.adt_def(adt_id);
                     let name = format!("closure{}", closure_id.to_raw());
                     let layout = layout_computer.layout_of(ty).unwrap_or(Layout::unit());
-                    let size_bits = layout.size.0 * 8;
-                    let align_bits = layout.align.0 * 8;
+                    let size_bits = layout.size.as_u64() * 8;
+                    let align_bits = layout.align.as_u64() * 8;
                     if let Some(adt_def) = adt_def_opt {
                         if adt_def.variants.len() == 1 {
                             let variant = &adt_def.variants[0];
@@ -581,8 +581,8 @@ impl<'ctx> DebugInfoCtx<'ctx> {
                     let name = "closure";
                     // Treat as opaque struct.
                     let layout = layout_computer.layout_of(ty).unwrap_or(Layout::unit());
-                    let size_bits = layout.size.0 * 8;
-                    let align_bits = layout.align.0 * 8;
+                    let size_bits = layout.size.as_u64() * 8;
+                    let align_bits = layout.align.as_u64() * 8;
                     self.builder
                         .create_struct_type(
                             self.compile_unit_scope,
@@ -654,7 +654,7 @@ impl<'ctx> DebugInfoCtx<'ctx> {
         let basic_ty = self.debug_type_for_ty(context, ty, ty_ctx);
         let name = ty_ctx.name_str(var_info.name);
         let (line, col) = self.span_to_line_col(&span).unwrap_or((1, 1));
-        let file = self.get_file(span.file);
+        let file = self.get_file(span.file());
 
         let divar = self.builder.create_auto_variable(
             scope,
