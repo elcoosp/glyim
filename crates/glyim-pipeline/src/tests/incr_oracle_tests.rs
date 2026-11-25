@@ -140,7 +140,9 @@ fn def_map_fingerprint(db: &Database, file: glyim_span::FileId) -> Fingerprint {
 /// the `FileId`.
 fn set_source(db: &Database, src: &str) -> glyim_span::FileId {
     let path = std::path::Path::new("oracle.g");
-    db.vfs().add_file_content(path, Arc::from(src))
+    db.vfs()
+        .add_file_content(path, Arc::from(src))
+        .expect("fixture sources are far below the VFS length gate")
 }
 
 use std::sync::Arc;
