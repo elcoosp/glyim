@@ -24,7 +24,7 @@ impl<'a> FullLayoutComputer<'a> {
     }
 
     fn classify_arg(&self, ty: Ty, layout: &Layout) -> PassMode {
-        let size = layout.size.0;
+        let size = layout.size.as_u64();
         if size == 0 {
             return PassMode::Ignore;
         }
@@ -61,7 +61,7 @@ impl<'a> FullLayoutComputer<'a> {
 
         match target_abi {
             glyim_core::primitives::TargetAbi::X86_64SystemV => {
-                if size <= 16 && layout.align.0 <= 8 {
+                if size <= 16 && layout.align.as_u64() <= 8 {
                     PassMode::Direct
                 } else {
                     PassMode::Indirect { meta_attrs: false }
@@ -76,14 +76,14 @@ impl<'a> FullLayoutComputer<'a> {
                 PassMode::Indirect { meta_attrs: false }
             }
             glyim_core::primitives::TargetAbi::X86_64Windows => {
-                if size <= 8 && layout.align.0 <= 8 {
+                if size <= 8 && layout.align.as_u64() <= 8 {
                     PassMode::Direct
                 } else {
                     PassMode::Indirect { meta_attrs: false }
                 }
             }
             glyim_core::primitives::TargetAbi::AArch64Windows => {
-                if size <= 8 && layout.align.0 <= 8 {
+                if size <= 8 && layout.align.as_u64() <= 8 {
                     PassMode::Direct
                 } else {
                     PassMode::Indirect { meta_attrs: false }
@@ -173,13 +173,24 @@ impl FullLayoutComputer<'_> {
                 let mut size = Size::ZERO;
                 let mut align = Align::ONE;
                 let mut offsets = glyim_core::arena::IndexVec::new();
+                let mut cursor = glyim_layout::Offset::ZERO;
                 for layout in &field_layouts {
-                    let offset = size.align_to(layout.align);
-                    offsets.push(offset);
-                    size = offset + layout.size;
+                    let offset = cursor
+                        .checked_align_to(layout.align)
+                        .ok_or(LayoutError::SizeOverflow(ty))?;
+                    offsets.push(offset.to_size());
+                    size = offset
+                        .checked_add(layout.size)
+                        .ok_or(LayoutError::SizeOverflow(ty))?
+                        .to_size();
+                    cursor = offset
+                        .checked_add(layout.size)
+                        .ok_or(LayoutError::SizeOverflow(ty))?;
                     align = align.max(layout.align);
                 }
-                size = size.align_to(align);
+                size = size
+                    .checked_align_to(align)
+                    .ok_or(LayoutError::SizeOverflow(ty))?;
                 Ok(Layout {
                     size,
                     align,
@@ -196,8 +207,13 @@ impl FullLayoutComputer<'_> {
                     _ => return Err(LayoutError::UnknownType(ty)),
                 };
                 let elem_layout = self.layout_of(elem_ty)?;
-                let stride = elem_layout.size.align_to(elem_layout.align);
-                let size = Size(stride.0.saturating_mul(count));
+                let stride = elem_layout
+                    .size
+                    .checked_align_to(elem_layout.align)
+                    .ok_or(LayoutError::SizeOverflow(ty))?;
+                let size = stride
+                    .checked_mul(count)
+                    .ok_or(LayoutError::SizeOverflow(ty))?;
                 Ok(Layout {
                     size,
                     align: elem_layout.align,
@@ -220,13 +236,24 @@ impl FullLayoutComputer<'_> {
                             let mut size = Size::ZERO;
                             let mut align = Align::ONE;
                             let mut offsets = glyim_core::arena::IndexVec::new();
+                            let mut cursor = glyim_layout::Offset::ZERO;
                             for layout in &field_layouts {
-                                let offset = size.align_to(layout.align);
-                                offsets.push(offset);
-                                size = offset + layout.size;
+                                let offset = cursor
+                                    .checked_align_to(layout.align)
+                                    .ok_or(LayoutError::SizeOverflow(ty))?;
+                                offsets.push(offset.to_size());
+                                size = offset
+                                    .checked_add(layout.size)
+                                    .ok_or(LayoutError::SizeOverflow(ty))?
+                                    .to_size();
+                                cursor = offset
+                                    .checked_add(layout.size)
+                                    .ok_or(LayoutError::SizeOverflow(ty))?;
                                 align = align.max(layout.align);
                             }
-                            size = size.align_to(align);
+                            size = size
+                                .checked_align_to(align)
+                                .ok_or(LayoutError::SizeOverflow(ty))?;
                             variant_layouts.push(Layout {
                                 size,
                                 align,
@@ -236,10 +263,18 @@ impl FullLayoutComputer<'_> {
                             });
                         }
 
-                        let max_size = variant_layouts.iter().map(|l| l.size.0).max().unwrap_or(0);
-                        let max_align =
-                            variant_layouts.iter().map(|l| l.align.0).max().unwrap_or(1);
-                        let max_align = Align::from_bytes(max_align);
+                        let max_size = variant_layouts
+                            .iter()
+                            .map(|l| l.size)
+                            .max()
+                            .unwrap_or(Size::ZERO);
+                        let max_align_raw = variant_layouts
+                            .iter()
+                            .map(|l| l.align.as_u64())
+                            .max()
+                            .unwrap_or(1);
+                        let max_align = Align::from_bytes(max_align_raw)
+                            .ok_or(LayoutError::SizeOverflow(ty))?;
 
                         let n_variants = adt_def.variants.len() as u64;
                         let tag_bits = if n_variants <= 1 {
@@ -248,8 +283,9 @@ impl FullLayoutComputer<'_> {
                             64 - (n_variants - 1).leading_zeros()
                         };
                         let tag_size_bytes = u64::from(tag_bits.div_ceil(8));
-                        let tag_size = Size(tag_size_bytes);
-                        let tag_align = Align::from_bytes(tag_size_bytes);
+                        let tag_size = Size::bytes(tag_size_bytes);
+                        let tag_align = Align::from_bytes(tag_size_bytes)
+                            .ok_or(LayoutError::SizeOverflow(ty))?;
 
                         let tag_ty = if n_variants <= 256 {
                             glyim_type::Ty::U8
@@ -259,7 +295,11 @@ impl FullLayoutComputer<'_> {
                             glyim_type::Ty::U32
                         };
 
-                        let data_start = tag_size.align_to(tag_align).align_to(max_align);
+                        let data_start = tag_size
+                            .checked_align_to(tag_align)
+                            .ok_or(LayoutError::SizeOverflow(ty))?
+                            .checked_align_to(max_align)
+                            .ok_or(LayoutError::SizeOverflow(ty))?;
                         let mut untagged_offsets: glyim_core::arena::IndexVec<
                             glyim_type::ty::FieldIdx,
                             glyim_layout::Size,
@@ -267,13 +307,20 @@ impl FullLayoutComputer<'_> {
                         if let Some(layout) = variant_layouts.first() {
                             if let FieldsShape::Arbitrary { offsets } = &layout.fields {
                                 for offset in offsets.iter() {
-                                    untagged_offsets.push(*offset + data_start);
+                                    untagged_offsets.push(
+                                        offset
+                                            .checked_add(data_start)
+                                            .ok_or(LayoutError::SizeOverflow(ty))?,
+                                    );
                                 }
                             }
                         }
 
-                        let total_size = max_size + data_start.0;
-                        let total_size = Size(total_size).align_to(max_align);
+                        let total_size = max_size
+                            .checked_add(data_start)
+                            .ok_or(LayoutError::SizeOverflow(ty))?
+                            .checked_align_to(max_align)
+                            .ok_or(LayoutError::SizeOverflow(ty))?;
 
                         let variants_shape = VariantsShape::Multiple {
                             tag: tag_ty,
@@ -319,13 +366,24 @@ impl FullLayoutComputer<'_> {
                         let mut size = Size::ZERO;
                         let mut align = Align::ONE;
                         let mut offsets = glyim_core::arena::IndexVec::new();
+                        let mut cursor = glyim_layout::Offset::ZERO;
                         for layout in &field_layouts {
-                            let offset = size.align_to(layout.align);
-                            offsets.push(offset);
-                            size = offset + layout.size;
+                            let offset = cursor
+                                .checked_align_to(layout.align)
+                                .ok_or(LayoutError::SizeOverflow(ty))?;
+                            offsets.push(offset.to_size());
+                            size = offset
+                                .checked_add(layout.size)
+                                .ok_or(LayoutError::SizeOverflow(ty))?
+                                .to_size();
+                            cursor = offset
+                                .checked_add(layout.size)
+                                .ok_or(LayoutError::SizeOverflow(ty))?;
                             align = align.max(layout.align);
                         }
-                        size = size.align_to(align);
+                        size = size
+                            .checked_align_to(align)
+                            .ok_or(LayoutError::SizeOverflow(ty))?;
                         return Ok(Layout {
                             size,
                             align,
