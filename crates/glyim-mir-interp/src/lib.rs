@@ -3072,7 +3072,7 @@ impl<'tcx> Interpreter<'tcx> {
                     self.tcx,
                     glyim_core::primitives::TargetInfo::x86_64(),
                 );
-                let size = lc.layout_of(*ty).map_or(0, |l| l.size.0);
+                let size = lc.layout_of(*ty).map_or(0, |l| l.size.as_u64());
                 Ok(InterpValue::Uint(u128::from(size)))
             }
             MirConstKind::StaticRef { def_id, init, .. } => {
@@ -4483,7 +4483,7 @@ impl<'tcx> Interpreter<'tcx> {
     fn get_element_size(&self, ty: Ty) -> InterpResult<usize> {
         self.layout
             .layout_of(ty)
-            .map(|l| l.size.0 as usize)
+            .map(|l| l.size.as_u64() as usize)
             .map_err(|e| {
                 InterpError::Panic(format!("cannot size type for pointer arithmetic: {e:?}"))
             })
