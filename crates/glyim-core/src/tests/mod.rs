@@ -1,6 +1,7 @@
 mod alignment;
 mod def_id;
 mod define_idx_macro;
+mod foundations_proptests;
 mod idx;
 mod index_vec;
 mod interning;
