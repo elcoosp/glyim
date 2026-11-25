@@ -77,7 +77,7 @@ pub fn linked_editing_ranges(
             // read; `?` drops an in-flight invalidation race (one
             // unmappable literal is dropped, the good ones survive).
             let ((start_line, start_col), (end_line, end_col)) =
-                sm.span_to_position(h.span.lo.to_usize(), h.span.hi.to_usize())?;
+                sm.span_to_position(h.span.lo().to_usize(), h.span.hi().to_usize())?;
             Some(lsp_types::Range {
                 start: lsp_types::Position {
                     line: start_line as u32,
