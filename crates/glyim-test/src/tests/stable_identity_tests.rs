@@ -150,7 +150,10 @@ fn property_item_tree_fingerprint_invariant_under_body_only_edit() {
     });
     let path = Path::new("src.g");
     let v1 = "fn foo() -> i32 { 1 }\nfn bar() -> i32 { 2 }\n";
-    let file = db.vfs().add_file_content(path, Arc::<str>::from(v1));
+    let file = db
+        .vfs()
+        .add_file_content(path, Arc::<str>::from(v1))
+        .expect("fixture sources are far below the VFS length gate");
     let fp0 = db.item_tree_fingerprint(file);
 
     // Body-only edit: change `bar`'s body, not its signature.
@@ -221,7 +224,10 @@ fn property_def_map_query_invariant_under_body_only_edits() {
     };
     let v1 = mk_source(&[0; 5]);
     let path = Path::new("src.g");
-    let file = db.vfs().add_file_content(path, v1.clone());
+    let file = db
+        .vfs()
+        .add_file_content(path, v1.clone())
+        .expect("fixture sources are far below the VFS length gate");
 
     // Build a real CrateDefMap (parse + expand + build_def_map). The compute
     // closure runs only on a cache miss; on a body-only-edit cache hit it is
