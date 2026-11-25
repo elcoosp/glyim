@@ -122,3 +122,1063 @@ reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), 
 [[ignore]]
 item = "mir.TerminatorKind.Unreachable"
 reason = "per-variant coverage rows are the backend-parity matrix (plan §3.6), landing with M1.8 evidence; no per-variant feature exists at M1.3 seed time"
+
+# M1.3-remainder families (SyntaxKind / TyKind / stdlib API /
+# CLI flags / error & lint registries): items with no claiming
+# feature, each with its audited reason (plan §3.5).
+
+[[ignore]]
+item = "cli.flag.allow"
+reason = "lint-selection flags driving the existing lint registry, not a language or tooling feature"
+
+[[ignore]]
+item = "cli.flag.deny"
+reason = "lint-selection flags driving the existing lint registry, not a language or tooling feature"
+
+[[ignore]]
+item = "cli.flag.explain-rebuild"
+reason = "diagnostics/profiling flags (M6.9/M2.1 faces) without registry feature entries"
+
+[[ignore]]
+item = "cli.flag.link-flags"
+reason = "driver/plumbing flags, not feature surfaces"
+
+[[ignore]]
+item = "cli.flag.linker"
+reason = "driver/plumbing flags, not feature surfaces"
+
+[[ignore]]
+item = "cli.flag.output"
+reason = "driver/plumbing flags, not feature surfaces"
+
+[[ignore]]
+item = "cli.flag.proc-macro-deps"
+reason = "driver/plumbing flags, not feature surfaces"
+
+[[ignore]]
+item = "cli.flag.self-profile"
+reason = "diagnostics/profiling flags (M6.9/M2.1 faces) without registry feature entries"
+
+[[ignore]]
+item = "cli.flag.time-passes"
+reason = "diagnostics/profiling flags (M6.9/M2.1 faces) without registry feature entries"
+
+[[ignore]]
+item = "cli.flag.warn"
+reason = "lint-selection flags driving the existing lint registry, not a language or tooling feature"
+
+[[ignore]]
+item = "cli.flag.with-stdlib"
+reason = "driver/plumbing flags, not feature surfaces"
+
+[[ignore]]
+item = "core.lint.UnsafeFnCall"
+reason = "lint IDs surface through the CLI -A/-W/-D selection flags; no per-lint feature entries exist yet"
+
+[[ignore]]
+item = "core.lint.UnusedGenericParams"
+reason = "lint IDs surface through the CLI -A/-W/-D selection flags; no per-lint feature entries exist yet"
+
+[[ignore]]
+item = "diag.error_code.B0001"
+reason = "diagnostic codes are cross-checked per-feature through the feature `errors` field (CT-5); no per-code feature entries exist"
+
+[[ignore]]
+item = "diag.error_code.C0001"
+reason = "diagnostic codes are cross-checked per-feature through the feature `errors` field (CT-5); no per-code feature entries exist"
+
+[[ignore]]
+item = "diag.error_code.E0001"
+reason = "diagnostic codes are cross-checked per-feature through the feature `errors` field (CT-5); no per-code feature entries exist"
+
+[[ignore]]
+item = "diag.error_code.P0001"
+reason = "diagnostic codes are cross-checked per-feature through the feature `errors` field (CT-5); no per-code feature entries exist"
+
+[[ignore]]
+item = "diag.error_code.T0000"
+reason = "diagnostic codes are cross-checked per-feature through the feature `errors` field (CT-5); no per-code feature entries exist"
+
+[[ignore]]
+item = "diag.error_code.T0001"
+reason = "diagnostic codes are cross-checked per-feature through the feature `errors` field (CT-5); no per-code feature entries exist"
+
+[[ignore]]
+item = "diag.error_code.T0002"
+reason = "diagnostic codes are cross-checked per-feature through the feature `errors` field (CT-5); no per-code feature entries exist"
+
+[[ignore]]
+item = "diag.error_code.T0050"
+reason = "diagnostic codes are cross-checked per-feature through the feature `errors` field (CT-5); no per-code feature entries exist"
+
+[[ignore]]
+item = "diag.error_code.T0051"
+reason = "diagnostic codes are cross-checked per-feature through the feature `errors` field (CT-5); no per-code feature entries exist"
+
+[[ignore]]
+item = "diag.error_code.T0060"
+reason = "diagnostic codes are cross-checked per-feature through the feature `errors` field (CT-5); no per-code feature entries exist"
+
+[[ignore]]
+item = "diag.error_code.T0061"
+reason = "diagnostic codes are cross-checked per-feature through the feature `errors` field (CT-5); no per-code feature entries exist"
+
+[[ignore]]
+item = "diag.error_code.X0000"
+reason = "diagnostic codes are cross-checked per-feature through the feature `errors` field (CT-5); no per-code feature entries exist"
+
+[[ignore]]
+item = "syntax.SyntaxKind.And"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.AndAnd"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.AndEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ArrayExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ArrayType"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Arrow"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.AssignExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.At"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.AttrList"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Attribute"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.AwaitExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Bang"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.BangEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.BinaryExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Block"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.BlockComment"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.BoolLit"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Bound"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.BreakExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ByteLit"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.CallExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Caret"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.CaretEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.CastExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.CharLit"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ClosureExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Colon"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ColonColon"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Comma"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ConstDef"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ContinueExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.DocComment"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Dollar"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Dot"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.DotDot"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.DotDotEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.DynType"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.EnumDef"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.EnumVariant"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Eq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.EqEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Error"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ExprStmt"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ExternBlock"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.FatArrow"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.FieldExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.FieldList"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.FloatLit"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.FnDef"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.FnType"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ForExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.GenericArgList"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.GsxAttr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.GsxBlockChild"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.GsxCloseTag"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.GsxDirectiveAttr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.GsxElement"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.GsxForBy"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.GsxFragment"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.GsxOpenTag"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.GsxSelfClosing"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.GsxSpread"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.GsxTextLit"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Gt"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.GtEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Hash"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Ident"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.IfExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ImplDef"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ImplTraitType"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.IndexExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.InferType"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.IntLit"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwAs"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwAsync"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwAwait"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwBreak"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwComptime"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwConst"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwContinue"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwCrate"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwDyn"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwElse"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwEnum"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwExtern"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwFalse"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwFn"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwFor"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwIf"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwImpl"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwIn"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwLet"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwLoop"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwMacro"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwMacroRules"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwMatch"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwMod"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwMove"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwMut"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwPriv"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwPub"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwRef"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwReturn"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwSelf"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwStatic"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwStruct"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwSuper"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwTrait"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwTrue"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwType"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwUnsafe"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwUse"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwWhere"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.KwWhile"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.LBrace"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.LBracket"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.LParen"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.LetStmt"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Lifetime"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.LineComment"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.LitExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.LoopExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Lt"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.LtEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.MacroArm"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.MacroCall"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.MacroDef"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.MacroPattern"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.MatchArm"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.MatchArmList"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.MatchExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.MetaVar"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.MetaVarCrate"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.MethodCallExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Minus"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.MinusEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Module"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.NeverType"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Or"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.OrEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.OrOr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Param"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ParamList"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.PatIdent"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.PatLit"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.PatOr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.PatRange"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.PatRef"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.PatSlice"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.PatStruct"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.PatTuple"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.PatWild"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.PathExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.PathType"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Percent"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.PercentEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Plus"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.PlusEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Question"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.RBrace"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.RBracket"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.RParen"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.RangeExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.RawPtrType"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.RefExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.RefType"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ReturnExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Semicolon"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Shl"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ShlEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Shr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.ShrEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Slash"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.SlashEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.SliceType"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.SourceFile"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Star"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.StarEq"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.StaticDef"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.StringLit"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.StructDef"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.StructExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.StructField"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Tilde"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.TokenTree"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.TraitDef"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.TryExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.TupleExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.TupleType"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.TypeAlias"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.TypeParam"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.TypeParamList"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.UnaryExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Underscore"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.UseDecl"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.UsePath"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.UseTree"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.VariantList"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.VisCrate"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.VisPath"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.VisSelf"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.VisSuper"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Visibility"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.WhereClause"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.WherePredicate"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.WhileExpr"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "syntax.SyntaxKind.Whitespace"
+reason = "lexer/grammar token or node kind - a grammar production, not a language feature; language constructs live in the LANG-SYN-* entries"
+
+[[ignore]]
+item = "ty.AdtKind.Enum"
+reason = "ADT type form; the language-facing constructs are the LANG-SYN-* entries"
+
+[[ignore]]
+item = "ty.AdtKind.Struct"
+reason = "ADT type form; the language-facing constructs are the LANG-SYN-* entries"
+
+[[ignore]]
+item = "ty.AdtKind.Union"
+reason = "ADT type form; the language-facing constructs are the LANG-SYN-* entries"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.Any"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.Clone"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.Copy"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.Default"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.Deref"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.DerefMut"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.Drop"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.Fn"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.FnMut"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.FnOnce"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.Future"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.IntoIterator"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.Iterator"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.Send"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.Sized"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.Sync"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.BuiltinTraitDef.Unpin"
+reason = "builtin trait definition; trait mechanisms are the LANG-TRAIT-* entries and per-trait rows are the §3.6 matrix material"
+
+[[ignore]]
+item = "ty.TyKind.Adt"
+reason = "compiler-internal or inference-only type form; no user-facing LANG-TY-* entry exists"
+
+[[ignore]]
+item = "ty.TyKind.Bound"
+reason = "compiler-internal or inference-only type form; no user-facing LANG-TY-* entry exists"
+
+[[ignore]]
+item = "ty.TyKind.Closure"
+reason = "compiler-internal or inference-only type form; no user-facing LANG-TY-* entry exists"
+
+[[ignore]]
+item = "ty.TyKind.Dynamic"
+reason = "compiler-internal or inference-only type form; no user-facing LANG-TY-* entry exists"
+
+[[ignore]]
+item = "ty.TyKind.Error"
+reason = "compiler-internal or inference-only type form; no user-facing LANG-TY-* entry exists"
+
+[[ignore]]
+item = "ty.TyKind.FnDef"
+reason = "compiler-internal or inference-only type form; no user-facing LANG-TY-* entry exists"
+
+[[ignore]]
+item = "ty.TyKind.Infer"
+reason = "compiler-internal or inference-only type form; no user-facing LANG-TY-* entry exists"
+
+[[ignore]]
+item = "ty.TyKind.Never"
+reason = "compiler-internal or inference-only type form; no user-facing LANG-TY-* entry exists"
+
+[[ignore]]
+item = "ty.TyKind.Opaque"
+reason = "compiler-internal or inference-only type form; no user-facing LANG-TY-* entry exists"
+
+[[ignore]]
+item = "ty.TyKind.Param"
+reason = "compiler-internal or inference-only type form; no user-facing LANG-TY-* entry exists"
+
+[[ignore]]
+item = "ty.TyKind.Projection"
+reason = "compiler-internal or inference-only type form; no user-facing LANG-TY-* entry exists"
+
+[[ignore]]
+item = "ty.TyKind.Unit"
+reason = "compiler-internal or inference-only type form; no user-facing LANG-TY-* entry exists"
