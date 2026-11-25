@@ -55,7 +55,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn span(&self, start: usize, end: usize) -> Span {
-        Span::new(
+        Span::range(
             self.file_id,
             ByteIdx::from_usize(start),
             ByteIdx::from_usize(end),
@@ -667,7 +667,7 @@ impl<'a> Lexer<'a> {
             let suffix = &self.source[suffix_start..self.pos];
             if !is_valid_number_suffix(suffix) {
                 self.diagnostics.push(GlyimDiagnostic::lex_error(
-                    Span::new(
+                    Span::range(
                         self.file_id,
                         ByteIdx::from_usize(suffix_start),
                         ByteIdx::from_usize(self.pos),
