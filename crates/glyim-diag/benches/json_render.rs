@@ -21,13 +21,13 @@ use glyim_span::{ByteIdx, FileId, MultiSpan, Span};
 /// two secondary spans (the structured non-exhaustive-match shape), every
 /// odd index a warning over a dummy span.
 fn synthetic_batch() -> Vec<GlyimDiagnostic> {
-    let primary = Span::new(
+    let primary = Span::range(
         FileId::from_usize(1),
         ByteIdx::ZERO,
         ByteIdx::from_usize(64),
         glyim_span::SyntaxContext::ROOT,
     );
-    let secondary = Span::new(
+    let secondary = Span::range(
         FileId::from_usize(1),
         ByteIdx::from_usize(80),
         ByteIdx::from_usize(144),
