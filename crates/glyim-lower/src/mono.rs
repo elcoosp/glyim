@@ -85,7 +85,7 @@ pub struct MonoCtx<'a> {
     /// is None (unit tests), deduplication falls back to the previous
     /// (incorrect-but-narrower) behavior.
     pre_subst_bodies:
-        Option<&'a std::collections::HashMap<glyim_core::def_id::DefId, Arc<glyim_mir::Body>>>,
+        Option<&'a std::collections::BTreeMap<glyim_core::def_id::DefId, Arc<glyim_mir::Body>>>,
 }
 
 impl<'a> MonoCtx<'a> {
@@ -139,7 +139,7 @@ impl<'a> MonoCtx<'a> {
     /// `polymorphize_and_deduplicate` can analyze `TyKind::Param` usage.
     pub fn with_pre_subst_bodies(
         &mut self,
-        bodies: &'a std::collections::HashMap<glyim_core::def_id::DefId, Arc<glyim_mir::Body>>,
+        bodies: &'a std::collections::BTreeMap<glyim_core::def_id::DefId, Arc<glyim_mir::Body>>,
     ) {
         self.pre_subst_bodies = Some(bodies);
     }
