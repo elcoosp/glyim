@@ -390,7 +390,7 @@ pub(crate) fn substitute_body(body: &Body, substs: &Substitution, ty_ctx: &TyCtx
 }
 
 pub(crate) fn make_mir_body_provider<'a>(
-    bodies: &'a std::collections::HashMap<DefId, Arc<Body>>,
+    bodies: &'a std::collections::BTreeMap<DefId, Arc<Body>>,
     sink: &'a RefCell<DiagSink>,
     ty_ctx: &'a TyCtx,
 ) -> impl Fn(DefId, &Substitution) -> Arc<Body> + 'a {
