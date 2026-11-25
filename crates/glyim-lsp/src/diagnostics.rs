@@ -23,8 +23,10 @@ pub fn convert_diagnostics(
         .iter()
         .map(|d| {
             let range = if let Some(((start_line, start_col), (end_line, end_col))) = source_map
-                .span_to_position(d.span.primary.lo.to_usize(), d.span.primary.hi.to_usize())
-            {
+                .span_to_position(
+                    d.span.primary.lo().to_usize(),
+                    d.span.primary.hi().to_usize(),
+                ) {
                 Range {
                     start: Position {
                         line: start_line as u32,
