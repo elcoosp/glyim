@@ -17,7 +17,7 @@ fn interner() -> &'static Interner {
 }
 
 fn dummy_span() -> Span {
-    Span::new(
+    Span::range(
         FileId::BOGUS,
         ByteIdx::ZERO,
         ByteIdx::ZERO,
