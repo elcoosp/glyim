@@ -1,0 +1,85 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.11.0] - 2026-11-25
+
+### Documentation
+- embed the generated status block, fix claims by @elcoosp in [#283](https://github.com/elcoosp/glyim/pull/283) ([a5e44d6](https://github.com/elcoosp/glyim/commit/a5e44d6e55e2321f2c29dfc4a74fff3f47d6f0eb))
+- add mascot illustrations to GFM callout alerts by @elcoosp ([fd5d5b6](https://github.com/elcoosp/glyim/commit/fd5d5b6aafda1c46c09df573dc97fa68a70b957a))
+- update header with theme-aware vector logo wordmark by @elcoosp ([4dbef1c](https://github.com/elcoosp/glyim/commit/4dbef1ccea1f819c5df36e865ab6e842db8ce965))
+- document the rails and the 12-key ratchet by @elcoosp in [#267](https://github.com/elcoosp/glyim/pull/267) ([22a646b](https://github.com/elcoosp/glyim/commit/22a646bde5f6f1c5bb42605da72a4fadf17586c0))
+- embed the generated readiness status block by @elcoosp in [#266](https://github.com/elcoosp/glyim/pull/266) ([6e9f73c](https://github.com/elcoosp/glyim/commit/6e9f73ca54d59752d9452b044ad002c718b50f33))
+- sync the interrupt and math seams by @elcoosp in [#265](https://github.com/elcoosp/glyim/pull/265) ([a6b8dd0](https://github.com/elcoosp/glyim/commit/a6b8dd043456b93cdc7294a3eeaefbd26ae04c69))
+- sync the stack and fuel seams and examples by @elcoosp in [#264](https://github.com/elcoosp/glyim/pull/264) ([0694226](https://github.com/elcoosp/glyim/commit/0694226bc7ce65c64cfe1a89973cc56ad39dd047))
+- sync the float seam and fix the OP_DEREF mnemonic by @elcoosp in [#263](https://github.com/elcoosp/glyim/pull/263) ([dcb772b](https://github.com/elcoosp/glyim/commit/dcb772b8e8fc4748dc9aa82430fa8fed6d7f922c))
+- sync the aggregate and projection seams and examples by @elcoosp in [#262](https://github.com/elcoosp/glyim/pull/262) ([05e4052](https://github.com/elcoosp/glyim/commit/05e4052ec510011477e33c3c40d6a06289ea132d))
+- sync the calls and strings seams and the examples by @elcoosp in [#261](https://github.com/elcoosp/glyim/pull/261) ([87d23a0](https://github.com/elcoosp/glyim/commit/87d23a08ec12d6d6572a88fcd3f9f9192d71213e))
+- sync the cast and memory seams and the examples by @elcoosp in [#260](https://github.com/elcoosp/glyim/pull/260) ([2ea3bf3](https://github.com/elcoosp/glyim/commit/2ea3bf35c25cefaef91447baa0a01d959dee0c2b))
+- sync the assertion and drop seams and the examples by @elcoosp in [#259](https://github.com/elcoosp/glyim/pull/259) ([bd9a049](https://github.com/elcoosp/glyim/commit/bd9a0498fa2ce672d826792c7e70aa105934cad3))
+- sync the cache metrics and data-flow seams by @elcoosp in [#258](https://github.com/elcoosp/glyim/pull/258) ([9df1c48](https://github.com/elcoosp/glyim/commit/9df1c4857f8e5e10915dfe9779675eb3b0c6a28f))
+- sync the cost and window seams and the examples by @elcoosp in [#257](https://github.com/elcoosp/glyim/pull/257) ([f020427](https://github.com/elcoosp/glyim/commit/f020427ec57561bed686c2b91e57b849fe18a45c))
+- sync the branches and state seams and the examples by @elcoosp in [#256](https://github.com/elcoosp/glyim/pull/256) ([d0179f2](https://github.com/elcoosp/glyim/commit/d0179f2c0ec69432b4dfce8a0a00dc13e061a22a))
+- sync the callgraph and run-diff seams by @elcoosp in [#255](https://github.com/elcoosp/glyim/pull/255) ([689136f](https://github.com/elcoosp/glyim/commit/689136ffabadc7380ebababe4183262e2c38e072))
+- sync the watch and diff seams and the examples by @elcoosp in [#254](https://github.com/elcoosp/glyim/pull/254) ([8a89a2e](https://github.com/elcoosp/glyim/commit/8a89a2edaf4c7599973c2e3845041e5a500ffdfe))
+- sync the new seams and the example inventory by @elcoosp in [#253](https://github.com/elcoosp/glyim/pull/253) ([24aa14d](https://github.com/elcoosp/glyim/commit/24aa14d798e420a95596b1ba594dda7bfd9847c5))
+- sync the profile seam and the example inventory by @elcoosp in [#252](https://github.com/elcoosp/glyim/pull/252) ([2b0b113](https://github.com/elcoosp/glyim/commit/2b0b1137d91e94885132e5bfc0be5e8edec8158d))
+- sync the bytecode capability list and example inventory by @elcoosp in [#251](https://github.com/elcoosp/glyim/pull/251) ([9db245e](https://github.com/elcoosp/glyim/commit/9db245eab0f4c20c15652b5154f2ccfe08be1b17))
+- sync the async and disasm capability lists by @elcoosp in [#250](https://github.com/elcoosp/glyim/pull/250) ([530e3d0](https://github.com/elcoosp/glyim/commit/530e3d01595be77fcbeb1730047eb2db247404b4))
+- sync the bytecode capability list with the seams by @elcoosp in [#249](https://github.com/elcoosp/glyim/pull/249) ([e241e84](https://github.com/elcoosp/glyim/commit/e241e84ecdadfd7070d2f8672b46dbcd35f67913))
+- sync the bytecode capability lists with the image seam by @elcoosp in [#248](https://github.com/elcoosp/glyim/pull/248) ([c61cb6b](https://github.com/elcoosp/glyim/commit/c61cb6be65e3065640b08ec248123383ad35422b))
+- sync the async and gap lists with the closure by @elcoosp in [#247](https://github.com/elcoosp/glyim/pull/247) ([90e655a](https://github.com/elcoosp/glyim/commit/90e655a5bf7930053119c5f937c9c620e92accd9))
+- sync the capability lists with the new lsp features by @elcoosp in [#246](https://github.com/elcoosp/glyim/pull/246) ([fb57347](https://github.com/elcoosp/glyim/commit/fb5734773f7765066da5b2859e066d831689e8ee))
+- sync the capability lists with the file operations by @elcoosp in [#245](https://github.com/elcoosp/glyim/pull/245) ([7c97a26](https://github.com/elcoosp/glyim/commit/7c97a26179d5db8c7e0052cf0473a32c7994bddb))
+- sync the capability list with the new lsp surface by @elcoosp in [#243](https://github.com/elcoosp/glyim/pull/243) ([ac93e15](https://github.com/elcoosp/glyim/commit/ac93e1512d8f3fd233c6a6e3ff8626bbf8203ddc))
+- sync both capability lists with the new lsp surface by @elcoosp ([05c4a9b](https://github.com/elcoosp/glyim/commit/05c4a9b6635ae8f11488c4077bbc3d05757c233a))
+- sync both capability lists with the new lsp surface by @elcoosp in [#242](https://github.com/elcoosp/glyim/pull/242) ([27ce3cc](https://github.com/elcoosp/glyim/commit/27ce3cc5c96f4fdcddf16d538555292389279f16))
+- sync the capability list with the lsp surface by @elcoosp in [#241](https://github.com/elcoosp/glyim/pull/241) ([1bf08cb](https://github.com/elcoosp/glyim/commit/1bf08cbc91cbaf512a14606ed9422303a7f64e61))
+- sync both capability lists with the lsp surface by @elcoosp in [#240](https://github.com/elcoosp/glyim/pull/240) ([dddc41b](https://github.com/elcoosp/glyim/commit/dddc41b5e94533524a83a03f5f087d0810c99757))
+- list the document-link and linked-editing capabilities by @elcoosp in [#239](https://github.com/elcoosp/glyim/pull/239) ([2358c76](https://github.com/elcoosp/glyim/commit/2358c76e64c5c89be47ca7537124a8a7b562b55a))
+- list workspace and related diagnostics walkthroughs by @elcoosp in [#238](https://github.com/elcoosp/glyim/pull/238) ([58a5162](https://github.com/elcoosp/glyim/commit/58a5162622763ea2b5c22a10d17f40c42954182a))
+- list goto-implementation, pull diagnostics, walkthroughs by @elcoosp in [#237](https://github.com/elcoosp/glyim/pull/237) ([5f8c122](https://github.com/elcoosp/glyim/commit/5f8c122a5ed7e3f7f743316fbfb6759f30776582))
+- list goto-declaration, the log file, and walkthroughs by @elcoosp in [#236](https://github.com/elcoosp/glyim/pull/236) ([bf117be](https://github.com/elcoosp/glyim/commit/bf117bebd57353d9b8e3f3120b487fac04898a50))
+- list inlay hints and sync the lsp capability list by @elcoosp in [#235](https://github.com/elcoosp/glyim/pull/235) ([e31db4e](https://github.com/elcoosp/glyim/commit/e31db4e65e41134451170ebe24e58e9d7f2341b5))
+- list call hierarchy and signature help by @elcoosp in [#234](https://github.com/elcoosp/glyim/pull/234) ([1711075](https://github.com/elcoosp/glyim/commit/171107532252dcdda341d2950206c4d0fc207f35))
+- list semantic tokens, sync the lsp capability list by @elcoosp in [#233](https://github.com/elcoosp/glyim/pull/233) ([a289bed](https://github.com/elcoosp/glyim/commit/a289bed9340adc992808a1d0aad4b1df3542bf42))
+- list selection ranges and type definition by @elcoosp in [#232](https://github.com/elcoosp/glyim/pull/232) ([1b2fb4d](https://github.com/elcoosp/glyim/commit/1b2fb4d0ba4c432368af6af3b1b8ac805549f148))
+- list document highlight and prepare rename by @elcoosp in [#231](https://github.com/elcoosp/glyim/pull/231) ([15114e4](https://github.com/elcoosp/glyim/commit/15114e475a35f565f57e62e78abad680c49d515f))
+- document the exemption faces, fix the faces drift by @elcoosp in [#229](https://github.com/elcoosp/glyim/pull/229) ([9f8cdbd](https://github.com/elcoosp/glyim/commit/9f8cdbd8ccd550c0b06161515c9852248aaba4ab))
+- document the gaps audit and unwitness faces by @elcoosp in [#226](https://github.com/elcoosp/glyim/pull/226) ([ce4b273](https://github.com/elcoosp/glyim/commit/ce4b2738e8883c424a7d7b3c4f6fc3f6a9163140))
+- document the gaps open and retract faces by @elcoosp in [#225](https://github.com/elcoosp/glyim/pull/225) ([d3e7298](https://github.com/elcoosp/glyim/commit/d3e729860e92d1e30f65004cd20f916de7e329d3))
+- document the gaps write faces, fix drift by @elcoosp in [#224](https://github.com/elcoosp/glyim/pull/224) ([34adbca](https://github.com/elcoosp/glyim/commit/34adbcabcf7d05a46220d540ec349e214a159a56))
+- document the release-check and prune faces by @elcoosp in [#223](https://github.com/elcoosp/glyim/pull/223) ([3daf474](https://github.com/elcoosp/glyim/commit/3daf4742304cd3b558dbfaef4b82c76610a4b896))
+- document the extend and audit faces, fix drift by @elcoosp in [#222](https://github.com/elcoosp/glyim/pull/222) ([ccf39ef](https://github.com/elcoosp/glyim/commit/ccf39ef4bfce126637393f42644f74d7c135523b))
+- document the handoff and revoke faces by @elcoosp in [#221](https://github.com/elcoosp/glyim/pull/221) ([1cd5c7c](https://github.com/elcoosp/glyim/commit/1cd5c7c4b2408efdf5659528f3ac6e1fa0985b0d))
+- document the waiver health and grant faces by @elcoosp in [#220](https://github.com/elcoosp/glyim/pull/220) ([8c9da01](https://github.com/elcoosp/glyim/commit/8c9da0122bb95d267645686b51d2d221e1308c0b))
+- document the evidence store and status gates by @elcoosp in [#219](https://github.com/elcoosp/glyim/pull/219) ([270be03](https://github.com/elcoosp/glyim/commit/270be0370825956dd2694366b1af1fa58db335ce))
+- document render-gaps and the committed corpus dir by @elcoosp in [#218](https://github.com/elcoosp/glyim/pull/218) ([63e35c3](https://github.com/elcoosp/glyim/commit/63e35c3345afaced9b9e674e4ba379db71c6480e))
+- document the gates and verify ledger commands by @elcoosp in [#217](https://github.com/elcoosp/glyim/pull/217) ([164ff05](https://github.com/elcoosp/glyim/commit/164ff05bea78ef7eb759429a2df5dcaf44748f41))
+- document the matrix and trend bench gates by @elcoosp in [#216](https://github.com/elcoosp/glyim/pull/216) ([9ce89b8](https://github.com/elcoosp/glyim/commit/9ce89b880591f0f6d0326e1004317182d53ea6f4))
+- document the budget and history bench gates by @elcoosp in [#215](https://github.com/elcoosp/glyim/pull/215) ([6c367d5](https://github.com/elcoosp/glyim/commit/6c367d5ccfcb1a972c81c22c600f22d505ae04a7))
+- document the ledger diff and bench scale slices by @elcoosp in [#214](https://github.com/elcoosp/glyim/pull/214) ([89fd081](https://github.com/elcoosp/glyim/commit/89fd081423ad6b3577f5a90e42738d01e7a8c041))
+- add status to the ledger subcommand enumeration by @elcoosp in [#213](https://github.com/elcoosp/glyim/pull/213) ([4aba533](https://github.com/elcoosp/glyim/commit/4aba533dab0a6436e867db8568045980944fe849))
+- document compute and status ledger CLI subcommands by @elcoosp ([3c64a99](https://github.com/elcoosp/glyim/commit/3c64a9994581bbe1fe4a711746b1a1790b3e9fcb))
+- add Vercel documentation link to Cargo.toml by @elcoosp ([fdb8ee6](https://github.com/elcoosp/glyim/commit/fdb8ee6d94017be0cfcfe29d58829b3c28be2f2e))
+- enforce SKILL.md rules (jsDelivr logos, absolute links, remove license sections) by @elcoosp ([76a425d](https://github.com/elcoosp/glyim/commit/76a425d76c75d0f8c60672f8f7bab635825b4714))
+
+### Features
+- StableHasher, DefPathHash, Fingerprint, HirId (M6.1) by @elcoosp in [#275](https://github.com/elcoosp/glyim/pull/275) ([7b2039c](https://github.com/elcoosp/glyim/commit/7b2039cdb1568e3711794b03b751e3c4b7313798))
+- add Interner len/is_empty for query cache sizing by @elcoosp in [#274](https://github.com/elcoosp/glyim/pull/274) ([889e552](https://github.com/elcoosp/glyim/commit/889e552f1c5422d0b40e36c6d10799bc8b285fbe))
+
+### Miscellaneous
+- readme by @elcoosp ([bd95a18](https://github.com/elcoosp/glyim/commit/bd95a181eb118edf7255fb91275c2d9be59ae90f))
+- drop unused glyim-test dev-dep (M0.8 dead-weight) by @elcoosp in [#273](https://github.com/elcoosp/glyim/pull/273) ([db385be](https://github.com/elcoosp/glyim/commit/db385be963390591bdd1618ae3be30ef323c9e5e))
+- describe the glyim-core crate by @elcoosp in [#261](https://github.com/elcoosp/glyim/pull/261) ([adc732d](https://github.com/elcoosp/glyim/commit/adc732dc7761563c04ae6305be6bb5575784d682))
+- inject missing metadata and point to root README by @elcoosp ([b882afb](https://github.com/elcoosp/glyim/commit/b882afb23084c5526362e2dcf8ebde2bb9c7e855))
+- inject precisely curated keywords for crates.io by @elcoosp ([af1b8e1](https://github.com/elcoosp/glyim/commit/af1b8e10a8b186832055c1bcd825ad665c562ec0))
+
+### Refactor
+- register the stable_hash module by @elcoosp in [#275](https://github.com/elcoosp/glyim/pull/275) ([74a70f1](https://github.com/elcoosp/glyim/commit/74a70f12cc1ce18fbb4efe55280d2e0f2b6ab8a0))
+
+### build
+- reuse workspace sha2 dep for stable identity by @elcoosp in [#275](https://github.com/elcoosp/glyim/pull/275) ([feff1d7](https://github.com/elcoosp/glyim/commit/feff1d74d80c374ca53a7fd64297ddf91e599b47))
+**Full Changelog**: https://github.com/elcoosp/glyim/compare/v0.10.0...v0.11.0
