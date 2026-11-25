@@ -100,8 +100,8 @@ pub fn find_references(
             references.iter().find(|r| {
                 !r.span.is_dummy()
                     && r.file_id == file_id
-                    && r.span.lo.to_usize() <= off
-                    && off < r.span.hi.to_usize()
+                    && r.span.lo().to_usize() <= off
+                    && off < r.span.hi().to_usize()
             })
         })
         .and_then(|r| {
@@ -137,7 +137,7 @@ pub fn find_references(
         };
         // Exact token extents (LSP-EXACT-EXTENTS).
         let ((start_line, start_col), (end_line, end_col)) = sm
-            .span_to_position(r.span.lo.to_usize(), r.span.hi.to_usize())
+            .span_to_position(r.span.lo().to_usize(), r.span.hi().to_usize())
             .unwrap_or(((0, 0), (0, 0)));
         let Some(path) = file_map.path(r.file_id) else {
             continue;
@@ -180,8 +180,8 @@ pub fn document_symbols(
         // same extent (it names the identifier, not a zero-width point).
         let ((start_line, start_col), (end_line, end_col)) = sm
             .span_to_position(
-                sym.definition.span.lo.to_usize(),
-                sym.definition.span.hi.to_usize(),
+                sym.definition.span.lo().to_usize(),
+                sym.definition.span.hi().to_usize(),
             )
             .unwrap_or(((0, 0), (0, 0)));
         let kind = match sym.kind {
@@ -244,8 +244,8 @@ pub fn workspace_symbols(
         // Exact token extents (LSP-EXACT-EXTENTS).
         let ((start_line, start_col), (end_line, end_col)) = sm
             .span_to_position(
-                info.definition.span.lo.to_usize(),
-                info.definition.span.hi.to_usize(),
+                info.definition.span.lo().to_usize(),
+                info.definition.span.hi().to_usize(),
             )
             .unwrap_or(((0, 0), (0, 0)));
         let path = file_map.path(info.definition.file_id)?;
