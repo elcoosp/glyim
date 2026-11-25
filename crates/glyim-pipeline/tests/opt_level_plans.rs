@@ -49,7 +49,7 @@ fn test_db() -> Database {
 /// Total `Assign` statement count in `main`'s optimized body — the
 /// DCE-observable shape.
 fn main_assign_count(
-    bodies: &std::collections::HashMap<DefId, std::sync::Arc<glyim_mir::Body>>,
+    bodies: &std::collections::BTreeMap<DefId, std::sync::Arc<glyim_mir::Body>>,
 ) -> usize {
     let main_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
     // The fixture has a single user function; `main`'s body is the one the
