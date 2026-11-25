@@ -314,7 +314,7 @@ fn spelled_import_bindings(green: &GreenNode, file_id: FileId) -> Vec<(String, S
 }
 
 fn span_of(file_id: FileId, range: rowan::TextRange) -> Span {
-    Span::new(
+    Span::range(
         file_id,
         ByteIdx::from_usize(u32::from(range.start()) as usize),
         ByteIdx::from_usize(u32::from(range.end()) as usize),
@@ -355,7 +355,7 @@ fn dedupe(facts: Vec<MonikerFact>) -> Vec<MonikerFact> {
 /// Whether `offset` sits inside `span` (half-open, the span map's own
 /// convention for extents).
 fn contains(span: &Span, offset: usize) -> bool {
-    span.lo.to_usize() <= offset && offset < span.hi.to_usize()
+    span.lo().to_usize() <= offset && offset < span.hi().to_usize()
 }
 
 /// One import fact per distinct spelled path, ordered by (span start,
@@ -376,7 +376,7 @@ fn import_facts(imports: &[SpelledImport]) -> Vec<MonikerFact> {
             )
         })
         .collect();
-    facts.sort_by_key(|(span, _)| (span.lo.to_usize(), span.hi.to_usize()));
+    facts.sort_by_key(|(span, _)| (span.lo().to_usize(), span.hi().to_usize()));
     dedupe(facts.into_iter().map(|(_, fact)| fact).collect())
 }
 
@@ -450,7 +450,7 @@ pub fn monikers_at(
                 .as_ref()
                 .is_some_and(|path| !path.is_empty())
         })
-        .filter(|sym| sym.location.span.lo != sym.location.span.hi)
+        .filter(|sym| sym.location.span.lo() != sym.location.span.hi())
         .map(|sym| {
             let location = sym.location.clone();
             (
@@ -465,8 +465,8 @@ pub fn monikers_at(
     bare_exports.sort_by_key(|(location, _)| {
         (
             location.file_id.to_raw(),
-            location.span.lo.to_usize(),
-            location.span.hi.to_usize(),
+            location.span.lo().to_usize(),
+            location.span.hi().to_usize(),
         )
     });
     dedupe(bare_exports.into_iter().map(|(_, fact)| fact).collect())
