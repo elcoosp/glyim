@@ -7,13 +7,13 @@ use std::sync::Arc;
 /// A type-error diagnostic over `src.g` offsets 0..5, plus a secondary
 /// span 10..20 — the smallest diagnostic that exercises every JSON field.
 fn sample_error() -> GlyimDiagnostic {
-    let primary = Span::new(
+    let primary = Span::range(
         FileId::from_usize(1),
         ByteIdx::ZERO,
         ByteIdx::from_usize(5),
         glyim_span::SyntaxContext::ROOT,
     );
-    let secondary = Span::new(
+    let secondary = Span::range(
         FileId::from_usize(1),
         ByteIdx::from_usize(10),
         ByteIdx::from_usize(20),
@@ -106,7 +106,7 @@ fn json_empty_batch_is_empty() {
 }
 
 /// Human rendering keeps the `Display` line shape: `[CODE] message
-/// @lo..hi`, one line per diagnostic.
+/// @lo..hi()`, one line per diagnostic.
 #[test]
 fn human_matches_display_lines() {
     let out = HumanDiagnosticRenderer.render(&[sample_error()]);
