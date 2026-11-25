@@ -55,7 +55,11 @@ fn struct_beats_same_named_function() {
     let target = type_target(&src, "Foo").expect("a struct is recorded");
 
     assert_eq!(target.file_id, FileId::from_usize(1));
-    assert_eq!(target.span.lo.to_usize(), 7, "the struct site, not the fn");
+    assert_eq!(
+        target.span.lo().to_usize(),
+        7,
+        "the struct site, not the fn"
+    );
 }
 
 #[test]
@@ -66,7 +70,7 @@ fn enum_qualifies_as_a_type_definition() {
     let target = type_target(&src, "Shape").expect("an enum is recorded");
 
     assert_eq!(target.file_id, FileId::from_usize(2));
-    assert_eq!(target.span.lo.to_usize(), 3);
+    assert_eq!(target.span.lo().to_usize(), 3);
 }
 
 #[test]
@@ -101,5 +105,5 @@ fn first_recorded_type_symbol_wins() {
     let target = type_target(&src, "Pair").expect("structs are recorded");
 
     assert_eq!(target.file_id, FileId::from_usize(1), "first recording");
-    assert_eq!(target.span.lo.to_usize(), 5);
+    assert_eq!(target.span.lo().to_usize(), 5);
 }
