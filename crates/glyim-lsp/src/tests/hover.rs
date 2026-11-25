@@ -30,7 +30,7 @@ fn test_provide_hover() {
             kind: SymbolKind::Function,
             definition: DefinitionLocation {
                 file_id,
-                span: Span::new(
+                span: Span::range(
                     FileId::from_usize(0),
                     ByteIdx::from_usize(0),
                     ByteIdx::from_usize(4),
