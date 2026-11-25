@@ -364,8 +364,8 @@ fn rename_idents(source: &str) -> Option<String> {
                 .position(|name| *name == token.text.as_str())
                 .expect("name came from this set");
             replacements.push((
-                token.span.lo.to_raw() as usize,
-                token.span.hi.to_raw() as usize,
+                token.span.lo().to_raw() as usize,
+                token.span.hi().to_raw() as usize,
                 format!("vr{rank}"),
             ));
         }
