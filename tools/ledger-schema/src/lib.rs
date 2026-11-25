@@ -44,12 +44,16 @@ pub use policy::{
 };
 
 pub use inventory::{
-    CODE_INVENTORY_CONFLICT, CODE_INVENTORY_DUP_CLAIM, CODE_INVENTORY_DUP_IGNORE,
-    CODE_INVENTORY_PARSE, CODE_INVENTORY_STALE_CLAIM, CODE_INVENTORY_STALE_IGNORE,
-    CODE_INVENTORY_UNMAPPED, InventoryExtraction, InventoryExtractor, InventoryIgnore,
-    InventoryIgnoreFile, InventoryItem, LoadedIgnore, MIR_SOURCE_DIR, MIR_VARIANT_ENUMS,
-    RUNTIME_SOURCE_DIR, extract_inventory, extract_mir_variants, extract_runtime_ffi,
-    inventory_diagnostics, load_inventory_ignore, unmapped_item_keys,
+    CLI_ARGS_STRUCT, CLI_SOURCE_DIR, CODE_INVENTORY_CONFLICT, CODE_INVENTORY_DUP_CLAIM,
+    CODE_INVENTORY_DUP_IGNORE, CODE_INVENTORY_PARSE, CODE_INVENTORY_STALE_CLAIM,
+    CODE_INVENTORY_STALE_IGNORE, CODE_INVENTORY_UNMAPPED, ERROR_CODE_REGISTRY, InventoryExtraction,
+    InventoryExtractor, InventoryIgnore, InventoryIgnoreFile, InventoryItem, LINT_SOURCE_DIR,
+    LoadedIgnore, MIR_SOURCE_DIR, MIR_VARIANT_ENUMS, RUNTIME_SOURCE_DIR, STDLIB_LIB_DIRS,
+    SYNTAX_KIND_ENUMS, SYNTAX_SOURCE_DIR, TY_KIND_ENUMS, TY_SOURCE_DIR, extract_cli_flags,
+    extract_error_codes, extract_inventory, extract_lints, extract_mir_variants,
+    extract_runtime_ffi, extract_stdlib_api, extract_syntax_kinds, extract_ty_kinds,
+    inventory_diagnostics, load_inventory_ignore, stdlib_api_had_parse_diagnostics,
+    unmapped_item_keys,
 };
 
 // ---------------------------------------------------------------------------
