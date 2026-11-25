@@ -21,7 +21,7 @@ fn hover_shows_type_signature_and_doc() {
         let mut file_map = analysis.file_map.write();
         file_map.get_or_create(&path)
     };
-    let span = Span::new(
+    let span = Span::range(
         file_id,
         ByteIdx::ZERO,
         ByteIdx::from_usize(10),
@@ -100,7 +100,7 @@ fn hover_includes_definition_preview() {
             .to_string();
     // Definition span covers the whole `add` declaration line (0..39 bytes,
     // exclusive of the trailing newline at index 39).
-    let span = Span::new(
+    let span = Span::range(
         file_id,
         ByteIdx::ZERO,
         ByteIdx::from_usize(39),
