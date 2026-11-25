@@ -14,6 +14,13 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "M"
+inventory    = [
+    "stdlib.core.cell.Cell",
+    "stdlib.core.cell.Ref",
+    "stdlib.core.cell.RefCell",
+    "stdlib.core.cell.RefMut",
+    "stdlib.core.cell.UnsafeCell",
+]
 
 [[feature]]
 id            = "STD-CORE-CMP"
@@ -24,6 +31,16 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "T"
+inventory    = [
+    "stdlib.core.cmp.Eq",
+    "stdlib.core.cmp.Ord",
+    "stdlib.core.cmp.Ordering",
+    "stdlib.core.cmp.PartialEq",
+    "stdlib.core.cmp.PartialOrd",
+    "stdlib.core.cmp.Reverse",
+    "stdlib.core.cmp.max",
+    "stdlib.core.cmp.min",
+]
 
 [[feature]]
 id            = "STD-CORE-CONVERT"
@@ -34,6 +51,15 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "T"
+inventory    = [
+    "stdlib.core.convert.AsMut",
+    "stdlib.core.convert.AsRef",
+    "stdlib.core.convert.From",
+    "stdlib.core.convert.Infallible",
+    "stdlib.core.convert.Into",
+    "stdlib.core.convert.TryFrom",
+    "stdlib.core.convert.TryInto",
+]
 
 [[feature]]
 id            = "STD-CORE-DEFAULT"
@@ -44,6 +70,9 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "T"
+inventory    = [
+    "stdlib.core.default.Default",
+]
 
 [[feature]]
 id            = "STD-CORE-FUTURE"
@@ -54,6 +83,12 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "M"
+inventory    = [
+    "stdlib.core.future.Context",
+    "stdlib.core.future.Future",
+    "stdlib.core.future.Poll",
+    "stdlib.core.future.Waker",
+]
 
 [[feature]]
 id            = "STD-CORE-HINT"
@@ -64,6 +99,10 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "M"
+inventory    = [
+    "stdlib.core.hint.black_box",
+    "stdlib.core.hint.spin_loop",
+]
 
 [[feature]]
 id            = "STD-CORE-ITER"
@@ -74,6 +113,27 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "M"
+inventory    = [
+    "stdlib.core.iter.DoubleEndedIterator",
+    "stdlib.core.iter.Empty",
+    "stdlib.core.iter.Enumerate",
+    "stdlib.core.iter.ExactSizeIterator",
+    "stdlib.core.iter.Filter",
+    "stdlib.core.iter.FromIterator",
+    "stdlib.core.iter.IntoIterator",
+    "stdlib.core.iter.Iter",
+    "stdlib.core.iter.Iterator",
+    "stdlib.core.iter.Map",
+    "stdlib.core.iter.Once",
+    "stdlib.core.iter.RangeIter",
+    "stdlib.core.iter.RangeIterI32",
+    "stdlib.core.iter.Repeat",
+    "stdlib.core.iter.Skip",
+    "stdlib.core.iter.Take",
+    "stdlib.core.iter.empty",
+    "stdlib.core.iter.once",
+    "stdlib.core.iter.repeat",
+]
 
 [[feature]]
 id            = "STD-CORE-MARKER"
@@ -84,6 +144,14 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "T"
+inventory    = [
+    "stdlib.core.marker.Copy",
+    "stdlib.core.marker.PhantomData",
+    "stdlib.core.marker.PhantomPinned",
+    "stdlib.core.marker.Send",
+    "stdlib.core.marker.Sized",
+    "stdlib.core.marker.Sync",
+]
 
 [[feature]]
 id            = "STD-CORE-MEM"
@@ -94,6 +162,19 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "M"
+inventory    = [
+    "stdlib.core.mem.ManuallyDrop",
+    "stdlib.core.mem.MaybeUninit",
+    "stdlib.core.mem.align_of",
+    "stdlib.core.mem.align_of_val",
+    "stdlib.core.mem.forget",
+    "stdlib.core.mem.needs_drop",
+    "stdlib.core.mem.replace",
+    "stdlib.core.mem.size_of",
+    "stdlib.core.mem.size_of_val",
+    "stdlib.core.mem.swap",
+    "stdlib.core.mem.take",
+]
 
 [[feature]]
 id            = "STD-CORE-OPS"
@@ -104,6 +185,38 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "T"
+inventory    = [
+    "stdlib.core.ops.Add",
+    "stdlib.core.ops.AddAssign",
+    "stdlib.core.ops.BitAnd",
+    "stdlib.core.ops.BitOr",
+    "stdlib.core.ops.BitXor",
+    "stdlib.core.ops.Deref",
+    "stdlib.core.ops.DerefMut",
+    "stdlib.core.ops.Div",
+    "stdlib.core.ops.DivAssign",
+    "stdlib.core.ops.Drop",
+    "stdlib.core.ops.Fn",
+    "stdlib.core.ops.FnMut",
+    "stdlib.core.ops.FnOnce",
+    "stdlib.core.ops.Index",
+    "stdlib.core.ops.IndexMut",
+    "stdlib.core.ops.Mul",
+    "stdlib.core.ops.MulAssign",
+    "stdlib.core.ops.Neg",
+    "stdlib.core.ops.Not",
+    "stdlib.core.ops.Range",
+    "stdlib.core.ops.RangeFrom",
+    "stdlib.core.ops.RangeFull",
+    "stdlib.core.ops.RangeInclusive",
+    "stdlib.core.ops.RangeTo",
+    "stdlib.core.ops.RangeToInclusive",
+    "stdlib.core.ops.Rem",
+    "stdlib.core.ops.Shl",
+    "stdlib.core.ops.Shr",
+    "stdlib.core.ops.Sub",
+    "stdlib.core.ops.SubAssign",
+]
 
 [[feature]]
 id            = "STD-CORE-OPTION"
@@ -114,6 +227,9 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "M"
+inventory    = [
+    "stdlib.core.option.Option",
+]
 
 [[feature]]
 id            = "STD-CORE-PANIC"
@@ -124,6 +240,10 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "M"
+inventory    = [
+    "stdlib.core.panic.panic_any",
+    "stdlib.core.panic.panic_any_str",
+]
 
 [[feature]]
 id            = "STD-CORE-PARSE"
@@ -134,6 +254,10 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "M"
+inventory    = [
+    "stdlib.core.parse.ParseFloatError",
+    "stdlib.core.parse.ParseIntError",
+]
 
 [[feature]]
 id            = "STD-CORE-PTR"
@@ -144,6 +268,16 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "M"
+inventory    = [
+    "stdlib.core.ptr.NonNull",
+    "stdlib.core.ptr.copy",
+    "stdlib.core.ptr.copy_nonoverlapping",
+    "stdlib.core.ptr.drop_in_place",
+    "stdlib.core.ptr.null",
+    "stdlib.core.ptr.null_mut",
+    "stdlib.core.ptr.read",
+    "stdlib.core.ptr.write",
+]
 
 [[feature]]
 id            = "STD-CORE-RESULT"
@@ -154,6 +288,9 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "M"
+inventory    = [
+    "stdlib.core.result.Result",
+]
 
 [[feature]]
 id            = "STD-CORE-SLICE"
@@ -174,3 +311,8 @@ spec          = "README.md"
 target_level  = "L4"
 backends      = ["gam", "llvm"]
 owner_lane    = "M"
+inventory    = [
+    "stdlib.core.str.Chars",
+    "stdlib.core.str.FromStr",
+    "stdlib.core.str.Lines",
+]
