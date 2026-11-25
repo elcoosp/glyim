@@ -441,7 +441,7 @@ impl<'a> ExpanderImpl<'a> {
             // diagnostic points at the offending expansion instead of
             // `Span::DUMMY`.
             let range = node.text_range();
-            let span = glyim_span::Span::new(
+            let span = glyim_span::Span::range(
                 glyim_span::FileId::from_usize(u32::MAX as usize),
                 glyim_span::ByteIdx::from_usize(u32::from(range.start()) as usize),
                 glyim_span::ByteIdx::from_usize(u32::from(range.end()) as usize),
@@ -660,14 +660,14 @@ impl<'a> ExpanderImpl<'a> {
                 // file!() expands to the path of the source file (relative to
                 // the VFS path when available, else the file id).
                 let name = if let Some(vfs) = self.vfs {
-                    vfs.file_path(call_site.file).map_or_else(
-                        || format!("file_{}", call_site.file.to_raw()),
+                    vfs.file_path(call_site.file()).map_or_else(
+                        || format!("file_{}", call_site.file().to_raw()),
                         |p| p.to_string_lossy().into_owned(),
                     )
-                } else if call_site.file.to_raw() == u32::MAX {
+                } else if call_site.file().to_raw() == u32::MAX {
                     String::from("<bogus>")
                 } else {
-                    format!("file_{}", call_site.file.to_raw())
+                    format!("file_{}", call_site.file().to_raw())
                 };
                 // T170-PATCHED [MAC-7]: escape both backslash and double
                 // quote. The previous `name.replace('\\', "\\\\")` only
@@ -768,7 +768,7 @@ impl<'a> ExpanderImpl<'a> {
                         let resolved = if path.is_absolute() {
                             path.to_path_buf()
                         } else if let Some(vfs) = self.vfs {
-                            match vfs.file_path(call_site.file) {
+                            match vfs.file_path(call_site.file()) {
                                 Some(calling) => calling.parent().map_or_else(
                                     || PathBuf::from(path_str),
                                     |dir| dir.join(path_str),
@@ -821,7 +821,7 @@ impl<'a> ExpanderImpl<'a> {
                         let resolved = if path.is_absolute() {
                             path.to_path_buf()
                         } else if let Some(vfs) = self.vfs {
-                            match vfs.file_path(call_site.file) {
+                            match vfs.file_path(call_site.file()) {
                                 Some(calling) => calling.parent().map_or_else(
                                     || PathBuf::from(path_str),
                                     |dir| dir.join(path_str),
@@ -900,7 +900,7 @@ impl<'a> ExpanderImpl<'a> {
                 let resolved = if path.is_absolute() {
                     path.to_path_buf()
                 } else if let Some(vfs) = self.vfs {
-                    vfs.file_path(call_site.file)
+                    vfs.file_path(call_site.file())
                         .and_then(|calling| calling.parent().map(|dir| dir.join(path_str)))
                         .unwrap_or_else(|| PathBuf::from(path_str))
                 } else {
@@ -924,7 +924,7 @@ impl<'a> ExpanderImpl<'a> {
                 };
                 // Lex with trivia so comments/whitespace round-trip, then
                 // emit each token as a `TokenTree::Token`.
-                let lexed = glyim_frontend::lex_with_trivia(&content, call_site.file);
+                let lexed = glyim_frontend::lex_with_trivia(&content, call_site.file());
                 let trees: Vec<TokenTree> = lexed
                     .tokens
                     .iter()
@@ -1531,7 +1531,7 @@ impl<'a> ExpanderImpl<'a> {
 
     fn span_from_node(&self, node: &SyntaxNode) -> Span {
         let range = node.text_range();
-        Span::new(
+        Span::range(
             self.file_id_from_node(node),
             ByteIdx::from_usize(u32::from(range.start()) as usize),
             ByteIdx::from_usize(u32::from(range.end()) as usize),
@@ -1544,9 +1544,9 @@ impl<'a> ExpanderImpl<'a> {
     /// (`lo / 80`, `lo % 80`) for call sites without a VFS/source.
     fn line_col_of(&self, span: Span) -> (u32, u32) {
         if let Some(vfs) = self.vfs
-            && let Some(src) = vfs.file_content(span.file)
+            && let Some(src) = vfs.file_content(span.file())
         {
-            let offset = span.lo.to_usize();
+            let offset = span.lo().to_usize();
             let mut line = 1u32;
             let mut col = 1u32;
             for (i, ch) in src.char_indices() {
@@ -1563,7 +1563,7 @@ impl<'a> ExpanderImpl<'a> {
             return (line, col);
         }
         // Fallback heuristic when no source is available.
-        let lo = span.lo.to_raw();
+        let lo = span.lo().to_raw();
         (
             lo.checked_div(80).unwrap_or(0).saturating_add(1),
             lo.checked_rem(80).unwrap_or(0).saturating_add(1),
