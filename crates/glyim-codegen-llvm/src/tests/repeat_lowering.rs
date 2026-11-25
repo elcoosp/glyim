@@ -23,7 +23,7 @@ fn build_repeat_body(ctx: &mut TyCtxMut) -> Body {
     locals.push(LocalDecl {
         ty: array_ty,
         mutability: Mutability::Not,
-        source_info: SourceInfo::new(Span::new(
+        source_info: SourceInfo::new(Span::range(
             FileId::BOGUS,
             ByteIdx::ZERO,
             ByteIdx::ZERO,
