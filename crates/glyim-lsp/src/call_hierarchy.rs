@@ -66,7 +66,7 @@ pub trait CallGraphSource {
     fn item_definition_by_owner(&self, owner_item_id: u32) -> Option<ItemDefinition>;
 
     /// The item-level function definition recorded in `file_id` covering
-    /// the byte extent `lo..hi` — the echo-resolution half of the seam:
+    /// the byte extent `lo..hi()` — the echo-resolution half of the seam:
     /// clients answer `incomingCalls` with the item `prepare` handed
     /// them, and the exact definition extent is what makes the echoed
     /// item resolvable without trusting the client.
@@ -154,8 +154,8 @@ impl CallGraphSource for ReferenceGraphCallSource<'_> {
                     && r.is_item_level
                     && !r.span.is_dummy()
                     && r.file_id == file_id
-                    && r.span.lo.to_usize() == lo
-                    && r.span.hi.to_usize() == hi
+                    && r.span.lo().to_usize() == lo
+                    && r.span.hi().to_usize() == hi
             })
             .and_then(|(name, r)| {
                 Some(ItemDefinition {
@@ -278,8 +278,8 @@ pub fn prepare_target(
 ) -> Option<ItemDefinition> {
     if let Some(def) = source.function_definition(identifier)
         && def.file_id == file_id
-        && def.span.lo.to_usize() <= cursor_offset
-        && cursor_offset < def.span.hi.to_usize()
+        && def.span.lo().to_usize() <= cursor_offset
+        && cursor_offset < def.span.hi().to_usize()
     {
         return Some(def);
     }
@@ -290,8 +290,8 @@ pub fn prepare_target(
     // method receivers answer `None` honestly.
     let on_call_site = source.incoming_call_sites(identifier).iter().any(|s| {
         s.file_id == file_id
-            && s.span.lo.to_usize() <= cursor_offset
-            && cursor_offset < s.span.hi.to_usize()
+            && s.span.lo().to_usize() <= cursor_offset
+            && cursor_offset < s.span.hi().to_usize()
     });
     if on_call_site {
         return source.function_definition(identifier);
@@ -324,7 +324,7 @@ pub fn compute_incoming_calls(
     grouped
         .into_values()
         .map(|(caller, mut sites)| {
-            sites.sort_by_key(|s| (s.lo.to_usize(), s.hi.to_usize()));
+            sites.sort_by_key(|s| (s.lo().to_usize(), s.hi().to_usize()));
             IncomingCall {
                 caller,
                 call_sites: sites,
@@ -357,7 +357,7 @@ pub fn compute_outgoing_calls(
     grouped
         .into_values()
         .map(|(callee, mut sites)| {
-            sites.sort_by_key(|s| (s.lo.to_usize(), s.hi.to_usize()));
+            sites.sort_by_key(|s| (s.lo().to_usize(), s.hi().to_usize()));
             OutgoingCall {
                 callee,
                 call_sites: sites,
@@ -520,7 +520,7 @@ fn item_to_wire(
     let uri = lsp_types::Uri::from_str(uri.as_str()).ok()?;
     let sm = source_maps.get(&def.file_id)?;
     let ((start_line, start_col), (end_line, end_col)) =
-        sm.span_to_position(def.span.lo.to_usize(), def.span.hi.to_usize())?;
+        sm.span_to_position(def.span.lo().to_usize(), def.span.hi().to_usize())?;
     let range = Range {
         start: lsp_types::Position {
             line: start_line as u32,
@@ -552,7 +552,7 @@ fn span_to_range(
 ) -> Option<Range> {
     let sm = source_maps.get(&file_id)?;
     let ((start_line, start_col), (end_line, end_col)) =
-        sm.span_to_position(span.lo.to_usize(), span.hi.to_usize())?;
+        sm.span_to_position(span.lo().to_usize(), span.hi().to_usize())?;
     Some(Range {
         start: lsp_types::Position {
             line: start_line as u32,
