@@ -43,6 +43,7 @@ members = [
     "crates/glyim-runtime",
     "crates/glyim-test",
     "crates/glyim-smith",
+    "crates/glyim-reduce",
     "crates/glyim-lang-core",
     "crates/glyip",
     "crates/glyim-lang-std",
