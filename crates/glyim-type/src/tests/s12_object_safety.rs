@@ -6,7 +6,7 @@ use glyim_core::interner::Interner;
 use glyim_span::{ByteIdx, FileId, Span, SyntaxContext};
 
 fn test_span() -> Span {
-    Span::new(
+    Span::range(
         FileId::BOGUS,
         ByteIdx::ZERO,
         ByteIdx::ZERO,
