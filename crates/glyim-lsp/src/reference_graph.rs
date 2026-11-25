@@ -122,8 +122,8 @@ impl ReferenceGraph {
                 let key = (
                     name.to_string(),
                     file_id,
-                    span.lo.to_usize(),
-                    span.hi.to_usize(),
+                    span.lo().to_usize(),
+                    span.hi().to_usize(),
                     kind,
                     access,
                 );
@@ -887,8 +887,8 @@ impl ReferenceGraph {
                 for r in refs.iter_mut() {
                     if r.is_definition
                         && r.file_id == file_id
-                        && r.span.lo == item.span.lo
-                        && r.span.hi == item.span.hi
+                        && r.span.lo() == item.span.lo()
+                        && r.span.hi() == item.span.hi()
                     {
                         r.is_item_level = true;
                     }
