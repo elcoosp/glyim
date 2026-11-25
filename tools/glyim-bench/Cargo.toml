@@ -1,6 +1,6 @@
 [package]
 name = "glyim-bench"
-version = "0.10.0"
+version = "0.10.1"
 edition = "2024"
 description = "M2.2 measurement harness: instruction counts (perf stat / callgrind), wall time, child RSS, a counting allocator, and the CoV stability gate"
 publish = false
