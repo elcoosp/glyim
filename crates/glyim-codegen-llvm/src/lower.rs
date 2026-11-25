@@ -6,7 +6,7 @@ use glyim_core::arena::IndexVec;
 use glyim_core::primitives::*;
 use glyim_core::primitives::{BinOp, TargetAbi, UintTy, UnOp};
 use glyim_diag::{CompResult, GlyimDiagnostic};
-use glyim_layout::{FieldsShape, LayoutComputer, PassMode, Size, TagEncoding, VariantsShape};
+use glyim_layout::{FieldsShape, LayoutComputer, PassMode, TagEncoding, VariantsShape};
 use glyim_mir::VariantIdx;
 use glyim_mir::{
     AggregateKind, BasicBlockIdx, Body, CastKind, LocalIdx, MirConst, MirConstKind, Operand, Place,
@@ -306,7 +306,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
             // backend never silently under-aligns (e.g. `#[repr(align(64))]`).
             let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
             if let Ok(layout) = layout_computer.layout_of(ty) {
-                let align = layout.align.0.max(1) as u32;
+                let align = layout.align.as_u64().max(1) as u32;
                 if let Some(alloca_inst) = alloca.as_instruction_value() {
                     let _ = alloca_inst.set_alignment(align);
                 }
@@ -613,10 +613,10 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                 // `tag_size` bytes of an otherwise-zero block. Inkwell offers
                 // no byte-level constant surgery, but the tag is a plain
                 // integer, so shift it out byte by byte.
-                let total = layout.size.0 as usize;
+                let total = layout.size.as_u64() as usize;
                 let mut bytes: Vec<u8> = vec![0u8; total];
                 let mut disc = discr;
-                for b in bytes.iter_mut().take(tag_size.0 as usize) {
+                for b in bytes.iter_mut().take(tag_size.as_u64() as usize) {
                     *b = (disc & 0xff) as u8;
                     disc >>= 8;
                 }
@@ -665,7 +665,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
             }
             MirConstKind::SizeOf(ty) => {
                 let lc = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
-                let size = lc.layout_of(*ty).map_or(0, |l| l.size.0);
+                let size = lc.layout_of(*ty).map_or(0, |l| l.size.as_u64());
                 let int_ty = self.llvm_type_for_ty(c.ty)?.into_int_type();
                 Ok(int_ty.const_int(size, false).into())
             }
@@ -940,7 +940,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                                         // niche-tagged layout). The slice
                                         // `get` returns `None` cleanly.
                                         FieldsShape::Arbitrary { offsets } => {
-                                            offsets.as_slice().get(1).map_or(0, |s| s.0)
+                                            offsets.as_slice().get(1).map_or(0, |s| s.as_u64())
                                         }
                                         _ => 0,
                                     }
@@ -971,8 +971,9 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                                         if let FieldsShape::Arbitrary { offsets } = &variant.fields
                                         {
                                             if idx_raw < offsets.len() {
-                                                let per_variant =
-                                                    offsets[FieldIdx::from_raw(idx_raw as u32)].0;
+                                                let per_variant = offsets
+                                                    [FieldIdx::from_raw(idx_raw as u32)]
+                                                .as_u64();
                                                 found = Some(tag_prefix + per_variant);
                                                 break;
                                             }
@@ -985,7 +986,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                                 FieldsShape::Arbitrary { offsets } => {
                                     let i = idx.to_raw() as usize;
                                     if i < offsets.len() {
-                                        Some(offsets[*idx].0)
+                                        Some(offsets[*idx].as_u64())
                                     } else {
                                         None
                                     }
@@ -1384,10 +1385,22 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                         // outer enum layout.
                         let data_start = match tag_encoding {
                             TagEncoding::Direct => {
-                                Size(tag_size.0)
-                                    .align_to(*tag_align)
-                                    .align_to(variants[vi].align)
-                                    .0
+                                // CT-3: the variant data start is checked;
+                                // a layout that overflows the offset space
+                                // is a compiler bug, not a wrapped GEP.
+                                match tag_size
+                                    .checked_align_to(*tag_align)
+                                    .and_then(|s| s.checked_align_to(variants[vi].align))
+                                {
+                                    Some(start) => start.as_u64(),
+                                    None => {
+                                        return Err(vec![GlyimDiagnostic::internal_error(
+                                            format!(
+                                                "variant data start overflows for {current_ty:?}"
+                                            ),
+                                        )]);
+                                    }
+                                }
                             }
                             TagEncoding::Niche { .. } => 0,
                         };
@@ -1964,7 +1977,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                         // Tag lives at offset 0; variant data starts right
                         // after it, aligned to the variant's own alignment
                         // (mirrors `direct_tag_encoding` in glyim-layout).
-                        let tag_bits = (tag_size.0 * 8).max(8) as u32;
+                        let tag_bits = (tag_size.as_u64() * 8).max(8) as u32;
                         let tag_llvm_ty = self.llvm_int_type(tag_bits);
                         let tag_ptr_raw = unsafe {
                             self.builder.build_in_bounds_gep(
@@ -1987,10 +2000,18 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                                     "store tag failed: {e:?}"
                                 ))]
                             })?;
-                        let data_start = Size(tag_size.0)
-                            .align_to(*tag_align)
-                            .align_to(variant_layout.align)
-                            .0;
+                        // CT-3: checked alignment chain; overflow is a
+                        // compiler bug surfaced as a diagnostic, never a
+                        // wrapped store offset.
+                        let data_start = tag_size
+                            .checked_align_to(*tag_align)
+                            .and_then(|s| s.checked_align_to(variant_layout.align))
+                            .map(|s| s.as_u64())
+                            .ok_or_else(|| {
+                                vec![GlyimDiagnostic::internal_error(
+                                    "variant data start overflows building aggregate",
+                                )]
+                            })?;
                         (variant_layout.fields.clone(), data_start)
                     }
                     TagEncoding::Niche {
@@ -2012,10 +2033,10 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                                 FieldsShape::Arbitrary { offsets } => offsets
                                     .as_slice()
                                     .get(*tag_field as usize)
-                                    .map_or(0, |s| s.0),
+                                    .map_or(0, |s| s.as_u64()),
                                 _ => 0,
                             };
-                            let tag_bits = (tag_size.0 * 8).max(8) as u32;
+                            let tag_bits = (tag_size.as_u64() * 8).max(8) as u32;
                             let tag_llvm_ty = self.llvm_int_type(tag_bits);
                             let tag_ptr_raw = unsafe {
                                 self.builder.build_in_bounds_gep(
@@ -2054,9 +2075,11 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
         };
 
         let offsets: Vec<u64> = match &field_shape {
-            FieldsShape::Arbitrary { offsets } => offsets.iter().map(|s| s.0).collect(),
+            FieldsShape::Arbitrary { offsets } => offsets.iter().map(|s| s.as_u64()).collect(),
             FieldsShape::Primitive => vec![0],
-            FieldsShape::Array { stride, count } => (0..*count).map(|i| i * stride.0).collect(),
+            FieldsShape::Array { stride, count } => {
+                (0..*count).map(|i| i * stride.as_u64()).collect()
+            }
         };
         for (i, val) in vals.iter().enumerate() {
             let byte_offset = base_offset + offsets.get(i).copied().unwrap_or(0);
@@ -2134,7 +2157,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                     FieldsShape::Arbitrary { offsets } => offsets
                         .as_slice()
                         .get(*tag_field as usize)
-                        .map_or(0, |s| s.0),
+                        .map_or(0, |s| s.as_u64()),
                     _ => 0,
                 };
                 let i8_ptr_ty = self.context.ptr_type(AddressSpace::default());
@@ -2161,7 +2184,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                         "GEP failed: {e:?}"
                     ))]
                 })?;
-                let tag_bits = (tag_size.0 * 8).max(8) as u32;
+                let tag_bits = (tag_size.as_u64() * 8).max(8) as u32;
                 let tag_llvm_ty = self.llvm_int_type(tag_bits);
                 let tag_val = self
                     .builder
@@ -4019,7 +4042,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                             self.target_info.clone(),
                         )
                         .layout_of(ty)
-                        .map_or(1, |l| l.size.0);
+                        .map_or(1, |l| l.size.as_u64());
                         if size == 0 {
                             self.builder
                                 .build_int_to_ptr(
@@ -4093,10 +4116,12 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                             let layout_computer =
                                 FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
                             if let Ok(layout) = layout_computer.layout_of(pointee_ty) {
-                                let size_val =
-                                    self.llvm_int_type(64).const_int(layout.size.0, false);
-                                let align_val =
-                                    self.llvm_int_type(64).const_int(layout.align.0, false);
+                                let size_val = self
+                                    .llvm_int_type(64)
+                                    .const_int(layout.size.as_u64(), false);
+                                let align_val = self
+                                    .llvm_int_type(64)
+                                    .const_int(layout.align.as_u64(), false);
                                 let dealloc_args: Vec<BasicMetadataValueEnum<'ctx>> =
                                     vec![ptr.into(), size_val.into(), align_val.into()];
                                 self.builder
@@ -4168,10 +4193,12 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                             let layout_computer =
                                 FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
                             if let Ok(layout) = layout_computer.layout_of(pointee_ty) {
-                                let size_val =
-                                    self.llvm_int_type(64).const_int(layout.size.0, false);
-                                let align_val =
-                                    self.llvm_int_type(64).const_int(layout.align.0, false);
+                                let size_val = self
+                                    .llvm_int_type(64)
+                                    .const_int(layout.size.as_u64(), false);
+                                let align_val = self
+                                    .llvm_int_type(64)
+                                    .const_int(layout.align.as_u64(), false);
                                 let dealloc_args: Vec<BasicMetadataValueEnum<'ctx>> =
                                     vec![ptr.into(), size_val.into(), align_val.into()];
                                 self.builder
@@ -5244,7 +5271,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
             let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
             let elem_size_u64 = layout_computer
                 .layout_of(elem_ty_rust)
-                .map(|l| l.size.0)
+                .map(|l| l.size.as_u64())
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
                         "vec push: layout_of element failed: {e:?}"
@@ -6458,7 +6485,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
             let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
             let elem_size = layout_computer
                 .layout_of(elem_ty)
-                .map(|l| l.size.0)
+                .map(|l| l.size.as_u64())
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
                         "Vec::clone layout: {e:?}"
@@ -6771,7 +6798,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
             let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
             let elem_size = layout_computer
                 .layout_of(elem_ty)
-                .map(|l| l.size.0)
+                .map(|l| l.size.as_u64())
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
                         "vec pop layout: {e:?}"
@@ -6905,7 +6932,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
             let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
             let elem_size = layout_computer
                 .layout_of(elem_ty_rust)
-                .map(|l| l.size.0)
+                .map(|l| l.size.as_u64())
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
                         "insert layout: {e:?}"
@@ -6992,7 +7019,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
             let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
             let elem_size = layout_computer
                 .layout_of(elem_ty)
-                .map(|l| l.size.0)
+                .map(|l| l.size.as_u64())
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
                         "reserve layout: {e:?}"
@@ -7085,7 +7112,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
             let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
             let elem_size = layout_computer
                 .layout_of(elem_ty)
-                .map(|l| l.size.0)
+                .map(|l| l.size.as_u64())
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
                         "copy_from_slice layout: {e:?}"
@@ -7180,7 +7207,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
             let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
             let elem_size = layout_computer
                 .layout_of(elem_ty)
-                .map(|l| l.size.0)
+                .map(|l| l.size.as_u64())
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
                         "split_at layout: {e:?}"
@@ -7680,7 +7707,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
             let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
             let elem_size = layout_computer
                 .layout_of(elem_ty)
-                .map(|l| l.size.0)
+                .map(|l| l.size.as_u64())
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
                         "vec remove layout: {e:?}"
@@ -7797,7 +7824,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                     FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
                 let elem_size = layout_computer
                     .layout_of(elem_ty)
-                    .map(|l| l.size.0)
+                    .map(|l| l.size.as_u64())
                     .map_err(|e| {
                         vec![GlyimDiagnostic::internal_error(format!(
                             "to_vec array layout: {e:?}"
@@ -7879,7 +7906,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
             let layout_computer = FullLayoutComputer::new(self.ty_ctx, self.target_info.clone());
             let elem_size = layout_computer
                 .layout_of(elem_ty)
-                .map(|l| l.size.0)
+                .map(|l| l.size.as_u64())
                 .map_err(|e| {
                     vec![GlyimDiagnostic::internal_error(format!(
                         "to_vec layout: {e:?}"
@@ -9154,7 +9181,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                             "Layout error in Cast: {e:?}"
                         ))]
                     })?;
-                    let size_bits = layout.size.0 * 8;
+                    let size_bits = layout.size.as_u64() * 8;
                     let cast_ty = self.llvm_int_type(size_bits as u32);
                     let cast_ptr = self
                         .builder
