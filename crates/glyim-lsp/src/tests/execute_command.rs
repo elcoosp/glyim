@@ -36,7 +36,7 @@ impl MockSource {
 }
 
 fn span_of(file: u32, lo: usize, hi: usize) -> Span {
-    Span::new(
+    Span::range(
         FileId::from_usize(file as usize),
         ByteIdx::from_usize(lo),
         ByteIdx::from_usize(hi),
@@ -155,7 +155,7 @@ fn reference_targets_are_ordered_and_deduped() {
     let targets = compute_reference_targets(&mock, "helper");
     assert_eq!(targets.len(), 2, "duplicate record collapses");
     assert_eq!(targets[0].file_id, FileId::from_usize(0));
-    assert_eq!(targets[0].span.lo.to_usize(), 44);
+    assert_eq!(targets[0].span.lo().to_usize(), 44);
     assert_eq!(targets[1].file_id, FileId::from_usize(1));
 }
 
@@ -168,7 +168,7 @@ fn reference_targets_skip_zero_width_extents() {
     mock.reference("helper", 0, 50, 56);
     let targets = compute_reference_targets(&mock, "helper");
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].span.lo.to_usize(), 50);
+    assert_eq!(targets[0].span.lo().to_usize(), 50);
 
     assert!(compute_reference_targets(&mock, "unknown").is_empty());
 }
