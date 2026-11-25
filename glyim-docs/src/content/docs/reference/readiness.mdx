@@ -1,0 +1,54 @@
+---
+title: Readiness Status
+description: The computed readiness ledger — every feature's maturity level, generated at build time from the committed STATUS.json evidence render.
+type: reference
+sidebar:
+  order: 20
+---
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+import status from '../../../../../STATUS.json';
+
+The readiness ledger is **computed, never typed**: `glyim-ledger compute` derives every level from machine-checked evidence (passing fixtures, differential runs, fuzzing campaigns) over the registry in `ledger/features/**`. This page renders the committed `STATUS.json` (`glyim.status/1`) at build time, so it can never disagree with the repository's generated [STATUS.md](https://github.com/elcoosp/glyim/blob/main/STATUS.md).
+
+## Level histogram
+
+| Level | Meaning | Features |
+|---|---|---|
+| L0 | Declared | {status.summary.L0} |
+| L1 | Parses | {status.summary.L1} |
+| L2 | Checks | {status.summary.L2} |
+| L3 | Interpreted | {status.summary.L3} |
+| L4 | Native-verified | {status.summary.L4} |
+| L5 | Hardened | {status.summary.L5} |
+
+**{status.features}** features over **{status.records}** evidence record(s).
+
+## Feature levels
+
+Every registry entry with its target level, computed level, and the open gaps that cap it.
+
+| Feature | Tier | Target | Computed | Capped by |
+|---|---|---|---|---|
+{status.entries.map((entry) => `| \`${entry.id}\` | ${entry.tier} | ${entry.target_level} | ${entry.computed_level} | ${entry.capped_by.length > 0 ? entry.capped_by.join(', ') : '-'} |`).join('\n')}
+
+<Aside type="caution">
+  Features capped by a `GAP-NNNN` identifier cannot rise above the cap until the gap closes — a silent-miscompile gap (class `b`) always pulls a feature out of "native-verified". The full per-gap audit with witnesses lives in [KNOWN_GAPS.md](https://github.com/elcoosp/glyim/blob/main/KNOWN_GAPS.md).
+</Aside>
+
+## Next steps
+
+<LinkCard
+  title="STATUS.md in the repository"
+  description="The generated per-feature readiness table with unmeasured evidence columns."
+  href="https://github.com/elcoosp/glyim/blob/main/STATUS.md"
+/>
+<LinkCard
+  title="KNOWN_GAPS.md in the repository"
+  description="The generated gap registry: class, witness fixture, and cap per open gap."
+  href="https://github.com/elcoosp/glyim/blob/main/KNOWN_GAPS.md"
+/>
+<LinkCard
+  title="The ledger CLI"
+  description="How `ledger check`, `compute`, and `diff` keep the status honest."
+  href="/reference/cli/"
+/>
