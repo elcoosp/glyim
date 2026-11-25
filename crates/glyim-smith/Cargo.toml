@@ -17,7 +17,10 @@ version.workspace = true
 
 [dev-dependencies]
 glyim-db = { workspace = true }
-glyim-pipeline = { workspace = true }
+# MIR-only agreement test (`compile_file_to_mir`): the LLVM-free pipeline
+# face suffices, so the dev-dep keeps the workspace LLVM-free gate green
+# without LLVM 23 installed (the CI llvm tier sets `glyim-test/real-llvm`).
+glyim-pipeline = { workspace = true, default-features = false }
 glyim-mir-interp = { workspace = true }
 tempfile = { workspace = true }
 
