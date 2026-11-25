@@ -1,3 +1,4 @@
+mod checked_arith;
 mod enum_layout;
 mod extended_tests;
 mod fn_abi;
