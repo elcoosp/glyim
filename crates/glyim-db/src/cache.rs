@@ -393,15 +393,18 @@ impl CompileCache {
                 // The key is the file stem (`object_path` writes
                 // `{key}.o`); `to_string_lossy` keeps the event total —
                 // our own keys are ASCII hex, so lossy never rewrites one.
-                let key = entry
+                // A path with no stem (never one of ours) is still removed,
+                // but emits no mislabeled empty-key event.
+                if let Some(key) = entry
                     .path
                     .file_stem()
                     .map(|s| s.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                self.emit(CacheEvent::Evicted {
-                    key,
-                    size_bytes: entry.size,
-                });
+                {
+                    self.emit(CacheEvent::Evicted {
+                        key,
+                        size_bytes: entry.size,
+                    });
+                }
             }
         }
     }
