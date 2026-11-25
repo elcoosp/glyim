@@ -34,7 +34,7 @@ fn make_test_body(ctx: &TyCtxMut, var_name: Name) -> Body {
     locals.push(LocalDecl {
         ty: unit_ty,
         mutability: Mutability::Not,
-        source_info: SourceInfo::new(Span::new(
+        source_info: SourceInfo::new(Span::range(
             FileId::from_usize(0),
             ByteIdx::from_usize(0),
             ByteIdx::from_usize(0),
@@ -44,7 +44,7 @@ fn make_test_body(ctx: &TyCtxMut, var_name: Name) -> Body {
     locals.push(LocalDecl {
         ty: bool_ty,
         mutability: Mutability::Not,
-        source_info: SourceInfo::new(Span::new(
+        source_info: SourceInfo::new(Span::range(
             FileId::from_usize(0),
             ByteIdx::from_usize(10),
             ByteIdx::from_usize(15),
@@ -64,7 +64,7 @@ fn make_test_body(ctx: &TyCtxMut, var_name: Name) -> Body {
             Rvalue::Use(Operand::Constant(MirConst {
                 kind: MirConstKind::Bool(false),
                 ty: bool_ty,
-                span: Span::new(
+                span: Span::range(
                     FileId::from_usize(0),
                     ByteIdx::from_usize(12),
                     ByteIdx::from_usize(17),
@@ -72,7 +72,7 @@ fn make_test_body(ctx: &TyCtxMut, var_name: Name) -> Body {
                 ),
             })),
         ),
-        source_info: SourceInfo::new(Span::new(
+        source_info: SourceInfo::new(Span::range(
             FileId::from_usize(0),
             ByteIdx::from_usize(10),
             ByteIdx::from_usize(17),
@@ -84,7 +84,7 @@ fn make_test_body(ctx: &TyCtxMut, var_name: Name) -> Body {
         statements: stmts,
         terminator: Terminator {
             kind: TerminatorKind::Return,
-            source_info: SourceInfo::new(Span::new(
+            source_info: SourceInfo::new(Span::range(
                 FileId::from_usize(0),
                 ByteIdx::from_usize(18),
                 ByteIdx::from_usize(19),
@@ -335,7 +335,7 @@ fn test_debug_info_var_debug_const_value() {
         locals.push(LocalDecl {
             ty: unit_ty,
             mutability: Mutability::Not,
-            source_info: SourceInfo::new(Span::new(
+            source_info: SourceInfo::new(Span::range(
                 FileId::from_usize(0),
                 ByteIdx::from_usize(0),
                 ByteIdx::from_usize(0),
@@ -493,7 +493,7 @@ fn resolve_span_to_location_returns_call_site_for_macro_span() {
     // proper `syntax_contexts` entry exists.
     let mut hygiene = HygieneCtx::new();
     let file_id = FileId::from_usize(1);
-    let call_site = Span::new(
+    let call_site = Span::range(
         file_id,
         ByteIdx::from_usize(10),
         ByteIdx::from_usize(20),
@@ -507,7 +507,7 @@ fn resolve_span_to_location_returns_call_site_for_macro_span() {
         def_site: Span::DUMMY,
         transparency: Transparency::Transparent,
     });
-    let base_span = Span::new(
+    let base_span = Span::range(
         file_id,
         ByteIdx::from_usize(15),
         ByteIdx::from_usize(25),
@@ -521,17 +521,17 @@ fn resolve_span_to_location_returns_call_site_for_macro_span() {
         },
     );
     let resolved = crate::debug::resolve_span_to_location(expanded_span, &hygiene);
-    assert_eq!(resolved.file, call_site.file);
-    assert_eq!(resolved.lo.to_usize(), call_site.lo.to_usize());
-    assert_eq!(resolved.hi.to_usize(), call_site.hi.to_usize());
-    assert!(resolved.ctx.is_root());
+    assert_eq!(resolved.file(), call_site.file());
+    assert_eq!(resolved.lo().to_usize(), call_site.lo().to_usize());
+    assert_eq!(resolved.hi().to_usize(), call_site.hi().to_usize());
+    assert!(resolved.ctx().is_root());
 }
 
 #[test]
 fn resolve_span_to_location_returns_unchanged_for_root_span() {
     let hygiene = HygieneCtx::new();
     let file_id = FileId::from_usize(1);
-    let root_span = Span::new(
+    let root_span = Span::range(
         file_id,
         ByteIdx::from_usize(10),
         ByteIdx::from_usize(20),
@@ -553,7 +553,7 @@ fn macro_defined_function_has_correct_line_numbers_in_ir() {
     let mut hygiene = HygieneCtx::new();
     let file_id = FileId::from_usize(1);
     let source = "line1\nline2\nline3\nline4\nline5".to_string();
-    let call_site = Span::new(
+    let call_site = Span::range(
         file_id,
         ByteIdx::from_usize(0),
         ByteIdx::from_usize(5),
@@ -569,7 +569,7 @@ fn macro_defined_function_has_correct_line_numbers_in_ir() {
     });
     let macro_ctx = hygiene
         .apply_mark(
-            Span::new(
+            Span::range(
                 file_id,
                 ByteIdx::from_usize(0),
                 ByteIdx::from_usize(0),
@@ -580,8 +580,8 @@ fn macro_defined_function_has_correct_line_numbers_in_ir() {
                 transparency: Transparency::Transparent,
             },
         )
-        .ctx;
-    let macro_span = Span::new(
+        .ctx();
+    let macro_span = Span::range(
         file_id,
         ByteIdx::from_usize(10),
         ByteIdx::from_usize(15),
@@ -628,7 +628,7 @@ fn macro_defined_function_has_correct_line_numbers_in_ir() {
         .with_hygiene_ctx(hygiene)
         .with_ty_ctx(ctx_mut.freeze());
     let ir = backend.generate_ir(&body).expect("IR generation failed");
-    let call_site_line = source[..call_site.lo.to_usize()].matches('\n').count() + 1;
+    let call_site_line = source[..call_site.lo().to_usize()].matches('\n').count() + 1;
     let expected_line_pattern = format!("line: {call_site_line}");
     assert!(
         ir.contains(&expected_line_pattern),
@@ -641,7 +641,7 @@ fn nested_macro_expansions_produce_correct_inline_locations() {
     let mut hygiene = HygieneCtx::new();
     let file_id = FileId::from_usize(1);
     let source = "line1\nline2\nline3\nline4\nline5".to_string();
-    let outer_call_site = Span::new(
+    let outer_call_site = Span::range(
         file_id,
         ByteIdx::from_usize(0),
         ByteIdx::from_usize(5),
@@ -657,7 +657,7 @@ fn nested_macro_expansions_produce_correct_inline_locations() {
     });
     let outer_ctx = hygiene
         .apply_mark(
-            Span::new(
+            Span::range(
                 file_id,
                 ByteIdx::from_usize(0),
                 ByteIdx::from_usize(0),
@@ -668,9 +668,9 @@ fn nested_macro_expansions_produce_correct_inline_locations() {
                 transparency: Transparency::Transparent,
             },
         )
-        .ctx;
+        .ctx();
 
-    let inner_call_site = Span::new(
+    let inner_call_site = Span::range(
         file_id,
         ByteIdx::from_usize(10),
         ByteIdx::from_usize(15),
@@ -686,7 +686,7 @@ fn nested_macro_expansions_produce_correct_inline_locations() {
     });
     let inner_ctx = hygiene
         .apply_mark(
-            Span::new(
+            Span::range(
                 file_id,
                 ByteIdx::from_usize(0),
                 ByteIdx::from_usize(0),
@@ -697,9 +697,9 @@ fn nested_macro_expansions_produce_correct_inline_locations() {
                 transparency: Transparency::Transparent,
             },
         )
-        .ctx;
+        .ctx();
 
-    let inner_span = Span::new(
+    let inner_span = Span::range(
         file_id,
         ByteIdx::from_usize(20),
         ByteIdx::from_usize(25),
@@ -746,7 +746,7 @@ fn nested_macro_expansions_produce_correct_inline_locations() {
         .with_hygiene_ctx(hygiene)
         .with_ty_ctx(ctx_mut.freeze());
     let ir = backend.generate_ir(&body).expect("IR generation failed");
-    let outer_call_site_line = source[..outer_call_site.lo.to_usize()]
+    let outer_call_site_line = source[..outer_call_site.lo().to_usize()]
         .matches('\n')
         .count()
         + 1;
