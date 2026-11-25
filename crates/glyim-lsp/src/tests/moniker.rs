@@ -45,7 +45,7 @@ impl MockSource {
 }
 
 fn span_of(file: u32, lo: usize, hi: usize) -> Span {
-    Span::new(
+    Span::range(
         FileId::from_usize(file as usize),
         glyim_span::ByteIdx::from_usize(lo),
         glyim_span::ByteIdx::from_usize(hi),
