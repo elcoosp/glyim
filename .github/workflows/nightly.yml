@@ -113,3 +113,26 @@ jobs:
         run: cargo test -p glyim-test --test metamorphic
       - name: Relation throughput (nightly budget input)
         run: cargo bench -p glyim-test --bench metamorphic
+
+  # Plan M4.8 ("Per-operator exhaustive tests … across const-eval,
+  # interpreter, LLVM-O0/O2"): the PR tier keeps the exhaustive
+  # interpreter leg plus a sampled const-eval leg in budget
+  # (`crates/glyim-test/tests/exhaustive.rs`); the nightly widens the
+  # const-eval leg to every pair (`GLYIM_EXHAUSTIVE_CONST=1`) and runs
+  # the sweep-throughput bench. The native LLVM leg rides the existing
+  # LLVM-evidence job's toolchain where `real-llvm` is available.
+  nightly-exhaustive:
+    name: Nightly — per-operator exhaustive oracle, const leg widened
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
+      - name: Run the exhaustive suite (const leg widened to every pair)
+        env:
+          GLYIM_EXHAUSTIVE_CONST: "1"
+        run: cargo test -p glyim-test --test exhaustive
+      - name: Sweep throughput (nightly budget input)
+        run: cargo bench -p glyim-test --bench exhaustive
+
