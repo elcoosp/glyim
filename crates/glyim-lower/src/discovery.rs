@@ -120,7 +120,7 @@ fn collect_tokens(node: &SyntaxNode, out: &mut Vec<SyntaxToken>) {
 
 fn token_span(tok: &SyntaxToken) -> Span {
     let range = tok.text_range();
-    Span::new(
+    Span::range(
         glyim_span::FileId::BOGUS,
         glyim_span::ByteIdx::from_usize(u32::from(range.start()) as usize),
         glyim_span::ByteIdx::from_usize(u32::from(range.end()) as usize),
@@ -129,5 +129,5 @@ fn token_span(tok: &SyntaxToken) -> Span {
 }
 
 fn span_intersects(a: Span, b: Span) -> bool {
-    a.lo <= b.hi && b.lo <= a.hi
+    a.lo() <= b.hi() && b.lo() <= a.hi()
 }
