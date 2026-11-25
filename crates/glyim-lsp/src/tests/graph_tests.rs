@@ -7,7 +7,7 @@ use glyim_span::{ByteIdx, FileId, Span, SyntaxContext};
 fn build_from_hir_records_definitions_and_references() {
     let interner = Interner::new();
     let file_id = FileId::from_usize(1);
-    let span = Span::new(
+    let span = Span::range(
         file_id,
         ByteIdx::from_usize(0),
         ByteIdx::from_usize(10),
