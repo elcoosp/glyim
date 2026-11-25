@@ -6,7 +6,7 @@ use glyim_syntax::{GlyimLang, SyntaxKind, SyntaxNode};
 use rowan::Language;
 
 fn dummy_span(file_id: FileId, lo: u32) -> Span {
-    Span::new(
+    Span::range(
         file_id,
         ByteIdx::from_usize(lo as usize),
         ByteIdx::from_usize(lo as usize + 1),
