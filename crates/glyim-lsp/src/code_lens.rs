@@ -165,8 +165,8 @@ impl LensSource for GraphLensSource<'_> {
             })
             .map(|(name, reference)| LensItem {
                 name: name.to_string(),
-                lo: reference.span.lo.to_usize(),
-                hi: reference.span.hi.to_usize(),
+                lo: reference.span.lo().to_usize(),
+                hi: reference.span.hi().to_usize(),
             })
             .collect();
         items.sort_by_key(|item| (item.lo, item.hi));
