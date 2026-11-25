@@ -24,7 +24,7 @@ fn goto_definition_returns_location() {
         let mut file_map = analysis.file_map.write();
         file_map.get_or_create(&path)
     };
-    let span = Span::new(
+    let span = Span::range(
         file_id,
         ByteIdx::ZERO,
         ByteIdx::from_usize(5),
@@ -86,7 +86,7 @@ fn goto_definition_cross_file() {
         file_map.get_or_create(&path2)
     };
 
-    let span_def = Span::new(
+    let span_def = Span::range(
         file_id2,
         ByteIdx::from_usize(5),
         ByteIdx::from_usize(8),
@@ -113,7 +113,7 @@ fn goto_definition_cross_file() {
     let source_map2 = crate::SourceMap::new(file_id2, "fn helper() {}".to_string());
     analysis.source_maps.write().insert(file_id2, source_map2);
 
-    let usage_span = Span::new(
+    let usage_span = Span::range(
         file_id1,
         ByteIdx::from_usize(15),
         ByteIdx::from_usize(21),
