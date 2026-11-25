@@ -332,7 +332,7 @@ impl SweepCase for CastSweep {
     fn ground_truth_exit(&self) -> i32 {
         let mut acc: i64 = 0;
         for a in 0..256u16 {
-            acc += cast_value(self.from, self.to, a as u8) as i32 as i64;
+            acc += i64::from(cast_value(self.from, self.to, a as u8) as i32);
         }
         exit_byte(acc)
     }
@@ -571,7 +571,7 @@ fn pair_value(op: &str, signed: bool, a: u8, b: u8) -> PairValue {
                     if m >= 8 {
                         0
                     } else {
-                        i64::from(((x as i16) << m) as i8)
+                        i64::from((i16::from(x) << m) as i8)
                     }
                 }
                 ">>" => {
@@ -637,18 +637,18 @@ fn pair_value(op: &str, signed: bool, a: u8, b: u8) -> PairValue {
 /// width, returned as the fold's `i64` view.
 #[must_use]
 fn cast_value(from: &str, to: &str, a: u8) -> i64 {
-    let source: i64 = if from != "a" {
-        i64::from(a as i8)
-    } else {
+    let source: i64 = if from == "a" {
         i64::from(a)
+    } else {
+        i64::from(a as i8)
     };
     match to {
-        "i8" => source as i8 as i64,
-        "u8" => source as u8 as i64,
-        "i16" => source as i16 as i64,
-        "u16" => source as u16 as i64,
-        "i32" => source as i32 as i64,
-        "u32" => source as u32 as i64,
+        "i8" => i64::from(source as i8),
+        "u8" => i64::from(source as u8),
+        "i16" => i64::from(source as i16),
+        "u16" => i64::from(source as u16),
+        "i32" => i64::from(source as i32),
+        "u32" => i64::from(source as u32),
         "i64" | "isize" => source,
         "u64" | "usize" => source as u64 as i64,
         other => unreachable!("cast target {other} has no pinned rule"),
@@ -708,7 +708,7 @@ const fn cast(id: &'static str, from: &'static str, to: &'static str) -> CastSwe
 /// position).
 fn const_safe(op: &str, signed: bool, a: u8, b: u8) -> bool {
     match (op, signed) {
-        ("&&", _) | ("||", _) => true,
+        ("&&" | "||", _) => true,
         ("+" | "-" | "*", true) => {
             let (x, y) = (a as i8, b as i8);
             match op {
@@ -742,7 +742,7 @@ fn const_safe(op: &str, signed: bool, a: u8, b: u8) -> bool {
         // is boundary.
         ("<<" | ">>", true) => {
             let y = b as i8;
-            y >= 0 && y < 32
+            (0..32).contains(&y)
         }
         ("<<" | ">>", false) => false,
         _ => true,
