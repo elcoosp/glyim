@@ -46,7 +46,7 @@ fn goto_definition_reports_exact_token_extents() {
             kind: SymbolKind::Function,
             definition: DefinitionLocation {
                 file_id,
-                span: Span::new(
+                span: Span::range(
                     file_id,
                     ByteIdx::from_usize(3),
                     ByteIdx::from_usize(6),
