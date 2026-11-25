@@ -678,7 +678,7 @@ impl FnCtxt<'_> {
                     // Two-step: extract the elem type first (immutable
                     // borrow), then build the `&T` after the borrow ends.
                     // A single match-with-closure would hold the
-                    // `ty_kind` borrow across `self.ctx.mk_ref`.
+                    // `ty_kind` borrow across `self.ctx().mk_ref`.
                     let ref_vec_elem_inner: Option<Ty> = match self.ctx.ty_kind(iter_ty) {
                         TyKind::Ref(_, inner, glyim_core::primitives::Mutability::Not) => {
                             match self.ctx.ty_kind(*inner) {
@@ -1432,7 +1432,7 @@ impl FnCtxt<'_> {
                         let mut subst: rustc_hash::FxHashMap<u32, GenericArg> =
                             rustc_hash::FxHashMap::default();
                         // Collect the formal input types into an owned vec so the
-                        // immutable borrow of `self.ctx` ends before the mutable
+                        // immutable borrow of `self.ctx()` ends before the mutable
                         // `unify`/`intern_substitution`/`mk_ty` calls below.
                         // (`sig` was also cloned above for the same reason.)
                         let inputs: Vec<GenericArg> =
@@ -2688,8 +2688,8 @@ impl FnCtxt<'_> {
                     crate::tyconv::resolve_enum_variant_path(self.ctx, self.def_map, path)
                 {
                     // Collect the variant's field infos into owned values FIRST
-                    // so the immutable `self.ctx.adt_def` borrow is released
-                    // before we mutably borrow `self.ctx` below.
+                    // so the immutable `self.ctx().adt_def` borrow is released
+                    // before we mutably borrow `self.ctx()` below.
                     let field_infos: Vec<(Name, Ty)> = if let Some(def) = self.ctx.adt_def(adt_id) {
                         if let Some(v) = def.variants.get(variant_idx as usize) {
                             v.fields.iter().map(|f| (f.name, f.ty)).collect()
@@ -4093,10 +4093,10 @@ impl FnCtxt<'_> {
         // the compiler's `as` casts between `*mut T` and `usize` don't
         // compose with method dispatch at stdlib level (Script 81's
         // attempt added 18 net errors).
-        // Copy the pointee type and mutability out of the borrow of `self.ctx`
+        // Copy the pointee type and mutability out of the borrow of `self.ctx()`
         // before the match below, so `"addr"` / `"as_ptr"` / `"as_mut_ptr"`
-        // can call `self.ctx.mk_ty(..)` without a mutable-borrow conflict
-        // (`ty_kind` returns `&TyKind`, borrowing `self.ctx` immutably; `Ty`
+        // can call `self.ctx().mk_ty(..)` without a mutable-borrow conflict
+        // (`ty_kind` returns `&TyKind`, borrowing `self.ctx()` immutably; `Ty`
         // and `Mutability` are `Copy`, so we dereference them out).
         let raw_ptr_parts: Option<(Ty, glyim_core::primitives::Mutability)> =
             match self.ctx.ty_kind(recv_ty) {
