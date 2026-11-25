@@ -338,8 +338,10 @@ impl SymbolIndex {
         let name = info.name.clone();
         self.by_name.entry(name).or_default().push(info.clone());
         self.by_file.entry(file_id).or_default().push(info.clone());
-        self.by_location
-            .insert((file_id.to_raw(), info.definition.span.lo.to_usize()), info);
+        self.by_location.insert(
+            (file_id.to_raw(), info.definition.span.lo().to_usize()),
+            info,
+        );
     }
 
     /// `lookup_by_name`.
@@ -359,8 +361,8 @@ impl SymbolIndex {
         // (lo <= offset < hi) rather than an exact start-offset key, so any
         // position within the symbol resolves to it.
         self.by_file.get(&file_id)?.iter().find(|sym| {
-            let lo = sym.definition.span.lo.to_usize();
-            let hi = sym.definition.span.hi.to_usize();
+            let lo = sym.definition.span.lo().to_usize();
+            let hi = sym.definition.span.hi().to_usize();
             offset >= lo && offset < hi
         })
     }
@@ -512,7 +514,7 @@ impl SymbolIndex {
                     }
                 }
                 self.by_location
-                    .remove(&(file_id.to_raw(), sym.definition.span.lo.to_usize()));
+                    .remove(&(file_id.to_raw(), sym.definition.span.lo().to_usize()));
             }
         }
         self.import_paths
