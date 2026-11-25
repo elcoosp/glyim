@@ -45,7 +45,7 @@ use glyim_diag::{CompResult, GlyimDiagnostic};
 use glyim_hir::CrateHir;
 use glyim_mir::Body;
 use glyim_typeck::thir;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 /// Output of [`LowerPhase`]: the optimized MIR body map, the pre-optimization
@@ -53,7 +53,7 @@ use std::sync::Arc;
 /// symbols.
 pub struct LowerOutput {
     /// `DefId` → optimized MIR body, ready for monomorphization.
-    pub mir_bodies_map: HashMap<DefId, Arc<Body>>,
+    pub mir_bodies_map: BTreeMap<DefId, Arc<Body>>,
     /// `DefId` → the same bodies *before* `glyim_opt::optimize`, so
     /// `--emit=mir` shows lowering artifacts DCE would otherwise erase.
     pub pre_opt_bodies_map: HashMap<DefId, Arc<Body>>,
@@ -84,7 +84,7 @@ impl CompilerPhase for LowerPhase<'_> {
         "lower-borrowck-opt"
     }
     fn run(&self, ctx: &mut PhaseCtx) -> CompResult<Self::Output> {
-        let mut mir_bodies_map: HashMap<DefId, Arc<Body>> = HashMap::new();
+        let mut mir_bodies_map: BTreeMap<DefId, Arc<Body>> = BTreeMap::new();
         let mut pre_opt_bodies_map: HashMap<DefId, Arc<Body>> = HashMap::new();
         let mut closure_bodies_codegen: Vec<(String, Arc<Body>)> = Vec::new();
 
