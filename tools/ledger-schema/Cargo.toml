@@ -12,6 +12,13 @@ serde_json = "1.0"
 # enables item/enum/fn grammar coverage, `parsing` the Parse plumbing.
 syn = { version = "2.0", default-features = false, features = ["full", "parsing"] }
 toml = "1.2.1"
+# M1.3 remainder: the stdlib-API extractor parses `glyim-lang-*/lib/*.g`
+# with Glyim's own parser (plan §3.5 row 4) — the frontend for parsing,
+# the syntax crate for the CST `SyntaxKind`/`SyntaxNode` faces, the span
+# crate for the parser's `FileId`.
+glyim-frontend = { workspace = true }
+glyim-syntax = { workspace = true }
+glyim-span = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.27"
