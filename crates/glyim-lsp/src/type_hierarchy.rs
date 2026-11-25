@@ -221,7 +221,7 @@ impl TypeHierarchySource for HirTypeHierarchySource<'_> {
             .min_by_key(|item| {
                 (
                     item.location.file_id.to_raw(),
-                    item.location.span.lo.to_usize(),
+                    item.location.span.lo().to_usize(),
                 )
             })
     }
@@ -253,7 +253,7 @@ impl TypeHierarchySource for HirTypeHierarchySource<'_> {
 #[must_use]
 pub fn hierarchy_target(source: &dyn TypeHierarchySource, name: &str) -> Option<NamedItem> {
     let item = source.named_item(name)?;
-    if item.location.span.lo == item.location.span.hi {
+    if item.location.span.lo() == item.location.span.hi() {
         return None;
     }
     Some(item)
@@ -277,7 +277,7 @@ pub fn compute_supertypes(
         let Some(trait_name) = site.trait_name else {
             continue;
         };
-        if trait_name.is_empty() || site.location.span.lo == site.location.span.hi {
+        if trait_name.is_empty() || site.location.span.lo() == site.location.span.hi() {
             continue;
         }
         let member = HierarchyMember {
@@ -292,8 +292,8 @@ pub fn compute_supertypes(
     members.sort_by_key(|member| {
         (
             member.location.file_id.to_raw(),
-            member.location.span.lo.to_usize(),
-            member.location.span.hi.to_usize(),
+            member.location.span.lo().to_usize(),
+            member.location.span.hi().to_usize(),
         )
     });
     members
@@ -316,7 +316,7 @@ pub fn compute_subtypes(
         let Some(self_ty_name) = site.self_ty_name else {
             continue;
         };
-        if self_ty_name.is_empty() || site.location.span.lo == site.location.span.hi {
+        if self_ty_name.is_empty() || site.location.span.lo() == site.location.span.hi() {
             continue;
         }
         let member = HierarchyMember {
@@ -331,8 +331,8 @@ pub fn compute_subtypes(
     members.sort_by_key(|member| {
         (
             member.location.file_id.to_raw(),
-            member.location.span.lo.to_usize(),
-            member.location.span.hi.to_usize(),
+            member.location.span.lo().to_usize(),
+            member.location.span.hi().to_usize(),
         )
     });
     members
@@ -364,7 +364,7 @@ fn member_wire_item(
     let source_maps = db.source_maps.read();
     let sm = source_maps.get(&location.file_id)?;
     let ((start_line, start_col), (end_line, end_col)) =
-        sm.span_to_position(location.span.lo.to_usize(), location.span.hi.to_usize())?;
+        sm.span_to_position(location.span.lo().to_usize(), location.span.hi().to_usize())?;
     drop(source_maps);
     let target_path = file_map.path(location.file_id)?;
     let target_uri = Url::from_file_path(target_path).ok()?;
@@ -473,7 +473,7 @@ fn echo_target(
         hirs.iter().map(|(file_id, hir)| (*file_id, hir)).collect();
     let target = hierarchy_target(&HirTypeHierarchySource::new(files), &item.name)?;
     // The echo must name the same recorded item: same file, same start.
-    (target.location.file_id == file_id && target.location.span.lo.to_usize() == lo)
+    (target.location.file_id == file_id && target.location.span.lo().to_usize() == lo)
         .then_some(target)
 }
 
