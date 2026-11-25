@@ -96,3 +96,20 @@ jobs:
         run: cargo run -q -p glyim-ledger -- verify .
       - name: Release-gate report (unmeasured displayed, never silently passed)
         run: cargo run -q -p glyim-ledger -- gates .
+
+  # Plan M4.7 ("Metamorphic suite v1 … relations run nightly over fixtures
+  # + generated programs"): the PR tier keeps a small sample in budget
+  # (`crates/glyim-test/tests/metamorphic.rs`); the nightly widens the
+  # workload through the same relations. Interpreter-only — no LLVM setup.
+  nightly-metamorphic:
+    name: Nightly — metamorphic relations over fixtures + generated programs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
+      - name: Run the metamorphic suite (all four relations)
+        run: cargo test -p glyim-test --test metamorphic
+      - name: Relation throughput (nightly budget input)
+        run: cargo bench -p glyim-test --bench metamorphic
