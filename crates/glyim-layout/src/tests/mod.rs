@@ -1,4 +1,5 @@
 mod checked_arith;
+mod checked_layout_proptests;
 mod enum_layout;
 mod extended_tests;
 mod fn_abi;
