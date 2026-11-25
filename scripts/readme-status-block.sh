@@ -60,6 +60,14 @@ compose_readme() {
 }
 
 if [ "${1:-}" = "--check" ]; then
+    # The gate must be honest about its own presence: a README without
+    # the markers carries hand-typed status prose (constitution C1 —
+    # status is computed, never typed), and compose_readme would compare
+    # the file against itself. Fail loudly instead of passing vacuously.
+    if ! grep -qF "$START" "$README" || ! grep -qF "$END" "$README"; then
+        echo "README carries no $START/$END markers: the generated status block (plan M1.9) is missing (embed it with: scripts/readme-status-block.sh)" >&2
+        exit 1
+    fi
     composed="$(compose_readme)"
     committed="$(cat "$README")"
     if [ "$composed" != "$committed" ]; then
