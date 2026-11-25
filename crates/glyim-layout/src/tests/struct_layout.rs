@@ -43,8 +43,8 @@ fn s15_t01_struct_two_i32_fields() {
     let layout = computer
         .layout_of(struct_ty)
         .expect("struct layout should succeed");
-    assert_eq!(layout.size, Size::bytes(8), "size mismatch");
-    assert_eq!(layout.align, Align::from_bytes(4), "align mismatch");
+    assert_eq!(layout.size.as_u64(), 8, "size mismatch");
+    assert_eq!(layout.align.as_u64(), 4, "align mismatch");
     assert!(!layout.is_unsized, "struct should be sized");
 
     match &layout.fields {
@@ -72,8 +72,8 @@ fn s15_t01_struct_with_alignment_gap() {
     let layout = computer
         .layout_of(struct_ty)
         .expect("struct layout should succeed");
-    assert_eq!(layout.size, Size::bytes(8), "size should be 8 with padding");
-    assert_eq!(layout.align, Align::from_bytes(4), "align should be 4");
+    assert_eq!(layout.size.as_u64(), 8, "size should be 8 with padding");
+    assert_eq!(layout.align.as_u64(), 4, "align should be 4");
 }
 
 #[test]
@@ -97,7 +97,7 @@ fn s15_t01_struct_single_bool() {
     let layout = computer
         .layout_of(struct_ty)
         .expect("struct layout should succeed");
-    assert_eq!(layout.size, Size::bytes(1));
+    assert_eq!(layout.size.as_u64(), 1);
     assert_eq!(layout.align, Align::ONE);
 }
 
@@ -117,12 +117,8 @@ fn s15_t01_struct_three_fields_mixed() {
     let layout = computer
         .layout_of(struct_ty)
         .expect("struct layout should succeed");
-    assert_eq!(
-        layout.size,
-        Size::bytes(12),
-        "size should be 12 with padding"
-    );
-    assert_eq!(layout.align, Align::from_bytes(4), "align should be 4");
+    assert_eq!(layout.size.as_u64(), 12, "size should be 12 with padding");
+    assert_eq!(layout.align.as_u64(), 4, "align should be 4");
 }
 
 #[test]
@@ -136,6 +132,6 @@ fn s15_t01_struct_with_pointer() {
     let layout = computer
         .layout_of(struct_ty)
         .expect("struct layout should succeed");
-    assert_eq!(layout.size, Size::bytes(16), "size should be 16");
-    assert_eq!(layout.align, Align::from_bytes(8), "align should be 8");
+    assert_eq!(layout.size.as_u64(), 16, "size should be 16");
+    assert_eq!(layout.align.as_u64(), 8, "align should be 8");
 }
