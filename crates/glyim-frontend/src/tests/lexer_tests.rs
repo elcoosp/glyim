@@ -338,8 +338,8 @@ fn invalid_suffix_diagnostic_span_is_correct() {
     assert_eq!(result.diagnostics.len(), 1);
     let diag = &result.diagnostics[0];
     let span = diag.span.primary;
-    let lo = span.lo.to_usize();
-    let hi = span.hi.to_usize();
+    let lo = span.lo().to_usize();
+    let hi = span.hi().to_usize();
     assert_eq!(&source[lo..hi], "xyz");
 }
 
