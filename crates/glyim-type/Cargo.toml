@@ -20,6 +20,9 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 glyim-test = { workspace = true }
+# M3.10 "property tests for foundations": the `Substitution` interning,
+# `subst_ty` rewrite and the symbol mangler are property-tested here.
+proptest = { workspace = true }
 
 [[bench]]
 name = "builtin_trait_registry"
