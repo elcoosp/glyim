@@ -218,7 +218,7 @@ fn expand_api_with_builtin_file_macro() {
         span: Span::DUMMY,
     });
 
-    let call_site = Span::new(
+    let call_site = Span::range(
         FileId::from_usize(42),
         ByteIdx::from_usize(0),
         ByteIdx::from_usize(7),
