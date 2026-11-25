@@ -17,7 +17,6 @@ glyim-span = { workspace = true }
 glyim-diag = { workspace = true }
 glyim-vfs = { workspace = true }
 glyim-type = { workspace = true }
-glyim-solve = { workspace = true }
 parking_lot = { workspace = true }
 tracing = { workspace = true }
 
