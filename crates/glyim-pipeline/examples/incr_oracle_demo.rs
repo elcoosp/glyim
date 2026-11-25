@@ -104,6 +104,7 @@ impl Model {
 fn set_source(db: &Database, src: &str) -> glyim_span::FileId {
     db.vfs()
         .add_file_content(std::path::Path::new("oracle.g"), Arc::from(src))
+        .expect("fixture sources are far below the VFS length gate")
 }
 
 fn main() {
