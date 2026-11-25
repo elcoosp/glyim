@@ -54,7 +54,10 @@ fn main() {
     });
     let path = Path::new("demo.g");
     let src: Arc<str> = Arc::from("fn foo() -> i32 { 1 }\nfn bar() -> i32 { 2 }\n");
-    let file = db.vfs().add_file_content(path, src.clone());
+    let file = db
+        .vfs()
+        .add_file_content(path, src.clone())
+        .expect("fixture sources are far below the VFS length gate");
 
     // First query: cache miss → compute runs → recorded `miss`.
     db.clear_rebuild_trace();
