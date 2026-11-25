@@ -5,7 +5,7 @@ use glyim_span::{ByteIdx, FileId, Span, SyntaxContext};
 fn test_lookup_by_name_returns_correct_symbol() {
     let mut index = SymbolIndex::new();
     let file_id = FileId::from_usize(1);
-    let span = Span::new(
+    let span = Span::range(
         file_id,
         ByteIdx::ZERO,
         ByteIdx::from_usize(10),
@@ -41,7 +41,7 @@ fn test_lookup_by_name_returns_correct_symbol() {
 fn test_query_prefix_returns_matching_symbols() {
     let mut index = SymbolIndex::new();
     let file_id = FileId::from_usize(1);
-    let span = Span::new(
+    let span = Span::range(
         file_id,
         ByteIdx::ZERO,
         ByteIdx::from_usize(10),
@@ -96,7 +96,7 @@ fn test_query_prefix_returns_matching_symbols() {
 fn test_query_fallback_contains() {
     let mut index = SymbolIndex::new();
     let file_id = FileId::from_usize(1);
-    let span = Span::new(
+    let span = Span::range(
         file_id,
         ByteIdx::ZERO,
         ByteIdx::from_usize(10),
