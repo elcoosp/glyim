@@ -21,7 +21,7 @@ fn interner() -> &'static Interner {
 }
 
 fn dummy_span() -> glyim_span::Span {
-    glyim_span::Span::new(
+    glyim_span::Span::range(
         glyim_span::FileId::BOGUS,
         glyim_span::ByteIdx::ZERO,
         glyim_span::ByteIdx::ZERO,
