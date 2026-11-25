@@ -8,7 +8,7 @@ fn test_insert_and_find() {
 
     let ref1 = Reference {
         file_id,
-        span: Span::new(
+        span: Span::range(
             file_id,
             ByteIdx::from_usize(0),
             ByteIdx::from_usize(3),
