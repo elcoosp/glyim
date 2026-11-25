@@ -8,7 +8,7 @@ use crate::{BuiltinMacro, Expander, MacroDef, MacroKind};
 
 // Helper to create a dummy span with given file id and byte offset
 fn dummy_span(file_id: FileId, lo: u32) -> Span {
-    Span::new(
+    Span::range(
         file_id,
         ByteIdx::from_usize(lo as usize),
         ByteIdx::from_usize(lo as usize + 1),
