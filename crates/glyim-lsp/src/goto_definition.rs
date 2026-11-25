@@ -34,7 +34,7 @@ pub fn goto_definition(
     // width-1 `col + 1` end underlined one character of any
     // multi-character definition.
     let ((start_line, start_col), (end_line, end_col)) = def_sm
-        .span_to_position(def.span.lo.to_usize(), def.span.hi.to_usize())
+        .span_to_position(def.span.lo().to_usize(), def.span.hi().to_usize())
         .unwrap_or(((0, 0), (0, 0)));
     let target_path = file_map.path(def.file_id)?;
     let target_uri = Url::from_file_path(target_path).ok()?;
