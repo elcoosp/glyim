@@ -131,7 +131,7 @@ fn builtin_file_expand_api() {
     let args_source = "()";
     let args_root = parse(args_source);
 
-    let call_site = Span::new(
+    let call_site = Span::range(
         FileId::from_usize(7),
         ByteIdx::from_usize(10),
         ByteIdx::from_usize(17),
@@ -172,7 +172,7 @@ fn builtin_line_expand_api() {
     let args_source = "()";
     let args_root = parse(args_source);
 
-    let call_site = Span::new(
+    let call_site = Span::range(
         FileId::from_usize(1),
         ByteIdx::from_usize(20),
         ByteIdx::from_usize(27),
@@ -218,7 +218,7 @@ fn builtin_env_expand_api() {
     let args_source = r#"("GLYIM_TEST_ENV_VAR")"#;
     let args_root = parse(args_source);
 
-    let call_site = Span::new(
+    let call_site = Span::range(
         FileId::from_usize(1),
         ByteIdx::from_usize(0),
         ByteIdx::from_usize(7),
