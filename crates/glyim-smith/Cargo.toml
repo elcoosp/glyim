@@ -1,0 +1,29 @@
+[package]
+documentation = "https://glyim.vercel.app"
+
+description = "M4.3 glyim-smith v1: deterministic typed program generator with checksum printing."
+repository = "https://github.com/elcoosp/glyim"
+readme = "../../README.md"
+name = "glyim-smith"
+keywords = ["fuzzing", "program-generator", "testing", "compiler"]
+license.workspace = true
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+# Intentionally dependency-free: the generator must be a pure function of
+# its seed (plan CO-5 "deterministic-by-seed"), so the RNG is implemented
+# in-crate (`rng`) instead of pulling in `rand`.
+
+[dev-dependencies]
+glyim-db = { workspace = true }
+glyim-pipeline = { workspace = true }
+glyim-mir-interp = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "generation"
+harness = false
