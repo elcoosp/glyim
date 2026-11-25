@@ -302,8 +302,8 @@ impl AnalysisDatabase {
                 // The method-call / field-access span encloses the `.`, so the
                 // cursor placed just after the `.` still falls inside it.
                 let span = body.expr_spans.get(expr_id)?;
-                let lo = span.lo.to_usize();
-                let hi = span.hi.to_usize();
+                let lo = span.lo().to_usize();
+                let hi = span.hi().to_usize();
                 if lo <= offset && offset <= hi {
                     let size = hi.saturating_sub(lo);
                     if receiver_best.is_none_or(|(b, _, _)| size < b) {
@@ -330,8 +330,8 @@ impl AnalysisDatabase {
         let mut best: Option<(usize, glyim_core::def_id::LocalDefId, glyim_hir::ExprId)> = None;
         for (body_id, body) in hir.bodies.iter_enumerated() {
             for (expr_id, span) in body.expr_spans.iter_enumerated() {
-                let lo = span.lo.to_usize();
-                let hi = span.hi.to_usize();
+                let lo = span.lo().to_usize();
+                let hi = span.hi().to_usize();
                 let contains = lo <= offset && offset <= hi;
                 let ends_before = hi == offset || hi == offset.saturating_sub(1);
                 if contains || ends_before {
