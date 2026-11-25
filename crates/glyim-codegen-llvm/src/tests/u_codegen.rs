@@ -443,6 +443,6 @@ fn test_layout_of_bool() {
     let layout = computer.layout_of(bool_ty);
     assert!(layout.is_ok(), "Layout of bool should succeed");
     let layout = layout.unwrap();
-    assert_eq!(layout.size.0, 1, "Bool size should be 1 byte");
-    assert_eq!(layout.align.0, 1, "Bool alignment should be 1");
+    assert_eq!(layout.size.as_u64(), 1, "Bool size should be 1 byte");
+    assert_eq!(layout.align.as_u64(), 1, "Bool alignment should be 1");
 }
