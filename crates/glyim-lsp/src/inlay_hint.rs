@@ -135,7 +135,7 @@ impl BindingTypeSource for HirBindingTypeSource<'_> {
                     continue;
                 };
                 out.push(UnannotatedBinding {
-                    after: pat_span.hi.to_usize(),
+                    after: pat_span.hi().to_usize(),
                     type_label,
                 });
             }
