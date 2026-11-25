@@ -1,0 +1,39 @@
+# GAP-0009 — class-b silent divergence found by the M4.8 per-operator
+# oracle's probe sweep (`crates/glyim-test/src/exhaustive.rs`, pinned
+# shift/div semantics work). The optimizer's constant-propagation pass
+# folds an explicit division or remainder by zero to `0` at `-O2`
+# (`crates/glyim-opt/src/constant_prop.rs`:
+# `l.checked_div(r).unwrap_or(0)` — the comment above it claims the
+# opposite), while the interpreter at `-O0` panics with exit 101:
+#
+#   `fn main() -> i32 { let c = 5 / 0; return c; }`
+#     opt0: exit 101 (runtime panic)
+#     opt2: exit 0   (const-prop folds `5 / 0` to `0`, silently)
+#
+# Probed live at HEAD cbb072bf (addition form: `2147483647 + 1` wraps at
+# both opt levels, so the fold family is div/rem-by-zero specifically).
+# The same fold also erases the `i8::MIN / -1` wrap case
+# (`checked_div` returns `None` for it too). Per AGENTS.md rule 6 a
+# found silent-wrong-behaviour class outranks feature work: the finding
+# is registered here as witnessed class-b debt, capped at L2, with the
+# strict-xfail witness
+# `crates/glyim-test/tests/run-pass/behavior/const_prop_div_zero_silent_opt2_known_gap.g`
+# pinned at `--opt-level=2`: while the gap is open the silent fold is the
+# declared state (exit 0); the moment const-prop stops folding the
+# division by zero, the witness panics at `-O2` and the fixture fails
+# with `known-gap GAP-0009 closed`, forcing the witness to be retired in
+# the gap-closing change (plan §3.3, M1.6). The fix direction is already
+# named by the pass's own comment: only fold when `checked_div` /
+# `checked_rem` return `Some` (the divisor is a non-zero constant); the
+# class-level defence is the M4.8 oracle itself (it sweeps every
+# operator × opt level nightly).
+
+[[gap]]
+id        = "GAP-0009"
+class     = "b"
+title     = "Constant-propagation folds division/remainder by zero to 0 at -O2 while the interpreter panics at -O0 (silent opt-level divergence)"
+affects   = ["COMPILER-OPT-CONST-PROP"]
+caps      = "L2"
+opened_in = "v0.10.0"
+status    = "witnessed"
+witness   = "crates/glyim-test/tests/run-pass/behavior/const_prop_div_zero_silent_opt2_known_gap.g"
