@@ -42,6 +42,7 @@ members = [
     "crates/glyim-lsp",
     "crates/glyim-runtime",
     "crates/glyim-test",
+    "crates/glyim-smith",
     "crates/glyim-lang-core",
     "crates/glyip",
     "crates/glyim-lang-std",
@@ -67,6 +68,9 @@ glyim-const-eval = { path = "crates/glyim-const-eval" }
 glyim-ledger = { path = "tools/glyim-ledger" }
 ledger-schema = { path = "tools/ledger-schema" }
 glyim-bytecode-vm = { path = "crates/glyim-bytecode-vm" }
+# M4.7 metamorphic suite consumes the M4.3 generator's programs as an
+# input class ("fixtures + generated programs", plan §6 M4.7).
+glyim-smith = { path = "crates/glyim-smith" }
 glyim-proc-macro = { path = "crates/glyim-proc-macro" }
 glyim-core = { path = "crates/glyim-core" }
 glyim-span = { path = "crates/glyim-span" }
