@@ -57,8 +57,8 @@ fn known_identifier_yields_its_extent_and_placeholder() {
     let src = graphed("foo");
     let target = rename_target(&src, "foo", make_span(FileId::from_usize(1), 3, 6))
         .expect("a graphed symbol is renameable");
-    assert_eq!(target.0.lo.to_usize(), 3);
-    assert_eq!(target.0.hi.to_usize(), 6);
+    assert_eq!(target.0.lo().to_usize(), 3);
+    assert_eq!(target.0.hi().to_usize(), 6);
     assert_eq!(target.1, "foo");
 }
 
