@@ -66,7 +66,7 @@ impl CallGraphSource for MockSource {
         self.fns
             .iter()
             .find(|f| {
-                f.file_id == file_id && f.span.lo.to_usize() == lo && f.span.hi.to_usize() == hi
+                f.file_id == file_id && f.span.lo().to_usize() == lo && f.span.hi().to_usize() == hi
             })
             .cloned()
     }
@@ -202,8 +202,8 @@ fn incoming_groups_callers_and_collects_their_call_sites() {
     assert_eq!(calls.len(), 2, "helper and main, grouped");
     assert_eq!(calls[0].caller.name, "helper", "sorted by caller name");
     assert_eq!(calls[0].call_sites.len(), 2, "helper calls leaf twice");
-    assert_eq!(calls[0].call_sites[0].lo.to_usize(), 90, "site order");
-    assert_eq!(calls[0].call_sites[1].lo.to_usize(), 103);
+    assert_eq!(calls[0].call_sites[0].lo().to_usize(), 90, "site order");
+    assert_eq!(calls[0].call_sites[1].lo().to_usize(), 103);
     assert_eq!(calls[1].caller.name, "main");
     assert_eq!(calls[1].call_sites.len(), 1);
 }
@@ -301,8 +301,8 @@ fn responses_are_sorted_deterministically() {
     let calls = compute_incoming_calls(&src, &target);
 
     assert_eq!(calls[0].caller.name, "alpha");
-    assert_eq!(calls[0].call_sites[0].lo.to_usize(), 80, "sites sorted");
-    assert_eq!(calls[0].call_sites[1].lo.to_usize(), 100);
+    assert_eq!(calls[0].call_sites[0].lo().to_usize(), 80, "sites sorted");
+    assert_eq!(calls[0].call_sites[1].lo().to_usize(), 100);
     assert_eq!(calls[1].caller.name, "beta");
 }
 
