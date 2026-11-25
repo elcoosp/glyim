@@ -23,7 +23,7 @@ fn create_dummy_hir(interner: &Interner) -> CrateHir {
             attrs: Vec::new(),
         }),
         visibility: Visibility::Public,
-        span: Span::new(
+        span: Span::range(
             FileId::from_usize(1),
             ByteIdx::ZERO,
             ByteIdx::from_usize(10),
@@ -58,13 +58,13 @@ fn multi_file_symbols() {
     let file1 = FileId::from_usize(10);
     let file2 = FileId::from_usize(20);
 
-    let span1 = Span::new(
+    let span1 = Span::range(
         file1,
         ByteIdx::ZERO,
         ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
-    let span2 = Span::new(
+    let span2 = Span::range(
         file2,
         ByteIdx::ZERO,
         ByteIdx::from_usize(5),
@@ -109,7 +109,7 @@ fn multi_file_symbols() {
 fn query_prefix_and_contains() {
     let mut index = SymbolIndex::new();
     let file = FileId::from_usize(1);
-    let span = Span::new(
+    let span = Span::range(
         file,
         ByteIdx::ZERO,
         ByteIdx::from_usize(5),
