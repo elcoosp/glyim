@@ -36,7 +36,7 @@ fn assembled_stdlib_compiles() {
             mods.sort_by_key(|&(start, _)| start);
             for d in &diags {
                 {
-                    let off = d.span.primary.lo.to_usize();
+                    let off = d.span.primary.lo().to_usize();
                     // Find the module containing this offset.
                     let mut idx = 0;
                     for (k, (start, _)) in mods.iter().enumerate() {
