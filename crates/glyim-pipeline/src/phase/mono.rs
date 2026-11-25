@@ -41,7 +41,7 @@ use glyim_lower::post_mono_checks::{
 };
 use glyim_mir::Body;
 use glyim_syntax::SyntaxNode;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 /// Output of [`MonoPhase`]: the monomorphized + deduplicated item set, ready
@@ -63,7 +63,7 @@ pub struct MonoPhase<'a> {
     /// The crate definition map (module scope + `def_to_module`).
     pub def_map: &'a CrateDefMap,
     /// The optimized MIR body map produced by [`super::lower::LowerPhase`].
-    pub mir_bodies_map: &'a HashMap<DefId, Arc<Body>>,
+    pub mir_bodies_map: &'a BTreeMap<DefId, Arc<Body>>,
 }
 
 impl CompilerPhase for MonoPhase<'_> {
