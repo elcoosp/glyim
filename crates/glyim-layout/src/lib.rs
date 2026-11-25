@@ -8,64 +8,153 @@ use glyim_type::adt_def::{AdtDef, AdtKind};
 use glyim_type::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-/// `Size`.
-pub struct Size(pub u64);
+/// `Size` — a byte count that never lies about overflow (plan §6 M3.2 /
+/// §5.2 CT-3: layout newtypes with checked arithmetic).
+///
+/// The field is private: every arithmetic step is `checked_*` and returns
+/// `None` past `u64::MAX`, so a silent saturate-or-wrap (the old `Add`
+/// impl and `align_to` mask arithmetic) cannot reach an ABI decision.
+pub struct Size(u64);
 
 impl Size {
     /// `ZERO`.
     pub const ZERO: Size = Size(0);
-    /// bytes.
+    /// The largest representable byte count (`u64::MAX`) — the `checked_*`
+    /// methods return `None` past it.
+    pub const MAX: Size = Size(u64::MAX);
+    /// Total constructor: wrap a byte count (any `u64` is a valid size).
     #[must_use]
-    pub fn bytes(b: u64) -> Self {
+    pub const fn bytes(b: u64) -> Self {
         Size(b)
     }
-    /// bits.
+    /// The size in bytes.
     #[must_use]
-    pub fn bits(&self) -> u64 {
-        self.0.saturating_mul(8)
+    pub const fn as_u64(self) -> u64 {
+        self.0
     }
-    /// `align_to`.
+    /// The size in bits, if `bytes * 8` fits `u64` (checked — the old
+    /// `saturating_mul` silently clamped instead of reporting).
     #[must_use]
-    pub fn align_to(&self, align: Align) -> Self {
-        debug_assert!(align.0 > 0, "alignment must be non-zero");
+    pub const fn checked_bits(self) -> Option<u64> {
+        match self.0.checked_mul(8) {
+            Some(bits) => Some(bits),
+            None => None,
+        }
+    }
+    /// Checked addition (the old `Add` impl saturated silently).
+    #[must_use]
+    pub const fn checked_add(self, rhs: Self) -> Option<Self> {
+        match self.0.checked_add(rhs.0) {
+            Some(sum) => Some(Size(sum)),
+            None => None,
+        }
+    }
+    /// Checked multiplication (element counts into array sizes).
+    #[must_use]
+    pub const fn checked_mul(self, rhs: u64) -> Option<Self> {
+        match self.0.checked_mul(rhs) {
+            Some(prod) => Some(Size(prod)),
+            None => None,
+        }
+    }
+    /// Round the size up to `align`, or `None` when the rounding addition
+    /// would overflow (the old mask arithmetic wrapped silently) — the
+    /// checked CT-3 form the layout computer turns into
+    /// [`LayoutError::SizeOverflow`].
+    #[must_use]
+    pub const fn checked_align_to(self, align: Align) -> Option<Self> {
         let mask = align.0 - 1;
-        Size((self.0 + mask) & !mask)
-    }
-    /// `checked_mul`.
-    pub fn checked_mul(self, rhs: u64) -> Option<Size> {
-        self.0.checked_mul(rhs).map(Size)
-    }
-}
-
-impl std::ops::Add for Size {
-    type Output = Size;
-    fn add(self, rhs: Size) -> Size {
-        Size(self.0.saturating_add(rhs.0))
+        match self.0.checked_add(mask) {
+            Some(ceil) => Some(Size(ceil & !mask)),
+            None => None,
+        }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-/// `Align`.
-pub struct Align(pub u64);
+/// `Align` — a power-of-two alignment in bytes (plan §6 M3.2 / §5.2 CT-3:
+/// checked construction instead of a `debug_assert` that vanishes in
+/// release builds).
+///
+/// The field is private; [`Align::from_bytes`] is the only mint and
+/// refuses non-power-of-two (and zero) values with `None`, so an illegal
+/// alignment is unrepresentable instead of silently mis-masking.
+pub struct Align(u64);
 
 impl Align {
     /// `ONE`.
     pub const ONE: Align = Align(1);
     /// `EIGHT`.
     pub const EIGHT: Align = Align(8);
-    /// `from_bytes`.
+    /// Checked constructor: `bytes` must be a non-zero power of two.
+    ///
+    /// Returns `None` for 0 or any non-power-of-two value (the old
+    /// `debug_assert!` only fired in debug builds; the FIXES §4 class).
     #[must_use]
-    pub fn from_bytes(bytes: u64) -> Self {
-        debug_assert!(
-            bytes.is_power_of_two(),
-            "alignment must be a power of two, got {bytes}"
-        );
-        Align(bytes)
+    pub const fn from_bytes(bytes: u64) -> Option<Self> {
+        if bytes == 0 || bytes & (bytes - 1) != 0 {
+            None
+        } else {
+            Some(Align(bytes))
+        }
     }
-    /// max.
+    /// The alignment in bytes.
     #[must_use]
-    pub fn max(self, other: Self) -> Self {
-        Align(self.0.max(other.0))
+    pub const fn as_u64(self) -> u64 {
+        self.0
+    }
+    /// The stricter of the two alignments.
+    #[must_use]
+    pub const fn max(self, other: Self) -> Self {
+        if self.0 >= other.0 { self } else { other }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// `Offset` — a byte offset of a field inside a composite (plan §6 M3.2 /
+/// §5.2 CT-3: the layout vocabulary distinguishes *offsets* from *sizes*
+/// and checks the arithmetic between them).
+///
+/// The field is private; arithmetic is `checked_*` and [`Offset::to_size`]
+/// converts to a [`Size`] when a byte count is wanted.
+pub struct Offset(u64);
+
+impl Offset {
+    /// `ZERO` — the first field of any composite starts at byte 0.
+    pub const ZERO: Offset = Offset(0);
+    /// Total constructor: wrap a byte offset (any `u64` is a valid offset).
+    #[must_use]
+    pub const fn at_byte(b: u64) -> Self {
+        Offset(b)
+    }
+    /// The offset in bytes.
+    #[must_use]
+    pub const fn as_u64(self) -> u64 {
+        self.0
+    }
+    /// Checked advance by `size` (the field-accumulator step).
+    #[must_use]
+    pub const fn checked_add(self, size: Size) -> Option<Self> {
+        match self.0.checked_add(size.0) {
+            Some(next) => Some(Offset(next)),
+            None => None,
+        }
+    }
+    /// Round the offset up to `align`, or `None` on overflow (checked
+    /// padding computation — the old mask arithmetic wrapped silently).
+    #[must_use]
+    pub const fn checked_align_to(self, align: Align) -> Option<Self> {
+        let mask = align.0 - 1;
+        match self.0.checked_add(mask) {
+            Some(ceil) => Some(Offset(ceil & !mask)),
+            None => None,
+        }
+    }
+    /// View the offset as a size (a field's offset is the prefix size
+    /// before it).
+    #[must_use]
+    pub const fn to_size(self) -> Size {
+        Size(self.0)
     }
 }
 
@@ -318,24 +407,34 @@ impl<'a> SimpleLayoutComputer<'a> {
         }
     }
 
-    fn layout_tuple(&self, substs: Substitution) -> Result<Layout, LayoutError> {
+    fn layout_tuple(&self, substs: Substitution, outer_ty: Ty) -> Result<Layout, LayoutError> {
         let args = self.ctx.substitution_args(substs);
         if args.is_empty() {
             return Ok(Layout::unit());
         }
         let mut offsets = IndexVec::new();
         let mut struct_align = Align::ONE;
-        let mut current_offset = Size::ZERO;
+        // CT-3: the field-offset accumulator is an `Offset` and every step
+        // is checked — an oversized field sequence reports SizeOverflow
+        // instead of silently wrapping the offsets the ABI lays out by.
+        let mut current_offset = Offset::ZERO;
         for arg in args {
             if let GenericArg::Ty(field_ty) = arg {
                 let field_layout = self.layout_of(*field_ty)?;
                 struct_align = struct_align.max(field_layout.align);
-                current_offset = current_offset.align_to(field_layout.align);
-                offsets.push(current_offset);
-                current_offset = current_offset + field_layout.size;
+                let field_start = current_offset
+                    .checked_align_to(field_layout.align)
+                    .ok_or(LayoutError::SizeOverflow(outer_ty))?;
+                offsets.push(field_start.to_size());
+                current_offset = field_start
+                    .checked_add(field_layout.size)
+                    .ok_or(LayoutError::SizeOverflow(outer_ty))?;
             }
         }
-        let size = current_offset.align_to(struct_align);
+        let size = current_offset
+            .checked_align_to(struct_align)
+            .ok_or(LayoutError::SizeOverflow(outer_ty))?
+            .to_size();
         Ok(Layout {
             size,
             align: struct_align,
@@ -359,7 +458,10 @@ impl<'a> SimpleLayoutComputer<'a> {
             }
             _ => return Err(LayoutError::UnknownType(outer_ty)),
         };
-        let stride = inner_layout.size.align_to(inner_layout.align);
+        let stride = inner_layout
+            .size
+            .checked_align_to(inner_layout.align)
+            .ok_or(LayoutError::SizeOverflow(inner))?;
         let size = stride
             .checked_mul(count_val)
             .ok_or(LayoutError::SizeOverflow(outer_ty))?;
@@ -379,18 +481,26 @@ impl<'a> SimpleLayoutComputer<'a> {
         &self,
         adt_def: &AdtDef,
         substs: &[GenericArg],
+        outer_ty: Ty,
     ) -> Result<Layout, LayoutError> {
         let mut offsets = IndexVec::new();
         let mut struct_align = Align::ONE;
-        let mut current_offset = Size::ZERO;
+        let mut current_offset = Offset::ZERO;
         for field in adt_def.fields.iter() {
             let field_layout = self.layout_of(self.subst_params(field.ty, substs))?;
             struct_align = struct_align.max(field_layout.align);
-            current_offset = current_offset.align_to(field_layout.align);
-            offsets.push(current_offset);
-            current_offset = current_offset + field_layout.size;
+            let field_start = current_offset
+                .checked_align_to(field_layout.align)
+                .ok_or(LayoutError::SizeOverflow(outer_ty))?;
+            offsets.push(field_start.to_size());
+            current_offset = field_start
+                .checked_add(field_layout.size)
+                .ok_or(LayoutError::SizeOverflow(outer_ty))?;
         }
-        let size = current_offset.align_to(struct_align);
+        let size = current_offset
+            .checked_align_to(struct_align)
+            .ok_or(LayoutError::SizeOverflow(outer_ty))?
+            .to_size();
         Ok(Layout {
             size,
             align: struct_align,
@@ -400,7 +510,12 @@ impl<'a> SimpleLayoutComputer<'a> {
         })
     }
 
-    fn layout_union(&self, adt_def: &AdtDef, substs: &[GenericArg]) -> Result<Layout, LayoutError> {
+    fn layout_union(
+        &self,
+        adt_def: &AdtDef,
+        substs: &[GenericArg],
+        outer_ty: Ty,
+    ) -> Result<Layout, LayoutError> {
         let mut union_size = Size::ZERO;
         let mut union_align = Align::ONE;
         let mut offsets = IndexVec::new();
@@ -410,7 +525,9 @@ impl<'a> SimpleLayoutComputer<'a> {
             union_size = union_size.max(field_layout.size);
             offsets.push(Size::ZERO);
         }
-        let size = union_size.align_to(union_align);
+        let size = union_size
+            .checked_align_to(union_align)
+            .ok_or(LayoutError::SizeOverflow(outer_ty))?;
         Ok(Layout {
             size,
             align: union_align,
@@ -431,17 +548,17 @@ impl<'a> SimpleLayoutComputer<'a> {
             return Err(LayoutError::UnknownType(outer_ty));
         }
         if variant_count == 1 {
-            return self.layout_single_variant_enum(adt_def, substs);
+            return self.layout_single_variant_enum(adt_def, substs, outer_ty);
         }
         let variant_layouts: Vec<Layout> = adt_def
             .variants
             .iter()
-            .map(|v| self.layout_variant_data(v, substs))
+            .map(|v| self.layout_variant_data(v, substs, outer_ty))
             .collect::<Result<Vec<_>, LayoutError>>()?;
         if let Some(result) = self.try_niche_encoding(adt_def, &variant_layouts)? {
             return Ok(result);
         }
-        let d = self.direct_tag_encoding(adt_def, &variant_layouts)?;
+        let d = self.direct_tag_encoding(adt_def, &variant_layouts, outer_ty)?;
         Ok(d)
     }
 
@@ -449,19 +566,27 @@ impl<'a> SimpleLayoutComputer<'a> {
         &self,
         adt_def: &AdtDef,
         substs: &[GenericArg],
+        outer_ty: Ty,
     ) -> Result<Layout, LayoutError> {
         let variant_fields = &adt_def.variants[0].fields;
         let mut offsets = IndexVec::new();
         let mut enum_align = Align::ONE;
-        let mut current_offset = Size::ZERO;
+        let mut current_offset = Offset::ZERO;
         for field in variant_fields.iter() {
             let field_layout = self.layout_of(self.subst_params(field.ty, substs))?;
             enum_align = enum_align.max(field_layout.align);
-            current_offset = current_offset.align_to(field_layout.align);
-            offsets.push(current_offset);
-            current_offset = current_offset + field_layout.size;
+            let field_start = current_offset
+                .checked_align_to(field_layout.align)
+                .ok_or(LayoutError::SizeOverflow(outer_ty))?;
+            offsets.push(field_start.to_size());
+            current_offset = field_start
+                .checked_add(field_layout.size)
+                .ok_or(LayoutError::SizeOverflow(outer_ty))?;
         }
-        let size = current_offset.align_to(enum_align);
+        let size = current_offset
+            .checked_align_to(enum_align)
+            .ok_or(LayoutError::SizeOverflow(outer_ty))?
+            .to_size();
         Ok(Layout {
             size,
             align: enum_align,
@@ -475,18 +600,26 @@ impl<'a> SimpleLayoutComputer<'a> {
         &self,
         variant: &glyim_type::adt_def::VariantDef,
         substs: &[GenericArg],
+        outer_ty: Ty,
     ) -> Result<Layout, LayoutError> {
         let mut offsets = IndexVec::new();
         let mut var_align = Align::ONE;
-        let mut current_offset = Size::ZERO;
+        let mut current_offset = Offset::ZERO;
         for field in variant.fields.iter() {
             let field_layout = self.layout_of(self.subst_params(field.ty, substs))?;
             var_align = var_align.max(field_layout.align);
-            current_offset = current_offset.align_to(field_layout.align);
-            offsets.push(current_offset);
-            current_offset = current_offset + field_layout.size;
+            let field_start = current_offset
+                .checked_align_to(field_layout.align)
+                .ok_or(LayoutError::SizeOverflow(outer_ty))?;
+            offsets.push(field_start.to_size());
+            current_offset = field_start
+                .checked_add(field_layout.size)
+                .ok_or(LayoutError::SizeOverflow(outer_ty))?;
         }
-        let size = current_offset.align_to(var_align);
+        let size = current_offset
+            .checked_align_to(var_align)
+            .ok_or(LayoutError::SizeOverflow(outer_ty))?
+            .to_size();
         Ok(Layout {
             size,
             align: var_align,
@@ -558,7 +691,9 @@ impl<'a> SimpleLayoutComputer<'a> {
             max_size = max_size.max(vl.size);
             max_align = max_align.max(vl.align);
         }
-        let size = max_size.align_to(max_align);
+        let size = max_size
+            .checked_align_to(max_align)
+            .ok_or(LayoutError::SizeOverflow(niche_field_ty))?;
         let output_variants: Vec<Layout> = variant_layouts.to_vec();
         let niche_layout = self.layout_of(niche_field_ty)?; // ← Compute tag size/align
         Ok(Layout {
@@ -577,7 +712,9 @@ impl<'a> SimpleLayoutComputer<'a> {
                         let mut off = Size::ZERO;
                         for _ in 0..*count {
                             o.push(off);
-                            off = off + *stride;
+                            off = off
+                                .checked_add(*stride)
+                                .ok_or(LayoutError::SizeOverflow(niche_field_ty))?;
                         }
                         o
                     }
@@ -707,15 +844,27 @@ impl<'a> SimpleLayoutComputer<'a> {
     /// with that scheme or the codegen-side tag type would silently disagree with the
     /// layout-side tag type — a latent ABI mismatch. We therefore pick the smallest
     /// unsigned integer whose value range covers `variant_count` discriminants.
-    fn discriminant_info(&self, variant_count: usize) -> (Size, Align, Ty) {
+    fn discriminant_info(
+        &self,
+        variant_count: usize,
+        outer_ty: Ty,
+    ) -> Result<(Size, Align, Ty), LayoutError> {
         if variant_count <= 256 {
-            (Size::bytes(1), Align::ONE, Ty::U8)
+            Ok((Size::bytes(1), Align::ONE, Ty::U8))
         } else if variant_count <= 65_536 {
-            (Size::bytes(2), Align::from_bytes(2), Ty::U16)
+            Ok((
+                Size::bytes(2),
+                Align::from_bytes(2).ok_or(LayoutError::SizeOverflow(outer_ty))?,
+                Ty::U16,
+            ))
         } else if variant_count <= 4_294_967_296 {
-            (Size::bytes(4), Align::from_bytes(4), Ty::U32)
+            Ok((
+                Size::bytes(4),
+                Align::from_bytes(4).ok_or(LayoutError::SizeOverflow(outer_ty))?,
+                Ty::U32,
+            ))
         } else {
-            (Size::bytes(8), Align::EIGHT, Ty::U64)
+            Ok((Size::bytes(8), Align::EIGHT, Ty::U64))
         }
     }
 
@@ -723,29 +872,38 @@ impl<'a> SimpleLayoutComputer<'a> {
         &self,
         adt_def: &AdtDef,
         variant_layouts: &[Layout],
+        outer_ty: Ty,
     ) -> Result<Layout, LayoutError> {
         let variant_count = adt_def.variants.len();
-        let (tag_size, tag_align, tag_ty) = self.discriminant_info(variant_count);
+        let (tag_size, tag_align, tag_ty) = self.discriminant_info(variant_count, outer_ty)?;
         let mut max_variant_size = Size::ZERO;
         let mut overall_align = tag_align;
         let mut tagged_variant_layouts: Vec<Layout> = Vec::with_capacity(variant_count);
         for variant_data in variant_layouts {
             overall_align = overall_align.max(variant_data.align);
-            let data_start = tag_size.align_to(variant_data.align);
-            let variant_end = data_start + variant_data.size;
+            let data_start = tag_size
+                .checked_align_to(variant_data.align)
+                .ok_or(LayoutError::SizeOverflow(outer_ty))?;
+            let variant_end = data_start
+                .checked_add(variant_data.size)
+                .ok_or(LayoutError::SizeOverflow(outer_ty))?;
             max_variant_size = max_variant_size.max(variant_end);
             tagged_variant_layouts.push(variant_data.clone());
         }
-        let size = max_variant_size.align_to(overall_align);
+        let size = max_variant_size
+            .checked_align_to(overall_align)
+            .ok_or(LayoutError::SizeOverflow(outer_ty))?;
         let mut offsets = IndexVec::new();
         offsets.push(Size::ZERO);
-        let data_start = tag_size.align_to(
-            variant_layouts
-                .iter()
-                .map(|v| v.align)
-                .max()
-                .unwrap_or(Align::ONE),
-        );
+        let data_start = tag_size
+            .checked_align_to(
+                variant_layouts
+                    .iter()
+                    .map(|v| v.align)
+                    .max()
+                    .unwrap_or(Align::ONE),
+            )
+            .ok_or(LayoutError::SizeOverflow(outer_ty))?;
         offsets.push(data_start);
         Ok(Layout {
             size,
@@ -829,15 +987,22 @@ impl<'a> SimpleLayoutComputer<'a> {
             if let Some(repr) = self.ctx.adt_repr(adt_id) {
                 let mut offsets = IndexVec::new();
                 let mut struct_align = Align::ONE;
-                let mut current_offset = Size::ZERO;
+                let mut current_offset = Offset::ZERO;
                 for field_ty in &repr.field_tys {
                     let field_layout = self.layout_of(*field_ty)?;
                     struct_align = struct_align.max(field_layout.align);
-                    current_offset = current_offset.align_to(field_layout.align);
-                    offsets.push(current_offset);
-                    current_offset = current_offset + field_layout.size;
+                    let field_start = current_offset
+                        .checked_align_to(field_layout.align)
+                        .ok_or(LayoutError::SizeOverflow(outer_ty))?;
+                    offsets.push(field_start.to_size());
+                    current_offset = field_start
+                        .checked_add(field_layout.size)
+                        .ok_or(LayoutError::SizeOverflow(outer_ty))?;
                 }
-                let size = current_offset.align_to(struct_align);
+                let size = current_offset
+                    .checked_align_to(struct_align)
+                    .ok_or(LayoutError::SizeOverflow(outer_ty))?
+                    .to_size();
                 return Ok(Layout {
                     size,
                     align: struct_align,
@@ -851,9 +1016,9 @@ impl<'a> SimpleLayoutComputer<'a> {
         let _args = self.ctx.substitution_args(substs);
         let args = _args;
         match adt_def.kind {
-            AdtKind::Struct => self.layout_struct(adt_def, args),
+            AdtKind::Struct => self.layout_struct(adt_def, args, outer_ty),
             AdtKind::Enum => self.layout_enum(adt_def, outer_ty, args),
-            AdtKind::Union => self.layout_union(adt_def, args),
+            AdtKind::Union => self.layout_union(adt_def, args, outer_ty),
         }
     }
 
@@ -869,7 +1034,7 @@ impl<'a> SimpleLayoutComputer<'a> {
         }
         match conv {
             CallConvention::C | CallConvention::System => {
-                if layout.size.0 > 16 {
+                if layout.size.as_u64() > 16 {
                     PassMode::Indirect { meta_attrs: false }
                 } else {
                     PassMode::Direct
@@ -947,7 +1112,17 @@ impl LayoutComputer for SimpleLayoutComputer<'_> {
         Size::bytes(self.target.pointer_size())
     }
     fn ptr_align(&self) -> Align {
-        Align::from_bytes(self.target.pointer_align())
+        // The target's pointer alignment is a construction invariant of
+        // `TargetInfo` (a pointer size is always a power of two); a target
+        // that violates it is refused loudly instead of silently
+        // mis-masking every pointer layout.
+        match Align::from_bytes(self.target.pointer_align()) {
+            Some(align) => align,
+            None => panic!(
+                "target pointer_align {} is not a power of two",
+                self.target.pointer_align()
+            ),
+        }
     }
     fn target_info(&self) -> &TargetInfo {
         &self.target
@@ -957,25 +1132,37 @@ impl LayoutComputer for SimpleLayoutComputer<'_> {
 impl SimpleLayoutComputer<'_> {
     fn layout_of_inner(&self, ty: Ty) -> Result<Layout, LayoutError> {
         let ptr_size = Size::bytes(self.target.pointer_size());
-        let ptr_align = Align::from_bytes(self.target.pointer_align());
+        let ptr_align = self.ptr_align();
         let layout = match self.ctx.ty_kind(ty) {
             TyKind::Bool => Layout::scalar(Size::bytes(1), Align::ONE),
             TyKind::Int(i) => {
                 let bw = i.bit_width(&self.target);
                 let byte_width = u64::from(bw) / 8;
-                Layout::scalar(Size::bytes(byte_width), Align::from_bytes(byte_width))
+                Layout::scalar(
+                    Size::bytes(byte_width),
+                    Align::from_bytes(byte_width).ok_or(LayoutError::SizeOverflow(ty))?,
+                )
             }
             TyKind::Uint(u) => {
                 let bw = u.bit_width(&self.target);
                 let byte_width = u64::from(bw) / 8;
-                Layout::scalar(Size::bytes(byte_width), Align::from_bytes(byte_width))
+                Layout::scalar(
+                    Size::bytes(byte_width),
+                    Align::from_bytes(byte_width).ok_or(LayoutError::SizeOverflow(ty))?,
+                )
             }
             TyKind::Float(f) => {
                 let bw = f.bit_width();
                 let byte_width = u64::from(bw) / 8;
-                Layout::scalar(Size::bytes(byte_width), Align::from_bytes(byte_width))
+                Layout::scalar(
+                    Size::bytes(byte_width),
+                    Align::from_bytes(byte_width).ok_or(LayoutError::SizeOverflow(ty))?,
+                )
             }
-            TyKind::Char => Layout::scalar(Size::bytes(4), Align::from_bytes(4)),
+            TyKind::Char => Layout::scalar(
+                Size::bytes(4),
+                Align::from_bytes(4).ok_or(LayoutError::SizeOverflow(ty))?,
+            ),
             TyKind::Never => Layout::scalar(Size::ZERO, Align::ONE),
             TyKind::Unit => Layout::unit(),
             // A reference / raw pointer to an *unsized* pointee — a slice
@@ -1038,7 +1225,7 @@ impl SimpleLayoutComputer<'_> {
                     is_unsized: false,
                 }
             }
-            TyKind::Tuple(substs) => return self.layout_tuple(*substs),
+            TyKind::Tuple(substs) => return self.layout_tuple(*substs, ty),
             TyKind::Array(inner, count) => return self.layout_array(*inner, count, ty),
             TyKind::Adt(adt_id, substs) => return self.layout_adt(*adt_id, *substs, ty),
             TyKind::Infer(_) => {
@@ -1069,25 +1256,40 @@ impl SimpleLayoutComputer<'_> {
                 // was treated as zero-sized — the aggregate store then went
                 // through a null alloca (SIGBUS).
                 let ptr_size = Size::bytes(self.target.pointer_size());
-                let ptr_align = Align::from_bytes(self.target.pointer_align());
+                let ptr_align = self.ptr_align();
                 let args = self.ctx.substitution_args(*substs);
-                let mut size = Size::ZERO;
                 let mut align = Align::ONE;
                 let mut offsets = glyim_core::arena::IndexVec::new();
-                let off0 = size.align_to(ptr_align);
-                offsets.push(off0);
-                size = off0 + ptr_size;
+                // CT-3: the field-offset cursor is an `Offset` and every
+                // step is checked (the fn-pointer slot lands at the first
+                // aligned offset, the captures follow it).
+                let fn_ptr_slot = Offset::ZERO
+                    .checked_align_to(ptr_align)
+                    .ok_or(LayoutError::SizeOverflow(ty))?;
+                let cursor_start = fn_ptr_slot
+                    .checked_add(ptr_size)
+                    .ok_or(LayoutError::SizeOverflow(ty))?;
+                let mut size = cursor_start.to_size();
+                offsets.push(fn_ptr_slot.to_size());
                 align = align.max(ptr_align);
+                let cursor = cursor_start;
                 for arg in args {
                     if let glyim_type::GenericArg::Ty(t) = arg {
                         let l = self.layout_of(*t)?;
-                        let offset = size.align_to(l.align);
-                        offsets.push(offset);
-                        size = offset + l.size;
+                        let offset = cursor
+                            .checked_align_to(l.align)
+                            .ok_or(LayoutError::SizeOverflow(ty))?;
+                        offsets.push(offset.to_size());
+                        size = offset
+                            .checked_add(l.size)
+                            .ok_or(LayoutError::SizeOverflow(ty))?
+                            .to_size();
                         align = align.max(l.align);
                     }
                 }
-                size = size.align_to(align);
+                size = size
+                    .checked_align_to(align)
+                    .ok_or(LayoutError::SizeOverflow(ty))?;
                 Layout {
                     size,
                     align,
