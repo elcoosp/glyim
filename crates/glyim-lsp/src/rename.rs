@@ -30,7 +30,7 @@ pub(crate) fn rename_text_fallback(
         if tok.kind == glyim_syntax::SyntaxKind::Ident
             && tok.text.as_str() == symbol_name
             && let Some(((start_line, start_col), (end_line, end_col))) =
-                sm.span_to_position(tok.span.lo.to_usize(), tok.span.hi.to_usize())
+                sm.span_to_position(tok.span.lo().to_usize(), tok.span.hi().to_usize())
         {
             edits.push(TextEdit {
                 range: lsp_types::Range {
@@ -97,8 +97,8 @@ pub fn rename_symbol(
         let cursor_ref = references.iter().find(|r| {
             !r.span.is_dummy()
                 && r.file_id == file_id
-                && r.span.lo.to_usize() <= offset
-                && offset < r.span.hi.to_usize()
+                && r.span.lo().to_usize() <= offset
+                && offset < r.span.hi().to_usize()
         });
         let scope_owner: Option<u32> = match cursor_ref {
             Some(r) if !r.is_item_level => r.owner_item_id,
@@ -132,7 +132,7 @@ pub fn rename_symbol(
                 let ref_uri = Uri::from_str(ref_url.as_ref()).ok()?;
                 if let Some(sm_ref) = source_maps.get(&r.file_id)
                     && let Some(((start_line, start_col), (end_line, end_col))) =
-                        sm_ref.span_to_position(r.span.lo.to_usize(), r.span.hi.to_usize())
+                        sm_ref.span_to_position(r.span.lo().to_usize(), r.span.hi().to_usize())
                 {
                     let range = Range {
                         start: Position {
