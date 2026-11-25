@@ -1213,7 +1213,7 @@ fn node_span(node: &SyntaxNode) -> Span {
     let range = node.text_range();
     let lo = ByteIdx::from_usize(u32::from(range.start()) as usize);
     let hi = ByteIdx::from_usize(u32::from(range.end()) as usize);
-    Span::new(FileId::BOGUS, lo, hi, SyntaxContext::ROOT)
+    Span::range(FileId::BOGUS, lo, hi, SyntaxContext::ROOT)
 }
 
 /// Check whether an item with the given visibility, defined in `defining_module`,
