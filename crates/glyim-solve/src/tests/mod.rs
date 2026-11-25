@@ -2,6 +2,7 @@ mod coerce_tests;
 mod coercion_tests;
 mod cycle_diagnostic_tests;
 mod hrtb;
+mod infer_proptests;
 mod inference_snapshot_tests;
 mod iterator_next_test;
 mod projection_occurs_check;
