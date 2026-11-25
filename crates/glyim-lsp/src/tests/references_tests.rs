@@ -18,7 +18,7 @@ fn setup_test_db_with_references() -> (Arc<AnalysisDatabase>, FileMap, PathBuf) 
 
     // Build a reference graph manually for testing
     let mut graph = ReferenceGraph::new();
-    let span = Span::new(
+    let span = Span::range(
         file_id,
         ByteIdx::from_usize(0),
         ByteIdx::from_usize(5),
