@@ -1360,7 +1360,7 @@ fn split_int_literal(s: &str) -> (String, Option<String>) {
 /// Span of a single token (rowan `text_range`), mirroring `node_span`.
 fn token_span(token: &SyntaxToken) -> Span {
     let range = token.text_range();
-    Span::new(
+    Span::range(
         glyim_span::FileId::from_usize(1),
         glyim_span::ByteIdx::from_usize(u32::from(range.start()) as usize),
         glyim_span::ByteIdx::from_usize(u32::from(range.end()) as usize),
