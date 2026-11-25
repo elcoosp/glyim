@@ -260,7 +260,7 @@ fn format_diagnostics(diagnostics: &[GlyimDiagnostic], source: &str, test_path: 
         let primary = diag.span.primary;
         if primary == glyim_span::Span::DUMMY {
             out.push_str("  (no location)\n");
-        } else if let Some((line_i, col_i)) = offset_to_line_col(primary.lo.to_usize()) {
+        } else if let Some((line_i, col_i)) = offset_to_line_col(primary.lo().to_usize()) {
             let _ = writeln!(out, " --> {}:{}:{}", file_name, line_i + 1, col_i + 1);
             // Source excerpt with a caret underline.
             if let Some(src_line) = lines.get(line_i) {
@@ -270,9 +270,9 @@ fn format_diagnostics(diagnostics: &[GlyimDiagnostic], source: &str, test_path: 
                 let _ = writeln!(out, "{} | {}", line_i + 1, src_line);
                 let caret_pad = " ".repeat(col_i);
                 let caret_len = primary
-                    .hi
+                    .hi()
                     .to_usize()
-                    .saturating_sub(primary.lo.to_usize())
+                    .saturating_sub(primary.lo().to_usize())
                     .max(1);
                 let _ = writeln!(out, "{} | {}{}", gutter, caret_pad, "^".repeat(caret_len));
             }
