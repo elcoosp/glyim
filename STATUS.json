@@ -366,7 +366,9 @@
       "tier": "core",
       "target_level": "L5",
       "computed_level": "L0",
-      "capped_by": [],
+      "capped_by": [
+        "GAP-0009"
+      ],
       "unmeasured": [
         "fuzz_cpu_hours",
         "mutation_kill_rate_pct"
