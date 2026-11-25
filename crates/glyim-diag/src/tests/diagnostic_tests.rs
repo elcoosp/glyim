@@ -5,7 +5,7 @@ use std::sync::Arc;
 // S01-T04: GlyimDiagnostic builders create correct severity and code
 #[test]
 fn test_lex_error_constructor() {
-    let span = Span::new(
+    let span = Span::range(
         FileId::from_usize(1),
         ByteIdx::ZERO,
         ByteIdx::from_usize(5),
