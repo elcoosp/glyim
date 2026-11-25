@@ -154,14 +154,14 @@ pub fn compute_inline_values(
         // answers nothing, the same rule the other extent-consuming
         // engines apply — even though it would arithmetically overlap a
         // containing range.
-        .filter(|binding| binding.span.lo != binding.span.hi)
-        .filter(|binding| binding.span.lo.to_usize() < hi && lo < binding.span.hi.to_usize())
+        .filter(|binding| binding.span.lo() != binding.span.hi())
+        .filter(|binding| binding.span.lo().to_usize() < hi && lo < binding.span.hi().to_usize())
         .map(|binding| InlineValueFact {
             name: binding.name,
             span: binding.span,
         })
         .collect();
-    facts.sort_by_key(|fact| (fact.span.lo.to_usize(), fact.span.hi.to_usize()));
+    facts.sort_by_key(|fact| (fact.span.lo().to_usize(), fact.span.hi().to_usize()));
     facts.dedup();
     facts
 }
@@ -176,7 +176,7 @@ pub fn wire_inline_value(
     map: &dyn Fn(usize, usize) -> Option<((usize, usize), (usize, usize))>,
 ) -> Option<InlineValue> {
     let ((start_line, start_col), (end_line, end_col)) =
-        map(fact.span.lo.to_usize(), fact.span.hi.to_usize())?;
+        map(fact.span.lo().to_usize(), fact.span.hi().to_usize())?;
     Some(InlineValue::VariableLookup(InlineValueVariableLookup {
         range: lsp_types::Range {
             start: lsp_types::Position {
