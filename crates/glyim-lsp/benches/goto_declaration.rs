@@ -96,7 +96,7 @@ fn main() {
             let Some(target) = declaration_target(&src, file_id, "Point") else {
                 panic!("the corpus imports Point; the policy must answer");
             };
-            hits += target.span.hi.to_usize() - target.span.lo.to_usize();
+            hits += target.span.hi().to_usize() - target.span.lo().to_usize();
             black_box(&target);
         }
         let policy = t0.elapsed();
