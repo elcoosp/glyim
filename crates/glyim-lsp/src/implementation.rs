@@ -170,7 +170,7 @@ pub fn implementation_targets(source: &dyn ImplSource, name: &str) -> Vec<Defini
         if !matches {
             continue;
         }
-        if site.location.span.lo == site.location.span.hi {
+        if site.location.span.lo() == site.location.span.hi() {
             continue;
         }
         if kept.contains(&site.location) {
@@ -181,8 +181,8 @@ pub fn implementation_targets(source: &dyn ImplSource, name: &str) -> Vec<Defini
     kept.sort_by_key(|location| {
         (
             location.file_id.to_raw(),
-            location.span.lo.to_usize(),
-            location.span.hi.to_usize(),
+            location.span.lo().to_usize(),
+            location.span.hi().to_usize(),
         )
     });
     kept
@@ -235,7 +235,7 @@ pub fn goto_implementation(
             continue;
         };
         let Some(((start_line, start_col), (end_line, end_col))) =
-            target_sm.span_to_position(target.span.lo.to_usize(), target.span.hi.to_usize())
+            target_sm.span_to_position(target.span.lo().to_usize(), target.span.hi().to_usize())
         else {
             continue;
         };
