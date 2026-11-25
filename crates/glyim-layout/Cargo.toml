@@ -17,6 +17,9 @@ glyim-type = { workspace = true }
 [dev-dependencies]
 rand = "0.10"
 glyim-test = { workspace = true }
+# M3.10 "property tests for foundations": `Size`/`Align`/`Offset` checked
+# arithmetic is property-tested against reference u64 math here.
+proptest = { workspace = true }
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
 workspace = true
