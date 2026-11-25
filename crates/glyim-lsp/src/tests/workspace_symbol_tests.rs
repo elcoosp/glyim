@@ -26,7 +26,7 @@ fn analysis_with_symbols(names: &[&str]) -> (AnalysisDatabase, FileId) {
     let sm = SourceMap::new(file_id, source.clone());
     analysis.source_maps.write().insert(file_id, sm);
 
-    let span = Span::new(
+    let span = Span::range(
         file_id,
         ByteIdx::ZERO,
         ByteIdx::from_usize(5),
