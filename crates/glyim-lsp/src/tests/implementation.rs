@@ -14,7 +14,7 @@ use crate::symbol_index::DefinitionLocation;
 use glyim_span::{ByteIdx, FileId, Span, SyntaxContext};
 
 fn span(file: u32, lo: usize, hi: usize) -> Span {
-    Span::new(
+    Span::range(
         FileId::from_usize(file as usize),
         ByteIdx::from_usize(lo),
         ByteIdx::from_usize(hi),
@@ -58,8 +58,8 @@ fn trait_name_matches_answer_the_impl_site() {
     };
     let targets = implementation_targets(&mock, "Greet");
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].span.lo.to_usize(), 40);
-    assert_eq!(targets[0].span.hi.to_usize(), 90);
+    assert_eq!(targets[0].span.lo().to_usize(), 40);
+    assert_eq!(targets[0].span.hi().to_usize(), 90);
 }
 
 #[test]
@@ -71,14 +71,14 @@ fn self_ty_name_matches_answer_the_impl_site_too() {
     };
     let targets = implementation_targets(&mock, "P");
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].span.lo.to_usize(), 40);
+    assert_eq!(targets[0].span.lo().to_usize(), 40);
 
     let inherent = MockSource {
         sites: vec![site(None, Some("P"), 100, 150)],
     };
     let targets = implementation_targets(&inherent, "P");
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].span.lo.to_usize(), 100);
+    assert_eq!(targets[0].span.lo().to_usize(), 100);
 }
 
 #[test]
@@ -116,7 +116,7 @@ fn a_name_matching_both_sides_answers_once() {
     };
     let targets = implementation_targets(&mock, "Greet");
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].span.lo.to_usize(), 40);
+    assert_eq!(targets[0].span.lo().to_usize(), 40);
 }
 
 #[test]
@@ -132,7 +132,7 @@ fn zero_width_spans_are_skipped() {
     };
     let targets = implementation_targets(&mock, "Greet");
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].span.lo.to_usize(), 50);
+    assert_eq!(targets[0].span.lo().to_usize(), 50);
 }
 
 #[test]
@@ -155,9 +155,9 @@ fn targets_are_ordered_by_file_then_offset() {
     let targets = implementation_targets(&mock, "Greet");
     assert_eq!(targets.len(), 3);
     assert_eq!(targets[0].file_id.to_raw(), 0);
-    assert_eq!(targets[0].span.lo.to_usize(), 30);
+    assert_eq!(targets[0].span.lo().to_usize(), 30);
     assert_eq!(targets[1].file_id.to_raw(), 0);
-    assert_eq!(targets[1].span.lo.to_usize(), 90);
+    assert_eq!(targets[1].span.lo().to_usize(), 90);
     assert_eq!(targets[2].file_id.to_raw(), 1);
-    assert_eq!(targets[2].span.lo.to_usize(), 10);
+    assert_eq!(targets[2].span.lo().to_usize(), 10);
 }
