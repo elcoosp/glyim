@@ -34,13 +34,13 @@ fn main() {
     // cannot mix up a byte index with a line number by accident.
     let lo = ByteIdx::from_usize(20);
     let hi = ByteIdx::from_usize(34);
-    let call_site = Span::new(src, lo, hi, SyntaxContext::ROOT);
+    let call_site = Span::range(src, lo, hi, SyntaxContext::ROOT);
     println!(
         "call site span: {:?} range={:?} len={} bytes, root hygiene={}",
         call_site,
-        call_site.range(),
+        call_site.byte_range(),
         call_site.len(),
-        call_site.ctx.is_root()
+        call_site.ctx().is_root()
     );
 
     // `Span::DUMMY` marks synthetic positions (compiler-generated code
@@ -48,12 +48,12 @@ fn main() {
     // the bogus file.
     assert!(Span::DUMMY.is_dummy());
     assert!(!call_site.is_dummy());
-    println!("dummy span is the sentinel: {:?}", Span::DUMMY.file);
+    println!("dummy span is the sentinel: {:?}", Span::DUMMY.file());
 
     // Two spans of one expression merge into the span a "this expression"
     // diagnostic points at. Merging across files is a hard panic — the
     // resulting span would attribute one file's text to another.
-    let receiver = Span::new(
+    let receiver = Span::range(
         src,
         ByteIdx::from_usize(20),
         ByteIdx::from_usize(26),
@@ -62,7 +62,7 @@ fn main() {
     let merged = receiver.to(call_site);
     println!(
         "merged span: range={:?} (covers the receiver and the call)",
-        merged.range()
+        merged.byte_range()
     );
 
     // Macro hygiene: an expanded token carries a non-root `SyntaxContext`,
@@ -77,7 +77,7 @@ fn main() {
     // arena-issued and opaque externally.)
     let mut hygiene = HygieneCtx::new();
     let macro_span = hygiene.apply_mark(
-        Span::new(
+        Span::range(
             lib,
             ByteIdx::from_usize(4),
             ByteIdx::from_usize(9),
@@ -90,9 +90,9 @@ fn main() {
     );
     println!(
         "macro span hygiene: ctx={} (root={}?) associated expn={:?}",
-        macro_span.ctx.to_raw(),
-        macro_span.ctx.is_root(),
-        macro_span.ctx.expn_id()
+        macro_span.ctx().to_raw(),
+        macro_span.ctx().is_root(),
+        macro_span.ctx().expn_id()
     );
 
     // The diagnostic renderer's currency is `miette`'s `SourceSpan`; a
@@ -112,11 +112,11 @@ fn main() {
         .with_secondary(macro_span, "expanded from here");
     println!(
         "multi-span: primary range={:?}, secondaries={}",
-        multi.primary.range(),
+        multi.primary.byte_range(),
         multi
             .secondary
             .iter()
-            .map(|(s, label)| format!("{:?} {label}", s.range()))
+            .map(|(s, label)| format!("{:?} {label}", s.byte_range()))
             .collect::<Vec<_>>()
             .join("; ")
     );
@@ -126,6 +126,26 @@ fn main() {
     // of expansion depth.
     println!(
         "sans_ctx span hygiene is root: {}",
-        macro_span.sans_ctx().ctx.is_root()
+        macro_span.sans_ctx().ctx().is_root()
     );
+
+    // CT-3 (plan M3.2): the span's stored shape is `(lo, len)` — a backwards
+    // range cannot be represented — and an oversized one is refused, never
+    // wrapped. The checked `(lo, len)` constructor returns the refusal so a
+    // caller can diagnose it; the `(lo, hi)` bridge keeps the invariant loud.
+    let checked = Span::new(src, ByteIdx::from_usize(40), 14, SyntaxContext::ROOT);
+    match checked {
+        Ok(span) => println!("checked (lo,len) span: range={:?}", span.byte_range()),
+        Err(overflow) => println!("oversized span refused: {overflow}"),
+    }
+    let overflow = Span::new(
+        src,
+        ByteIdx::from_usize(u32::MAX as usize - 1),
+        5,
+        SyntaxContext::ROOT,
+    );
+    match overflow {
+        Ok(_) => println!("unexpected: u32::MAX-1 + 5 was accepted"),
+        Err(err) => println!("overflow refused: {err}"),
+    }
 }
