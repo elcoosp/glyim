@@ -46,7 +46,7 @@ fn test_span_to_miette_sourcespan() {
     let file = FileId::from_raw(0);
     let lo = ByteIdx::from_raw(5);
     let hi = ByteIdx::from_raw(12);
-    let span = Span::new(file, lo, hi, SyntaxContext::ROOT);
+    let span = Span::range(file, lo, hi, SyntaxContext::ROOT);
     let source: SourceSpan = span.into();
     assert_eq!(source.offset(), 5);
     assert_eq!(source.len(), 7); // 12-5 =7
