@@ -17,7 +17,9 @@ fn add_file_content_and_file_content_ref_roundtrip() {
     let path = PathBuf::from("/test/path.g");
     let content: Arc<str> = Arc::from("fn main() {}");
 
-    let id = vfs.add_file_content(&path, content.clone());
+    let id = vfs
+        .add_file_content(&path, content.clone())
+        .expect("fixture sources are far below the VFS length gate");
     assert_eq!(id.index(), 0);
     assert_eq!(vfs.file_content(id), Some(content.clone()));
     let result = vfs.file_content_ref(id, |s: &str| s.to_owned());
@@ -31,8 +33,12 @@ fn file_id_returns_correct_id() {
     let path2 = PathBuf::from("/b.g");
     let content: Arc<str> = Arc::from("content");
 
-    let id1 = vfs.add_file_content(&path1, content.clone());
-    let id2 = vfs.add_file_content(&path2, content);
+    let id1 = vfs
+        .add_file_content(&path1, content.clone())
+        .expect("fixture sources are far below the VFS length gate");
+    let id2 = vfs
+        .add_file_content(&path2, content)
+        .expect("fixture sources are far below the VFS length gate");
     assert_eq!(vfs.file_id(&path1), Some(id1));
     assert_eq!(vfs.file_id(&path2), Some(id2));
     assert_eq!(vfs.file_id(&PathBuf::from("/missing.g")), None);
@@ -42,7 +48,9 @@ fn file_id_returns_correct_id() {
 fn set_file_content_updates_content() {
     let vfs = Vfs::new();
     let path = PathBuf::from("/test.g");
-    let id = vfs.add_file_content(&path, Arc::from("old"));
+    let id = vfs
+        .add_file_content(&path, Arc::from("old"))
+        .expect("fixture sources are far below the VFS length gate");
     assert_eq!(vfs.file_content(id), Some(Arc::from("old")));
 
     vfs.set_file_content(id, Arc::from("new"))
@@ -63,8 +71,12 @@ fn add_file_from_disk_reads_file() {
 fn add_file_content_updates_existing_path() {
     let vfs = Vfs::new();
     let path = PathBuf::from("/dup.g");
-    let id1 = vfs.add_file_content(&path, Arc::from("first"));
-    let id2 = vfs.add_file_content(&path, Arc::from("second"));
+    let id1 = vfs
+        .add_file_content(&path, Arc::from("first"))
+        .expect("fixture sources are far below the VFS length gate");
+    let id2 = vfs
+        .add_file_content(&path, Arc::from("second"))
+        .expect("fixture sources are far below the VFS length gate");
     // Same FileId should be returned
     assert_eq!(id1, id2);
     assert_eq!(vfs.file_content(id1), Some(Arc::from("second")));
