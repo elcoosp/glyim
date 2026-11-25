@@ -407,8 +407,16 @@ fn vtable_layout_matches_expectations() {
     let layout = computer
         .layout_of(dyn_ty)
         .expect("layout_of(dyn Trait) should succeed");
-    assert_eq!(layout.size.0, 16, "fat pointer size should be 16 on x86_64");
-    assert_eq!(layout.align.0, 8, "fat pointer align should be 8 on x86_64");
+    assert_eq!(
+        layout.size.as_u64(),
+        16,
+        "fat pointer size should be 16 on x86_64"
+    );
+    assert_eq!(
+        layout.align.as_u64(),
+        8,
+        "fat pointer align should be 8 on x86_64"
+    );
     assert!(!layout.is_unsized);
 }
 
