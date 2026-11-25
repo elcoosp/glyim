@@ -974,8 +974,8 @@ pub fn collect_unresolved_ty_var_spans(
 ) -> Vec<glyim_span::Span> {
     let mut out: Vec<glyim_span::Span> = Vec::new();
     walk_body_for_variant_ctor_calls(infer, ctx, body, &mut out);
-    out.sort_by_key(|s| (s.lo.to_raw(), s.hi.to_raw()));
-    out.dedup_by_key(|s| (s.lo.to_raw(), s.hi.to_raw()));
+    out.sort_by_key(|s| (s.lo().to_raw(), s.hi().to_raw()));
+    out.dedup_by_key(|s| (s.lo().to_raw(), s.hi().to_raw()));
     out
 }
 
