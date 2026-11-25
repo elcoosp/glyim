@@ -53,11 +53,11 @@ fn chain_stays_innermost_first_root_last() {
     let chain = chains[0].as_ref().expect("offset resolves");
     assert_eq!(chain.len(), 2, "the duplicate root span is collapsed");
     assert_eq!(
-        chain[0].lo.to_usize(),
+        chain[0].lo().to_usize(),
         5,
         "innermost (the token) comes first"
     );
-    assert_eq!(chain[1].lo.to_usize(), 0, "root comes last");
+    assert_eq!(chain[1].lo().to_usize(), 0, "root comes last");
 }
 
 #[test]
@@ -72,8 +72,8 @@ fn consecutive_duplicate_spans_are_collapsed() {
 
     let chain = chains[0].as_ref().expect("offset resolves");
     assert_eq!(chain.len(), 2);
-    assert_eq!(chain[0].lo.to_usize(), 3);
-    assert_eq!(chain[1].lo.to_usize(), 1);
+    assert_eq!(chain[0].lo().to_usize(), 3);
+    assert_eq!(chain[1].lo().to_usize(), 1);
 }
 
 #[test]
