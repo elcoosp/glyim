@@ -26,6 +26,7 @@ real-llvm = ["glyim-codegen-llvm", "glyim-pipeline/llvm-codegen", "glyim-cli"]
 [dependencies]
 tempfile = { workspace = true }
 glyim-mir-interp = { workspace = true }
+glyim-smith = { workspace = true }
 glyim-core       = { workspace = true }
 glyim-span       = { workspace = true }
 glyim-diag       = { workspace = true }
@@ -65,6 +66,10 @@ walkdir          = "2"
 regex            = "1"
 shell-words      = "1.1"
 rand             = "0.10"
+
+[[bench]]
+name = "metamorphic"
+harness = false
 
 [[bench]]
 name = "annotations"
