@@ -25,13 +25,13 @@ fn document_symbols_returns_hierarchy() {
         crate::SourceMap::new(file_id, "fn foo() {}\nstruct Bar { x: i32 }".to_string());
     analysis.source_maps.write().insert(file_id, source_map);
 
-    let span_foo = Span::new(
+    let span_foo = Span::range(
         file_id,
         ByteIdx::ZERO,
         ByteIdx::from_usize(7),
         SyntaxContext::ROOT,
     );
-    let span_bar = Span::new(
+    let span_bar = Span::range(
         file_id,
         ByteIdx::from_usize(10),
         ByteIdx::from_usize(20),
