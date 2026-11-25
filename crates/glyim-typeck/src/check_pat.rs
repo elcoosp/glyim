@@ -57,7 +57,7 @@ impl FnCtxt<'_> {
     }
 
     /// Re-map a `Name` taken from the HIR (valid in `self.hir.interner`) into
-    /// the type-checker's interner (`self.ctx.resolver()`). The HIR body and
+    /// the type-checker's interner (`self.ctx().resolver()`). The HIR body and
     /// the `TyCtx` are sometimes built from different `Interner` instances, so
     /// a `Name` id that means `"y"` in one can mean `"x"` in the other.
     /// Resolving through the HIR interner recovers the textual identifier,
@@ -200,7 +200,7 @@ impl FnCtxt<'_> {
             } => {
                 // Re-map the HIR `Name` (valid in `self.hir.interner`) into the
                 // type-checker's interner so lexical lookups in the guard/body
-                // (which use `self.ctx.resolver()`) resolve against the same
+                // (which use `self.ctx().resolver()`) resolve against the same
                 // identifier. See `CrateHir::interner` for why the two can
                 // diverge.
                 let ctx_name = self.remap_name(*name);
@@ -603,7 +603,7 @@ impl FnCtxt<'_> {
                 // typed `<error>`, so downstream uses (`secs`, `nanos`, …)
                 // cascaded into "no method"/"cannot dereference" diagnostics.
                 // A `Vec<Option<Ty>>` local collects the projection so the
-                // `self.ctx` borrow from `substitution_args` ends before any
+                // `self.ctx()` borrow from `substitution_args` ends before any
                 // `self.fresh_infer_ty()` call (a closure over `self` while
                 // that borrow is live is rejected by the borrow checker).
                 let projected: Vec<Option<Ty>> = match self.ctx.ty_kind(expected_ty) {
