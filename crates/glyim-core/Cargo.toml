@@ -26,5 +26,11 @@ sha2 = { workspace = true }
 # glyim-core --all-features`. glyim-core is the leaf foundation crate with no
 # LLVM coupling. Dropping it makes the M3.1 local baseline gate green on
 # LLVM-less hosts — the same unblock the M3.3 work applied to glyim-diag.
+[dev-dependencies]
+# M3.10 "property tests for foundations": the `IndexVec`/`Idx`/`define_idx!`
+# arena and the `Interner` are property-tested here (self-contained — this
+# crate deliberately keeps dev-deps LLVM-free, so `proptest` only).
+proptest = { workspace = true }
+
 [lints]
 workspace = true
