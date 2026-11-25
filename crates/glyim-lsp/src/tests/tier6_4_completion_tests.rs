@@ -153,7 +153,7 @@ fn main() {
     let main_body_id = glyim_hir::BodyId::from_raw(0);
     let ctx = SyntaxContext::ROOT;
     let span_for = |lo: usize, hi: usize| {
-        Span::new(
+        Span::range(
             file_id,
             ByteIdx::from_usize(lo),
             ByteIdx::from_usize(hi),
@@ -355,7 +355,7 @@ fn main() {
 
     let ctx = SyntaxContext::ROOT;
     let span_for = |lo: usize, hi: usize| {
-        Span::new(
+        Span::range(
             file_id,
             ByteIdx::from_usize(lo),
             ByteIdx::from_usize(hi),
