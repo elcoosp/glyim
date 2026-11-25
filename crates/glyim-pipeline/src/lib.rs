@@ -211,7 +211,7 @@ impl<'a> PipelineChain<'a> {
         parse_root: &glyim_syntax::SyntaxNode,
         hir: &glyim_hir::CrateHir,
         def_map: &glyim_def_map::CrateDefMap,
-        mir_bodies_map: &std::collections::HashMap<
+        mir_bodies_map: &std::collections::BTreeMap<
             glyim_core::def_id::DefId,
             std::sync::Arc<glyim_mir::Body>,
         >,
@@ -639,7 +639,13 @@ impl Pipeline {
 /// Result of compiling a source file down to MIR without code generation.
 pub struct MirCompilation {
     /// All monomorphized MIR bodies, keyed by their owning `DefId`.
-    pub bodies: std::collections::HashMap<glyim_core::def_id::DefId, Arc<Body>>,
+    ///
+    /// `BTreeMap` (not `HashMap`) so iteration is deterministic under the
+    /// constitution C6 "no `HashMap` iteration in compiler core" rule
+    /// (CT-9): every consumer that walks the map (`--emit=run`, `glyip`,
+    /// the M4.7 metamorphic runner) sees the same DefId-ascending order
+    /// across runs and machines.
+    pub bodies: std::collections::BTreeMap<glyim_core::def_id::DefId, Arc<Body>>,
     /// The crate's definition map (used to resolve a function name to a `DefId`).
     pub def_map: glyim_def_map::CrateDefMap,
     /// The type context produced during type-checking (required by the interpreter).
@@ -748,7 +754,7 @@ pub fn compile_file_to_mir_with_proc_registry(
     opt_level: u8,
 ) -> Result<MirCompilation, Vec<GlyimDiagnostic>> {
     let prepared = Pipeline::prepare_compilation(db, path, None, proc_registry, false, opt_level)?;
-    let mut bodies = std::collections::HashMap::with_capacity(prepared.all_bodies.len());
+    let mut bodies = std::collections::BTreeMap::new();
     for (_symbol, body) in prepared.all_bodies {
         bodies.insert(body.owner, body);
     }
