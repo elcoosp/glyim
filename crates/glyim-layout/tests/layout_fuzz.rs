@@ -109,17 +109,17 @@ fn fuzz_random_adt_layouts() {
 
         // Verify basic invariants.
         assert!(
-            layout.align.0.is_power_of_two(),
+            layout.align.as_u64().is_power_of_two(),
             "Alignment must be power of two"
         );
         assert!(
-            layout.align.0 >= 1 && layout.align.0 <= 64,
+            layout.align.as_u64() >= 1 && layout.align.as_u64() <= 64,
             "Alignment within limits"
         );
         // size is u64, always non-negative
         if field_count == 0 {
-            assert_eq!(layout.size.0, 0, "Empty struct should have size 0");
-            assert_eq!(layout.align.0, 1, "Empty struct should have align 1");
+            assert_eq!(layout.size.as_u64(), 0, "Empty struct should have size 0");
+            assert_eq!(layout.align.as_u64(), 1, "Empty struct should have align 1");
         }
 
         // Verify field offsets are non-overlapping.
@@ -127,9 +127,9 @@ fn fuzz_random_adt_layouts() {
             let mut prev_end = 0;
             for (i, &offset) in offsets.iter().enumerate() {
                 if i < field_count {
-                    assert!(offset.0 >= prev_end, "Fields must not overlap");
+                    assert!(offset.as_u64() >= prev_end, "Fields must not overlap");
                     // We don't have field sizes here, but we can check that offsets are non-decreasing.
-                    prev_end = offset.0 + 1; // Just a basic check.
+                    prev_end = offset.as_u64() + 1; // Just a basic check.
                 }
             }
         }
@@ -200,8 +200,8 @@ fn fuzz_random_enum_layouts() {
         };
 
         // Check alignment and size invariants.
-        assert!(layout.align.0.is_power_of_two());
-        assert!(layout.align.0 >= 1 && layout.align.0 <= 64);
+        assert!(layout.align.as_u64().is_power_of_two());
+        assert!(layout.align.as_u64() >= 1 && layout.align.as_u64() <= 64);
 
         // For enums, the variants shape should be Multiple.
         match layout.variants {
@@ -217,7 +217,7 @@ fn fuzz_random_enum_layouts() {
                 // Tag type can be non-integer for niche-optimized enums, so we skip type check.
                 // Check that variant layouts are valid.
                 for vl in &variant_layouts {
-                    assert!(vl.align.0.is_power_of_two());
+                    assert!(vl.align.as_u64().is_power_of_two());
                 }
             }
             VariantsShape::Single { index } if variant_count == 1 => {
