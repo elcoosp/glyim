@@ -37,7 +37,9 @@ fn main() {
     // 2. In-memory registration: the LSP open-document face. Content-keyed
     //    by path; re-registering the same path overwrites (idempotent).
     let buffer_path = PathBuf::from("file:///lsp-opened.g");
-    let buffer_id = vfs.add_file_content(&buffer_path, Arc::from("fn main() -> i32 { 0 }"));
+    let buffer_id = vfs
+        .add_file_content(&buffer_path, Arc::from("fn main() -> i32 { 0 }"))
+        .expect("fixture sources are far below the VFS length gate");
     println!(
         "registered LSP buffer {:?} as FileId({buffer_id:?})",
         buffer_path.display()
