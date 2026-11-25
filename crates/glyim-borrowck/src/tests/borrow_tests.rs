@@ -242,13 +242,13 @@ fn t05_borrow_expires_after_last_use_no_error() {
 
 #[test]
 fn t07_error_diagnostics_include_span() {
-    let span1 = Span::new(
+    let span1 = Span::range(
         glyim_span::FileId::BOGUS,
         glyim_span::ByteIdx::from_usize(0),
         glyim_span::ByteIdx::from_usize(5),
         glyim_span::SyntaxContext::ROOT,
     );
-    let span2 = Span::new(
+    let span2 = Span::range(
         glyim_span::FileId::BOGUS,
         glyim_span::ByteIdx::from_usize(10),
         glyim_span::ByteIdx::from_usize(15),
