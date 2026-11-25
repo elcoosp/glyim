@@ -78,7 +78,7 @@ fn s15_t02_enum_simple_two_variants_no_data() {
         VariantsShape::Single { .. } => panic!("enum should have Multiple variants"),
     }
     assert!(
-        layout.size.0 >= 1,
+        layout.size.as_u64() >= 1,
         "enum should have at least 1 byte for discriminant"
     );
 }
@@ -124,7 +124,7 @@ fn s15_t02_enum_with_data_variants() {
         VariantsShape::Single { .. } => panic!("enum should have Multiple variants"),
     }
     assert!(
-        layout.size.0 >= 4,
+        layout.size.as_u64() >= 4,
         "enum with i32 variant should be at least 4 bytes"
     );
 }
@@ -159,7 +159,10 @@ fn s15_t02_enum_niche_option_bool() {
         },
         VariantsShape::Single { .. } => panic!("enum should have Multiple variants"),
     }
-    assert!(layout.size.0 <= 2, "Option<bool> should be at most 2 bytes");
+    assert!(
+        layout.size.as_u64() <= 2,
+        "Option<bool> should be at most 2 bytes"
+    );
 }
 
 #[test]
@@ -176,7 +179,7 @@ fn s15_t02_enum_three_variants_no_data() {
         .layout_of(enum_ty)
         .expect("enum layout should succeed");
 
-    assert!(layout.size.0 >= 1);
+    assert!(layout.size.as_u64() >= 1);
     match &layout.variants {
         VariantsShape::Multiple { variants, .. } => {
             assert_eq!(variants.len(), 3);
@@ -195,7 +198,7 @@ fn s15_t02_enum_large_discriminant() {
     let layout = computer
         .layout_of(enum_ty)
         .expect("enum layout should succeed");
-    assert!(layout.size.0 >= 1);
+    assert!(layout.size.as_u64() >= 1);
 }
 
 #[test]
@@ -209,7 +212,7 @@ fn s15_t02_enum_257_variants_needs_u16() {
         .layout_of(enum_ty)
         .expect("enum layout should succeed");
     assert!(
-        layout.size.0 >= 2,
+        layout.size.as_u64() >= 2,
         "257-variant enum needs at least 2 bytes for u16 tag"
     );
 }
@@ -239,7 +242,8 @@ fn s15_t02_enum_nested_option_niche() {
         .expect("nested enum layout should succeed");
 
     assert_eq!(
-        layout.size.0, 1,
+        layout.size.as_u64(),
+        1,
         "Option<Option<bool>> must collapse to a single byte via recursive niche detection"
     );
     match &layout.variants {
@@ -277,7 +281,8 @@ fn s15_t02_enum_direct_tag_recursive_niche() {
     // inner is a Direct-tag 3-variant enum; the recursive niche must keep the
     // outer enum to a single byte.
     assert_eq!(
-        layout.size.0, 1,
+        layout.size.as_u64(),
+        1,
         "Option<3-variant-enum> must collapse to a single byte via recursive niche detection"
     );
 }
