@@ -13,7 +13,7 @@ use glyim_hir::{Body, Expr, ExprId, Literal};
 use glyim_span::{ByteIdx, FileId, Span};
 
 fn dummy_span() -> Span {
-    Span::new(
+    Span::range(
         FileId::BOGUS,
         ByteIdx::ZERO,
         ByteIdx::ZERO,
