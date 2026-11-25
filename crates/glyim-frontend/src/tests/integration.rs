@@ -27,7 +27,7 @@ fn token_has_kind_span_text_fields() {
 
 #[test]
 fn token_new_constructor() {
-    let span = Span::new(
+    let span = Span::range(
         FileId::from_usize(1),
         ByteIdx::from_usize(0),
         ByteIdx::from_usize(2),
@@ -36,7 +36,7 @@ fn token_new_constructor() {
     let token = Token::new(SyntaxKind::KwFn, span, "fn");
     assert_eq!(token.kind, SyntaxKind::KwFn);
     assert_eq!(token.text, "fn");
-    assert_eq!(token.span.file, FileId::from_usize(1));
+    assert_eq!(token.span.file(), FileId::from_usize(1));
 }
 
 #[test]
@@ -63,7 +63,8 @@ fn file_id_propagated_to_all_tokens() {
     let result = lex("fn main() { let x = 42; }", fid);
     for token in &result.tokens {
         assert_eq!(
-            token.span.file, fid,
+            token.span.file(),
+            fid,
             "all tokens should have the same file_id"
         );
     }
@@ -76,7 +77,8 @@ fn file_id_propagated_to_diagnostics() {
     assert!(!result.diagnostics.is_empty());
     for diag in &result.diagnostics {
         assert_eq!(
-            diag.span.primary.file, fid,
+            diag.span.primary.file(),
+            fid,
             "all diagnostics should have the same file_id"
         );
     }
@@ -369,8 +371,8 @@ fn double_underscore_prefix_is_ident() {
 fn multiple_file_ids_independent() {
     let result1 = lex("fn", FileId::from_usize(1));
     let result2 = lex("fn", FileId::from_usize(2));
-    assert_eq!(result1.tokens[0].span.file, FileId::from_usize(1));
-    assert_eq!(result2.tokens[0].span.file, FileId::from_usize(2));
+    assert_eq!(result1.tokens[0].span.file(), FileId::from_usize(1));
+    assert_eq!(result2.tokens[0].span.file(), FileId::from_usize(2));
 }
 
 #[test]
@@ -408,7 +410,7 @@ fn lex_same_source_idempotent() {
 #[test]
 fn span_root_context() {
     let result = lex("fn", FileId::from_usize(0));
-    assert_eq!(result.tokens[0].span.ctx, SyntaxContext::ROOT);
+    assert_eq!(result.tokens[0].span.ctx(), SyntaxContext::ROOT);
 }
 
 #[test]
