@@ -177,7 +177,7 @@ pub fn deduplicate_with_pre_subst(
     ctx: &mut TyCtxMut,
     items: &[MonoItemData],
     pre_subst: Option<
-        &std::collections::HashMap<glyim_core::def_id::DefId, std::sync::Arc<glyim_mir::Body>>,
+        &std::collections::BTreeMap<glyim_core::def_id::DefId, std::sync::Arc<glyim_mir::Body>>,
     >,
 ) -> Vec<MonoItemData> {
     let mut seen: HashSet<MonoItem> = HashSet::new();
