@@ -999,6 +999,7 @@ name = "glyim-core"
 version = "0.10.0"
 dependencies = [
  "lasso",
+ "proptest",
  "sha2",
  "smallvec",
 ]
@@ -1113,6 +1114,7 @@ dependencies = [
  "glyim-core",
  "glyim-test",
  "glyim-type",
+ "proptest",
  "rand",
 ]
 
@@ -1375,6 +1377,7 @@ dependencies = [
  "glyim-span",
  "glyim-test",
  "glyim-type",
+ "proptest",
  "tracing",
 ]
 
@@ -1451,6 +1454,7 @@ dependencies = [
  "glyim-core",
  "glyim-span",
  "glyim-test",
+ "proptest",
  "smallvec",
  "tracing",
 ]
