@@ -74,8 +74,8 @@ fn import_declaration_beats_same_file_definition() {
 
     let target = declaration_target(&src, a, "Point").expect("an import exists");
     assert_eq!(target.file_id, a);
-    assert_eq!(target.span.lo.to_usize(), 0, "the import span wins");
-    assert_eq!(target.span.hi.to_usize(), 25);
+    assert_eq!(target.span.lo().to_usize(), 0, "the import span wins");
+    assert_eq!(target.span.hi().to_usize(), 25);
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn same_file_definition_used_when_not_imported() {
 
     let target = declaration_target(&src, a, "helper").expect("a same-file definition exists");
     assert_eq!(target.file_id, a);
-    assert_eq!(target.span.lo.to_usize(), 30);
+    assert_eq!(target.span.lo().to_usize(), 30);
 }
 
 #[test]
@@ -134,7 +134,7 @@ fn first_import_declaration_wins() {
     src.add_import(a, "Point", 40, 65);
 
     let target = declaration_target(&src, a, "Point").expect("an import exists");
-    assert_eq!(target.span.lo.to_usize(), 0, "first recorded import wins");
+    assert_eq!(target.span.lo().to_usize(), 0, "first recorded import wins");
 }
 
 #[test]
