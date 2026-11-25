@@ -1,0 +1,54 @@
+---
+title: État de préparation
+description: "Le registre de préparation calculé — le niveau de maturité de chaque fonctionnalité, généré à la construction depuis le STATUS.json validé."
+type: reference
+sidebar:
+  order: 20
+---
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+import status from '../../../../../../STATUS.json';
+
+Le registre de préparation est **calculé, jamais saisi à la main** : `glyim-ledger compute` déduit chaque niveau à partir d'éléments de preuve vérifiés par la machine (fixtures réussies, exécutions différentielles, campagnes de fuzzing) sur le registre de `ledger/features/**`. Cette page rend le `STATUS.json` validé (`glyim.status/1`) au moment de la construction — elle ne peut donc jamais diverger du [STATUS.md](https://github.com/elcoosp/glyim/blob/main/STATUS.md) généré par le dépôt.
+
+## Histogramme des niveaux
+
+| Niveau | Signification | Fonctionnalités |
+|---|---|---|
+| L0 | Déclaré | {status.summary.L0} |
+| L1 | Analyse lexicale | {status.summary.L1} |
+| L2 | Vérifié | {status.summary.L2} |
+| L3 | Interprété | {status.summary.L3} |
+| L4 | Vérifié en natif | {status.summary.L4} |
+| L5 | Durci | {status.summary.L5} |
+
+**{status.features}** fonctionnalités sur **{status.records}** enregistrement(s) de preuve.
+
+## Niveaux par fonctionnalité
+
+Chaque entrée du registre avec son niveau cible, son niveau calculé et les lacunes ouvertes qui la plafonnent.
+
+| Fonctionnalité | Segment | Cible | Calculé | Plafonné par |
+|---|---|---|---|---|
+{status.entries.map((entry) => `| \`${entry.id}\` | ${entry.tier} | ${entry.target_level} | ${entry.computed_level} | ${entry.capped_by.length > 0 ? entry.capped_by.join(', ') : '-'} |`).join('\n')}
+
+<Aside type="caution">
+  Une fonctionnalité plafonnée par un identifiant `GAP-NNNN` ne peut pas dépasser le plafond tant que la lacune n'est pas fermée — une lacune de compilation silencieuse (classe `b`) sort toujours la fonctionnalité de « vérifié en natif ». L'audit complet par lacune, avec ses témoins, se trouve dans [KNOWN_GAPS.md](https://github.com/elcoosp/glyim/blob/main/KNOWN_GAPS.md).
+</Aside>
+
+## Prochaines étapes
+
+<LinkCard
+  title="STATUS.md dans le dépôt"
+  description="La table générée des fonctionnalités avec les colonnes de preuve non mesurées."
+  href="https://github.com/elcoosp/glyim/blob/main/STATUS.md"
+/>
+<LinkCard
+  title="KNOWN_GAPS.md dans le dépôt"
+  description="Le registre des lacunes généré : classe, témoin et plafond par lacune ouverte."
+  href="https://github.com/elcoosp/glyim/blob/main/KNOWN_GAPS.md"
+/>
+<LinkCard
+  title="La CLI du registre"
+  description="Comment `ledger check`, `compute` et `diff` maintiennent l'état honnête."
+  href="/fr/reference/cli/"
+/>
