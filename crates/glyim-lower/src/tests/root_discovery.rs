@@ -31,7 +31,7 @@ fn make_hir(items: Vec<Item>) -> CrateHir {
 }
 
 fn dummy_span() -> Span {
-    Span::new(
+    Span::range(
         FileId::BOGUS,
         ByteIdx::ZERO,
         ByteIdx::from_usize(1),
@@ -122,7 +122,7 @@ fn build_attr_syntax(attr_name: &str) -> (SyntaxNode, Span) {
     let last_tok = root.last_token().unwrap();
     let start: u32 = first_tok.text_range().start().into();
     let end: u32 = last_tok.text_range().end().into();
-    let span = Span::new(
+    let span = Span::range(
         FileId::BOGUS,
         ByteIdx::from_usize(start as usize),
         ByteIdx::from_usize(end as usize),
