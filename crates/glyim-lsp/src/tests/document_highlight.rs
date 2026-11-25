@@ -89,8 +89,8 @@ fn definition_read_and_write_get_distinct_kinds() {
     assert_eq!(highlights[0].kind, HighlightKind::Text); // the definition
     assert_eq!(highlights[1].kind, HighlightKind::Write);
     assert_eq!(highlights[2].kind, HighlightKind::Read);
-    assert_eq!(highlights[0].span.lo.to_usize(), 6);
-    assert_eq!(highlights[2].span.lo.to_usize(), 22);
+    assert_eq!(highlights[0].span.lo().to_usize(), 6);
+    assert_eq!(highlights[2].span.lo().to_usize(), 22);
 }
 
 #[test]
@@ -110,7 +110,7 @@ fn scoped_occurrences_in_other_scopes_are_excluded() {
     assert_eq!(highlights.len(), 2, "owner-9 occurrences must be excluded");
     for h in &highlights {
         assert!(
-            h.span.lo.to_usize() < 40,
+            h.span.lo().to_usize() < 40,
             "only owner-7 (early-offset) occurrences may appear, got {:?}",
             h.span
         );
@@ -168,7 +168,7 @@ fn dummy_spans_are_skipped() {
         compute_highlights(&src, main_file(), 6, "x").expect("cursor is on the definition");
 
     assert_eq!(highlights.len(), 1, "the DUMMY-span occurrence is skipped");
-    assert_eq!(highlights[0].span.lo.to_usize(), 6);
+    assert_eq!(highlights[0].span.lo().to_usize(), 6);
 }
 
 #[test]
@@ -191,7 +191,7 @@ fn occurrences_in_other_files_are_not_highlighted() {
         1,
         "only the current document's occurrences"
     );
-    assert_eq!(highlights[0].span.lo.to_usize(), 4);
+    assert_eq!(highlights[0].span.lo().to_usize(), 4);
 }
 
 #[test]
