@@ -466,9 +466,9 @@ impl MirBuilder<'_> {
                             match lc.layout_of(t) {
                                 Ok(l) => {
                                     let n = if name == "align_of" {
-                                        l.align.0
+                                        l.align.as_u64()
                                     } else {
-                                        l.size.0
+                                        l.size.as_u64()
                                     };
                                     i128::from(n)
                                 }
@@ -3858,7 +3858,7 @@ impl MirBuilder<'_> {
         // concrete type into it and the backends fold the real size.
         let elem_size_const = match layout_computer.layout_of(elem_ty) {
             Ok(l) if !contains_param(self.ctx.ty_ctx(), elem_ty) => MirConst {
-                kind: MirConstKind::Uint(l.size.0.into()),
+                kind: MirConstKind::Uint(l.size.as_u64().into()),
                 ty: Ty::USIZE,
                 span,
             },
