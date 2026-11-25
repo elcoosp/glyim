@@ -215,7 +215,7 @@ pub fn on_type_indent(
     // A closer with an empty stack, or whose family mismatches the stack
     // top, leaves the typed token's opener unvouchable — honest `None`.
     // The typed token's opener is the one its own pop hands back, so it
-    // is captured inside the loop (`token.lo == typed_lo`).
+    // is captured inside the loop (`token.lo() == typed_lo`).
     let mut stack: Vec<(SyntaxKind, usize)> = Vec::new();
     let mut opener_lo: Option<usize> = None;
     for token in brackets.iter().take(typed_index + 1) {
