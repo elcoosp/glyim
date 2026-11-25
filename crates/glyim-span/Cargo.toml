@@ -27,7 +27,8 @@ miette = { workspace = true }
 # M3.2 DoD "Span invariants proptested": the `(lo, len)` representation
 # invariants are property-tested here (the same `proptest` the pilot gate
 # already pins at 1.12, so the lockfile carries no new version surface).
-proptest = "1.12"
+# Same workspace-pinned version the M3.10 foundation proptests use.
+proptest = { workspace = true }
 
 # M3.2 construction bench: the CT-3 invariant checks must stay negligible
 # next to parsing; the bench tracks the per-span cost of the checked
