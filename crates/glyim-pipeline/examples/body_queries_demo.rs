@@ -43,7 +43,10 @@ fn main() {
     });
     let path = Path::new("demo.g");
     let v1: Arc<str> = Arc::from("fn foo() -> i32 { 1 }\nfn bar() -> i32 { 2 }\n");
-    let file = db.vfs().add_file_content(path, v1.clone());
+    let file = db
+        .vfs()
+        .add_file_content(path, v1.clone())
+        .expect("fixture sources are far below the VFS length gate");
 
     // Initial query: cache miss → compute → cache.
     let arc1 = db.def_map_query(file, || build_def_map(&db, &v1, file));
