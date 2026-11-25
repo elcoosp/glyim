@@ -18,8 +18,8 @@ fn unexpected_char_span_covers_char() {
     let result = lex("\u{00A9}", FileId::from_usize(0));
     assert_eq!(result.tokens.len(), 1);
     let span = result.tokens[0].span;
-    assert_eq!(span.range().start, 0);
-    assert!(span.range().end > 0, "span should cover the character");
+    assert_eq!(span.byte_range().start, 0);
+    assert!(span.byte_range().end > 0, "span should cover the character");
 }
 
 #[test]
