@@ -96,7 +96,7 @@ fn is_trivia(kind: SyntaxKind) -> bool {
 }
 
 fn span_of(file_id: FileId, range: TextRange) -> Span {
-    Span::new(
+    Span::range(
         file_id,
         ByteIdx::from_usize(u32::from(range.start()) as usize),
         ByteIdx::from_usize(u32::from(range.end()) as usize),
@@ -163,13 +163,13 @@ pub fn compute_selection_chains(
             let raw = source.ancestors_at(offset)?;
             let mut chain: Vec<Span> = Vec::with_capacity(raw.len());
             for span in raw {
-                let (lo, hi) = (span.lo.to_usize(), span.hi.to_usize());
+                let (lo, hi) = (span.lo().to_usize(), span.hi().to_usize());
                 if offset < lo || offset > hi {
                     return None;
                 }
                 if chain
                     .last()
-                    .is_some_and(|last| last.lo.to_usize() == lo && last.hi.to_usize() == hi)
+                    .is_some_and(|last| last.lo().to_usize() == lo && last.hi().to_usize() == hi)
                 {
                     continue;
                 }
@@ -189,7 +189,7 @@ fn chain_to_wire(sm: &SourceMap, chain: &[Span]) -> Option<SelectionRange> {
     let mut current: Option<SelectionRange> = None;
     for span in chain.iter().rev() {
         let ((start_line, start_col), (end_line, end_col)) =
-            sm.span_to_position(span.lo.to_usize(), span.hi.to_usize())?;
+            sm.span_to_position(span.lo().to_usize(), span.hi().to_usize())?;
         current = Some(SelectionRange {
             range: Range {
                 start: Position {
