@@ -79,13 +79,15 @@ impl LayoutProvider for GlyimLayoutProvider {
             match layout.fields {
                 FieldsShape::Arbitrary { ref offsets } => {
                     if field_idx.index() < offsets.len() {
-                        offsets[field_idx].0
+                        offsets[field_idx].as_u64()
                     } else {
                         0
                     }
                 }
                 FieldsShape::Primitive => 0,
-                FieldsShape::Array { stride, count: _ } => u64::from(field_idx.to_raw()) * stride.0,
+                FieldsShape::Array { stride, count: _ } => {
+                    u64::from(field_idx.to_raw()) * stride.as_u64()
+                }
             }
         } else {
             tracing::warn!("Layout computation failed for field offset");
@@ -100,7 +102,7 @@ impl LayoutProvider for GlyimLayoutProvider {
         };
         let computer = SimpleLayoutComputer::new(ctx.as_ref(), self.target.clone());
         if let Ok(layout) = computer.layout_of(ty) {
-            layout.size.0
+            layout.size.as_u64()
         } else {
             tracing::warn!("Layout computation failed for size");
             0
@@ -131,7 +133,7 @@ impl LayoutProvider for GlyimLayoutProvider {
                 ..
             } = &layout.variants
             {
-                tag_size.0
+                tag_size.as_u64()
             } else {
                 0
             }
@@ -1262,7 +1264,7 @@ impl BytecodeBackend {
                                     &ctx,
                                     glyim_core::primitives::TargetInfo::x86_64(),
                                 );
-                                lc.layout_of(*ty).map_or(0, |l| l.size.0)
+                                lc.layout_of(*ty).map_or(0, |l| l.size.as_u64())
                             }
                             None => 0,
                         };
