@@ -12,14 +12,8 @@ registry holds only *open* gaps; closed entries retire to the git history
 of this file and of the registry (the RG-10 verdict's contract, see
 `tools/glyim-ledger/src/gates.rs`).
 
-Registry snapshot: 7 open gaps — 4 witnessed, 3 unwitnessed (witness debt,
+Registry snapshot: 8 open gaps — 8 witnessed, 0 unwitnessed (witness debt,
 plan §3.3: allowed, but never silent).
-
-## Witness debt
-
-- GAP-0002 — Windows SEH cleanup edges are unreachable: no lowering site sets cleanup (panic exits 101)
-- GAP-0003 — `panic!` does not unwind: `glyim_panic` exits 101 without running destructors (intentional, documented)
-- GAP-0005 — `TyCtx::needs_drop` is conservative for `dyn Trait`/generic/projection types (drop glue may be skipped)
 
 ## GAP-0002 — Windows SEH cleanup edges are unreachable: no lowering site sets cleanup (panic exits 101)
 
@@ -27,7 +21,8 @@ plan §3.3: allowed, but never silent).
 - affects: `LANG-UNWIND-CLEANUP`
 - caps affected features at `L2`
 - opened in: v0.3.0
-- status: unwitnessed (witness debt)
+- status: witnessed
+- witness: `crates/glyim-test/tests/run-fail/behavior/seh_cleanup_edges_unreachable_known_gap.g` (strict xfail)
 
 ## GAP-0003 — `panic!` does not unwind: `glyim_panic` exits 101 without running destructors (intentional, documented)
 
@@ -35,7 +30,8 @@ plan §3.3: allowed, but never silent).
 - affects: `LANG-UNWIND-CLEANUP`
 - caps affected features at `L2`
 - opened in: v0.3.0
-- status: unwitnessed (witness debt)
+- status: witnessed
+- witness: `crates/glyim-test/tests/run-fail/behavior/panic_no_unwind_exit_101_known_gap.g` (strict xfail)
 
 ## GAP-0004 — Partial move out of a Drop-implementing type suppresses the parent destructor entirely (over-retains, never double-frees)
 
@@ -52,7 +48,8 @@ plan §3.3: allowed, but never silent).
 - affects: `COMPILER-LAYOUT-SIZE-ALIGN`
 - caps affected features at `L2`
 - opened in: v0.3.0
-- status: unwitnessed (witness debt)
+- status: witnessed
+- witness: `crates/glyim-test/tests/run-pass/behavior/needs_drop_conservative_generic_known_gap.g` (strict xfail)
 
 ## GAP-0006 — .await inside non-range `for` iterables / destructuring loop patterns rejected by async lowering (diagnostic T0060)
 
@@ -82,5 +79,14 @@ plan §3.3: allowed, but never silent).
 - status: witnessed
 - witness: `crates/glyim-test/tests/compile-fail/match-arm-leading-or-known-gap.g` (strict xfail)
 - expect: witness must produce diagnostic `P0001`
+
+## GAP-0009 — Constant-propagation folds division/remainder by zero to 0 at -O2 while the interpreter panics at -O0 (silent opt-level divergence)
+
+- class: `b` (silent wrong behaviour — always first in the work queue)
+- affects: `COMPILER-OPT-CONST-PROP`
+- caps affected features at `L2`
+- opened in: v0.10.0
+- status: witnessed
+- witness: `crates/glyim-test/tests/run-pass/behavior/const_prop_div_zero_silent_opt2_known_gap.g` (strict xfail)
 
 <!-- ledger:known-gaps:end -->
