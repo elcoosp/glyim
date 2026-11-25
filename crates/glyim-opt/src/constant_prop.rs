@@ -109,11 +109,17 @@ fn evaluate_rvalue_to_const(
                         glyim_core::primitives::BinOp::Sub => l - r,
                         glyim_core::primitives::BinOp::Mul => l * r,
                         glyim_core::primitives::BinOp::Div => {
-                            // Division by zero is not folded; the runtime
-                            // operation would trap, so propagate `0` as the
-                            // constant-folded value only when `r != 0`.
+                            // GAP-0009 (ledger/gaps/known/0009-const-prop-div-zero.toml):
+                            // `unwrap_or(0)` fires exactly when the divisor
+                            // is zero (or `i8::MIN / -1` overflows), silently
+                            // folding what the runtime panics on — the
+                            // witnessed `-O0`-panics/`-O2`-returns-0
+                            // divergence. The fix direction is to fold only
+                            // when `checked_div` returns `Some`; the M4.8
+                            // exhaustive oracle is the class-level defence.
                             l.checked_div(r).unwrap_or(0)
                         }
+                        // GAP-0009: same silent fold as the `Div` arm above.
                         glyim_core::primitives::BinOp::Rem => l.checked_rem(r).unwrap_or(0),
                         _ => return None,
                     };
@@ -129,11 +135,17 @@ fn evaluate_rvalue_to_const(
                         glyim_core::primitives::BinOp::Sub => l - r,
                         glyim_core::primitives::BinOp::Mul => l * r,
                         glyim_core::primitives::BinOp::Div => {
-                            // Division by zero is not folded; the runtime
-                            // operation would trap, so propagate `0` as the
-                            // constant-folded value only when `r != 0`.
+                            // GAP-0009 (ledger/gaps/known/0009-const-prop-div-zero.toml):
+                            // `unwrap_or(0)` fires exactly when the divisor
+                            // is zero (or `i8::MIN / -1` overflows), silently
+                            // folding what the runtime panics on — the
+                            // witnessed `-O0`-panics/`-O2`-returns-0
+                            // divergence. The fix direction is to fold only
+                            // when `checked_div` returns `Some`; the M4.8
+                            // exhaustive oracle is the class-level defence.
                             l.checked_div(r).unwrap_or(0)
                         }
+                        // GAP-0009: same silent fold as the `Div` arm above.
                         glyim_core::primitives::BinOp::Rem => l.checked_rem(r).unwrap_or(0),
                         _ => return None,
                     };
