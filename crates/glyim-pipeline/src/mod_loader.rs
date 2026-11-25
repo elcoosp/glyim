@@ -362,7 +362,7 @@ fn module_error(
     message: &str,
 ) -> GlyimDiagnostic {
     use glyim_span::{ByteIdx, SyntaxContext};
-    let span = Span::new(
+    let span = Span::range(
         ctx.file_id,
         ByteIdx::from_usize(start),
         ByteIdx::from_usize(end),
