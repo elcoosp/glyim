@@ -47,7 +47,7 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `COMPILER-MONO-MONOMORPHIZE` | core | L5 | L1 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `COMPILER-MONO-POLYMORPHIZE` | core | L5 | L2 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `COMPILER-OPT-CFG-SIMPLIFY` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
-| `COMPILER-OPT-CONST-PROP` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
+| `COMPILER-OPT-CONST-PROP` | core | L5 | L0 | GAP-0009 | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `COMPILER-OPT-DCE` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `COMPILER-OPT-DROP-ELAB` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
 | `COMPILER-OPT-SLICE-DEGUGAR` | core | L5 | L0 | - | fuzz_cpu_hours, mutation_kill_rate_pct |
