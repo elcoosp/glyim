@@ -61,7 +61,7 @@ fn local_x_after(from: usize) -> usize {
 }
 
 fn span(file_id: FileId, lo: usize, hi: usize) -> Span {
-    Span::new(
+    Span::range(
         file_id,
         ByteIdx::from_usize(lo),
         ByteIdx::from_usize(hi),
