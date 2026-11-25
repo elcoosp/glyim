@@ -72,6 +72,10 @@ name = "metamorphic"
 harness = false
 
 [[bench]]
+name = "exhaustive"
+harness = false
+
+[[bench]]
 name = "annotations"
 harness = false
 path = "benches/annotations.rs"
