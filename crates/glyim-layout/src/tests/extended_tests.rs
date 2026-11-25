@@ -137,11 +137,11 @@ fn s04_e12_fn_abi_of_ignores_lifetime_args() {
 #[test]
 fn s04_e13_size_arithmetic() {
     let s = Size::bytes(5);
-    assert_eq!(s.bits(), 40);
-    let aligned = s.align_to(Align::from_bytes(4));
-    assert_eq!(aligned, Size::bytes(8));
-    let sum = Size::bytes(3) + Size::bytes(7);
-    assert_eq!(sum, Size::bytes(10));
+    assert_eq!(s.checked_bits(), Some(40));
+    let aligned = s.checked_align_to(Align::from_bytes(4).expect("4 is a power of two"));
+    assert_eq!(aligned, Some(Size::bytes(8)));
+    let sum = Size::bytes(3).checked_add(Size::bytes(7));
+    assert_eq!(sum, Some(Size::bytes(10)));
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn s04_e15_ptr_size_and_align() {
     let ctx = test_frozen_ty_ctx();
     let computer = SimpleLayoutComputer::new(&ctx, TargetInfo::x86_64());
     assert_eq!(computer.ptr_size(), Size::bytes(8));
-    assert_eq!(computer.ptr_align(), Align::from_bytes(8));
+    assert_eq!(computer.ptr_align().as_u64(), 8);
 }
 
 #[test]
