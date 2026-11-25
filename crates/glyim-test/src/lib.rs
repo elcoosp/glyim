@@ -13,6 +13,8 @@ pub mod error;
 pub mod fixtures;
 /// harness.
 pub mod harness;
+/// metamorphic.
+pub mod metamorphic;
 /// mock.
 pub mod mock;
 /// phase.
