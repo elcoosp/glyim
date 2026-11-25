@@ -23,5 +23,18 @@ miette = { workspace = true }
 # (`cargo test -p glyim-span --all-features`) green on LLVM-less hosts, the
 # same unblock the M3.3 work applied to glyim-diag. No src/tests/benches/
 # examples file referenced either dependency.
+[dev-dependencies]
+# M3.2 DoD "Span invariants proptested": the `(lo, len)` representation
+# invariants are property-tested here (the same `proptest` the pilot gate
+# already pins at 1.12, so the lockfile carries no new version surface).
+proptest = "1.12"
+
+# M3.2 construction bench: the CT-3 invariant checks must stay negligible
+# next to parsing; the bench tracks the per-span cost of the checked
+# constructors (see `benches/span_ctor.rs`).
+[[bench]]
+name = "span_ctor"
+harness = false
+
 [lints]
 workspace = true
