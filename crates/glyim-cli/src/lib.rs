@@ -133,7 +133,8 @@ pub fn inject_assembled_stdlib(
     // "generic type `Once` expects 0 type argument(s)" cascade.
     let combined = format!("{stdlib}\n{user}\n");
     db.vfs()
-        .add_file_content(input, std::sync::Arc::from(combined));
+        .add_file_content(input, std::sync::Arc::from(combined))
+        .map_err(|e| vec![glyim_diag::GlyimDiagnostic::internal_error(e.to_string())])?;
     Ok(())
 }
 
@@ -313,12 +314,20 @@ fn print_diagnostics(diags: &[glyim_diag::GlyimDiagnostic], format: &str) {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum EmitKind {
+/// `EmitKind` — the parsed `--emit` value (plan §6 M3.8 / §5.2 CT-6: the
+/// flag vocabulary is a type, not a string compared in five places).
+pub enum EmitKind {
+    /// A relocatable object file (`.o`) — the plain-object cache rung.
     Obj,
+    /// An executable: object + system link against `glyim-runtime`.
     Exec,
+    /// Pretty-printed MIR (analysis output, no codegen).
     Mir,
+    /// The LLVM IR text the backend produced (analysis output).
     LlvmIr,
+    /// The parsed syntax tree dump (analysis output).
     Syntax,
+    /// Target assembly text (object + disassembly view).
     Asm,
     /// Emit a position-independent shared library (cdylib). Phase 9.2: this is
     /// the host artifact a procedural-macro crate compiles to so it can be
@@ -358,6 +367,206 @@ impl EmitKind {
     }
 }
 
+/// The parsed `--backend` value (plan §6 M3.8 / §5.2 CT-6: a type, so the
+/// backend dispatch sites cannot misspell a flag string).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Backend {
+    /// The default: the native LLVM backend (object emission, LTO, linking).
+    Llvm,
+    /// The in-process MIR interpreter (`--emit=run` execution path).
+    Interp,
+    /// The bytecode backend: raw VM opcode emission (`--emit=obj` artifacts
+    /// for the VM), not a linker-feedable object format.
+    Bytecode,
+}
+
+impl Backend {
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "llvm" => Ok(Backend::Llvm),
+            "interp" => Ok(Backend::Interp),
+            "bytecode" => Ok(Backend::Bytecode),
+            _ => Err(format!(
+                "invalid value for --backend: '{s}' (expected one of: llvm, interp, bytecode)"
+            )),
+        }
+    }
+}
+
+/// The typed refusal `ValidConfig::build_parts` returns for a flag
+/// combination the driver cannot honour (plan §6 M3.8 / §5.2 CT-6 `DoD`:
+/// illegal combos are refused at one named place, with the conflicting
+/// flags in the message, instead of five scattered runtime string compares).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ConfigError {
+    /// `--backend=bytecode` + `--emit=run`.
+    BytecodeCannotRun,
+    /// `--emit=run` + `--output` (run mode writes no artifact).
+    RunWritesNoArtifact,
+    /// `--backend=interp` + any code-producing emit kind.
+    InterpEmitsNoCode,
+    /// `--backend=bytecode` + `--emit=exec`/`--emit=cdylib`.
+    BytecodeCannotLink,
+    /// `--lto=thin`/`fat` + `--backend=bytecode`.
+    ThinLtoRequiresLlvm,
+    /// An unparsable `--backend` value.
+    InvalidBackend(String),
+    /// An unparsable `--emit` value.
+    InvalidEmit(String),
+    /// An unparsable `--lto` value.
+    InvalidLto(String),
+}
+
+impl ConfigError {
+    /// Parse-shaped refusals render as `parse_error` diagnostics (bad flag
+    /// syntax); combination refusals render as `internal_error` (the driver
+    /// understood both flags, their combination is the bug).
+    fn is_parse_error(&self) -> bool {
+        matches!(
+            self,
+            ConfigError::InvalidBackend(_)
+                | ConfigError::InvalidEmit(_)
+                | ConfigError::InvalidLto(_)
+        )
+    }
+}
+
+impl std::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            // Message texts are pinned by the CLI integration tests
+            // (`cli_tests.rs` asserts the flag names appear); keep them.
+            ConfigError::BytecodeCannotRun => write!(
+                f,
+                "`--backend=bytecode` cannot run: the bytecode backend is a codegen \
+                 backend and `--emit=run` executes in-process through the MIR \
+                 interpreter, writing no artifact. Drop `--backend=bytecode` (or \
+                 use `--backend=interp` explicitly), or use `--emit=obj` to emit \
+                 bytecode modules."
+            ),
+            ConfigError::RunWritesNoArtifact => write!(
+                f,
+                "`--emit=run` executes the program in-process and writes no \
+                 artifact, so `--output` does not apply. Remove `--output`, or \
+                 use `--emit=obj`/`--emit=exec` to produce a file."
+            ),
+            ConfigError::InterpEmitsNoCode => write!(
+                f,
+                "`--backend=interp` executes through the in-process MIR interpreter and \
+                 does not emit code, so it is only valid with `--emit=run`. Use \
+                 `--emit=run` to execute, or drop `--backend=interp` for a \
+                 code-producing emit kind (llvm is the default backend)."
+            ),
+            ConfigError::BytecodeCannotLink => write!(
+                f,
+                "`--backend=bytecode` cannot produce an executable or cdylib: it emits \
+                 raw VM opcode bytes, not a relocatable object, so the system linker \
+                 rejects the result. Use the default (LLVM) backend for `--emit=exec` \
+                 or `--emit=cdylib`, or `--emit=run` to execute in-process through \
+                 the interpreter without linking."
+            ),
+            ConfigError::ThinLtoRequiresLlvm => write!(
+                f,
+                "ThinLTO requires the LLVM backend; `--backend=bytecode` cannot emit \
+                 per-CGU bitcode. Use the default (LLVM) backend for `--lto=thin`."
+            ),
+            ConfigError::InvalidBackend(s) => write!(
+                f,
+                "invalid value for --backend: '{s}' (expected one of: llvm, interp, bytecode)"
+            ),
+            ConfigError::InvalidEmit(s) => write!(f, "{s}"),
+            ConfigError::InvalidLto(s) => write!(f, "{s}"),
+        }
+    }
+}
+
+/// The validated driver configuration (plan §6 M3.8 / §5.2 CT-6): every
+/// `--backend`/`--emit`/`--lto` combination the driver accepts, plus the
+/// facts downstream phases derived from scattered string compares before
+/// (run-mode shape, compile-cache eligibility).
+///
+/// Construction is total through [`ValidConfig::build_parts`]: an illegal
+/// combination has no `ValidConfig`, so no later phase can re-decide (or
+/// re-mis-decide) the compatibility rules.
+#[derive(Clone, Copy, Debug)]
+pub struct ValidConfig {
+    /// The parsed backend.
+    pub backend: Backend,
+    /// The parsed emit kind.
+    pub emit: EmitKind,
+    /// The parsed LTO strategy.
+    pub lto: glyim_codegen_llvm::passes::LtoKind,
+    /// Whether the compile lands on the plain-object cache rung
+    /// (`obj`/`exec` on a non-bytecode backend without `ThinLTO`) — the fact
+    /// the driver used to recompute at the cache site.
+    pub cacheable: bool,
+    /// `--emit=run` shape (the interpreter executes, no artifact is named).
+    pub is_run: bool,
+}
+
+impl ValidConfig {
+    /// Parse and validate the three flags (plus `--output`, which run mode
+    /// refuses) into a [`ValidConfig`], or name the exact violation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigError`] for an unparsable flag value or an illegal
+    /// combination; every refusal carries the conflicting flag names.
+    pub fn build_parts(
+        backend: &str,
+        emit: &str,
+        lto: &str,
+        output: Option<&std::path::Path>,
+    ) -> Result<Self, ConfigError> {
+        let backend = Backend::from_str(backend).map_err(ConfigError::InvalidBackend)?;
+        let emit = EmitKind::from_str(emit).map_err(ConfigError::InvalidEmit)?;
+        let lto = match lto {
+            "off" | "none" | "false" => Ok(glyim_codegen_llvm::passes::LtoKind::None),
+            "fat" => Ok(glyim_codegen_llvm::passes::LtoKind::Fat),
+            "thin" => Ok(glyim_codegen_llvm::passes::LtoKind::Thin),
+            other => Err(ConfigError::InvalidLto(format!(
+                "invalid value for --lto: '{other}' (expected one of: off, fat, thin)"
+            ))),
+        }?;
+
+        let is_run = emit == EmitKind::Run;
+        // Run mode executes through the interpreter regardless of the
+        // backend spelling; a bytecode spelling is a contradiction, and
+        // `--output` has no artifact to name.
+        if is_run {
+            if backend == Backend::Bytecode {
+                return Err(ConfigError::BytecodeCannotRun);
+            }
+            if output.is_some() {
+                return Err(ConfigError::RunWritesNoArtifact);
+            }
+        }
+        if backend == Backend::Interp && !is_run {
+            return Err(ConfigError::InterpEmitsNoCode);
+        }
+        if backend == Backend::Bytecode && matches!(emit, EmitKind::Exec | EmitKind::Cdylib) {
+            return Err(ConfigError::BytecodeCannotLink);
+        }
+        if matches!(
+            lto,
+            glyim_codegen_llvm::passes::LtoKind::Thin | glyim_codegen_llvm::passes::LtoKind::Fat
+        ) && backend == Backend::Bytecode
+        {
+            return Err(ConfigError::ThinLtoRequiresLlvm);
+        }
+        let cacheable = matches!(emit, EmitKind::Obj | EmitKind::Exec)
+            && backend != Backend::Bytecode
+            && lto == glyim_codegen_llvm::passes::LtoKind::None;
+        Ok(Self {
+            backend,
+            emit,
+            lto,
+            cacheable,
+            is_run,
+        })
+    }
+}
+
 pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimDiagnostic>> {
     // M2.4: the success payload is the **process exit code** the driver
     // should terminate with. Every code-producing mode returns 0; `run`
@@ -370,15 +579,21 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
         .ok();
 
     let input = &args.input;
-    let emit = match EmitKind::from_str(&args.emit) {
-        Ok(k) => k,
-        Err(msg) => {
-            return Err(vec![glyim_diag::GlyimDiagnostic::parse_error(
-                glyim_diag::Span::DUMMY,
-                msg,
-            )]);
-        }
-    };
+    // CT-6 (plan M3.8): the `--backend`/`--emit`/`--lto` combination space
+    // is validated in ONE place; the scattered runtime string compares are
+    // gone, and the driver runs on the typed facts (`cfg.emit`, `cfg.lto`,
+    // `cfg.backend`, `cfg.cacheable`).
+    let cfg =
+        ValidConfig::build_parts(&args.backend, &args.emit, &args.lto, args.output.as_deref())
+            .map_err(|e| {
+                let diag = if e.is_parse_error() {
+                    glyim_diag::GlyimDiagnostic::parse_error(glyim_diag::Span::DUMMY, e.to_string())
+                } else {
+                    glyim_diag::GlyimDiagnostic::internal_error(e.to_string())
+                };
+                vec![diag]
+            })?;
+    let emit = cfg.emit;
 
     // Determine output paths based on emit mode
     let (object_path, final_output_path) = match emit {
@@ -478,20 +693,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
     // historical default if `std::env::consts` cannot classify the platform.
     let target_triple = args.target.clone().unwrap_or_else(host_target_triple);
 
-    // Parse the requested LTO strategy (Phase 10.2). `Thin` is a tracked gap
-    // (linker-driver integration); surface it as an explicit error rather than
-    // silently degrading to a no-op.
-    let lto = match args.lto.as_str() {
-        "off" | "none" | "false" => LtoKind::None,
-        "fat" => LtoKind::Fat,
-        "thin" => LtoKind::Thin,
-        other => {
-            return Err(vec![glyim_diag::GlyimDiagnostic::parse_error(
-                glyim_diag::Span::DUMMY,
-                format!("invalid value for --lto: '{other}' (expected one of: off, fat, thin)"),
-            )]);
-        }
-    };
+    let lto = cfg.lto;
 
     let config = CrateConfig {
         name: args
@@ -503,50 +705,6 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
         target_triple: target_triple.clone(),
         opt_level: args.opt_level,
     };
-
-    // M2.4: `--emit=run` mode validation. The interpreter is the run
-    // backend; the bytecode backend is a *codegen* backend whose raw
-    // opcode output has nothing to do with run mode, and `--output` has
-    // no artifact to name. Both are explicit errors rather than silent
-    // no-ops, mirroring the `--backend=bytecode` + `--emit=exec` rule.
-    if emit == EmitKind::Run {
-        if args.backend == "bytecode" {
-            return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(
-                "`--backend=bytecode` cannot run: the bytecode backend is a codegen \
-                 backend and `--emit=run` executes in-process through the MIR \
-                 interpreter, writing no artifact. Drop `--backend=bytecode` (or \
-                 use `--backend=interp` explicitly), or use `--emit=obj` to emit \
-                 bytecode modules.",
-            )]);
-        }
-        if args.output.is_some() {
-            return Err(vec![
-                glyim_diag::GlyimDiagnostic::internal_error(
-                    "`--emit=run` executes the program in-process and writes no \
-                 artifact, so `--output` does not apply. Remove `--output`, or \
-                 use `--emit=obj`/`--emit=exec` to produce a file.",
-                )
-                .with_suggestion(glyim_diag::Suggestion {
-                    message: "drop --output; run mode's observable output is the \
-                          program's stdout/stderr and its exit code"
-                        .to_string(),
-                    replacements: Vec::new(),
-                    applicability: glyim_diag::Applicability::MaybeIncorrect,
-                }),
-            ]);
-        }
-    }
-    // M2.4: `--backend=interp` names the in-process interpreter. It does
-    // not emit code, so any other emit kind is an explicit error pointing
-    // at the one combination it supports.
-    if args.backend == "interp" && emit != EmitKind::Run {
-        return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(
-            "`--backend=interp` executes through the in-process MIR interpreter and \
-             does not emit code, so it is only valid with `--emit=run`. Use \
-             `--emit=run` to execute, or drop `--backend=interp` for a \
-             code-producing emit kind (llvm is the default backend).",
-        )]);
-    }
 
     let mut db = Database::new(config);
     // §3.5.30 framework: translate `-A/-W/-D <lint>`.
@@ -784,9 +942,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
     // `mir`/`llvm-ir`/`asm` paths return above; ThinLTO produces per-CGU
     // bitcode whose combination depends on the link driver, which is out of
     // this first rung's scope.
-    let cacheable = matches!(emit, EmitKind::Obj | EmitKind::Exec)
-        && args.backend != "bytecode"
-        && lto != LtoKind::Thin;
+    let cacheable = cfg.cacheable;
     let cache = if cacheable {
         Some(glyim_db::cache::CompileCache::open_default())
     } else {
@@ -892,7 +1048,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
     // pipeline; its internal `generate` call short-circuits for Thin (see
     // `LlvmBackend::generate`) so it does not write a redundant merged object.
     if lto == LtoKind::Thin {
-        if args.backend == "bytecode" {
+        if cfg.backend == Backend::Bytecode {
             return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(
                 "ThinLTO requires the LLVM backend; `--backend=bytecode` cannot emit \
                  per-CGU bitcode. Use the default (LLVM) backend for `--lto=thin`.",
@@ -976,7 +1132,7 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
                 ))]
             })?;
         }
-    } else if args.backend == "bytecode" {
+    } else if cfg.backend == Backend::Bytecode {
         if args.opt_level > 0 {
             tracing::warn!(
                 "bytecode backend opt-level currently has no effect; reserved for future peephole passes"
@@ -1026,24 +1182,6 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
         && object_path.exists()
     {
         c.store(k, &object_path);
-    }
-
-    // P1-C10 (production-readiness plan §6 / §13): the bytecode backend emits
-    // raw VM opcode bytes, not a relocatable object. Passing that to `cc`
-    // produces a bare "ld: unknown file type" error — an unhelpful leak of
-    // backend internals. Reject the combination up front with a documented
-    // message, mirroring the thin-LTO/bytecode check above. The VM itself
-    // (correctness, wiring `glyim run --backend bytecode`) is a Phase 4
-    // concern; today the honest outcome is a clean error.
-    if args.backend == "bytecode" && matches!(emit, EmitKind::Exec | EmitKind::Cdylib) {
-        return Err(vec![glyim_diag::GlyimDiagnostic::internal_error(
-            "`--backend=bytecode` cannot produce an executable or cdylib: it emits \
-             raw VM opcode bytes, not a relocatable object, so the system linker \
-             rejects the result. Use the default (LLVM) backend for `--emit=exec` \
-             or `--emit=cdylib`, or `--emit=run` to execute in-process through \
-             the interpreter without linking. (The bytecode backend is available \
-             for `--emit=obj` as a testing tool — see KNOWN_GAPS §6 P1-C10.)",
-        )]);
     }
 
     if emit == EmitKind::Exec || emit == EmitKind::Cdylib {
