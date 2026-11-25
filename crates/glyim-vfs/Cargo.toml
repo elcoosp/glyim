@@ -13,7 +13,6 @@ version.workspace = true
 [dependencies]
 glyim-span = { workspace = true }
 parking_lot = { workspace = true }
-tracing = { workspace = true }
 
 [dev-dependencies]
 glyim-test = { workspace = true }
