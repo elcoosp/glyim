@@ -146,7 +146,7 @@ pub fn empty_def_map() -> glyim_def_map::CrateDefMap {
         children: vec![],
         scope: ItemScope::default(),
         origin: ModuleOrigin::CrateRoot,
-        span: Span::new(
+        span: Span::range(
             FileId::from_usize(0),
             ByteIdx::from_usize(0),
             ByteIdx::from_usize(0),
