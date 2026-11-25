@@ -77,10 +77,10 @@ impl CallSiteSource for ReferenceGraphCallSiteSource<'_> {
             .filter(|(_, r)| r.kind == ReferenceKind::Call && !r.span.is_dummy())
             .filter(|(_, r)| {
                 r.file_id == file_id
-                    && r.span.lo.to_usize() <= offset
-                    && offset < r.span.hi.to_usize()
+                    && r.span.lo().to_usize() <= offset
+                    && offset < r.span.hi().to_usize()
             })
-            .min_by_key(|(_, r)| r.span.hi.to_usize() - r.span.lo.to_usize())
+            .min_by_key(|(_, r)| r.span.hi().to_usize() - r.span.lo().to_usize())
             .map(|(name, r)| CalledFunction {
                 callee: name.to_string(),
                 span: r.span,
@@ -239,8 +239,8 @@ fn active_parameter_at(
     if data.parameters.is_empty() {
         return None;
     }
-    let lo = call_span.lo.to_usize();
-    let hi = call_span.hi.to_usize();
+    let lo = call_span.lo().to_usize();
+    let hi = call_span.hi().to_usize();
     let text = source_text.get(lo..hi)?;
     // The callee name runs to the argument list's `(`; commas count from
     // there to the cursor (or the close paren, whichever comes first).
