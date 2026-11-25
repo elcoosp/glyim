@@ -42,6 +42,7 @@ mod s12_object_safety;
 mod stress;
 mod substitution;
 mod substitution_extra;
+mod substitution_proptests;
 mod test_helpers;
 mod traits;
 mod type_construction;
