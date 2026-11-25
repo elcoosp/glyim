@@ -27,7 +27,7 @@ fn test_provide_completions() {
             kind: SymbolKind::Function,
             definition: DefinitionLocation {
                 file_id,
-                span: Span::new(
+                span: Span::range(
                     FileId::from_usize(0),
                     ByteIdx::from_usize(0),
                     ByteIdx::from_usize(10),
@@ -115,7 +115,7 @@ fn test_auto_import_offers_symbol_from_other_file() {
             kind: SymbolKind::Struct,
             definition: DefinitionLocation {
                 file_id: file_id_b,
-                span: Span::new(
+                span: Span::range(
                     FileId::from_usize(0),
                     ByteIdx::from_usize(0),
                     ByteIdx::from_usize(10),
