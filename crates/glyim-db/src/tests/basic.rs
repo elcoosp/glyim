@@ -49,7 +49,8 @@ fn test_database_vfs_content() {
     let content: Arc<str> = Arc::from("fn main() {}");
     let file_id = db
         .vfs()
-        .add_file_content(&std::path::PathBuf::from("main.g"), content.clone());
+        .add_file_content(&std::path::PathBuf::from("main.g"), content.clone())
+        .expect("fixture sources are far below the VFS length gate");
     // M6: read through the QueryContext::file_text query rather than reaching
     // into the VFS struct directly.
     let retrieved = db.file_text(file_id).unwrap();
@@ -67,10 +68,13 @@ fn test_query_context_file_text_dispatches_to_vfs() {
         target_triple: "x86_64-unknown-linux-gnu".to_string(),
         opt_level: 0,
     });
-    let file_id = db.vfs().add_file_content(
-        &std::path::PathBuf::from("main.g"),
-        Arc::from("fn main() -> i32 { 0 }"),
-    );
+    let file_id = db
+        .vfs()
+        .add_file_content(
+            &std::path::PathBuf::from("main.g"),
+            Arc::from("fn main() -> i32 { 0 }"),
+        )
+        .expect("fixture sources are far below the VFS length gate");
     assert_eq!(&*db.file_text(file_id).unwrap(), "fn main() -> i32 { 0 }");
     // A FileId the VFS never registered content for yields `None`, not a panic.
     let unknown = glyim_span::FileId::from_usize(9_999);
