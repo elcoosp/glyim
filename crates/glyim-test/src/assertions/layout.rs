@@ -10,13 +10,17 @@ pub fn assert_layout(ctx: &TyCtx, ty: Ty, expected_size: u64, expected_align: u6
         .layout_of(ty)
         .unwrap_or_else(|e| panic!("layout computation failed: {e:?}"));
     assert_eq!(
-        layout.size.0, expected_size,
+        layout.size.as_u64(),
+        expected_size,
         "layout size mismatch: expected {}, got {}",
-        expected_size, layout.size.0
+        expected_size,
+        layout.size.as_u64()
     );
     assert_eq!(
-        layout.align.0, expected_align,
+        layout.align.as_u64(),
+        expected_align,
         "layout align mismatch: expected {}, got {}",
-        expected_align, layout.align.0
+        expected_align,
+        layout.align.as_u64()
     );
 }
