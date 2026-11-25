@@ -126,6 +126,11 @@ fixedbitset = "0.5.7"
 toml = "1.2.1"
 sha2 = "0.11.1"
 tempfile = "3.27"
+# M3.10 property tests for foundations (`IndexVec`, interner, `Size/Align`,
+# substitution, unification; spans are covered in glyim-span). One pinned
+# version at the workspace root, so the per-crate dev-dependencies carry no
+# new version surface (the glyim-span comment's "same proptest" contract).
+proptest = "1.12"
 libloading = "0.9"
 
 # Phase 10.3 (report #30): enforce `missing_docs` for the public API. The
