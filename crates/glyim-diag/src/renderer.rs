@@ -42,7 +42,7 @@ pub trait DiagnosticRenderer {
 }
 
 /// The `--error-format=human` renderer: one [`Display`](fmt::Display)
-/// line per diagnostic (`[CODE] message @lo..hi`), matching the
+/// line per diagnostic (`[CODE] message @lo..hi()`), matching the
 /// compiler's human output byte-for-byte.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct HumanDiagnosticRenderer;
@@ -85,9 +85,9 @@ impl DiagnosticRenderer for JsonDiagnosticRenderer {
             let spans: Vec<serde_json::Value> = std::iter::once(&d.span.primary)
                 .chain(d.span.secondary.iter().map(|(s, _)| s))
                 .map(|s| {
-                    let r = s.range();
+                    let r = s.byte_range();
                     serde_json::json!({
-                        "file": s.file.to_raw(),
+                        "file": s.file().to_raw(),
                         "lo": r.start,
                         "hi": r.end,
                     })
