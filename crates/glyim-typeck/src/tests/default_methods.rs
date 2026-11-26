@@ -37,7 +37,7 @@ fn make_return_42_body(owner: LocalDefId) -> Body {
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.clone().len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.clone().len()]),
     }
 }
 
@@ -57,7 +57,7 @@ fn make_return_99_body(owner: LocalDefId) -> Body {
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.clone().len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.clone().len()]),
     }
 }
 
@@ -80,20 +80,20 @@ fn make_body_with_call(owner: LocalDefId, callee_name: Name) -> Body {
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.clone().len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.clone().len()]),
     }
 }
 
 fn build_empty_def_map(krate: CrateId) -> CrateDefMap {
     let mut modules = IndexVec::new();
-    let root = ModuleId::from_raw(0);
+    let root = ModuleId::from_usize(0);
     modules.push(ModuleData {
         parent: None,
         children: Vec::new(),
         scope: ItemScope::default(),
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(0),
+        def_id: LocalDefId::from_usize(0),
         visibility: Visibility::Public,
     });
     CrateDefMap {
@@ -112,8 +112,8 @@ fn make_simple_hir_with_trait_and_impl(override_default: bool) -> (TyCtxMut, Cra
     let trait_name = make_name(&mut interner, "MyTrait");
     let method_name = make_name(&mut interner, "my_method");
 
-    let owner_trait = LocalDefId::from_raw(0);
-    let owner_impl = LocalDefId::from_raw(1);
+    let owner_trait = LocalDefId::from_usize(0);
+    let owner_impl = LocalDefId::from_usize(1);
 
     let default_body = make_return_42_body(owner_trait);
 
@@ -136,7 +136,7 @@ fn make_simple_hir_with_trait_and_impl(override_default: bool) -> (TyCtxMut, Cra
 
     let (impl_body_opt, override_body) = if override_default {
         let body = make_return_99_body(owner_impl);
-        (Some(BodyId::from_raw(1)), Some(body))
+        (Some(BodyId::from_usize(1)), Some(body))
     } else {
         (None, None)
     };
@@ -168,18 +168,18 @@ fn make_simple_hir_with_trait_and_impl(override_default: bool) -> (TyCtxMut, Cra
 
     let mut items = IndexVec::new();
     let trait_item_id = items.push(Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: trait_name,
         kind: ItemKind::Trait(trait_item),
         visibility: Visibility::Inherited,
         span: Span::DUMMY,
     });
     if let ItemKind::Trait(ref mut ti) = items[trait_item_id].kind {
-        ti.methods[0].default_body = Some(BodyId::from_raw(0));
+        ti.methods[0].default_body = Some(BodyId::from_usize(0));
     }
 
     items.push(Item {
-        id: ItemId::from_raw(1),
+        id: ItemId::from_usize(1),
         name: make_name(&mut interner, "MyType"),
         kind: ItemKind::Impl(impl_item),
         visibility: Visibility::Inherited,
@@ -209,7 +209,7 @@ fn make_simple_hir_with_trait_and_impl(override_default: bool) -> (TyCtxMut, Cra
 #[test]
 fn v03_t01_trait_default_method_impl_no_override() {
     let (ctx, hir) = make_simple_hir_with_trait_and_impl(false);
-    let def_map = build_empty_def_map(CrateId::from_raw(0));
+    let def_map = build_empty_def_map(CrateId::from_usize(0));
     let mut solver = MockSolver::new().respond_for_any(SolverResult::Proven);
     let (_frozen_ctx, result) = typeck_crate(ctx, &def_map, &hir, &mut solver);
 
@@ -229,7 +229,7 @@ fn v03_t01_trait_default_method_impl_no_override() {
 #[test]
 fn v03_t02_overridden_default_method() {
     let (ctx, hir) = make_simple_hir_with_trait_and_impl(true);
-    let def_map = build_empty_def_map(CrateId::from_raw(0));
+    let def_map = build_empty_def_map(CrateId::from_usize(0));
     let mut solver = MockSolver::new().respond_for_any(SolverResult::Proven);
     let (_frozen_ctx, result) = typeck_crate(ctx, &def_map, &hir, &mut solver);
 
@@ -250,8 +250,8 @@ fn v03_t03_default_method_calling_another_default_method() {
     let bar_name = make_name(&mut interner, "bar");
     let foo_name = make_name(&mut interner, "foo");
 
-    let owner_trait = LocalDefId::from_raw(0);
-    let _owner_impl = LocalDefId::from_raw(1);
+    let owner_trait = LocalDefId::from_usize(0);
+    let _owner_impl = LocalDefId::from_usize(1);
 
     let bar_body = make_return_42_body(owner_trait);
     let foo_body = make_body_with_call(owner_trait, bar_name);
@@ -322,19 +322,19 @@ fn v03_t03_default_method_calling_another_default_method() {
 
     let mut items = IndexVec::new();
     let trait_item_id = items.push(Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: trait_name,
         kind: ItemKind::Trait(trait_item),
         visibility: Visibility::Inherited,
         span: Span::DUMMY,
     });
     if let ItemKind::Trait(ref mut ti) = items[trait_item_id].kind {
-        ti.methods[0].default_body = Some(BodyId::from_raw(0));
-        ti.methods[1].default_body = Some(BodyId::from_raw(1));
+        ti.methods[0].default_body = Some(BodyId::from_usize(0));
+        ti.methods[1].default_body = Some(BodyId::from_usize(1));
     }
 
     items.push(Item {
-        id: ItemId::from_raw(1),
+        id: ItemId::from_usize(1),
         name: make_name(&mut interner, "MyType"),
         kind: ItemKind::Impl(impl_item),
         visibility: Visibility::Inherited,
@@ -344,7 +344,7 @@ fn v03_t03_default_method_calling_another_default_method() {
     let mut bodies = IndexVec::new();
     bodies.push(bar_body);
     bodies.push(foo_body);
-    let body_owners = IndexVec::from_raw(vec![owner_trait, owner_trait]);
+    let body_owners = IndexVec::from_vec(vec![owner_trait, owner_trait]);
 
     let hir = CrateHir {
         items,
@@ -354,7 +354,7 @@ fn v03_t03_default_method_calling_another_default_method() {
     };
 
     let ctx = TyCtxMut::new(interner);
-    let def_map = build_empty_def_map(CrateId::from_raw(0));
+    let def_map = build_empty_def_map(CrateId::from_usize(0));
     let mut solver = MockSolver::new().respond_for_any(SolverResult::Proven);
     let (_frozen_ctx, result) = typeck_crate(ctx, &def_map, &hir, &mut solver);
 
@@ -378,7 +378,7 @@ fn v03_t04_default_method_with_generic_params() {
     let method_name = make_name(&mut interner, "my_method");
     let t_name = make_name(&mut interner, "T");
 
-    let owner_trait = LocalDefId::from_raw(0);
+    let owner_trait = LocalDefId::from_usize(0);
 
     // Use a unit body to avoid type mismatches
     let mut exprs = IndexVec::new();
@@ -391,7 +391,7 @@ fn v03_t04_default_method_with_generic_params() {
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.len()]),
     };
 
     let generic_params = vec![GenericParam {
@@ -450,18 +450,18 @@ fn v03_t04_default_method_with_generic_params() {
 
     let mut items = IndexVec::new();
     let trait_item_id = items.push(Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: trait_name,
         kind: ItemKind::Trait(trait_item),
         visibility: Visibility::Inherited,
         span: Span::DUMMY,
     });
     if let ItemKind::Trait(ref mut ti) = items[trait_item_id].kind {
-        ti.methods[0].default_body = Some(BodyId::from_raw(0));
+        ti.methods[0].default_body = Some(BodyId::from_usize(0));
     }
 
     items.push(Item {
-        id: ItemId::from_raw(1),
+        id: ItemId::from_usize(1),
         name: make_name(&mut interner, "MyType"),
         kind: ItemKind::Impl(impl_item),
         visibility: Visibility::Inherited,
@@ -470,7 +470,7 @@ fn v03_t04_default_method_with_generic_params() {
 
     let mut bodies = IndexVec::new();
     bodies.push(default_body);
-    let body_owners = IndexVec::from_raw(vec![owner_trait]);
+    let body_owners = IndexVec::from_vec(vec![owner_trait]);
 
     let hir = CrateHir {
         items,
@@ -485,20 +485,20 @@ fn v03_t04_default_method_with_generic_params() {
     let mut scope = glyim_def_map::ItemScope::default();
     scope.types.insert(
         make_name(&mut interner, "MyType"),
-        (LocalDefId::from_raw(0), Visibility::Public, Span::DUMMY),
+        (LocalDefId::from_usize(0), Visibility::Public, Span::DUMMY),
     );
     scope.types.insert(
         make_name(&mut interner, "MyTrait"),
-        (LocalDefId::from_raw(1), Visibility::Public, Span::DUMMY),
+        (LocalDefId::from_usize(1), Visibility::Public, Span::DUMMY),
     );
-    let root_id = glyim_def_map::ModuleId::from_raw(0);
+    let root_id = glyim_def_map::ModuleId::from_usize(0);
     let root_data = glyim_def_map::ModuleData {
         parent: None,
         children: vec![],
         scope,
         origin: glyim_def_map::ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(0),
+        def_id: LocalDefId::from_usize(0),
         visibility: Visibility::Public,
     };
     let mut modules = IndexVec::new();
@@ -506,7 +506,7 @@ fn v03_t04_default_method_with_generic_params() {
     let def_map = glyim_def_map::CrateDefMap {
         root: root_id,
         modules,
-        krate: CrateId::from_raw(0),
+        krate: CrateId::from_usize(0),
         interner: interner.clone(),
         variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
@@ -568,14 +568,14 @@ fn v03_t05_default_method_calls_missing_method_error() {
 
     let mut items = IndexVec::new();
     items.push(Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: trait_name,
         kind: ItemKind::Trait(trait_item),
         visibility: Visibility::Inherited,
         span: Span::DUMMY,
     });
     items.push(Item {
-        id: ItemId::from_raw(1),
+        id: ItemId::from_usize(1),
         name: make_name(&mut interner, "MyType"),
         kind: ItemKind::Impl(impl_item),
         visibility: Visibility::Inherited,
@@ -590,7 +590,7 @@ fn v03_t05_default_method_calls_missing_method_error() {
     };
 
     let ctx = TyCtxMut::new(interner);
-    let def_map = build_empty_def_map(CrateId::from_raw(0));
+    let def_map = build_empty_def_map(CrateId::from_usize(0));
     let mut solver = MockSolver::new().respond_for_any(SolverResult::Proven);
     let (_frozen_ctx, result) = typeck_crate(ctx, &def_map, &hir, &mut solver);
 
@@ -622,7 +622,7 @@ fn v03_t06_ambiguous_method_in_multiple_impls() {
     // Two inherent impls of `i32`, each providing `amb`. Using a primitive
     // self type guarantees both impls resolve and unify with the receiver.
     let mk_impl = |owner: LocalDefId| Item {
-        id: ItemId::from_raw(owner.to_raw()),
+        id: ItemId::from_usize(owner.index()),
         name: mytype_name,
         kind: ItemKind::Impl(ImplItem {
             trait_ref: None,
@@ -645,8 +645,8 @@ fn v03_t06_ambiguous_method_in_multiple_impls() {
     };
 
     let mut items = IndexVec::new();
-    items.push(mk_impl(LocalDefId::from_raw(1)));
-    items.push(mk_impl(LocalDefId::from_raw(2)));
+    items.push(mk_impl(LocalDefId::from_usize(1)));
+    items.push(mk_impl(LocalDefId::from_usize(2)));
 
     // fn main(x: MyType) { x.amb(); }
     let mut pats: IndexVec<PatId, Pat> = IndexVec::new();
@@ -669,21 +669,21 @@ fn v03_t06_ambiguous_method_in_multiple_impls() {
 
     let main_body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pats,
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![x_pat],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.len()]),
     };
     let mut bodies = IndexVec::new();
     let main_body_id = bodies.push(main_body);
     let mut body_owners = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
 
     items.push(Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: make_name(&mut interner, "main"),
         kind: ItemKind::Fn(FnItem {
             params: vec![glyim_hir::Param {
@@ -713,7 +713,7 @@ fn v03_t06_ambiguous_method_in_multiple_impls() {
     };
 
     let ctx = TyCtxMut::new(interner);
-    let def_map = build_empty_def_map(CrateId::from_raw(0));
+    let def_map = build_empty_def_map(CrateId::from_usize(0));
     let mut solver = MockSolver::new().respond_for_any(SolverResult::Proven);
     let (_frozen_ctx, result) = typeck_crate(ctx, &def_map, &hir, &mut solver);
 
