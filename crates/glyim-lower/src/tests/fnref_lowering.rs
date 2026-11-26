@@ -13,7 +13,7 @@ use glyim_typeck::thir::{self, ExprKind};
 fn fn_ref_lowers_to_constant_fn() {
     let mut ctx_mut = test_ty_ctx();
     let _i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
-    let fn_def_id = FnDefId::from_raw(7);
+    let fn_def_id = FnDefId::from_usize(7);
     let empty_subst = ctx_mut.intern_substitution(vec![]);
     let fn_ty = ctx_mut.mk_ty(TyKind::FnDef(fn_def_id, empty_subst));
     let interner = ctx_mut.resolver().clone();
