@@ -537,6 +537,7 @@ fn execute_inner(
             &output.diagnostics,
             &test.source,
             &test.config.error_patterns,
+            &test.config.error_codes,
         ),
         super::config::TestMode::Ui => {
             strategy::UiTestStrategy.evaluate(&output, &test.source, &test.path, bless)
