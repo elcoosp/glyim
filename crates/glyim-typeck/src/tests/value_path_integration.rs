@@ -16,7 +16,7 @@ use glyim_span::Span;
 use glyim_type::{FnSig, Substitution, Ty, TyCtxMut, TyKind};
 
 fn owner_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 fn intern(s: &str) -> Name {
@@ -37,7 +37,7 @@ fn def_map_with_module_fn() -> CrateDefMap {
         scope: ItemScope::default(),
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(0),
+        def_id: LocalDefId::from_usize(0),
         visibility: Visibility::Public,
     });
     // math module (ModuleId 1)
@@ -47,13 +47,13 @@ fn def_map_with_module_fn() -> CrateDefMap {
         scope: ItemScope::default(),
         origin: ModuleOrigin::Inline { span: Span::DUMMY },
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(1),
+        def_id: LocalDefId::from_usize(1),
         visibility: Visibility::Public,
     });
     // root.child[math] = math_mod
     modules[root].children.push((math_name, math_mod));
     // math declares `square` as a value (FnDef).
-    let square_def = LocalDefId::from_raw(2);
+    let square_def = LocalDefId::from_usize(2);
     modules[math_mod].scope.declare(
         square_name,
         square_def,
@@ -65,7 +65,7 @@ fn def_map_with_module_fn() -> CrateDefMap {
     CrateDefMap {
         root,
         modules,
-        krate: CrateId::from_raw(0),
+        krate: CrateId::from_usize(0),
         interner: global_interner(),
         variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
@@ -78,7 +78,7 @@ fn i32_ty(ctx: &mut TyCtxMut) -> Ty {
 }
 
 fn register_square(ctx: &mut TyCtxMut) -> FnDefId {
-    let square = FnDefId::from_raw(2);
+    let square = FnDefId::from_usize(2);
     let sig = FnSig {
         inputs: Substitution::empty(),
         output: i32_ty(ctx),
@@ -162,7 +162,7 @@ fn multi_segment_function_call_yields_registered_return_type() {
     let (hir, body_id) = make_single_body_hir(vec![
         Expr::Path(path),
         Expr::Call {
-            func: ExprId::from_raw(0),
+            func: ExprId::from_usize(0),
             args: vec![],
         },
     ]);
