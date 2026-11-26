@@ -72,7 +72,7 @@ fn build_async_hir(n_awaits: usize) -> CrateHir {
 
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
         pat_spans: IndexVec::new(),
@@ -86,7 +86,7 @@ fn build_async_hir(n_awaits: usize) -> CrateHir {
             s
         },
     };
-    let body_id = BodyId::from_raw(0);
+    let body_id = BodyId::from_usize(0);
 
     let params = vec![
         Param {
@@ -113,7 +113,7 @@ fn build_async_hir(n_awaits: usize) -> CrateHir {
         attrs: Vec::new(),
     };
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: two_name,
         kind: ItemKind::Fn(fn_item),
         visibility: Visibility::Inherited,
@@ -125,7 +125,7 @@ fn build_async_hir(n_awaits: usize) -> CrateHir {
     let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
     bodies.push(body);
     let mut body_owners: IndexVec<BodyId, LocalDefId> = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
 
     CrateHir {
         items,
@@ -295,7 +295,7 @@ fn build_async_hir_while_loop_await() -> CrateHir {
 
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pat_spans: {
             // T053-PATCHED [LSP-4]: tests build `pats` manually and don't
@@ -317,7 +317,7 @@ fn build_async_hir_while_loop_await() -> CrateHir {
             s
         },
     };
-    let body_id = BodyId::from_raw(0);
+    let body_id = BodyId::from_usize(0);
 
     let params = vec![Param {
         name: n_name,
@@ -337,7 +337,7 @@ fn build_async_hir_while_loop_await() -> CrateHir {
         attrs: Vec::new(),
     };
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: fn_name,
         kind: ItemKind::Fn(fn_item),
         visibility: Visibility::Inherited,
@@ -349,7 +349,7 @@ fn build_async_hir_while_loop_await() -> CrateHir {
     let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
     bodies.push(body);
     let mut body_owners: IndexVec<BodyId, LocalDefId> = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
 
     CrateHir {
         items,
@@ -516,7 +516,7 @@ fn build_async_hir_for_loop_await(shape: ForLoopAwaitShape) -> CrateHir {
 
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pat_spans: {
             let mut s = IndexVec::new();
@@ -536,7 +536,7 @@ fn build_async_hir_for_loop_await(shape: ForLoopAwaitShape) -> CrateHir {
             s
         },
     };
-    let body_id = BodyId::from_raw(0);
+    let body_id = BodyId::from_usize(0);
 
     let params = vec![Param {
         name: n_name,
@@ -556,7 +556,7 @@ fn build_async_hir_for_loop_await(shape: ForLoopAwaitShape) -> CrateHir {
         attrs: Vec::new(),
     };
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: fn_name,
         kind: ItemKind::Fn(fn_item),
         visibility: Visibility::Inherited,
@@ -568,7 +568,7 @@ fn build_async_hir_for_loop_await(shape: ForLoopAwaitShape) -> CrateHir {
     let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
     bodies.push(body);
     let mut body_owners: IndexVec<BodyId, LocalDefId> = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
 
     CrateHir {
         items,
@@ -799,7 +799,7 @@ fn build_async_hir_loop_await() -> CrateHir {
 
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pat_spans: {
             // T053-PATCHED [LSP-4]: tests build `pats` manually and don't
@@ -821,7 +821,7 @@ fn build_async_hir_loop_await() -> CrateHir {
             s
         },
     };
-    let body_id = BodyId::from_raw(0);
+    let body_id = BodyId::from_usize(0);
 
     let params = vec![Param {
         name: n_name,
@@ -841,7 +841,7 @@ fn build_async_hir_loop_await() -> CrateHir {
         attrs: Vec::new(),
     };
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: fn_name,
         kind: ItemKind::Fn(fn_item),
         visibility: Visibility::Inherited,
@@ -853,7 +853,7 @@ fn build_async_hir_loop_await() -> CrateHir {
     let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
     bodies.push(body);
     let mut body_owners: IndexVec<BodyId, LocalDefId> = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
 
     CrateHir {
         items,
