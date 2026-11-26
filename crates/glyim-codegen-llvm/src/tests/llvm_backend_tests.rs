@@ -61,8 +61,8 @@ fn s08_t05_multiple_generate_calls_reuse_context() {
 fn s08_t06_generate_function_with_body() {
     let backend = LlvmBackend::new();
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     )));
     let result = backend.generate_function(&body);
     assert!(result.is_ok(), "generate_function should succeed");
@@ -98,8 +98,8 @@ fn s08_t09_generate_with_single_body() {
     let backend = LlvmBackend::new();
     let output = tpath("glyim_test_single.o");
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     )));
     let bodies = vec![body];
     let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
@@ -115,8 +115,8 @@ fn s08_t10_generate_with_multiple_bodies() {
     let mut bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
     for i in 0..5 {
         let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(i),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(i),
         )));
         bodies.push(body);
     }
@@ -135,8 +135,8 @@ fn s08_t11_stress_many_bodies() {
     let mut bodies: Vec<std::sync::Arc<glyim_mir::Body>> = vec![];
     for i in 0..100 {
         let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(i),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(i),
         )));
         bodies.push(body);
     }
@@ -151,8 +151,8 @@ fn s08_t11_stress_many_bodies() {
 fn s08_t12_generate_function_multiple_calls() {
     let backend = LlvmBackend::new();
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     )));
     // Multiple generate_function calls should work (reuse context)
     let r1 = backend.generate_function(&body);
@@ -167,8 +167,8 @@ fn s08_t12_generate_function_multiple_calls() {
 fn s08_t13_empty_generate_function_returns_empty() {
     let backend = LlvmBackend::new();
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     )));
     let result = backend.generate_function(&body);
     assert!(result.is_ok());
@@ -201,12 +201,12 @@ fn s08_t14_different_output_paths() {
 fn s08_t15_generate_function_different_owners() {
     let backend = LlvmBackend::new();
     let body1 = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(1),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(1),
     )));
     let body2 = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(2),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(2),
     )));
     let r1 = backend.generate_function(&body1);
     let r2 = backend.generate_function(&body2);
@@ -235,8 +235,8 @@ fn s08_t16_generate_with_invalid_triple() {
 fn s08_t17_generate_function_then_generate() {
     let backend = LlvmBackend::new();
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(42),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(42),
     )));
     // First call generate_function
     let r1 = backend.generate_function(&body);
@@ -286,8 +286,8 @@ fn s08_t19_generate_function_returns_elf_magic_for_linux() {
     // On x86_64-unknown-linux-gnu, generated object should be ELF.
     let backend = LlvmBackend::new(); // default is x86_64-unknown-linux-gnu
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(7),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(7),
     )));
     let result = backend.generate_function(&body);
     assert!(result.is_ok());
@@ -306,8 +306,8 @@ fn s08_t20_default_target_triple_is_linux() {
     // We cannot directly access target_triple field, but generate_function
     // will succeed with ELF output (tested above). We just rely on it not crashing.
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     )));
     let _ = backend.generate_function(&body);
     // If no panic, test passes.
@@ -332,12 +332,12 @@ fn s08_t27_generate_with_directory_path_errors() {
 fn s08_t28_different_owners_produce_different_output() {
     let backend = LlvmBackend::new();
     let body_a = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(1),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(1),
     )));
     let body_b = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(2),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(2),
     )));
     let bytes_a = backend.generate_function(&body_a).expect("should succeed");
     let bytes_b = backend.generate_function(&body_b).expect("should succeed");
@@ -361,8 +361,8 @@ fn s08_t29_name_after_with_target() {
 fn s08_t30_generate_function_returns_vec_u8() {
     let backend = LlvmBackend::new();
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(3),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(3),
     )));
     let bytes = backend.generate_function(&body).expect("should succeed");
     // bytes must be a valid Vec<u8> (not empty, not a slice pointing to invalid memory)
@@ -376,8 +376,8 @@ fn s08_t31_multiple_backends_independent() {
     let b1 = LlvmBackend::new();
     let b2 = LlvmBackend::new();
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(10),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(10),
     )));
     let r1 = b1.generate_function(&body);
     let r2 = b2.generate_function(&body);
@@ -396,8 +396,8 @@ fn s08_t32_wasm_triple_produces_wasm_object() {
     let backend = LlvmBackend::default().with_target("wasm32-unknown-unknown");
     let output = tpath("glyim_test_wasm.o");
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(200),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(200),
     )));
     let bodies = vec![body];
     let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
@@ -422,8 +422,8 @@ fn s08_t32_wasm_triple_produces_wasm_object() {
 fn s08_t33_generate_function_body_not_mutated() {
     // Ensure that calling generate_function does not alter the Arc<Body> itself.
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(300),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(300),
     )));
     let original_owner = body.owner;
     let backend = LlvmBackend::new();
@@ -443,8 +443,8 @@ fn s08_t34_codegen_backend_trait_object_safe() {
     assert_eq!(backend.name(), "llvm");
     // generate_function should also be callable
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(400),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(400),
     )));
     let result = backend.generate_function(&body);
     assert!(
