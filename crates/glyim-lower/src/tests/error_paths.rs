@@ -70,7 +70,7 @@ fn fn_ref_does_not_panic() {
     let mock = TestLowerCtx::new(&ctx);
 
     let b = ThirBuilder::new(fn_ty, interner);
-    let fn_ref = b.expr(ExprKind::FnRef(FnDefId::from_raw(0)), fn_ty);
+    let fn_ref = b.expr(ExprKind::FnRef(FnDefId::from_usize(0)), fn_ty);
     let body = b.into_body(vec![thir::Stmt::Expr { expr: fn_ref }], vec![]);
     let result = lower_body(&mock, &body);
     let _ = assert_mir(&ctx, &result.body).block_count(1);
