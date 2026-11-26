@@ -11,11 +11,11 @@ fn occurs_check_cycle() {
     let _infer = InferenceTable::new();
 
     let a_name = ctx.resolver().intern("A");
-    let trait_id = TraitDefId::from_raw(0);
+    let trait_id = TraitDefId::from_usize(0);
 
     // Create a projection that references itself (cycle)
     // Not a realistic case, but tests that occurs check catches self-reference.
-    let self_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_raw(0))));
+    let self_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_usize(0))));
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(self_ty)]);
     let trait_ref = TraitRef {
         def_id: trait_id,
@@ -38,7 +38,7 @@ fn occurs_check_projection_no_cycle() {
     let mut infer = InferenceTable::new();
 
     let item_name = ctx.resolver().intern("Item");
-    let trait_id = TraitDefId::from_raw(0);
+    let trait_id = TraitDefId::from_usize(0);
     let int_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(int_ty)]);
     let trait_ref = TraitRef {
@@ -71,7 +71,7 @@ fn unify_identical_projections() {
     let mut infer = InferenceTable::new();
 
     let item_name = ctx.resolver().intern("Item");
-    let trait_id = TraitDefId::from_raw(42);
+    let trait_id = TraitDefId::from_usize(42);
     let self_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(self_ty)]);
     let trait_ref = TraitRef {
@@ -99,7 +99,7 @@ fn unify_projections_different_names_fails() {
 
     let name_a = ctx.resolver().intern("Item");
     let name_b = ctx.resolver().intern("Other");
-    let trait_id = TraitDefId::from_raw(0);
+    let trait_id = TraitDefId::from_usize(0);
     let self_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(self_ty)]);
     let tr1 = TraitRef {
@@ -133,7 +133,7 @@ fn unify_projection_with_ty_var() {
     let mut infer = InferenceTable::new();
 
     let item_name = ctx.resolver().intern("Item");
-    let trait_id = TraitDefId::from_raw(0);
+    let trait_id = TraitDefId::from_usize(0);
     let self_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(self_ty)]);
     let trait_ref = TraitRef {
