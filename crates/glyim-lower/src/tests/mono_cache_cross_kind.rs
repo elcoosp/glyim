@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 fn dummy_body() -> Arc<Body> {
     Arc::new(Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(0),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
     )))
 }
 
@@ -25,19 +25,19 @@ fn fn_and_const_same_raw_different_subst_len() {
 
     let items = vec![
         MonoItem::Fn {
-            def_id: FnDefId::from_raw(1),
+            def_id: FnDefId::from_usize(1),
             substs: empty_subst,
         },
         MonoItem::Fn {
-            def_id: FnDefId::from_raw(1),
+            def_id: FnDefId::from_usize(1),
             substs: one_arg,
         },
         MonoItem::Const {
-            def_id: ConstDefId::from_raw(1),
+            def_id: ConstDefId::from_usize(1),
             substs: ty_ctx.intern_substitution(Vec::new()),
         },
         MonoItem::Const {
-            def_id: ConstDefId::from_raw(1),
+            def_id: ConstDefId::from_usize(1),
             substs: ty_ctx.intern_substitution(vec![GenericArg::Ty(ty_ctx.bool_ty())]),
         },
     ];
@@ -70,7 +70,7 @@ fn int_vs_uint_substitution() {
         "i32 and u32 substitutions should differ"
     );
 
-    let fn_id = FnDefId::from_raw(1);
+    let fn_id = FnDefId::from_usize(1);
     let item_i32 = MonoItem::Fn {
         def_id: fn_id,
         substs: subst_i32,
@@ -98,7 +98,7 @@ fn int_vs_uint_substitution() {
 fn static_dedup_across_collects() {
     let mut ctx = MonoCtx::new();
     let item = MonoItem::Static {
-        def_id: StaticDefId::from_raw(1),
+        def_id: StaticDefId::from_usize(1),
     };
 
     ctx.collect(
@@ -136,7 +136,7 @@ fn items_in_collection_order() {
 
     let items: Vec<MonoItem> = (1..=5)
         .map(|i| MonoItem::Fn {
-            def_id: FnDefId::from_raw(i),
+            def_id: FnDefId::from_usize(i),
             substs: empty_subst,
         })
         .collect();
@@ -172,7 +172,7 @@ fn const_different_substs() {
     let subst_a = ty_ctx.intern_substitution(vec![GenericArg::Ty(ty_ctx.bool_ty())]);
     let subst_b = ty_ctx.intern_substitution(vec![GenericArg::Ty(ty_ctx.unit_ty())]);
 
-    let const_id = ConstDefId::from_raw(1);
+    let const_id = ConstDefId::from_usize(1);
     let item_a = MonoItem::Const {
         def_id: const_id,
         substs: subst_a,
@@ -204,11 +204,11 @@ fn interleaved_collect_no_readd() {
     let mut ctx = MonoCtx::new();
 
     let item_a = MonoItem::Fn {
-        def_id: FnDefId::from_raw(1),
+        def_id: FnDefId::from_usize(1),
         substs: empty_subst,
     };
     let item_b = MonoItem::Fn {
-        def_id: FnDefId::from_raw(2),
+        def_id: FnDefId::from_usize(2),
         substs: empty_subst,
     };
 
@@ -241,7 +241,7 @@ fn multiple_statics() {
 
     let items: Vec<MonoItem> = (0..10)
         .map(|i| MonoItem::Static {
-            def_id: StaticDefId::from_raw(i),
+            def_id: StaticDefId::from_usize(i),
         })
         .collect();
 
