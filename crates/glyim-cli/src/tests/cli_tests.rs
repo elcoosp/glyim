@@ -29,6 +29,7 @@ fn test_compile_valid_file() {
         time_passes: false,
         self_profile: None,
         explain_rebuild: false,
+        opt_bisect_limit: None,
     };
     let result = run_with_args(args);
     assert!(
@@ -63,6 +64,7 @@ fn test_compile_invalid_file() {
         time_passes: false,
         self_profile: None,
         explain_rebuild: false,
+        opt_bisect_limit: None,
     };
     let result = run_with_args(args);
     assert!(result.is_err(), "Expected compilation to fail");
@@ -140,6 +142,7 @@ fn test_emit_asm_produces_assembly_file() {
         time_passes: false,
         self_profile: None,
         explain_rebuild: false,
+        opt_bisect_limit: None,
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "asm emit should succeed, got: {result:?}");
@@ -191,6 +194,7 @@ fn test_lto_fat_compiles_to_object() {
         time_passes: false,
         self_profile: None,
         explain_rebuild: false,
+        opt_bisect_limit: None,
     };
     let result = run_with_args(args);
     assert!(
@@ -242,6 +246,7 @@ fn test_lto_thin_is_no_longer_a_tracked_gap() {
         time_passes: false,
         self_profile: None,
         explain_rebuild: false,
+        opt_bisect_limit: None,
     };
     let result = run_with_args(args);
     // Two acceptable outcomes: success when llvm-lto2 is present, or a
@@ -300,6 +305,7 @@ fn test_emit_cdylib_produces_shared_library() {
         time_passes: false,
         self_profile: None,
         explain_rebuild: false,
+        opt_bisect_limit: None,
     };
     let result = run_with_args(args);
     assert!(
@@ -336,6 +342,7 @@ fn test_lto_invalid_value_rejected() {
         time_passes: false,
         self_profile: None,
         explain_rebuild: false,
+        opt_bisect_limit: None,
     };
     let result = run_with_args(args);
     assert!(result.is_err(), "invalid --lto value must be rejected");
@@ -380,6 +387,7 @@ fn exec_emit_links_and_runs() {
         time_passes: false,
         self_profile: None,
         explain_rebuild: false,
+        opt_bisect_limit: None,
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "glyim-cli --emit=exec failed: {result:?}");
@@ -469,6 +477,7 @@ fn test_emit_stats_writes_report() {
         time_passes: false,
         self_profile: None,
         explain_rebuild: false,
+        opt_bisect_limit: None,
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "--emit=stats failed: {result:?}");
@@ -525,6 +534,7 @@ fn test_self_profile_writes_trace_file() {
         time_passes: true,
         self_profile: Some(trace_path.clone()),
         explain_rebuild: false,
+        opt_bisect_limit: None,
     };
     let result = run_with_args(args);
     assert!(result.is_ok(), "profiled compile failed: {result:?}");
@@ -563,6 +573,7 @@ fn run_args(src_path: &std::path::Path, backend: &str, with_stdlib: bool) -> Cli
         time_passes: false,
         self_profile: None,
         explain_rebuild: false,
+        opt_bisect_limit: None,
     }
 }
 
@@ -621,6 +632,34 @@ fn test_emit_run_panicking_program_exits_101() {
         "a panicking program is a successful driver run: {result:?}"
     );
     assert_eq!(result.unwrap(), 101, "panics exit 101 like the native path");
+}
+
+/// M5.11: `--opt-bisect-limit` threads from the CLI through the pipeline
+/// into `optimize_with_bisect` and is behaviour-preserving on a valid
+/// program — the bisected `--emit=run` produces the same (masked) exit code
+/// as the un-bisected one, because the passes the limit skips
+/// (`constant_prop`, `dce`, …) are semantics-preserving.
+#[test]
+fn test_emit_run_opt_bisect_limit_preserves_program_behavior() {
+    let src = "fn main() -> i32 {\n    let dead: i32 = 40 + 2;\n    3\n}\n";
+    let mut tmp = NamedTempFile::new().unwrap();
+    write!(tmp, "{src}").unwrap();
+    let path = tmp.into_temp_path();
+
+    let mut full = run_args(&path, "llvm", false);
+    full.opt_level = 2;
+    let full_code = run_with_args(full).expect("un-bisected run must succeed");
+
+    let mut bisected = run_args(&path, "llvm", false);
+    bisected.opt_level = 2;
+    bisected.opt_bisect_limit = Some(2);
+    let bisected_code =
+        run_with_args(bisected).expect("bisected run (--opt-bisect-limit=2) must succeed");
+
+    assert_eq!(
+        full_code, bisected_code,
+        "the bisect limit must not change a valid program's behaviour"
+    );
 }
 
 /// M2.4: a compile error in run mode is a driver failure (diagnostics
