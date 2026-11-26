@@ -60,14 +60,14 @@ fn local_decl_mut(ty: Ty) -> LocalDecl {
 }
 
 fn make_body(statements: Vec<Statement>, locals: Vec<LocalDecl>) -> Body {
-    let def_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let def_id = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut body = Body::dummy(def_id);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData::new(Terminator {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData::new(Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(Span::DUMMY),
     })]);
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].statements = statements;
-    body.locals = IndexVec::from_raw(locals);
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].statements = statements;
+    body.locals = IndexVec::from_vec(locals);
     body
 }
 
@@ -75,7 +75,9 @@ fn make_body(statements: Vec<Statement>, locals: Vec<LocalDecl>) -> Body {
 fn field_place(local: LocalIdx, field_idx: u32) -> Place {
     Place {
         local,
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(field_idx))]),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(
+            field_idx as usize,
+        ))]),
     }
 }
 
@@ -157,8 +159,8 @@ fn v10_t01_move_whole_struct_then_field_access_error() {
 
         make_body(
             vec![
-                assign_move(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
-                use_field(LocalIdx::from_raw(3), LocalIdx::from_raw(1), 0),
+                assign_move(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
+                use_field(LocalIdx::from_usize(3), LocalIdx::from_usize(1), 0),
             ],
             locals,
         )
@@ -209,8 +211,8 @@ fn v10_t02_partial_move_one_field_other_usable() {
 
         make_body(
             vec![
-                assign_move_field(LocalIdx::from_raw(2), LocalIdx::from_raw(1), 0),
-                use_field(LocalIdx::from_raw(3), LocalIdx::from_raw(1), 1),
+                assign_move_field(LocalIdx::from_usize(2), LocalIdx::from_usize(1), 0),
+                use_field(LocalIdx::from_usize(3), LocalIdx::from_usize(1), 1),
             ],
             locals,
         )
@@ -247,14 +249,14 @@ fn v10_t03_move_of_copy_type_not_a_move() {
 
         make_body(
             vec![
-                assign_move(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
+                assign_move(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
             ],
             locals,
         )
     });
 
-    let i32_ty = body.locals[LocalIdx::from_raw(1)].ty;
+    let i32_ty = body.locals[LocalIdx::from_usize(1)].ty;
     let mock = MoveMockCtx {
         ty_ctx: ctx,
         body,
@@ -289,7 +291,7 @@ fn v10_t04_move_out_of_array_element_error() {
         };
         let array_ty = ctx_mut.mk_ty(glyim_type::TyKind::Array(tuple_ty, const_val));
 
-        let index_local = LocalIdx::from_raw(3);
+        let index_local = LocalIdx::from_usize(3);
         let locals = vec![
             local_decl(ctx_mut.unit_ty()), // 0: return
             local_decl_mut(array_ty),      // 1: the array
@@ -304,15 +306,15 @@ fn v10_t04_move_out_of_array_element_error() {
             vec![
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(2)),
+                        Place::new(LocalIdx::from_usize(2)),
                         Rvalue::Use(Operand::Move(Place {
-                            local: LocalIdx::from_raw(1),
+                            local: LocalIdx::from_usize(1),
                             projection: Box::new([ProjectionElem::Index(index_local)]),
                         })),
                     ),
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
-                use_field(LocalIdx::from_raw(4), LocalIdx::from_raw(1), 0),
+                use_field(LocalIdx::from_usize(4), LocalIdx::from_usize(1), 0),
             ],
             locals,
         )
@@ -354,15 +356,15 @@ fn v10_t05_move_field_then_reassign_allowed() {
 
         make_body(
             vec![
-                assign_move_field(LocalIdx::from_raw(2), LocalIdx::from_raw(1), 0),
+                assign_move_field(LocalIdx::from_usize(2), LocalIdx::from_usize(1), 0),
                 Statement {
                     kind: StatementKind::Assign(
-                        field_place(LocalIdx::from_raw(1), 0),
-                        Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(4)))),
+                        field_place(LocalIdx::from_usize(1), 0),
+                        Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(4)))),
                     ),
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
-                use_field(LocalIdx::from_raw(3), LocalIdx::from_raw(1), 0),
+                use_field(LocalIdx::from_usize(3), LocalIdx::from_usize(1), 0),
             ],
             locals,
         )
@@ -404,8 +406,8 @@ fn v10_extra_whole_struct_move_then_use_whole() {
 
         make_body(
             vec![
-                assign_move(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
-                assign_move(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
+                assign_move(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
+                assign_move(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
             ],
             locals,
         )
@@ -446,8 +448,8 @@ fn v10_extra_partial_move_then_use_whole_struct_error() {
 
         make_body(
             vec![
-                assign_move_field(LocalIdx::from_raw(2), LocalIdx::from_raw(1), 0),
-                assign_move(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
+                assign_move_field(LocalIdx::from_usize(2), LocalIdx::from_usize(1), 0),
+                assign_move(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
             ],
             locals,
         )
@@ -488,8 +490,8 @@ fn v10_extra_no_move_use_field_no_error() {
 
         make_body(
             vec![
-                use_field(LocalIdx::from_raw(2), LocalIdx::from_raw(1), 0),
-                use_field(LocalIdx::from_raw(3), LocalIdx::from_raw(1), 1),
+                use_field(LocalIdx::from_usize(2), LocalIdx::from_usize(1), 0),
+                use_field(LocalIdx::from_usize(3), LocalIdx::from_usize(1), 1),
             ],
             locals,
         )
@@ -532,15 +534,15 @@ fn v10_extra_reassign_whole_after_partial_move_then_use() {
 
         make_body(
             vec![
-                assign_move_field(LocalIdx::from_raw(2), LocalIdx::from_raw(1), 0),
+                assign_move_field(LocalIdx::from_usize(2), LocalIdx::from_usize(1), 0),
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(1)),
-                        Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(4)))),
+                        Place::new(LocalIdx::from_usize(1)),
+                        Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(4)))),
                     ),
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
-                use_field(LocalIdx::from_raw(3), LocalIdx::from_raw(1), 0),
+                use_field(LocalIdx::from_usize(3), LocalIdx::from_usize(1), 0),
             ],
             locals,
         )
@@ -580,24 +582,34 @@ fn v10_t06_cross_block_move_then_use_error() {
             local_decl(i32_ty),            // 3: use sink for field
         ];
 
-        let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-        body.locals = IndexVec::from_raw(locals);
+        let mut body = Body::dummy(DefId::new(
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(0),
+        ));
+        body.locals = IndexVec::from_vec(locals);
 
         let mut bb0 = BasicBlockData::new(Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(1),
+                target: BasicBlockIdx::from_usize(1),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         });
-        bb0.statements = vec![assign_move(LocalIdx::from_raw(2), LocalIdx::from_raw(1))];
+        bb0.statements = vec![assign_move(
+            LocalIdx::from_usize(2),
+            LocalIdx::from_usize(1),
+        )];
 
         let mut bb1 = BasicBlockData::new(Terminator {
             kind: TerminatorKind::Return,
             source_info: SourceInfo::new(Span::DUMMY),
         });
-        bb1.statements = vec![use_field(LocalIdx::from_raw(3), LocalIdx::from_raw(1), 0)];
+        bb1.statements = vec![use_field(
+            LocalIdx::from_usize(3),
+            LocalIdx::from_usize(1),
+            0,
+        )];
 
-        body.basic_blocks = IndexVec::from_raw(vec![bb0, bb1]);
+        body.basic_blocks = IndexVec::from_vec(vec![bb0, bb1]);
         body
     });
 
@@ -633,23 +645,29 @@ fn v10_t07_cross_block_move_no_use_no_error() {
             local_decl_mut(tuple_ty),      // 2: move dest
         ];
 
-        let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-        body.locals = IndexVec::from_raw(locals);
+        let mut body = Body::dummy(DefId::new(
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(0),
+        ));
+        body.locals = IndexVec::from_vec(locals);
 
         let mut bb0 = BasicBlockData::new(Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(1),
+                target: BasicBlockIdx::from_usize(1),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         });
-        bb0.statements = vec![assign_move(LocalIdx::from_raw(2), LocalIdx::from_raw(1))];
+        bb0.statements = vec![assign_move(
+            LocalIdx::from_usize(2),
+            LocalIdx::from_usize(1),
+        )];
 
         let bb1 = BasicBlockData::new(Terminator {
             kind: TerminatorKind::Return,
             source_info: SourceInfo::new(Span::DUMMY),
         });
 
-        body.basic_blocks = IndexVec::from_raw(vec![bb0, bb1]);
+        body.basic_blocks = IndexVec::from_vec(vec![bb0, bb1]);
         body
     });
 
@@ -689,8 +707,8 @@ fn v10_t08_multiple_partial_moves_different_fields() {
 
         make_body(
             vec![
-                assign_move_field(LocalIdx::from_raw(2), LocalIdx::from_raw(1), 0),
-                assign_move_field(LocalIdx::from_raw(3), LocalIdx::from_raw(1), 1),
+                assign_move_field(LocalIdx::from_usize(2), LocalIdx::from_usize(1), 0),
+                assign_move_field(LocalIdx::from_usize(3), LocalIdx::from_usize(1), 1),
             ],
             locals,
         )
@@ -733,9 +751,9 @@ fn v10_t09_multiple_partial_moves_then_use_whole_error() {
 
         make_body(
             vec![
-                assign_move_field(LocalIdx::from_raw(2), LocalIdx::from_raw(1), 0),
-                assign_move_field(LocalIdx::from_raw(3), LocalIdx::from_raw(1), 1),
-                assign_move(LocalIdx::from_raw(4), LocalIdx::from_raw(1)),
+                assign_move_field(LocalIdx::from_usize(2), LocalIdx::from_usize(1), 0),
+                assign_move_field(LocalIdx::from_usize(3), LocalIdx::from_usize(1), 1),
+                assign_move(LocalIdx::from_usize(4), LocalIdx::from_usize(1)),
             ],
             locals,
         )
@@ -778,16 +796,16 @@ fn v10_t10_reassign_only_moved_field_then_use_ok() {
 
         make_body(
             vec![
-                assign_move_field(LocalIdx::from_raw(2), LocalIdx::from_raw(1), 0),
+                assign_move_field(LocalIdx::from_usize(2), LocalIdx::from_usize(1), 0),
                 Statement {
                     kind: StatementKind::Assign(
-                        field_place(LocalIdx::from_raw(1), 0),
-                        Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(3)))),
+                        field_place(LocalIdx::from_usize(1), 0),
+                        Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(3)))),
                     ),
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
-                use_field(LocalIdx::from_raw(4), LocalIdx::from_raw(1), 0),
-                use_field(LocalIdx::from_raw(5), LocalIdx::from_raw(1), 1),
+                use_field(LocalIdx::from_usize(4), LocalIdx::from_usize(1), 0),
+                use_field(LocalIdx::from_usize(5), LocalIdx::from_usize(1), 1),
             ],
             locals,
         )
@@ -830,15 +848,15 @@ fn v10_t11_use_after_move_in_binary_op_error() {
 
         make_body(
             vec![
-                assign_move(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
+                assign_move(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(4)),
+                        Place::new(LocalIdx::from_usize(4)),
                         Rvalue::BinaryOp(
                             glyim_core::primitives::BinOp::Add,
                             [
-                                Operand::Copy(field_place(LocalIdx::from_raw(1), 0)),
-                                Operand::Copy(Place::new(LocalIdx::from_raw(3))),
+                                Operand::Copy(field_place(LocalIdx::from_usize(1), 0)),
+                                Operand::Copy(Place::new(LocalIdx::from_usize(3))),
                             ],
                         ),
                     ),
@@ -885,15 +903,15 @@ fn v10_t12_use_after_move_in_aggregate_error() {
 
         make_body(
             vec![
-                assign_move(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
+                assign_move(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(4)),
+                        Place::new(LocalIdx::from_usize(4)),
                         Rvalue::Aggregate(
                             glyim_mir::AggregateKind::Tuple,
                             vec![
-                                Operand::Copy(field_place(LocalIdx::from_raw(1), 0)),
-                                Operand::Copy(Place::new(LocalIdx::from_raw(3))),
+                                Operand::Copy(field_place(LocalIdx::from_usize(1), 0)),
+                                Operand::Copy(Place::new(LocalIdx::from_usize(3))),
                             ],
                         ),
                     ),
@@ -938,9 +956,9 @@ fn v10_t13_move_then_storage_dead_no_error() {
 
         make_body(
             vec![
-                assign_move(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
+                assign_move(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
                 Statement {
-                    kind: StatementKind::StorageDead(LocalIdx::from_raw(1)),
+                    kind: StatementKind::StorageDead(LocalIdx::from_usize(1)),
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
             ],
@@ -982,18 +1000,21 @@ fn v10_t14_partial_move_in_one_branch_use_other_field_ok() {
             local_decl(i32_ty),            // 3: use sink for field1
         ];
 
-        let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-        body.locals = IndexVec::from_raw(locals);
+        let mut body = Body::dummy(DefId::new(
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(0),
+        ));
+        body.locals = IndexVec::from_vec(locals);
 
         let mut bb0 = BasicBlockData::new(Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(1),
+                target: BasicBlockIdx::from_usize(1),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         });
         bb0.statements = vec![assign_move_field(
-            LocalIdx::from_raw(2),
-            LocalIdx::from_raw(1),
+            LocalIdx::from_usize(2),
+            LocalIdx::from_usize(1),
             0,
         )];
 
@@ -1001,9 +1022,13 @@ fn v10_t14_partial_move_in_one_branch_use_other_field_ok() {
             kind: TerminatorKind::Return,
             source_info: SourceInfo::new(Span::DUMMY),
         });
-        bb1.statements = vec![use_field(LocalIdx::from_raw(3), LocalIdx::from_raw(1), 1)];
+        bb1.statements = vec![use_field(
+            LocalIdx::from_usize(3),
+            LocalIdx::from_usize(1),
+            1,
+        )];
 
-        body.basic_blocks = IndexVec::from_raw(vec![bb0, bb1]);
+        body.basic_blocks = IndexVec::from_vec(vec![bb0, bb1]);
         body
     });
 
@@ -1043,14 +1068,14 @@ fn v10_t15_move_field_of_copy_type_no_error() {
 
         make_body(
             vec![
-                assign_move_field(LocalIdx::from_raw(2), LocalIdx::from_raw(1), 0),
-                use_field(LocalIdx::from_raw(3), LocalIdx::from_raw(1), 0),
+                assign_move_field(LocalIdx::from_usize(2), LocalIdx::from_usize(1), 0),
+                use_field(LocalIdx::from_usize(3), LocalIdx::from_usize(1), 0),
             ],
             locals,
         )
     });
 
-    let i32_ty = body.locals[LocalIdx::from_raw(2)].ty;
+    let i32_ty = body.locals[LocalIdx::from_usize(2)].ty;
     let mock = MoveMockCtx {
         ty_ctx: ctx,
         body,
@@ -1092,8 +1117,8 @@ fn v10_t16_nested_tuple_move_inner_field() {
 
         make_body(
             vec![
-                assign_move_field(LocalIdx::from_raw(2), LocalIdx::from_raw(1), 1),
-                use_field(LocalIdx::from_raw(3), LocalIdx::from_raw(1), 0),
+                assign_move_field(LocalIdx::from_usize(2), LocalIdx::from_usize(1), 1),
+                use_field(LocalIdx::from_usize(3), LocalIdx::from_usize(1), 0),
             ],
             locals,
         )
@@ -1135,13 +1160,13 @@ fn v10_t17_use_after_move_in_unary_op_error() {
 
         make_body(
             vec![
-                assign_move(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
+                assign_move(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(3)),
+                        Place::new(LocalIdx::from_usize(3)),
                         Rvalue::UnaryOp(
                             glyim_core::primitives::UnOp::Neg,
-                            Operand::Copy(field_place(LocalIdx::from_raw(1), 0)),
+                            Operand::Copy(field_place(LocalIdx::from_usize(1), 0)),
                         ),
                     ),
                     source_info: SourceInfo::new(Span::DUMMY),
@@ -1186,12 +1211,12 @@ fn v10_t18_storage_live_reinitializes_after_move() {
 
         make_body(
             vec![
-                assign_move(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
+                assign_move(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
                 Statement {
-                    kind: StatementKind::StorageLive(LocalIdx::from_raw(1)),
+                    kind: StatementKind::StorageLive(LocalIdx::from_usize(1)),
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
-                use_field(LocalIdx::from_raw(3), LocalIdx::from_raw(1), 0),
+                use_field(LocalIdx::from_usize(3), LocalIdx::from_usize(1), 0),
             ],
             locals,
         )
@@ -1233,8 +1258,8 @@ fn v10_t19_copy_operand_no_move_error() {
 
         make_body(
             vec![
-                assign_copy_field(LocalIdx::from_raw(2), LocalIdx::from_raw(1), 0),
-                assign_copy_field(LocalIdx::from_raw(3), LocalIdx::from_raw(1), 0),
+                assign_copy_field(LocalIdx::from_usize(2), LocalIdx::from_usize(1), 0),
+                assign_copy_field(LocalIdx::from_usize(3), LocalIdx::from_usize(1), 0),
             ],
             locals,
         )
@@ -1278,15 +1303,15 @@ fn v10_t20_partial_move_then_borrow_whole_error() {
 
         make_body(
             vec![
-                assign_move_field(LocalIdx::from_raw(2), LocalIdx::from_raw(1), 0),
+                assign_move_field(LocalIdx::from_usize(2), LocalIdx::from_usize(1), 0),
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(3)),
-                        Rvalue::Ref(Place::new(LocalIdx::from_raw(1)), BorrowKind::Shared),
+                        Place::new(LocalIdx::from_usize(3)),
+                        Rvalue::Ref(Place::new(LocalIdx::from_usize(1)), BorrowKind::Shared),
                     ),
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
-                use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)),
+                use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)),
             ],
             locals,
         )
