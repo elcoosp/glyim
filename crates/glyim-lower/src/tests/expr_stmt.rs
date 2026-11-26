@@ -9,7 +9,7 @@ use glyim_typeck::thir;
 fn expr_stmt_works() {
     let ctx = test_frozen_ty_ctx();
     let mock_ctx = MockLowerCtx::new(&ctx);
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let thir_body = thir::Body {
         owner,
         stmts: vec![],
