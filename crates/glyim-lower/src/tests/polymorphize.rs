@@ -31,7 +31,7 @@ fn dummy_source_info() -> SourceInfo {
 }
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 /// Build a simple MIR body with the given local types.
@@ -87,7 +87,7 @@ fn build_body_with_fn_call(
         mutability: Mutability::Mut,
         source_info: dummy_source_info(),
     });
-    let dest_local = LocalIdx::from_raw(0);
+    let dest_local = LocalIdx::from_usize(0);
 
     let func_const = MirConst {
         kind: MirConstKind::Fn(callee_def_id, callee_substs),
@@ -96,7 +96,7 @@ fn build_body_with_fn_call(
     };
     let func_op = Operand::Constant(func_const);
 
-    let next_bb = BasicBlockIdx::from_raw(1);
+    let next_bb = BasicBlockIdx::from_usize(1);
     let term = Terminator {
         kind: TerminatorKind::Call {
             func: func_op,
@@ -193,7 +193,7 @@ fn t01_unused_type_param_not_monomorphized() {
     let param_t = ctx.mk_ty(TyKind::Param(param_ty));
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
 
-    let fn_def_id = FnDefId::from_raw(1);
+    let fn_def_id = FnDefId::from_usize(1);
     let item = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -283,7 +283,7 @@ fn t02_used_type_param_is_monomorphized() {
     let body = build_body_with_local_of_type(param_t);
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(2);
+    let fn_def_id = FnDefId::from_usize(2);
     let item = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -369,7 +369,7 @@ fn t03_multiple_calls_consistent_deduplication() {
     // Body where T (ParamTy index 0) is unused
     let body = build_body(vec![i32_ty, i32_ty], 1);
 
-    let fn_def_id = FnDefId::from_raw(3);
+    let fn_def_id = FnDefId::from_usize(3);
 
     let substs_i32 = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let substs_bool = ctx.intern_substitution(vec![GenericArg::Ty(bool_ty)]);
@@ -451,7 +451,7 @@ fn t04_drop_glue_unused_param_still_deduplicates() {
     let param_t = ctx.mk_ty(TyKind::Param(param_ty));
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(4);
+    let fn_def_id = FnDefId::from_usize(4);
 
     let used = analyze_used_params(&body, &ctx, substs);
     assert!(!used[0], "T is unused even considering potential drop glue");
@@ -502,7 +502,7 @@ fn empty_substitution_no_polymorphization() {
     let body = build_body(vec![i32_ty, i32_ty], 1);
 
     let substs = ctx.intern_substitution(Vec::new());
-    let fn_def_id = FnDefId::from_raw(10);
+    let fn_def_id = FnDefId::from_usize(10);
     let item = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -535,7 +535,7 @@ fn multiple_params_some_used_some_not() {
     let body = build_body_with_local_of_type(ty_a);
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(ty_a), GenericArg::Ty(ty_b)]);
-    let fn_def_id = FnDefId::from_raw(11);
+    let fn_def_id = FnDefId::from_usize(11);
     let item = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -586,12 +586,12 @@ fn param_used_via_fn_call_substitution() {
     let param_t = ctx.mk_ty(TyKind::Param(param_ty));
 
     let callee_substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let callee_def_id = FnDefId::from_raw(100);
+    let callee_def_id = FnDefId::from_usize(100);
 
     let body = build_body_with_fn_call(callee_def_id, callee_substs, Ty::UNIT);
 
     let caller_substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(12);
+    let fn_def_id = FnDefId::from_usize(12);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs: caller_substs,
@@ -611,7 +611,7 @@ fn static_item_unchanged_by_polymorphization() {
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let body = build_body(vec![i32_ty], 0);
 
-    let static_def_id = StaticDefId::from_raw(20);
+    let static_def_id = StaticDefId::from_usize(20);
     let item = MonoItem::Static {
         def_id: static_def_id,
     };
@@ -642,8 +642,8 @@ fn deduplicate_preserves_order() {
     let substs_i32 = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let substs_bool = ctx.intern_substitution(vec![GenericArg::Ty(ctx.bool_ty())]);
 
-    let fn_def_used = FnDefId::from_raw(30);
-    let fn_def_unused = FnDefId::from_raw(31);
+    let fn_def_used = FnDefId::from_usize(30);
+    let fn_def_unused = FnDefId::from_usize(31);
 
     let items = vec![
         MonoItemData {
@@ -707,7 +707,7 @@ fn param_used_in_ref_local() {
     let body = build_body_with_local_of_type(ref_ty);
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(50);
+    let fn_def_id = FnDefId::from_usize(50);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -736,7 +736,7 @@ fn param_used_in_raw_ptr_local() {
     let body = build_body_with_local_of_type(ptr_ty);
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(51);
+    let fn_def_id = FnDefId::from_usize(51);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -765,7 +765,7 @@ fn param_used_in_slice_local() {
     let body = build_body_with_local_of_type(slice_ty);
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(52);
+    let fn_def_id = FnDefId::from_usize(52);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -798,7 +798,7 @@ fn param_used_in_array_local() {
     let body = build_body_with_local_of_type(array_ty);
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(53);
+    let fn_def_id = FnDefId::from_usize(53);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -830,7 +830,7 @@ fn param_used_in_tuple_local() {
     let body = build_body_with_local_of_type(tuple_ty);
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(54);
+    let fn_def_id = FnDefId::from_usize(54);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -854,14 +854,14 @@ fn param_used_in_adt_local() {
         name: name_t,
     };
     let param_t = ctx.mk_ty(TyKind::Param(param_ty));
-    let adt_id = AdtId::from_raw(1);
+    let adt_id = AdtId::from_usize(1);
     let adt_subst = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let adt_ty = ctx.mk_ty(TyKind::Adt(adt_id, adt_subst));
 
     let body = build_body_with_local_of_type(adt_ty);
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(55);
+    let fn_def_id = FnDefId::from_usize(55);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -898,7 +898,7 @@ fn param_used_in_fn_ptr_local() {
     let body = build_body_with_local_of_type(fn_ptr_ty);
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(56);
+    let fn_def_id = FnDefId::from_usize(56);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -941,7 +941,7 @@ fn all_params_unused() {
         GenericArg::Ty(ty_b),
         GenericArg::Ty(ty_c),
     ]);
-    let fn_def_id = FnDefId::from_raw(60);
+    let fn_def_id = FnDefId::from_usize(60);
     let item = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -989,7 +989,7 @@ fn const_item_deduplication() {
     let substs_i32 = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let substs_bool = ctx.intern_substitution(vec![GenericArg::Ty(bool_ty)]);
 
-    let const_def_id = ConstDefId::from_raw(70);
+    let const_def_id = ConstDefId::from_usize(70);
 
     let item_i32 = MonoItemData {
         item: MonoItem::Const {
@@ -1031,8 +1031,8 @@ fn different_def_ids_never_deduplicate() {
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
 
-    let fn_a = FnDefId::from_raw(80);
-    let fn_b = FnDefId::from_raw(81);
+    let fn_a = FnDefId::from_usize(80);
+    let fn_b = FnDefId::from_usize(81);
 
     let item_a = MonoItemData {
         item: MonoItem::Fn {
@@ -1077,14 +1077,14 @@ fn param_used_in_fn_def_local_type() {
     };
     let param_t = ctx.mk_ty(TyKind::Param(param_ty));
 
-    let fn_def_id = FnDefId::from_raw(90);
+    let fn_def_id = FnDefId::from_usize(90);
     let fn_def_substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let fn_def_ty = ctx.mk_ty(TyKind::FnDef(fn_def_id, fn_def_substs));
 
     let body = build_body_with_local_of_type(fn_def_ty);
 
     let caller_substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let caller_fn_id = FnDefId::from_raw(91);
+    let caller_fn_id = FnDefId::from_usize(91);
     let _ = MonoItem::Fn {
         def_id: caller_fn_id,
         substs: caller_substs,
@@ -1114,7 +1114,7 @@ fn param_used_in_return_type() {
     let body = build_body(vec![param_t], 0);
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(92);
+    let fn_def_id = FnDefId::from_usize(92);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -1150,7 +1150,7 @@ fn param_used_in_switch_int_switch_ty() {
         source_info: dummy_source_info(),
     });
     // discr local
-    let discr_local = LocalIdx::from_raw(1);
+    let discr_local = LocalIdx::from_usize(1);
     locals.push(LocalDecl {
         ty: i32_ty,
         mutability: Mutability::Not,
@@ -1158,7 +1158,7 @@ fn param_used_in_switch_int_switch_ty() {
     });
 
     let discr_op = Operand::Copy(Place::new(discr_local));
-    let targets = SwitchTargets::new(Box::new([]), BasicBlockIdx::from_raw(1));
+    let targets = SwitchTargets::new(Box::new([]), BasicBlockIdx::from_usize(1));
 
     let term = Terminator {
         kind: TerminatorKind::SwitchInt {
@@ -1195,7 +1195,7 @@ fn param_used_in_switch_int_switch_ty() {
     };
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(93);
+    let fn_def_id = FnDefId::from_usize(93);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -1220,7 +1220,7 @@ fn dedup_reduces_item_count() {
 
     // Function where T is unused
     let body_unused = build_body(vec![i32_ty, i32_ty], 1);
-    let fn_unused = FnDefId::from_raw(100);
+    let fn_unused = FnDefId::from_usize(100);
 
     // Function where T is used
     let name_t = intern_name(&mut ctx, "T");
@@ -1230,7 +1230,7 @@ fn dedup_reduces_item_count() {
     };
     let param_t = ctx.mk_ty(TyKind::Param(param_ty));
     let body_used = build_body_with_local_of_type(param_t);
-    let fn_used = FnDefId::from_raw(101);
+    let fn_used = FnDefId::from_usize(101);
 
     let types = [i32_ty, bool_ty, u8_ty, u16_ty];
     let mut items = Vec::new();
@@ -1300,7 +1300,7 @@ fn lifetime_params_unchanged() {
         GenericArg::Lifetime(lifetime.clone()), // index 1: lifetime (should be kept as-is)
     ]);
 
-    let fn_def_id = FnDefId::from_raw(110);
+    let fn_def_id = FnDefId::from_usize(110);
     let item = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -1355,7 +1355,7 @@ fn deeply_nested_type_usage() {
     let body = build_body_with_local_of_type(ref_slice_ty);
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(120);
+    let fn_def_id = FnDefId::from_usize(120);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -1398,7 +1398,7 @@ fn param_used_via_assert_condition() {
     };
     let cond_op = Operand::Constant(cond_const);
 
-    let target_bb = BasicBlockIdx::from_raw(1);
+    let target_bb = BasicBlockIdx::from_usize(1);
     let term = Terminator {
         kind: TerminatorKind::Assert {
             cond: cond_op,
@@ -1436,7 +1436,7 @@ fn param_used_via_assert_condition() {
     };
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(121);
+    let fn_def_id = FnDefId::from_usize(121);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -1464,14 +1464,14 @@ fn param_used_in_opaque_type() {
     };
     let param_t = ctx.mk_ty(TyKind::Param(param_ty));
 
-    let opaque_id = OpaqueTyId::from_raw(1);
+    let opaque_id = OpaqueTyId::from_usize(1);
     let opaque_subst = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let opaque_ty = ctx.mk_ty(TyKind::Opaque(opaque_id, opaque_subst));
 
     let body = build_body_with_local_of_type(opaque_ty);
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(122);
+    let fn_def_id = FnDefId::from_usize(122);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
@@ -1504,14 +1504,14 @@ fn build_body_with_indexed_copy_and_drop(arr_ty: Ty, idx_ty: Ty) -> Body {
         source_info: dummy_source_info(),
     });
     // _1: array (base of the indexed place)
-    let arr_local = LocalIdx::from_raw(1);
+    let arr_local = LocalIdx::from_usize(1);
     locals.push(LocalDecl {
         ty: arr_ty,
         mutability: Mutability::Not,
         source_info: dummy_source_info(),
     });
     // _2: index operand local
-    let idx_local = LocalIdx::from_raw(2);
+    let idx_local = LocalIdx::from_usize(2);
     locals.push(LocalDecl {
         ty: idx_ty,
         mutability: Mutability::Not,
@@ -1526,13 +1526,13 @@ fn build_body_with_indexed_copy_and_drop(arr_ty: Ty, idx_ty: Ty) -> Body {
 
     let entry = BasicBlockData {
         statements: vec![Statement {
-            kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(0)), Rvalue::Use(copy_op)),
+            kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(0)), Rvalue::Use(copy_op)),
             source_info: dummy_source_info(),
         }],
         terminator: Terminator {
             kind: TerminatorKind::Drop {
                 place: Place::new(arr_local),
-                target: BasicBlockIdx::from_raw(0),
+                target: BasicBlockIdx::from_usize(0),
                 cleanup: None,
             },
             source_info: dummy_source_info(),
@@ -1628,14 +1628,14 @@ fn param_used_in_closure_type() {
     };
     let param_t = ctx.mk_ty(TyKind::Param(param_ty));
 
-    let closure_id = ClosureId::from_raw(1);
+    let closure_id = ClosureId::from_usize(1);
     let closure_subst = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
     let closure_ty = ctx.mk_ty(TyKind::Closure(closure_id, closure_subst));
 
     let body = build_body_with_local_of_type(closure_ty);
 
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(param_t)]);
-    let fn_def_id = FnDefId::from_raw(123);
+    let fn_def_id = FnDefId::from_usize(123);
     let _ = MonoItem::Fn {
         def_id: fn_def_id,
         substs,
