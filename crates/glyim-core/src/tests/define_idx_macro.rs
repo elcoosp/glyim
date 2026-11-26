@@ -4,7 +4,7 @@ crate::define_idx!(TestIdx);
 
 #[test]
 fn define_idx_works() {
-    let idx = TestIdx::from_raw(5);
+    let idx = TestIdx::from_usize(5);
     assert_eq!(idx.to_raw(), 5);
     assert_eq!(idx.index(), 5);
 }
