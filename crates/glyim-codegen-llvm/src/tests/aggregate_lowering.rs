@@ -58,34 +58,34 @@ fn build_array_body(ctx: &mut TyCtxMut) -> Body {
     let stmts = vec![
         Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
+                Place::new(LocalIdx::from_usize(1)),
                 Rvalue::Use(Operand::Constant(const_10)),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         },
         Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(2)),
+                Place::new(LocalIdx::from_usize(2)),
                 Rvalue::Use(Operand::Constant(const_20)),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         },
         Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(3)),
+                Place::new(LocalIdx::from_usize(3)),
                 Rvalue::Use(Operand::Constant(const_30)),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         },
         Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Aggregate(
                     glyim_mir::AggregateKind::Array(i32_ty),
                     vec![
-                        Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                        Operand::Copy(Place::new(LocalIdx::from_raw(2))),
-                        Operand::Copy(Place::new(LocalIdx::from_raw(3))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(1))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(2))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(3))),
                     ],
                 ),
             ),
@@ -101,7 +101,7 @@ fn build_array_body(ctx: &mut TyCtxMut) -> Body {
     basic_blocks.push(bb0);
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1)),
         basic_blocks,
         locals,
         arg_count: 0,
