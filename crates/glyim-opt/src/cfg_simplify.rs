@@ -57,7 +57,7 @@ pub(crate) fn run(_ctx: &TyCtx, body: &mut Body) {
             blocks = new_blocks;
         }
     }
-    body.basic_blocks = IndexVec::from_raw(blocks);
+    body.basic_blocks = IndexVec::from_vec(blocks);
 }
 
 pub(crate) fn terminator_successors(term: &Terminator) -> Vec<BasicBlockIdx> {
@@ -106,9 +106,9 @@ pub(crate) fn remap_terminator(block: &mut BasicBlockData, remap: &[Option<usize
     let map = |idx: &BasicBlockIdx| -> BasicBlockIdx {
         let old = idx.to_raw() as usize;
         if let Some(&Some(new)) = remap.get(old) {
-            BasicBlockIdx::from_raw(new as u32)
+            BasicBlockIdx::from_usize(new)
         } else {
-            BasicBlockIdx::from_raw(0)
+            BasicBlockIdx::from_usize(0)
         }
     };
     let map_opt = |opt: &Option<BasicBlockIdx>| -> Option<BasicBlockIdx> { opt.as_ref().map(map) };
