@@ -5,5 +5,6 @@ mod drop_glue_tests;
 mod incr_oracle_tests;
 mod incr_verify_tests;
 mod mir_parity_tests;
+mod pass_manager_tests;
 mod phase_prof_tests;
 mod rebuild_trace_tests;
