@@ -42,7 +42,7 @@ fn setup() -> (Database, DefId, glyim_type::TyCtx) {
         target_triple: "x86_64-unknown-linux-gnu".to_string(),
         opt_level: 0,
     });
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1));
     let ty_ctx = glyim_test::test_ty_ctx().freeze();
     (db, owner, ty_ctx)
 }
