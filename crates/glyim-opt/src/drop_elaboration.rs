@@ -65,7 +65,7 @@ impl MaybeInitialized {
         while let Some(bb_idx) = queue.pop_front() {
             in_queue[bb_idx] = false;
             let mut cur = entry[bb_idx].clone();
-            let block = &body.basic_blocks[BasicBlockIdx::from_raw(bb_idx as u32)];
+            let block = &body.basic_blocks[BasicBlockIdx::from_usize(bb_idx)];
             for stmt in &block.statements {
                 match &stmt.kind {
                     StatementKind::Assign(place, _) if place.projection.is_empty() => {
@@ -161,11 +161,11 @@ impl DropFlags {
                     _ => 0,
                 };
                 if len > 0 && loop_built.contains(&local) {
-                    per_element.insert(local, (LocalIdx::from_raw(0), len));
+                    per_element.insert(local, (LocalIdx::from_usize(0), len));
                     continue;
                 }
             }
-            flags[local.to_raw() as usize] = Some(LocalIdx::from_raw(0));
+            flags[local.to_raw() as usize] = Some(LocalIdx::from_usize(0));
         }
         DropFlags {
             flag_for_local: flags,
@@ -182,7 +182,7 @@ impl DropFlags {
                     source_info: SourceInfo::new(Span::DUMMY),
                 });
                 *flag_opt = Some(flag_local);
-                let entry_block = &mut body.basic_blocks[BasicBlockIdx::from_raw(0)];
+                let entry_block = &mut body.basic_blocks[BasicBlockIdx::from_usize(0)];
                 entry_block.statements.insert(
                     0,
                     Statement {
@@ -225,7 +225,7 @@ impl DropFlags {
                 source_info: SourceInfo::new(Span::DUMMY),
             });
             *flag_arr = flag_arr_local;
-            let entry_block = &mut body.basic_blocks[BasicBlockIdx::from_raw(0)];
+            let entry_block = &mut body.basic_blocks[BasicBlockIdx::from_usize(0)];
             entry_block.statements.insert(
                 0,
                 Statement {
@@ -317,7 +317,7 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
 
     // Insert flag-setting after assignments.
     for block_idx in 0..body.basic_blocks.len() {
-        let block = &mut body.basic_blocks[BasicBlockIdx::from_raw(block_idx as u32)];
+        let block = &mut body.basic_blocks[BasicBlockIdx::from_usize(block_idx)];
         let mut new_stmts = Vec::new();
         for stmt in block.statements.drain(..) {
             let span = stmt.source_info.span;
@@ -401,7 +401,7 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
     }
 
     for (old_idx, old_block) in body.basic_blocks.iter().enumerate() {
-        let old_bb = BasicBlockIdx::from_raw(old_idx as u32);
+        let old_bb = BasicBlockIdx::from_usize(old_idx);
         let terminator = &old_block.terminator;
 
         let new_term = match &terminator.kind {
@@ -455,7 +455,7 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
                         }
                     } else if let Some(flag_local) = flags.get_flag(local) {
                         let drop_block_idx = new_blocks.len();
-                        let drop_block = BasicBlockIdx::from_raw(drop_block_idx as u32);
+                        let drop_block = BasicBlockIdx::from_usize(drop_block_idx);
                         let clear_flag = DropFlags::set_flag_stmt(
                             flag_local,
                             false,
@@ -510,7 +510,7 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
         };
     }
 
-    body.basic_blocks = IndexVec::from_raw(new_blocks);
+    body.basic_blocks = IndexVec::from_vec(new_blocks);
 }
 
 /// Emit the array-drop loop for a `Drop` on an array place.
@@ -534,13 +534,13 @@ fn emit_array_drop_loop(
     len: u64,
 ) -> TerminatorKind {
     let init_block_idx = new_blocks.len();
-    let init_block = BasicBlockIdx::from_raw(init_block_idx as u32);
+    let init_block = BasicBlockIdx::from_usize(init_block_idx);
     let cond_block_idx = init_block_idx + 1;
-    let cond_block = BasicBlockIdx::from_raw(cond_block_idx as u32);
+    let cond_block = BasicBlockIdx::from_usize(cond_block_idx);
     let body_block_idx = cond_block_idx + 1;
-    let body_block = BasicBlockIdx::from_raw(body_block_idx as u32);
+    let body_block = BasicBlockIdx::from_usize(body_block_idx);
     let exit_block_idx = body_block_idx + 1;
-    let exit_block = BasicBlockIdx::from_raw(exit_block_idx as u32);
+    let exit_block = BasicBlockIdx::from_usize(exit_block_idx);
 
     let init_block_data = BasicBlockData {
         statements: vec![Statement {
@@ -611,7 +611,7 @@ fn emit_array_drop_loop(
 
     if let Some((flag_arr, _)) = per_element {
         let drop_elem_block_idx = new_blocks.len();
-        let drop_elem_block = BasicBlockIdx::from_raw(drop_elem_block_idx as u32);
+        let drop_elem_block = BasicBlockIdx::from_usize(drop_elem_block_idx);
         let drop_elem_data = BasicBlockData {
             statements: vec![],
             terminator: Terminator {
