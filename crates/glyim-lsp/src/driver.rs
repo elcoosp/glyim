@@ -305,7 +305,7 @@ impl AnalysisDriver {
             self.db.versions.write().insert(file_id, i64::from(v));
         }
 
-        let crate_id = CrateId::from_raw(0);
+        let crate_id = CrateId::from_usize(0);
         let lex_result = lex(content, file_id);
         let parse_result = parse_to_syntax(content, file_id);
         let mut interner = Interner::new();
