@@ -16,10 +16,10 @@ fn test_t08_while_loop() {
     let local_cond = add_local(&mut body, Ty::BOOL, Mutability::Mut);
 
     // Blocks: bb0 = initialization, bb1 = header (check condition), bb2 = body, bb3 = exit
-    let bb0 = BasicBlockIdx::from_raw(0);
-    let bb1 = BasicBlockIdx::from_raw(1);
-    let bb2 = BasicBlockIdx::from_raw(2);
-    let bb3 = BasicBlockIdx::from_raw(3);
+    let bb0 = BasicBlockIdx::from_usize(0);
+    let bb1 = BasicBlockIdx::from_usize(1);
+    let bb2 = BasicBlockIdx::from_usize(2);
+    let bb3 = BasicBlockIdx::from_usize(3);
     body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Goto { target: bb2 },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -83,7 +83,7 @@ fn test_t08_while_loop() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -104,10 +104,10 @@ fn test_t09_break_and_continue() {
     let local_cond = add_local(&mut body, Ty::BOOL, Mutability::Mut);
 
     // Blocks: bb0 = initialization, bb1 = header, bb2 = body increment, bb3 = exit
-    let bb0 = BasicBlockIdx::from_raw(0);
-    let bb1 = BasicBlockIdx::from_raw(1);
-    let bb2 = BasicBlockIdx::from_raw(2);
-    let bb3 = BasicBlockIdx::from_raw(3);
+    let bb0 = BasicBlockIdx::from_usize(0);
+    let bb1 = BasicBlockIdx::from_usize(1);
+    let bb2 = BasicBlockIdx::from_usize(2);
+    let bb3 = BasicBlockIdx::from_usize(3);
     body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Goto { target: bb1 },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -171,7 +171,7 @@ fn test_t09_break_and_continue() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
