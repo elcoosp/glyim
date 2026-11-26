@@ -40,7 +40,7 @@ fn mk_array_ty() {
 #[test]
 fn mk_fn_def_ty() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
-        let fn_def_id = FnDefId::from_raw(10);
+        let fn_def_id = FnDefId::from_usize(10);
         let substs = c.intern_substitution(vec![GenericArg::Ty(c.bool_ty())]);
         c.mk_ty(TyKind::FnDef(fn_def_id, substs))
     });
@@ -56,7 +56,7 @@ fn mk_fn_def_ty() {
 #[test]
 fn mk_closure_ty() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
-        let closure_id = ClosureId::from_raw(20);
+        let closure_id = ClosureId::from_usize(20);
         let substs = c.intern_substitution(vec![]);
         c.mk_ty(TyKind::Closure(closure_id, substs))
     });
@@ -72,7 +72,7 @@ fn mk_closure_ty() {
 #[test]
 fn mk_opaque_ty() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
-        let opaque_id = OpaqueTyId::from_raw(30);
+        let opaque_id = OpaqueTyId::from_usize(30);
         let inner_ty = c.mk_ty(TyKind::Int(IntTy::I32));
         let substs = c.intern_substitution(vec![GenericArg::Ty(inner_ty)]);
         c.mk_ty(TyKind::Opaque(opaque_id, substs))
@@ -92,7 +92,7 @@ fn mk_dynamic_ty() {
         let trait_substs = c.intern_substitution(vec![]);
         let pred = Predicate::Trait(TraitPredicate {
             trait_ref: TraitRef {
-                def_id: glyim_core::def_id::TraitDefId::from_raw(1),
+                def_id: glyim_core::def_id::TraitDefId::from_usize(1),
                 substs: trait_substs,
             },
             polarity: ImplPolarity::Positive,
