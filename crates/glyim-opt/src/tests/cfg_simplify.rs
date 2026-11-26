@@ -14,7 +14,7 @@ fn return_term() -> Terminator {
 fn goto_term(t: u32) -> Terminator {
     Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(t),
+            target: BasicBlockIdx::from_usize(t as usize),
         },
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     }
@@ -27,7 +27,7 @@ fn nop_block() -> BasicBlockData {
     }
 }
 fn make_place(idx: u32) -> Place {
-    Place::new(LocalIdx::from_raw(idx))
+    Place::new(LocalIdx::from_usize(idx as usize))
 }
 fn make_copy(idx: u32) -> Operand {
     Operand::Copy(make_place(idx))
@@ -46,10 +46,10 @@ fn make_body_double_goto(_ctx: &mut glyim_type::TyCtxMut) -> Body {
     };
     let block2 = nop_block();
     let mut body = Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     ));
-    body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1, block2]);
+    body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1, block2]);
     body.locals = glyim_core::IndexVec::new();
     body
 }
@@ -64,11 +64,11 @@ fn make_body_diamond(ctx: &mut glyim_type::TyCtxMut) -> Body {
                 switch_ty: _ut,
                 targets: SwitchTargets::new(
                     vec![
-                        (0, BasicBlockIdx::from_raw(1)),
-                        (1, BasicBlockIdx::from_raw(2)),
+                        (0, BasicBlockIdx::from_usize(1)),
+                        (1, BasicBlockIdx::from_usize(2)),
                     ]
                     .into_boxed_slice(),
-                    BasicBlockIdx::from_raw(3),
+                    BasicBlockIdx::from_usize(3),
                 ),
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -87,11 +87,11 @@ fn make_body_diamond(ctx: &mut glyim_type::TyCtxMut) -> Body {
     };
     let block3 = nop_block();
     let mut body = Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     ));
-    body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1, block2, block3]);
-    body.locals = glyim_core::IndexVec::from_raw(vec![LocalDecl {
+    body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1, block2, block3]);
+    body.locals = glyim_core::IndexVec::from_vec(vec![LocalDecl {
         ty: _ut,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -112,10 +112,10 @@ fn make_body_loop(ctx: &mut glyim_type::TyCtxMut) -> Body {
         is_cleanup: false,
     };
     let mut body = Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     ));
-    body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
+    body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
     body.locals = glyim_core::IndexVec::new();
     body
 }
@@ -145,8 +145,8 @@ fn merges_single_goto_chain() {
                 discr: make_copy(0),
                 switch_ty: ut,
                 targets: SwitchTargets::new(
-                    vec![(0, BasicBlockIdx::from_raw(2))].into_boxed_slice(),
-                    BasicBlockIdx::from_raw(2),
+                    vec![(0, BasicBlockIdx::from_usize(2))].into_boxed_slice(),
+                    BasicBlockIdx::from_usize(2),
                 ),
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -158,11 +158,11 @@ fn merges_single_goto_chain() {
         };
         let block2 = nop_block();
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1, block2]);
-        body.locals = glyim_core::IndexVec::from_raw(vec![LocalDecl {
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1, block2]);
+        body.locals = glyim_core::IndexVec::from_vec(vec![LocalDecl {
             ty: ut,
             mutability: Mutability::Not,
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -176,7 +176,7 @@ fn merges_single_goto_chain() {
         "should merge block0 into block1, leaving 2 blocks"
     );
     assert!(
-        !body.basic_blocks[BasicBlockIdx::from_raw(0)]
+        !body.basic_blocks[BasicBlockIdx::from_usize(0)]
             .statements
             .is_empty(),
         "merged block should contain statement"
@@ -193,7 +193,7 @@ fn merges_double_goto_chain() {
         "double goto chain should merge into a single block"
     );
     assert!(matches!(
-        body.basic_blocks[BasicBlockIdx::from_raw(0)]
+        body.basic_blocks[BasicBlockIdx::from_usize(0)]
             .terminator
             .kind,
         TerminatorKind::Return
@@ -235,7 +235,7 @@ fn call_terminator_not_merged() {
                     func: make_copy(0),
                     args: vec![],
                     destination: make_place(0),
-                    target: Some(BasicBlockIdx::from_raw(1)),
+                    target: Some(BasicBlockIdx::from_usize(1)),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -248,11 +248,11 @@ fn call_terminator_not_merged() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-        body.locals = glyim_core::IndexVec::from_raw(vec![LocalDecl {
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+        body.locals = glyim_core::IndexVec::from_vec(vec![LocalDecl {
             ty: ut,
             mutability: Mutability::Not,
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -279,8 +279,8 @@ fn switchint_single_target_not_merged() {
                     discr: make_copy(0),
                     switch_ty: ut,
                     targets: SwitchTargets::new(
-                        vec![(0, BasicBlockIdx::from_raw(1))].into_boxed_slice(),
-                        BasicBlockIdx::from_raw(1),
+                        vec![(0, BasicBlockIdx::from_usize(1))].into_boxed_slice(),
+                        BasicBlockIdx::from_usize(1),
                     ),
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -289,11 +289,11 @@ fn switchint_single_target_not_merged() {
         };
         let block1 = nop_block();
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-        body.locals = glyim_core::IndexVec::from_raw(vec![LocalDecl {
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+        body.locals = glyim_core::IndexVec::from_vec(vec![LocalDecl {
             ty: ut,
             mutability: Mutability::Not,
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -322,7 +322,7 @@ fn merge_remaps_indices_correctly() {
                 let term = if i < 3 {
                     Terminator {
                         kind: TerminatorKind::Goto {
-                            target: BasicBlockIdx::from_raw(i + 1),
+                            target: BasicBlockIdx::from_usize(i + 1),
                         },
                         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
                     }
@@ -337,11 +337,11 @@ fn merge_remaps_indices_correctly() {
             })
             .collect::<Vec<_>>();
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(blocks);
-        body.locals = glyim_core::IndexVec::from_raw(vec![LocalDecl {
+        body.basic_blocks = glyim_core::IndexVec::from_vec(blocks);
+        body.locals = glyim_core::IndexVec::from_vec(vec![LocalDecl {
             ty: ut,
             mutability: Mutability::Not,
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -356,7 +356,7 @@ fn merge_remaps_indices_correctly() {
     );
     assert!(
         matches!(
-            body.basic_blocks[BasicBlockIdx::from_raw(0)]
+            body.basic_blocks[BasicBlockIdx::from_usize(0)]
                 .terminator
                 .kind,
             TerminatorKind::Return
