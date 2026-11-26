@@ -4,7 +4,7 @@ use glyim_span::Span;
 use glyim_type::{Ty, TyCtxMut, TyKind};
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
@@ -18,8 +18,8 @@ fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
 /// Build a body that computes lhs + rhs and stores in local 1.
 pub fn build_add_body(_tcx: &TyCtxMut, lhs: i128, rhs: i128, ty: Ty) -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(ty, Mutability::Mut),
     ]);
@@ -40,7 +40,7 @@ pub fn build_add_body(_tcx: &TyCtxMut, lhs: i128, rhs: i128, ty: Ty) -> Body {
         ),
         source_info: SourceInfo::new(Span::DUMMY),
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![stmt],
         terminator: Terminator {
             kind: TerminatorKind::Return,
@@ -54,8 +54,8 @@ pub fn build_add_body(_tcx: &TyCtxMut, lhs: i128, rhs: i128, ty: Ty) -> Body {
 /// Build a body that computes lhs - rhs and stores in local 1.
 pub fn build_sub_body(_tcx: &TyCtxMut, lhs: i128, rhs: i128, ty: Ty) -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(ty, Mutability::Mut),
     ]);
@@ -76,7 +76,7 @@ pub fn build_sub_body(_tcx: &TyCtxMut, lhs: i128, rhs: i128, ty: Ty) -> Body {
         ),
         source_info: SourceInfo::new(Span::DUMMY),
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![stmt],
         terminator: Terminator {
             kind: TerminatorKind::Return,
@@ -93,8 +93,8 @@ pub fn build_sub_body(_tcx: &TyCtxMut, lhs: i128, rhs: i128, ty: Ty) -> Body {
 pub fn build_branch_body(cond: bool, then_unreachable: bool, else_unreachable: bool) -> Body {
     let mut body = Body::dummy(dummy_def_id());
     let bool_ty = Ty::BOOL;
-    let discr_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let discr_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(bool_ty, Mutability::Not),
     ]);
@@ -109,8 +109,8 @@ pub fn build_branch_body(cond: bool, then_unreachable: bool, else_unreachable: b
         ),
         source_info: SourceInfo::new(Span::DUMMY),
     };
-    let then_target = BasicBlockIdx::from_raw(1);
-    let else_target = BasicBlockIdx::from_raw(2);
+    let then_target = BasicBlockIdx::from_usize(1);
+    let else_target = BasicBlockIdx::from_usize(2);
     let switch_targets =
         SwitchTargets::new(vec![(0u128, else_target)].into_boxed_slice(), then_target);
     let switch = Terminator {
@@ -143,7 +143,7 @@ pub fn build_branch_body(cond: bool, then_unreachable: bool, else_unreachable: b
             source_info: SourceInfo::new(Span::DUMMY),
         }
     };
-    body.basic_blocks = IndexVec::from_raw(vec![
+    body.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![assign_stmt],
             terminator: switch,
@@ -166,12 +166,12 @@ pub fn build_branch_body(cond: bool, then_unreachable: bool, else_unreachable: b
 /// Build an infinite loop body (Goto to itself).
 pub fn build_infinite_loop_body() -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![local_decl(Ty::UNIT, Mutability::Mut)]);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.locals = IndexVec::from_vec(vec![local_decl(Ty::UNIT, Mutability::Mut)]);
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![],
         terminator: Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(0),
+                target: BasicBlockIdx::from_usize(0),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         },
@@ -183,7 +183,7 @@ pub fn build_infinite_loop_body() -> Body {
 /// Build a recursive body: calls itself.
 pub fn build_recursive_body(def_id: DefId) -> Body {
     let mut body = Body::dummy(def_id);
-    body.locals = IndexVec::from_raw(vec![local_decl(Ty::UNIT, Mutability::Mut)]);
+    body.locals = IndexVec::from_vec(vec![local_decl(Ty::UNIT, Mutability::Mut)]);
     let call_terminator = Terminator {
         kind: TerminatorKind::Call {
             func: Operand::Constant(MirConst {
@@ -192,13 +192,13 @@ pub fn build_recursive_body(def_id: DefId) -> Body {
                 span: Span::DUMMY,
             }),
             args: vec![],
-            destination: Place::new(LocalIdx::from_raw(0)),
-            target: Some(BasicBlockIdx::from_raw(1)),
+            destination: Place::new(LocalIdx::from_usize(0)),
+            target: Some(BasicBlockIdx::from_usize(1)),
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
     };
-    body.basic_blocks = IndexVec::from_raw(vec![
+    body.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![],
             terminator: call_terminator,
@@ -219,8 +219,8 @@ pub fn build_recursive_body(def_id: DefId) -> Body {
 /// Build a body with an unreachable terminator.
 pub fn build_unreachable_body() -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![local_decl(Ty::UNIT, Mutability::Mut)]);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.locals = IndexVec::from_vec(vec![local_decl(Ty::UNIT, Mutability::Mut)]);
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![],
         terminator: Terminator {
             kind: TerminatorKind::Unreachable,
@@ -234,9 +234,9 @@ pub fn build_unreachable_body() -> Body {
 /// Build a body with `StorageLive`, assign, `StorageDead`.
 pub fn build_allocation_body(tcx: &mut TyCtxMut, val: i128) -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    let local = LocalIdx::from_raw(1);
+    let local = LocalIdx::from_usize(1);
     let ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
-    body.locals = IndexVec::from_raw(vec![
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(ty, Mutability::Mut),
     ]);
@@ -245,7 +245,7 @@ pub fn build_allocation_body(tcx: &mut TyCtxMut, val: i128) -> Body {
         ty,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![
             Statement {
                 kind: StatementKind::StorageLive(local),
