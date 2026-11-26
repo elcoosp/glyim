@@ -47,7 +47,7 @@ impl FrontendTester {
         let mut interner = glyim_core::interner::Interner::new();
         let (def_map, def_diags) = glyim_def_map::build_def_map(
             &result.root,
-            glyim_core::def_id::CrateId::from_raw(0),
+            glyim_core::def_id::CrateId::from_usize(0),
             interner.clone(),
         );
         trace.def_map_diagnostics.clone_from(&def_diags);
