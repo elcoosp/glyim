@@ -36,7 +36,10 @@ const N_ITEMS: u32 = 4;
 /// A minimal THIR body distinct per `local`.
 fn thir_body_for(local: u32) -> thir::Body {
     thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(local)),
+        owner: DefId::new(
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(local as usize),
+        ),
         params: Vec::new(),
         return_ty: Ty::UNIT,
         stmts: Vec::new(),
@@ -126,8 +129,9 @@ fn main() {
         let incr_def_fp = incr_db.item_tree_fingerprint(incr_file);
         let incr_thir_fps: Vec<Fingerprint> = (0..N_ITEMS)
             .map(|local| {
-                let arc =
-                    incr_db.thir_body_query(LocalDefId::from_raw(local), || thir_body_for(local));
+                let arc = incr_db.thir_body_query(LocalDefId::from_usize(local as usize), || {
+                    thir_body_for(local)
+                });
                 debug_fingerprint(&*arc)
             })
             .collect();
@@ -138,8 +142,9 @@ fn main() {
         let clean_def_fp = clean_db.item_tree_fingerprint(clean_file);
         let clean_thir_fps: Vec<Fingerprint> = (0..N_ITEMS)
             .map(|local| {
-                let arc =
-                    clean_db.thir_body_query(LocalDefId::from_raw(local), || thir_body_for(local));
+                let arc = clean_db.thir_body_query(LocalDefId::from_usize(local as usize), || {
+                    thir_body_for(local)
+                });
                 debug_fingerprint(&*arc)
             })
             .collect();
