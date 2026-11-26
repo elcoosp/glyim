@@ -39,7 +39,7 @@ fn obligation_collected() {
     };
 
     let dummy_trait_ref = TraitRef {
-        def_id: glyim_core::def_id::TraitDefId::from_raw(0),
+        def_id: glyim_core::def_id::TraitDefId::from_usize(0),
         substs,
     };
     let trait_pred = TraitPredicate {
@@ -70,19 +70,19 @@ fn obligation_fulfilled() {
 
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.clone().len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.clone().len()]),
     };
     let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
     let body_id = bodies.push(body);
 
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: main_name,
         kind: ItemKind::Fn(FnItem {
             params: vec![],
@@ -103,7 +103,7 @@ fn obligation_fulfilled() {
     let mut items: IndexVec<ItemId, Item> = IndexVec::new();
     items.push(item);
     let mut body_owners = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
     let hir = CrateHir {
         items,
         bodies,
