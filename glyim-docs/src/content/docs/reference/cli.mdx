@@ -34,6 +34,7 @@ The `glyim` compiler driver (built as `glyim-cli`) compiles a single `.g` source
 | `--time-passes` | flag | off | no | Print per-pass timing measurements after compilation. |
 | `--self-profile[=FILE]` | path | none | no | Record a Chrome-trace profiling event log (`FILE`, default `trace.json`); opens in Perfetto. |
 | `--opt-bisect-limit <N>` | integer | none | no | Stop the `-O<level>` MIR pass plan after the first `N` passes (M5.11 opt-bisect); pair with `--time-passes` to see one ran/changed/stmtsΔ/blocksΔ row per planned pass. Binary-searching `N` localizes a miscompile to the first pass whose output is wrong. |
+| `--explain [CODE]` | code | — | no | Print the registered explanation for one diagnostic code (M3.3 CT-5), e.g. `glyim --explain T0060`. A bare `--explain` lists every registered code. Answered before `<INPUT>` validation — explaining a code never compiles anything. The full listing of every code with its long-form text is the [diagnostics reference](/reference/diagnostics/). |
 | `--with-stdlib` | flag | off | no | Prepend the assembled standard library to the input, so `println`, `Vec`, `Option`, `Result`, `String`, `Box`, `Rc`, and `Iterator` resolve without explicit `use` statements. |
 | `-A`, `--allow <LINT>` | lint name | none | no | Suppress the named lint. Repeatable. |
 | `-W`, `--warn <LINT>` | lint name | none | no | Set the named lint to warning level (the default). Repeatable. `glyim -W help` lists all lints. |
