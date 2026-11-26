@@ -33,8 +33,10 @@ use crate::visitor::successor_blocks;
 struct MovePathIdx(u32);
 
 impl MovePathIdx {
+    /// Raw wrap for the move-path arena's own machinery. Formerly
+    /// `from_raw` (renamed by the CT-1 ratchet, plan M3.1).
     #[inline]
-    fn from_raw(raw: u32) -> Self {
+    fn from_u32(raw: u32) -> Self {
         Self(raw)
     }
     #[inline]
@@ -77,7 +79,7 @@ impl MovePathArena {
     }
 
     fn push(&mut self, path: MovePath) -> MovePathIdx {
-        let idx = MovePathIdx::from_raw(self.paths.len() as u32);
+        let idx = MovePathIdx::from_u32(self.paths.len() as u32);
         self.paths.push(path);
         idx
     }
@@ -241,7 +243,8 @@ fn build_move_paths(body: &Body, ctx: &dyn BorrowckCtx) -> MovePathArena {
         let ty_ctx = ctx.ty_ctx();
         if let Some(field_count) = count_fields(ty, ty_ctx) {
             for field_idx in 0..field_count {
-                let field_proj = ProjectionElem::Field(glyim_type::FieldIdx::from_raw(field_idx));
+                let field_proj =
+                    ProjectionElem::Field(glyim_type::FieldIdx::from_usize(field_idx as usize));
                 let child_place = Place {
                     local: local_idx,
                     projection: Box::new([field_proj]),
@@ -451,7 +454,7 @@ fn compute_move_dataflow(
             dead_in[bi] = new_dead_in;
             dead_out[bi] = new_dead_out;
 
-            let block_idx = BasicBlockIdx::from_raw(bi as u32);
+            let block_idx = BasicBlockIdx::from_usize(bi);
             let block_data = &body.basic_blocks[block_idx];
             for succ in successor_blocks(&block_data.terminator.kind) {
                 let si = succ.to_raw() as usize;
