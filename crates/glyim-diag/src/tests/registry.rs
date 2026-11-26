@@ -13,7 +13,7 @@
 //! [`explain_code`](crate::error_registry::explain_code) return the
 //! registered explanation — the `--explain <code>` surface.
 
-use crate::error_registry::{explain_code, registry_entries};
+use crate::error_registry::{explain_code, explain_entry, registry_entries};
 use crate::{ErrorCategory, ErrorCode};
 
 /// The exact set of `(category, number)` codes constructed across the
@@ -108,6 +108,62 @@ fn explain_code_rejects_unknown_strings() {
         "unknown code string must return None, not panic"
     );
     assert!(explain_code("not-a-code").is_none());
+}
+
+#[test]
+fn explain_entry_returns_the_full_registered_entry() {
+    // CT-5 (plan §5.2): "errors/*.toml (code, category, summary, long
+    // explanation, example fixtures) generates ... `glyim --explain E0123`,
+    // the docs page". The CLI surface prints title + explanation for one
+    // code, so the registry must expose the whole entry by display-form
+    // string — not just the explanation the way [`explain_code`] does.
+    let entry = explain_entry("T0050").expect("T0050 must be registered");
+    assert_eq!(entry.code.category, ErrorCategory::Type);
+    assert_eq!(entry.code.number, 50);
+    assert_eq!(entry.title, "non-exhaustive match");
+    assert_eq!(
+        entry.explanation,
+        explain_code("T0050").expect("explain_code must agree with explain_entry"),
+    );
+}
+
+#[test]
+fn explain_entry_covers_every_registered_code() {
+    for entry in registry_entries() {
+        let display = entry.code.to_string();
+        let looked = explain_entry(&display)
+            .unwrap_or_else(|| panic!("explain_entry must accept its own display form {display}"));
+        assert!(looked.code == entry.code);
+        assert!(!looked.title.is_empty());
+        assert!(!looked.explanation.is_empty());
+    }
+}
+
+#[test]
+fn explain_entry_rejects_unknown_strings() {
+    assert!(
+        explain_entry("Z9999").is_none(),
+        "unknown code string must return None, not panic"
+    );
+    assert!(explain_entry("not-a-code").is_none());
+    assert!(explain_entry("").is_none());
+    assert!(explain_entry("T").is_none());
+}
+
+#[test]
+fn explain_resolves_the_zero_numbered_code_display_form() {
+    // Regression: `Type:0` is registered and emitted (the generic late-stage
+    // type error), and its Display form is `T0000`. The zero-trimming parse
+    // used to consume every digit and then fail `u16` parse on the empty
+    // tail, so the registered zero code was unreachable through the
+    // `--explain` surface.
+    let entry = explain_entry("T0000").expect("T0000 is registered and must resolve");
+    assert_eq!(entry.code.number, 0);
+    assert_eq!(
+        explain_code("T0000"),
+        Some(entry.explanation.as_str()),
+        "explain_code and explain_entry must agree on the zero code"
+    );
 }
 
 #[test]
