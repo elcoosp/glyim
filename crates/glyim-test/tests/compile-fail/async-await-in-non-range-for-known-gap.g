@@ -16,6 +16,7 @@
 // same change — migrate the program to the pass corpus and flip the
 // ledger gap entry.
 //@ mode: compile-fail
+//@ expect-error-code: T0060
 //@ feature: LANG-ASYNC-AWAIT, TOOL-TEST-COMPILE-FAIL
 //@ backends: gam
 //@ known-gap: GAP-0006
