@@ -4,7 +4,10 @@ use crate::lang_items::{LangItem, LangItemError, LangItems};
 use glyim_core::def_id::{CrateId, DefId, LocalDefId};
 
 fn def(krate: u32, local: u32) -> DefId {
-    DefId::new(CrateId::from_raw(krate), LocalDefId::from_raw(local))
+    DefId::new(
+        CrateId::from_usize(krate as usize),
+        LocalDefId::from_usize(local as usize),
+    )
 }
 
 #[test]
