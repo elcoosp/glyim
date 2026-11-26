@@ -5,7 +5,7 @@ use glyim_type::Ty;
 
 #[test]
 fn terminator_goto() {
-    let target = BasicBlockIdx::from_raw(5);
+    let target = BasicBlockIdx::from_usize(5);
     let term = Terminator {
         kind: TerminatorKind::Goto { target },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -41,13 +41,13 @@ fn terminator_call_with_target() {
         ty: Ty::UNIT,
         span: Span::DUMMY,
     });
-    let dest = Place::new(LocalIdx::from_raw(1));
+    let dest = Place::new(LocalIdx::from_usize(1));
     let term = Terminator {
         kind: TerminatorKind::Call {
             func,
             args: vec![],
             destination: dest,
-            target: Some(BasicBlockIdx::from_raw(1)),
+            target: Some(BasicBlockIdx::from_usize(1)),
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -57,7 +57,7 @@ fn terminator_call_with_target() {
             target: Some(bb),
             cleanup: None,
             ..
-        } => assert_eq!(*bb, BasicBlockIdx::from_raw(1)),
+        } => assert_eq!(*bb, BasicBlockIdx::from_usize(1)),
         other => panic!("Expected Call, got {other:?}"),
     }
 }
@@ -69,14 +69,14 @@ fn terminator_call_with_cleanup() {
         ty: Ty::UNIT,
         span: Span::DUMMY,
     });
-    let dest = Place::new(LocalIdx::from_raw(1));
+    let dest = Place::new(LocalIdx::from_usize(1));
     let term = Terminator {
         kind: TerminatorKind::Call {
             func,
             args: vec![],
             destination: dest,
-            target: Some(BasicBlockIdx::from_raw(1)),
-            cleanup: Some(BasicBlockIdx::from_raw(2)),
+            target: Some(BasicBlockIdx::from_usize(1)),
+            cleanup: Some(BasicBlockIdx::from_usize(2)),
         },
         source_info: SourceInfo::new(Span::DUMMY),
     };
@@ -85,7 +85,7 @@ fn terminator_call_with_cleanup() {
             target: Some(_),
             cleanup: Some(cleanup_bb),
             ..
-        } => assert_eq!(*cleanup_bb, BasicBlockIdx::from_raw(2)),
+        } => assert_eq!(*cleanup_bb, BasicBlockIdx::from_usize(2)),
         other => panic!("Expected Call with cleanup, got {other:?}"),
     }
 }
@@ -101,8 +101,8 @@ fn terminator_assert() {
         kind: TerminatorKind::Assert {
             cond,
             expected: true,
-            target: BasicBlockIdx::from_raw(3),
-            cleanup: Some(BasicBlockIdx::from_raw(4)),
+            target: BasicBlockIdx::from_usize(3),
+            cleanup: Some(BasicBlockIdx::from_usize(4)),
             msg: AssertMessage::Overflow(BinOp::Add),
         },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -115,7 +115,7 @@ fn terminator_assert() {
             ..
         } => {
             assert!(*expected);
-            assert_eq!(*target, BasicBlockIdx::from_raw(3));
+            assert_eq!(*target, BasicBlockIdx::from_usize(3));
             assert!(matches!(msg, AssertMessage::Overflow(BinOp::Add)));
         }
         other => panic!("Expected Assert, got {other:?}"),
@@ -124,11 +124,11 @@ fn terminator_assert() {
 
 #[test]
 fn terminator_drop() {
-    let place = Place::new(LocalIdx::from_raw(2));
+    let place = Place::new(LocalIdx::from_usize(2));
     let term = Terminator {
         kind: TerminatorKind::Drop {
             place,
-            target: BasicBlockIdx::from_raw(1),
+            target: BasicBlockIdx::from_usize(1),
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -138,7 +138,7 @@ fn terminator_drop() {
             target,
             cleanup: None,
             ..
-        } => assert_eq!(*target, BasicBlockIdx::from_raw(1)),
+        } => assert_eq!(*target, BasicBlockIdx::from_usize(1)),
         other => panic!("Expected Drop, got {other:?}"),
     }
 }
@@ -150,7 +150,8 @@ fn terminator_switch_int() {
         ty: Ty::BOOL,
         span: Span::DUMMY,
     });
-    let targets = SwitchTargets::if_switch(BasicBlockIdx::from_raw(2), BasicBlockIdx::from_raw(3));
+    let targets =
+        SwitchTargets::if_switch(BasicBlockIdx::from_usize(2), BasicBlockIdx::from_usize(3));
     let term = Terminator {
         kind: TerminatorKind::SwitchInt {
             discr,
@@ -164,7 +165,7 @@ fn terminator_switch_int() {
             switch_ty, targets, ..
         } => {
             assert_eq!(*switch_ty, Ty::BOOL);
-            assert_eq!(targets.otherwise(), BasicBlockIdx::from_raw(3));
+            assert_eq!(targets.otherwise(), BasicBlockIdx::from_usize(3));
         }
         other => panic!("Expected SwitchInt, got {other:?}"),
     }
