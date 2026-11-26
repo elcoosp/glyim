@@ -9,7 +9,7 @@ fn get_body_hir(source: &str) -> (crate::CrateHir, Interner, BodyId) {
     let parse_result = parse_to_syntax(source, file_id);
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
-    let body_id = match &hir.items[ItemId::from_raw(0)].kind {
+    let body_id = match &hir.items[ItemId::from_usize(0)].kind {
         ItemKind::Fn(fn_item) => fn_item.body.expect("no body"),
         other => panic!("expected Fn item, got {other:?}"),
     };
@@ -24,7 +24,7 @@ fn get_body(hir: &crate::CrateHir, body_id: BodyId) -> &crate::Body {
 fn test_break_continue_lowering() {
     let (hir, _interner, body_id) = get_body_hir("fn f() { loop { break; continue; } }");
     let body = get_body(&hir, body_id);
-    let block_id = ExprId::from_raw(body.exprs.len() as u32 - 1);
+    let block_id = ExprId::from_usize(body.exprs.len() - 1);
     match &body.exprs[block_id] {
         Expr::Block {
             tail: Some(loop_id),
