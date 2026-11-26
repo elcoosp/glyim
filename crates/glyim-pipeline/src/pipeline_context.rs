@@ -92,10 +92,10 @@ impl LowerCtx for PipelineLowerCtx<'_> {
         }
 
         let def_id = glyim_core::def_id::DefId::new(
-            glyim_core::def_id::CrateId::from_raw(0),
-            glyim_core::def_id::LocalDefId::from_raw(id.to_raw()),
+            glyim_core::def_id::CrateId::from_usize(0),
+            glyim_core::def_id::LocalDefId::from_usize(id.index()),
         );
-        let item_id = glyim_hir::ItemId::from_raw(def_id.local_id.to_raw());
+        let item_id = glyim_hir::ItemId::from_usize(def_id.local_id.index());
 
         if let Some(item) = self.hir.items.get(item_id) {
             match &item.kind {
@@ -173,7 +173,7 @@ impl LowerCtx for PipelineLowerCtx<'_> {
         // local (breaking the async state-machine desugar's
         // `match self.state { Start { f0 } => .. }`, M4/M5).
         if let Some(idx) = adt.fields.iter_enumerated().find(|(_, f)| f.name == name) {
-            return Some(FieldIdx::from_raw(idx.0.index() as u32));
+            return Some(FieldIdx::from_usize(idx.0.index()));
         }
         if let Some(variant) = adt.variants.get(variant_idx as usize)
             && let Some(idx) = variant
@@ -181,7 +181,7 @@ impl LowerCtx for PipelineLowerCtx<'_> {
                 .iter_enumerated()
                 .find(|(_, f)| f.name == name)
         {
-            return Some(FieldIdx::from_raw(idx.0.index() as u32));
+            return Some(FieldIdx::from_usize(idx.0.index()));
         }
         None
     }
@@ -260,7 +260,7 @@ impl LowerCtx for PipelineLowerCtx<'_> {
                     continue;
                 };
                 let local: LocalDefId = self.hir.body_owners[body_id];
-                let fn_def_id = FnDefId::from_raw(local.to_raw());
+                let fn_def_id = FnDefId::from_usize(local.index());
                 let fn_substs = self.ty_ctx.intern_substitution(vec![]);
                 let fn_ty = self.ty_ctx.mk_ty(TyKind::FnDef(fn_def_id, fn_substs));
                 // The `next` body's return type is the real `Option<elem_ty>`.
@@ -464,7 +464,7 @@ impl PipelineLowerCtx<'_> {
                     .collect::<Option<Vec<_>>>()?;
                 MirConstKind::Variant {
                     adt_id: *adt_id,
-                    variant_idx: glyim_mir::VariantIdx::from_raw(variant_idx.to_raw()),
+                    variant_idx: glyim_mir::VariantIdx::from_usize(variant_idx.index()),
                     fields: elems,
                 }
             }
@@ -579,7 +579,7 @@ mod tests {
         // `Range<T>` is registered as ADT 1000 by the `TyCtxBuilder`-style
         // default setup; `cv_const` only reads the substitution's element type,
         // so we build the `Range<i32>` type directly without re-registering it.
-        let range_ty = tcx.mk_ty(TyKind::Adt(AdtId::from_raw(1000), substs));
+        let range_ty = tcx.mk_ty(TyKind::Adt(AdtId::from_usize(1000), substs));
         let frozen = tcx.freeze();
 
         let hir = CrateHir {
