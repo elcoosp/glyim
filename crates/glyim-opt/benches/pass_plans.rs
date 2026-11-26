@@ -59,17 +59,17 @@ fn synthetic_body(ctx: &mut TyCtxMut, blocks: usize) -> Body {
 
     let assign = |place: u32, val: i128| Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(place)),
+            Place::new(LocalIdx::from_usize(place as usize)),
             Rvalue::Use(const_int(val, i32_ty)),
         ),
         source_info: SourceInfo::new(Span::DUMMY),
     };
     let storage_live = |l: u32| Statement {
-        kind: StatementKind::StorageLive(LocalIdx::from_raw(l)),
+        kind: StatementKind::StorageLive(LocalIdx::from_usize(l as usize)),
         source_info: SourceInfo::new(Span::DUMMY),
     };
     let storage_dead = |l: u32| Statement {
-        kind: StatementKind::StorageDead(LocalIdx::from_raw(l)),
+        kind: StatementKind::StorageDead(LocalIdx::from_usize(l as usize)),
         source_info: SourceInfo::new(Span::DUMMY),
     };
 
@@ -101,7 +101,7 @@ fn synthetic_body(ctx: &mut TyCtxMut, blocks: usize) -> Body {
         } else {
             Terminator {
                 kind: TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw((i + 1) as u32),
+                    target: BasicBlockIdx::from_usize(i + 1),
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
             }
@@ -115,11 +115,11 @@ fn synthetic_body(ctx: &mut TyCtxMut, blocks: usize) -> Body {
 
     Body {
         owner: glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ),
-        basic_blocks: IndexVec::from_raw(bbs),
-        locals: IndexVec::from_raw(
+        basic_blocks: IndexVec::from_vec(bbs),
+        locals: IndexVec::from_vec(
             locals
                 .into_iter()
                 .map(|(ty, mutability)| LocalDecl {
