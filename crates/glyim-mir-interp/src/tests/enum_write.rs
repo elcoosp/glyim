@@ -15,7 +15,7 @@ use glyim_type::{AdtDef, FieldDef, TyKind, VariantDef};
 use crate::{InterpValue, Interpreter};
 
 fn dummy_owner() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 fn dummy_si() -> SourceInfo {
     SourceInfo::new(Span::DUMMY)
@@ -26,9 +26,9 @@ fn enum_field_write_preserves_discriminant() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
     // Register an enum `E { A(i32), B(i32) }`.
-    let adt_id = AdtId::from_raw(1000);
+    let adt_id = AdtId::from_usize(1000);
     let mk_fields = |ctx: &mut glyim_type::TyCtxMut| {
-        IndexVec::from_raw(vec![FieldDef {
+        IndexVec::from_vec(vec![FieldDef {
             name: ctx.resolver().intern("0"),
             ty: i32_ty,
         }])
@@ -67,7 +67,7 @@ fn enum_field_write_preserves_discriminant() {
         mutability: Mutability::Mut,
         source_info: dummy_si(),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(
@@ -75,7 +75,7 @@ fn enum_field_write_preserves_discriminant() {
                 Rvalue::Aggregate(
                     AggregateKind::Adt(
                         adt_id,
-                        VariantIdx::from_raw(0),
+                        VariantIdx::from_usize(0),
                         tcx.intern_substitution(vec![]),
                     ),
                     vec![Operand::Constant(MirConst {
@@ -89,7 +89,7 @@ fn enum_field_write_preserves_discriminant() {
         });
 
     // `Body::dummy`'s bb0 ends in `Unreachable`; terminate it with `Return`.
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Return,
         source_info: dummy_si(),
     };
@@ -103,7 +103,7 @@ fn enum_field_write_preserves_discriminant() {
         .write_place(
             &Place {
                 local: ev,
-                projection: Box::new([ProjectionElem::Field(glyim_type::FieldIdx::from_raw(0))]),
+                projection: Box::new([ProjectionElem::Field(glyim_type::FieldIdx::from_usize(0))]),
             },
             InterpValue::Int(42),
         )
