@@ -13,7 +13,7 @@ fn make_slice_pattern_body(ctx_mut: &mut TyCtxMut) -> Body {
     let slice_ty = ctx_mut.mk_ty(TyKind::Slice(elem_ty));
 
     let scrutinee = Expr {
-        kind: ExprKind::VarRef(thir::LocalVarId::from_raw(0)),
+        kind: ExprKind::VarRef(thir::LocalVarId::from_usize(0)),
         ty: slice_ty,
         span: Span::DUMMY,
     };
@@ -21,7 +21,7 @@ fn make_slice_pattern_body(ctx_mut: &mut TyCtxMut) -> Body {
     let prefix = vec![
         Pattern {
             kind: PatternKind::Binding {
-                var_id: thir::LocalVarId::from_raw(0),
+                var_id: thir::LocalVarId::from_usize(0),
                 name: ctx_mut.resolver().intern("a"),
                 mutability: Mutability::Not,
                 binding_ty: None,
@@ -32,7 +32,7 @@ fn make_slice_pattern_body(ctx_mut: &mut TyCtxMut) -> Body {
         },
         Pattern {
             kind: PatternKind::Binding {
-                var_id: thir::LocalVarId::from_raw(0),
+                var_id: thir::LocalVarId::from_usize(0),
                 name: ctx_mut.resolver().intern("b"),
                 mutability: Mutability::Not,
                 binding_ty: None,
@@ -43,7 +43,7 @@ fn make_slice_pattern_body(ctx_mut: &mut TyCtxMut) -> Body {
         },
         Pattern {
             kind: PatternKind::Binding {
-                var_id: thir::LocalVarId::from_raw(0),
+                var_id: thir::LocalVarId::from_usize(0),
                 name: ctx_mut.resolver().intern("c"),
                 mutability: Mutability::Not,
                 binding_ty: None,
@@ -83,7 +83,7 @@ fn make_slice_pattern_body(ctx_mut: &mut TyCtxMut) -> Body {
     };
     let stmt = Stmt::Expr { expr: match_expr };
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         params: vec![],
         return_ty: ctx_mut.unit_ty(),
         stmts: vec![stmt],
