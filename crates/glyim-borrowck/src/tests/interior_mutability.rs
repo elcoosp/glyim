@@ -53,8 +53,8 @@ impl crate::BorrowckCtx for TestCtx<'_> {
 fn dummy_body() -> Body {
     Body {
         owner: glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ),
         basic_blocks: IndexVec::new(),
         locals: IndexVec::new(),
@@ -73,7 +73,7 @@ fn dummy_body() -> Body {
 fn build_interior_mut_body(interior_mutable: bool) -> (TyCtx, Body) {
     let (ctx, (_adt_id, adt_ty)) = with_fresh_ty_ctx(|ctx_mut| {
         // Create a dummy ADT type: struct Dummy(i32) with 1 field.
-        let adt_id = AdtId::from_raw(0);
+        let adt_id = AdtId::from_usize(0);
         // Mark interior mutability BEFORE creating the type so flags are correct.
         if interior_mutable {
             ctx_mut.mark_adt_interior_mutable(adt_id);
@@ -103,15 +103,15 @@ fn build_interior_mut_body(interior_mutable: bool) -> (TyCtx, Body) {
         // Statement 0: create shared borrow of local 0, storing in local 1
         Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
-                Rvalue::Ref(Place::new(LocalIdx::from_raw(0)), BorrowKind::Shared),
+                Place::new(LocalIdx::from_usize(1)),
+                Rvalue::Ref(Place::new(LocalIdx::from_usize(0)), BorrowKind::Shared),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         },
         // Statement 1: write to local 0 (assign unit) while local 1 is live
         Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Unit,
                     ty: Ty::UNIT,
@@ -123,8 +123,8 @@ fn build_interior_mut_body(interior_mutable: bool) -> (TyCtx, Body) {
         // Statement 2: use local 1 to keep it live (read it)
         Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
-                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(1)))),
+                Place::new(LocalIdx::from_usize(1)),
+                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(1)))),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         },
@@ -166,7 +166,7 @@ fn cell_mutation_through_shared_ref() {
 fn interior_mutability_flag_is_set() {
     // Verify that marking an ADT as interior mutable sets HAS_INTERIOR_MUTABILITY on the type.
     let (ctx, adt_ty) = with_fresh_ty_ctx(|ctx_mut| {
-        let adt_id = AdtId::from_raw(0);
+        let adt_id = AdtId::from_usize(0);
         ctx_mut.mark_adt_interior_mutable(adt_id);
         let substs = ctx_mut.intern_substitution(vec![]);
         ctx_mut.mk_ty(TyKind::Adt(adt_id, substs))
