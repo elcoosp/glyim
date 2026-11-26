@@ -51,7 +51,7 @@ fn test_db() -> Database {
 fn main_assign_count(
     bodies: &std::collections::BTreeMap<DefId, std::sync::Arc<glyim_mir::Body>>,
 ) -> usize {
-    let main_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let main_id = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     // The fixture has a single user function; `main`'s body is the one the
     // entry pre-pass selected (fall back to the only body present).
     let body = bodies
