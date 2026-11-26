@@ -26,6 +26,7 @@ mod tests {
             time_passes: false,
             self_profile: None,
             explain_rebuild: false,
+            opt_bisect_limit: None,
         };
         let result = run_with_args(args);
         assert!(result.is_err());
@@ -68,6 +69,7 @@ mod tests {
             time_passes: false,
             self_profile: None,
             explain_rebuild: false,
+            opt_bisect_limit: None,
         };
         let result = run_with_args(args);
         assert!(result.is_ok(), "emit_mir failed: {:?}", result.err());
@@ -104,6 +106,7 @@ mod tests {
             time_passes: false,
             self_profile: None,
             explain_rebuild: false,
+            opt_bisect_limit: None,
         };
         let result = run_with_args(args);
         assert!(result.is_ok(), "emit_llvm_ir failed: {:?}", result.err());
