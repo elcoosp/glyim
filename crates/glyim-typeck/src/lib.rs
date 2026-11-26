@@ -142,7 +142,7 @@ fn adt_id_for_item(
         // the single source of truth shared with `register_builtin_ranges`.
         let name_str = def_map.interner.resolve(name);
         if let Some(builtin) = glyim_type::builtin_adts::BuiltinAdt::from_name(name_str) {
-            return AdtId::from_raw(builtin.adt_id());
+            return AdtId::from_usize(builtin.adt_id() as usize);
         }
     }
 
@@ -171,18 +171,18 @@ fn adt_id_for_item(
         .and_then(|m| m.scope.types.get(&name))
         .map(|(id, _, _)| *id)
     {
-        return AdtId::from_raw(l.to_raw());
+        return AdtId::from_usize(l.index());
     }
     if let Some(l) = (0..def_map.modules.len())
         .find_map(|i| {
-            def_map.modules[glyim_def_map::ModuleId::from_raw(i as u32)]
+            def_map.modules[glyim_def_map::ModuleId::from_usize(i)]
                 .scope
                 .types
                 .get(&name)
         })
         .map(|(id, _, _)| *id)
     {
-        return AdtId::from_raw(l.to_raw());
+        return AdtId::from_usize(l.index());
     }
     if let Some(existing) = ctx.adt_id_by_name(name) {
         return existing;
@@ -316,7 +316,7 @@ fn canonical_enum_adt_id(
     def_map: &glyim_def_map::CrateDefMap,
     enum_local: glyim_core::def_id::LocalDefId,
 ) -> glyim_core::def_id::AdtId {
-    let from_defmap = glyim_core::def_id::AdtId::from_raw(enum_local.to_raw());
+    let from_defmap = glyim_core::def_id::AdtId::from_usize(enum_local.index());
     if ctx.adt_def(from_defmap).is_some() {
         return from_defmap;
     }
@@ -383,7 +383,7 @@ pub fn typeck_crate(
     // collides with the def-map's ids — an impl method that got id 51
     // previously overwrote `io::copy`'s `FnSig` (also id 51), making
     // `io::copy(..)` type as `Adt63` (OpenOptions).
-    let mut next_local_def_id: u32 = def_map.max_local_def_id;
+    let mut next_local_def_id: usize = def_map.max_local_def_id;
 
     // any trait/impl/function type resolution. The coherence pass and the
     // signature-resolution loops below resolve types that reference these ADTs
@@ -427,7 +427,7 @@ pub fn typeck_crate(
                                     if let Some(local) =
                                         tyconv::resolve_path_to_local_def_id(&ctx, def_map, p)
                                     {
-                                        let tid = TraitDefId::from_raw(local.to_raw());
+                                        let tid = TraitDefId::from_usize(local.index());
                                         ctx.param_bounds
                                             .entry(gp.name)
                                             .or_default()
@@ -448,7 +448,7 @@ pub fn typeck_crate(
                                     if let Some(local) =
                                         tyconv::resolve_path_to_local_def_id(&ctx, def_map, p)
                                     {
-                                        let tid = TraitDefId::from_raw(local.to_raw());
+                                        let tid = TraitDefId::from_usize(local.index());
                                         ctx.param_bounds
                                             .entry(gp.name)
                                             .or_default()
@@ -564,7 +564,7 @@ pub fn typeck_crate(
                 ItemKind::Const(c) => {
                     let const_def_id = match def_map.modules[module_id].scope.values.get(&item.name)
                     {
-                        Some((id, _, _)) => ConstDefId::from_raw(id.to_raw()),
+                        Some((id, _, _)) => ConstDefId::from_usize(id.index()),
                         None => return, // unregistered — later branch handles it
                     };
                     let empty_params: FxHashMap<Name, Ty> = FxHashMap::default();
@@ -585,7 +585,7 @@ pub fn typeck_crate(
                     // resolve a bare static path to `StaticRef`.
                     let static_def_id =
                         match def_map.modules[module_id].scope.values.get(&item.name) {
-                            Some((id, _, _)) => StaticDefId::from_raw(id.to_raw()),
+                            Some((id, _, _)) => StaticDefId::from_usize(id.index()),
                             None => return,
                         };
                     let empty_params: FxHashMap<Name, Ty> = FxHashMap::default();
@@ -604,7 +604,7 @@ pub fn typeck_crate(
                     // Also alias into `const_tys` under the same raw id
                     // so `PipelineLowerCtx::const_value` can recover the
                     // type (it does `const_ty(def_id)` for the alias).
-                    ctx.register_const_ty(ConstDefId::from_raw(static_def_id.to_raw()), static_ty);
+                    ctx.register_const_ty(ConstDefId::from_usize(static_def_id.index()), static_ty);
                 }
                 _ => {}
             }
@@ -637,7 +637,7 @@ pub fn typeck_crate(
                 kind: glyim_core::path::PathKind::Plain,
             };
             if let Some(local) = tyconv::resolve_path_to_local_def_id(&ctx, def_map, &trait_path) {
-                let trait_def_id = TraitDefId::from_raw(local.to_raw());
+                let trait_def_id = TraitDefId::from_usize(local.index());
                 let methods = trait_item
                     .methods
                     .iter()
@@ -706,7 +706,7 @@ pub fn typeck_crate(
                                 if let Some(local) =
                                     tyconv::resolve_path_to_local_def_id(&ctx, def_map, p)
                                 {
-                                    let tid = TraitDefId::from_raw(local.to_raw());
+                                    let tid = TraitDefId::from_usize(local.index());
                                     ctx.param_bounds
                                         .entry(gp.name)
                                         .or_default()
@@ -774,7 +774,7 @@ pub fn typeck_crate(
                                         if let Some(local) =
                                             tyconv::resolve_path_to_local_def_id(ctx, def_map, p)
                                         {
-                                            let tid = TraitDefId::from_raw(local.to_raw());
+                                            let tid = TraitDefId::from_usize(local.index());
                                             ctx.param_bounds
                                                 .entry(gp.name)
                                                 .or_default()
@@ -875,7 +875,7 @@ pub fn typeck_crate(
                             if let Some(local) =
                                 tyconv::resolve_path_to_local_def_id(ctx, def_map, p)
                             {
-                                let tid = TraitDefId::from_raw(local.to_raw());
+                                let tid = TraitDefId::from_usize(local.index());
                                 ctx.param_bounds
                                     .entry(pname)
                                     .or_default()
@@ -906,7 +906,7 @@ pub fn typeck_crate(
                     if let Some(local) =
                         tyconv::resolve_path_to_local_def_id(&ctx, def_map, &trait_path)
                     {
-                        let tid = TraitDefId::from_raw(local.to_raw());
+                        let tid = TraitDefId::from_usize(local.index());
                         let self_name = ctx.resolver().intern("Self");
                         ctx.param_bounds
                             .entry(self_name)
@@ -992,7 +992,7 @@ pub fn typeck_crate(
                 resolver
                     .resolve_path(&core_path)
                     .values
-                    .map_or_else(|| LocalDefId::from_raw(item.id.to_raw()), |(id, _)| id)
+                    .map_or_else(|| LocalDefId::from_usize(item.id.index()), |(id, _)| id)
             };
             let sig = tyconv::resolve_fn_sig(
                 &mut ctx,
@@ -1008,7 +1008,7 @@ pub fn typeck_crate(
             let inputs =
                 ctx.intern_substitution(sig.param_tys.iter().map(|t| GenericArg::Ty(*t)).collect());
             ctx.register_fn_sig(
-                FnDefId::from_raw(local_def_id.to_raw()),
+                FnDefId::from_usize(local_def_id.index()),
                 FnSig {
                     inputs,
                     output: sig.return_ty,
@@ -1280,9 +1280,9 @@ fn pre_register_fn_sigs_in_module(
             ItemKind::Fn(f) => {
                 let local_def_id = match def_map.modules[module_id].scope.values.get(&item.name) {
                     Some((id, _, _)) => *id,
-                    None => LocalDefId::from_raw(item.id.to_raw()),
+                    None => LocalDefId::from_usize(item.id.index()),
                 };
-                let fn_id = FnDefId::from_raw(local_def_id.to_raw());
+                let fn_id = FnDefId::from_usize(local_def_id.index());
 
                 // Script 670: extern_fns registered BEFORE the sig-guard.
                 if f.abi == Some(ctx.resolver().intern("C"))
@@ -1381,7 +1381,7 @@ fn pre_allocate_impl_method_ids(
     hir: &glyim_hir::CrateHir,
     item_ids: &[ItemId],
     module_id: ModuleId,
-    next_local_def_id: &mut u32,
+    next_local_def_id: &mut usize,
     body_owner_map: &mut std::collections::HashMap<glyim_hir::BodyId, LocalDefId>,
 ) {
     for item_id in item_ids {
@@ -1407,10 +1407,10 @@ fn pre_allocate_impl_method_ids(
                     let local_def_id = {
                         let id = *next_local_def_id;
                         *next_local_def_id += 1;
-                        LocalDefId::from_raw(id)
+                        LocalDefId::from_usize(id)
                     };
                     body_owner_map.insert(bid, local_def_id);
-                    let fn_id = FnDefId::from_raw(local_def_id.to_raw());
+                    let fn_id = FnDefId::from_usize(local_def_id.index());
                     let combined_generics: Vec<glyim_hir::GenericParam> = impl_item
                         .generic_params
                         .iter()
@@ -1506,7 +1506,7 @@ fn check_fn_items_in_module(
     all_const_values: &mut std::collections::HashMap<ConstDefId, glyim_const_eval::ConstValue>,
     item_ids: &[ItemId],
     module_id: ModuleId,
-    next_local_def_id: &mut u32,
+    next_local_def_id: &mut usize,
     body_owner_map: &mut std::collections::HashMap<glyim_hir::BodyId, LocalDefId>,
 ) {
     for item_id in item_ids {
@@ -1528,7 +1528,7 @@ fn check_fn_items_in_module(
                     // track this item (e.g. `main`). This must match the id
                     // `discover_mono_roots` assigns to entry points so the
                     // MIR body is found during monomorphization.
-                    None => LocalDefId::from_raw(item.id.to_raw()),
+                    None => LocalDefId::from_usize(item.id.index()),
                 };
                 let owner = DefId::new(local_krate, local_def_id);
 
@@ -1548,7 +1548,7 @@ fn check_fn_items_in_module(
                     sig.param_tys.iter().map(|t| GenericArg::Ty(*t)).collect(),
                 );
                 ctx.register_fn_sig(
-                    FnDefId::from_raw(local_def_id.to_raw()),
+                    FnDefId::from_usize(local_def_id.index()),
                     FnSig {
                         inputs,
                         output: sig.return_ty,
@@ -1622,9 +1622,9 @@ fn check_fn_items_in_module(
                         glyim_type::builtin_adts::BuiltinAdt::from_name(
                             def_map.interner.resolve(item.name),
                         ) {
-                        AdtId::from_raw(builtin.adt_id())
+                        AdtId::from_usize(builtin.adt_id() as usize)
                     } else {
-                        AdtId::from_raw(enum_local.to_raw())
+                        AdtId::from_usize(enum_local.index())
                     };
                     // The enum's own generic params (e.g. `T` in `Poll<T>`) must
                     // be in scope when resolving variant field types, so
@@ -1695,9 +1695,9 @@ fn check_fn_items_in_module(
                         glyim_type::builtin_adts::BuiltinAdt::from_name(
                             def_map.interner.resolve(item.name),
                         ) {
-                        AdtId::from_raw(builtin.adt_id())
+                        AdtId::from_usize(builtin.adt_id() as usize)
                     } else {
-                        AdtId::from_raw(struct_local.to_raw())
+                        AdtId::from_usize(struct_local.index())
                     };
                     // Generic params of the struct are in scope when resolving
                     // its field types (e.g. `struct S<T> { x: T }`). Build the
@@ -1778,7 +1778,7 @@ fn check_fn_items_in_module(
                                     if let Some(local) =
                                         tyconv::resolve_path_to_local_def_id(ctx, def_map, p)
                                     {
-                                        let tid = TraitDefId::from_raw(local.to_raw());
+                                        let tid = TraitDefId::from_usize(local.index());
                                         ctx.param_bounds
                                             .entry(gp.name)
                                             .or_default()
@@ -1831,7 +1831,7 @@ fn check_fn_items_in_module(
                     } else {
                         let id = *next_local_def_id;
                         *next_local_def_id += 1;
-                        LocalDefId::from_raw(id)
+                        LocalDefId::from_usize(id)
                     };
                     let owner = DefId::new(local_krate, local_def_id);
                     if let Some(bid) = method.body {
@@ -1858,7 +1858,7 @@ fn check_fn_items_in_module(
                         sig.param_tys.iter().map(|t| GenericArg::Ty(*t)).collect(),
                     );
                     ctx.register_fn_sig(
-                        FnDefId::from_raw(local_def_id.to_raw()),
+                        FnDefId::from_usize(local_def_id.index()),
                         FnSig {
                             inputs,
                             output: sig.return_ty,
@@ -1869,7 +1869,7 @@ fn check_fn_items_in_module(
                     );
                     // §3.5.30 impl-method follow-up: propagate unsafe flag.
                     ctx.register_fn_unsafe(
-                        FnDefId::from_raw(local_def_id.to_raw()),
+                        FnDefId::from_usize(local_def_id.index()),
                         method.is_unsafe,
                     );
                     // Script 690 (re-applied): register the inherent-method
@@ -1878,7 +1878,7 @@ fn check_fn_items_in_module(
                     // silently become Ty::ERROR if not yet registered in the
                     // module's type scope when impls are scanned).
                     let method_name = method.name;
-                    let fn_def_id = FnDefId::from_raw(local_def_id.to_raw());
+                    let fn_def_id = FnDefId::from_usize(local_def_id.index());
                     let self_type_name: Option<Name> = match &impl_item.self_ty {
                         glyim_hir::TypeRef::Path(p) if p.segments.len() == 1 => {
                             Some(p.segments[0].name)
@@ -1906,7 +1906,7 @@ fn check_fn_items_in_module(
                                 trait_def_id,
                                 self_ty,
                                 method.name,
-                                FnDefId::from_raw(local_def_id.to_raw()),
+                                FnDefId::from_usize(local_def_id.index()),
                             );
                         }
                     }
@@ -2001,7 +2001,7 @@ fn check_fn_items_in_module(
                         let local_def_id = {
                             let id = *next_local_def_id;
                             *next_local_def_id += 1;
-                            LocalDefId::from_raw(id)
+                            LocalDefId::from_usize(id)
                         };
                         let owner = DefId::new(local_krate, local_def_id);
                         let combined_generics: Vec<glyim_hir::GenericParam> = impl_item
@@ -2030,7 +2030,7 @@ fn check_fn_items_in_module(
                             sig.param_tys.iter().map(|t| GenericArg::Ty(*t)).collect(),
                         );
                         ctx.register_fn_sig(
-                            FnDefId::from_raw(local_def_id.to_raw()),
+                            FnDefId::from_usize(local_def_id.index()),
                             FnSig {
                                 inputs,
                                 output: sig.return_ty,
@@ -2042,7 +2042,7 @@ fn check_fn_items_in_module(
                         // §3.5.30 impl-method follow-up: propagate unsafe
                         // flag for trait default methods reached via impls.
                         ctx.register_fn_unsafe(
-                            FnDefId::from_raw(local_def_id.to_raw()),
+                            FnDefId::from_usize(local_def_id.index()),
                             tm.is_unsafe,
                         );
                         if let (Some(self_ty), Some(trait_def_id)) = (self_ty_opt, trait_def_id_opt)
@@ -2051,7 +2051,7 @@ fn check_fn_items_in_module(
                                 trait_def_id,
                                 self_ty,
                                 tm.name,
-                                FnDefId::from_raw(local_def_id.to_raw()),
+                                FnDefId::from_usize(local_def_id.index()),
                             );
                         }
                         let params: Vec<(Name, Ty, Span)> = tm
@@ -2105,11 +2105,11 @@ fn check_fn_items_in_module(
                 let static_def_id = if let Some((id, _, _)) =
                     def_map.modules[module_id].scope.values.get(&item.name)
                 {
-                    StaticDefId::from_raw(id.to_raw())
+                    StaticDefId::from_usize(id.index())
                 } else {
                     let id = *next_local_def_id;
                     *next_local_def_id += 1;
-                    StaticDefId::from_raw(id)
+                    StaticDefId::from_usize(id)
                 };
                 let empty_params: FxHashMap<Name, Ty> = FxHashMap::default();
                 let static_ty = tyconv::resolve_type_ref(
@@ -2123,14 +2123,14 @@ fn check_fn_items_in_module(
                 );
                 ctx.register_static_ty(static_def_id, static_ty);
                 ctx.register_static_is_mut(static_def_id, s.is_mut);
-                ctx.register_const_ty(ConstDefId::from_raw(static_def_id.to_raw()), static_ty);
+                ctx.register_const_ty(ConstDefId::from_usize(static_def_id.index()), static_ty);
 
                 // Const-evaluate the static's initializer so lowering can
                 // fold the static to a `MirConst`. Statics and consts share
                 // the same `LocalDefId` raw id space; the value is stored
                 // under a `ConstDefId` aliasing the static's raw id.
                 if let (Some(body_id), Some(root_expr)) = (s.body, s.root_expr) {
-                    let const_alias = ConstDefId::from_raw(static_def_id.to_raw());
+                    let const_alias = ConstDefId::from_usize(static_def_id.index());
                     let primitive_tys = glyim_const_eval::ConstEvaluator::build_primitive_tys(ctx);
                     let body = &hir.bodies[body_id];
                     let mut evaluator = glyim_const_eval::ConstEvaluator::new(body)
@@ -2145,7 +2145,7 @@ fn check_fn_items_in_module(
                                 .map(|(id, _, _)| *id);
                             if let Some(local) = fn_local_def_id {
                                 evaluator = evaluator
-                                    .with_fn_def(fn_item.name, FnDefId::from_raw(local.to_raw()));
+                                    .with_fn_def(fn_item.name, FnDefId::from_usize(local.index()));
                             }
                         }
                     }
@@ -2210,9 +2210,9 @@ fn check_fn_items_in_module(
                                             glyim_type::builtin_adts::BuiltinAdt::from_name(
                                                 &name_str,
                                             ) {
-                                            AdtId::from_raw(builtin.adt_id())
+                                            AdtId::from_usize(builtin.adt_id() as usize)
                                         } else {
-                                            AdtId::from_raw(def_id.to_raw())
+                                            AdtId::from_usize(def_id.index())
                                         };
                                         ctx.register_adt_with_name(
                                             ctx_name,
@@ -2235,11 +2235,11 @@ fn check_fn_items_in_module(
                 let const_def_id = if let Some((id, _, _)) =
                     def_map.modules[module_id].scope.values.get(&item.name)
                 {
-                    ConstDefId::from_raw(id.to_raw())
+                    ConstDefId::from_usize(id.index())
                 } else {
                     let id = *next_local_def_id;
                     *next_local_def_id += 1;
-                    ConstDefId::from_raw(id)
+                    ConstDefId::from_usize(id)
                 };
                 let empty_params: FxHashMap<Name, Ty> = FxHashMap::default();
                 let const_ty = tyconv::resolve_type_ref(
@@ -2299,7 +2299,7 @@ fn check_fn_items_in_module(
                                 .map(|(id, _, _)| *id);
                             if let Some(local) = fn_local_def_id {
                                 evaluator = evaluator
-                                    .with_fn_def(fn_item.name, FnDefId::from_raw(local.to_raw()));
+                                    .with_fn_def(fn_item.name, FnDefId::from_usize(local.index()));
                             }
                         }
                     }
@@ -2563,7 +2563,7 @@ impl TypeckResult {
     pub fn expr_ty(&self, body_id: LocalDefId, expr_id: usize) -> Option<Ty> {
         self.expr_types
             .get(&body_id)
-            .and_then(|m| m.get(&ExprId::from_raw(expr_id as u32)))
+            .and_then(|m| m.get(&ExprId::from_usize(expr_id)))
             .copied()
     }
     /// Resolved type of a HIR pattern.
