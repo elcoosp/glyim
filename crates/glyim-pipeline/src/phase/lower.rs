@@ -44,7 +44,7 @@ use glyim_core::def_id::{ConstDefId, DefId, LocalDefId};
 use glyim_diag::{CompResult, GlyimDiagnostic};
 use glyim_hir::CrateHir;
 use glyim_mir::Body;
-use glyim_typeck::thir;
+use glyim_typeck::TypedBody;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
@@ -62,7 +62,7 @@ pub struct LowerOutput {
     /// the compile runs bisected (`LowerPhase::opt_bisect_limit` is
     /// `Some`); empty otherwise, so the default path pays nothing. Rows are
     /// appended in the per-body loop order, which is the deterministic
-    /// `thir_bodies` order, so the aggregation the CLI prints under
+    /// `typed_bodies` order, so the aggregation the CLI prints under
     /// `--time-passes` is reproducible across runs (C6).
     pub pass_stats: Vec<(DefId, glyim_opt::PassStats)>,
     /// Closure bodies captured while lowering, each paired with its
@@ -76,8 +76,11 @@ pub struct LowerOutput {
 /// block so the per-body short-circuit (`has_errors` after each borrow check)
 /// is preserved exactly.
 pub struct LowerPhase<'a> {
-    /// The type-checked THIR bodies (`typeck_result.thir_bodies`).
-    pub thir_bodies: &'a [(LocalDefId, thir::Body)],
+    /// The verified THIR bodies (`typeck_result.typed_bodies`, plan M5.2):
+    /// lowering accepts only `TypedBody`, so a body whose signature slots
+    /// still carry an inference variable or the `Ty::ERROR` sentinel never
+    /// reaches this phase.
+    pub typed_bodies: &'a [(LocalDefId, TypedBody)],
     /// The lowered HIR crate.
     pub hir: &'a CrateHir,
     /// Const values resolved by typeck (`typeck_result.const_values`).
@@ -108,10 +111,10 @@ impl CompilerPhase for LowerPhase<'_> {
 
         let lower_ctx = PipelineLowerCtx::new(ty_ctx_ref, self.hir, self.const_values.clone());
 
-        for (_owner_def_id, thir_body) in self.thir_bodies {
+        for (_owner_def_id, typed_body) in self.typed_bodies {
             let mut lower_result = {
                 let _guard = ctx.recorder.enter(Phase::Lower);
-                glyim_lower::lower_body(&lower_ctx, thir_body)
+                glyim_lower::lower_typed_body(&lower_ctx, typed_body)
             };
             // A never-instantiated generic template's placeholder `Err`
             // nodes are expected; drop only that warning for such bodies.
