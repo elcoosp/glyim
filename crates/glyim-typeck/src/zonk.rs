@@ -52,13 +52,63 @@ use crate::thir;
 
 /// Zonk every THIR body in `bodies` in place, folding inference variables
 /// in every `Ty` slot through `infer`. See module docs for the contract.
+///
+/// Plan M5.2 (`zonk -> Result`): the fold is followed by a checked walk, and
+/// the bodies that are *not* fully resolved are reported as an
+/// owner → spans map instead of being silently handed downstream:
+///
+/// - signature slots (parameters, return type) carrying a leftover
+///   `Infer(_)` or the folded `Ty::ERROR` sentinel (deep walk, same
+///   traversal as `crate::typed_body::TypedBody::try_from_body`);
+/// - value-construction sites with an unbound type variable — the
+///   variant-constructor shapes `collect_unresolved_ty_var_spans` pins
+///   (rustc E0282, "type annotations needed").
+///
+/// Callers keep the reported map: the pipeline stores it as
+/// `TypeckResult::unresolved_ty_var_spans` and diagnoses only the owners
+/// mono discovery proves reachable (unused stdlib templates stay silent).
+/// Only bodies *absent* from the map are eligible for the
+/// `TypedBody` boundary (and therefore for lowering).
 pub fn zonk_bodies(
     infer: &InferenceTable,
     ctx: &TyCtx,
     bodies: &mut [(glyim_core::def_id::LocalDefId, thir::Body)],
-) {
-    for (_owner, body) in bodies.iter_mut() {
+) -> Result<(), std::collections::BTreeMap<glyim_core::def_id::LocalDefId, Vec<glyim_span::Span>>> {
+    let mut unresolved: std::collections::BTreeMap<
+        glyim_core::def_id::LocalDefId,
+        Vec<glyim_span::Span>,
+    > = std::collections::BTreeMap::new();
+    for (owner, body) in bodies.iter_mut() {
+        // Pre-fold: record the value-construction shapes (variant-ctor calls)
+        // whose spans the E0282 diagnostic must point at. Post-fold the
+        // distinction between "no annotation possible" and "explicit error
+        // sentinel" is lost, so this runs before `zonk_body`.
+        let ctor_spans = collect_unresolved_ty_var_spans(infer, ctx, body);
         zonk_body(infer, ctx, body);
+        let mut spans = ctor_spans;
+        // Post-fold: the signature slots must be fully resolved — an
+        // `Infer(_)` or `Ty::ERROR` here is either an unbound type variable
+        // (folded to the sentinel) or a `zonk::walk_*` gap for a new `Ty`
+        // slot shape. Reported in all profiles (plan M5.2), not just
+        // debug builds.
+        for param in &body.params {
+            if crate::typed_body::find_first_unresolved(ctx, param.ty).is_some() {
+                spans.push(param.span);
+            }
+        }
+        if crate::typed_body::find_first_unresolved(ctx, body.return_ty).is_some() {
+            spans.push(body.span);
+        }
+        if !spans.is_empty() {
+            spans.sort_by_key(|s| (s.lo().to_raw(), s.hi().to_raw()));
+            spans.dedup_by_key(|s| (s.lo().to_raw(), s.hi().to_raw()));
+            unresolved.insert(*owner, spans);
+        }
+    }
+    if unresolved.is_empty() {
+        Ok(())
+    } else {
+        Err(unresolved)
     }
 }
 
