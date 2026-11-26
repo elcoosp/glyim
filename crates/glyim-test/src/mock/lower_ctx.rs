@@ -212,7 +212,7 @@ mod tests {
 
     fn sample_info() -> IteratorNextInfo {
         IteratorNextInfo {
-            fn_def_id: FnDefId::from_raw(0),
+            fn_def_id: FnDefId::from_usize(0),
             fn_substs: Substitution::empty(),
             fn_ty: Ty::ERROR,
             option_ty: Ty::UNIT,
@@ -234,7 +234,7 @@ mod tests {
             got.is_some(),
             "iterator_next_fn should return the override's Some(info)"
         );
-        assert_eq!(got.unwrap().fn_def_id, FnDefId::from_raw(0));
+        assert_eq!(got.unwrap().fn_def_id, FnDefId::from_usize(0));
     }
 
     #[test]
@@ -272,7 +272,7 @@ mod p2_a2_tests {
     fn fn_sig_returns_registered_signature() {
         let ctx = test_frozen_ty_ctx();
         let mut mock = MockLowerCtx::new(&ctx);
-        let dummy_id = FnDefId::from_raw(4242);
+        let dummy_id = FnDefId::from_usize(4242);
         let sig = FnSig {
             inputs: Substitution::empty(),
             output: ctx.unit_ty(),
@@ -291,14 +291,14 @@ mod p2_a2_tests {
     fn fn_sig_panics_when_unregistered() {
         let ctx = test_frozen_ty_ctx();
         let mock = MockLowerCtx::new(&ctx);
-        let _ = mock.fn_sig(FnDefId::from_raw(9999));
+        let _ = mock.fn_sig(FnDefId::from_usize(9999));
     }
 
     #[test]
     fn const_value_returns_registered_value() {
         let ctx = test_frozen_ty_ctx();
         let mut mock = MockLowerCtx::new(&ctx);
-        let dummy_id = glyim_core::def_id::ConstDefId::from_raw(1);
+        let dummy_id = glyim_core::def_id::ConstDefId::from_usize(1);
         let val = MirConst {
             kind: MirConstKind::Unit,
             ty: ctx.unit_ty(),
@@ -317,7 +317,7 @@ mod p2_a2_tests {
         let ctx = test_frozen_ty_ctx();
         let mock = MockLowerCtx::new(&ctx);
         let _ = mock.const_value(
-            glyim_core::def_id::ConstDefId::from_raw(7),
+            glyim_core::def_id::ConstDefId::from_usize(7),
             Substitution::empty(),
         );
     }
