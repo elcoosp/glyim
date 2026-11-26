@@ -11,7 +11,12 @@ pub struct Substitution {
 }
 
 impl Substitution {
-    pub(crate) fn from_raw(index: u32, len: u16) -> Self {
+    /// Crate-internal constructor pairing a substitution slot index with
+    /// its length. (Formerly `Substitution::from_raw`; the CT-1
+    /// private-constructor ratchet (plan M3.1) reserves the `from_raw`
+    /// name for the `#[cfg(test)]`-only arena escape hatches, so this
+    /// two-part constructor carries a name of its own.)
+    pub(crate) fn from_parts(index: u32, len: u16) -> Self {
         Self { index, len }
     }
 
