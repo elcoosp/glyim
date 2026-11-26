@@ -11,7 +11,7 @@ fn build_map(source: &str) -> (CrateDefMap, Vec<GlyimDiagnostic>) {
     let parse_result = parse_to_syntax(source, file_id);
     build_def_map(
         &parse_result.root,
-        CrateId::from_raw(0),
+        CrateId::from_usize(0),
         glyim_core::interner::Interner::new(),
     )
 }
@@ -570,7 +570,7 @@ fn t39_resolve_module_name_as_type() {
 #[test]
 fn t40_per_ns_from_types_constructor() {
     use glyim_core::def_id::LocalDefId;
-    let id = LocalDefId::from_raw(42);
+    let id = LocalDefId::from_usize(42);
     let per_ns = PerNs::from_types(id, Visibility::Public);
     assert_eq!(per_ns.types, Some((id, Visibility::Public)));
     assert!(per_ns.values.is_none());
