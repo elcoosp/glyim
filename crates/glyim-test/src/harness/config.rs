@@ -93,6 +93,10 @@ pub struct TestConfig {
     pub compile_flags: Vec<String>,
     /// Diagnostic substrings a `compile-fail` fixture must produce.
     pub error_patterns: Vec<String>,
+    /// Diagnostic codes (`"T0050"`) a `compile-fail` fixture must produce —
+    /// the CT-5 negative-fixture contract (plan §6 M3.3): the fixture's
+    /// diagnostics must include every declared registered code.
+    pub error_codes: Vec<String>,
     /// Whether the fixture needs the real LLVM backend (`//@ needs-llvm`).
     pub needs_llvm: bool,
     /// Minimum harness/tool version the fixture requires.
@@ -164,6 +168,7 @@ impl Default for TestConfig {
             revision_compile_flags: HashMap::new(),
             compile_flags: Vec::new(),
             error_patterns: Vec::new(),
+            error_codes: Vec::new(),
             needs_llvm: false,
             min_version: None,
             ignore: false,
@@ -535,6 +540,11 @@ pub fn parse_test_config(source: &str) -> Result<ParsedConfig, TestConfigError> 
     }
     if !annotations.expect_errors.is_empty() {
         config.error_patterns.clone_from(&annotations.expect_errors);
+    }
+    if !annotations.expect_error_codes.is_empty() {
+        config
+            .error_codes
+            .clone_from(&annotations.expect_error_codes);
     }
     if !annotations.expect_warnings.is_empty() {
         config
