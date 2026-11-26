@@ -8,7 +8,7 @@ fn struct_field_access() {
     let exprs = vec![
         Expr::Path(glyim_hir::Path::from_single(name_x)),
         Expr::Field {
-            receiver: ExprId::from_raw(0),
+            receiver: ExprId::from_usize(0),
             field: name_field,
         },
     ];
