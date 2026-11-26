@@ -93,8 +93,8 @@ mod tests {
     use std::sync::Arc;
 
     fn item(source_module: u32, idx: u32) -> MonoItemData {
-        let def_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(idx));
-        let static_id = StaticDefId::from_raw(idx);
+        let def_id = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(idx as usize));
+        let static_id = StaticDefId::from_usize(idx as usize);
         MonoItemData {
             item: MonoItem::Static { def_id: static_id },
             body: Arc::new(Body::dummy(def_id)),
