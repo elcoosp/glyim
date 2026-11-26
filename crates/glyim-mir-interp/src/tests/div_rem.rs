@@ -12,7 +12,7 @@ use glyim_test::test_ty_ctx;
 use glyim_type::{Ty, TyCtxMut, TyKind};
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
@@ -27,8 +27,8 @@ fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
 fn build_binop_body_signed(tcx: &mut TyCtxMut, op: BinOp, lhs: i128, rhs: i128) -> Body {
     let ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(ty, Mutability::Mut),
     ]);
@@ -42,7 +42,7 @@ fn build_binop_body_signed(tcx: &mut TyCtxMut, op: BinOp, lhs: i128, rhs: i128) 
         ty,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
@@ -63,8 +63,8 @@ fn build_binop_body_signed(tcx: &mut TyCtxMut, op: BinOp, lhs: i128, rhs: i128) 
 fn build_binop_body_uint(tcx: &mut TyCtxMut, op: BinOp, lhs: u128, rhs: u128) -> Body {
     let ty = tcx.mk_ty(TyKind::Uint(glyim_core::UintTy::U32));
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(ty, Mutability::Mut),
     ]);
@@ -78,7 +78,7 @@ fn build_binop_body_uint(tcx: &mut TyCtxMut, op: BinOp, lhs: u128, rhs: u128) ->
         ty,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
@@ -159,7 +159,7 @@ fn signed_rem_normal() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(2))
     );
 }
@@ -192,7 +192,7 @@ fn unsigned_rem_normal() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Uint(2))
     );
 }
@@ -202,8 +202,8 @@ fn unsigned_rem_normal() {
 fn build_binop_body_float(tcx: &mut TyCtxMut, op: BinOp, lhs: f64, rhs: f64) -> Body {
     let ty = tcx.mk_ty(TyKind::Float(glyim_core::FloatTy::F64));
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(ty, Mutability::Mut),
     ]);
@@ -217,7 +217,7 @@ fn build_binop_body_float(tcx: &mut TyCtxMut, op: BinOp, lhs: f64, rhs: f64) -> 
         ty,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
@@ -243,7 +243,7 @@ fn t106_float_div_by_zero_is_inf() {
     let tcx = tcx_mut.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
-    match interp.get_local_value(LocalIdx::from_raw(1)) {
+    match interp.get_local_value(LocalIdx::from_usize(1)) {
         Some(InterpValue::Float(f)) => {
             assert!(
                 f.is_infinite() && f.is_sign_positive(),
