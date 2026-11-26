@@ -9,7 +9,7 @@ pub(crate) fn run(_ctx: &TyCtx, body: &mut Body) {
     let reachable = reachable_set(&blocks);
     if reachable.len() == blocks.len() {
         // Put the blocks back
-        body.basic_blocks = IndexVec::from_raw(blocks);
+        body.basic_blocks = IndexVec::from_vec(blocks);
         return;
     }
 
@@ -26,7 +26,7 @@ pub(crate) fn run(_ctx: &TyCtx, body: &mut Body) {
         super::cfg_simplify::remap_terminator(block, &old_to_new);
     }
 
-    body.basic_blocks = IndexVec::from_raw(new_blocks);
+    body.basic_blocks = IndexVec::from_vec(new_blocks);
 }
 
 fn reachable_set(blocks: &[BasicBlockData]) -> HashSet<usize> {
