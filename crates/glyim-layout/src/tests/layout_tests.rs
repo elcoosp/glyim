@@ -84,7 +84,7 @@ fn s04_t13_layout_dyn_is_unsized() {
     let (ctx, dyn_ty) = glyim_test::with_fresh_ty_ctx(|ctx| {
         let empty_subst = ctx.intern_substitution(vec![]);
         let trait_ref = TraitRef {
-            def_id: TraitDefId::from_raw(0),
+            def_id: TraitDefId::from_usize(0),
             substs: empty_subst,
         };
         let predicate = Predicate::Trait(TraitPredicate {
