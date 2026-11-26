@@ -13,7 +13,7 @@ use crate::*;
 /// Helper: create an ADT with given field types, returning (`frozen_ctx`, `adt_ty`)
 fn make_single_field_adt(field_ty: Ty) -> (TyCtx, Ty) {
     with_fresh_ty_ctx(|ctx: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(100);
+        let adt_id = AdtId::from_usize(100);
         let substs = ctx.intern_substitution(vec![]);
         ctx.register_adt_repr(adt_id, vec![field_ty]);
         ctx.mk_adt(adt_id, substs)
@@ -48,7 +48,7 @@ fn struct_with_non_send_field_no_auto_send() {
     let (ctx, adt_ty) = with_fresh_ty_ctx(|ctx_mut: &mut TyCtxMut| {
         let inner = ctx_mut.bool_ty();
         let raw_ptr_ty = ctx_mut.mk_ty(TyKind::RawPtr(inner, Mutability::Not));
-        let adt_id = AdtId::from_raw(102);
+        let adt_id = AdtId::from_usize(102);
         let substs = ctx_mut.intern_substitution(vec![]);
         ctx_mut.register_adt_repr(adt_id, vec![raw_ptr_ty]);
         ctx_mut.mk_adt(adt_id, substs)
@@ -63,7 +63,7 @@ fn struct_with_non_send_field_no_auto_send() {
 #[test]
 fn negative_impl_overrides_auto_send() {
     let (ctx, adt_ty) = with_fresh_ty_ctx(|ctx_mut: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(103);
+        let adt_id = AdtId::from_usize(103);
         let substs = ctx_mut.intern_substitution(vec![]);
         let field_ty = ctx_mut.bool_ty();
         ctx_mut.register_adt_repr(adt_id, vec![field_ty]);
@@ -108,7 +108,7 @@ fn ref_to_non_sync_is_not_send() {
     let (ctx, ref_ty) = with_fresh_ty_ctx(|ctx_mut: &mut TyCtxMut| {
         let inner_bool = ctx_mut.bool_ty();
         let raw_ptr_ty = ctx_mut.mk_ty(TyKind::RawPtr(inner_bool, Mutability::Not));
-        let adt_id = AdtId::from_raw(104);
+        let adt_id = AdtId::from_usize(104);
         let substs = ctx_mut.intern_substitution(vec![]);
         ctx_mut.register_adt_repr(adt_id, vec![raw_ptr_ty]);
         let non_sync_ty = ctx_mut.mk_adt(adt_id, substs);
@@ -122,7 +122,7 @@ fn ref_to_non_sync_is_not_send() {
 #[test]
 fn manual_impl_overrides_auto() {
     let (ctx, adt_ty) = with_fresh_ty_ctx(|ctx_mut: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(105);
+        let adt_id = AdtId::from_usize(105);
         let substs = ctx_mut.intern_substitution(vec![]);
         let inner = ctx_mut.bool_ty();
         let raw_ptr_ty = ctx_mut.mk_ty(TyKind::RawPtr(inner, Mutability::Not));
@@ -210,7 +210,7 @@ fn error_type_has_no_auto_traits() {
 #[test]
 fn infer_type_has_no_auto_traits() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        c.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_raw(0))))
+        c.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_usize(0))))
     });
     let flags = ctx.auto_trait_flags(ty);
     assert!(!flags.contains(AutoTraitFlags::SEND));
@@ -392,7 +392,7 @@ fn array_of_raw_ptr_is_not_send() {
 fn array_of_send_adt_is_send() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let bool_ty = c.bool_ty();
-        let adt_id = AdtId::from_raw(880);
+        let adt_id = AdtId::from_usize(880);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![bool_ty]);
         let adt_ty = c.mk_adt(adt_id, substs);
@@ -423,7 +423,7 @@ fn multi_field_adt_all_must_implement() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let bool_ty = c.bool_ty();
         let i32_ty = c.mk_ty(TyKind::Int(IntTy::I32));
-        let adt_id = AdtId::from_raw(106);
+        let adt_id = AdtId::from_usize(106);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![bool_ty, i32_ty]);
         c.mk_adt(adt_id, substs)
@@ -436,7 +436,7 @@ fn multi_field_adt_one_bad_field_removes_send() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let bool_ty = c.bool_ty();
         let raw_ptr_ty = c.mk_ty(TyKind::RawPtr(bool_ty, Mutability::Not));
-        let adt_id = AdtId::from_raw(107);
+        let adt_id = AdtId::from_usize(107);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![bool_ty, raw_ptr_ty]);
         c.mk_adt(adt_id, substs)
@@ -450,7 +450,7 @@ fn multi_field_adt_one_bad_field_removes_send() {
 #[test]
 fn adt_with_no_repr_gets_no_auto_traits() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(500);
+        let adt_id = AdtId::from_usize(500);
         let substs = c.intern_substitution(vec![]);
         c.mk_adt(adt_id, substs)
     });
@@ -463,7 +463,7 @@ fn adt_with_no_repr_gets_no_auto_traits() {
 #[test]
 fn adt_with_empty_fields_has_all_auto_traits() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(501);
+        let adt_id = AdtId::from_usize(501);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![]);
         c.mk_adt(adt_id, substs)
@@ -475,7 +475,7 @@ fn adt_with_empty_fields_has_all_auto_traits() {
 fn adt_with_ref_field_is_send() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let ref_ty = c.mk_ref(Region::Erased, c.bool_ty(), Mutability::Not);
-        let adt_id = AdtId::from_raw(830);
+        let adt_id = AdtId::from_usize(830);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![ref_ty]);
         c.mk_adt(adt_id, substs)
@@ -487,7 +487,7 @@ fn adt_with_ref_field_is_send() {
 fn adt_with_ref_mut_field_is_send() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let ref_mut_ty = c.mk_ref(Region::Erased, c.bool_ty(), Mutability::Mut);
-        let adt_id = AdtId::from_raw(831);
+        let adt_id = AdtId::from_usize(831);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![ref_mut_ty]);
         c.mk_adt(adt_id, substs)
@@ -498,7 +498,7 @@ fn adt_with_ref_mut_field_is_send() {
 #[test]
 fn adt_with_error_field_no_auto_traits() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(893);
+        let adt_id = AdtId::from_usize(893);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![Ty::ERROR]);
         c.mk_adt(adt_id, substs)
@@ -517,7 +517,7 @@ fn adt_with_many_send_fields() {
         let i32_ty = c.mk_ty(TyKind::Int(IntTy::I32));
         let u32_ty = c.mk_ty(TyKind::Uint(UintTy::U32));
         let f32_ty = c.mk_ty(TyKind::Float(FloatTy::F32));
-        let adt_id = AdtId::from_raw(800);
+        let adt_id = AdtId::from_usize(800);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![bool_ty, i8_ty, i32_ty, u32_ty, f32_ty]);
         c.mk_adt(adt_id, substs)
@@ -533,7 +533,7 @@ fn adt_with_tuple_field() {
         let tuple_substs =
             c.intern_substitution(vec![GenericArg::Ty(bool_ty), GenericArg::Ty(i32_ty)]);
         let tuple_ty = c.mk_tuple(tuple_substs);
-        let adt_id = AdtId::from_raw(890);
+        let adt_id = AdtId::from_usize(890);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![tuple_ty]);
         c.mk_adt(adt_id, substs)
@@ -545,7 +545,7 @@ fn adt_with_tuple_field() {
 fn adt_with_slice_field() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let slice_ty = c.mk_ty(TyKind::Slice(c.bool_ty()));
-        let adt_id = AdtId::from_raw(891);
+        let adt_id = AdtId::from_usize(891);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![slice_ty]);
         c.mk_adt(adt_id, substs)
@@ -566,7 +566,7 @@ fn adt_with_fn_ptr_field() {
             abi: Abi::Glyim,
         };
         let fn_ptr_ty = c.mk_fn_ptr(sig);
-        let adt_id = AdtId::from_raw(892);
+        let adt_id = AdtId::from_usize(892);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![fn_ptr_ty]);
         c.mk_adt(adt_id, substs)
@@ -579,7 +579,7 @@ fn adt_with_fn_ptr_field() {
 #[test]
 fn negative_impl_send_doesnt_affect_sync_or_unpin() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(108);
+        let adt_id = AdtId::from_usize(108);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![c.bool_ty()]);
         c.register_negative_impl(adt_id, AutoTrait::Send);
@@ -594,7 +594,7 @@ fn negative_impl_send_doesnt_affect_sync_or_unpin() {
 #[test]
 fn negative_impl_sync_doesnt_affect_send() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(300);
+        let adt_id = AdtId::from_usize(300);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![c.bool_ty()]);
         c.register_negative_impl(adt_id, AutoTrait::Sync);
@@ -609,7 +609,7 @@ fn negative_impl_sync_doesnt_affect_send() {
 #[test]
 fn negative_impl_unpin_doesnt_affect_send_or_sync() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(301);
+        let adt_id = AdtId::from_usize(301);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![c.bool_ty()]);
         c.register_negative_impl(adt_id, AutoTrait::Unpin);
@@ -624,7 +624,7 @@ fn negative_impl_unpin_doesnt_affect_send_or_sync() {
 #[test]
 fn multiple_negative_impls() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(302);
+        let adt_id = AdtId::from_usize(302);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![c.bool_ty()]);
         c.register_negative_impl(adt_id, AutoTrait::Send);
@@ -640,7 +640,7 @@ fn multiple_negative_impls() {
 #[test]
 fn all_auto_traits_negative() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(860);
+        let adt_id = AdtId::from_usize(860);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![c.bool_ty()]);
         c.register_negative_impl(adt_id, AutoTrait::Send);
@@ -656,7 +656,7 @@ fn all_auto_traits_negative() {
 #[test]
 fn manual_impl_sync_on_raw_ptr_struct() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(303);
+        let adt_id = AdtId::from_usize(303);
         let substs = c.intern_substitution(vec![]);
         let raw_ptr_ty = c.mk_ty(TyKind::RawPtr(c.bool_ty(), Mutability::Not));
         c.register_adt_repr(adt_id, vec![raw_ptr_ty]);
@@ -670,7 +670,7 @@ fn manual_impl_sync_on_raw_ptr_struct() {
 #[test]
 fn manual_impl_overrides_negative_impl() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(304);
+        let adt_id = AdtId::from_usize(304);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![c.bool_ty()]);
         c.register_negative_impl(adt_id, AutoTrait::Send);
@@ -683,7 +683,7 @@ fn manual_impl_overrides_negative_impl() {
 #[test]
 fn manual_impl_all_traits_on_raw_ptr_struct() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(870);
+        let adt_id = AdtId::from_usize(870);
         let substs = c.intern_substitution(vec![]);
         let raw_ptr_ty = c.mk_ty(TyKind::RawPtr(c.bool_ty(), Mutability::Not));
         c.register_adt_repr(adt_id, vec![raw_ptr_ty]);
@@ -700,11 +700,11 @@ fn manual_impl_all_traits_on_raw_ptr_struct() {
 #[test]
 fn nested_adt_auto_traits() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let inner_adt_id = AdtId::from_raw(400);
+        let inner_adt_id = AdtId::from_usize(400);
         let inner_substs = c.intern_substitution(vec![]);
         c.register_adt_repr(inner_adt_id, vec![c.bool_ty()]);
         let inner_ty = c.mk_adt(inner_adt_id, inner_substs);
-        let outer_adt_id = AdtId::from_raw(401);
+        let outer_adt_id = AdtId::from_usize(401);
         let outer_substs = c.intern_substitution(vec![]);
         c.register_adt_repr(outer_adt_id, vec![inner_ty]);
         c.mk_adt(outer_adt_id, outer_substs)
@@ -716,11 +716,11 @@ fn nested_adt_auto_traits() {
 fn nested_adt_inner_not_send_outer_not_send() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let raw_ptr_ty = c.mk_ty(TyKind::RawPtr(c.bool_ty(), Mutability::Not));
-        let inner_adt_id = AdtId::from_raw(402);
+        let inner_adt_id = AdtId::from_usize(402);
         let inner_substs = c.intern_substitution(vec![]);
         c.register_adt_repr(inner_adt_id, vec![raw_ptr_ty]);
         let inner_ty = c.mk_adt(inner_adt_id, inner_substs);
-        let outer_adt_id = AdtId::from_raw(403);
+        let outer_adt_id = AdtId::from_usize(403);
         let outer_substs = c.intern_substitution(vec![]);
         c.register_adt_repr(outer_adt_id, vec![inner_ty]);
         c.mk_adt(outer_adt_id, outer_substs)
@@ -734,15 +734,15 @@ fn nested_adt_inner_not_send_outer_not_send() {
 #[test]
 fn deeply_nested_adts() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id_1 = AdtId::from_raw(810);
+        let adt_id_1 = AdtId::from_usize(810);
         c.register_adt_repr(adt_id_1, vec![c.bool_ty()]);
         let substs_1 = c.intern_substitution(vec![]);
         let ty_1 = c.mk_adt(adt_id_1, substs_1);
-        let adt_id_2 = AdtId::from_raw(811);
+        let adt_id_2 = AdtId::from_usize(811);
         c.register_adt_repr(adt_id_2, vec![ty_1]);
         let substs_2 = c.intern_substitution(vec![]);
         let ty_2 = c.mk_adt(adt_id_2, substs_2);
-        let adt_id_3 = AdtId::from_raw(812);
+        let adt_id_3 = AdtId::from_usize(812);
         c.register_adt_repr(adt_id_3, vec![ty_2]);
         let substs_3 = c.intern_substitution(vec![]);
         c.mk_adt(adt_id_3, substs_3)
@@ -754,11 +754,11 @@ fn deeply_nested_adts() {
 fn deeply_nested_adts_non_send_inner() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let raw_ptr_ty = c.mk_ty(TyKind::RawPtr(c.bool_ty(), Mutability::Not));
-        let adt_id_1 = AdtId::from_raw(820);
+        let adt_id_1 = AdtId::from_usize(820);
         c.register_adt_repr(adt_id_1, vec![raw_ptr_ty]);
         let substs_1 = c.intern_substitution(vec![]);
         let ty_1 = c.mk_adt(adt_id_1, substs_1);
-        let adt_id_2 = AdtId::from_raw(821);
+        let adt_id_2 = AdtId::from_usize(821);
         c.register_adt_repr(adt_id_2, vec![ty_1]);
         let substs_2 = c.intern_substitution(vec![]);
         c.mk_adt(adt_id_2, substs_2)
@@ -773,7 +773,7 @@ fn deeply_nested_adts_non_send_inner() {
 #[test]
 fn coinductive_recursive_adt() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(200);
+        let adt_id = AdtId::from_usize(200);
         let substs = c.intern_substitution(vec![]);
         let adt_ty = c.mk_adt(adt_id, substs);
         c.register_adt_repr(adt_id, vec![adt_ty]);
@@ -788,8 +788,8 @@ fn coinductive_recursive_adt() {
 #[test]
 fn coinductive_mutual_recursion() {
     let (ctx, ty_a) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id_a = AdtId::from_raw(900);
-        let adt_id_b = AdtId::from_raw(901);
+        let adt_id_a = AdtId::from_usize(900);
+        let adt_id_b = AdtId::from_usize(901);
         let substs_a = c.intern_substitution(vec![]);
         let substs_b = c.intern_substitution(vec![]);
         let ty_a = c.mk_adt(adt_id_a, substs_a);
@@ -827,7 +827,7 @@ fn fn_ptr_has_all_auto_traits() {
 fn fn_def_has_all_auto_traits() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let substs = c.intern_substitution(vec![]);
-        c.mk_ty(TyKind::FnDef(FnDefId::from_raw(0), substs))
+        c.mk_ty(TyKind::FnDef(FnDefId::from_usize(0), substs))
     });
     assert!(ctx.auto_trait_flags(ty).contains(AutoTraitFlags::all()));
 }
@@ -836,7 +836,7 @@ fn fn_def_has_all_auto_traits() {
 fn closure_with_all_send_fields_is_send() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let substs = c.intern_substitution(vec![GenericArg::Ty(c.bool_ty())]);
-        c.mk_ty(TyKind::Closure(ClosureId::from_raw(0), substs))
+        c.mk_ty(TyKind::Closure(ClosureId::from_usize(0), substs))
     });
     assert!(ctx.auto_trait_flags(ty).contains(AutoTraitFlags::all()));
 }
@@ -846,7 +846,7 @@ fn closure_with_raw_ptr_is_not_send() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let raw_ptr_ty = c.mk_ty(TyKind::RawPtr(c.bool_ty(), Mutability::Not));
         let substs = c.intern_substitution(vec![GenericArg::Ty(raw_ptr_ty)]);
-        c.mk_ty(TyKind::Closure(ClosureId::from_raw(1), substs))
+        c.mk_ty(TyKind::Closure(ClosureId::from_usize(1), substs))
     });
     let flags = ctx.auto_trait_flags(ty);
     assert!(!flags.contains(AutoTraitFlags::SEND));
@@ -870,7 +870,7 @@ fn dynamic_type_has_no_auto_traits() {
 fn opaque_type_has_no_auto_traits() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let substs = c.intern_substitution(vec![]);
-        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_raw(0), substs))
+        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_usize(0), substs))
     });
     assert!(!ctx.auto_trait_flags(ty).contains(AutoTraitFlags::SEND));
     assert!(!ctx.auto_trait_flags(ty).contains(AutoTraitFlags::SYNC));
@@ -885,9 +885,9 @@ fn opaque_type_delegates_to_registered_hidden_type() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let inner = c.mk_ty(TyKind::Int(IntTy::I32));
         let hidden = c.mk_ty(TyKind::RawPtr(inner, Mutability::Not));
-        c.register_opaque_hidden(OpaqueTyId::from_raw(0), hidden);
+        c.register_opaque_hidden(OpaqueTyId::from_usize(0), hidden);
         let substs = c.intern_substitution(vec![]);
-        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_raw(0), substs))
+        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_usize(0), substs))
     });
     let flags = ctx.auto_trait_flags(ty);
     assert!(!flags.contains(AutoTraitFlags::SEND));
@@ -901,9 +901,9 @@ fn opaque_type_delegates_to_registered_hidden_type() {
 fn opaque_type_inherits_send_from_hidden_type() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let hidden = c.mk_ty(TyKind::Int(IntTy::I32));
-        c.register_opaque_hidden(OpaqueTyId::from_raw(1), hidden);
+        c.register_opaque_hidden(OpaqueTyId::from_usize(1), hidden);
         let substs = c.intern_substitution(vec![]);
-        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_raw(1), substs))
+        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_usize(1), substs))
     });
     let flags = ctx.auto_trait_flags(ty);
     assert!(flags.contains(AutoTraitFlags::SEND));
@@ -916,7 +916,7 @@ fn projection_type_has_no_auto_traits() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let substs = c.intern_substitution(vec![GenericArg::Ty(c.bool_ty())]);
         let trait_ref = TraitRef {
-            def_id: TraitDefId::from_raw(0),
+            def_id: TraitDefId::from_usize(0),
             substs,
         };
         let name = c.resolver().intern("Item");
@@ -935,7 +935,7 @@ fn projection_type_has_no_auto_traits() {
 fn ref_mut_to_non_sync_is_not_send() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let raw_ptr_ty = c.mk_ty(TyKind::RawPtr(c.bool_ty(), Mutability::Not));
-        let adt_id = AdtId::from_raw(404);
+        let adt_id = AdtId::from_usize(404);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![raw_ptr_ty]);
         let non_sync_ty = c.mk_adt(adt_id, substs);
@@ -951,7 +951,7 @@ fn ref_mut_to_non_sync_is_not_send() {
 fn ref_to_send_but_not_sync_is_not_send() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let raw_ptr_ty = c.mk_ty(TyKind::RawPtr(c.bool_ty(), Mutability::Not));
-        let adt_id = AdtId::from_raw(405);
+        let adt_id = AdtId::from_usize(405);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![raw_ptr_ty]);
         c.register_manual_impl(adt_id, AutoTrait::Send);
@@ -993,11 +993,11 @@ fn implements_auto_trait_convenience_method() {
 #[test]
 fn frozen_context_negative_and_manual_impl_queries() {
     let (ctx, ()) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(600);
+        let adt_id = AdtId::from_usize(600);
         c.register_negative_impl(adt_id, AutoTrait::Send);
         c.register_manual_impl(adt_id, AutoTrait::Sync);
     });
-    let adt_id = AdtId::from_raw(600);
+    let adt_id = AdtId::from_usize(600);
     assert!(ctx.has_negative_impl(adt_id, AutoTrait::Send));
     assert!(!ctx.has_negative_impl(adt_id, AutoTrait::Sync));
     assert!(ctx.has_manual_impl(adt_id, AutoTrait::Sync));
@@ -1007,13 +1007,13 @@ fn frozen_context_negative_and_manual_impl_queries() {
 #[test]
 fn frozen_context_adt_repr_accessor() {
     let (ctx, ()) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(700);
+        let adt_id = AdtId::from_usize(700);
         c.register_adt_repr(adt_id, vec![c.bool_ty()]);
     });
-    let adt_id = AdtId::from_raw(700);
+    let adt_id = AdtId::from_usize(700);
     assert!(ctx.adt_repr(adt_id).is_some());
     assert_eq!(ctx.adt_repr(adt_id).unwrap().field_tys.len(), 1);
-    assert!(ctx.adt_repr(AdtId::from_raw(999)).is_none());
+    assert!(ctx.adt_repr(AdtId::from_usize(999)).is_none());
 }
 
 #[test]
@@ -1053,7 +1053,7 @@ fn auto_trait_flags_combinations() {
 #[test]
 fn auto_trait_flags_are_cached() {
     let (ctx, ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
-        let adt_id = AdtId::from_raw(840);
+        let adt_id = AdtId::from_usize(840);
         let substs = c.intern_substitution(vec![]);
         c.register_adt_repr(adt_id, vec![c.bool_ty()]);
         c.mk_adt(adt_id, substs)
@@ -1068,11 +1068,11 @@ fn multiple_adts_independent() {
     let (ctx, pair) = with_fresh_ty_ctx(|c: &mut TyCtxMut| {
         let bool_ty = c.bool_ty();
         let raw_ptr_ty = c.mk_ty(TyKind::RawPtr(bool_ty, Mutability::Not));
-        let send_adt_id = AdtId::from_raw(850);
+        let send_adt_id = AdtId::from_usize(850);
         let send_substs = c.intern_substitution(vec![]);
         c.register_adt_repr(send_adt_id, vec![bool_ty]);
         let send_adt = c.mk_adt(send_adt_id, send_substs);
-        let nosend_adt_id = AdtId::from_raw(851);
+        let nosend_adt_id = AdtId::from_usize(851);
         let nosend_substs = c.intern_substitution(vec![]);
         c.register_adt_repr(nosend_adt_id, vec![raw_ptr_ty]);
         let nosend_adt = c.mk_adt(nosend_adt_id, nosend_substs);
