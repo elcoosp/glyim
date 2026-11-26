@@ -31,7 +31,7 @@ fn int_const(val: i128) -> MirConst {
 }
 
 fn copy(local: u32) -> Operand {
-    Operand::Copy(Place::new(LocalIdx::from_raw(local)))
+    Operand::Copy(Place::new(LocalIdx::from_usize(local as usize)))
 }
 
 /// Minimal one-block `return` body with `local_ty` locals, mirroring the
@@ -49,7 +49,7 @@ fn one_block_body(local_ty: Ty) -> Body {
         source_info: SourceInfo::new(Span::DUMMY),
     });
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks,
         locals,
         arg_count: 0,
@@ -93,7 +93,7 @@ fn binary_op_inline_payload_round_trips_through_a_body() {
         let mut body = one_block_body(ty);
         let assign = Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::binary_op(
                     BinOp::Add,
                     Operand::Constant(int_const(1)),
@@ -102,7 +102,7 @@ fn binary_op_inline_payload_round_trips_through_a_body() {
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         };
-        body.basic_blocks[BasicBlockIdx::from_raw(0)]
+        body.basic_blocks[BasicBlockIdx::from_usize(0)]
             .statements
             .push(assign);
         body
@@ -110,7 +110,7 @@ fn binary_op_inline_payload_round_trips_through_a_body() {
     // The inline payload is a plain well-formed rvalue: the M5.5 validator
     // accepts a body whose only rvalue is a `BinaryOp`.
     assert!(validate_body(&ctx, &body).is_ok());
-    let stmt = &body.basic_blocks[BasicBlockIdx::from_raw(0)].statements[0];
+    let stmt = &body.basic_blocks[BasicBlockIdx::from_usize(0)].statements[0];
     let StatementKind::Assign(_, Rvalue::BinaryOp(_, ops)) = &stmt.kind else {
         panic!("expected the assign to carry the inline BinaryOp");
     };
