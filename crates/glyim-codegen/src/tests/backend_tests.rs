@@ -26,7 +26,7 @@ fn make_body(blocks: Vec<BasicBlockData>, locals: Vec<LocalDecl>, arg_count: usi
     }
 
     Arc::new(Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: bb_map,
         locals: local_map,
         arg_count,
@@ -95,7 +95,7 @@ fn t02_integer_constants_and_add_yields_loadconst_add_return() {
         vec![block(
             vec![
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(42),
                         ty: Ty::UNIT,
@@ -103,7 +103,7 @@ fn t02_integer_constants_and_add_yields_loadconst_add_return() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(10),
                         ty: Ty::UNIT,
@@ -111,12 +111,12 @@ fn t02_integer_constants_and_add_yields_loadconst_add_return() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::BinaryOp(
                         BinOp::Add,
                         [
-                            Operand::Copy(Place::new(LocalIdx::from_raw(0))),
-                            Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(0))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                         ],
                     ),
                 )),
@@ -153,7 +153,7 @@ fn t03_locals_yield_loadlocal_storelocal() {
         vec![block(
             vec![
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(1),
                         ty: Ty::UNIT,
@@ -161,8 +161,8 @@ fn t03_locals_yield_loadlocal_storelocal() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
-                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(0)))),
+                    Place::new(LocalIdx::from_usize(1)),
+                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(0)))),
                 )),
             ],
             term(TerminatorKind::Return),
@@ -192,7 +192,7 @@ fn t04_branch_yields_jumpif_and_jump() {
         vec![
             block(
                 vec![stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Bool(true),
                         ty: Ty::BOOL,
@@ -200,11 +200,11 @@ fn t04_branch_yields_jumpif_and_jump() {
                     })),
                 ))],
                 term(TerminatorKind::SwitchInt {
-                    discr: Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+                    discr: Operand::Copy(Place::new(LocalIdx::from_usize(0))),
                     switch_ty: Ty::BOOL,
                     targets: SwitchTargets::new(
-                        Box::new([(0u128, BasicBlockIdx::from_raw(1))]),
-                        BasicBlockIdx::from_raw(2),
+                        Box::new([(0u128, BasicBlockIdx::from_usize(1))]),
+                        BasicBlockIdx::from_usize(2),
                     ),
                 }),
             ),
@@ -266,7 +266,7 @@ fn t07_goto_emits_jump() {
             block(
                 vec![],
                 term(TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(1),
+                    target: BasicBlockIdx::from_usize(1),
                 }),
             ),
             block(vec![], term(TerminatorKind::Return)),
@@ -314,8 +314,8 @@ fn t09_storage_live_dead_ignored() {
     let body = make_body(
         vec![block(
             vec![
-                stmt(StatementKind::StorageLive(LocalIdx::from_raw(0))),
-                stmt(StatementKind::StorageDead(LocalIdx::from_raw(0))),
+                stmt(StatementKind::StorageLive(LocalIdx::from_usize(0))),
+                stmt(StatementKind::StorageDead(LocalIdx::from_usize(0))),
             ],
             term(TerminatorKind::Return),
         )],
@@ -394,7 +394,7 @@ fn t13_bool_constant_encodes_correctly() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Bool(false),
                     ty: Ty::BOOL,
@@ -427,7 +427,7 @@ fn t14_stress_many_statements() {
     let mut stmts = Vec::new();
     for i in 0..num_locals {
         stmts.push(stmt(StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(i as u32)),
+            Place::new(LocalIdx::from_usize(i)),
             Rvalue::Use(Operand::Constant(MirConst {
                 kind: MirConstKind::Int(i as i128),
                 ty: Ty::UNIT,
@@ -466,8 +466,8 @@ fn t15_call_stub_does_not_crash() {
                     span: Span::DUMMY,
                 }),
                 args: vec![],
-                destination: Place::new(LocalIdx::from_raw(0)),
-                target: Some(BasicBlockIdx::from_raw(1)),
+                destination: Place::new(LocalIdx::from_usize(0)),
+                target: Some(BasicBlockIdx::from_usize(1)),
                 cleanup: None,
             }),
         )],
@@ -490,8 +490,8 @@ fn t16_ref_stub_does_not_crash() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
-                Rvalue::Ref(Place::new(LocalIdx::from_raw(1)), BorrowKind::Shared),
+                Place::new(LocalIdx::from_usize(0)),
+                Rvalue::Ref(Place::new(LocalIdx::from_usize(1)), BorrowKind::Shared),
             ))],
             term(TerminatorKind::Return),
         )],
@@ -514,8 +514,11 @@ fn t17_unary_op_stub_does_not_crash() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
-                Rvalue::UnaryOp(UnOp::Neg, Operand::Copy(Place::new(LocalIdx::from_raw(1)))),
+                Place::new(LocalIdx::from_usize(0)),
+                Rvalue::UnaryOp(
+                    UnOp::Neg,
+                    Operand::Copy(Place::new(LocalIdx::from_usize(1))),
+                ),
             ))],
             term(TerminatorKind::Return),
         )],
@@ -540,7 +543,7 @@ fn t18_arithmetic_stubs_do_not_crash() {
             vec![block(
                 vec![
                     stmt(StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(0)),
+                        Place::new(LocalIdx::from_usize(0)),
                         Rvalue::Use(Operand::Constant(MirConst {
                             kind: MirConstKind::Int(10),
                             ty: Ty::UNIT,
@@ -548,7 +551,7 @@ fn t18_arithmetic_stubs_do_not_crash() {
                         })),
                     )),
                     stmt(StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(1)),
+                        Place::new(LocalIdx::from_usize(1)),
                         Rvalue::Use(Operand::Constant(MirConst {
                             kind: MirConstKind::Int(3),
                             ty: Ty::UNIT,
@@ -556,12 +559,12 @@ fn t18_arithmetic_stubs_do_not_crash() {
                         })),
                     )),
                     stmt(StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(2)),
+                        Place::new(LocalIdx::from_usize(2)),
                         Rvalue::BinaryOp(
                             *op,
                             [
-                                Operand::Copy(Place::new(LocalIdx::from_raw(0))),
-                                Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                                Operand::Copy(Place::new(LocalIdx::from_usize(0))),
+                                Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                             ],
                         ),
                     )),
@@ -594,7 +597,7 @@ fn t19_exact_bytecode_constant_and_return() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Int(42),
                     ty: Ty::UNIT,
@@ -632,7 +635,7 @@ fn t20_switchint_false_jumps_to_false_target() {
         vec![
             block(
                 vec![stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Bool(false),
                         ty: Ty::BOOL,
@@ -640,11 +643,11 @@ fn t20_switchint_false_jumps_to_false_target() {
                     })),
                 ))],
                 term(TerminatorKind::SwitchInt {
-                    discr: Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+                    discr: Operand::Copy(Place::new(LocalIdx::from_usize(0))),
                     switch_ty: Ty::BOOL,
                     targets: SwitchTargets::new(
-                        Box::new([(0u128, BasicBlockIdx::from_raw(1))]),
-                        BasicBlockIdx::from_raw(2),
+                        Box::new([(0u128, BasicBlockIdx::from_usize(1))]),
+                        BasicBlockIdx::from_usize(2),
                     ),
                 }),
             ),
@@ -673,8 +676,8 @@ fn t21_move_operand_works_like_copy() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
-                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_raw(1)))),
+                Place::new(LocalIdx::from_usize(0)),
+                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_usize(1)))),
             ))],
             term(TerminatorKind::Return),
         )],
@@ -701,7 +704,7 @@ fn t22_multiple_blocks_all_processed() {
         vec![
             block(
                 vec![stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(1),
                         ty: Ty::UNIT,
@@ -709,7 +712,7 @@ fn t22_multiple_blocks_all_processed() {
                     })),
                 ))],
                 term(TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(1),
+                    target: BasicBlockIdx::from_usize(1),
                 }),
             ),
             block(vec![], term(TerminatorKind::Return)),
@@ -736,7 +739,7 @@ fn t23_aggregate_tuple_stub_does_not_crash() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Aggregate(
                     AggregateKind::Tuple,
                     vec![Operand::Constant(MirConst {
@@ -767,8 +770,8 @@ fn t24_len_stub_does_not_crash() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
-                Rvalue::Len(Place::new(LocalIdx::from_raw(1))),
+                Place::new(LocalIdx::from_usize(0)),
+                Rvalue::Len(Place::new(LocalIdx::from_usize(1))),
             ))],
             term(TerminatorKind::Return),
         )],
@@ -791,10 +794,10 @@ fn t25_cast_stub_does_not_crash() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Cast(
                     CastKind::IntToInt,
-                    Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                    Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                     Ty::UNIT,
                 ),
             ))],
@@ -819,8 +822,8 @@ fn t26_discriminant_stub_does_not_crash() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
-                Rvalue::Discriminant(Place::new(LocalIdx::from_raw(1))),
+                Place::new(LocalIdx::from_usize(0)),
+                Rvalue::Discriminant(Place::new(LocalIdx::from_usize(1))),
             ))],
             term(TerminatorKind::Return),
         )],
@@ -843,7 +846,7 @@ fn t27_repeat_stub_does_not_crash() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Repeat(
                     Operand::Constant(MirConst {
                         kind: MirConstKind::Int(0),
@@ -885,7 +888,7 @@ fn t28_assert_stub_does_not_crash() {
                     span: Span::DUMMY,
                 }),
                 expected: true,
-                target: BasicBlockIdx::from_raw(1),
+                target: BasicBlockIdx::from_usize(1),
                 cleanup: None,
                 msg: AssertMessage::Overflow(BinOp::Add),
             }),
@@ -910,8 +913,8 @@ fn t29_drop_stub_does_not_crash() {
         vec![block(
             vec![],
             term(TerminatorKind::Drop {
-                place: Place::new(LocalIdx::from_raw(0)),
-                target: BasicBlockIdx::from_raw(1),
+                place: Place::new(LocalIdx::from_usize(0)),
+                target: BasicBlockIdx::from_usize(1),
                 cleanup: None,
             }),
         )],
@@ -932,8 +935,8 @@ fn t29_drop_stub_does_not_crash() {
 #[test]
 fn t30_assign_with_projection_stub_does_not_crash() {
     let place = Place {
-        local: LocalIdx::from_raw(0),
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+        local: LocalIdx::from_usize(0),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
     };
     let body = make_body(
         vec![block(
@@ -964,13 +967,13 @@ fn t30_assign_with_projection_stub_does_not_crash() {
 #[test]
 fn t31_operand_with_projection_stub_does_not_crash() {
     let place = Place {
-        local: LocalIdx::from_raw(0),
-        projection: Box::new([ProjectionElem::Index(LocalIdx::from_raw(1))]),
+        local: LocalIdx::from_usize(0),
+        projection: Box::new([ProjectionElem::Index(LocalIdx::from_usize(1))]),
     };
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(2)),
+                Place::new(LocalIdx::from_usize(2)),
                 Rvalue::Use(Operand::Copy(place)),
             ))],
             term(TerminatorKind::Return),
@@ -998,7 +1001,7 @@ fn t32_unsigned_constant_handled() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Uint(42),
                     ty: Ty::UNIT,
@@ -1026,7 +1029,7 @@ fn t33_char_constant_handled() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Char('a'),
                     ty: Ty::UNIT,
@@ -1054,7 +1057,7 @@ fn t34_float_constant_handled() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::FloatBits(1065353216),
                     ty: Ty::UNIT,
@@ -1082,7 +1085,7 @@ fn t35_string_constant_handled() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Unit,
                     ty: Ty::UNIT,
@@ -1110,7 +1113,7 @@ fn t36_unit_constant_handled() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Unit,
                     ty: Ty::UNIT,
@@ -1139,7 +1142,7 @@ fn t37_multiple_uses_of_same_constant_works() {
         vec![block(
             vec![
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(5),
                         ty: Ty::UNIT,
@@ -1147,7 +1150,7 @@ fn t37_multiple_uses_of_same_constant_works() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(5),
                         ty: Ty::UNIT,
@@ -1178,7 +1181,7 @@ fn t38_error_constant_handled() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Error,
                     ty: Ty::UNIT,
@@ -1208,11 +1211,11 @@ fn t39_switchint_non_bool_stub_does_not_crash() {
             block(
                 vec![],
                 term(TerminatorKind::SwitchInt {
-                    discr: Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+                    discr: Operand::Copy(Place::new(LocalIdx::from_usize(0))),
                     switch_ty: Ty::UNIT,
                     targets: SwitchTargets::new(
-                        Box::new([(1u128, BasicBlockIdx::from_raw(1))]),
-                        BasicBlockIdx::from_raw(2),
+                        Box::new([(1u128, BasicBlockIdx::from_usize(1))]),
+                        BasicBlockIdx::from_usize(2),
                     ),
                 }),
             ),
@@ -1254,7 +1257,7 @@ fn t41_add_exact_bytecode_sequence() {
         vec![block(
             vec![
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(3),
                         ty: Ty::UNIT,
@@ -1262,7 +1265,7 @@ fn t41_add_exact_bytecode_sequence() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(4),
                         ty: Ty::UNIT,
@@ -1270,12 +1273,12 @@ fn t41_add_exact_bytecode_sequence() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::BinaryOp(
                         BinOp::Add,
                         [
-                            Operand::Copy(Place::new(LocalIdx::from_raw(0))),
-                            Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(0))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                         ],
                     ),
                 )),
@@ -1312,7 +1315,7 @@ fn t42_bytecode_deterministic() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Int(42),
                     ty: Ty::UNIT,
@@ -1357,7 +1360,7 @@ fn t44_multiple_calls_independent() {
     let body2 = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Int(7),
                     ty: Ty::UNIT,
@@ -1386,12 +1389,12 @@ fn t45_function_with_args() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(2)),
+                Place::new(LocalIdx::from_usize(2)),
                 Rvalue::BinaryOp(
                     BinOp::Add,
                     [
-                        Operand::Copy(Place::new(LocalIdx::from_raw(0))),
-                        Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(0))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                     ],
                 ),
             ))],
@@ -1422,7 +1425,7 @@ fn t46_char_constant_emits_unicode_scalar() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Char('A'),
                     ty: Ty::UNIT,
@@ -1453,7 +1456,7 @@ fn t47_large_integer_constant() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Int(big_val),
                     ty: Ty::UNIT,
@@ -1483,7 +1486,7 @@ fn t48_float_bits_constant() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::FloatBits(u64::from(bits)),
                     ty: Ty::UNIT,
@@ -1542,16 +1545,16 @@ fn t51_mixed_stub_rvalues() {
         vec![block(
             vec![
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
-                    Rvalue::Len(Place::new(LocalIdx::from_raw(1))),
+                    Place::new(LocalIdx::from_usize(0)),
+                    Rvalue::Len(Place::new(LocalIdx::from_usize(1))),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
-                    Rvalue::Discriminant(Place::new(LocalIdx::from_raw(0))),
+                    Place::new(LocalIdx::from_usize(2)),
+                    Rvalue::Discriminant(Place::new(LocalIdx::from_usize(0))),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(3)),
-                    Rvalue::Ref(Place::new(LocalIdx::from_raw(1)), BorrowKind::Shared),
+                    Place::new(LocalIdx::from_usize(3)),
+                    Rvalue::Ref(Place::new(LocalIdx::from_usize(1)), BorrowKind::Shared),
                 )),
             ],
             term(TerminatorKind::Return),
@@ -1580,7 +1583,7 @@ fn t52_negative_integer_constant() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Int(-42),
                     ty: Ty::UNIT,
@@ -1610,7 +1613,7 @@ fn t53_minimum_i64_constant() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Int(min_val),
                     ty: Ty::UNIT,
@@ -1640,7 +1643,7 @@ fn t54_maximum_i64_constant() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Int(max_val),
                     ty: Ty::UNIT,
@@ -1669,7 +1672,7 @@ fn t55_zero_integer_constant() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Int(0),
                     ty: Ty::UNIT,
@@ -1699,7 +1702,7 @@ fn t56_complex_branch_three_targets() {
         vec![
             block(
                 vec![stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Bool(false),
                         ty: Ty::BOOL,
@@ -1707,17 +1710,17 @@ fn t56_complex_branch_three_targets() {
                     })),
                 ))],
                 term(TerminatorKind::SwitchInt {
-                    discr: Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+                    discr: Operand::Copy(Place::new(LocalIdx::from_usize(0))),
                     switch_ty: Ty::BOOL,
                     targets: SwitchTargets::new(
-                        Box::new([(0u128, BasicBlockIdx::from_raw(1))]),
-                        BasicBlockIdx::from_raw(2),
+                        Box::new([(0u128, BasicBlockIdx::from_usize(1))]),
+                        BasicBlockIdx::from_usize(2),
                     ),
                 }),
             ),
             block(
                 vec![stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(1),
                         ty: Ty::UNIT,
@@ -1728,7 +1731,7 @@ fn t56_complex_branch_three_targets() {
             ),
             block(
                 vec![stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(2),
                         ty: Ty::UNIT,
@@ -1765,7 +1768,7 @@ fn t58_loadlocal_midrange_index() {
         vec![block(
             vec![
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(idx)),
+                    Place::new(LocalIdx::from_usize(idx as usize)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(5),
                         ty: Ty::UNIT,
@@ -1773,8 +1776,10 @@ fn t58_loadlocal_midrange_index() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(idx + 1)),
-                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(idx)))),
+                    Place::new(LocalIdx::from_usize(idx as usize + 1)),
+                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(
+                        idx as usize,
+                    )))),
                 )),
             ],
             term(TerminatorKind::Return),
@@ -1803,7 +1808,7 @@ fn t59_nested_binaryop_does_not_crash() {
         vec![block(
             vec![
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(1),
                         ty: Ty::UNIT,
@@ -1811,7 +1816,7 @@ fn t59_nested_binaryop_does_not_crash() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(2),
                         ty: Ty::UNIT,
@@ -1819,7 +1824,7 @@ fn t59_nested_binaryop_does_not_crash() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(3),
                         ty: Ty::UNIT,
@@ -1827,22 +1832,22 @@ fn t59_nested_binaryop_does_not_crash() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(3)),
+                    Place::new(LocalIdx::from_usize(3)),
                     Rvalue::BinaryOp(
                         BinOp::Add,
                         [
-                            Operand::Copy(Place::new(LocalIdx::from_raw(0))),
-                            Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(0))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                         ],
                     ),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(4)),
+                    Place::new(LocalIdx::from_usize(4)),
                     Rvalue::BinaryOp(
                         BinOp::Add,
                         [
-                            Operand::Copy(Place::new(LocalIdx::from_raw(3))),
-                            Operand::Copy(Place::new(LocalIdx::from_raw(2))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(3))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(2))),
                         ],
                     ),
                 )),
@@ -1911,7 +1916,7 @@ fn t62_generate_single_body_consistent_with_generate_function() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Int(42),
                     ty: Ty::UNIT,
@@ -1940,7 +1945,7 @@ fn t63_bool_true_encodes_as_1() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Bool(true),
                     ty: Ty::BOOL,
@@ -1969,7 +1974,7 @@ fn t64_bool_false_encodes_as_0() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Bool(false),
                     ty: Ty::BOOL,
@@ -1998,7 +2003,7 @@ fn t65_uint_constant_encodes_as_i64() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Uint(42),
                     ty: Ty::UNIT,
@@ -2027,7 +2032,7 @@ fn t66_uint_max_value() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Uint(u128::from(u64::MAX)),
                     ty: Ty::UNIT,
@@ -2056,7 +2061,7 @@ fn t67_no_branch_leakage() {
     let body = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Int(100),
                     ty: Ty::UNIT,
@@ -2086,7 +2091,7 @@ fn t68_many_locals_stress_test() {
     let mut stmts = Vec::new();
     for i in 0..num_locals {
         stmts.push(stmt(StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(i as u32)),
+            Place::new(LocalIdx::from_usize(i)),
             Rvalue::Use(Operand::Constant(MirConst {
                 kind: MirConstKind::Int((i % 100) as i128),
                 ty: Ty::UNIT,
@@ -2137,13 +2142,13 @@ fn t70_goto_loop_emits_two_jumps() {
             block(
                 vec![],
                 term(TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(1),
+                    target: BasicBlockIdx::from_usize(1),
                 }),
             ),
             block(
                 vec![],
                 term(TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(0),
+                    target: BasicBlockIdx::from_usize(0),
                 }),
             ),
         ],
@@ -2170,7 +2175,7 @@ fn t71_comparison_ops_do_not_crash() {
             vec![block(
                 vec![
                     stmt(StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(0)),
+                        Place::new(LocalIdx::from_usize(0)),
                         Rvalue::Use(Operand::Constant(MirConst {
                             kind: MirConstKind::Int(1),
                             ty: Ty::UNIT,
@@ -2178,7 +2183,7 @@ fn t71_comparison_ops_do_not_crash() {
                         })),
                     )),
                     stmt(StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(1)),
+                        Place::new(LocalIdx::from_usize(1)),
                         Rvalue::Use(Operand::Constant(MirConst {
                             kind: MirConstKind::Int(2),
                             ty: Ty::UNIT,
@@ -2186,12 +2191,12 @@ fn t71_comparison_ops_do_not_crash() {
                         })),
                     )),
                     stmt(StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(2)),
+                        Place::new(LocalIdx::from_usize(2)),
                         Rvalue::BinaryOp(
                             *op,
                             [
-                                Operand::Copy(Place::new(LocalIdx::from_raw(0))),
-                                Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                                Operand::Copy(Place::new(LocalIdx::from_usize(0))),
+                                Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                             ],
                         ),
                     )),
@@ -2232,7 +2237,7 @@ fn t72_bitwise_shift_ops_do_not_crash() {
             vec![block(
                 vec![
                     stmt(StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(0)),
+                        Place::new(LocalIdx::from_usize(0)),
                         Rvalue::Use(Operand::Constant(MirConst {
                             kind: MirConstKind::Int(7),
                             ty: Ty::UNIT,
@@ -2240,7 +2245,7 @@ fn t72_bitwise_shift_ops_do_not_crash() {
                         })),
                     )),
                     stmt(StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(1)),
+                        Place::new(LocalIdx::from_usize(1)),
                         Rvalue::Use(Operand::Constant(MirConst {
                             kind: MirConstKind::Int(2),
                             ty: Ty::UNIT,
@@ -2248,12 +2253,12 @@ fn t72_bitwise_shift_ops_do_not_crash() {
                         })),
                     )),
                     stmt(StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(2)),
+                        Place::new(LocalIdx::from_usize(2)),
                         Rvalue::BinaryOp(
                             *op,
                             [
-                                Operand::Copy(Place::new(LocalIdx::from_raw(0))),
-                                Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                                Operand::Copy(Place::new(LocalIdx::from_usize(0))),
+                                Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                             ],
                         ),
                     )),
@@ -2287,7 +2292,7 @@ fn t73_double_assignment_chain() {
         vec![block(
             vec![
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(10),
                         ty: Ty::UNIT,
@@ -2295,12 +2300,12 @@ fn t73_double_assignment_chain() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
-                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(0)))),
+                    Place::new(LocalIdx::from_usize(1)),
+                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(0)))),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
-                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(1)))),
+                    Place::new(LocalIdx::from_usize(2)),
+                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(1)))),
                 )),
             ],
             term(TerminatorKind::Return),
@@ -2329,7 +2334,7 @@ fn t74_switchint_true_targets_otherwise() {
         vec![
             block(
                 vec![stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Bool(true),
                         ty: Ty::BOOL,
@@ -2337,11 +2342,11 @@ fn t74_switchint_true_targets_otherwise() {
                     })),
                 ))],
                 term(TerminatorKind::SwitchInt {
-                    discr: Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+                    discr: Operand::Copy(Place::new(LocalIdx::from_usize(0))),
                     switch_ty: Ty::BOOL,
                     targets: SwitchTargets::new(
-                        Box::new([(0u128, BasicBlockIdx::from_raw(1))]),
-                        BasicBlockIdx::from_raw(2),
+                        Box::new([(0u128, BasicBlockIdx::from_usize(1))]),
+                        BasicBlockIdx::from_usize(2),
                     ),
                 }),
             ),
@@ -2370,13 +2375,13 @@ fn t75_goto_chain_three_blocks() {
             block(
                 vec![],
                 term(TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(1),
+                    target: BasicBlockIdx::from_usize(1),
                 }),
             ),
             block(
                 vec![],
                 term(TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(2),
+                    target: BasicBlockIdx::from_usize(2),
                 }),
             ),
             block(vec![], term(TerminatorKind::Return)),
@@ -2402,7 +2407,7 @@ fn t76_nop_does_not_disrupt_bytecode() {
             vec![
                 stmt(StatementKind::Nop),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(5),
                         ty: Ty::UNIT,
@@ -2433,7 +2438,7 @@ fn t77_same_constant_repeated_correct() {
         vec![block(
             vec![
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(42),
                         ty: Ty::UNIT,
@@ -2441,7 +2446,7 @@ fn t77_same_constant_repeated_correct() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(42),
                         ty: Ty::UNIT,
@@ -2449,7 +2454,7 @@ fn t77_same_constant_repeated_correct() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(42),
                         ty: Ty::UNIT,
@@ -2482,7 +2487,7 @@ fn t78_generate_mixed_empty_and_nonempty() {
     let body_nonempty = make_body(
         vec![block(
             vec![stmt(StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Int(1),
                     ty: Ty::UNIT,
@@ -2518,14 +2523,14 @@ fn t79_no_errors_for_any_supported_terminator() {
         TerminatorKind::Return,
         TerminatorKind::Unreachable,
         TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(1),
+            target: BasicBlockIdx::from_usize(1),
         },
         TerminatorKind::SwitchInt {
-            discr: Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+            discr: Operand::Copy(Place::new(LocalIdx::from_usize(0))),
             switch_ty: Ty::BOOL,
             targets: SwitchTargets::new(
-                Box::new([(0u128, BasicBlockIdx::from_raw(1))]),
-                BasicBlockIdx::from_raw(2),
+                Box::new([(0u128, BasicBlockIdx::from_usize(1))]),
+                BasicBlockIdx::from_usize(2),
             ),
         },
     ];
@@ -2537,7 +2542,7 @@ fn t79_no_errors_for_any_supported_terminator() {
             vec![
                 block(
                     vec![stmt(StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(0)),
+                        Place::new(LocalIdx::from_usize(0)),
                         Rvalue::Use(Operand::Constant(MirConst {
                             kind: MirConstKind::Bool(true),
                             ty: Ty::BOOL,
@@ -2577,7 +2582,7 @@ fn t80_all_opcodes_emitted_somewhere() {
         vec![block(
             vec![
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(1),
                         ty: Ty::UNIT,
@@ -2585,16 +2590,16 @@ fn t80_all_opcodes_emitted_somewhere() {
                     })),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
-                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(0)))),
+                    Place::new(LocalIdx::from_usize(1)),
+                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(0)))),
                 )),
                 stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::BinaryOp(
                         BinOp::Add,
                         [
-                            Operand::Copy(Place::new(LocalIdx::from_raw(0))),
-                            Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(0))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                         ],
                     ),
                 )),
@@ -2619,7 +2624,7 @@ fn t80_all_opcodes_emitted_somewhere() {
             block(
                 vec![],
                 term(TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(1),
+                    target: BasicBlockIdx::from_usize(1),
                 }),
             ),
             block(vec![], term(TerminatorKind::Return)),
@@ -2633,7 +2638,7 @@ fn t80_all_opcodes_emitted_somewhere() {
         vec![
             block(
                 vec![stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Bool(true),
                         ty: Ty::BOOL,
@@ -2641,11 +2646,11 @@ fn t80_all_opcodes_emitted_somewhere() {
                     })),
                 ))],
                 term(TerminatorKind::SwitchInt {
-                    discr: Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+                    discr: Operand::Copy(Place::new(LocalIdx::from_usize(0))),
                     switch_ty: Ty::BOOL,
                     targets: SwitchTargets::new(
-                        Box::new([(0u128, BasicBlockIdx::from_raw(1))]),
-                        BasicBlockIdx::from_raw(2),
+                        Box::new([(0u128, BasicBlockIdx::from_usize(1))]),
+                        BasicBlockIdx::from_usize(2),
                     ),
                 }),
             ),
@@ -2669,8 +2674,8 @@ fn test_assign_field_projection() {
         std::sync::Arc::new(glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze()),
         glyim_core::TargetInfo::default(),
     );
-    let local = LocalIdx::from_raw(0);
-    let field_idx = FieldIdx::from_raw(1);
+    let local = LocalIdx::from_usize(0);
+    let field_idx = FieldIdx::from_usize(1);
     let proj = vec![ProjectionElem::Field(field_idx)];
     let place = Place {
         local,
@@ -2703,7 +2708,7 @@ fn test_assign_field_projection() {
         source_info: SourceInfo::new(Span::DUMMY),
     });
     let body = Arc::new(Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: bbs,
         locals,
         arg_count: 0,
@@ -2723,10 +2728,10 @@ fn test_ref_creates_pointer() {
         std::sync::Arc::new(glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze()),
         glyim_core::TargetInfo::default(),
     );
-    let place = Place::new(LocalIdx::from_raw(0));
+    let place = Place::new(LocalIdx::from_usize(0));
     let rvalue = Rvalue::Ref(place, BorrowKind::Shared);
     let stmt = Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(1)), rvalue),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(1)), rvalue),
         source_info: SourceInfo::new(Span::DUMMY),
     };
     let term = Terminator {
@@ -2741,7 +2746,7 @@ fn test_ref_creates_pointer() {
     let mut bbs = IndexVec::new();
     bbs.push(block);
     let body = Arc::new(Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: bbs,
         locals: IndexVec::new(),
         arg_count: 0,
@@ -2761,10 +2766,10 @@ fn test_deref_loads() {
         std::sync::Arc::new(glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze()),
         glyim_core::TargetInfo::default(),
     );
-    let operand = Operand::Copy(Place::new(LocalIdx::from_raw(0)));
+    let operand = Operand::Copy(Place::new(LocalIdx::from_usize(0)));
     let rvalue = Rvalue::UnaryOp(UnOp::Deref, operand);
     let stmt = Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(1)), rvalue),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(1)), rvalue),
         source_info: SourceInfo::new(Span::DUMMY),
     };
     let term = Terminator {
@@ -2779,7 +2784,7 @@ fn test_deref_loads() {
     let mut bbs = IndexVec::new();
     bbs.push(block);
     let body = Arc::new(Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: bbs,
         locals: IndexVec::new(),
         arg_count: 0,
@@ -2799,8 +2804,8 @@ fn test_drop_calls_drop_in_place() {
         std::sync::Arc::new(glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze()),
         glyim_core::TargetInfo::default(),
     );
-    let target_bb = BasicBlockIdx::from_raw(1);
-    let place = Place::new(LocalIdx::from_raw(0));
+    let target_bb = BasicBlockIdx::from_usize(1);
+    let place = Place::new(LocalIdx::from_usize(0));
     let term = TerminatorKind::Drop {
         place: place.clone(),
         target: target_bb,
@@ -2818,7 +2823,7 @@ fn test_drop_calls_drop_in_place() {
     let mut bbs = IndexVec::new();
     bbs.push(block);
     let body = Arc::new(Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: bbs,
         locals: IndexVec::new(),
         arg_count: 0,
@@ -2852,7 +2857,7 @@ fn test_repeat_array_constant() {
     };
     let rvalue = Rvalue::Repeat(operand, len_const);
     let stmt = Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(0)), rvalue),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(0)), rvalue),
         source_info: SourceInfo::new(Span::DUMMY),
     };
     let term = Terminator {
@@ -2867,7 +2872,7 @@ fn test_repeat_array_constant() {
     let mut bbs = IndexVec::new();
     bbs.push(block);
     let body = Arc::new(Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: bbs,
         locals: IndexVec::new(),
         arg_count: 0,
@@ -2894,7 +2899,7 @@ fn test_float_constant_emits() {
     };
     let rvalue = Rvalue::Use(Operand::Constant(float_const));
     let stmt = Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(0)), rvalue),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(0)), rvalue),
         source_info: SourceInfo::new(Span::DUMMY),
     };
     let term = Terminator {
@@ -2909,7 +2914,7 @@ fn test_float_constant_emits() {
     let mut bbs = IndexVec::new();
     bbs.push(block);
     let body = Arc::new(Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: bbs,
         locals: IndexVec::new(),
         arg_count: 0,
@@ -2950,7 +2955,7 @@ fn t99_cross_backend_execution_computes_value() {
     let locals: Vec<LocalDecl> = (0..6).map(|_| local_decl(Ty::ERROR)).collect();
     let stmts = vec![
         stmt(StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::Use(Operand::Constant(MirConst {
                 kind: MirConstKind::Int(3),
                 ty: Ty::ERROR,
@@ -2958,7 +2963,7 @@ fn t99_cross_backend_execution_computes_value() {
             })),
         )),
         stmt(StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(2)),
+            Place::new(LocalIdx::from_usize(2)),
             Rvalue::Use(Operand::Constant(MirConst {
                 kind: MirConstKind::Int(4),
                 ty: Ty::ERROR,
@@ -2966,17 +2971,17 @@ fn t99_cross_backend_execution_computes_value() {
             })),
         )),
         stmt(StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(3)),
+            Place::new(LocalIdx::from_usize(3)),
             Rvalue::BinaryOp(
                 BinOp::Add,
                 [
-                    Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                    Operand::Copy(Place::new(LocalIdx::from_raw(2))),
+                    Operand::Copy(Place::new(LocalIdx::from_usize(1))),
+                    Operand::Copy(Place::new(LocalIdx::from_usize(2))),
                 ],
             ),
         )),
         stmt(StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(4)),
+            Place::new(LocalIdx::from_usize(4)),
             Rvalue::Use(Operand::Constant(MirConst {
                 kind: MirConstKind::Int(2),
                 ty: Ty::ERROR,
@@ -2984,12 +2989,12 @@ fn t99_cross_backend_execution_computes_value() {
             })),
         )),
         stmt(StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(5)),
+            Place::new(LocalIdx::from_usize(5)),
             Rvalue::BinaryOp(
                 BinOp::Mul,
                 [
-                    Operand::Copy(Place::new(LocalIdx::from_raw(3))),
-                    Operand::Copy(Place::new(LocalIdx::from_raw(4))),
+                    Operand::Copy(Place::new(LocalIdx::from_usize(3))),
+                    Operand::Copy(Place::new(LocalIdx::from_usize(4))),
                 ],
             ),
         )),
@@ -3056,7 +3061,7 @@ fn rt11_bool_switch_true_target_is_branch_value_1() {
         vec![
             block(
                 vec![stmt(StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Bool(true),
                         ty: Ty::BOOL,
@@ -3064,12 +3069,12 @@ fn rt11_bool_switch_true_target_is_branch_value_1() {
                     })),
                 ))],
                 term(TerminatorKind::SwitchInt {
-                    discr: Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+                    discr: Operand::Copy(Place::new(LocalIdx::from_usize(0))),
                     switch_ty: Ty::BOOL,
                     // Convention: value 1 -> block 1 (true), otherwise -> block 2.
                     targets: SwitchTargets::new(
-                        Box::new([(1u128, BasicBlockIdx::from_raw(1))]),
-                        BasicBlockIdx::from_raw(2),
+                        Box::new([(1u128, BasicBlockIdx::from_usize(1))]),
+                        BasicBlockIdx::from_usize(2),
                     ),
                 }),
             ),
