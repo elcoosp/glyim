@@ -21,7 +21,7 @@ use glyim_type::{Substitution, Ty, TyCtxMut, TyKind};
 /// `DefId(0, raw)` — the owner id convention used by the interpreter's
 /// `resolve_callee` for `MirConstKind::Fn(FnDefId::from_raw(raw), _)`.
 fn id(raw: u32) -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(raw))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(raw as usize))
 }
 
 /// `fn(ret_ty) -> i32 { _0 = val; return }` — a single-block callee that
@@ -29,15 +29,15 @@ fn id(raw: u32) -> DefId {
 fn build_returning_body(tcx: &mut TyCtxMut, owner: DefId, val: i128) -> Body {
     let mut body = Body::dummy(owner);
     let i32_ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
-    body.locals = IndexVec::from_raw(vec![LocalDecl {
+    body.locals = IndexVec::from_vec(vec![LocalDecl {
         ty: i32_ty,
         mutability: Mutability::Mut,
         source_info: SourceInfo::new(Span::DUMMY),
     }]);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Int(val),
                     ty: i32_ty,
@@ -63,7 +63,7 @@ fn build_returning_body(tcx: &mut TyCtxMut, owner: DefId, val: i128) -> Body {
 fn build_caller_body(tcx: &mut TyCtxMut, caller: DefId, callee_raw: u32) -> Body {
     let i32_ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
     let mut body = Body::dummy(caller);
-    body.locals = IndexVec::from_raw(vec![
+    body.locals = IndexVec::from_vec(vec![
         LocalDecl {
             ty: Ty::UNIT,
             mutability: Mutability::Mut,
@@ -75,22 +75,22 @@ fn build_caller_body(tcx: &mut TyCtxMut, caller: DefId, callee_raw: u32) -> Body
             source_info: SourceInfo::new(Span::DUMMY),
         },
     ]);
-    body.basic_blocks = IndexVec::from_raw(vec![
+    body.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Call {
                     func: Operand::Constant(MirConst {
                         kind: MirConstKind::Fn(
-                            FnDefId::from_raw(callee_raw),
+                            FnDefId::from_usize(callee_raw as usize),
                             Substitution::empty(),
                         ),
                         ty: i32_ty,
                         span: Span::DUMMY,
                     }),
                     args: vec![],
-                    destination: Place::new(LocalIdx::from_raw(1)),
-                    target: Some(BasicBlockIdx::from_raw(1)),
+                    destination: Place::new(LocalIdx::from_usize(1)),
+                    target: Some(BasicBlockIdx::from_usize(1)),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -123,7 +123,7 @@ fn observer_records_call_sequence() {
     interp.run_body(&caller_body).unwrap();
 
     let val = interp
-        .get_local_value(LocalIdx::from_raw(1))
+        .get_local_value(LocalIdx::from_usize(1))
         .expect("call result landed in local 1");
     assert_eq!(val, &InterpValue::Int(42), "callee result must still flow");
 
@@ -131,8 +131,8 @@ fn observer_records_call_sequence() {
         .take_trace()
         .expect("with_trace_collector installed a TraceCollector");
 
-    let bb0 = BasicBlockIdx::from_raw(0);
-    let bb1 = BasicBlockIdx::from_raw(1);
+    let bb0 = BasicBlockIdx::from_usize(0);
+    let bb1 = BasicBlockIdx::from_usize(1);
     let expected = vec![
         TraceEvent::BbEnter {
             owner: caller_id,
@@ -177,7 +177,7 @@ fn noop_observer_is_default_and_silent() {
         "no TraceCollector installed → take_trace is None"
     );
     let val = interp
-        .get_local_value(LocalIdx::from_raw(1))
+        .get_local_value(LocalIdx::from_usize(1))
         .expect("call result landed in local 1");
     assert_eq!(val, &InterpValue::Int(7));
 }
