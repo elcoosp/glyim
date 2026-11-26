@@ -66,7 +66,7 @@ impl BorrowckCtx for TestCtx {
 
 fn empty_body() -> Body {
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: IndexVec::new(),
         locals: IndexVec::new(),
         arg_count: 0,
@@ -104,14 +104,14 @@ fn dummy_terminator() -> Terminator {
 
 #[test]
 fn test_field_vs_index_disjoint() {
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let field_place = Place {
         local,
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
     };
     let index_place = Place {
         local,
-        projection: Box::new([ProjectionElem::Index(LocalIdx::from_raw(1))]),
+        projection: Box::new([ProjectionElem::Index(LocalIdx::from_usize(1))]),
     };
 
     assert!(
@@ -130,14 +130,14 @@ fn test_field_vs_index_disjoint() {
 
 #[test]
 fn test_same_field_conflicts() {
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let place_a = Place {
         local,
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
     };
     let place_b = Place {
         local,
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
     };
 
     assert!(
@@ -152,14 +152,14 @@ fn test_same_field_conflicts() {
 
 #[test]
 fn test_different_fields_disjoint() {
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let place_a = Place {
         local,
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
     };
     let place_b = Place {
         local,
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(1))]),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(1))]),
     };
 
     assert!(
@@ -202,7 +202,7 @@ fn test_cross_block_reservation_extends() {
         }],
         terminator: Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(1),
+                target: BasicBlockIdx::from_usize(1),
             },
             source_info: dummy_source_info(),
         },
@@ -220,13 +220,13 @@ fn test_cross_block_reservation_extends() {
 
     let analysis = crate::twophase::ReservationAnalysis::compute(
         &body,
-        BasicBlockIdx::from_raw(0),
+        BasicBlockIdx::from_usize(0),
         0,
         local_ref,
     );
 
     assert!(
-        analysis.is_reservation(BasicBlockIdx::from_raw(1), 0),
+        analysis.is_reservation(BasicBlockIdx::from_usize(1), 0),
         "Reservation should extend to successor block"
     );
 }
@@ -270,7 +270,7 @@ fn test_cross_block_reservation_ends_on_activation() {
         }],
         terminator: Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(1),
+                target: BasicBlockIdx::from_usize(1),
             },
             source_info: dummy_source_info(),
         },
@@ -300,17 +300,17 @@ fn test_cross_block_reservation_ends_on_activation() {
 
     let analysis = crate::twophase::ReservationAnalysis::compute(
         &body,
-        BasicBlockIdx::from_raw(0),
+        BasicBlockIdx::from_usize(0),
         0,
         local_ref,
     );
 
     assert!(
-        analysis.is_reservation(BasicBlockIdx::from_raw(1), 0),
+        analysis.is_reservation(BasicBlockIdx::from_usize(1), 0),
         "Reservation should be active before activation read"
     );
     assert!(
-        !analysis.is_reservation(BasicBlockIdx::from_raw(1), 1),
+        !analysis.is_reservation(BasicBlockIdx::from_usize(1), 1),
         "Reservation should end after activation read"
     );
 }
@@ -324,7 +324,7 @@ fn test_move_analysis_adt_field_count() {
     use glyim_test::test_ty_ctx;
 
     let mut ctx_mut = test_ty_ctx();
-    let adt_id = AdtId::from_raw(0);
+    let adt_id = AdtId::from_usize(0);
     let field_tys = vec![Ty::BOOL, Ty::BOOL, Ty::BOOL];
     ctx_mut.register_adt_repr(adt_id, field_tys);
     let substs = ctx_mut.intern_substitution(vec![]);
@@ -344,7 +344,7 @@ fn test_move_analysis_adt_field_count() {
                     Rvalue::Ref(
                         Place {
                             local: local_data,
-                            projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+                            projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
                         },
                         BorrowKind::Mut {
                             allow_two_phase_borrow: false,
@@ -359,7 +359,7 @@ fn test_move_analysis_adt_field_count() {
                     Rvalue::Ref(
                         Place {
                             local: local_data,
-                            projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(1))]),
+                            projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(1))]),
                         },
                         BorrowKind::Mut {
                             allow_two_phase_borrow: false,
