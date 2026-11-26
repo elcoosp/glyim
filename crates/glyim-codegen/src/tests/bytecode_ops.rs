@@ -68,7 +68,7 @@ fn build_body(
     basic_blocks.push(block);
 
     Arc::new(Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks,
         locals,
         arg_count: 0,
@@ -149,12 +149,12 @@ fn test_index_emits_load_addr_plus_offset_plus_deref() {
 
     // _0 = Copy(_1[_2])
     let indexed_place = Place {
-        local: LocalIdx::from_raw(1),
-        projection: Box::new([ProjectionElem::Index(LocalIdx::from_raw(2))]),
+        local: LocalIdx::from_usize(1),
+        projection: Box::new([ProjectionElem::Index(LocalIdx::from_usize(2))]),
     };
     let stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Use(Operand::Copy(indexed_place)),
         ),
         source_info: src_info(),
@@ -215,7 +215,7 @@ fn test_repeat_emits_op_repeat() {
     };
     let stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Repeat(value, count),
         ),
         source_info: src_info(),
@@ -249,7 +249,7 @@ fn test_aggregate_emits_op_aggregate_with_field_count() {
     let operands = vec![const_int_operand(1), const_int_operand(2)];
     let stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Aggregate(AggregateKind::Tuple, operands),
         ),
         source_info: src_info(),
@@ -296,12 +296,12 @@ fn test_field_access_emits_load_addr_plus_offset() {
 
     // _0 = Copy(_1.0)
     let field_place = Place {
-        local: LocalIdx::from_raw(1),
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+        local: LocalIdx::from_usize(1),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
     };
     let stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Use(Operand::Copy(field_place)),
         ),
         source_info: src_info(),
@@ -344,12 +344,12 @@ fn test_oob_local_panics() {
 
     // _0 = Ref(_5.*) -- _5 does not exist, projection non-empty so bounds check fires
     let oob_place = Place {
-        local: LocalIdx::from_raw(5),
+        local: LocalIdx::from_usize(5),
         projection: Box::new([ProjectionElem::Deref]),
     };
     let stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Ref(oob_place, BorrowKind::Shared),
         ),
         source_info: src_info(),
@@ -400,12 +400,12 @@ fn test_zero_sized_element_handled() {
 
     // _0 = Copy(_1[_2]) -- zero-sized elements should not panic, just yield 0 offset
     let indexed_place = Place {
-        local: LocalIdx::from_raw(1),
-        projection: Box::new([ProjectionElem::Index(LocalIdx::from_raw(2))]),
+        local: LocalIdx::from_usize(1),
+        projection: Box::new([ProjectionElem::Index(LocalIdx::from_usize(2))]),
     };
     let stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Use(Operand::Copy(indexed_place)),
         ),
         source_info: src_info(),
