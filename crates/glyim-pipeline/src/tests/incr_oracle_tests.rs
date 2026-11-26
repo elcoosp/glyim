@@ -113,7 +113,10 @@ enum Edit {
 /// different `Debug` → different fingerprint).
 fn thir_body_for(local: u32) -> thir::Body {
     thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(local)),
+        owner: DefId::new(
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(local as usize),
+        ),
         params: Vec::new(),
         return_ty: Ty::UNIT,
         stmts: Vec::new(),
@@ -183,8 +186,9 @@ fn incremental_matches_clean_across_edit_sequence() {
         // Run each item's thir_body query through the incremental cache.
         let incr_thir_fps: Vec<Fingerprint> = (0..N_ITEMS)
             .map(|local| {
-                let arc =
-                    incr_db.thir_body_query(LocalDefId::from_raw(local), || thir_body_for(local));
+                let arc = incr_db.thir_body_query(LocalDefId::from_usize(local as usize), || {
+                    thir_body_for(local)
+                });
                 debug_fingerprint(&*arc)
             })
             .collect();
@@ -195,8 +199,9 @@ fn incremental_matches_clean_across_edit_sequence() {
         let clean_def_fp = def_map_fingerprint(&clean_db, clean_file);
         let clean_thir_fps: Vec<Fingerprint> = (0..N_ITEMS)
             .map(|local| {
-                let arc =
-                    clean_db.thir_body_query(LocalDefId::from_raw(local), || thir_body_for(local));
+                let arc = clean_db.thir_body_query(LocalDefId::from_usize(local as usize), || {
+                    thir_body_for(local)
+                });
                 debug_fingerprint(&*arc)
             })
             .collect();
@@ -243,7 +248,9 @@ fn incremental_oracle_records_verified_on_backdates() {
     // Seed the cache with the initial source.
     let _ = set_source(&incr_db, &model.render());
     for local in 0..N_ITEMS {
-        incr_db.thir_body_query(LocalDefId::from_raw(local), || thir_body_for(local));
+        incr_db.thir_body_query(LocalDefId::from_usize(local as usize), || {
+            thir_body_for(local)
+        });
     }
     incr_db.clear_incr_verify();
 
@@ -251,7 +258,9 @@ fn incremental_oracle_records_verified_on_backdates() {
         let _edit = model.apply_edit(&mut rng);
         let _ = set_source(&incr_db, &model.render());
         for local in 0..N_ITEMS {
-            incr_db.thir_body_query(LocalDefId::from_raw(local), || thir_body_for(local));
+            incr_db.thir_body_query(LocalDefId::from_usize(local as usize), || {
+                thir_body_for(local)
+            });
         }
     }
 
