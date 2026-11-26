@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 fn dummy_body() -> Arc<Body> {
     Arc::new(Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(0),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
     )))
 }
 
@@ -25,7 +25,7 @@ fn many_distinct_fn_items() {
 
     let items: Vec<MonoItem> = (0..count)
         .map(|i| MonoItem::Fn {
-            def_id: FnDefId::from_raw(i as u32),
+            def_id: FnDefId::from_usize(i),
             substs: empty_subst,
         })
         .collect();
@@ -52,7 +52,7 @@ fn many_distinct_fn_items() {
 fn many_substitutions_same_fn() {
     let mut ty_ctx = test_ty_ctx();
     let mut ctx = MonoCtx::new();
-    let fn_id = FnDefId::from_raw(1);
+    let fn_id = FnDefId::from_usize(1);
     let count: usize = 20;
 
     let items: Vec<MonoItem> = (0..count)
@@ -87,26 +87,26 @@ fn mixed_item_types() {
 
     let items = vec![
         MonoItem::Fn {
-            def_id: FnDefId::from_raw(1),
+            def_id: FnDefId::from_usize(1),
             substs: empty_subst,
         },
         MonoItem::Const {
-            def_id: ConstDefId::from_raw(2),
+            def_id: ConstDefId::from_usize(2),
             substs: empty_subst,
         },
         MonoItem::Static {
-            def_id: StaticDefId::from_raw(3),
+            def_id: StaticDefId::from_usize(3),
         },
         MonoItem::Fn {
-            def_id: FnDefId::from_raw(4),
+            def_id: FnDefId::from_usize(4),
             substs: empty_subst,
         },
         MonoItem::Const {
-            def_id: ConstDefId::from_raw(5),
+            def_id: ConstDefId::from_usize(5),
             substs: empty_subst,
         },
         MonoItem::Static {
-            def_id: StaticDefId::from_raw(6),
+            def_id: StaticDefId::from_usize(6),
         },
     ];
 
@@ -134,15 +134,15 @@ fn incremental_collect() {
     // First batch: 3 items
     let batch1 = vec![
         MonoItem::Fn {
-            def_id: FnDefId::from_raw(1),
+            def_id: FnDefId::from_usize(1),
             substs: empty_subst,
         },
         MonoItem::Fn {
-            def_id: FnDefId::from_raw(2),
+            def_id: FnDefId::from_usize(2),
             substs: empty_subst,
         },
         MonoItem::Static {
-            def_id: StaticDefId::from_raw(3),
+            def_id: StaticDefId::from_usize(3),
         },
     ];
     ctx.collect(&batch1, &|_def_id, _substs| dummy_body(), &|_ty| {
@@ -153,15 +153,15 @@ fn incremental_collect() {
     // Second batch: 2 new items + 1 duplicate from batch1
     let batch2 = vec![
         MonoItem::Fn {
-            def_id: FnDefId::from_raw(4),
+            def_id: FnDefId::from_usize(4),
             substs: empty_subst,
         },
         MonoItem::Fn {
-            def_id: FnDefId::from_raw(1),
+            def_id: FnDefId::from_usize(1),
             substs: empty_subst,
         }, // duplicate
         MonoItem::Const {
-            def_id: ConstDefId::from_raw(5),
+            def_id: ConstDefId::from_usize(5),
             substs: empty_subst,
         },
     ];
@@ -176,7 +176,7 @@ fn incremental_collect() {
 
     // Third batch: 1 new item
     let batch3 = vec![MonoItem::Fn {
-        def_id: FnDefId::from_raw(6),
+        def_id: FnDefId::from_usize(6),
         substs: empty_subst,
     }];
     ctx.collect(&batch3, &|_def_id, _substs| dummy_body(), &|_ty| {
@@ -195,7 +195,7 @@ fn large_overlapping_collect() {
     // Collect 30 items
     let batch1: Vec<MonoItem> = (0..30)
         .map(|i| MonoItem::Fn {
-            def_id: FnDefId::from_raw(i),
+            def_id: FnDefId::from_usize(i),
             substs: empty_subst,
         })
         .collect();
@@ -207,7 +207,7 @@ fn large_overlapping_collect() {
     // Collect 30 more where half overlap
     let batch2: Vec<MonoItem> = (15..45)
         .map(|i| MonoItem::Fn {
-            def_id: FnDefId::from_raw(i),
+            def_id: FnDefId::from_usize(i),
             substs: empty_subst,
         })
         .collect();
@@ -235,7 +235,7 @@ fn empty_start_list() {
 fn multi_arg_substitution() {
     let mut ty_ctx = test_ty_ctx();
     let mut ctx = MonoCtx::new();
-    let fn_id = FnDefId::from_raw(1);
+    let fn_id = FnDefId::from_usize(1);
 
     let subst_a = ty_ctx.intern_substitution(vec![
         GenericArg::Ty(ty_ctx.bool_ty()),
