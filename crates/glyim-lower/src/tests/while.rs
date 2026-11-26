@@ -63,5 +63,5 @@ fn while_to_loop_with_conditional_break() {
     let result = lower_body(&mock, &body);
     let _ = assert_mir(&ctx, &result.body)
         .block_count(4)
-        .block_terminator(BasicBlockIdx::from_raw(0), "Goto");
+        .block_terminator(BasicBlockIdx::from_usize(0), "Goto");
 }
