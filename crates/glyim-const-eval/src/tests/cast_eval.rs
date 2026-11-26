@@ -25,7 +25,7 @@ fn interner() -> &'static Interner {
 fn test_body() -> Body {
     Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: glyim_core::def_id::LocalDefId::from_raw(0),
+        owner: glyim_core::def_id::LocalDefId::from_usize(0),
         exprs: glyim_core::arena::IndexVec::new(),
         pats: glyim_core::arena::IndexVec::new(),
         pat_spans: glyim_core::arena::IndexVec::new(),
