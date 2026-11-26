@@ -107,6 +107,7 @@ impl<'a> TestCollector<'a> {
             config.compile_flags = header_config.compile_flags;
             config.revision_compile_flags = header_config.revision_compile_flags;
             config.error_patterns = header_config.error_patterns;
+            config.error_codes = header_config.error_codes;
             config.needs_llvm = header_config.needs_llvm;
             config.ignore = header_config.ignore;
             config.timeout_secs = header_config.timeout_secs;
