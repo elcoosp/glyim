@@ -50,18 +50,18 @@ fn slice_type_lowering() {
             let mut statements = Vec::new();
             statements.push(Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::Use(Operand::Constant(zero_const.clone())),
                 ),
                 source_info: SourceInfo { span: Span::DUMMY },
             });
             let elem_place = Place {
-                local: LocalIdx::from_raw(1),
-                projection: vec![ProjectionElem::Index(LocalIdx::from_raw(2))].into_boxed_slice(),
+                local: LocalIdx::from_usize(1),
+                projection: vec![ProjectionElem::Index(LocalIdx::from_usize(2))].into_boxed_slice(),
             };
             statements.push(Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(3)),
+                    Place::new(LocalIdx::from_usize(3)),
                     Rvalue::Use(Operand::Copy(elem_place)),
                 ),
                 source_info: SourceInfo { span: Span::DUMMY },
@@ -79,7 +79,7 @@ fn slice_type_lowering() {
         };
 
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1)),
             basic_blocks,
             locals,
             arg_count: 1,
@@ -137,18 +137,18 @@ fn slice_index_emits_gep_and_load() {
             let mut statements = Vec::new();
             statements.push(Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::Use(Operand::Constant(zero_const.clone())),
                 ),
                 source_info: SourceInfo { span: Span::DUMMY },
             });
             let elem_place = Place {
-                local: LocalIdx::from_raw(1),
-                projection: vec![ProjectionElem::Index(LocalIdx::from_raw(2))].into_boxed_slice(),
+                local: LocalIdx::from_usize(1),
+                projection: vec![ProjectionElem::Index(LocalIdx::from_usize(2))].into_boxed_slice(),
             };
             statements.push(Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(3)),
+                    Place::new(LocalIdx::from_usize(3)),
                     Rvalue::Use(Operand::Copy(elem_place)),
                 ),
                 source_info: SourceInfo { span: Span::DUMMY },
@@ -166,7 +166,7 @@ fn slice_index_emits_gep_and_load() {
         };
 
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1)),
             basic_blocks,
             locals,
             arg_count: 1,
