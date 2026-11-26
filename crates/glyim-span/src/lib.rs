@@ -51,7 +51,7 @@ impl FileId {
     /// same commit that owns the arena.
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn from_raw(raw: u32) -> Self {
+    pub fn from_raw(raw: u32) -> Self {
         Self(raw)
     }
     /// `to_raw`.
@@ -106,7 +106,7 @@ impl ByteIdx {
     /// `u32`. The sanctioned production path is [`ByteIdx::from_usize`].
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn from_raw(raw: u32) -> Self {
+    pub fn from_raw(raw: u32) -> Self {
         Self(raw)
     }
     /// The largest byte offset a `ByteIdx` can carry (`u32::MAX`).
@@ -438,7 +438,7 @@ impl SyntaxContext {
     /// (the hygiene arena) or [`SyntaxContext::ROOT`].
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn from_raw(raw: u32) -> Self {
+    pub fn from_raw(raw: u32) -> Self {
         Self(raw)
     }
 }
@@ -484,7 +484,7 @@ impl ExpnId {
     /// arena) or [`ExpnId::ROOT`].
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn from_raw(raw: u32) -> Self {
+    pub fn from_raw(raw: u32) -> Self {
         Self(raw)
     }
 }
