@@ -10,7 +10,7 @@ fn get_fn_return_type_opt(source: &str) -> Option<TypeRef> {
     let parse_result = parse_to_syntax(source, file_id);
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
-    match &hir.items[ItemId::from_raw(0)].kind {
+    match &hir.items[ItemId::from_usize(0)].kind {
         ItemKind::Fn(fn_item) => fn_item.return_ty.clone(),
         other => panic!("Expected Fn item, got {other:?}"),
     }
