@@ -11,7 +11,7 @@ fn test_pattern_or_lowering() {
     let parse_result = parse_to_syntax(source, file_id);
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
-    let body_id = match &hir.items[ItemId::from_raw(0)].kind {
+    let body_id = match &hir.items[ItemId::from_usize(0)].kind {
         ItemKind::Fn(fn_item) => fn_item.body.expect("no body"),
         _ => panic!("expected Fn item"),
     };
