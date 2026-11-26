@@ -42,8 +42,8 @@ fn s08_t41_generate_returns_error_for_invalid_path() {
 fn s08_t42_generate_function_error_for_invalid_triple() {
     let backend = LlvmBackend::default().with_target("nonexistent-triple-unknown");
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(9999),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(9999),
     )));
     let result = backend.generate_function(&body);
     assert!(result.is_err());
@@ -54,8 +54,8 @@ fn s08_t42_generate_function_error_for_invalid_triple() {
 #[test]
 fn s08_t43_generate_function_produces_deterministic_output_across_backends() {
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(8888),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(8888),
     )));
     let b1 = LlvmBackend::new();
     let b2 = LlvmBackend::new();
@@ -88,8 +88,8 @@ fn s08_t45_generate_function_memory_buffer_not_leaked() {
     // calling many times should not leak.
     let backend = LlvmBackend::new();
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(7777),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(7777),
     )));
     for _ in 0..200 {
         let _ = backend.generate_function(&body);
@@ -106,8 +106,8 @@ fn s08_t46_with_target_reuses_initialization() {
     assert_eq!(b2.name(), "llvm");
     // Both should be usable
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(4444),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(4444),
     )));
     b1.generate_function(&body).unwrap();
     b2.generate_function(&body).unwrap();
@@ -118,8 +118,8 @@ fn s08_t47_generate_function_returns_vec_not_slice() {
     // The Vec<u8> returned must own its data.
     let backend = LlvmBackend::new();
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(5555),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(5555),
     )));
     let vec = backend.generate_function(&body).unwrap();
     let ptr = vec.as_ptr();
