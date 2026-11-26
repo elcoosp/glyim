@@ -63,7 +63,7 @@ fn s04_e08_error_type_is_unknown() {
 fn s04_e09_unknown_adt_type() {
     let (ctx, adt_ty) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![]);
-        c.mk_ty(TyKind::Adt(AdtId::from_raw(42), substs))
+        c.mk_ty(TyKind::Adt(AdtId::from_usize(42), substs))
     });
     let computer = SimpleLayoutComputer::new(&ctx, TargetInfo::x86_64());
     let result = computer.layout_of(adt_ty);
