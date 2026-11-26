@@ -23,7 +23,7 @@ fn field_projection_on_tuple_generates_gep() {
     builder.add_statement(make_assign(
         Place {
             local: field_local,
-            projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+            projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
         },
         Rvalue::Use(Operand::Copy(Place::new(tuple_local))),
     ));
@@ -53,7 +53,7 @@ fn field_projection_on_tuple_second_field() {
     builder.add_statement(make_assign(
         Place {
             local: field_local,
-            projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(1))]),
+            projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(1))]),
         },
         Rvalue::Use(Operand::Copy(Place::new(tuple_local))),
     ));
@@ -83,14 +83,14 @@ fn field_projection_on_nested_tuple() {
     builder.add_statement(make_assign(
         Place {
             local: inner_local,
-            projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+            projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
         },
         Rvalue::Use(Operand::Copy(Place::new(outer_local))),
     ));
     builder.add_statement(make_assign(
         Place {
             local: field_local,
-            projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+            projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
         },
         Rvalue::Use(Operand::Copy(Place::new(inner_local))),
     ));
