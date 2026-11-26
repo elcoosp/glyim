@@ -74,7 +74,7 @@ fn v05_t01_fn_bound_for_a_ref_u32() {
 #[test]
 fn v05_t02_higher_ranked_region_constraint_solving() {
     let (mut ctx, mut infer) = fresh_ctx_and_infer();
-    let trait_def_id = TraitDefId::from_raw(42);
+    let trait_def_id = TraitDefId::from_usize(42);
 
     let bound_vars: Box<[BoundVariableKind]> =
         Box::new([BoundVariableKind::Region(BoundRegionKind::BrAnon(0))]);
@@ -116,7 +116,7 @@ fn v05_t02_higher_ranked_region_constraint_solving() {
 #[test]
 fn v05_t02_higher_ranked_with_impl_proven() {
     let (mut ctx, mut infer) = fresh_ctx_and_infer();
-    let trait_def_id = TraitDefId::from_raw(100);
+    let trait_def_id = TraitDefId::from_usize(100);
     let interner = Interner::new();
 
     let mut trait_ctx = TraitContext::new();
@@ -129,7 +129,7 @@ fn v05_t02_higher_ranked_with_impl_proven() {
 
     let impl_substs = ctx.intern_substitution(vec![]);
     trait_ctx.register_impl(crate::solver::ImplDef {
-        def_id: glyim_core::def_id::ImplDefId::from_raw(200),
+        def_id: glyim_core::def_id::ImplDefId::from_usize(200),
         trait_ref: TraitRef {
             def_id: trait_def_id,
             substs: impl_substs,
@@ -244,7 +244,7 @@ fn v05_t03_nested_hrtb_triple_binder() {
 #[test]
 fn v05_t04_hrtb_with_associated_types() {
     let (mut ctx, mut infer) = fresh_ctx_and_infer();
-    let trait_def_id = TraitDefId::from_raw(55);
+    let trait_def_id = TraitDefId::from_usize(55);
 
     let bound_vars: Box<[BoundVariableKind]> =
         Box::new([BoundVariableKind::Region(BoundRegionKind::BrAnon(0))]);
@@ -298,7 +298,7 @@ fn v05_t04_hrtb_with_associated_types() {
 #[test]
 fn v05_t05_unmet_higher_ranked_bound_definite_no() {
     let (mut ctx, mut infer) = fresh_ctx_and_infer();
-    let trait_def_id = TraitDefId::from_raw(999);
+    let trait_def_id = TraitDefId::from_usize(999);
 
     let bound_vars: Box<[BoundVariableKind]> =
         Box::new([BoundVariableKind::Region(BoundRegionKind::BrAnon(0))]);
@@ -330,7 +330,7 @@ fn v05_t05_unmet_higher_ranked_bound_definite_no() {
 #[test]
 fn v05_t05_unmet_bound_negative_polarity() {
     let (mut ctx, mut infer) = fresh_ctx_and_infer();
-    let trait_def_id = TraitDefId::from_raw(888);
+    let trait_def_id = TraitDefId::from_usize(888);
 
     let bound_vars: Box<[BoundVariableKind]> =
         Box::new([BoundVariableKind::Region(BoundRegionKind::BrAnon(0))]);
