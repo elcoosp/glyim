@@ -40,7 +40,7 @@ fuzz_target!(|data: &[u8]| {
         return;
     }
     let _ = std::fs::write("/tmp/glyim-fuzz-last-input.g", src);
-    let parsed = glyim_frontend::parse_to_syntax(src, glyim_span::FileId::from_raw(0));
+    let parsed = glyim_frontend::parse_to_syntax(src, glyim_span::FileId::from_usize(0));
     // Losslessness: the CST must render back to the exact input.
     let rendered = parsed.root.to_string();
     assert_eq!(
