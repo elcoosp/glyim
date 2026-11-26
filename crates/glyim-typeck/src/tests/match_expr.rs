@@ -9,12 +9,12 @@ fn match_integer_with_wildcard() {
     exprs.push(Expr::Literal(Literal::Int(0, None)));
     pats.push(Pat::Wild);
     let arm = MatchArm {
-        pat: PatId::from_raw(0),
+        pat: PatId::from_usize(0),
         guard: None,
-        body: ExprId::from_raw(1),
+        body: ExprId::from_usize(1),
     };
     exprs.push(Expr::Match {
-        scrutinee: ExprId::from_raw(0),
+        scrutinee: ExprId::from_usize(0),
         arms: vec![arm],
     });
 
