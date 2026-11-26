@@ -78,7 +78,7 @@ fn region_late_bound() {
 
 #[test]
 fn region_var() {
-    let r = Region::Var(RegionVid::from_raw(0));
+    let r = Region::Var(RegionVid::from_usize(0));
     assert!(matches!(r, Region::Var(_)));
 }
 
