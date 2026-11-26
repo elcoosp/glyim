@@ -2,9 +2,9 @@ use crate::*;
 
 #[test]
 fn test_span_new_valid() {
-    let file = FileId::from_raw(1);
-    let lo = ByteIdx::from_raw(5);
-    let hi = ByteIdx::from_raw(10);
+    let file = FileId::from_usize(1);
+    let lo = ByteIdx::from_usize(5);
+    let hi = ByteIdx::from_usize(10);
     let span = Span::range(file, lo, hi, SyntaxContext::ROOT);
     assert_eq!(span.file(), file);
     assert_eq!(span.lo(), lo);
@@ -15,9 +15,9 @@ fn test_span_new_valid() {
 #[test]
 #[should_panic(expected = "Span lo > hi")]
 fn test_span_new_invalid_lo_gt_hi() {
-    let file = FileId::from_raw(1);
-    let lo = ByteIdx::from_raw(10);
-    let hi = ByteIdx::from_raw(5);
+    let file = FileId::from_usize(1);
+    let lo = ByteIdx::from_usize(10);
+    let hi = ByteIdx::from_usize(5);
     let _ = Span::range(file, lo, hi, SyntaxContext::ROOT);
 }
 
@@ -25,9 +25,9 @@ fn test_span_new_invalid_lo_gt_hi() {
 fn test_is_dummy() {
     assert!(Span::DUMMY.is_dummy());
     let real = Span::range(
-        FileId::from_raw(0),
+        FileId::from_usize(0),
         ByteIdx::ZERO,
-        ByteIdx::from_raw(1),
+        ByteIdx::from_usize(1),
         SyntaxContext::ROOT,
     );
     assert!(!real.is_dummy());
@@ -35,9 +35,9 @@ fn test_is_dummy() {
 
 #[test]
 fn test_range() {
-    let lo = ByteIdx::from_raw(3);
-    let hi = ByteIdx::from_raw(7);
-    let span = Span::range(FileId::from_raw(0), lo, hi, SyntaxContext::ROOT);
+    let lo = ByteIdx::from_usize(3);
+    let hi = ByteIdx::from_usize(7);
+    let span = Span::range(FileId::from_usize(0), lo, hi, SyntaxContext::ROOT);
     let r = span.byte_range();
     assert_eq!(r.start, 3);
     assert_eq!(r.end, 7);
@@ -47,9 +47,9 @@ fn test_range() {
 fn test_sans_ctx() {
     let ctx = SyntaxContext::from_raw(42); // non-root
     let span = Span::range(
-        FileId::from_raw(0),
+        FileId::from_usize(0),
         ByteIdx::ZERO,
-        ByteIdx::from_raw(1),
+        ByteIdx::from_usize(1),
         ctx,
     );
     let sans = span.sans_ctx();
@@ -62,17 +62,17 @@ fn test_sans_ctx() {
 #[test]
 fn test_len_and_is_empty() {
     let empty = Span::range(
-        FileId::from_raw(0),
-        ByteIdx::from_raw(5),
-        ByteIdx::from_raw(5),
+        FileId::from_usize(0),
+        ByteIdx::from_usize(5),
+        ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
     assert_eq!(empty.len(), 0);
     assert!(empty.is_empty());
     let nonempty = Span::range(
-        FileId::from_raw(0),
-        ByteIdx::from_raw(5),
-        ByteIdx::from_raw(10),
+        FileId::from_usize(0),
+        ByteIdx::from_usize(5),
+        ByteIdx::from_usize(10),
         SyntaxContext::ROOT,
     );
     assert_eq!(nonempty.len(), 5);
@@ -81,23 +81,23 @@ fn test_len_and_is_empty() {
 
 #[test]
 fn test_to_merges_spans_same_file() {
-    let file = FileId::from_raw(1);
+    let file = FileId::from_usize(1);
     let a = Span::range(
         file,
-        ByteIdx::from_raw(2),
-        ByteIdx::from_raw(5),
+        ByteIdx::from_usize(2),
+        ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
     let b = Span::range(
         file,
-        ByteIdx::from_raw(4),
-        ByteIdx::from_raw(7),
+        ByteIdx::from_usize(4),
+        ByteIdx::from_usize(7),
         SyntaxContext::ROOT,
     );
     let merged = a.to(b);
     assert_eq!(merged.file(), file);
-    assert_eq!(merged.lo(), ByteIdx::from_raw(2));
-    assert_eq!(merged.hi(), ByteIdx::from_raw(7));
+    assert_eq!(merged.lo(), ByteIdx::from_usize(2));
+    assert_eq!(merged.hi(), ByteIdx::from_usize(7));
     assert_eq!(merged.ctx(), SyntaxContext::ROOT);
 }
 
@@ -105,15 +105,15 @@ fn test_to_merges_spans_same_file() {
 #[should_panic(expected = "Cannot merge spans from different files")]
 fn test_to_panics_different_files() {
     let a = Span::range(
-        FileId::from_raw(1),
+        FileId::from_usize(1),
         ByteIdx::ZERO,
-        ByteIdx::from_raw(1),
+        ByteIdx::from_usize(1),
         SyntaxContext::ROOT,
     );
     let b = Span::range(
-        FileId::from_raw(2),
+        FileId::from_usize(2),
         ByteIdx::ZERO,
-        ByteIdx::from_raw(1),
+        ByteIdx::from_usize(1),
         SyntaxContext::ROOT,
     );
     let _ = a.to(b);
