@@ -33,6 +33,7 @@ The `glyim` compiler driver (built as `glyim-cli`) compiles a single `.g` source
 | `--error-format <FMT>` | enum | `human` | no | Diagnostic format: `human` (miette-rendered) or `json` (one JSON object per diagnostic). |
 | `--time-passes` | flag | off | no | Print per-pass timing measurements after compilation. |
 | `--self-profile[=FILE]` | path | none | no | Record a Chrome-trace profiling event log (`FILE`, default `trace.json`); opens in Perfetto. |
+| `--opt-bisect-limit <N>` | integer | none | no | Stop the `-O<level>` MIR pass plan after the first `N` passes (M5.11 opt-bisect); pair with `--time-passes` to see one ran/changed/stmtsΔ/blocksΔ row per planned pass. Binary-searching `N` localizes a miscompile to the first pass whose output is wrong. |
 | `--with-stdlib` | flag | off | no | Prepend the assembled standard library to the input, so `println`, `Vec`, `Option`, `Result`, `String`, `Box`, `Rc`, and `Iterator` resolve without explicit `use` statements. |
 | `-A`, `--allow <LINT>` | lint name | none | no | Suppress the named lint. Repeatable. |
 | `-W`, `--warn <LINT>` | lint name | none | no | Set the named lint to warning level (the default). Repeatable. `glyim -W help` lists all lints. |
