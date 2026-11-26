@@ -54,7 +54,7 @@ fn main() {
         .write()
         .insert(file_id, SourceMap::new(file_id, source.clone()));
 
-    let crate_id = glyim_core::CrateId::from_raw(0);
+    let crate_id = glyim_core::CrateId::from_usize(0);
     let parse_result = glyim_frontend::parse_to_syntax(&source, file_id);
     let mut interner = glyim_core::Interner::new();
     let (_def_map, _def_diags) =
