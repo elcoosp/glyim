@@ -553,7 +553,7 @@ mod terminator_conflict_tests {
                     switch_ty: Ty::BOOL,
                     targets: glyim_mir::SwitchTargets::new(
                         Box::new([]),
-                        BasicBlockIdx::from_raw(1),
+                        BasicBlockIdx::from_usize(1),
                     ),
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -579,7 +579,7 @@ mod terminator_conflict_tests {
         };
 
         let mut body = Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: IndexVec::new(),
             locals,
             arg_count: 0,
