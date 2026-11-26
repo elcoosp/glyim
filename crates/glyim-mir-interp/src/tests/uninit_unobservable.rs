@@ -26,7 +26,7 @@ use glyim_test::test_ty_ctx;
 use glyim_type::{Ty, TyKind};
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 fn decl(ty: Ty) -> LocalDecl {
@@ -47,14 +47,14 @@ fn const_i32(v: i32, ty: Ty) -> Operand {
 
 fn assign(place: u32, rvalue: Rvalue) -> Statement {
     Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(place)), rvalue),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(place as usize)), rvalue),
         source_info: SourceInfo::new(Span::DUMMY),
     }
 }
 
 fn storage_live(local: u32) -> Statement {
     Statement {
-        kind: StatementKind::StorageLive(LocalIdx::from_raw(local)),
+        kind: StatementKind::StorageLive(LocalIdx::from_usize(local as usize)),
         source_info: SourceInfo::new(Span::DUMMY),
     }
 }
@@ -70,7 +70,7 @@ fn block(stmts: Vec<Statement>, term: Terminator) -> BasicBlockData {
 fn goto(target: u32) -> Terminator {
     Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(target),
+            target: BasicBlockIdx::from_usize(target as usize),
         },
         source_info: SourceInfo::new(Span::DUMMY),
     }
@@ -100,25 +100,24 @@ fn storage_live_on_back_edge_preserves_loop_carried_value() {
 
     let cond_ty = tcx.bool_ty();
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![
-        decl(i32_ty),  // _0 return
-        decl(i32_ty),  // _1 init temp
-        decl(i32_ty),  // _2 carried counter
-        decl(cond_ty), // _3 condition
+    body.locals = IndexVec::from_vec(vec![
+        decl(i32_ty),
+        decl(i32_ty),
+        decl(i32_ty),
+        decl(cond_ty),
     ]);
-    body.basic_blocks = IndexVec::from_raw(vec![
+    body.basic_blocks = IndexVec::from_vec(vec![
         block(
             vec![
                 storage_live(1),
                 assign(1, Rvalue::Use(const_i32(0, i32_ty))),
                 assign(
                     2,
-                    Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_raw(1)))),
+                    Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_usize(1)))),
                 ),
             ],
             goto(1),
         ),
-        // Loop header — re-lives _2 on every back-edge.
         block(
             vec![
                 storage_live(2),
@@ -127,7 +126,7 @@ fn storage_live_on_back_edge_preserves_loop_carried_value() {
                     Rvalue::BinaryOp(
                         BinOp::Add,
                         [
-                            Operand::Copy(Place::new(LocalIdx::from_raw(2))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(2))),
                             const_i32(1, i32_ty),
                         ],
                     ),
@@ -135,11 +134,11 @@ fn storage_live_on_back_edge_preserves_loop_carried_value() {
             ],
             Terminator {
                 kind: TerminatorKind::SwitchInt {
-                    discr: Operand::Copy(Place::new(LocalIdx::from_raw(2))),
+                    discr: Operand::Copy(Place::new(LocalIdx::from_usize(2))),
                     switch_ty: i32_ty,
                     targets: glyim_mir::SwitchTargets::new(
-                        vec![(4, BasicBlockIdx::from_raw(2))].into_boxed_slice(),
-                        BasicBlockIdx::from_raw(1),
+                        vec![(4, BasicBlockIdx::from_usize(2))].into_boxed_slice(),
+                        BasicBlockIdx::from_usize(1),
                     ),
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -148,7 +147,7 @@ fn storage_live_on_back_edge_preserves_loop_carried_value() {
         block(
             vec![assign(
                 0,
-                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(2)))),
+                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(2)))),
             )],
             return_term(),
         ),
@@ -159,7 +158,7 @@ fn storage_live_on_back_edge_preserves_loop_carried_value() {
         .run_body(&body)
         .expect("re-StorageLive on the back-edge must not wipe the carried value");
     let counter = interp
-        .get_local_value(LocalIdx::from_raw(2))
+        .get_local_value(LocalIdx::from_usize(2))
         .expect("counter local must be initialized at exit");
     assert_eq!(
         counter,
@@ -177,28 +176,22 @@ fn uninit_unit_temp_read_yields_unit() {
     let tcx = tcx_mut.freeze();
 
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![
-        decl(i32_ty),   // _0 return
-        decl(i32_ty),   // _1 condition
-        decl(Ty::UNIT), // _2: the dead unit temp — written on ONE predecessor only
-    ]);
-    body.basic_blocks = IndexVec::from_raw(vec![
-        // bb0: _1 = 1; switch on it (1 → bb2 skip-writer, otherwise bb1 writes)
+    body.locals = IndexVec::from_vec(vec![decl(i32_ty), decl(i32_ty), decl(Ty::UNIT)]);
+    body.basic_blocks = IndexVec::from_vec(vec![
         block(
             vec![assign(1, Rvalue::Use(const_i32(1, i32_ty)))],
             Terminator {
                 kind: TerminatorKind::SwitchInt {
-                    discr: Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                    discr: Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                     switch_ty: i32_ty,
                     targets: glyim_mir::SwitchTargets::new(
-                        vec![(1, BasicBlockIdx::from_raw(2))].into_boxed_slice(),
-                        BasicBlockIdx::from_raw(1),
+                        vec![(1, BasicBlockIdx::from_usize(2))].into_boxed_slice(),
+                        BasicBlockIdx::from_usize(1),
                     ),
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
             },
         ),
-        // bb1: writes the unit temp (the taken-this-time path never runs).
         block(
             vec![assign(
                 2,
@@ -210,13 +203,11 @@ fn uninit_unit_temp_read_yields_unit() {
             )],
             goto(3),
         ),
-        // bb2: skips the writer — bb3 then reads _2 uninitialized.
         block(vec![], goto(3)),
-        // bb3: the join — reads _2 (dead by construction).
         block(
             vec![assign(
                 2,
-                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(2)))),
+                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(2)))),
             )],
             return_term(),
         ),
@@ -238,51 +229,43 @@ fn uninit_never_temp_read_yields_unit() {
     let tcx = tcx_mut.freeze();
 
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![
-        decl(i32_ty),   // _0 return
-        decl(i32_ty),   // _1 counter
-        decl(never_ty), // _2: phantom — never written, moved once
-    ]);
-    body.basic_blocks = IndexVec::from_raw(vec![
-        // bb0: _1 = 0; goto bb1 (head)
+    body.locals = IndexVec::from_vec(vec![decl(i32_ty), decl(i32_ty), decl(never_ty)]);
+    body.basic_blocks = IndexVec::from_vec(vec![
         block(vec![assign(1, Rvalue::Use(const_i32(0, i32_ty)))], goto(1)),
-        // bb1 head: _1 = _1 + 1; switch → bb3 (break) otherwise bb2 (continue)
         block(
             vec![assign(
                 1,
                 Rvalue::BinaryOp(
                     BinOp::Add,
                     [
-                        Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                         const_i32(1, i32_ty),
                     ],
                 ),
             )],
             Terminator {
                 kind: TerminatorKind::SwitchInt {
-                    discr: Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                    discr: Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                     switch_ty: i32_ty,
                     targets: glyim_mir::SwitchTargets::new(
-                        vec![(3, BasicBlockIdx::from_raw(3))].into_boxed_slice(),
-                        BasicBlockIdx::from_raw(2),
+                        vec![(3, BasicBlockIdx::from_usize(3))].into_boxed_slice(),
+                        BasicBlockIdx::from_usize(2),
                     ),
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
             },
         ),
-        // bb2 continue edge: mirrors the real shape — Move(phantom).
         block(
             vec![assign(
                 2,
-                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_raw(2)))),
+                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_usize(2)))),
             )],
             goto(1),
         ),
-        // bb3 break: _0 = _1; return
         block(
             vec![assign(
                 0,
-                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(1)))),
+                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(1)))),
             )],
             return_term(),
         ),
@@ -294,7 +277,7 @@ fn uninit_never_temp_read_yields_unit() {
         out.is_ok(),
         "the `!`-phantom move on the continue edge must yield Unit, not panic: {out:?}"
     );
-    let counter = interp.get_local_value(LocalIdx::from_raw(1)).unwrap();
+    let counter = interp.get_local_value(LocalIdx::from_usize(1)).unwrap();
     assert_eq!(counter, &InterpValue::Int(3), "loop must run to the break");
 }
 
@@ -307,11 +290,11 @@ fn uninit_inhabited_read_still_panics() {
     let tcx = tcx_mut.freeze();
 
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![decl(i32_ty), decl(i32_ty)]);
-    body.basic_blocks = IndexVec::from_raw(vec![block(
+    body.locals = IndexVec::from_vec(vec![decl(i32_ty), decl(i32_ty)]);
+    body.basic_blocks = IndexVec::from_vec(vec![block(
         vec![assign(
             0,
-            Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(1)))),
+            Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(1)))),
         )],
         return_term(),
     )]);
