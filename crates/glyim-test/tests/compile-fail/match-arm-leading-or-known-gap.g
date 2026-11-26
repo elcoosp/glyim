@@ -17,6 +17,7 @@
 // plan §3.3): retire the witness in the same change — migrate the program
 // to the pass corpus and flip the GAP-0008 entry to closed.
 //@ mode: compile-fail
+//@ expect-error-code: P0001
 //@ expect-error: expected pattern
 //@ feature: LANG-MATCH-GUARDS, TOOL-TEST-COMPILE-FAIL
 //@ backends: gam
