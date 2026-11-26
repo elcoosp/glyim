@@ -16,7 +16,7 @@ fn make_const(val: i128, ty: glyim_type::Ty) -> MirConst {
 }
 
 fn make_place(idx: u32) -> Place {
-    Place::new(LocalIdx::from_raw(idx))
+    Place::new(LocalIdx::from_usize(idx as usize))
 }
 
 fn make_copy(idx: u32) -> Operand {
@@ -57,11 +57,11 @@ fn make_body_two_const_chain(ctx: &mut glyim_type::TyCtxMut) -> Body {
         is_cleanup: false,
     };
     let mut body = Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     ));
-    body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block]);
-    body.locals = glyim_core::IndexVec::from_raw(
+    body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block]);
+    body.locals = glyim_core::IndexVec::from_vec(
         (0..4)
             .map(|_| LocalDecl {
                 ty: int_ty,
@@ -107,11 +107,11 @@ fn make_body_overwrite(ctx: &mut glyim_type::TyCtxMut) -> Body {
         is_cleanup: false,
     };
     let mut body = Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     ));
-    body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block]);
-    body.locals = glyim_core::IndexVec::from_raw(
+    body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block]);
+    body.locals = glyim_core::IndexVec::from_vec(
         (0..3)
             .map(|_| LocalDecl {
                 ty: int_ty,
@@ -137,7 +137,7 @@ fn make_body_projection_no_propagate(ctx: &mut glyim_type::TyCtxMut) -> Body {
         Statement {
             kind: StatementKind::Assign(
                 Place {
-                    local: LocalIdx::from_raw(1),
+                    local: LocalIdx::from_usize(1),
                     projection: proj,
                 },
                 Rvalue::Use(Operand::Constant(make_const(99, int_ty))),
@@ -158,11 +158,11 @@ fn make_body_projection_no_propagate(ctx: &mut glyim_type::TyCtxMut) -> Body {
         is_cleanup: false,
     };
     let mut body = Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     ));
-    body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block]);
-    body.locals = glyim_core::IndexVec::from_raw(
+    body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block]);
+    body.locals = glyim_core::IndexVec::from_vec(
         (0..3)
             .map(|_| LocalDecl {
                 ty: int_ty,
@@ -206,11 +206,11 @@ fn propagate_int_constants() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block]);
-        body.locals = glyim_core::IndexVec::from_raw(
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block]);
+        body.locals = glyim_core::IndexVec::from_vec(
             (0..3)
                 .map(|_| LocalDecl {
                     ty: int_ty,
@@ -222,7 +222,7 @@ fn propagate_int_constants() {
         body
     });
     crate::constant_prop::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     assert_eq!(
         block.statements.len(),
         2,
@@ -242,7 +242,7 @@ fn propagate_int_constants() {
 fn propagate_through_chain() {
     let (ctx, mut body) = with_fresh_ty_ctx(make_body_two_const_chain);
     crate::constant_prop::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     if let StatementKind::Assign(_, Rvalue::BinaryOp(_, box_ops)) = &block.statements[2].kind {
         assert!(
             matches!(box_ops[0], Operand::Constant(_)),
@@ -261,7 +261,7 @@ fn propagate_through_chain() {
 fn overwrite_removes_from_const_map() {
     let (ctx, mut body) = with_fresh_ty_ctx(make_body_overwrite);
     crate::constant_prop::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     if let StatementKind::Assign(_, Rvalue::BinaryOp(_, box_ops)) = &block.statements[2].kind {
         assert!(
             matches!(box_ops[0], Operand::Copy(_)),
@@ -276,7 +276,7 @@ fn overwrite_removes_from_const_map() {
 fn projection_write_prevents_propagation() {
     let (ctx, mut body) = with_fresh_ty_ctx(make_body_projection_no_propagate);
     crate::constant_prop::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     if let StatementKind::Assign(_, Rvalue::Use(op)) = &block.statements[2].kind {
         assert!(
             matches!(op, Operand::Copy(_)),
@@ -331,11 +331,11 @@ fn re_constant_after_overwrite_propagates() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block]);
-        body.locals = glyim_core::IndexVec::from_raw(
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block]);
+        body.locals = glyim_core::IndexVec::from_vec(
             (0..3)
                 .map(|_| LocalDecl {
                     ty: int_ty,
@@ -347,7 +347,7 @@ fn re_constant_after_overwrite_propagates() {
         body
     });
     crate::constant_prop::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     if let StatementKind::Assign(_, Rvalue::BinaryOp(_, box_ops)) = &block.statements[3].kind {
         assert!(
             matches!(box_ops[0], Operand::Constant(_)),
@@ -375,7 +375,7 @@ fn cross_block_constant_propagation() {
             }],
             terminator: Terminator {
                 kind: TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(1),
+                    target: BasicBlockIdx::from_usize(1),
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
             },
@@ -397,8 +397,8 @@ fn cross_block_constant_propagation() {
                     discr: make_copy(2),
                     switch_ty: int_ty,
                     targets: SwitchTargets::new(
-                        vec![(0, BasicBlockIdx::from_raw(2))].into_boxed_slice(),
-                        BasicBlockIdx::from_raw(2),
+                        vec![(0, BasicBlockIdx::from_usize(2))].into_boxed_slice(),
+                        BasicBlockIdx::from_usize(2),
                     ),
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -414,11 +414,11 @@ fn cross_block_constant_propagation() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1, block2]);
-        body.locals = glyim_core::IndexVec::from_raw(
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1, block2]);
+        body.locals = glyim_core::IndexVec::from_vec(
             (0..3)
                 .map(|_| LocalDecl {
                     ty: int_ty,
@@ -430,7 +430,7 @@ fn cross_block_constant_propagation() {
         body
     });
     crate::constant_prop::run(&ctx, &mut body);
-    let block1 = &body.basic_blocks[BasicBlockIdx::from_raw(1)];
+    let block1 = &body.basic_blocks[BasicBlockIdx::from_usize(1)];
     if let StatementKind::Assign(_, Rvalue::BinaryOp(_, box_ops)) = &block1.statements[0].kind {
         assert!(
             matches!(box_ops[0], Operand::Constant(_)),
@@ -472,11 +472,11 @@ fn bool_constant_propagation() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block]);
-        body.locals = glyim_core::IndexVec::from_raw(
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block]);
+        body.locals = glyim_core::IndexVec::from_vec(
             (0..3)
                 .map(|_| LocalDecl {
                     ty: bool_ty,
@@ -488,7 +488,7 @@ fn bool_constant_propagation() {
         body
     });
     crate::constant_prop::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     if let StatementKind::Assign(_, Rvalue::Use(op)) = &block.statements[1].kind {
         assert!(
             matches!(op, Operand::Constant(_)),
