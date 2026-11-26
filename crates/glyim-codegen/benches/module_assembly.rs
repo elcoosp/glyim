@@ -27,7 +27,7 @@ use std::time::Instant;
 /// the return place).
 fn leaf_body(owner: glyim_core::def_id::DefId) -> Arc<Body> {
     let mut body = Body::dummy(owner);
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(Span::DUMMY),
     };
@@ -38,10 +38,10 @@ fn leaf_body(owner: glyim_core::def_id::DefId) -> Arc<Body> {
 // second (empty) block.
 fn main_body(callee: FnDefId) -> Arc<Body> {
     let mut body = Body::dummy(glyim_core::def_id::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::def_id::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::def_id::LocalDefId::from_usize(0),
     ));
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Call {
             func: Operand::Constant(MirConst {
                 kind: MirConstKind::Fn(callee, Substitution::empty()),
@@ -49,8 +49,8 @@ fn main_body(callee: FnDefId) -> Arc<Body> {
                 span: Span::DUMMY,
             }),
             args: vec![],
-            destination: Place::new(LocalIdx::from_raw(1)),
-            target: Some(BasicBlockIdx::from_raw(1)),
+            destination: Place::new(LocalIdx::from_usize(1)),
+            target: Some(BasicBlockIdx::from_usize(1)),
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -70,13 +70,13 @@ fn main_body(callee: FnDefId) -> Arc<Body> {
 /// (owner 0) calling the first leaf — the multi-function shape the assembly
 /// seam exists for.
 fn measured_bodies(count: u32) -> Vec<(String, Arc<Body>)> {
-    let mut bodies = vec![("main".to_string(), main_body(FnDefId::from_raw(1)))];
+    let mut bodies = vec![("main".to_string(), main_body(FnDefId::from_usize(1)))];
     for i in 1..=count {
         bodies.push((
             format!("leaf_{i}"),
             leaf_body(glyim_core::def_id::DefId::new(
-                glyim_core::CrateId::from_raw(0),
-                glyim_core::def_id::LocalDefId::from_raw(i),
+                glyim_core::CrateId::from_usize(0),
+                glyim_core::def_id::LocalDefId::from_usize(i as usize),
             )),
         ));
     }
