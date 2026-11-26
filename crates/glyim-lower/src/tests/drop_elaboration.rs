@@ -41,7 +41,7 @@ fn non_copy_local_gets_drop_terminator() {
     // terminator for the `s` local (local index 1) somewhere in the body, and
     // the entry block must not end directly in `Return` (it must route through
     // the drop chain).
-    let entry = &result.body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let entry = &result.body.basic_blocks[BasicBlockIdx::from_usize(0)];
     assert!(
         !matches!(entry.terminator.kind, TerminatorKind::Return),
         "entry must route through drop chain, not Return directly"
@@ -53,7 +53,7 @@ fn non_copy_local_gets_drop_terminator() {
         if let TerminatorKind::Drop { place, cleanup, .. } = &bb.terminator.kind {
             drop_count += 1;
             assert!(cleanup.is_none(), "drop elaboration should not set cleanup");
-            if place.local == LocalIdx::from_raw(1) {
+            if place.local == LocalIdx::from_usize(1) {
                 drops_s_local = true;
             }
         }
@@ -88,7 +88,7 @@ fn copy_local_does_not_get_drop_terminator() {
 
     // No drops: single block ending directly in Return.
     assert_eq!(result.body.basic_blocks.len(), 1);
-    let _ = assert_mir(&ctx, &result.body).block_terminator(BasicBlockIdx::from_raw(0), "Return");
+    let _ = assert_mir(&ctx, &result.body).block_terminator(BasicBlockIdx::from_usize(0), "Return");
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn return_place_is_never_dropped() {
 
     // No locals other than _0, so no drop chain: single Return block.
     assert_eq!(result.body.basic_blocks.len(), 1);
-    let _ = assert_mir(&ctx, &result.body).block_terminator(BasicBlockIdx::from_raw(0), "Return");
+    let _ = assert_mir(&ctx, &result.body).block_terminator(BasicBlockIdx::from_usize(0), "Return");
 }
 
 /// §1.8 / Phase 4 (`GLYIM_DESTUB_PLAN)`: a non-`Copy` local's scope-exit `Drop`
