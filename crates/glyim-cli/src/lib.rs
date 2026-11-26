@@ -96,6 +96,14 @@ pub struct CliArgs {
     /// compile-cache hit.
     #[arg(long = "self-profile", value_name = "FILE", require_equals = true, num_args = 0..=1, default_missing_value = "trace.json")]
     pub self_profile: Option<PathBuf>,
+    /// Stop the `-O<level>` MIR pass plan after the first `N` passes and
+    /// print one row per planned pass under `--time-passes` (ran/changed/
+    /// statement-delta/block-delta). Plan M5.11: `--opt-bisect-limit`.
+    /// Binary-searching `N` in `0..=plan_len` localizes a miscompile to the
+    /// first pass whose output is wrong; without `--time-passes` the limit
+    /// still applies to the compiled output.
+    #[arg(long = "opt-bisect-limit", value_name = "N")]
+    pub opt_bisect_limit: Option<usize>,
     /// Print the query-recompute set to stderr after a successful compile:
     /// one row per body/signature query showing whether it cache-hit, was
     /// backdated (fingerprint matched, value reused), or recomputed (miss).
@@ -857,10 +865,12 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             input,
             proc_registry_ref,
             args.opt_level,
+            args.opt_bisect_limit,
         )?;
         // Same warning-rendering rule as the code-producing modes: a
         // successful compile's non-error diagnostics must reach the user.
         print_diagnostics(&compilation.warnings, &args.error_format);
+        print_pass_stats(&args, &compilation.pass_stats);
         write_profile_outputs(&args, &compilation.profile, &db)?;
         let bodies: Vec<_> = compilation.bodies.values().cloned().collect();
         let outcome =
@@ -1009,6 +1019,17 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
                 extra_key_bytes.push(*lvl_b);
             }
         }
+        // M5.11: `--opt-bisect-limit` changes the optimized body the cached
+        // object stores, so the key must separate bisected from un-bisected
+        // compiles and different limits from each other — same reason
+        // `codegen_units` mixes its value into the key.
+        match args.opt_bisect_limit {
+            Some(n) => {
+                extra_key_bytes.push(0x1E);
+                extra_key_bytes.extend_from_slice(&n.to_le_bytes());
+            }
+            None => extra_key_bytes.push(0x1F),
+        }
         let key = glyim_pipeline::Pipeline::compute_cache_key(
             &mut db,
             input,
@@ -1062,8 +1083,10 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             args.codegen_units,
             proc_registry.as_ref(),
             args.opt_level,
+            args.opt_bisect_limit,
         )?;
         print_diagnostics(&artifacts.warnings, &args.error_format);
+        print_pass_stats(&args, &artifacts.pass_stats);
         write_profile_outputs(&args, &artifacts.profile, &db)?;
         let bitcode_dir = object_path.with_extension("thin-bc");
         std::fs::create_dir_all(&bitcode_dir).map_err(|e| {
@@ -1156,8 +1179,10 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             args.codegen_units,
             proc_registry.as_ref(),
             args.opt_level,
+            args.opt_bisect_limit,
         )?;
         print_diagnostics(&artifacts.warnings, &args.error_format);
+        print_pass_stats(&args, &artifacts.pass_stats);
         write_profile_outputs(&args, &artifacts.profile, &db)?;
     } else {
         let backend: Box<dyn glyim_codegen::CodegenBackend> = Box::new(llvm);
@@ -1169,8 +1194,10 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
             args.codegen_units,
             proc_registry.as_ref(),
             args.opt_level,
+            args.opt_bisect_limit,
         )?;
         print_diagnostics(&artifacts.warnings, &args.error_format);
+        print_pass_stats(&args, &artifacts.pass_stats);
         write_profile_outputs(&args, &artifacts.profile, &db)?;
     }
 
@@ -1249,6 +1276,55 @@ pub(crate) fn run_with_args(args: CliArgs) -> Result<i32, Vec<glyim_diag::GlyimD
 /// write failure is a real user error (the requested file could not be
 /// produced) and surfaces as a diagnostic with a fix suggestion. The rebuild
 /// report is pure-read off the `Database` query-rebuild trace and cannot fail.
+/// M5.11 (`--opt-bisect-limit`): aggregate the per-body
+/// [`glyim_opt::PassStats`] rows into one deterministic per-pass table
+/// (first-appearance order = the pass plan's run order) and print it to
+/// stderr under `--time-passes`. Un-bisected compiles collect no stats, so
+/// empty rows print nothing and the `--time-passes` output stays
+/// phase-granular.
+fn print_pass_stats(args: &CliArgs, stats: &[(glyim_core::def_id::DefId, glyim_opt::PassStats)]) {
+    if !args.time_passes || stats.is_empty() {
+        return;
+    }
+    // First-appearance aggregation over at most `plan.len()` distinct pass
+    // ids; insertion order is the plan order, so the table is reproducible
+    // across runs (C6).
+    let mut order: Vec<&'static str> = Vec::new();
+    let mut rows: Vec<(usize, usize, i64, i64)> = Vec::new();
+    for (_, s) in stats {
+        match order.iter().position(|id| *id == s.name) {
+            Some(i) => {
+                let row = &mut rows[i];
+                row.0 += usize::from(s.ran);
+                row.1 += usize::from(s.body_changed);
+                row.2 += s.stmt_delta;
+                row.3 += s.block_delta;
+            }
+            None => {
+                order.push(s.name);
+                rows.push((
+                    usize::from(s.ran),
+                    usize::from(s.body_changed),
+                    s.stmt_delta,
+                    s.block_delta,
+                ));
+            }
+        }
+    }
+    match args.opt_bisect_limit {
+        Some(n) => eprintln!("per-pass MIR stats (--opt-bisect-limit={n}):"),
+        None => eprintln!("per-pass MIR stats:"),
+    }
+    eprintln!(
+        "  {:<20} {:>5} {:>8} {:>8} {:>8}",
+        "pass", "ran", "changed", "stmtsΔ", "blocksΔ"
+    );
+    for (i, name) in order.iter().enumerate() {
+        let (ran, changed, stmts, blocks) = rows[i];
+        eprintln!("  {name:<20} {ran:>5} {changed:>8} {stmts:>8} {blocks:>8}");
+    }
+}
+
 fn write_profile_outputs(
     args: &CliArgs,
     profile: &glyim_pipeline::PhaseProfile,
@@ -1453,6 +1529,7 @@ fn compile_proc_macro_dep(
         time_passes: false,
         self_profile: None,
         explain_rebuild: false,
+        opt_bisect_limit: None,
     };
     run_with_args(args).map_err(|diags| {
         let msg = diags
