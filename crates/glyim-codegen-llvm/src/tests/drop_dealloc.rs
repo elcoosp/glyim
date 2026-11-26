@@ -29,7 +29,7 @@ use glyim_type::{Ty, TyKind};
 use inkwell::targets::{InitializationConfig, Target};
 
 fn dummy_def_id(idx: u32) -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(idx))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(idx as usize))
 }
 
 /// Helper: count occurrences of `call void @glyim_drop_in_place` in IR
@@ -61,7 +61,7 @@ fn v15_t01_drop_copy_type_at_block_end() {
         bbs.push(BasicBlockData {
             statements: vec![Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(42),
                         ty: i32_ty,
@@ -72,8 +72,8 @@ fn v15_t01_drop_copy_type_at_block_end() {
             }],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -141,8 +141,8 @@ fn v15_t02_drop_non_copy_type_emits_drop_in_place() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -213,11 +213,11 @@ fn v15_t03_drop_in_panic_cleanup_path() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::SwitchInt {
-                    discr: Operand::Move(Place::new(LocalIdx::from_raw(2))),
+                    discr: Operand::Move(Place::new(LocalIdx::from_usize(2))),
                     switch_ty: i32_ty,
                     targets: SwitchTargets::new(
-                        Box::from_iter([(1u128, BasicBlockIdx::from_raw(1))]),
-                        BasicBlockIdx::from_raw(2),
+                        Box::from_iter([(1u128, BasicBlockIdx::from_usize(1))]),
+                        BasicBlockIdx::from_usize(2),
                     ),
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -228,8 +228,8 @@ fn v15_t03_drop_in_panic_cleanup_path() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(3),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(3),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -240,8 +240,8 @@ fn v15_t03_drop_in_panic_cleanup_path() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(3),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(3),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -312,8 +312,8 @@ fn v15_t04_drop_order_matches_declaration_order() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(2)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(2)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -324,8 +324,8 @@ fn v15_t04_drop_order_matches_declaration_order() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(2),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(2),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -395,8 +395,8 @@ fn v15_t05_drop_mut_ref_non_copy_emits_dealloc() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -469,8 +469,8 @@ fn v15_t06_drop_mut_ref_copy_type_no_dealloc() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -545,8 +545,8 @@ fn v15_t07_drop_tuple_of_non_copy_types() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -618,8 +618,8 @@ fn v15_t08_drop_tuple_of_copy_types() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -691,8 +691,8 @@ fn v15_t09_drop_shared_ref_non_copy_no_dealloc() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -767,8 +767,8 @@ fn v15_t10_drop_raw_ptr_non_copy_type() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -839,8 +839,8 @@ fn v15_t11_drop_unit_type() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -905,8 +905,8 @@ fn v15_t12_drop_bool_type() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -982,8 +982,8 @@ fn v15_t13_drop_nested_ref() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -1060,9 +1060,9 @@ fn v15_t14_drop_with_cleanup_target() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
-                    cleanup: Some(BasicBlockIdx::from_raw(2)),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
+                    cleanup: Some(BasicBlockIdx::from_usize(2)),
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
             },
@@ -1147,8 +1147,8 @@ fn v15_t15_drop_array_of_non_copy() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -1212,8 +1212,8 @@ fn v15_t16_drop_u32_copy_type() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -1278,8 +1278,8 @@ fn v15_t17_drop_f64_copy_type() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -1344,8 +1344,8 @@ fn v15_t18_drop_char_type() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -1417,8 +1417,8 @@ fn v15_t19_drop_fn_ptr_type() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -1502,8 +1502,8 @@ fn v15_t20_mixed_copy_non_copy_drops() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -1515,8 +1515,8 @@ fn v15_t20_mixed_copy_non_copy_drops() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(2)),
-                    target: BasicBlockIdx::from_raw(2),
+                    place: Place::new(LocalIdx::from_usize(2)),
+                    target: BasicBlockIdx::from_usize(2),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -1528,8 +1528,8 @@ fn v15_t20_mixed_copy_non_copy_drops() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(3)),
-                    target: BasicBlockIdx::from_raw(3),
+                    place: Place::new(LocalIdx::from_usize(3)),
+                    target: BasicBlockIdx::from_usize(3),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -1607,8 +1607,8 @@ fn v15_t21_drop_never_type() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -1681,8 +1681,8 @@ fn v15_t22_drop_mixed_tuple_copy_non_copy() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -1752,8 +1752,8 @@ fn v15_t23_stress_many_sequential_drops() {
 
         // Create 10 basic blocks, each dropping one local and going to the next
         for i in 0..10 {
-            let local_idx = LocalIdx::from_raw((i + 1) as u32);
-            let next_bb = BasicBlockIdx::from_raw((i + 1) as u32);
+            let local_idx = LocalIdx::from_usize(i + 1);
+            let next_bb = BasicBlockIdx::from_usize(i + 1);
             bbs.push(BasicBlockData {
                 statements: vec![],
                 terminator: Terminator {
@@ -1836,9 +1836,9 @@ fn v15_t24_drop_mut_ref_with_cleanup_dealloc() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
-                    cleanup: Some(BasicBlockIdx::from_raw(2)),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
+                    cleanup: Some(BasicBlockIdx::from_usize(2)),
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
             },
@@ -1915,8 +1915,8 @@ fn v15_t25_drop_error_type() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -1981,8 +1981,8 @@ fn v15_t26_drop_isize_copy_type() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -2047,8 +2047,8 @@ fn v15_t27_drop_usize_copy_type() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -2116,8 +2116,8 @@ fn v15_t28_drop_const_raw_ptr_non_copy() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -2190,8 +2190,8 @@ fn v15_t29_drop_empty_tuple() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -2258,8 +2258,8 @@ fn v15_t30_drop_in_place_receives_pointer_arg() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
-                    place: Place::new(LocalIdx::from_raw(1)),
-                    target: BasicBlockIdx::from_raw(1),
+                    place: Place::new(LocalIdx::from_usize(1)),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
