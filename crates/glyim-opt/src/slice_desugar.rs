@@ -63,7 +63,7 @@ use glyim_type::TyCtx;
 
 pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
     for i in 0..body.basic_blocks.len() {
-        let bb = BasicBlockIdx::from_raw(i as u32);
+        let bb = BasicBlockIdx::from_usize(i);
         desugar_block(ctx, body, bb);
     }
 }
@@ -274,7 +274,7 @@ mod tests {
         let elem = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let slice_ty = ctx.mk_ty(TyKind::Slice(elem));
         let ref_slice_ty = ctx.mk_ref(Region::Erased, slice_ty, Mutability::Not);
-        let local = LocalIdx::from_raw(1);
+        let local = LocalIdx::from_usize(1);
         let body = build_test_body(
             vec![
                 (ctx.unit_ty(), Mutability::Not),
@@ -314,7 +314,7 @@ mod tests {
 
         // Statement: `_2 = move (*_1)[1..]` — Subslice is terminal here.
         let place = Place {
-            local: LocalIdx::from_raw(1),
+            local: LocalIdx::from_usize(1),
             projection: Box::new([
                 ProjectionElem::Deref,
                 ProjectionElem::Subslice {
@@ -324,11 +324,11 @@ mod tests {
                 },
             ]),
         };
-        body.basic_blocks[BasicBlockIdx::from_raw(0)]
+        body.basic_blocks[BasicBlockIdx::from_usize(0)]
             .statements
             .push(Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::Use(Operand::Move(place)),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -356,7 +356,7 @@ mod tests {
 
         // Statement: `_2 = move (*_1)[1..][0]` — Subslice is NOT terminal.
         let place = Place {
-            local: LocalIdx::from_raw(1),
+            local: LocalIdx::from_usize(1),
             projection: Box::new([
                 ProjectionElem::Deref,
                 ProjectionElem::Subslice {
@@ -364,14 +364,14 @@ mod tests {
                     to: 2,
                     from_end: false,
                 },
-                ProjectionElem::Index(LocalIdx::from_raw(0)),
+                ProjectionElem::Index(LocalIdx::from_usize(0)),
             ]),
         };
-        body.basic_blocks[BasicBlockIdx::from_raw(0)]
+        body.basic_blocks[BasicBlockIdx::from_usize(0)]
             .statements
             .push(Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::Use(Operand::Move(place)),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -392,7 +392,7 @@ mod tests {
         );
         // The original statement's destination place must now root at the temp,
         // and the subslice projection must appear only once (in the prelude assign).
-        let stmt = &body.basic_blocks[BasicBlockIdx::from_raw(0)].statements;
+        let stmt = &body.basic_blocks[BasicBlockIdx::from_usize(0)].statements;
         let assign = stmt
             .iter()
             .find(|s| matches!(s.kind, StatementKind::Assign(_, _)))
@@ -417,12 +417,12 @@ mod tests {
         let n_storage_before = count_storage_live(&body);
 
         // Add a plain copy statement with no slice projection at all.
-        body.basic_blocks[BasicBlockIdx::from_raw(0)]
+        body.basic_blocks[BasicBlockIdx::from_usize(0)]
             .statements
             .push(Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
-                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(1)))),
+                    Place::new(LocalIdx::from_usize(2)),
+                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(1)))),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             });
@@ -444,7 +444,7 @@ mod tests {
 
         // `_2 = &(*_1)[1..][0]` — Subslice inside the Ref operand, not terminal.
         let place = Place {
-            local: LocalIdx::from_raw(1),
+            local: LocalIdx::from_usize(1),
             projection: Box::new([
                 ProjectionElem::Deref,
                 ProjectionElem::Subslice {
@@ -452,14 +452,14 @@ mod tests {
                     to: 2,
                     from_end: false,
                 },
-                ProjectionElem::Index(LocalIdx::from_raw(0)),
+                ProjectionElem::Index(LocalIdx::from_usize(0)),
             ]),
         };
-        body.basic_blocks[BasicBlockIdx::from_raw(0)]
+        body.basic_blocks[BasicBlockIdx::from_usize(0)]
             .statements
             .push(Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::Ref(place, BorrowKind::Shared),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
