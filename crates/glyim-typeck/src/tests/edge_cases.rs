@@ -89,7 +89,7 @@ fn multiple_functions() {
     let mut solver = MockSolver::new().respond_for_any(glyim_solve::SolverResult::Proven);
     let (_, result) = typeck_crate(ctx, &def_map, &hir, &mut solver);
     assert_no_errors(&result.diagnostics);
-    assert_eq!(result.thir_bodies.len(), 2, "two THIR bodies expected");
+    assert_eq!(result.typed_bodies.len(), 2, "two THIR bodies expected");
 }
 
 /// S14-T12: Function with multiple parameters
