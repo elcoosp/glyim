@@ -28,7 +28,7 @@ pub struct TyCtxMut {
     /// (Historically this was a `Box::leak`ed `&'static`, which retained the
     /// whole type table for the process lifetime — one leak per compilation,
     /// ~40MB+ per stdlib compile, `OOMing` long test runs.)
-    arena: std::sync::Arc<TypeArena>,
+    pub(crate) arena: std::sync::Arc<TypeArena>,
     regions: IndexVec<RegionVid, Region>,
     resolver: Interner,
     auto_trait_registry: AutoTraitRegistry,
@@ -391,6 +391,13 @@ impl TyCtxMut {
     #[must_use]
     pub fn ty_kind(&self, ty: Ty) -> &TyKind {
         self.arena.ty_kind(ty)
+    }
+
+    /// The shared, canonical [`TypeArena`] every view of this compilation
+    /// resolves handles through (see [`TyCtx::shared_arena`]).
+    #[must_use]
+    pub fn shared_arena(&self) -> &std::sync::Arc<TypeArena> {
+        &self.arena
     }
 
     /// Mechanically dereference a type for auto-deref in method resolution.
