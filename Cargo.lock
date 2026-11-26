@@ -943,6 +943,7 @@ dependencies = [
  "glyim-diag",
  "glyim-lang-std",
  "glyim-mir-interp",
+ "glyim-opt",
  "glyim-pipeline",
  "glyim-proc-macro",
  "glyim-test",
