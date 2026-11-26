@@ -158,10 +158,10 @@ pub(crate) fn node_span(node: &SyntaxNode) -> Span {
     Span::range(file, lo, hi, SyntaxContext::ROOT)
 }
 
-fn next_local_def_id(counter: &mut u32) -> LocalDefId {
+fn next_local_def_id(counter: &mut usize) -> LocalDefId {
     let id = *counter;
     *counter += 1;
-    LocalDefId::from_raw(id)
+    LocalDefId::from_usize(id)
 }
 
 /// Recursively walk the whole syntax tree for `ExternBlock` nodes and lower
@@ -174,8 +174,8 @@ fn next_local_def_id(counter: &mut u32) -> LocalDefId {
 fn lower_extern_imports(
     node: &SyntaxNode,
     interner: &mut Interner,
-    local_def_counter: &mut u32,
-    item_id_counter: &mut u32,
+    local_def_counter: &mut usize,
+    item_id_counter: &mut usize,
     bodies: &mut IndexVec<BodyId, Body>,
     body_owners: &mut IndexVec<BodyId, LocalDefId>,
     diags: &mut Vec<GlyimDiagnostic>,
@@ -269,8 +269,8 @@ pub(crate) fn lower_crate_raw(
     let mut items = IndexVec::new();
     let mut bodies = IndexVec::new();
     let mut body_owners = IndexVec::new();
-    let mut local_def_counter = 0u32;
-    let mut item_id_counter = 0u32;
+    let mut local_def_counter = 0usize;
+    let mut item_id_counter = 0usize;
 
     // First pass: collect all struct definitions for field ordering
     let mut struct_field_map = std::collections::HashMap::new();
