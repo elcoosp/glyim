@@ -45,7 +45,7 @@ fn build_len_body(ctx: &mut TyCtxMut) -> Body {
     };
     let stmt_init_array = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::Aggregate(
                 glyim_mir::AggregateKind::Array(i32_ty),
                 vec![
@@ -61,8 +61,8 @@ fn build_len_body(ctx: &mut TyCtxMut) -> Body {
     };
     let stmt_len = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
-            Rvalue::Len(Place::new(LocalIdx::from_raw(1))),
+            Place::new(LocalIdx::from_usize(0)),
+            Rvalue::Len(Place::new(LocalIdx::from_usize(1))),
         ),
         source_info: SourceInfo::new(Span::DUMMY),
     };
@@ -76,7 +76,7 @@ fn build_len_body(ctx: &mut TyCtxMut) -> Body {
     basic_blocks.push(bb0);
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(2)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(2)),
         basic_blocks,
         locals,
         arg_count: 0,
