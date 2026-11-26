@@ -34,7 +34,7 @@ pub struct CrateDefMap {
     /// bodies (checked later by typeck) must allocate ids *above* this so
     /// they cannot collide with the def-map's ids — an impl method that got
     /// id 51 previously overwrote `io::copy`'s `FnSig` (also id 51),
-    pub max_local_def_id: u32,
+    pub max_local_def_id: usize,
     /// T124-PATCHED [PIPE-4]: maps every `LocalDefId` to its declaring
     /// module. Consumed by mono-collection to populate
     /// `MonoItemData::source_module` so `partition()` can produce multiple
@@ -473,7 +473,7 @@ pub fn build_def_map(
 ) -> (CrateDefMap, Vec<GlyimDiagnostic>) {
     let mut diagnostics = Vec::new();
     let mut modules: IndexVec<ModuleId, ModuleData> = IndexVec::new();
-    let mut def_counter: u32 = 1;
+    let mut def_counter: usize = 1;
     let mut def_to_module: HashMap<LocalDefId, ModuleId> = HashMap::new();
     // Plan §4.1: collect `use` declarations during the structural pass instead
     // of resolving them inline, so import resolution can run as a fixed-point
@@ -487,10 +487,10 @@ pub fn build_def_map(
         scope: ItemScope::default(),
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(0), // root gets id 0
-        visibility: Visibility::Public,  // root is always public
+        def_id: LocalDefId::from_usize(0), // root gets id 0
+        visibility: Visibility::Public,    // root is always public
     });
-    def_to_module.insert(LocalDefId::from_raw(0), root_module);
+    def_to_module.insert(LocalDefId::from_usize(0), root_module);
 
     collect_items(
         root,
@@ -700,7 +700,8 @@ fn process_use_tree(
 
                             // Resolve the inner path (of any depth)
                             // relative to the base module.
-                            let resolver = Resolver::new(modules, ModuleId::from_raw(0), base_mod);
+                            let resolver =
+                                Resolver::new(modules, ModuleId::from_usize(0), base_mod);
                             let per_ns = resolver.resolve_path(&inner_p);
 
                             if let Some((id, _)) = per_ns.types {
@@ -752,7 +753,7 @@ fn process_use_tree(
             }
 
             // Existing type/value resolution (unchanged)
-            let resolver = Resolver::new(modules, ModuleId::from_raw(0), parent_module);
+            let resolver = Resolver::new(modules, ModuleId::from_usize(0), parent_module);
             let per_ns = resolver.resolve_path(&path);
 
             let name = alias.or_else(|| path.segments.last().map(|s| s.name));
@@ -798,7 +799,7 @@ fn collect_items(
     modules: &mut IndexVec<ModuleId, ModuleData>,
     diagnostics: &mut Vec<GlyimDiagnostic>,
     interner: &Interner,
-    def_counter: &mut u32,
+    def_counter: &mut usize,
     def_to_module: &mut HashMap<LocalDefId, ModuleId>,
     use_decls: &mut Vec<(SyntaxNode, ModuleId, Visibility)>,
     variant_map: &mut HashMap<LocalDefId, (LocalDefId, VariantIdx)>,
@@ -827,7 +828,7 @@ fn collect_items(
                         scope: ItemScope::default(),
                         origin: ModuleOrigin::Inline { span },
                         span,
-                        def_id: LocalDefId::from_raw(*def_counter),
+                        def_id: LocalDefId::from_usize(*def_counter),
                         visibility: vis.clone(),
                     });
                     *def_counter += 1;
@@ -894,7 +895,7 @@ fn collect_items(
                 let name = interner.intern(&name_str);
                 let vis = visibility_of_node(&child, interner);
                 let span = node_span(&child);
-                let enum_local = LocalDefId::from_raw(*def_counter);
+                let enum_local = LocalDefId::from_usize(*def_counter);
                 *def_counter += 1;
                 modules[parent_module].scope.declare(
                     name,
@@ -911,7 +912,7 @@ fn collect_items(
                 // the value namespace so `Color::Red` resolves `Color` as a
                 // module-like scope. Uses its own fresh def id (distinct from
                 // `enum_local`, which identifies the type / ADT).
-                let enum_mod_local = LocalDefId::from_raw(*def_counter);
+                let enum_mod_local = LocalDefId::from_usize(*def_counter);
                 *def_counter += 1;
                 let enum_module = modules.push(ModuleData {
                     parent: Some(parent_module),
@@ -927,7 +928,7 @@ fn collect_items(
 
                 // Variants live inside a `VariantList` child node, not
                 // directly under `EnumDef`.
-                let mut variant_idx: u32 = 0;
+                let mut variant_idx: usize = 0;
                 for vlist in child.children() {
                     if vlist.kind() != SyntaxKind::VariantList {
                         continue;
@@ -940,7 +941,7 @@ fn collect_items(
                         let vname = interner.intern(&vname_str);
                         let vvis = visibility_of_node(&vchild, interner);
                         let vspan = node_span(&vchild);
-                        let vlocal = LocalDefId::from_raw(*def_counter);
+                        let vlocal = LocalDefId::from_usize(*def_counter);
                         *def_counter += 1;
                         modules[enum_module].scope.declare(
                             vname,
@@ -949,7 +950,8 @@ fn collect_items(
                             vspan,
                             Namespace::Values,
                         );
-                        variant_map.insert(vlocal, (enum_local, VariantIdx::from_raw(variant_idx)));
+                        variant_map
+                            .insert(vlocal, (enum_local, VariantIdx::from_usize(variant_idx)));
                         variant_idx += 1;
                     }
                 }
@@ -968,7 +970,7 @@ fn collect_items(
                     let name_str = extract_ident(&child);
                     let name = interner.intern(&name_str);
                     let vis = visibility_of_node(&child, interner);
-                    let id = LocalDefId::from_raw(*def_counter);
+                    let id = LocalDefId::from_usize(*def_counter);
                     *def_counter += 1;
                     let span = node_span(&child);
                     def_to_module.insert(id, parent_module);
@@ -1092,7 +1094,7 @@ fn collect_extern_imports(
     modules: &mut IndexVec<ModuleId, ModuleData>,
     diagnostics: &mut Vec<GlyimDiagnostic>,
     interner: &mut Interner,
-    def_counter: &mut u32,
+    def_counter: &mut usize,
     def_to_module: &mut HashMap<LocalDefId, ModuleId>,
 ) {
     for child in node.children() {
@@ -1101,7 +1103,7 @@ fn collect_extern_imports(
                 if inner.kind() == SyntaxKind::FnDef {
                     let name_str = extract_ident(&inner);
                     let name = interner.intern(&name_str);
-                    let id = LocalDefId::from_raw(*def_counter);
+                    let id = LocalDefId::from_usize(*def_counter);
                     *def_counter += 1;
                     let span = node_span(&inner);
                     def_to_module.insert(id, root_module);
@@ -1335,7 +1337,7 @@ fn validate_import_visibility(
     diagnostics: &mut Vec<GlyimDiagnostic>,
 ) {
     for module_idx in 0..modules.len() {
-        let module_id = ModuleId::from_raw(module_idx as u32);
+        let module_id = ModuleId::from_usize(module_idx);
         let scope = &modules[module_id].scope;
 
         // Check type namespace items
