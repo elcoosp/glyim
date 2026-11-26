@@ -16,9 +16,20 @@ pub struct Ty {
 }
 
 impl Ty {
+    /// Sanctioned production constructor: wraps a `usize` slot produced by
+    /// the type arena's issuers (the interner and the builtin sentinels).
+    /// Formerly `Ty::from_raw(u32)`; the CT-1 private-constructor ratchet
+    /// (plan M3.1) replaces raw `u32` construction with the
+    /// `from_usize(usize)` factory, mirroring `glyim-span`'s `FileId` and
+    /// `glyim-core`'s macro-generated ID families. The `usize` -> `u32`
+    /// narrowing is deliberate (handle widths are `u32` by construction)
+    /// and is guarded by the arena invariant that type counts stay well
+    /// below `u32::MAX`. `const` so the builtin sentinels below stay
+    /// compile-time constants.
     #[inline]
-    pub(crate) const fn from_raw(raw: u32) -> Self {
-        Self { raw }
+    #[must_use]
+    pub const fn from_usize(idx: usize) -> Self {
+        Self { raw: idx as u32 }
     }
     #[inline]
     /// `to_raw`.
@@ -34,33 +45,33 @@ impl Ty {
     }
 
     /// `ERROR`.
-    pub const ERROR: Ty = Ty::from_raw(0);
+    pub const ERROR: Ty = Ty::from_usize(0);
     /// `NEVER`.
-    pub const NEVER: Ty = Ty::from_raw(1);
+    pub const NEVER: Ty = Ty::from_usize(1);
     /// `UNIT`.
-    pub const UNIT: Ty = Ty::from_raw(2);
+    pub const UNIT: Ty = Ty::from_usize(2);
     /// `BOOL`.
-    pub const BOOL: Ty = Ty::from_raw(3);
+    pub const BOOL: Ty = Ty::from_usize(3);
     /// `U8`.
-    pub const U8: Ty = Ty::from_raw(4);
+    pub const U8: Ty = Ty::from_usize(4);
     /// `U16`.
-    pub const U16: Ty = Ty::from_raw(5);
+    pub const U16: Ty = Ty::from_usize(5);
     /// `U32`.
-    pub const U32: Ty = Ty::from_raw(6);
+    pub const U32: Ty = Ty::from_usize(6);
     /// `U64`.
-    pub const U64: Ty = Ty::from_raw(7);
+    pub const U64: Ty = Ty::from_usize(7);
     /// `USIZE`.
-    pub const USIZE: Ty = Ty::from_raw(8);
+    pub const USIZE: Ty = Ty::from_usize(8);
     /// `I8`.
-    pub const I8: Ty = Ty::from_raw(9);
+    pub const I8: Ty = Ty::from_usize(9);
     /// `I16`.
-    pub const I16: Ty = Ty::from_raw(10);
+    pub const I16: Ty = Ty::from_usize(10);
     /// `I32`.
-    pub const I32: Ty = Ty::from_raw(11);
+    pub const I32: Ty = Ty::from_usize(11);
     /// `I64`.
-    pub const I64: Ty = Ty::from_raw(12);
+    pub const I64: Ty = Ty::from_usize(12);
     /// `ISIZE`.
-    pub const ISIZE: Ty = Ty::from_raw(13);
+    pub const ISIZE: Ty = Ty::from_usize(13);
     /// `F32`.
     ///
     /// Script 452: the primitive float types now have concrete `Ty`
@@ -69,9 +80,9 @@ impl Ty {
     /// `Ty::I32`. Adding F32/F64 at indices 14/15 keeps them adjacent to
     /// the other primitives (they are seeded by `TyCtxMut::new` right
     /// after `ISIZE`).
-    pub const F32: Ty = Ty::from_raw(14);
+    pub const F32: Ty = Ty::from_usize(14);
     /// `F64`.
-    pub const F64: Ty = Ty::from_raw(15);
+    pub const F64: Ty = Ty::from_usize(15);
 }
 
 impl fmt::Debug for Ty {
