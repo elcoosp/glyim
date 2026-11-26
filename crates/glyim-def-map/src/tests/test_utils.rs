@@ -11,7 +11,7 @@ pub fn parse_and_build(source: &str) -> (CrateDefMap, Vec<GlyimDiagnostic>) {
     let parse_result = parse_to_syntax(source, FileId::BOGUS);
     build_def_map(
         &parse_result.root,
-        CrateId::from_raw(0),
+        CrateId::from_usize(0),
         glyim_core::interner::Interner::new(),
     )
 }
