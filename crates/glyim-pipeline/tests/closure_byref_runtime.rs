@@ -45,8 +45,8 @@ fn compile_and_run(src: &str) -> Result<InterpValue, String> {
     let main_local = glyim_pipeline::Pipeline::entry_main_local_id(&mut db, &path)
         .ok_or_else(|| "could not resolve main entry".to_string())?;
     let main_id = glyim_core::def_id::DefId::new(
-        glyim_core::def_id::CrateId::from_raw(0),
-        glyim_core::def_id::LocalDefId::from_raw(main_local),
+        glyim_core::def_id::CrateId::from_usize(0),
+        glyim_core::def_id::LocalDefId::from_usize(main_local as usize),
     );
     let main_body = mir
         .bodies
