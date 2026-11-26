@@ -20,7 +20,7 @@ impl ThirBuilder {
     pub fn new(return_ty: Ty, interner: Interner) -> Self {
         Self {
             return_ty,
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             interner,
             var_counter: 0,
             var_names: HashMap::new(),
@@ -55,12 +55,12 @@ impl ThirBuilder {
         stmts: &mut Vec<thir::Stmt>,
     ) {
         let n = self.make_name(name);
-        let var_id = thir::LocalVarId::from_raw(self.var_counter);
+        let var_id = thir::LocalVarId::from_usize(self.var_counter as usize);
         self.var_counter += 1;
         self.var_names.insert(n, var_id);
         let pat = self.pat(
             thir::PatternKind::Binding {
-                var_id: thir::LocalVarId::from_raw(0),
+                var_id: thir::LocalVarId::from_usize(0),
                 name: n,
                 mutability: Mutability::Not,
                 binding_ty: None,
