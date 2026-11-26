@@ -164,7 +164,7 @@ impl<'tcx> Interpreter<'tcx> {
             current_body_owner: None,
             current_arg_count: 0,
             current_body: None,
-            current_bb: BasicBlockIdx::from_raw(0),
+            current_bb: BasicBlockIdx::from_usize(0),
             locals: Vec::new(),
             local_decls: Vec::new(),
             call_stack: Vec::new(),
@@ -367,7 +367,7 @@ impl<'tcx> Interpreter<'tcx> {
         if raw < 9_000 {
             return Ok(None);
         }
-        let fn_def_id = glyim_core::def_id::FnDefId::from_raw(raw);
+        let fn_def_id = glyim_core::def_id::FnDefId::from_usize(raw as usize);
         let Some((adt_id, name)) = self.tcx.builtin_fn_id(fn_def_id) else {
             return Ok(None);
         };
@@ -1619,7 +1619,7 @@ impl<'tcx> Interpreter<'tcx> {
         }
         match value {
             Some(InterpValue::Ref { frame, local, .. }) => {
-                let place = Place::new(LocalIdx::from_raw(*local as u32));
+                let place = Place::new(LocalIdx::from_usize(*local));
                 let mut v = self
                     .locals_for_ref_frame(*frame)
                     .and_then(|ls| ls.get(*local).and_then(|o| o.as_ref()).cloned())
@@ -1864,7 +1864,7 @@ impl<'tcx> Interpreter<'tcx> {
         callee_id: &DefId,
         args: &[InterpValue],
     ) -> InterpResult<Option<InterpValue>> {
-        let fn_def_id = glyim_core::def_id::FnDefId::from_raw(callee_id.local_id.to_raw());
+        let fn_def_id = glyim_core::def_id::FnDefId::from_usize(callee_id.local_id.index());
         let maybe = self.tcx.extern_fn_name(fn_def_id).map(str::to_string);
         let Some(name) = maybe else {
             return Ok(None);
@@ -2077,7 +2077,7 @@ impl<'tcx> Interpreter<'tcx> {
         self.current_body_owner = Some(body.owner);
         self.current_arg_count = body.arg_count;
         self.current_body = Some(body.clone());
-        self.current_bb = BasicBlockIdx::from_raw(0);
+        self.current_bb = BasicBlockIdx::from_usize(0);
         self.locals = vec![None; body.locals.len()];
         self.local_decls = body.locals.iter().cloned().collect();
         self.call_stack.clear();
@@ -2471,7 +2471,7 @@ impl<'tcx> Interpreter<'tcx> {
                         // T108-PATCHED [INT-5]: same sentinel for the
                         // unwind-target field so `frame.target_bb` and
                         // `frame.bb` agree.
-                        target_bb: next_bb.unwrap_or(BasicBlockIdx::from_raw(u32::MAX)),
+                        target_bb: next_bb.unwrap_or(BasicBlockIdx::from_usize(u32::MAX as usize)),
                         unwind_target: cleanup,
                     };
 
@@ -2492,7 +2492,7 @@ impl<'tcx> Interpreter<'tcx> {
                     self.current_arg_count = callee_body.arg_count;
                     self.locals = callee_locals;
                     body = callee_body;
-                    bb_idx = BasicBlockIdx::from_raw(0);
+                    bb_idx = BasicBlockIdx::from_usize(0);
                     if let Some(obs) = self.observer.as_mut() {
                         obs.on_call_enter(body.owner);
                     }
@@ -2550,8 +2550,8 @@ impl<'tcx> Interpreter<'tcx> {
                     } else {
                         self.tcx.drop_method_for(drop_ty).and_then(|fn_def_id| {
                             let key = DefId::new(
-                                CrateId::from_raw(0),
-                                LocalDefId::from_raw(fn_def_id.to_raw()),
+                                CrateId::from_usize(0),
+                                LocalDefId::from_usize(fn_def_id.index()),
                             );
                             self.function_table.get(&key).cloned()
                         })
@@ -2591,7 +2591,7 @@ impl<'tcx> Interpreter<'tcx> {
                         locals: std::mem::take(&mut self.locals),
                         // The destructor returns *to* `target`; there is no
                         // value to place (drop returns `()`).
-                        return_place: Place::new(LocalIdx::from_raw(0)),
+                        return_place: Place::new(LocalIdx::from_usize(0)),
                         target_bb: target,
                         unwind_target: None,
                     };
@@ -2609,7 +2609,7 @@ impl<'tcx> Interpreter<'tcx> {
                     self.current_arg_count = callee_body.arg_count;
                     self.locals = callee_locals;
                     body = callee_body;
-                    bb_idx = BasicBlockIdx::from_raw(0);
+                    bb_idx = BasicBlockIdx::from_usize(0);
                     if let Some(obs) = self.observer.as_mut() {
                         obs.on_call_enter(body.owner);
                     }
@@ -3033,14 +3033,14 @@ impl<'tcx> Interpreter<'tcx> {
                 Ok(InterpValue::String(s))
             }
             MirConstKind::Fn(def_id, _substs) => {
-                let crate_id = CrateId::from_raw(0);
-                let local_def_id = LocalDefId::from_raw(def_id.to_raw());
+                let crate_id = CrateId::from_usize(0);
+                let local_def_id = LocalDefId::from_usize(def_id.index());
                 let def_id = DefId::new(crate_id, local_def_id);
                 Ok(InterpValue::Fn(def_id))
             }
             MirConstKind::ConstRef(def_id, _substs) => {
-                let crate_id = CrateId::from_raw(0);
-                let local_def_id = LocalDefId::from_raw(def_id.to_raw());
+                let crate_id = CrateId::from_usize(0);
+                let local_def_id = LocalDefId::from_usize(def_id.index());
                 let def_id = DefId::new(crate_id, local_def_id);
                 Ok(InterpValue::ConstRef(def_id))
             }
@@ -3974,7 +3974,7 @@ impl<'tcx> Interpreter<'tcx> {
                     }
                 };
                 let target_place = Place {
-                    local: LocalIdx::from_raw(target.1 as u32),
+                    local: LocalIdx::from_usize(target.1),
                     projection: place.projection[1..].to_vec().into_boxed_slice(),
                 };
                 return self.write_place_frame(target.0, &target_place, val);
@@ -4223,15 +4223,15 @@ impl<'tcx> Interpreter<'tcx> {
         match func {
             Operand::Constant(c) => match &c.kind {
                 MirConstKind::Fn(def_id, _) => {
-                    let crate_id = CrateId::from_raw(0);
-                    let local_def_id = LocalDefId::from_raw(def_id.to_raw());
+                    let crate_id = CrateId::from_usize(0);
+                    let local_def_id = LocalDefId::from_usize(def_id.index());
                     Ok((DefId::new(crate_id, local_def_id), Vec::new()))
                 }
                 MirConstKind::ConstRef(_, _) => Err(InterpError::Panic(
                     "ConstRef constant not interpretable as function".into(),
                 )),
                 MirConstKind::Int(id) => Ok((
-                    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(*id as u32)),
+                    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(*id as usize)),
                     Vec::new(),
                 )),
                 MirConstKind::VirtualMethod {
@@ -4245,8 +4245,8 @@ impl<'tcx> Interpreter<'tcx> {
                             self.tcx
                                 .resolve_trait_method(*trait_def_id, recv_ty, *method_name)
                         {
-                            let crate_id = CrateId::from_raw(0);
-                            let local_def_id = LocalDefId::from_raw(fn_def_id.to_raw());
+                            let crate_id = CrateId::from_usize(0);
+                            let local_def_id = LocalDefId::from_usize(fn_def_id.index());
                             return Ok((DefId::new(crate_id, local_def_id), Vec::new()));
                         }
                     }
