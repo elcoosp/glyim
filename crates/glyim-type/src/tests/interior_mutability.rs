@@ -16,7 +16,7 @@ fn is_interior_mutable_adt_true_when_marked() {
     let (frozen, (adt_id, adt_ty)) = with_fresh_ty_ctx(|ctx| {
         let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let name_field = ctx.resolver().intern("value");
-        let adt_id = AdtId::from_raw(300);
+        let adt_id = AdtId::from_usize(300);
         let mut fields: IndexVec<FieldIdx, FieldDef> = IndexVec::new();
         fields.push(FieldDef {
             name: name_field,
@@ -61,7 +61,7 @@ fn is_interior_mutable_adt_true_on_mut_ctx() {
     let mut ctx = test_ty_ctx();
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let name_field = ctx.resolver().intern("value");
-    let adt_id = AdtId::from_raw(300);
+    let adt_id = AdtId::from_usize(300);
     let mut fields: IndexVec<FieldIdx, FieldDef> = IndexVec::new();
     fields.push(FieldDef {
         name: name_field,
@@ -101,7 +101,7 @@ fn is_interior_mutable_adt_false_when_not_marked() {
     let (frozen, (adt_id, adt_ty)) = with_fresh_ty_ctx(|ctx| {
         let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let name_field = ctx.resolver().intern("value");
-        let adt_id = AdtId::from_raw(301);
+        let adt_id = AdtId::from_usize(301);
         let mut fields: IndexVec<FieldIdx, FieldDef> = IndexVec::new();
         fields.push(FieldDef {
             name: name_field,
