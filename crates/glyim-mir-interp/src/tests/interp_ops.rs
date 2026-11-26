@@ -11,7 +11,7 @@ use glyim_type::{Const, ConstKind, FieldIdx, Ty, TyCtxMut, TyKind};
 use crate::{InterpValue, Interpreter};
 
 fn dummy_owner() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 fn dummy_source_info() -> SourceInfo {
@@ -43,7 +43,7 @@ fn len_on_array_returns_correct_integer() {
     let tcx = ctx_mut.freeze();
 
     let mut body = Body::dummy(dummy_owner());
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     let array_local = body.locals.push(LocalDecl {
         ty: array_ty,
         mutability: Mutability::Not,
@@ -81,7 +81,7 @@ fn match_on_enum_selects_correct_arm_via_discriminant() {
     let tcx = ctx_mut.freeze();
 
     let mut body = Body::dummy(dummy_owner());
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
 
     let enum_local = body.locals.push(LocalDecl {
         ty: i32_ty,
@@ -201,7 +201,7 @@ fn bitwise_and_on_integers() {
     let tcx = ctx_mut.freeze();
 
     let mut body = Body::dummy(dummy_owner());
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     let result_local = body.locals.push(LocalDecl {
         ty: i32_ty,
         mutability: Mutability::Not,
@@ -248,7 +248,7 @@ fn write_through_deref_field_modifies_nested_value() {
     let tcx = ctx_mut.freeze();
 
     let mut body = Body::dummy(dummy_owner());
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
 
     let aggregate_local = body.locals.push(LocalDecl {
         ty: i32_ty,
@@ -301,7 +301,7 @@ fn write_through_deref_field_modifies_nested_value() {
         local: ref_local,
         projection: Box::new([
             ProjectionElem::Deref,
-            ProjectionElem::Field(FieldIdx::from_raw(0)),
+            ProjectionElem::Field(FieldIdx::from_usize(0)),
         ]),
     };
     body.basic_blocks[bb0].statements.push(Statement {
@@ -333,7 +333,7 @@ fn not_on_bool() {
     let tcx = ctx_mut.freeze();
 
     let mut body = Body::dummy(dummy_owner());
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     let result_local = body.locals.push(LocalDecl {
         ty: bool_ty,
         mutability: Mutability::Not,
@@ -373,7 +373,7 @@ fn neg_on_int() {
     let tcx = ctx_mut.freeze();
 
     let mut body = Body::dummy(dummy_owner());
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     let result_local = body.locals.push(LocalDecl {
         ty: i32_ty,
         mutability: Mutability::Not,
