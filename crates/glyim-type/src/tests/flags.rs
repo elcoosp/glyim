@@ -10,7 +10,7 @@ use crate::*;
 #[test]
 fn infer_ty_var_sets_has_ty_infer() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         c.mk_ty(TyKind::Infer(InferVar::Ty(var)))
     });
     assert!(frozen.ty_flags(ty).contains(TypeFlags::HAS_TY_INFER));
@@ -19,7 +19,7 @@ fn infer_ty_var_sets_has_ty_infer() {
 #[test]
 fn infer_int_var_sets_has_ty_infer() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = IntVar::from_raw(0);
+        let var = IntVar::from_usize(0);
         c.mk_ty(TyKind::Infer(InferVar::Int(var)))
     });
     assert!(frozen.ty_flags(ty).contains(TypeFlags::HAS_TY_INFER));
@@ -28,7 +28,7 @@ fn infer_int_var_sets_has_ty_infer() {
 #[test]
 fn infer_float_var_sets_has_ty_infer() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = FloatVar::from_raw(0);
+        let var = FloatVar::from_usize(0);
         c.mk_ty(TyKind::Infer(InferVar::Float(var)))
     });
     assert!(frozen.ty_flags(ty).contains(TypeFlags::HAS_TY_INFER));
@@ -80,7 +80,7 @@ fn adt_with_error_substs_sets_has_error() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
         let args = vec![GenericArg::Ty(Ty::ERROR)];
         let substs = c.intern_substitution(args);
-        c.mk_adt(glyim_core::def_id::AdtId::from_raw(1), substs)
+        c.mk_adt(glyim_core::def_id::AdtId::from_usize(1), substs)
     });
     assert!(frozen.ty_flags(ty).contains(TypeFlags::HAS_ERROR));
 }
@@ -192,7 +192,7 @@ fn ref_with_static_region_does_not_set_has_re_param() {
 #[test]
 fn ref_to_infer_with_region_var_sets_both_infer_flags() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer_ty = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let vid = c.new_region_var(Region::Erased);
         c.mk_ref(Region::Var(vid), infer_ty, Mutability::Not)
@@ -205,7 +205,7 @@ fn ref_to_infer_with_region_var_sets_both_infer_flags() {
 #[test]
 fn nested_ref_propagates_inner_flags() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer_ty = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let inner_ref = c.mk_ref(Region::Erased, infer_ty, Mutability::Not);
         c.mk_ref(Region::Erased, inner_ref, Mutability::Mut)
