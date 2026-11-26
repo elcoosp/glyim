@@ -199,7 +199,7 @@ fn successor_idxs(kind: &TerminatorKind) -> Vec<usize> {
 fn run_main_returns(src: &str) -> InterpValue {
     let comp = compile_async_full(src).expect("full compile for runtime");
     let main_def_id = resolve_main_def_id(&comp).expect("main DefId resolvable");
-    let main_fn_def_id = glyim_core::def_id::FnDefId::from_raw(main_def_id.local_id.to_raw());
+    let main_fn_def_id = glyim_core::def_id::FnDefId::from_usize(main_def_id.local_id.index());
 
     let mono_bodies = comp.monomorphize(main_fn_def_id);
     let main_body = mono_bodies
