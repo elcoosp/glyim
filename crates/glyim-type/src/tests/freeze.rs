@@ -30,7 +30,7 @@ fn freeze_preserves_substitution_data() {
             GenericArg::Ty(c.mk_ty(TyKind::Int(IntTy::I32))),
         ];
         let substs = c.intern_substitution(args);
-        c.mk_adt(glyim_core::def_id::AdtId::from_raw(1), substs)
+        c.mk_adt(glyim_core::def_id::AdtId::from_usize(1), substs)
     });
     if let TyKind::Adt(_, substs) = frozen.ty_kind(adt_ty) {
         let args = frozen.substitution_args(*substs);
