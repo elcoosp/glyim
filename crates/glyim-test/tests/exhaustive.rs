@@ -130,6 +130,12 @@ fn const_eval_leg_agrees_or_pins_the_documented_boundary() {
 #[cfg(feature = "real-llvm")]
 #[test]
 fn native_backend_matches_the_model_on_the_sweeps() {
+    // `SweepCase` (the `source`/`ground_truth_exit` trait) is used only by
+    // this native leg, so the import lives inside the `real-llvm` gate: at
+    // the file top it is unused-imports in the default build, and without
+    // it this fn does not compile in the all-features build (the HEAD
+    // commit that dropped the top-level import broke `--all-features`).
+    use glyim_test::exhaustive::SweepCase;
     use glyim_test::harness::compiler::{PipelineCompiler, TestCompiler};
     use glyim_test::harness::runner::ProgramRunner;
     use glyim_test::mock::MockCodegen;
