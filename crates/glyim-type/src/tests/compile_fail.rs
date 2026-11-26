@@ -19,7 +19,9 @@ fn ty_ctx_mut_is_not_send_documented() {
     // See traits.rs for positive proof that TyCtx IS Send+Sync.
 }
 
-/// Documents that `Ty::from_raw` is pub(crate) and cannot be called from outside.
+/// Documents the `Ty` sentinel raw values; `Ty::from_raw` no longer exists
+/// (the CT-1 ratchet deleted the raw constructor; the arena wraps via
+/// `Ty::from_u32`), so nothing outside the arena can mint a `Ty`.
 #[test]
 fn ty_from_raw_is_pub_crate() {
     assert_eq!(Ty::ERROR.to_raw(), 0);
@@ -28,7 +30,8 @@ fn ty_from_raw_is_pub_crate() {
     assert_eq!(Ty::BOOL.to_raw(), 3);
 }
 
-/// Documents that `Substitution::from_raw` is pub(crate).
+/// Documents that `Substitution` construction stays crate-internal
+/// (`from_parts`; the CT-1 ratchet deleted the raw constructor).
 #[test]
 fn substitution_from_raw_is_pub_crate() {
     let (ctx, sub) =
