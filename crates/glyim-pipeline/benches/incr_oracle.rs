@@ -39,7 +39,10 @@ const N_ITEMS: u32 = 5;
 /// A minimal THIR body distinct per `local`.
 fn thir_body_for(local: u32) -> thir::Body {
     thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(local)),
+        owner: DefId::new(
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(local as usize),
+        ),
         params: Vec::new(),
         return_ty: Ty::UNIT,
         stmts: Vec::new(),
@@ -122,7 +125,9 @@ fn main() {
         let _ = incr_file;
         let incr_def_fp = glyim_db::QueryContext::item_tree_fingerprint(&incr_db, incr_file);
         for local in 0..N_ITEMS {
-            let _ = incr_db.thir_body_query(LocalDefId::from_raw(local), || thir_body_for(local));
+            let _ = incr_db.thir_body_query(LocalDefId::from_usize(local as usize), || {
+                thir_body_for(local)
+            });
         }
 
         // Clean: fresh DB, same source. Every query is a miss.
@@ -130,7 +135,9 @@ fn main() {
         let clean_file = set_source(&clean_db, &src);
         let clean_def_fp = glyim_db::QueryContext::item_tree_fingerprint(&clean_db, clean_file);
         for local in 0..N_ITEMS {
-            let _ = clean_db.thir_body_query(LocalDefId::from_raw(local), || thir_body_for(local));
+            let _ = clean_db.thir_body_query(LocalDefId::from_usize(local as usize), || {
+                thir_body_for(local)
+            });
         }
 
         if incr_def_fp != clean_def_fp {
