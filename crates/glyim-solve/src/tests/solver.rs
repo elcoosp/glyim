@@ -14,7 +14,7 @@ fn t01_register_trait() {
     let name = interner.intern("MyTrait");
     let mut ctx = TraitContext::new();
     ctx.register_trait(TraitDef {
-        def_id: TraitDefId::from_raw(1),
+        def_id: TraitDefId::from_usize(1),
         name,
         associated_types: vec![],
         predicates: vec![],
@@ -29,7 +29,7 @@ fn t02_register_impl() {
     let trait_name = interner.intern("Display");
     let mut ctx = TraitContext::new();
     ctx.register_trait(TraitDef {
-        def_id: TraitDefId::from_raw(10),
+        def_id: TraitDefId::from_usize(10),
         name: trait_name,
         associated_types: vec![],
         predicates: vec![],
@@ -37,9 +37,9 @@ fn t02_register_impl() {
     let mut ctx_mut = test_ty_ctx();
     let subst = empty_subst(&mut ctx_mut);
     ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(100),
+        def_id: ImplDefId::from_usize(100),
         trait_ref: TraitRef {
-            def_id: TraitDefId::from_raw(10),
+            def_id: TraitDefId::from_usize(10),
             substs: subst,
         },
         predicates: vec![],
@@ -47,7 +47,7 @@ fn t02_register_impl() {
     assert_eq!(ctx.impl_defs().len(), 1);
     assert_eq!(
         ctx.impl_defs()[0].trait_ref.def_id,
-        TraitDefId::from_raw(10)
+        TraitDefId::from_usize(10)
     );
 }
 
@@ -62,9 +62,9 @@ fn t08_builtin_traits_proven_structurally() {
     use glyim_type::{Const, ConstKind, GenericArg, TyKind};
 
     let mut trait_ctx = TraitContext::new();
-    let copy_id = TraitDefId::from_raw(1);
-    let sized_id = TraitDefId::from_raw(2);
-    let send_id = TraitDefId::from_raw(3);
+    let copy_id = TraitDefId::from_usize(1);
+    let sized_id = TraitDefId::from_usize(2);
+    let send_id = TraitDefId::from_usize(3);
     trait_ctx.register_lang_trait(copy_id, BuiltinTrait::Copy);
     trait_ctx.register_lang_trait(sized_id, BuiltinTrait::Sized);
     trait_ctx.register_lang_trait(send_id, BuiltinTrait::Send);
@@ -135,7 +135,7 @@ fn t08_builtin_traits_proven_structurally() {
 fn t03_prove_with_matching_impl() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(2);
+    let trait_id = TraitDefId::from_usize(2);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("Clone"),
@@ -145,7 +145,7 @@ fn t03_prove_with_matching_impl() {
     let mut ty_ctx = test_ty_ctx();
     let subst = empty_subst(&mut ty_ctx);
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(200),
+        def_id: ImplDefId::from_usize(200),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst,
@@ -170,7 +170,7 @@ fn t03_prove_with_matching_impl() {
 fn t04_prove_no_impl_gives_definite_no() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(3);
+    let trait_id = TraitDefId::from_usize(3);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("Default"),
@@ -197,8 +197,8 @@ fn t04_prove_no_impl_gives_definite_no() {
 fn t05_impls_of_trait_subset() {
     let interner = Interner::new();
     let mut ctx = TraitContext::new();
-    let id_a = TraitDefId::from_raw(10);
-    let id_b = TraitDefId::from_raw(20);
+    let id_a = TraitDefId::from_usize(10);
+    let id_b = TraitDefId::from_usize(20);
     ctx.register_trait(TraitDef {
         def_id: id_a,
         name: interner.intern("TraitA"),
@@ -213,7 +213,7 @@ fn t05_impls_of_trait_subset() {
     });
     let mut ty_ctx = test_ty_ctx();
     ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(1),
+        def_id: ImplDefId::from_usize(1),
         trait_ref: TraitRef {
             def_id: id_a,
             substs: ty_ctx.intern_substitution(vec![]),
@@ -221,7 +221,7 @@ fn t05_impls_of_trait_subset() {
         predicates: vec![],
     });
     ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(2),
+        def_id: ImplDefId::from_usize(2),
         trait_ref: TraitRef {
             def_id: id_b,
             substs: ty_ctx.intern_substitution(vec![]),
@@ -229,7 +229,7 @@ fn t05_impls_of_trait_subset() {
         predicates: vec![],
     });
     ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(3),
+        def_id: ImplDefId::from_usize(3),
         trait_ref: TraitRef {
             def_id: id_a,
             substs: ty_ctx.intern_substitution(vec![]),
@@ -238,18 +238,18 @@ fn t05_impls_of_trait_subset() {
     });
     let a_impls: Vec<_> = ctx.impls_of_trait(id_a).map(|i| i.def_id).collect();
     assert_eq!(a_impls.len(), 2);
-    assert!(a_impls.contains(&ImplDefId::from_raw(1)));
-    assert!(a_impls.contains(&ImplDefId::from_raw(3)));
+    assert!(a_impls.contains(&ImplDefId::from_usize(1)));
+    assert!(a_impls.contains(&ImplDefId::from_usize(3)));
     let b_impls: Vec<_> = ctx.impls_of_trait(id_b).map(|i| i.def_id).collect();
     assert_eq!(b_impls.len(), 1);
-    assert_eq!(b_impls[0], ImplDefId::from_raw(2));
+    assert_eq!(b_impls[0], ImplDefId::from_usize(2));
 }
 
 #[test]
 fn t12_evaluate_predicate_trait_delegates_to_can_prove() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(12);
+    let trait_id = TraitDefId::from_usize(12);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("Debug"),
@@ -259,7 +259,7 @@ fn t12_evaluate_predicate_trait_delegates_to_can_prove() {
     let mut ty_ctx = test_ty_ctx();
     let subst = empty_subst(&mut ty_ctx);
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(300),
+        def_id: ImplDefId::from_usize(300),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst,
@@ -285,7 +285,7 @@ fn t13_evaluate_wellformed_outlives_returns_proven() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
     trait_ctx.register_trait(TraitDef {
-        def_id: TraitDefId::from_raw(13),
+        def_id: TraitDefId::from_usize(13),
         name: interner.intern("Empty"),
         associated_types: vec![],
         predicates: vec![],
@@ -325,7 +325,7 @@ fn t14_evaluate_coerce_returns_ambiguous() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
     trait_ctx.register_trait(TraitDef {
-        def_id: TraitDefId::from_raw(14),
+        def_id: TraitDefId::from_usize(14),
         name: interner.intern("Empty"),
         associated_types: vec![],
         predicates: vec![],
@@ -345,7 +345,7 @@ fn t14_evaluate_coerce_returns_ambiguous() {
 fn t17_multiple_impls_for_same_trait() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(17);
+    let trait_id = TraitDefId::from_usize(17);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("From"),
@@ -355,7 +355,7 @@ fn t17_multiple_impls_for_same_trait() {
     let mut ty_ctx = test_ty_ctx();
     let subst = empty_subst(&mut ty_ctx);
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(401),
+        def_id: ImplDefId::from_usize(401),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst,
@@ -363,7 +363,7 @@ fn t17_multiple_impls_for_same_trait() {
         predicates: vec![],
     });
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(402),
+        def_id: ImplDefId::from_usize(402),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: ty_ctx.intern_substitution(vec![]),
@@ -405,16 +405,16 @@ fn t18_iterator_next_info_uses_real_option_adt() {
     // With a `next` fn def registered, resolution yields a real info struct
     // whose `option_ty` is the builtin `Option` ADT (id 1010), not a magic id.
     let mut trait_ctx2 = TraitContext::new();
-    trait_ctx2.set_builtin_iterator_next(FnDefId::from_raw(42));
+    trait_ctx2.set_builtin_iterator_next(FnDefId::from_usize(42));
     let solver2 = SimpleTraitSolver::new(&trait_ctx2);
     let mut ctx2 = test_ty_ctx();
     let elem_ty = ctx2.mk_ty(TyKind::Int(glyim_core::primitives::IntTy::I32));
     let info = solver2
         .iterator_next_info(&mut ctx2, elem_ty, elem_ty)
         .expect("iterator_next_info should resolve with a registered next fn");
-    assert_eq!(info.fn_def_id, FnDefId::from_raw(42));
+    assert_eq!(info.fn_def_id, FnDefId::from_usize(42));
     match ctx2.freeze().ty_kind(info.option_ty) {
-        TyKind::Adt(adt_id, _) => assert_eq!(*adt_id, glyim_core::def_id::AdtId::from_raw(1010)),
+        TyKind::Adt(adt_id, _) => assert_eq!(*adt_id, glyim_core::def_id::AdtId::from_usize(1010)),
         other => panic!("expected Option ADT for option_ty, got {other:?}"),
     }
 }
@@ -425,7 +425,7 @@ fn t18_register_trait_with_associated_types() {
     let assoc = interner.intern("Item");
     let mut ctx = TraitContext::new();
     ctx.register_trait(TraitDef {
-        def_id: TraitDefId::from_raw(18),
+        def_id: TraitDefId::from_usize(18),
         name: interner.intern("Iterator"),
         associated_types: vec![assoc],
         predicates: vec![],
@@ -438,7 +438,7 @@ fn t18_register_trait_with_associated_types() {
 fn t19_register_impl_with_predicates() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(19);
+    let trait_id = TraitDefId::from_usize(19);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("Default"),
@@ -448,7 +448,7 @@ fn t19_register_impl_with_predicates() {
     let mut ty_ctx = test_ty_ctx();
     let subst = empty_subst(&mut ty_ctx);
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(500),
+        def_id: ImplDefId::from_usize(500),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst,
@@ -463,12 +463,12 @@ fn t20_impls_of_trait_empty_for_no_match() {
     let interner = Interner::new();
     let mut ctx = TraitContext::new();
     ctx.register_trait(TraitDef {
-        def_id: TraitDefId::from_raw(20),
+        def_id: TraitDefId::from_usize(20),
         name: interner.intern("NoImpls"),
         associated_types: vec![],
         predicates: vec![],
     });
-    assert_eq!(ctx.impls_of_trait(TraitDefId::from_raw(20)).count(), 0);
+    assert_eq!(ctx.impls_of_trait(TraitDefId::from_usize(20)).count(), 0);
 }
 
 #[test]
@@ -482,7 +482,7 @@ fn t22_default_trait_context_is_empty() {
 fn t27_can_prove_negative_impl() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(27);
+    let trait_id = TraitDefId::from_usize(27);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("Send"),
@@ -492,7 +492,7 @@ fn t27_can_prove_negative_impl() {
     let mut ty_ctx = test_ty_ctx();
     let subst = empty_subst(&mut ty_ctx);
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(600),
+        def_id: ImplDefId::from_usize(600),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst,
@@ -520,7 +520,7 @@ fn t28_multiple_traits_registered() {
     let mut ctx = TraitContext::new();
     for i in 0..5 {
         ctx.register_trait(TraitDef {
-            def_id: TraitDefId::from_raw(100 + i),
+            def_id: TraitDefId::from_usize(100 + i),
             name: interner.intern(&format!("Trait{i}")),
             associated_types: vec![],
             predicates: vec![],
@@ -534,13 +534,13 @@ fn t29_register_duplicate_trait_id() {
     let interner = Interner::new();
     let mut ctx = TraitContext::new();
     ctx.register_trait(TraitDef {
-        def_id: TraitDefId::from_raw(29),
+        def_id: TraitDefId::from_usize(29),
         name: interner.intern("A"),
         associated_types: vec![],
         predicates: vec![],
     });
     ctx.register_trait(TraitDef {
-        def_id: TraitDefId::from_raw(29),
+        def_id: TraitDefId::from_usize(29),
         name: interner.intern("B"),
         associated_types: vec![],
         predicates: vec![],
@@ -575,7 +575,7 @@ fn t33_register_many_traits_and_impls() {
     let mut ctx = TraitContext::new();
     let mut ty_ctx = test_ty_ctx();
     for i in 0..20 {
-        let tid = TraitDefId::from_raw(1000 + i);
+        let tid = TraitDefId::from_usize(1000 + i);
         ctx.register_trait(TraitDef {
             def_id: tid,
             name: interner.intern(&format!("Trait{i}")),
@@ -583,7 +583,7 @@ fn t33_register_many_traits_and_impls() {
             predicates: vec![],
         });
         ctx.register_impl(ImplDef {
-            def_id: ImplDefId::from_raw(2000 + i),
+            def_id: ImplDefId::from_usize(2000 + i),
             trait_ref: TraitRef {
                 def_id: tid,
                 substs: ty_ctx.intern_substitution(vec![]),
@@ -596,7 +596,7 @@ fn t33_register_many_traits_and_impls() {
     let preds: Vec<_> = (0..20)
         .map(|i| TraitPredicate {
             trait_ref: TraitRef {
-                def_id: TraitDefId::from_raw(1000 + i),
+                def_id: TraitDefId::from_usize(1000 + i),
                 substs: ty_ctx.intern_substitution(vec![]),
             },
             polarity: ImplPolarity::Positive,
@@ -614,7 +614,7 @@ fn t34_evaluate_predicate_on_non_existent_trait() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
     trait_ctx.register_trait(TraitDef {
-        def_id: TraitDefId::from_raw(34),
+        def_id: TraitDefId::from_usize(34),
         name: interner.intern("Ghost"),
         associated_types: vec![],
         predicates: vec![],
@@ -625,7 +625,7 @@ fn t34_evaluate_predicate_on_non_existent_trait() {
     let mut solver = SimpleTraitSolver::new(&trait_ctx);
     let pred = TraitPredicate {
         trait_ref: TraitRef {
-            def_id: TraitDefId::from_raw(9999),
+            def_id: TraitDefId::from_usize(9999),
             substs: subst,
         },
         polarity: ImplPolarity::Positive,
@@ -652,7 +652,7 @@ fn t36_solver_result_clone() {
 fn t37_trait_def_clone() {
     let interner = Interner::new();
     let td = TraitDef {
-        def_id: TraitDefId::from_raw(37),
+        def_id: TraitDefId::from_usize(37),
         name: interner.intern("Clone37"),
         associated_types: vec![],
         predicates: vec![],
@@ -667,9 +667,9 @@ fn t38_impl_def_clone() {
     let mut ty_ctx = test_ty_ctx();
     let subst = ty_ctx.intern_substitution(vec![]);
     let imp = ImplDef {
-        def_id: ImplDefId::from_raw(38),
+        def_id: ImplDefId::from_usize(38),
         trait_ref: TraitRef {
-            def_id: TraitDefId::from_raw(1),
+            def_id: TraitDefId::from_usize(1),
             substs: subst,
         },
         predicates: vec![],
@@ -683,7 +683,7 @@ fn t38_impl_def_clone() {
 fn t48_solver_does_not_mutate_trait_ctx() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(48);
+    let trait_id = TraitDefId::from_usize(48);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("Immutable"),
@@ -693,7 +693,7 @@ fn t48_solver_does_not_mutate_trait_ctx() {
     let mut ty_ctx = test_ty_ctx();
     let subst = empty_subst(&mut ty_ctx);
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(4800),
+        def_id: ImplDefId::from_usize(4800),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst,
@@ -723,8 +723,8 @@ fn t48_solver_does_not_mutate_trait_ctx() {
 fn t49_impls_of_trait_returns_exact_count() {
     let interner = Interner::new();
     let mut ctx = TraitContext::new();
-    let tid_a = TraitDefId::from_raw(49);
-    let tid_b = TraitDefId::from_raw(50);
+    let tid_a = TraitDefId::from_usize(49);
+    let tid_b = TraitDefId::from_usize(50);
     ctx.register_trait(TraitDef {
         def_id: tid_a,
         name: interner.intern("A"),
@@ -740,7 +740,7 @@ fn t49_impls_of_trait_returns_exact_count() {
     let mut ty_ctx = test_ty_ctx();
     for i in 0..7 {
         ctx.register_impl(ImplDef {
-            def_id: ImplDefId::from_raw(4900 + i),
+            def_id: ImplDefId::from_usize(4900 + i),
             trait_ref: TraitRef {
                 def_id: tid_a,
                 substs: ty_ctx.intern_substitution(vec![]),
@@ -750,7 +750,7 @@ fn t49_impls_of_trait_returns_exact_count() {
     }
     for i in 0..3 {
         ctx.register_impl(ImplDef {
-            def_id: ImplDefId::from_raw(5000 + i),
+            def_id: ImplDefId::from_usize(5000 + i),
             trait_ref: TraitRef {
                 def_id: tid_b,
                 substs: ty_ctx.intern_substitution(vec![]),
@@ -766,7 +766,7 @@ fn t49_impls_of_trait_returns_exact_count() {
 fn t50_prove_with_substitution_same_as_empty() {
     let interner = Interner::new();
     let mut ctx = TraitContext::new();
-    let tid = TraitDefId::from_raw(50);
+    let tid = TraitDefId::from_usize(50);
     ctx.register_trait(TraitDef {
         def_id: tid,
         name: interner.intern("Subst"),
@@ -777,7 +777,7 @@ fn t50_prove_with_substitution_same_as_empty() {
     let i32_ty = ty_ctx.mk_ty(glyim_type::TyKind::Int(glyim_core::IntTy::I32));
     let subst = ty_ctx.intern_substitution(vec![glyim_type::GenericArg::Ty(i32_ty)]);
     ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(5000),
+        def_id: ImplDefId::from_usize(5000),
         trait_ref: TraitRef {
             def_id: tid,
             substs: subst,
@@ -812,7 +812,7 @@ fn t59_solver_with_empty_trait_context_always_definite_no() {
     for i in 0..10 {
         let pred = TraitPredicate {
             trait_ref: TraitRef {
-                def_id: TraitDefId::from_raw(i),
+                def_id: TraitDefId::from_usize(i),
                 substs: subst,
             },
             polarity: ImplPolarity::Positive,
@@ -828,15 +828,15 @@ fn t60_register_impl_for_unregistered_trait() {
     let mut ty_ctx = test_ty_ctx();
     let subst = ty_ctx.intern_substitution(vec![]);
     ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(6000),
+        def_id: ImplDefId::from_usize(6000),
         trait_ref: TraitRef {
-            def_id: TraitDefId::from_raw(999),
+            def_id: TraitDefId::from_usize(999),
             substs: subst,
         },
         predicates: vec![],
     });
     assert_eq!(ctx.impl_defs().len(), 1);
-    assert_eq!(ctx.impls_of_trait(TraitDefId::from_raw(999)).count(), 1);
+    assert_eq!(ctx.impls_of_trait(TraitDefId::from_usize(999)).count(), 1);
 }
 
 #[test]
@@ -847,7 +847,7 @@ fn t61_trait_def_with_many_associated_types() {
         .map(|i| interner.intern(&format!("Assoc{i}")))
         .collect();
     ctx.register_trait(TraitDef {
-        def_id: TraitDefId::from_raw(61),
+        def_id: TraitDefId::from_usize(61),
         name: interner.intern("ManyAssoc"),
         associated_types: assoc.clone(),
         predicates: vec![],
@@ -859,7 +859,7 @@ fn t61_trait_def_with_many_associated_types() {
 fn t62_impl_def_with_many_predicates() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(62);
+    let trait_id = TraitDefId::from_usize(62);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("ManyPreds"),
@@ -872,7 +872,7 @@ fn t62_impl_def_with_many_predicates() {
         .map(|_| glyim_type::Predicate::WellFormed(ty_ctx.bool_ty()))
         .collect();
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(6200),
+        def_id: ImplDefId::from_usize(6200),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst,
@@ -886,7 +886,7 @@ fn t62_impl_def_with_many_predicates() {
 fn t63_prove_checks_matching_not_existence() {
     let interner = Interner::new();
     let mut ctx = TraitContext::new();
-    let tid = TraitDefId::from_raw(63);
+    let tid = TraitDefId::from_usize(63);
     ctx.register_trait(TraitDef {
         def_id: tid,
         name: interner.intern("Match"),
@@ -899,7 +899,7 @@ fn t63_prove_checks_matching_not_existence() {
 
     let subst_i32 = ty_ctx.intern_substitution(vec![glyim_type::GenericArg::Ty(i32_ty)]);
     ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(6301),
+        def_id: ImplDefId::from_usize(6301),
         trait_ref: TraitRef {
             def_id: tid,
             substs: subst_i32,
@@ -924,7 +924,7 @@ fn t63_prove_checks_matching_not_existence() {
 fn t64_solver_evaluate_predicate_all_variants() {
     let interner = Interner::new();
     let mut ctx = TraitContext::new();
-    let tid = TraitDefId::from_raw(64);
+    let tid = TraitDefId::from_usize(64);
     ctx.register_trait(TraitDef {
         def_id: tid,
         name: interner.intern("All"),
@@ -934,7 +934,7 @@ fn t64_solver_evaluate_predicate_all_variants() {
     let mut ty_ctx = test_ty_ctx();
     let subst = ty_ctx.intern_substitution(vec![]);
     ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(6400),
+        def_id: ImplDefId::from_usize(6400),
         trait_ref: TraitRef {
             def_id: tid,
             substs: subst,
@@ -991,7 +991,7 @@ fn t64_solver_evaluate_predicate_all_variants() {
 fn t65_prove_negative_impl_with_positive_existing() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(65);
+    let trait_id = TraitDefId::from_usize(65);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("NegativeTest"),
@@ -1003,7 +1003,7 @@ fn t65_prove_negative_impl_with_positive_existing() {
     let pred_subst = empty_subst(&mut ty_ctx);
 
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(6500),
+        def_id: ImplDefId::from_usize(6500),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst,
@@ -1030,7 +1030,7 @@ fn t65_prove_negative_impl_with_positive_existing() {
 fn t66_prove_negative_impl_with_no_impls() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(66);
+    let trait_id = TraitDefId::from_usize(66);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("NegativeTestNoImpls"),
@@ -1058,8 +1058,8 @@ fn t66_prove_negative_impl_with_no_impls() {
 fn t67_prove_with_where_clause_proven() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(67);
-    let base_trait_id = TraitDefId::from_raw(670);
+    let trait_id = TraitDefId::from_usize(67);
+    let base_trait_id = TraitDefId::from_usize(670);
 
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
@@ -1078,7 +1078,7 @@ fn t67_prove_with_where_clause_proven() {
     let subst = empty_subst(&mut ty_ctx);
 
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(6700),
+        def_id: ImplDefId::from_usize(6700),
         trait_ref: TraitRef {
             def_id: base_trait_id,
             substs: subst,
@@ -1094,7 +1094,7 @@ fn t67_prove_with_where_clause_proven() {
         polarity: ImplPolarity::Positive,
     };
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(6701),
+        def_id: ImplDefId::from_usize(6701),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst,
@@ -1122,8 +1122,8 @@ fn t67_prove_with_where_clause_proven() {
 fn t68_prove_with_where_clause_fails() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(68);
-    let base_trait_id = TraitDefId::from_raw(680);
+    let trait_id = TraitDefId::from_usize(68);
+    let base_trait_id = TraitDefId::from_usize(680);
 
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
@@ -1149,7 +1149,7 @@ fn t68_prove_with_where_clause_fails() {
         polarity: ImplPolarity::Positive,
     };
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(6801),
+        def_id: ImplDefId::from_usize(6801),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst,
@@ -1177,7 +1177,7 @@ fn t68_prove_with_where_clause_fails() {
 fn t69_substitution_mismatch_yields_definite_no() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(69);
+    let trait_id = TraitDefId::from_usize(69);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("MatchTy"),
@@ -1191,7 +1191,7 @@ fn t69_substitution_mismatch_yields_definite_no() {
 
     let subst = ty_ctx.intern_substitution(vec![glyim_type::GenericArg::Ty(i32_ty)]);
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(6900),
+        def_id: ImplDefId::from_usize(6900),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst,
@@ -1217,7 +1217,7 @@ fn t69_substitution_mismatch_yields_definite_no() {
 fn t70_generic_param_matches_anything() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(70);
+    let trait_id = TraitDefId::from_usize(70);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("GenericParam"),
@@ -1234,7 +1234,7 @@ fn t70_generic_param_matches_anything() {
 
     let impl_subst = ty_ctx.intern_substitution(vec![glyim_type::GenericArg::Ty(param_ty)]);
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(7000),
+        def_id: ImplDefId::from_usize(7000),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: impl_subst,
@@ -1260,7 +1260,7 @@ fn t70_generic_param_matches_anything() {
 fn t71_projection_predicate_proven() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(71);
+    let trait_id = TraitDefId::from_usize(71);
     let assoc_name = interner.intern("Item");
 
     trait_ctx.register_trait(TraitDef {
@@ -1273,7 +1273,7 @@ fn t71_projection_predicate_proven() {
     let mut ty_ctx = test_ty_ctx();
     let subst = empty_subst(&mut ty_ctx);
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(7100),
+        def_id: ImplDefId::from_usize(7100),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst,
@@ -1301,7 +1301,7 @@ fn t71_projection_predicate_proven() {
 fn t72_coherence_overlap_violation() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(72);
+    let trait_id = TraitDefId::from_usize(72);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("Overlap"),
@@ -1321,7 +1321,7 @@ fn t72_coherence_overlap_violation() {
     let subst_b = subst_a;
 
     let impl1 = ImplDef {
-        def_id: ImplDefId::from_raw(7200),
+        def_id: ImplDefId::from_usize(7200),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst_a,
@@ -1331,7 +1331,7 @@ fn t72_coherence_overlap_violation() {
     trait_ctx.register_impl(impl1.clone());
 
     let impl2 = ImplDef {
-        def_id: ImplDefId::from_raw(7201),
+        def_id: ImplDefId::from_usize(7201),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst_b,
@@ -1348,7 +1348,7 @@ fn t72_coherence_overlap_violation() {
 fn t73_coherence_no_overlap_different_types() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(73);
+    let trait_id = TraitDefId::from_usize(73);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("NoOverlap"),
@@ -1364,7 +1364,7 @@ fn t73_coherence_no_overlap_different_types() {
     let subst_f64 = ty_ctx.intern_substitution(vec![glyim_type::GenericArg::Ty(f64_ty)]);
 
     let impl1 = ImplDef {
-        def_id: ImplDefId::from_raw(7300),
+        def_id: ImplDefId::from_usize(7300),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst_i32,
@@ -1374,7 +1374,7 @@ fn t73_coherence_no_overlap_different_types() {
     trait_ctx.register_impl(impl1);
 
     let impl2 = ImplDef {
-        def_id: ImplDefId::from_raw(7301),
+        def_id: ImplDefId::from_usize(7301),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst_f64,
@@ -1390,7 +1390,7 @@ fn t73_coherence_no_overlap_different_types() {
 fn t74_multiple_matching_impls_ambiguous() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(74);
+    let trait_id = TraitDefId::from_usize(74);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("AmbigImpl"),
@@ -1408,7 +1408,7 @@ fn t74_multiple_matching_impls_ambiguous() {
     let subst2 = ty_ctx.intern_substitution(vec![glyim_type::GenericArg::Ty(param_t)]);
 
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(7400),
+        def_id: ImplDefId::from_usize(7400),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst1,
@@ -1416,7 +1416,7 @@ fn t74_multiple_matching_impls_ambiguous() {
         predicates: vec![],
     });
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(7401),
+        def_id: ImplDefId::from_usize(7401),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst2,
@@ -1443,7 +1443,7 @@ fn t74_multiple_matching_impls_ambiguous() {
 fn t75_substs_length_mismatch() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(75);
+    let trait_id = TraitDefId::from_usize(75);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("LenMismatch"),
@@ -1460,7 +1460,7 @@ fn t75_substs_length_mismatch() {
         glyim_type::GenericArg::Ty(bool_ty),
     ]);
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(7500),
+        def_id: ImplDefId::from_usize(7500),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: impl_subst,
@@ -1486,7 +1486,7 @@ fn t75_substs_length_mismatch() {
 fn t76_infer_var_in_query_matches() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(76);
+    let trait_id = TraitDefId::from_usize(76);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("InferMatch"),
@@ -1497,12 +1497,12 @@ fn t76_infer_var_in_query_matches() {
     let mut ty_ctx = test_ty_ctx();
     let i32_ty = ty_ctx.mk_ty(glyim_type::TyKind::Int(glyim_core::IntTy::I32));
     let infer_ty = ty_ctx.mk_ty(glyim_type::TyKind::Infer(glyim_type::InferVar::Ty(
-        glyim_type::TyVar::from_raw(0),
+        glyim_type::TyVar::from_usize(0),
     )));
 
     let impl_subst = ty_ctx.intern_substitution(vec![glyim_type::GenericArg::Ty(i32_ty)]);
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(7600),
+        def_id: ImplDefId::from_usize(7600),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: impl_subst,
@@ -1528,7 +1528,7 @@ fn t76_infer_var_in_query_matches() {
 fn t77_ref_substitution_matching() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(77);
+    let trait_id = TraitDefId::from_usize(77);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("RefMatch"),
@@ -1551,7 +1551,7 @@ fn t77_ref_substitution_matching() {
 
     let impl_subst = ty_ctx.intern_substitution(vec![glyim_type::GenericArg::Ty(ref_i32)]);
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(7700),
+        def_id: ImplDefId::from_usize(7700),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: impl_subst,
@@ -1596,8 +1596,8 @@ fn t77_ref_substitution_matching() {
 fn t78_where_clause_ambiguous() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(78);
-    let base_trait_id = TraitDefId::from_raw(780);
+    let trait_id = TraitDefId::from_usize(78);
+    let base_trait_id = TraitDefId::from_usize(780);
 
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
@@ -1621,7 +1621,7 @@ fn t78_where_clause_ambiguous() {
     }));
     let impl_subst = ty_ctx.intern_substitution(vec![glyim_type::GenericArg::Ty(param_t)]);
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(7800),
+        def_id: ImplDefId::from_usize(7800),
         trait_ref: TraitRef {
             def_id: base_trait_id,
             substs: impl_subst,
@@ -1637,7 +1637,7 @@ fn t78_where_clause_ambiguous() {
         polarity: ImplPolarity::Positive,
     };
     trait_ctx.register_impl(ImplDef {
-        def_id: ImplDefId::from_raw(7801),
+        def_id: ImplDefId::from_usize(7801),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: subst,
@@ -1665,7 +1665,7 @@ fn t78_where_clause_ambiguous() {
 fn t79_coherence_orphan_rule_violation() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(79);
+    let trait_id = TraitDefId::from_usize(79);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("Orphan"),
@@ -1676,7 +1676,7 @@ fn t79_coherence_orphan_rule_violation() {
     let mut ty_ctx = test_ty_ctx();
     let impl_subst = ty_ctx.intern_substitution(vec![]);
     let impl_def = ImplDef {
-        def_id: ImplDefId::from_raw(7900),
+        def_id: ImplDefId::from_usize(7900),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: impl_subst,
@@ -1693,7 +1693,7 @@ fn t79_coherence_orphan_rule_violation() {
 fn t80_coherence_orphan_rule_pass() {
     let interner = Interner::new();
     let mut trait_ctx = TraitContext::new();
-    let trait_id = TraitDefId::from_raw(80);
+    let trait_id = TraitDefId::from_usize(80);
     trait_ctx.register_trait(TraitDef {
         def_id: trait_id,
         name: interner.intern("OrphanPass"),
@@ -1705,7 +1705,7 @@ fn t80_coherence_orphan_rule_pass() {
     let i32_ty = ty_ctx.mk_ty(glyim_type::TyKind::Int(glyim_core::IntTy::I32));
     let impl_subst = ty_ctx.intern_substitution(vec![glyim_type::GenericArg::Ty(i32_ty)]);
     let impl_def = ImplDef {
-        def_id: ImplDefId::from_raw(8000),
+        def_id: ImplDefId::from_usize(8000),
         trait_ref: TraitRef {
             def_id: trait_id,
             substs: impl_subst,
