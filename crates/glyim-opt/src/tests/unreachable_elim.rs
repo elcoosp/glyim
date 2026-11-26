@@ -11,7 +11,7 @@ fn return_term() -> Terminator {
 fn goto_term(t: u32) -> Terminator {
     Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(t),
+            target: BasicBlockIdx::from_usize(t as usize),
         },
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     }
@@ -32,11 +32,11 @@ fn eliminates_unreachable_block() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-        body.locals = glyim_core::IndexVec::from_raw(vec![LocalDecl {
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+        body.locals = glyim_core::IndexVec::from_vec(vec![LocalDecl {
             ty: ut,
             mutability: Mutability::Not,
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -66,11 +66,11 @@ fn all_reachable_no_change() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-        body.locals = glyim_core::IndexVec::from_raw(vec![LocalDecl {
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+        body.locals = glyim_core::IndexVec::from_vec(vec![LocalDecl {
             ty: ut,
             mutability: Mutability::Not,
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -106,11 +106,11 @@ fn multiple_unreachable_removed() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1, block2]);
-        body.locals = glyim_core::IndexVec::from_raw(vec![LocalDecl {
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1, block2]);
+        body.locals = glyim_core::IndexVec::from_vec(vec![LocalDecl {
             ty: ut,
             mutability: Mutability::Not,
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -133,15 +133,15 @@ fn switchint_keeps_reachable() {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::SwitchInt {
-                    discr: Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+                    discr: Operand::Copy(Place::new(LocalIdx::from_usize(0))),
                     switch_ty: ut,
                     targets: SwitchTargets::new(
                         vec![
-                            (0, BasicBlockIdx::from_raw(1)),
-                            (1, BasicBlockIdx::from_raw(2)),
+                            (0, BasicBlockIdx::from_usize(1)),
+                            (1, BasicBlockIdx::from_usize(2)),
                         ]
                         .into_boxed_slice(),
-                        BasicBlockIdx::from_raw(2),
+                        BasicBlockIdx::from_usize(2),
                     ),
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -159,11 +159,11 @@ fn switchint_keeps_reachable() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1, block2]);
-        body.locals = glyim_core::IndexVec::from_raw(vec![LocalDecl {
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1, block2]);
+        body.locals = glyim_core::IndexVec::from_vec(vec![LocalDecl {
             ty: ut,
             mutability: Mutability::Not,
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -201,11 +201,11 @@ fn transitive_unreachable_removed() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1, block2]);
-        body.locals = glyim_core::IndexVec::from_raw(vec![LocalDecl {
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1, block2]);
+        body.locals = glyim_core::IndexVec::from_vec(vec![LocalDecl {
             ty: ut,
             mutability: Mutability::Not,
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -237,11 +237,11 @@ fn cycle_all_reachable() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-        body.locals = glyim_core::IndexVec::from_raw(vec![LocalDecl {
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+        body.locals = glyim_core::IndexVec::from_vec(vec![LocalDecl {
             ty: ut,
             mutability: Mutability::Not,
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
