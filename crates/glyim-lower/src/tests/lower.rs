@@ -36,7 +36,7 @@ use glyim_typeck::thir::{self, LocalVarId};
 
 fn dummy_thir() -> thir::Body {
     thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         span: Span::DUMMY,
         return_ty: Ty::UNIT,
         params: vec![],
@@ -52,7 +52,7 @@ fn s15_t01_lower_empty_function() {
 
     let _ = assert_mir(&ctx, &result.body)
         .block_count(1)
-        .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "Return");
+        .block_terminator(glyim_mir::BasicBlockIdx::from_usize(0), "Return");
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn s15_t02_lower_params() {
             ty: Ty::BOOL,
             span: Span::DUMMY,
         },
-        local: thir::LocalVarId::from_raw(0),
+        local: thir::LocalVarId::from_usize(0),
     });
 
     let result = lower_body(&lower_ctx, &thir);
@@ -102,7 +102,7 @@ fn s15_t03_lower_let_binding() {
 
     let result = lower_body(&lower_ctx, &thir);
     let _ = assert_mir(&ctx, &result.body)
-        .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "Return");
+        .block_terminator(glyim_mir::BasicBlockIdx::from_usize(0), "Return");
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn s15_t04_lower_return() {
 
     let result = lower_body(&lower_ctx, &thir);
     let _ = assert_mir(&ctx, &result.body)
-        .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "Return");
+        .block_terminator(glyim_mir::BasicBlockIdx::from_usize(0), "Return");
 }
 
 #[test]
@@ -158,7 +158,7 @@ fn s15_t05_lower_binary_op() {
 
     let result = lower_body(&lower_ctx, &thir);
     let _ = assert_mir(&ctx, &result.body)
-        .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "Return");
+        .block_terminator(glyim_mir::BasicBlockIdx::from_usize(0), "Return");
 }
 
 #[test]
@@ -192,7 +192,7 @@ fn s15_t06_lower_if_else() {
 
     let result = lower_body(&lower_ctx, &thir);
     let _ = assert_mir(&ctx, &result.body)
-        .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "SwitchInt");
+        .block_terminator(glyim_mir::BasicBlockIdx::from_usize(0), "SwitchInt");
 }
 
 #[test]
@@ -202,7 +202,7 @@ fn s15_t07_lower_function_call() {
     let mut thir = dummy_thir();
 
     let func = thir::Expr {
-        kind: thir::ExprKind::FnRef(FnDefId::from_raw(0)),
+        kind: thir::ExprKind::FnRef(FnDefId::from_usize(0)),
         ty: Ty::ERROR,
         span: Span::DUMMY,
     };
@@ -220,7 +220,7 @@ fn s15_t07_lower_function_call() {
 
     let result = lower_body(&lower_ctx, &thir);
     let _ = assert_mir(&ctx, &result.body)
-        .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "Call");
+        .block_terminator(glyim_mir::BasicBlockIdx::from_usize(0), "Call");
 }
 
 #[test]
@@ -230,7 +230,7 @@ fn s15_t08_lower_reference() {
     let mut thir = dummy_thir();
 
     let var_ref = thir::Expr {
-        kind: thir::ExprKind::VarRef(LocalVarId::from_raw(1)),
+        kind: thir::ExprKind::VarRef(LocalVarId::from_usize(1)),
         ty: Ty::BOOL,
         span: Span::DUMMY,
     };
@@ -257,7 +257,7 @@ fn s15_t09_lower_assign() {
     let mut thir = dummy_thir();
 
     let lhs = thir::Expr {
-        kind: thir::ExprKind::VarRef(LocalVarId::from_raw(1)),
+        kind: thir::ExprKind::VarRef(LocalVarId::from_usize(1)),
         ty: Ty::BOOL,
         span: Span::DUMMY,
     };
@@ -276,7 +276,7 @@ fn s15_t09_lower_assign() {
     let result = lower_body(&lower_ctx, &thir);
     let _ = assert_mir(&ctx, &result.body).block_count(1);
 
-    let block = &result.body.basic_blocks[glyim_mir::BasicBlockIdx::from_raw(0)];
+    let block = &result.body.basic_blocks[glyim_mir::BasicBlockIdx::from_usize(0)];
     assert_eq!(block.statements.len(), 1);
     assert!(matches!(
         block.statements[0].kind,
