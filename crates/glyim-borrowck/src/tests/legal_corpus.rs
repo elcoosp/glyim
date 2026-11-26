@@ -73,7 +73,7 @@ fn drop_term(place: LocalIdx, target: u32) -> Terminator {
     Terminator {
         kind: TerminatorKind::Drop {
             place: Place::new(place),
-            target: BasicBlockIdx::from_raw(target),
+            target: BasicBlockIdx::from_usize(target as usize),
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -110,8 +110,8 @@ fn drop_after_move_is_accepted() {
     // destructor, but the *shape* is what a needs-drop local produces).
     let blocks = vec![
         BasicBlockData {
-            statements: vec![move_stmt(LocalIdx::from_raw(1), LocalIdx::from_raw(2))],
-            terminator: drop_term(LocalIdx::from_raw(2), 1),
+            statements: vec![move_stmt(LocalIdx::from_usize(1), LocalIdx::from_usize(2))],
+            terminator: drop_term(LocalIdx::from_usize(2), 1),
             is_cleanup: false,
         },
         BasicBlockData {
@@ -121,9 +121,9 @@ fn drop_after_move_is_accepted() {
         },
     ];
     let body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
-        basic_blocks: IndexVec::from_raw(blocks),
-        locals: IndexVec::from_raw(vec![decl(ty), decl(ty), decl(ty)]),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
+        basic_blocks: IndexVec::from_vec(blocks),
+        locals: IndexVec::from_vec(vec![decl(ty), decl(ty), decl(ty)]),
         arg_count: 0,
         return_ty: Ty::UNIT,
         span: Span::DUMMY,
@@ -140,16 +140,16 @@ fn move_one_local_read_another_is_accepted() {
 
     let blocks = vec![BasicBlockData {
         statements: vec![
-            move_stmt(LocalIdx::from_raw(0), LocalIdx::from_raw(2)),
-            copy_stmt(LocalIdx::from_raw(1), LocalIdx::from_raw(3)),
+            move_stmt(LocalIdx::from_usize(0), LocalIdx::from_usize(2)),
+            copy_stmt(LocalIdx::from_usize(1), LocalIdx::from_usize(3)),
         ],
         terminator: ret_term(),
         is_cleanup: false,
     }];
     let body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
-        basic_blocks: IndexVec::from_raw(blocks),
-        locals: IndexVec::from_raw(vec![decl(ty); 4]),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
+        basic_blocks: IndexVec::from_vec(blocks),
+        locals: IndexVec::from_vec(vec![decl(ty); 4]),
         arg_count: 0,
         return_ty: Ty::UNIT,
         span: Span::DUMMY,
@@ -168,13 +168,13 @@ fn sequential_borrows_of_same_place_are_accepted() {
     let blocks = vec![BasicBlockData {
         statements: vec![
             assign(
-                LocalIdx::from_raw(1),
-                Rvalue::Ref(Place::new(LocalIdx::from_raw(0)), BorrowKind::Shared),
+                LocalIdx::from_usize(1),
+                Rvalue::Ref(Place::new(LocalIdx::from_usize(0)), BorrowKind::Shared),
             ),
             assign(
-                LocalIdx::from_raw(2),
+                LocalIdx::from_usize(2),
                 Rvalue::Ref(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
@@ -185,9 +185,9 @@ fn sequential_borrows_of_same_place_are_accepted() {
         is_cleanup: false,
     }];
     let body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
-        basic_blocks: IndexVec::from_raw(blocks),
-        locals: IndexVec::from_raw(vec![decl(ty); 3]),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
+        basic_blocks: IndexVec::from_vec(blocks),
+        locals: IndexVec::from_vec(vec![decl(ty); 3]),
         arg_count: 0,
         return_ty: Ty::UNIT,
         span: Span::DUMMY,
@@ -205,21 +205,21 @@ fn two_shared_borrows_are_accepted() {
     let blocks = vec![BasicBlockData {
         statements: vec![
             assign(
-                LocalIdx::from_raw(1),
-                Rvalue::Ref(Place::new(LocalIdx::from_raw(0)), BorrowKind::Shared),
+                LocalIdx::from_usize(1),
+                Rvalue::Ref(Place::new(LocalIdx::from_usize(0)), BorrowKind::Shared),
             ),
             assign(
-                LocalIdx::from_raw(2),
-                Rvalue::Ref(Place::new(LocalIdx::from_raw(0)), BorrowKind::Shared),
+                LocalIdx::from_usize(2),
+                Rvalue::Ref(Place::new(LocalIdx::from_usize(0)), BorrowKind::Shared),
             ),
         ],
         terminator: ret_term(),
         is_cleanup: false,
     }];
     let body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
-        basic_blocks: IndexVec::from_raw(blocks),
-        locals: IndexVec::from_raw(vec![decl(ty); 3]),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
+        basic_blocks: IndexVec::from_vec(blocks),
+        locals: IndexVec::from_vec(vec![decl(ty); 3]),
         arg_count: 0,
         return_ty: Ty::UNIT,
         span: Span::DUMMY,
