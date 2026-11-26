@@ -8,7 +8,7 @@ fn trait_predicate_positive() {
     let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![GenericArg::Ty(c.bool_ty())]);
         let trait_ref = TraitRef {
-            def_id: glyim_core::def_id::TraitDefId::from_raw(1),
+            def_id: glyim_core::def_id::TraitDefId::from_usize(1),
             substs,
         };
         let pred = TraitPredicate {
@@ -25,7 +25,7 @@ fn trait_predicate_negative() {
     let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![]);
         let trait_ref = TraitRef {
-            def_id: glyim_core::def_id::TraitDefId::from_raw(2),
+            def_id: glyim_core::def_id::TraitDefId::from_usize(2),
             substs,
         };
         let pred = TraitPredicate {
@@ -42,7 +42,7 @@ fn predicate_trait_variant() {
     let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![]);
         let trait_ref = TraitRef {
-            def_id: glyim_core::def_id::TraitDefId::from_raw(1),
+            def_id: glyim_core::def_id::TraitDefId::from_usize(1),
             substs,
         };
         let pred = Predicate::Trait(TraitPredicate {
@@ -110,7 +110,7 @@ fn trait_ref_debug() {
     let (ctx, ()) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![GenericArg::Ty(c.bool_ty())]);
         let tr = TraitRef {
-            def_id: glyim_core::def_id::TraitDefId::from_raw(42),
+            def_id: glyim_core::def_id::TraitDefId::from_usize(42),
             substs,
         };
         let debug = format!("{tr:?}");
