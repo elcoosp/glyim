@@ -492,10 +492,14 @@ pub fn count_unsafe_items(source: &str) -> usize {
 
 /// Count `from_raw(` call sites outside comments and test regions. Only
 /// the exact name matches — `from_raw_parts` is a different API and is not
-/// a CT-1 codemod site.
+/// a CT-1 codemod site, and neither are the std smart-pointer reclamation
+/// constructors `Arc::from_raw` / `Rc::from_raw` / `Box::from_raw` /
+/// `Weak::from_raw` (plan M3.1 / CT-1 targets compiler *ID* constructors;
+/// the std APIs take raw pointers, not slot indices).
 #[must_use]
 pub fn count_from_raw_calls(source: &str) -> usize {
     let code = strip_line_comments(&strip_test_regions(source));
+    const STD_RECLAMATION: [&str; 4] = ["Arc::", "Rc::", "Box::", "Weak::"];
     let mut count = 0;
     let mut start = 0;
     while let Some(pos) = code[start..].find("from_raw") {
@@ -507,7 +511,8 @@ pub fn count_from_raw_calls(source: &str) -> usize {
                 .next_back()
                 .is_some_and(|c| c.is_alphanumeric() || c == '_');
         let call = code[end..].trim_start().starts_with('(');
-        if before_ok && call {
+        let std_api = before_ok && STD_RECLAMATION.iter().any(|q| code[..abs].ends_with(q));
+        if before_ok && call && !std_api {
             count += 1;
         }
         start = end;
@@ -1115,9 +1120,15 @@ mod tests {
             "let q = Vec::from_raw_parts(p, 1, 1);\n",
             "fn from_raw_elsewhere() {}\n",
             "let r = from_raw(ptr2);\n",
+            "let a = unsafe { Arc::from_raw(p) };\n",
+            "let c = unsafe { Rc::from_raw(p) };\n",
+            "let w = unsafe { Weak::from_raw(p) };\n",
             "// doc: Box::from_raw is dangerous\n",
         );
-        assert_eq!(count_from_raw_calls(src), 2);
+        // Only the bare compiler-ID constructor counts: the std
+        // smart-pointer reclamation APIs and suffixed names are not CT-1
+        // codemod sites (plan M3.1).
+        assert_eq!(count_from_raw_calls(src), 1);
     }
 
     // ------------------------------------------------------------------
