@@ -385,7 +385,7 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
 
     let mut preds = vec![Vec::new(); num_blocks];
     for i in 0..num_blocks {
-        let bb = BasicBlockIdx::from_raw(i as u32);
+        let bb = BasicBlockIdx::from_usize(i);
         let block = &body.basic_blocks[bb];
         for succ in super::cfg_simplify::terminator_successors(&block.terminator) {
             let succ_idx = succ.to_raw() as usize;
@@ -422,7 +422,7 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
 
             let mut out = incoming.clone();
             entry_maps[bb_idx] = Some(incoming.clone());
-            let block = &body.basic_blocks[BasicBlockIdx::from_raw(bb_idx as u32)];
+            let block = &body.basic_blocks[BasicBlockIdx::from_usize(bb_idx)];
             // Locals *defined* (assigned) in this block. A local defined with a
             // non-constant rvalue must be recorded as `None` (wild) in `out`,
             // NOT left absent. "Absent" means "this block does not define the
@@ -499,7 +499,7 @@ pub(crate) fn run(ctx: &TyCtx, body: &mut Body) {
         let Some(entry) = entry_map.clone() else {
             continue;
         };
-        let block = &mut body.basic_blocks[BasicBlockIdx::from_raw(bb_idx as u32)];
+        let block = &mut body.basic_blocks[BasicBlockIdx::from_usize(bb_idx)];
         // Simulate the block from its *entry* state, updating the map after
         // each assignment with the same transfer the fixpoint used. Applying a
         // single (exit) map to every statement would fold `_2 = move _1` to
@@ -600,7 +600,7 @@ mod tests {
                     span: Span::DUMMY,
                 }),
                 // A place that is not in the constant map → blocks folding.
-                Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+                Operand::Copy(Place::new(LocalIdx::from_usize(0))),
             ],
         );
         let result = evaluate_rvalue_to_const(&rv, &HashMap::new(), &ctx, int_ty);
