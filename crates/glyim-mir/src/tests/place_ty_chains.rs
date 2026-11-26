@@ -34,11 +34,11 @@ fn test_nested_ref_field_access() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
+        local: LocalIdx::from_usize(0),
         projection: Box::new([
             ProjectionElem::Deref,
             ProjectionElem::Deref,
-            ProjectionElem::Field(FieldIdx::from_raw(0)),
+            ProjectionElem::Field(FieldIdx::from_usize(0)),
         ]),
     };
 
@@ -70,9 +70,9 @@ fn test_array_of_refs() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
+        local: LocalIdx::from_usize(0),
         projection: Box::new([
-            ProjectionElem::Index(LocalIdx::from_raw(1)),
+            ProjectionElem::Index(LocalIdx::from_usize(1)),
             ProjectionElem::Deref,
         ]),
     };
@@ -101,9 +101,9 @@ fn test_slice_of_refs() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
+        local: LocalIdx::from_usize(0),
         projection: Box::new([
-            ProjectionElem::Index(LocalIdx::from_raw(1)),
+            ProjectionElem::Index(LocalIdx::from_usize(1)),
             ProjectionElem::Deref,
         ]),
     };
@@ -133,10 +133,10 @@ fn test_tuple_of_arrays() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
+        local: LocalIdx::from_usize(0),
         projection: Box::new([
-            ProjectionElem::Field(FieldIdx::from_raw(0)),
-            ProjectionElem::Index(LocalIdx::from_raw(1)),
+            ProjectionElem::Field(FieldIdx::from_usize(0)),
+            ProjectionElem::Index(LocalIdx::from_usize(1)),
         ]),
     };
 
