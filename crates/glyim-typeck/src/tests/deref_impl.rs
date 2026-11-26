@@ -28,21 +28,17 @@ fn build_def_map(interner: &mut Interner, krate: CrateId, type_names: &[&str]) -
         let name = interner.intern(name_str);
         scope.types.insert(
             name,
-            (
-                LocalDefId::from_raw(i as u32),
-                Visibility::Public,
-                Span::DUMMY,
-            ),
+            (LocalDefId::from_usize(i), Visibility::Public, Span::DUMMY),
         );
     }
-    let root_id = ModuleId::from_raw(0);
+    let root_id = ModuleId::from_usize(0);
     let root_data = ModuleData {
         parent: None,
         children: vec![],
         scope,
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(0),
+        def_id: LocalDefId::from_usize(0),
         visibility: Visibility::Public,
     };
     let mut modules = IndexVec::new();
@@ -88,7 +84,7 @@ fn impl_deref_for_adt_populates_registry() {
 
     let mut items = IndexVec::new();
     items.push(Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: wrapper_name,
         kind: ItemKind::Impl(impl_item),
         visibility: Visibility::Inherited,
@@ -103,7 +99,7 @@ fn impl_deref_for_adt_populates_registry() {
     };
 
     // `Wrapper` must resolve to a registered ADT self type (def-map local id 0).
-    let def_map = build_def_map(&mut interner, CrateId::from_raw(0), &["Wrapper"]);
+    let def_map = build_def_map(&mut interner, CrateId::from_usize(0), &["Wrapper"]);
 
     let ctx: TyCtxMut = TyCtxMut::new(interner);
     let trait_ctx = glyim_solve::TraitContext::new();
@@ -111,7 +107,7 @@ fn impl_deref_for_adt_populates_registry() {
     let (frozen, result): (TyCtx, TypeckResult) = typeck_crate(ctx, &def_map, &hir, &mut solver);
 
     // The registry must contain a template keyed by the `Wrapper` AdtId (0).
-    let wrapper_id = AdtId::from_raw(0);
+    let wrapper_id = AdtId::from_usize(0);
     let target_ty = frozen
         .deref_registry_target_for(wrapper_id)
         .expect("impl Deref for Wrapper must populate the deref registry");
