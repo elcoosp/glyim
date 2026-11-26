@@ -22,7 +22,7 @@ fn closure_lowers_to_aggregate() {
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
 
     // Construct a closure type: Closure(0, [])
-    let closure_id = ClosureId::from_raw(0);
+    let closure_id = ClosureId::from_usize(0);
     let closure_substs = ctx_mut.intern_substitution(vec![]);
     let closure_ty = ctx_mut.mk_ty(TyKind::Closure(closure_id, closure_substs));
 
@@ -32,7 +32,7 @@ fn closure_lowers_to_aggregate() {
 
     let b = ThirBuilder::new(closure_ty, interner);
     let closure_body = thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1)),
         params: vec![],
         return_ty: i32_ty,
         stmts: vec![],
@@ -81,7 +81,7 @@ fn closure_with_by_ref_capture() {
     let ref_i32_ty = ctx_mut.mk_ref(Region::Erased, i32_ty, Mutability::Not);
 
     // Closure type
-    let closure_id = ClosureId::from_raw(1);
+    let closure_id = ClosureId::from_usize(1);
     let closure_substs = ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let closure_ty = ctx_mut.mk_ty(TyKind::Closure(closure_id, closure_substs));
 
@@ -104,7 +104,7 @@ fn closure_with_by_ref_capture() {
     let x_name = interner.intern("x");
     let x_var_id = *b.var_names.get(&x_name).expect("x should be in var_names");
     let closure_body = thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1)),
         params: vec![],
         return_ty: i32_ty,
         stmts: vec![],
@@ -162,7 +162,7 @@ fn closure_with_by_value_capture() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
 
-    let closure_id = ClosureId::from_raw(2);
+    let closure_id = ClosureId::from_usize(2);
     let closure_substs = ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let closure_ty = ctx_mut.mk_ty(TyKind::Closure(closure_id, closure_substs));
 
@@ -183,7 +183,7 @@ fn closure_with_by_value_capture() {
     let x_name = interner.intern("x");
     let x_var_id = *b.var_names.get(&x_name).expect("x should be in var_names");
     let closure_body = thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1)),
         params: vec![],
         return_ty: i32_ty,
         stmts: vec![],
@@ -240,7 +240,7 @@ fn closure_with_multiple_captures() {
     let bool_ty = ctx_mut.bool_ty();
     let ref_bool_ty = ctx_mut.mk_ref(Region::Erased, bool_ty, Mutability::Not);
 
-    let closure_id = ClosureId::from_raw(3);
+    let closure_id = ClosureId::from_usize(3);
     let closure_substs =
         ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty), GenericArg::Ty(bool_ty)]);
     let closure_ty = ctx_mut.mk_ty(TyKind::Closure(closure_id, closure_substs));
@@ -271,7 +271,7 @@ fn closure_with_multiple_captures() {
     let y_var_id = *b.var_names.get(&y_name).expect("y should be in var_names");
 
     let closure_body = thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1)),
         params: vec![],
         return_ty: i32_ty,
         stmts: vec![],
@@ -340,7 +340,7 @@ fn closure_by_ref_capture_operand_uses_real_local() {
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
     let ref_i32_ty = ctx_mut.mk_ref(Region::Erased, i32_ty, Mutability::Not);
 
-    let closure_id = ClosureId::from_raw(9);
+    let closure_id = ClosureId::from_usize(9);
     let closure_substs = ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let closure_ty = ctx_mut.mk_ty(TyKind::Closure(closure_id, closure_substs));
 
@@ -360,7 +360,7 @@ fn closure_by_ref_capture_operand_uses_real_local() {
     let x_var_id = *b.var_names.get(&x_name).expect("x should be in var_names");
 
     let closure_body = thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1)),
         params: vec![],
         return_ty: i32_ty,
         stmts: vec![],
@@ -402,7 +402,7 @@ fn closure_by_ref_capture_operand_uses_real_local() {
     let local = capture_local.expect("closure aggregate with one Copy operand");
     assert_ne!(
         local,
-        glyim_mir::LocalIdx::from_raw(0),
+        glyim_mir::LocalIdx::from_usize(0),
         "ByRef capture must not reference the return place (LocalIdx(0))"
     );
 }
