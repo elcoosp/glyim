@@ -61,7 +61,7 @@ fn trivial_constant_returns_42() {
         vec![BasicBlockData {
             statements: vec![Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(const_int(42, i32_ty)),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -97,21 +97,21 @@ fn const_prop_does_not_use_stale_value() {
         statements: vec![
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(const_int(10, i32_ty)),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
-                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(1)))),
+                    Place::new(LocalIdx::from_usize(0)),
+                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(1)))),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(const_int(20, i32_ty)),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -142,22 +142,22 @@ fn dce_preserves_observed_value() {
         statements: vec![
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(const_int(7, i32_ty)),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::Use(const_int(999, i32_ty)),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
-                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(1)))),
+                    Place::new(LocalIdx::from_usize(0)),
+                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(1)))),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
@@ -187,22 +187,22 @@ fn dce_removes_unused_assignment_still_preserves() {
         statements: vec![
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::Use(const_int(999, i32_ty)),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(const_int(7, i32_ty)),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
-                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(1)))),
+                    Place::new(LocalIdx::from_usize(0)),
+                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(1)))),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
