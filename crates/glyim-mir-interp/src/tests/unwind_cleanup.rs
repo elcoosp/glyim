@@ -9,7 +9,7 @@ use glyim_test::test_ty_ctx;
 use glyim_type::{Ty, TyCtxMut, TyKind};
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 /// Build a body whose single "real" block panics via a failing `Assert` that
@@ -21,7 +21,7 @@ fn dummy_def_id() -> DefId {
 fn build_unwinding_body(tcx: &mut TyCtxMut) -> Body {
     let i32_ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![
+    body.locals = IndexVec::from_vec(vec![
         LocalDecl {
             ty: Ty::UNIT,
             mutability: Mutability::Mut,
@@ -33,8 +33,7 @@ fn build_unwinding_body(tcx: &mut TyCtxMut) -> Body {
             source_info: SourceInfo::new(Span::DUMMY),
         },
     ]);
-    body.basic_blocks = IndexVec::from_raw(vec![
-        // BB0: the main block — a failing assert with a cleanup edge.
+    body.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![],
             terminator: Terminator {
@@ -45,19 +44,18 @@ fn build_unwinding_body(tcx: &mut TyCtxMut) -> Body {
                         span: Span::DUMMY,
                     }),
                     expected: true,
-                    target: BasicBlockIdx::from_raw(2),
-                    cleanup: Some(BasicBlockIdx::from_raw(1)),
+                    target: BasicBlockIdx::from_usize(2),
+                    cleanup: Some(BasicBlockIdx::from_usize(1)),
                     msg: AssertMessage::BoundsCheck,
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
             },
             is_cleanup: false,
         },
-        // BB1: cleanup block — record that cleanup ran, then Goto return.
         BasicBlockData {
             statements: vec![Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(42),
                         ty: i32_ty,
@@ -68,13 +66,12 @@ fn build_unwinding_body(tcx: &mut TyCtxMut) -> Body {
             }],
             terminator: Terminator {
                 kind: TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(2),
+                    target: BasicBlockIdx::from_usize(2),
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
             },
             is_cleanup: true,
         },
-        // BB2: normal return (reached only via cleanup when unwinding).
         BasicBlockData {
             statements: vec![],
             terminator: Terminator {
@@ -112,7 +109,7 @@ fn panic_runs_cleanup_block_when_unwinding() {
         .run_body(&body)
         .expect("with unwinding, the cleanup block must absorb the panic");
     let ran = interp
-        .get_local_value(LocalIdx::from_raw(1))
+        .get_local_value(LocalIdx::from_usize(1))
         .expect("tracking local must be set");
     assert_eq!(
         ran,
@@ -123,7 +120,7 @@ fn panic_runs_cleanup_block_when_unwinding() {
 
 /// Nested-def-id helper so three functions can call each other.
 fn def_id(raw: u32) -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(raw))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(raw as usize))
 }
 
 /// Plan §7.2: a panic in a deeply-nested call must unwind through EVERY
@@ -141,12 +138,12 @@ fn nested_panic_unwinds_through_all_caller_frames() {
     // `inner` (def 2): panics immediately (block has no cleanup edge).
     let inner = {
         let mut b = Body::dummy(def_id(2));
-        b.locals = IndexVec::from_raw(vec![LocalDecl {
+        b.locals = IndexVec::from_vec(vec![LocalDecl {
             ty: Ty::UNIT,
             mutability: Mutability::Mut,
             source_info: SourceInfo::new(Span::DUMMY),
         }]);
-        b.basic_blocks = IndexVec::from_raw(vec![
+        b.basic_blocks = IndexVec::from_vec(vec![
             BasicBlockData {
                 statements: vec![],
                 terminator: Terminator {
@@ -157,7 +154,7 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                             span: Span::DUMMY,
                         }),
                         expected: true,
-                        target: BasicBlockIdx::from_raw(1),
+                        target: BasicBlockIdx::from_usize(1),
                         cleanup: None,
                         msg: AssertMessage::BoundsCheck,
                     },
@@ -181,7 +178,7 @@ fn nested_panic_unwinds_through_all_caller_frames() {
     // then re-panics so the walk continues to `outer`.
     let middle = {
         let mut b = Body::dummy(def_id(1));
-        b.locals = IndexVec::from_raw(vec![
+        b.locals = IndexVec::from_vec(vec![
             LocalDecl {
                 ty: Ty::UNIT,
                 mutability: Mutability::Mut,
@@ -193,34 +190,32 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                 source_info: SourceInfo::new(Span::DUMMY),
             },
         ]);
-        b.basic_blocks = IndexVec::from_raw(vec![
-            // BB0: call inner, resume at BB2, unwind at BB1.
+        b.basic_blocks = IndexVec::from_vec(vec![
             BasicBlockData {
                 statements: vec![],
                 terminator: Terminator {
                     kind: TerminatorKind::Call {
                         func: Operand::Constant(MirConst {
                             kind: MirConstKind::Fn(
-                                FnDefId::from_raw(2),
+                                FnDefId::from_usize(2),
                                 glyim_type::Substitution::empty(),
                             ),
                             ty: Ty::UNIT,
                             span: Span::DUMMY,
                         }),
                         args: vec![],
-                        destination: Place::new(LocalIdx::from_raw(0)),
-                        target: Some(BasicBlockIdx::from_raw(2)),
-                        cleanup: Some(BasicBlockIdx::from_raw(1)),
+                        destination: Place::new(LocalIdx::from_usize(0)),
+                        target: Some(BasicBlockIdx::from_usize(2)),
+                        cleanup: Some(BasicBlockIdx::from_usize(1)),
                     },
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
                 is_cleanup: false,
             },
-            // BB1: middle's cleanup — record sentinel 7, then re-panic.
             BasicBlockData {
                 statements: vec![Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(1)),
+                        Place::new(LocalIdx::from_usize(1)),
                         Rvalue::Use(Operand::Constant(MirConst {
                             kind: MirConstKind::Int(7),
                             ty: i32_ty,
@@ -231,13 +226,12 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                 }],
                 terminator: Terminator {
                     kind: TerminatorKind::Goto {
-                        target: BasicBlockIdx::from_raw(3),
+                        target: BasicBlockIdx::from_usize(3),
                     },
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
                 is_cleanup: true,
             },
-            // BB2: normal return after the (never-completed) call.
             BasicBlockData {
                 statements: vec![],
                 terminator: Terminator {
@@ -246,7 +240,6 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                 },
                 is_cleanup: false,
             },
-            // BB3: re-panic in middle's frame (no cleanup) so unwinding pops to outer.
             BasicBlockData {
                 statements: vec![],
                 terminator: Terminator {
@@ -257,7 +250,7 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                             span: Span::DUMMY,
                         }),
                         expected: true,
-                        target: BasicBlockIdx::from_raw(4),
+                        target: BasicBlockIdx::from_usize(4),
                         cleanup: None,
                         msg: AssertMessage::BoundsCheck,
                     },
@@ -265,7 +258,6 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                 },
                 is_cleanup: false,
             },
-            // BB4: unreachable return.
             BasicBlockData {
                 statements: vec![],
                 terminator: Terminator {
@@ -282,7 +274,7 @@ fn nested_panic_unwinds_through_all_caller_frames() {
     // then re-panics; with no caller frame the interpreter returns `Unwind`.
     let outer = {
         let mut b = Body::dummy(def_id(0));
-        b.locals = IndexVec::from_raw(vec![
+        b.locals = IndexVec::from_vec(vec![
             LocalDecl {
                 ty: Ty::UNIT,
                 mutability: Mutability::Mut,
@@ -294,33 +286,32 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                 source_info: SourceInfo::new(Span::DUMMY),
             },
         ]);
-        b.basic_blocks = IndexVec::from_raw(vec![
+        b.basic_blocks = IndexVec::from_vec(vec![
             BasicBlockData {
                 statements: vec![],
                 terminator: Terminator {
                     kind: TerminatorKind::Call {
                         func: Operand::Constant(MirConst {
                             kind: MirConstKind::Fn(
-                                FnDefId::from_raw(1),
+                                FnDefId::from_usize(1),
                                 glyim_type::Substitution::empty(),
                             ),
                             ty: Ty::UNIT,
                             span: Span::DUMMY,
                         }),
                         args: vec![],
-                        destination: Place::new(LocalIdx::from_raw(0)),
-                        target: Some(BasicBlockIdx::from_raw(2)),
-                        cleanup: Some(BasicBlockIdx::from_raw(1)),
+                        destination: Place::new(LocalIdx::from_usize(0)),
+                        target: Some(BasicBlockIdx::from_usize(2)),
+                        cleanup: Some(BasicBlockIdx::from_usize(1)),
                     },
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
                 is_cleanup: false,
             },
-            // BB1: outer's cleanup — record sentinel 99, then re-panic.
             BasicBlockData {
                 statements: vec![Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(1)),
+                        Place::new(LocalIdx::from_usize(1)),
                         Rvalue::Use(Operand::Constant(MirConst {
                             kind: MirConstKind::Int(99),
                             ty: i32_ty,
@@ -331,7 +322,7 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                 }],
                 terminator: Terminator {
                     kind: TerminatorKind::Goto {
-                        target: BasicBlockIdx::from_raw(3),
+                        target: BasicBlockIdx::from_usize(3),
                     },
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
@@ -345,7 +336,6 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                 },
                 is_cleanup: false,
             },
-            // BB3: re-panic in outer's frame; with no caller this returns `Unwind`.
             BasicBlockData {
                 statements: vec![],
                 terminator: Terminator {
@@ -356,7 +346,7 @@ fn nested_panic_unwinds_through_all_caller_frames() {
                             span: Span::DUMMY,
                         }),
                         expected: true,
-                        target: BasicBlockIdx::from_raw(4),
+                        target: BasicBlockIdx::from_usize(4),
                         cleanup: None,
                         msg: AssertMessage::BoundsCheck,
                     },
@@ -391,7 +381,7 @@ fn nested_panic_unwinds_through_all_caller_frames() {
     // Outer's cleanup block must have run (proving the unwind walked through
     // the middle frame to the outer frame, not just aborted in the innermost).
     let outer_sentinel = interp
-        .get_local_value(LocalIdx::from_raw(1))
+        .get_local_value(LocalIdx::from_usize(1))
         .expect("outer tracking local must be set");
     assert_eq!(
         outer_sentinel,
@@ -410,7 +400,7 @@ fn build_no_cleanup_chain(depth: usize, tcx_mut: &mut TyCtxMut) -> Vec<(DefId, B
     for i in 0..depth {
         let is_bottom = i == depth - 1;
         let mut b = Body::dummy(def_id(i as u32));
-        b.locals = IndexVec::from_raw(vec![LocalDecl {
+        b.locals = IndexVec::from_vec(vec![LocalDecl {
             ty: Ty::UNIT,
             mutability: Mutability::Mut,
             source_info: SourceInfo::new(Span::DUMMY),
@@ -423,7 +413,7 @@ fn build_no_cleanup_chain(depth: usize, tcx_mut: &mut TyCtxMut) -> Vec<(DefId, B
                     span: Span::DUMMY,
                 }),
                 expected: true,
-                target: BasicBlockIdx::from_raw(1),
+                target: BasicBlockIdx::from_usize(1),
                 cleanup: None,
                 msg: AssertMessage::BoundsCheck,
             }
@@ -431,19 +421,19 @@ fn build_no_cleanup_chain(depth: usize, tcx_mut: &mut TyCtxMut) -> Vec<(DefId, B
             TerminatorKind::Call {
                 func: Operand::Constant(MirConst {
                     kind: MirConstKind::Fn(
-                        FnDefId::from_raw((i as u32) + 1),
+                        FnDefId::from_usize(i + 1),
                         glyim_type::Substitution::empty(),
                     ),
                     ty: Ty::UNIT,
                     span: Span::DUMMY,
                 }),
                 args: vec![],
-                destination: Place::new(LocalIdx::from_raw(0)),
-                target: Some(BasicBlockIdx::from_raw(1)),
+                destination: Place::new(LocalIdx::from_usize(0)),
+                target: Some(BasicBlockIdx::from_usize(1)),
                 cleanup: None,
             }
         };
-        b.basic_blocks = IndexVec::from_raw(vec![
+        b.basic_blocks = IndexVec::from_vec(vec![
             BasicBlockData {
                 statements: vec![],
                 terminator: Terminator {
@@ -500,12 +490,12 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
     // `h` (def 2, bottom): panics, no cleanup.
     let h = {
         let mut b = Body::dummy(def_id(2));
-        b.locals = IndexVec::from_raw(vec![LocalDecl {
+        b.locals = IndexVec::from_vec(vec![LocalDecl {
             ty: Ty::UNIT,
             mutability: Mutability::Mut,
             source_info: SourceInfo::new(Span::DUMMY),
         }]);
-        b.basic_blocks = IndexVec::from_raw(vec![
+        b.basic_blocks = IndexVec::from_vec(vec![
             BasicBlockData {
                 statements: vec![],
                 terminator: Terminator {
@@ -516,7 +506,7 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
                             span: Span::DUMMY,
                         }),
                         expected: true,
-                        target: BasicBlockIdx::from_raw(1),
+                        target: BasicBlockIdx::from_usize(1),
                         cleanup: None,
                         msg: AssertMessage::BoundsCheck,
                     },
@@ -541,7 +531,7 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
     // because `g`'s call to `h` had no cleanup — the unwind walks past it.
     let g = {
         let mut b = Body::dummy(def_id(1));
-        b.locals = IndexVec::from_raw(vec![
+        b.locals = IndexVec::from_vec(vec![
             LocalDecl {
                 ty: Ty::UNIT,
                 mutability: Mutability::Mut,
@@ -553,22 +543,22 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
                 source_info: SourceInfo::new(Span::DUMMY),
             },
         ]);
-        b.basic_blocks = IndexVec::from_raw(vec![
+        b.basic_blocks = IndexVec::from_vec(vec![
             BasicBlockData {
                 statements: vec![],
                 terminator: Terminator {
                     kind: TerminatorKind::Call {
                         func: Operand::Constant(MirConst {
                             kind: MirConstKind::Fn(
-                                FnDefId::from_raw(2),
+                                FnDefId::from_usize(2),
                                 glyim_type::Substitution::empty(),
                             ),
                             ty: Ty::UNIT,
                             span: Span::DUMMY,
                         }),
                         args: vec![],
-                        destination: Place::new(LocalIdx::from_raw(0)),
-                        target: Some(BasicBlockIdx::from_raw(2)),
+                        destination: Place::new(LocalIdx::from_usize(0)),
+                        target: Some(BasicBlockIdx::from_usize(2)),
                         cleanup: None,
                     },
                     source_info: SourceInfo::new(Span::DUMMY),
@@ -578,7 +568,7 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
             BasicBlockData {
                 statements: vec![Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(1)),
+                        Place::new(LocalIdx::from_usize(1)),
                         Rvalue::Use(Operand::Constant(MirConst {
                             kind: MirConstKind::Int(7),
                             ty: i32_ty,
@@ -589,7 +579,7 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
                 }],
                 terminator: Terminator {
                     kind: TerminatorKind::Goto {
-                        target: BasicBlockIdx::from_raw(3),
+                        target: BasicBlockIdx::from_usize(3),
                     },
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
@@ -613,7 +603,7 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
                             span: Span::DUMMY,
                         }),
                         expected: true,
-                        target: BasicBlockIdx::from_raw(4),
+                        target: BasicBlockIdx::from_usize(4),
                         cleanup: None,
                         msg: AssertMessage::BoundsCheck,
                     },
@@ -636,7 +626,7 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
     // `f` (def 0, outer): calls `g` WITH a cleanup edge (BB1, sentinel 99).
     let f = {
         let mut b = Body::dummy(def_id(0));
-        b.locals = IndexVec::from_raw(vec![
+        b.locals = IndexVec::from_vec(vec![
             LocalDecl {
                 ty: Ty::UNIT,
                 mutability: Mutability::Mut,
@@ -648,23 +638,23 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
                 source_info: SourceInfo::new(Span::DUMMY),
             },
         ]);
-        b.basic_blocks = IndexVec::from_raw(vec![
+        b.basic_blocks = IndexVec::from_vec(vec![
             BasicBlockData {
                 statements: vec![],
                 terminator: Terminator {
                     kind: TerminatorKind::Call {
                         func: Operand::Constant(MirConst {
                             kind: MirConstKind::Fn(
-                                FnDefId::from_raw(1),
+                                FnDefId::from_usize(1),
                                 glyim_type::Substitution::empty(),
                             ),
                             ty: Ty::UNIT,
                             span: Span::DUMMY,
                         }),
                         args: vec![],
-                        destination: Place::new(LocalIdx::from_raw(0)),
-                        target: Some(BasicBlockIdx::from_raw(2)),
-                        cleanup: Some(BasicBlockIdx::from_raw(1)),
+                        destination: Place::new(LocalIdx::from_usize(0)),
+                        target: Some(BasicBlockIdx::from_usize(2)),
+                        cleanup: Some(BasicBlockIdx::from_usize(1)),
                     },
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
@@ -673,7 +663,7 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
             BasicBlockData {
                 statements: vec![Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(1)),
+                        Place::new(LocalIdx::from_usize(1)),
                         Rvalue::Use(Operand::Constant(MirConst {
                             kind: MirConstKind::Int(99),
                             ty: i32_ty,
@@ -684,7 +674,7 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
                 }],
                 terminator: Terminator {
                     kind: TerminatorKind::Goto {
-                        target: BasicBlockIdx::from_raw(3),
+                        target: BasicBlockIdx::from_usize(3),
                     },
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
@@ -708,7 +698,7 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
                             span: Span::DUMMY,
                         }),
                         expected: true,
-                        target: BasicBlockIdx::from_raw(4),
+                        target: BasicBlockIdx::from_usize(4),
                         cleanup: None,
                         msg: AssertMessage::BoundsCheck,
                     },
@@ -742,7 +732,7 @@ fn unwind_resumes_at_nearest_caller_with_cleanup() {
     );
     // g's sentinel (7) must NOT be set — its cleanup was correctly skipped.
     let g_sentinel = interp
-        .get_local_value(LocalIdx::from_raw(1))
+        .get_local_value(LocalIdx::from_usize(1))
         .expect("f tracking local must be set");
     assert_eq!(
         g_sentinel,
