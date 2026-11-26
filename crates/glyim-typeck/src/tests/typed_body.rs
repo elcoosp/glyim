@@ -25,7 +25,7 @@ use crate::zonk;
 /// `fn f() { 1; }` as a hand-built THIR body over `return_ty`.
 fn body_with_return_ty(return_ty: Ty) -> thir::Body {
     thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         params: Vec::new(),
         return_ty,
         stmts: vec![thir::Stmt::Expr {
@@ -96,13 +96,13 @@ fn zonk_reports_unbound_type_vars_as_err() {
     let var = infer.new_ty_var(&mut ctx_mut);
     let unbound = ctx_mut.mk_ty(TyKind::Infer(InferVar::Ty(var)));
     let frozen = ctx_mut.freeze();
-    let owner = LocalDefId::from_raw(0);
+    let owner = LocalDefId::from_usize(0);
     let mut bodies = vec![(owner, body_with_return_ty(unbound))];
     let err = zonk::zonk_bodies(&infer, &frozen, &mut bodies)
         .expect_err("an unbound type variable must fail the checked zonk");
     assert!(err.contains_key(&owner), "the offending owner is reported");
     // A body with only concrete types zonks to `Ok`.
-    let mut clean = vec![(LocalDefId::from_raw(1), body_with_return_ty(Ty::I32))];
+    let mut clean = vec![(LocalDefId::from_usize(1), body_with_return_ty(Ty::I32))];
     assert!(zonk::zonk_bodies(&infer, &frozen, &mut clean).is_ok());
 }
 
@@ -117,11 +117,11 @@ fn zonk_folds_int_vars_without_rejecting() {
     let var = infer.new_int_var(&mut ctx_mut);
     let int_ty = ctx_mut.mk_ty(TyKind::Infer(InferVar::Int(var)));
     let frozen = ctx_mut.freeze();
-    let mut bodies = vec![(LocalDefId::from_raw(2), body_with_return_ty(int_ty))];
+    let mut bodies = vec![(LocalDefId::from_usize(2), body_with_return_ty(int_ty))];
     assert!(
         zonk::zonk_bodies(&infer, &frozen, &mut bodies).is_ok(),
         "int vars fold to their fallback; the body stays clean"
     );
     // Pin the `InferVar::Int` variant construction used above.
-    let _ = InferVar::Int(IntVar::from_raw(0));
+    let _ = InferVar::Int(IntVar::from_usize(0));
 }
