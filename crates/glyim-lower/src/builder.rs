@@ -305,7 +305,7 @@ impl<'a> MirBuilder<'a> {
                 // terminator reads a populated slot.
                 if let thir::Stmt::Expr { expr } = stmt {
                     let rvalue = self.lower_expr_to_rvalue(expr);
-                    let ret_place = glyim_mir::Place::new(LocalIdx::from_raw(0));
+                    let ret_place = glyim_mir::Place::new(LocalIdx::from_usize(0));
                     self.push_stmt(
                         glyim_mir::StatementKind::Assign(ret_place, rvalue),
                         expr.span,
@@ -513,8 +513,8 @@ impl<'a> MirBuilder<'a> {
 
         // Create DefId for the closure.
         let def_id = DefId::new(
-            CrateId::from_raw(0),
-            LocalDefId::from_raw(closure_id.to_raw()),
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(closure_id.index()),
         );
 
         // Build a new MIR body for the closure using a fresh builder.
@@ -572,7 +572,7 @@ impl<'a> MirBuilder<'a> {
         // constant no longer fabricates a `Ty::ERROR` sentinel.
         let fn_const = glyim_mir::MirConst {
             kind: glyim_mir::MirConstKind::Fn(
-                glyim_core::def_id::FnDefId::from_raw(closure_id.to_raw()),
+                glyim_core::def_id::FnDefId::from_usize(closure_id.index()),
                 substs,
             ),
             ty: self
@@ -584,7 +584,7 @@ impl<'a> MirBuilder<'a> {
         let fn_operand = glyim_mir::Operand::Constant(fn_const);
         let mut operands = vec![fn_operand];
         for capture in captures {
-            let local = glyim_mir::LocalIdx::from_raw(capture.local.to_raw());
+            let local = glyim_mir::LocalIdx::from_usize(capture.local.index());
             let operand = match capture.kind {
                 thir::CaptureKind::ByValue => {
                     glyim_mir::Operand::Move(glyim_mir::Place::new(local))
