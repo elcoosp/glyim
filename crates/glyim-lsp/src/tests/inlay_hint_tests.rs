@@ -55,7 +55,7 @@ fn populated_db(content: &str, path_str: &str) -> (AnalysisDatabase, FileMap, Pa
         .write()
         .insert(file_id, SourceMap::new(file_id, content.to_string()));
 
-    let crate_id = glyim_core::CrateId::from_raw(0);
+    let crate_id = glyim_core::CrateId::from_usize(0);
     let parse_result = glyim_frontend::parse_to_syntax(content, file_id);
     let mut interner = glyim_core::Interner::new();
     let (def_map, _def_diags) =
