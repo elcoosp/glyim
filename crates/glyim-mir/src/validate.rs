@@ -785,8 +785,8 @@ mod tests {
         });
         Body {
             owner: glyim_core::def_id::DefId::new(
-                glyim_core::def_id::CrateId::from_raw(0),
-                glyim_core::def_id::LocalDefId::from_raw(0),
+                glyim_core::def_id::CrateId::from_usize(0),
+                glyim_core::def_id::LocalDefId::from_usize(0),
             ),
             basic_blocks,
             locals,
@@ -811,9 +811,9 @@ mod tests {
     #[test]
     fn flags_terminator_to_missing_block_mir7_mir10() {
         let (ctx, mut body) = i32_body();
-        body.basic_blocks[crate::BasicBlockIdx::from_raw(0)].terminator = Terminator {
+        body.basic_blocks[crate::BasicBlockIdx::from_usize(0)].terminator = Terminator {
             kind: TerminatorKind::Goto {
-                target: crate::BasicBlockIdx::from_raw(99),
+                target: crate::BasicBlockIdx::from_usize(99),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         };
@@ -830,7 +830,7 @@ mod tests {
     #[test]
     fn flags_call_cleanup_to_missing_block_mir15() {
         let (ctx, mut body) = i32_body();
-        body.basic_blocks[crate::BasicBlockIdx::from_raw(0)].terminator = Terminator {
+        body.basic_blocks[crate::BasicBlockIdx::from_usize(0)].terminator = Terminator {
             kind: TerminatorKind::Call {
                 func: Operand::Constant(MirConst {
                     kind: MirConstKind::Int(0),
@@ -838,9 +838,9 @@ mod tests {
                     span: Span::DUMMY,
                 }),
                 args: Vec::new(),
-                destination: Place::new(crate::LocalIdx::from_raw(0)),
+                destination: Place::new(crate::LocalIdx::from_usize(0)),
                 target: None,
-                cleanup: Some(crate::BasicBlockIdx::from_raw(99)),
+                cleanup: Some(crate::BasicBlockIdx::from_usize(99)),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         };
@@ -857,8 +857,8 @@ mod tests {
     fn flags_undeclared_local_mir28() {
         let (ctx, body) = i32_body();
         let mut bad = body.clone();
-        let undeclared = crate::LocalIdx::from_raw(5);
-        bad.basic_blocks[crate::BasicBlockIdx::from_raw(0)]
+        let undeclared = crate::LocalIdx::from_usize(5);
+        bad.basic_blocks[crate::BasicBlockIdx::from_usize(0)]
             .statements
             .push(Statement {
                 kind: StatementKind::StorageLive(undeclared),
@@ -902,10 +902,10 @@ mod tests {
             mutability: Mutability::Not,
             source_info: SourceInfo::new(Span::DUMMY),
         });
-        body.basic_blocks[crate::BasicBlockIdx::from_raw(0)]
+        body.basic_blocks[crate::BasicBlockIdx::from_usize(0)]
             .statements
             .push(Statement {
-                kind: StatementKind::StorageDead(crate::LocalIdx::from_raw(1)),
+                kind: StatementKind::StorageDead(crate::LocalIdx::from_usize(1)),
                 source_info: SourceInfo::new(Span::DUMMY),
             });
         let errs = validate_body(&ctx, &body).expect_err("dead-without-live must be flagged");
@@ -925,8 +925,8 @@ mod tests {
             mutability: Mutability::Not,
             source_info: SourceInfo::new(Span::DUMMY),
         });
-        let bb0 = crate::BasicBlockIdx::from_raw(0);
-        let local = crate::LocalIdx::from_raw(1);
+        let bb0 = crate::BasicBlockIdx::from_usize(0);
+        let local = crate::LocalIdx::from_usize(1);
         body.basic_blocks[bb0].statements.push(Statement {
             kind: StatementKind::StorageLive(local),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -950,10 +950,10 @@ mod tests {
             c.mk_ty(glyim_type::TyKind::Int(glyim_core::primitives::IntTy::I32))
         });
         let mut body = empty_body(i32_ty, i32_ty);
-        body.basic_blocks[crate::BasicBlockIdx::from_raw(0)].terminator = Terminator {
+        body.basic_blocks[crate::BasicBlockIdx::from_usize(0)].terminator = Terminator {
             kind: TerminatorKind::Drop {
-                place: Place::new(crate::LocalIdx::from_raw(0)),
-                target: crate::BasicBlockIdx::from_raw(0),
+                place: Place::new(crate::LocalIdx::from_usize(0)),
+                target: crate::BasicBlockIdx::from_usize(0),
                 cleanup: None,
             },
             source_info: SourceInfo::new(Span::DUMMY),
@@ -970,10 +970,10 @@ mod tests {
     fn allows_drop_on_droppable_type() {
         let (ctx, str_ty) = with_fresh_ty_ctx(|c| c.mk_ty(glyim_type::TyKind::String));
         let mut body = empty_body(str_ty, str_ty);
-        body.basic_blocks[crate::BasicBlockIdx::from_raw(0)].terminator = Terminator {
+        body.basic_blocks[crate::BasicBlockIdx::from_usize(0)].terminator = Terminator {
             kind: TerminatorKind::Drop {
-                place: Place::new(crate::LocalIdx::from_raw(0)),
-                target: crate::BasicBlockIdx::from_raw(0),
+                place: Place::new(crate::LocalIdx::from_usize(0)),
+                target: crate::BasicBlockIdx::from_usize(0),
                 cleanup: None,
             },
             source_info: SourceInfo::new(Span::DUMMY),
@@ -992,18 +992,18 @@ mod tests {
         });
         let mut body = empty_body(i32_ty, i32_ty);
         let subslice_place = Place {
-            local: crate::LocalIdx::from_raw(0),
+            local: crate::LocalIdx::from_usize(0),
             projection: Box::new([crate::ProjectionElem::Subslice {
                 from: 1,
                 to: 2,
                 from_end: false,
             }]),
         };
-        body.basic_blocks[crate::BasicBlockIdx::from_raw(0)]
+        body.basic_blocks[crate::BasicBlockIdx::from_usize(0)]
             .statements
             .push(Statement {
                 kind: StatementKind::Assign(
-                    Place::new(crate::LocalIdx::from_raw(0)),
+                    Place::new(crate::LocalIdx::from_usize(0)),
                     Rvalue::Aggregate(
                         crate::AggregateKind::Tuple,
                         vec![Operand::Copy(subslice_place)],
@@ -1030,21 +1030,21 @@ mod tests {
         });
         let mut body = empty_body(i32_ty, i32_ty);
         let place = Place {
-            local: crate::LocalIdx::from_raw(0),
+            local: crate::LocalIdx::from_usize(0),
             projection: Box::new([
                 crate::ProjectionElem::ConstantIndex {
                     offset: 0,
                     min_length: 0,
                     from_end: false,
                 },
-                crate::ProjectionElem::Field(glyim_type::FieldIdx::from_raw(0)),
+                crate::ProjectionElem::Field(glyim_type::FieldIdx::from_usize(0)),
             ]),
         };
-        body.basic_blocks[crate::BasicBlockIdx::from_raw(0)]
+        body.basic_blocks[crate::BasicBlockIdx::from_usize(0)]
             .statements
             .push(Statement {
                 kind: StatementKind::Assign(
-                    Place::new(crate::LocalIdx::from_raw(0)),
+                    Place::new(crate::LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Copy(place)),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -1066,11 +1066,11 @@ mod tests {
         let mut body = empty_body(i32_ty, i32_ty);
         // Two blocks: bb0 drops to bb1 (cleanup), bb1 is a cleanup block that
         // itself drops to bb0 with a cleanup edge.
-        let bb0 = crate::BasicBlockIdx::from_raw(0);
-        let bb1 = crate::BasicBlockIdx::from_raw(1);
+        let bb0 = crate::BasicBlockIdx::from_usize(0);
+        let bb1 = crate::BasicBlockIdx::from_usize(1);
         body.basic_blocks.push(BasicBlockData::new(Terminator {
             kind: TerminatorKind::Drop {
-                place: Place::new(crate::LocalIdx::from_raw(0)),
+                place: Place::new(crate::LocalIdx::from_usize(0)),
                 target: bb0,
                 cleanup: None,
             },
@@ -1079,7 +1079,7 @@ mod tests {
         body.basic_blocks[bb0].is_cleanup = true;
         body.basic_blocks[bb0].terminator = Terminator {
             kind: TerminatorKind::Drop {
-                place: Place::new(crate::LocalIdx::from_raw(0)),
+                place: Place::new(crate::LocalIdx::from_usize(0)),
                 target: bb1,
                 cleanup: Some(bb1),
             },
@@ -1108,10 +1108,10 @@ mod tests {
     fn drop_on_undeclared_local_does_not_panic() {
         let (ctx, body) = i32_body();
         let mut bad = body.clone();
-        bad.basic_blocks[crate::BasicBlockIdx::from_raw(0)].terminator = Terminator {
+        bad.basic_blocks[crate::BasicBlockIdx::from_usize(0)].terminator = Terminator {
             kind: TerminatorKind::Drop {
-                place: Place::new(crate::LocalIdx::from_raw(99)),
-                target: crate::BasicBlockIdx::from_raw(0),
+                place: Place::new(crate::LocalIdx::from_usize(99)),
+                target: crate::BasicBlockIdx::from_usize(0),
                 cleanup: None,
             },
             source_info: SourceInfo::new(Span::DUMMY),
