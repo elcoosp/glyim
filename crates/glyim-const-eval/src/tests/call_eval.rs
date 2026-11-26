@@ -32,7 +32,7 @@ fn dummy_span() -> Span {
 fn test_body() -> Body {
     Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: IndexVec::new(),
         pats: IndexVec::new(),
         pat_spans: glyim_core::arena::IndexVec::new(),
