@@ -31,14 +31,14 @@ impl BorrowckCtx for LocalMockBorrowckCtx {
 }
 
 fn make_body(statements: Vec<Statement>, locals: Vec<LocalDecl>) -> Body {
-    let def_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let def_id = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut body = Body::dummy(def_id);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData::new(Terminator {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData::new(Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(Span::DUMMY),
     })]);
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].statements = statements;
-    body.locals = IndexVec::from_raw(locals);
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].statements = statements;
+    body.locals = IndexVec::from_vec(locals);
     body
 }
 
@@ -103,17 +103,17 @@ fn t02_two_shared_borrows_no_error() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
                 assign_borrow(
-                    LocalIdx::from_raw(2),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(2),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(2)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(2)),
             ],
             locals,
         )
@@ -138,19 +138,19 @@ fn t03_shared_and_mutable_conflict_error() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
                 assign_borrow(
-                    LocalIdx::from_raw(2),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(2),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(2)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(2)),
             ],
             locals,
         )
@@ -175,21 +175,21 @@ fn t04_two_mutable_borrows_conflict_error() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
                 assign_borrow(
-                    LocalIdx::from_raw(2),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(2),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(2)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(2)),
             ],
             locals,
         )
@@ -214,16 +214,16 @@ fn t05_borrow_expires_after_last_use_no_error() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
-                use_local(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
+                use_local(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
                 assign_borrow(
-                    LocalIdx::from_raw(3),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(3),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
@@ -268,9 +268,9 @@ fn t07_error_diagnostics_include_span() {
             vec![
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(1)),
+                        Place::new(LocalIdx::from_usize(1)),
                         Rvalue::Ref(
-                            Place::new(LocalIdx::from_raw(0)),
+                            Place::new(LocalIdx::from_usize(0)),
                             BorrowKind::Mut {
                                 allow_two_phase_borrow: false,
                             },
@@ -280,9 +280,9 @@ fn t07_error_diagnostics_include_span() {
                 },
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(2)),
+                        Place::new(LocalIdx::from_usize(2)),
                         Rvalue::Ref(
-                            Place::new(LocalIdx::from_raw(0)),
+                            Place::new(LocalIdx::from_usize(0)),
                             BorrowKind::Mut {
                                 allow_two_phase_borrow: false,
                             },
@@ -290,8 +290,8 @@ fn t07_error_diagnostics_include_span() {
                     ),
                     source_info: SourceInfo::new(span2),
                 },
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(2)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(2)),
             ],
             locals,
         )
@@ -314,7 +314,7 @@ fn t08_local_ty_via_borrowck_ctx() {
         make_body(vec![], locals)
     });
     let mock = LocalMockBorrowckCtx { ty_ctx: ctx, body };
-    let decl = mock.local_decl(LocalIdx::from_raw(0));
+    let decl = mock.local_decl(LocalIdx::from_usize(0));
     assert_eq!(decl.ty, Ty::UNIT);
 }
 
@@ -339,8 +339,8 @@ fn t09_multiple_conflicts_in_one_body() {
             vec![
                 // _2 = &mut _0  (first mutable borrow of _0)
                 assign_borrow(
-                    LocalIdx::from_raw(2),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(2),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
@@ -348,15 +348,15 @@ fn t09_multiple_conflicts_in_one_body() {
                 // _3 = &mut _0  (second mutable borrow of _0 — CONFLICTS
                 // because _2 is still live: it's used at stmt 2)
                 assign_borrow(
-                    LocalIdx::from_raw(3),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(3),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
                 // Use both borrows to keep them live at stmt 1
-                use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
-                use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(3)),
+                use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
+                use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(3)),
             ],
             locals,
         )
@@ -384,19 +384,19 @@ fn t10_shared_borrow_after_mutable_expires_no_error() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
-                use_local(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
+                use_local(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
                 assign_borrow(
-                    LocalIdx::from_raw(3),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(3),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
-                use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)),
+                use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)),
             ],
             locals,
         )
@@ -425,19 +425,19 @@ fn t11_mutable_borrow_after_shared_expires_no_error() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
-                use_local(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
+                use_local(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
                 assign_borrow(
-                    LocalIdx::from_raw(3),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(3),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
-                use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)),
+                use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)),
             ],
             locals,
         )
@@ -466,21 +466,21 @@ fn t12_borrow_of_different_locals_no_conflict() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(2),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(2),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
                 assign_borrow(
-                    LocalIdx::from_raw(3),
-                    Place::new(LocalIdx::from_raw(1)),
+                    LocalIdx::from_usize(3),
+                    Place::new(LocalIdx::from_usize(1)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
-                use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
-                use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)),
+                use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
+                use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)),
             ],
             locals,
         )
@@ -508,21 +508,21 @@ fn t13_error_message_contains_borrow_kind_info() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
                 assign_borrow(
-                    LocalIdx::from_raw(2),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(2),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(2)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(2)),
             ],
             locals,
         )
@@ -556,17 +556,17 @@ fn t15_no_borrow_check_for_copy_types_ignored() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
-                use_local(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
+                use_local(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
                 assign_borrow(
-                    LocalIdx::from_raw(3),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(3),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
-                use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)),
+                use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)),
             ],
             locals,
         )
@@ -597,15 +597,15 @@ fn t17_borrow_dest_never_used_expires_immediately() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
                 assign_borrow(
-                    LocalIdx::from_raw(2),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(2),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
@@ -666,17 +666,17 @@ fn t19_unique_vs_shared_conflict() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Unique,
                 ),
                 assign_borrow(
-                    LocalIdx::from_raw(2),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(2),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(2)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(2)),
             ],
             locals,
         )
@@ -704,19 +704,19 @@ fn t20_unique_vs_mutable_conflict() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Unique,
                 ),
                 assign_borrow(
-                    LocalIdx::from_raw(2),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(2),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(2)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(2)),
             ],
             locals,
         )
@@ -744,17 +744,17 @@ fn t21_unique_vs_unique_conflict() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Unique,
                 ),
                 assign_borrow(
-                    LocalIdx::from_raw(2),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(2),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Unique,
                 ),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
-                use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(2)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
+                use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(2)),
             ],
             locals,
         )
@@ -780,17 +780,17 @@ fn t22_shared_after_unique_expires_no_error() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Unique,
                 ),
-                use_local(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
+                use_local(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
                 assign_borrow(
-                    LocalIdx::from_raw(3),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(3),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
-                use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)),
+                use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)),
             ],
             locals,
         )
@@ -815,24 +815,27 @@ fn t23_multi_block_borrows_across_blocks_no_conflict() {
             local_decl(mut_ref_ty),
             local_decl(unit),
         ];
-        let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-        body.locals = IndexVec::from_raw(locals);
+        let mut body = Body::dummy(DefId::new(
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(0),
+        ));
+        body.locals = IndexVec::from_vec(locals);
 
         let mut bb0 = BasicBlockData::new(Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(1),
+                target: BasicBlockIdx::from_usize(1),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         });
         bb0.statements = vec![
             assign_borrow(
-                LocalIdx::from_raw(1),
-                Place::new(LocalIdx::from_raw(0)),
+                LocalIdx::from_usize(1),
+                Place::new(LocalIdx::from_usize(0)),
                 BorrowKind::Mut {
                     allow_two_phase_borrow: false,
                 },
             ),
-            use_local(LocalIdx::from_raw(2), LocalIdx::from_raw(1)),
+            use_local(LocalIdx::from_usize(2), LocalIdx::from_usize(1)),
         ];
 
         let mut bb1 = BasicBlockData::new(Terminator {
@@ -841,16 +844,16 @@ fn t23_multi_block_borrows_across_blocks_no_conflict() {
         });
         bb1.statements = vec![
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(0)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(0)),
                 BorrowKind::Mut {
                     allow_two_phase_borrow: false,
                 },
             ),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)),
         ];
 
-        body.basic_blocks = IndexVec::from_raw(vec![bb0, bb1]);
+        body.basic_blocks = IndexVec::from_vec(vec![bb0, bb1]);
         body
     });
     let mock = LocalMockBorrowckCtx { ty_ctx: ctx, body };
@@ -872,18 +875,21 @@ fn t24_multi_block_overlap_conflict() {
             local_decl(mut_ref_ty),
             local_decl(unit),
         ];
-        let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-        body.locals = IndexVec::from_raw(locals);
+        let mut body = Body::dummy(DefId::new(
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(0),
+        ));
+        body.locals = IndexVec::from_vec(locals);
 
         let mut bb0 = BasicBlockData::new(Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(1),
+                target: BasicBlockIdx::from_usize(1),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         });
         bb0.statements = vec![assign_borrow(
-            LocalIdx::from_raw(1),
-            Place::new(LocalIdx::from_raw(0)),
+            LocalIdx::from_usize(1),
+            Place::new(LocalIdx::from_usize(0)),
             BorrowKind::Mut {
                 allow_two_phase_borrow: false,
             },
@@ -896,16 +902,16 @@ fn t24_multi_block_overlap_conflict() {
         // Second borrow happens before use of first borrow, so they overlap.
         bb1.statements = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(0)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(0)),
                 BorrowKind::Mut {
                     allow_two_phase_borrow: false,
                 },
             ),
-            use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
+            use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
         ];
 
-        body.basic_blocks = IndexVec::from_raw(vec![bb0, bb1]);
+        body.basic_blocks = IndexVec::from_vec(vec![bb0, bb1]);
         body
     });
     let mock = LocalMockBorrowckCtx { ty_ctx: ctx, body };
@@ -930,16 +936,16 @@ fn t25_borrow_of_reference_type_locals() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(2)),
-                        Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(1)))),
+                        Place::new(LocalIdx::from_usize(2)),
+                        Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(1)))),
                     ),
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
@@ -963,8 +969,8 @@ fn t26_many_locals_no_conflict() {
         let locals = vec![local_decl(unit); count * 2 + 1];
         let mut stmts = Vec::new();
         for i in 0..count {
-            let dest = LocalIdx::from_raw((i * 2 + 1) as u32);
-            let src = LocalIdx::from_raw((i) as u32);
+            let dest = LocalIdx::from_usize(i * 2 + 1);
+            let src = LocalIdx::from_usize(i);
             stmts.push(assign_borrow(
                 dest,
                 Place::new(src),
@@ -972,7 +978,7 @@ fn t26_many_locals_no_conflict() {
                     allow_two_phase_borrow: false,
                 },
             ));
-            stmts.push(use_local(LocalIdx::from_raw((i * 2 + 2) as u32), dest));
+            stmts.push(use_local(LocalIdx::from_usize(i * 2 + 2), dest));
         }
         make_body(stmts, locals)
     });
@@ -988,11 +994,14 @@ fn t26_many_locals_no_conflict() {
 fn t27_empty_second_block_no_panic() {
     let (ctx, body) = with_fresh_ty_ctx(|ctx_mut| {
         let _ = ctx_mut.unit_ty();
-        let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-        body.locals = IndexVec::from_raw(vec![local_decl(Ty::UNIT)]);
+        let mut body = Body::dummy(DefId::new(
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(0),
+        ));
+        body.locals = IndexVec::from_vec(vec![local_decl(Ty::UNIT)]);
         let bb0 = BasicBlockData::new(Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(1),
+                target: BasicBlockIdx::from_usize(1),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         });
@@ -1000,7 +1009,7 @@ fn t27_empty_second_block_no_panic() {
             kind: TerminatorKind::Return,
             source_info: SourceInfo::new(Span::DUMMY),
         });
-        body.basic_blocks = IndexVec::from_raw(vec![bb0, bb1]);
+        body.basic_blocks = IndexVec::from_vec(vec![bb0, bb1]);
         body
     });
     let mock = LocalMockBorrowckCtx { ty_ctx: ctx, body };
@@ -1023,23 +1032,23 @@ fn t28_binary_op_with_borrowed_operands_no_conflict() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
                 assign_borrow(
-                    LocalIdx::from_raw(2),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(2),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(3)),
+                        Place::new(LocalIdx::from_usize(3)),
                         Rvalue::BinaryOp(
                             glyim_core::primitives::BinOp::Add,
                             [
-                                Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                                Operand::Copy(Place::new(LocalIdx::from_raw(2))),
+                                Operand::Copy(Place::new(LocalIdx::from_usize(1))),
+                                Operand::Copy(Place::new(LocalIdx::from_usize(2))),
                             ],
                         ),
                     ),
@@ -1072,23 +1081,23 @@ fn t29_aggregate_with_borrowed_operands() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
                 assign_borrow(
-                    LocalIdx::from_raw(2),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(2),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(3)),
+                        Place::new(LocalIdx::from_usize(3)),
                         Rvalue::Aggregate(
                             glyim_mir::AggregateKind::Tuple,
                             vec![
-                                Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                                Operand::Copy(Place::new(LocalIdx::from_raw(2))),
+                                Operand::Copy(Place::new(LocalIdx::from_usize(1))),
+                                Operand::Copy(Place::new(LocalIdx::from_usize(2))),
                             ],
                         ),
                     ),
@@ -1115,14 +1124,14 @@ fn t30_discriminant_read_extends_borrow() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(2)),
-                        Rvalue::Discriminant(Place::new(LocalIdx::from_raw(1))),
+                        Place::new(LocalIdx::from_usize(2)),
+                        Rvalue::Discriminant(Place::new(LocalIdx::from_usize(1))),
                     ),
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
@@ -1144,14 +1153,14 @@ fn t31_len_extends_borrow() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(2)),
-                        Rvalue::Len(Place::new(LocalIdx::from_raw(1))),
+                        Place::new(LocalIdx::from_usize(2)),
+                        Rvalue::Len(Place::new(LocalIdx::from_usize(1))),
                     ),
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
@@ -1178,16 +1187,16 @@ fn t32_cast_extends_borrow() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(2)),
+                        Place::new(LocalIdx::from_usize(2)),
                         Rvalue::Cast(
                             glyim_mir::CastKind::IntToInt,
-                            Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                             i64_ty,
                         ),
                     ),
@@ -1222,15 +1231,15 @@ fn t33_repeat_extends_borrow() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(2)),
+                        Place::new(LocalIdx::from_usize(2)),
                         Rvalue::Repeat(
-                            Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                             glyim_mir::MirConst {
                                 kind: glyim_mir::MirConstKind::Uint(3),
                                 ty: ctx_mut.mk_ty(glyim_type::TyKind::Uint(
@@ -1260,14 +1269,14 @@ fn t34_operand_move_read_extends_borrow() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Shared,
                 ),
                 Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(2)),
-                        Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_raw(1)))),
+                        Place::new(LocalIdx::from_usize(2)),
+                        Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_usize(1)))),
                     ),
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
@@ -1289,14 +1298,14 @@ fn t35_storage_dead_does_not_crash() {
         make_body(
             vec![
                 assign_borrow(
-                    LocalIdx::from_raw(1),
-                    Place::new(LocalIdx::from_raw(0)),
+                    LocalIdx::from_usize(1),
+                    Place::new(LocalIdx::from_usize(0)),
                     BorrowKind::Mut {
                         allow_two_phase_borrow: false,
                     },
                 ),
                 Statement {
-                    kind: StatementKind::StorageDead(LocalIdx::from_raw(1)),
+                    kind: StatementKind::StorageDead(LocalIdx::from_usize(1)),
                     source_info: SourceInfo::new(Span::DUMMY),
                 },
             ],
@@ -1337,7 +1346,7 @@ fn t37_constant_operand_no_borrow() {
         make_body(
             vec![Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(Operand::Constant(glyim_mir::MirConst {
                         kind: glyim_mir::MirConstKind::Int(42),
                         ty: i32_ty,
