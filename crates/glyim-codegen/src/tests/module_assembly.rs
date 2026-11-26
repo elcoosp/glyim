@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 /// The owner `DefId` for local function `n`.
 fn owner(n: u32) -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(n))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(n as usize))
 }
 
 /// A `LocalDecl` with the ERROR type (the unit tests' convention: emission
@@ -39,7 +39,7 @@ fn return_body(owner_id: DefId, n_locals: usize) -> Arc<Body> {
     for _ in 0..n_locals {
         body.locals.push(local_decl());
     }
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(Span::DUMMY),
     };
@@ -52,7 +52,7 @@ fn call_body(owner_id: DefId, callee: FnDefId, dest: u32, target: u32) -> Arc<Bo
     let mut body = Body::dummy(owner_id);
     body.locals.push(local_decl());
     body.locals.push(local_decl());
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Call {
             func: Operand::Constant(MirConst {
                 kind: MirConstKind::Fn(callee, Substitution::empty()),
@@ -60,8 +60,8 @@ fn call_body(owner_id: DefId, callee: FnDefId, dest: u32, target: u32) -> Arc<Bo
                 span: Span::DUMMY,
             }),
             args: vec![],
-            destination: Place::new(LocalIdx::from_raw(dest)),
-            target: Some(BasicBlockIdx::from_raw(target)),
+            destination: Place::new(LocalIdx::from_usize(dest as usize)),
+            target: Some(BasicBlockIdx::from_usize(target as usize)),
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -82,7 +82,7 @@ fn module_image_assembles_multi_function_modules() {
     // emission; helper's own body claims that slot, main is appended after
     // the fn table as the unclaimed body.
     let helper = return_body(owner(1), 1);
-    let main = call_body(owner(0), FnDefId::from_raw(1), 0, 1);
+    let main = call_body(owner(0), FnDefId::from_usize(1), 0, 1);
     let bodies = vec![("main".to_string(), main), ("helper".to_string(), helper)];
 
     let image = backend()
@@ -148,16 +148,16 @@ fn module_image_carries_per_function_block_tables() {
     let mut main_body = Body::dummy(owner(0));
     main_body.locals.push(local_decl());
     main_body.locals.push(local_decl());
-    main_body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    main_body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Call {
             func: Operand::Constant(MirConst {
-                kind: MirConstKind::Fn(FnDefId::from_raw(1), Substitution::empty()),
+                kind: MirConstKind::Fn(FnDefId::from_usize(1), Substitution::empty()),
                 ty: Ty::ERROR,
                 span: Span::DUMMY,
             }),
             args: vec![],
-            destination: Place::new(LocalIdx::from_raw(0)),
-            target: Some(BasicBlockIdx::from_raw(1)),
+            destination: Place::new(LocalIdx::from_usize(0)),
+            target: Some(BasicBlockIdx::from_usize(1)),
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
