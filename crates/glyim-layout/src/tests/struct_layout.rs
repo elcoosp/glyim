@@ -37,7 +37,7 @@ fn make_struct_ty(
 fn s15_t01_struct_two_i32_fields() {
     let (ctx, struct_ty) = with_fresh_ty_ctx(|c| {
         let i32_ty = c.mk_ty(glyim_type::TyKind::Int(IntTy::I32));
-        make_struct_ty(c, glyim_core::AdtId::from_raw(100), vec![i32_ty, i32_ty])
+        make_struct_ty(c, glyim_core::AdtId::from_usize(100), vec![i32_ty, i32_ty])
     });
     let computer = SimpleLayoutComputer::new(&ctx, TargetInfo::x86_64());
     let layout = computer
@@ -50,8 +50,8 @@ fn s15_t01_struct_two_i32_fields() {
     match &layout.fields {
         FieldsShape::Arbitrary { offsets } => {
             assert_eq!(offsets.len(), 2);
-            assert_eq!(offsets[glyim_type::FieldIdx::from_raw(0)], Size::ZERO);
-            assert_eq!(offsets[glyim_type::FieldIdx::from_raw(1)], Size::bytes(4));
+            assert_eq!(offsets[glyim_type::FieldIdx::from_usize(0)], Size::ZERO);
+            assert_eq!(offsets[glyim_type::FieldIdx::from_usize(1)], Size::bytes(4));
         }
         _ => panic!("expected Arbitrary fields for struct"),
     }
@@ -66,7 +66,7 @@ fn s15_t01_struct_with_alignment_gap() {
     let (ctx, struct_ty) = with_fresh_ty_ctx(|c| {
         let u8_ty = c.mk_ty(glyim_type::TyKind::Uint(UintTy::U8));
         let i32_ty = c.mk_ty(glyim_type::TyKind::Int(IntTy::I32));
-        make_struct_ty(c, glyim_core::AdtId::from_raw(101), vec![u8_ty, i32_ty])
+        make_struct_ty(c, glyim_core::AdtId::from_usize(101), vec![u8_ty, i32_ty])
     });
     let computer = SimpleLayoutComputer::new(&ctx, TargetInfo::x86_64());
     let layout = computer
@@ -79,7 +79,7 @@ fn s15_t01_struct_with_alignment_gap() {
 #[test]
 fn s15_t01_struct_empty() {
     let (ctx, struct_ty) =
-        with_fresh_ty_ctx(|c| make_struct_ty(c, glyim_core::AdtId::from_raw(102), vec![]));
+        with_fresh_ty_ctx(|c| make_struct_ty(c, glyim_core::AdtId::from_usize(102), vec![]));
     let computer = SimpleLayoutComputer::new(&ctx, TargetInfo::x86_64());
     let layout = computer
         .layout_of(struct_ty)
@@ -91,7 +91,7 @@ fn s15_t01_struct_empty() {
 #[test]
 fn s15_t01_struct_single_bool() {
     let (ctx, struct_ty) = with_fresh_ty_ctx(|c| {
-        make_struct_ty(c, glyim_core::AdtId::from_raw(103), vec![c.bool_ty()])
+        make_struct_ty(c, glyim_core::AdtId::from_usize(103), vec![c.bool_ty()])
     });
     let computer = SimpleLayoutComputer::new(&ctx, TargetInfo::x86_64());
     let layout = computer
@@ -109,7 +109,7 @@ fn s15_t01_struct_three_fields_mixed() {
         let u8_ty = c.mk_ty(glyim_type::TyKind::Uint(UintTy::U8));
         make_struct_ty(
             c,
-            glyim_core::AdtId::from_raw(104),
+            glyim_core::AdtId::from_usize(104),
             vec![bool_ty, i32_ty, u8_ty],
         )
     });
@@ -126,7 +126,7 @@ fn s15_t01_struct_with_pointer() {
     let (ctx, struct_ty) = with_fresh_ty_ctx(|c| {
         let ref_ty = c.mk_ref(glyim_type::Region::Erased, c.bool_ty(), Mutability::Not);
         let i32_ty = c.mk_ty(glyim_type::TyKind::Int(IntTy::I32));
-        make_struct_ty(c, glyim_core::AdtId::from_raw(105), vec![ref_ty, i32_ty])
+        make_struct_ty(c, glyim_core::AdtId::from_usize(105), vec![ref_ty, i32_ty])
     });
     let computer = SimpleLayoutComputer::new(&ctx, TargetInfo::x86_64());
     let layout = computer
