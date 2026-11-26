@@ -36,8 +36,8 @@ fn rvalue_all_binary_ops() {
         BinOp::Gt,
     ];
     for op in ops {
-        let lhs = Operand::Copy(Place::new(LocalIdx::from_raw(0)));
-        let rhs = Operand::Copy(Place::new(LocalIdx::from_raw(1)));
+        let lhs = Operand::Copy(Place::new(LocalIdx::from_usize(0)));
+        let rhs = Operand::Copy(Place::new(LocalIdx::from_usize(1)));
         let rv = Rvalue::binary_op(op, lhs, rhs);
         assert!(matches!(rv, Rvalue::BinaryOp(o, _) if o == op));
     }
@@ -45,10 +45,16 @@ fn rvalue_all_binary_ops() {
 
 #[test]
 fn rvalue_both_unary_ops() {
-    let rv_not = Rvalue::UnaryOp(UnOp::Not, Operand::Copy(Place::new(LocalIdx::from_raw(0))));
+    let rv_not = Rvalue::UnaryOp(
+        UnOp::Not,
+        Operand::Copy(Place::new(LocalIdx::from_usize(0))),
+    );
     assert!(matches!(rv_not, Rvalue::UnaryOp(UnOp::Not, _)));
 
-    let rv_neg = Rvalue::UnaryOp(UnOp::Neg, Operand::Copy(Place::new(LocalIdx::from_raw(0))));
+    let rv_neg = Rvalue::UnaryOp(
+        UnOp::Neg,
+        Operand::Copy(Place::new(LocalIdx::from_usize(0))),
+    );
     assert!(matches!(rv_neg, Rvalue::UnaryOp(UnOp::Neg, _)));
 }
 
@@ -75,8 +81,8 @@ fn rvalue_aggregate_adt() {
         let bool_ty = c.bool_ty();
         c.intern_substitution(vec![GenericArg::Ty(bool_ty)])
     });
-    let adt_id = AdtId::from_raw(1);
-    let variant = VariantIdx::from_raw(0);
+    let adt_id = AdtId::from_usize(1);
+    let variant = VariantIdx::from_usize(0);
     let rv = Rvalue::Aggregate(
         AggregateKind::Adt(adt_id, variant, substs),
         vec![Operand::Constant(test_const_val())],
@@ -92,7 +98,7 @@ fn rvalue_aggregate_closure() {
         let bool_ty = c.bool_ty();
         c.intern_substitution(vec![GenericArg::Ty(bool_ty)])
     });
-    let closure_id = ClosureId::from_raw(3);
+    let closure_id = ClosureId::from_usize(3);
     let rv = Rvalue::Aggregate(AggregateKind::Closure(closure_id, substs), vec![]);
     assert!(matches!(rv, Rvalue::Aggregate(AggregateKind::Closure(id, _), _) if id == closure_id));
 }
@@ -109,7 +115,7 @@ fn rvalue_all_cast_kinds() {
     for kind in kinds {
         let rv = Rvalue::Cast(
             kind,
-            Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+            Operand::Copy(Place::new(LocalIdx::from_usize(0))),
             Ty::BOOL,
         );
         assert!(matches!(rv, Rvalue::Cast(k, _, _) if k == kind));
