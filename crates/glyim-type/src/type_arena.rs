@@ -8,27 +8,36 @@
 //! `ty_ctx.rs:59` because a type handle crossed a context boundary.
 //!
 //! The fix is a single **shared type arena** per compilation. Both `TyCtx` and
-//! `TyCtxMut` hold a `&'static TypeArena`; `freeze`/`to_mut` merely copy that
-//! pointer (no deep `Vec` clone), so any `Ty`/`Substitution` handle allocated
-//! by any view of the compilation is valid in every other view. This is the
-//! "canonical type interner" (de-stubbing plan P0): one source of truth for
-//! type structure, stable handles across contexts.
+//! `TyCtxMut` hold a clone of the same `Arc<TypeArena>`; `freeze`/`to_mut`
+//! merely copy that handle (no deep `Vec` clone), so any `Ty`/`Substitution`
+//! handle allocated by any view of the compilation is valid in every other
+//! view. This is the "canonical type interner" (de-stubbing plan P0): one
+//! source of truth for type structure, stable handles across contexts.
 //!
-//! Soundness model: the type/flag/substitution tables live in heap storage
-//! that is allocated once per compilation and never moved or freed for the
-//! program's lifetime (`Box::into_raw`). Reads (`ty_kind`, `substitution_args`)
-//! return references straight into that stable storage — no lock guard escapes
-//! the function. Writes are serialized through `write_gate` and operate on the
-//! same stable storage via `&mut`. This is the standard typed-arena pattern
-//! (rustc's `Ty` arena works the same way).
+//! Soundness model (plan §6 M3.4 — "safe append-only arena"): the three
+//! tables are [`boxcar::Vec`]s — the vetted, loom-tested, append-only vector
+//! whose entries are allocated in fixed chunks that **never move or shrink**
+//! and are freed when the arena drops. All raw-pointer plumbing the old
+//! design needed (`Box::into_raw` storage, `unsafe impl Send/Sync`, an
+//! `unsafe` `Drop` reconstructing the boxes) is gone: this crate now
+//! contains no `unsafe` at all, and soundness no longer rests on the
+//! single-threaded-per-compilation convention (see
+//! `tests/arena_concurrency.rs`, which races appends against reads across
+//! real threads).
 //!
-//! SAFETY: within a single compilation, type allocation is single-threaded and
-//! sequential (typeck → lower → mono → codegen). Reads therefore never observe
-//! a `Vec` reallocation racing a write, and references into a boxed entry stay
-//! valid across any reallocation of the outer `Vec`. Each compilation owns its
-//! own `TypeArena`; `nextest` runs distinct compilations on distinct threads,
-//! so no `TypeArena` is shared across threads. The raw-pointer fields are thus
-//! sound under `unsafe impl Send/Sync` given that invariant.
+//! The trade the old model made for safety was memory: a `Box::leak`ed
+//! `&'static` arena variant shipped here once and was reverted because it
+//! retained the whole table for the process lifetime (~40 MB per stdlib
+//! compile, OOMing long runs). boxcar keeps the free-at-last-`Arc`-drop
+//! semantics while staying concurrent — the two constraints that killed
+//! every pure-`std` alternative (a `RwLock` guard cannot hand out `&TyKind`
+//! with the caller's lifetime, and leaking cannot be reclaimed).
+//!
+//! Interning: `type_index`/`subst_index` remain `RwLock`-guarded maps (the
+//! reader/writer split of §1.1) and the `write_gate` still serializes the
+//! multi-table append; the gate path **re-checks the index** after taking
+//! the gate, so two racers that both missed the fast path observe one
+//! canonical handle instead of splitting the type world.
 
 use crate::flags::TypeFlags;
 use crate::substitution::*;
@@ -38,58 +47,46 @@ use std::collections::HashMap;
 use std::sync::{Mutex, RwLock};
 
 /// A single compilation's canonical type table.
+///
+/// Append-only and concurrent-sound: `alloc_ty`/`intern_substitution` are
+/// `&self`, reads are lock-free into never-moving entries, and the whole
+/// table is freed when the last view (`Arc`) of the compilation drops.
 pub struct TypeArena {
-    /// Stable heap storage for `TyKind` entries (boxed so addresses survive
-    /// `Vec` reallocations). Never moved/freed after allocation.
-    types: *mut Vec<Box<TyKind>>,
-    /// Parallel stable storage for type flags.
-    type_flags: *mut Vec<TypeFlags>,
-    /// Stable storage for substitution argument lists (boxed smallvecs).
-    substitution_data: *mut Vec<Box<SmallVec<[GenericArg; 4]>>>,
+    /// Canonical `TyKind` entries. Entries never move (chunked storage), so
+    /// `&TyKind` views handed out by [`TypeArena::ty_kind`] stay valid across
+    /// any number of later appends.
+    types: boxcar::Vec<TyKind>,
+    /// Parallel flag array, index-aligned with `types`.
+    type_flags: boxcar::Vec<TypeFlags>,
+    /// Interned substitution argument lists (boxed smallvecs' contents, in
+    /// chunk storage that likewise never moves).
+    substitution_data: boxcar::Vec<SmallVec<[GenericArg; 4]>>,
     /// Fast structural de-duplication so the same logical type maps to the same
     /// `Ty` handle (the "interning" property) within a compilation.
-    /// `RwLock` (§1.1): readers (`TyCtx` queries) take `read()` locks; the single
-    /// writer (`TyCtxMut::alloc_ty`) takes the write lock. This lets `&self` reads
-    /// proceed without blocking behind writer serialization.
+    /// `RwLock` (§1.1): readers (`TyCtx` queries) take `read()` locks; writers
+    /// (`alloc_ty`) take the write lock. This lets `&self` reads proceed
+    /// without blocking behind writer serialization.
     type_index: RwLock<HashMap<TyKind, Ty>>,
-    /// Parallel de-duplication table for substitutions (plan §2.1). `RwLock` (§1.1)
-    /// for the same reader/writer split. The old linear `data.iter().position(...)`
-    /// re-scan under the write gate (§1.2) has been removed — the `HashMap` alone is
-    /// the single source of truth under the write gate, so a concurrent insert is
-    /// impossible in the single-threaded-per-compilation model.
+    /// Parallel de-duplication table for substitutions (plan §2.1). `RwLock`
+    /// (§1.1) for the same reader/writer split. The old linear
+    /// `data.iter().position(...)` re-scan under the write gate (§1.2) has
+    /// been removed — the `HashMap` alone is the single source of truth under
+    /// the write gate.
     subst_index: RwLock<HashMap<SmallVec<[GenericArg; 4]>, Substitution>>,
-    /// Serializes appends to the three tables above.
+    /// Serializes the multi-table append + index insert of one `alloc`/
+    /// `intern` step. Storage pushes are individually atomic (boxcar), but
+    /// the *pair* (entry + flag / entry + index) must become visible
+    /// together with the handle, or a racing reader could observe a handle
+    /// whose flags row is not written yet.
     write_gate: Mutex<()>,
-}
-
-// SAFETY: see module docs. Each arena is used single-threaded (per
-// compilation); the heap storage is stable for the program lifetime and writes
-// are serialized. Distinct arenas are never shared across threads.
-unsafe impl Send for TypeArena {}
-unsafe impl Sync for TypeArena {}
-
-impl Drop for TypeArena {
-    fn drop(&mut self) {
-        // SAFETY: each raw pointer was produced by exactly one `Box::into_raw`
-        // in `new` and is reconstructed exactly once here. The arena is only
-        // dropped when the last `Arc` view of the compilation drops, so no
-        // `&TyKind` / `&[GenericArg]` borrowed through a live view can still
-        // exist (Rust's borrow checker ties such borrows to the view that
-        // produced them, which cannot outlive the view).
-        unsafe {
-            drop(Box::from_raw(self.types));
-            drop(Box::from_raw(self.type_flags));
-            drop(Box::from_raw(self.substitution_data));
-        }
-    }
 }
 
 impl TypeArena {
     pub(crate) fn new() -> Self {
         TypeArena {
-            types: Box::into_raw(Box::new(Vec::new())),
-            type_flags: Box::into_raw(Box::new(Vec::new())),
-            substitution_data: Box::into_raw(Box::new(Vec::new())),
+            types: boxcar::Vec::new(),
+            type_flags: boxcar::Vec::new(),
+            substitution_data: boxcar::Vec::new(),
             type_index: RwLock::new(HashMap::new()),
             subst_index: RwLock::new(HashMap::new()),
             write_gate: Mutex::new(()),
@@ -106,25 +103,25 @@ impl TypeArena {
                 return t;
             }
         }
-        // Do NOT recover from poisoning here. `write_gate` serializes
-        // writes to the raw `types`/`type_flags`/`substitution_data`
-        // pointers; a poisoned gate means a previous writer panicked
-        // *mid-write*, so those arenas may hold a torn count or a partially
-        // written element. Recovering the guard (`PoisonError::into_inner`)
-        // would let this writer proceed over corrupted state — unsound.
-        // Panicking keeps the failure loud and local, which is the correct
-        // trade for an invariant this strong. (Contrast the runtime's
-        // handle maps, which are plain `HashMap`s and *do* recover — see
-        // `lock_recover` in `glyim-runtime`.)
+        // Do NOT recover from poisoning here. `write_gate` serializes the
+        // entry+flag append and the index insert; a poisoned gate means a
+        // previous writer panicked *mid-write*, so the tables may hold an
+        // entry whose index row is missing. Recovering the guard
+        // (`PoisonError::into_inner`) would let this writer proceed over
+        // inconsistent state — unsound. Panicking keeps the failure loud and
+        // local, which is the correct trade for an invariant this strong.
+        // (Contrast the runtime's handle maps, which are plain `HashMap`s and
+        // *do* recover — see `lock_recover` in `glyim-runtime`.)
         let _gate = self.write_gate.lock().unwrap();
-        // SAFETY: `types`/`type_flags` point to stable heap storage; we hold the
-        // exclusive write gate, so no reader can observe a torn state.
-        let types = unsafe { &mut *self.types };
-        let type_flags = unsafe { &mut *self.type_flags };
-        let raw = types.len() as u32;
-        types.push(Box::new(kind.clone()));
-        type_flags.push(flags);
-        // Re-lock with write access (the read lock from the fast path is dropped).
+        // Re-check under the gate: a racer may have interned `kind` between
+        // our fast-path read and this lock. Without this, two racers push two
+        // entries for one structure and hand out two distinct handles — the
+        // type world splits (pinned by `tests::arena_concurrency`).
+        if let Some(&t) = self.type_index.read().unwrap().get(&kind) {
+            return t;
+        }
+        let raw = self.types.push(kind.clone()) as u32;
+        self.type_flags.push(flags);
         self.type_index
             .write()
             .unwrap()
@@ -135,34 +132,23 @@ impl TypeArena {
     #[inline]
     /// Ty Kind.
     pub fn ty_kind(&self, ty: Ty) -> &TyKind {
-        // SAFETY: `types` is stable heap storage; this compilation is
-        // single-threaded, so no concurrent write reallocates the `Vec` while
-        // we hold the resulting `&TyKind`.
-
-        unsafe {
-            let v = &*self.types;
-            &v[ty.index()]
-        }
+        &self.types[ty.index()]
     }
 
     #[inline]
     /// Ty Flags.
     pub fn ty_flags(&self, ty: Ty) -> TypeFlags {
-        // SAFETY: same reasoning as `ty_kind`.
-        unsafe {
-            let v: &Vec<TypeFlags> = &*self.type_flags;
-            v[ty.index()]
-        }
+        self.type_flags[ty.index()]
     }
 
     /// Intern a substitution's argument list; returns its stable index.
     ///
-    /// §1.2 fix: the old code did an O(n) linear re-scan (`data.iter().position(...)`)
-    /// after taking the write gate. With `subst_index` in place (plan §2.1), if the
-    /// fast-path read-lock found no match, the write-gate path can trust the `HashMap` —
-    /// no other thread inserts concurrently (single-threaded per compilation). Removing
-    /// the re-scan makes substitution interning O(1) amortized instead of O(n) per call
-    /// → O(n²) across a compilation.
+    /// §1.2 fix (retained): the old code did an O(n) linear re-scan
+    /// (`data.iter().position(...)`) after taking the write gate. With
+    /// `subst_index` in place (plan §2.1), the write-gate path can trust the
+    /// `HashMap` — after the gate re-check, no other racer is inserting this
+    /// list — so substitution interning is O(1) amortized instead of O(n) per
+    /// call → O(n²) across a compilation.
     pub fn intern_substitution(&self, args: Vec<GenericArg>) -> Substitution {
         let small: SmallVec<[GenericArg; 4]> = args.into_iter().collect();
         let len = small.len() as u16;
@@ -175,14 +161,11 @@ impl TypeArena {
         }
         // Do NOT recover from poisoning; see `alloc_ty`'s note.
         let _gate = self.write_gate.lock().unwrap();
-        // SAFETY: see `alloc_ty`.
-        let data = unsafe { &mut *self.substitution_data };
-        // §1.2: no O(n) re-scan here. The read-lock above already proved `small`
-        // is absent from `subst_index`, and the write gate ensures no concurrent
-        // insert, so the HashMap write-lock insert below is the single source of truth.
-        let index = data.len() as u32;
-        data.push(Box::new(small.clone()));
-        // Re-lock with write access (the read lock from the fast path is dropped).
+        // Gate re-check (see `alloc_ty`): interning uniqueness under racers.
+        if let Some(&s) = self.subst_index.read().unwrap().get(&small) {
+            return s;
+        }
+        let index = self.substitution_data.push(small.clone()) as u32;
         self.subst_index
             .write()
             .unwrap()
@@ -196,12 +179,6 @@ impl TypeArena {
         if sub.is_empty() {
             return &[];
         }
-        // SAFETY: `substitution_data` is stable heap storage; single-threaded
-        // per compilation.
-
-        unsafe {
-            let v = &*self.substitution_data;
-            &v[sub.index() as usize]
-        }
+        &self.substitution_data[sub.index() as usize]
     }
 }
