@@ -22,19 +22,19 @@ fn basic_block_data_new_with_terminator() {
 fn basic_block_data_with_statements() {
     let term = Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(1),
+            target: BasicBlockIdx::from_usize(1),
         },
         source_info: SourceInfo::new(Span::DUMMY),
     };
     let mut bb = BasicBlockData::new(term);
 
     bb.statements.push(Statement {
-        kind: StatementKind::StorageLive(LocalIdx::from_raw(1)),
+        kind: StatementKind::StorageLive(LocalIdx::from_usize(1)),
         source_info: SourceInfo::new(Span::DUMMY),
     });
     bb.statements.push(Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::Use(Operand::Constant(MirConst {
                 kind: MirConstKind::Int(42),
                 ty: Ty::BOOL,
@@ -44,7 +44,7 @@ fn basic_block_data_with_statements() {
         source_info: SourceInfo::new(Span::DUMMY),
     });
     bb.statements.push(Statement {
-        kind: StatementKind::StorageDead(LocalIdx::from_raw(1)),
+        kind: StatementKind::StorageDead(LocalIdx::from_usize(1)),
         source_info: SourceInfo::new(Span::DUMMY),
     });
 
