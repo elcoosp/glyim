@@ -59,7 +59,7 @@ fn binary_op_body(i32_ty: Ty) -> Body {
         source_info: SourceInfo::new(Span::DUMMY),
     });
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks,
         locals,
         arg_count: 0,
@@ -81,7 +81,7 @@ fn main() {
         let rv = Rvalue::binary_op(
             BinOp::Add,
             Operand::Constant(int_const(i as i128, i32_ty)),
-            Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+            Operand::Copy(Place::new(LocalIdx::from_usize(1))),
         );
         // Consume the payload like a pass would (operand walk).
         if let Rvalue::BinaryOp(op, [l, r]) = rv {
@@ -99,17 +99,17 @@ fn main() {
     let stmts: Vec<Statement> = (0..N)
         .map(|i| Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::binary_op(
                     BinOp::Add,
                     Operand::Constant(int_const(i as i128, i32_ty)),
-                    Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                    Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                 ),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         })
         .collect();
-    body.basic_blocks[glyim_mir::BasicBlockIdx::from_raw(0)].statements = stmts;
+    body.basic_blocks[glyim_mir::BasicBlockIdx::from_usize(0)].statements = stmts;
     let start = Instant::now();
     let verdict = validate_body(&ctx, &body);
     let validate = start.elapsed();
