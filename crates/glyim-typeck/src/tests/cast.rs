@@ -10,7 +10,7 @@ fn cast_i32_to_f64() {
     let exprs = vec![
         Expr::Literal(Literal::Int(42, None)),
         Expr::Cast {
-            expr: ExprId::from_raw(0),
+            expr: ExprId::from_usize(0),
             ty: TypeRef::Path(glyim_hir::Path::from_single(name("f64"))),
         },
     ];
@@ -48,7 +48,7 @@ fn is_valid_cast_rules() {
     );
 
     // Fieldless enum -> int is legal.
-    let enum_id = AdtId::from_raw(0);
+    let enum_id = AdtId::from_usize(0);
     let fieldless_enum = AdtDef {
         kind: AdtKind::Enum,
         fields: IndexVec::new(),
@@ -67,7 +67,7 @@ fn is_valid_cast_rules() {
     );
 
     // A struct (with a field) -> int must be rejected.
-    let struct_id = AdtId::from_raw(1);
+    let struct_id = AdtId::from_usize(1);
     let struct_def = AdtDef {
         kind: AdtKind::Struct,
         fields: IndexVec::new(),
