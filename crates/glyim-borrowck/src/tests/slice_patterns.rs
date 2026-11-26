@@ -8,9 +8,9 @@ use glyim_mir::{LocalIdx, Place, ProjectionElem};
 #[test]
 fn slice_pattern_disjoint_elements_no_conflict() {
     // Simulates `let [a, b] = &slice;` where `a` is slice[0], `b` is slice[1]
-    let local = LocalIdx::from_raw(0);
-    let idx0 = LocalIdx::from_raw(10);
-    let idx1 = LocalIdx::from_raw(11);
+    let local = LocalIdx::from_usize(0);
+    let idx0 = LocalIdx::from_usize(10);
+    let idx1 = LocalIdx::from_usize(11);
     let place0 = Place {
         local,
         projection: Box::new([ProjectionElem::Index(idx0)]),
@@ -31,8 +31,8 @@ fn slice_pattern_rest_overlaps_element_conflict() {
     // support requires constant propagation to determine slice ranges.
     // For now, any `Slice` projection is conservatively considered
     // conflicting with any `Index` on the same base.
-    let local = LocalIdx::from_raw(0);
-    let idx = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
+    let idx = LocalIdx::from_usize(0);
     // Slice projection: start and end are `Place`, but we can't resolve them.
     // The actual conflict logic will treat it as potentially overlapping.
     // This test asserts the conservative behaviour (conflict) for demonstration.
