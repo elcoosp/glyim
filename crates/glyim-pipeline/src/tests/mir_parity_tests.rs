@@ -102,13 +102,16 @@ fn assert_parity(name: &str, src: &str, golden_hex: &str) {
 
 /// `simple_main`: arithmetic `main` exercises the full
 /// `LexParse` → `DefMap` → `Hir` → `Typeck` → `Lower` → `Mono` → `Emit` chain end-to-end.
-/// Golden captured from the pre-refactor monolith.
+/// Golden re-captured after the intentional `Span` `(lo, len)` storage
+/// migration (`f6506cad`, plan M3.2/CT-3) changed the `Debug` rendering the
+/// normalization hashes; the M5.2 typed-THIR boundary (`TypedBody`) is
+/// MIR-neutral (the chain's bytes are unchanged by it).
 #[test]
 fn mir_parity_simple_main_matches_monolith_golden() {
     assert_parity(
         "simple_main",
         "fn main() -> i32 {\n    let a = 3;\n    a * 2\n}\n",
-        "9eb256e243ec983846842a1627dfecd7",
+        "ed2eeafb2870dd2323f1a0cb296c87b9",
     );
 }
 
@@ -121,6 +124,6 @@ fn mir_parity_struct_impl_matches_monolith_golden() {
     assert_parity(
         "struct_impl",
         "struct Point { x: i32, y: i32 }\nimpl Point {\n    fn new(x: i32, y: i32) -> Point {\n        Point { x, y }\n    }\n}\nfn main() -> i32 {\n    let p = Point::new(1, 2);\n    p.x + p.y\n}\n",
-        "86e6c7631c4d7536c2373a325a9c9121",
+        "61a9ba56c0fed3f110707ac3de30d017",
     );
 }
