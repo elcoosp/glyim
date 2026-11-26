@@ -29,7 +29,7 @@ fn the_solver_knows_every_registry_trait_by_name_and_id() {
     register_builtin_traits(&mut trait_ctx, &interner);
 
     for t in BuiltinTraitDef::ALL {
-        let id = TraitDefId::from_raw(t.trait_id());
+        let id = TraitDefId::from_usize(t.trait_id() as usize);
         let name = trait_ctx.trait_name(id).unwrap_or_else(|| {
             panic!(
                 "solver bootstrap dropped builtin trait `{}` (id {}) — \
@@ -55,7 +55,7 @@ fn default_and_any_reach_the_solver() {
     let mut trait_ctx = TraitContext::new();
     register_builtin_traits(&mut trait_ctx, &interner);
     for (id, expected) in [(2016_u32, "Default"), (2017, "Any")] {
-        let name = trait_ctx.trait_name(TraitDefId::from_raw(id));
+        let name = trait_ctx.trait_name(TraitDefId::from_usize(id as usize));
         assert_eq!(
             name.map(|n| interner.resolve(n)),
             Some(expected),
@@ -78,7 +78,7 @@ fn exactly_the_five_structural_traits_are_lang_traits_in_the_solver() {
     assert_eq!(lang, vec!["Copy", "Sized", "Send", "Sync", "Unpin"]);
 
     for t in BuiltinTraitDef::ALL {
-        let id = TraitDefId::from_raw(t.trait_id());
+        let id = TraitDefId::from_usize(t.trait_id() as usize);
         let is_lang = trait_ctx.builtin_trait_kind(id).is_some();
         assert_eq!(
             is_lang,
