@@ -106,7 +106,7 @@ impl LocalEnv {
     }
 
     pub fn add_binding(&mut self, name: Name, ty: Ty) -> LocalVarId {
-        let id = LocalVarId::from_raw(self.vars.len() as u32);
+        let id = LocalVarId::from_usize(self.vars.len());
         if std::env::var_os("GLYIM_DBG_BIND").is_some() {
             eprintln!(
                 "[BIND] id={} at vars.len={} scope_depth={}",
@@ -171,7 +171,7 @@ impl LocalEnv {
     /// before belongs to an enclosing scope (hence is a capture).
     #[inline]
     pub fn next_var_id(&self) -> LocalVarId {
-        LocalVarId::from_raw(self.vars.len() as u32)
+        LocalVarId::from_usize(self.vars.len())
     }
 }
 
