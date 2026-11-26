@@ -14,7 +14,7 @@ fn test_enum_simple() {
     let hir = lower_crate(&root, &mut interner, &mut Vec::new());
 
     assert_eq!(hir.items.len(), 1);
-    let item = &hir.items[ItemId::from_raw(0)];
+    let item = &hir.items[ItemId::from_usize(0)];
     assert_eq!(interner.resolve(item.name), "Color");
     match &item.kind {
         ItemKind::Enum(e) => {
