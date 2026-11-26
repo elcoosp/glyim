@@ -9,7 +9,7 @@ use glyim_core::interner::Interner;
 use glyim_core::primitives::{IntTy, Mutability};
 
 fn fresh_adt_id(raw: u32) -> AdtId {
-    AdtId::from_raw(raw)
+    AdtId::from_usize(raw as usize)
 }
 
 fn with_test_ctx<F, R>(f: F) -> (TyCtx, R)
