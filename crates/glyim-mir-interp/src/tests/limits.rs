@@ -28,7 +28,7 @@ fn interpret_infinite_loop_times_out() {
 #[test]
 fn interpret_deep_recursion_overflows() {
     let tcx = glyim_test::test_frozen_ty_ctx();
-    let def_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let def_id = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let body = build_recursive_body(def_id);
     let mut interp = Interpreter::new(&tcx).with_recursion_limit(2);
     interp.add_function(def_id, body.clone());
