@@ -25,7 +25,7 @@ fn def_map_with_fn_value(nm: Name) -> glyim_def_map::CrateDefMap {
     let mut scope = ItemScope::default();
     scope.values.insert(
         nm,
-        (LocalDefId::from_raw(5), Visibility::Public, Span::DUMMY),
+        (LocalDefId::from_usize(5), Visibility::Public, Span::DUMMY),
     );
     root.scope = scope;
     dm
@@ -43,7 +43,7 @@ fn register_fn(ctx: &mut TyCtxMut, def_id: FnDefId) {
 }
 
 fn owner_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn function_value_path_resolves_to_fnref() {
     let foo = name("foo");
     let def_map = def_map_with_fn_value(foo);
     let mut ctx = make_ty_ctx();
-    let fn_def_id = FnDefId::from_raw(5);
+    let fn_def_id = FnDefId::from_usize(5);
     register_fn(&mut ctx, fn_def_id);
 
     // Body: a single expression `foo` (a function reference).
@@ -95,14 +95,14 @@ fn calling_function_value_path_yields_return_type() {
     let foo = name("foo");
     let def_map = def_map_with_fn_value(foo);
     let mut ctx = make_ty_ctx();
-    let fn_def_id = FnDefId::from_raw(5);
+    let fn_def_id = FnDefId::from_usize(5);
     register_fn(&mut ctx, fn_def_id);
 
     // Body: `foo()` — call the function reference.
     let exprs = vec![
         Expr::Path(Path::from_single(foo)),
         Expr::Call {
-            func: ExprId::from_raw(0),
+            func: ExprId::from_usize(0),
             args: vec![],
         },
     ];
