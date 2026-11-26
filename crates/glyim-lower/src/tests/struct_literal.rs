@@ -11,7 +11,7 @@ use glyim_typeck::thir::{self, ExprKind, Literal};
 fn struct_literal_does_not_panic() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
-    let adt_id = AdtId::from_raw(0);
+    let adt_id = AdtId::from_usize(0);
     let subst = ctx_mut.intern_substitution(vec![]);
     let struct_ty = ctx_mut.mk_adt(adt_id, subst);
     let interner = ctx_mut.resolver().clone();
@@ -47,7 +47,7 @@ fn struct_literal_does_not_panic() {
 fn struct_literal_with_spread_does_not_panic() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
-    let adt_id = AdtId::from_raw(1);
+    let adt_id = AdtId::from_usize(1);
     let subst = ctx_mut.intern_substitution(vec![]);
     let struct_ty = ctx_mut.mk_adt(adt_id, subst);
     let interner = ctx_mut.resolver().clone();
@@ -82,7 +82,7 @@ fn struct_literal_with_spread_does_not_panic() {
 fn t024_out_of_order_struct_fields_use_declaration_index() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
-    let adt_id = AdtId::from_raw(0);
+    let adt_id = AdtId::from_usize(0);
     let subst = ctx_mut.intern_substitution(vec![]);
     let struct_ty = ctx_mut.mk_adt(adt_id, subst);
     let interner = ctx_mut.resolver().clone();
@@ -98,8 +98,8 @@ fn t024_out_of_order_struct_fields_use_declaration_index() {
         let resolver = ctx.resolver().clone();
         resolver.intern("y")
     };
-    mock.add_field_index(adt_id, 0, name_x, glyim_type::FieldIdx::from_raw(0));
-    mock.add_field_index(adt_id, 0, name_y, glyim_type::FieldIdx::from_raw(1));
+    mock.add_field_index(adt_id, 0, name_x, glyim_type::FieldIdx::from_usize(0));
+    mock.add_field_index(adt_id, 0, name_y, glyim_type::FieldIdx::from_usize(1));
 
     // Build `P { y: 2, x: 1 }` — source order is y then x.
     let b = ThirBuilder::new(struct_ty, interner);
