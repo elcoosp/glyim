@@ -6,8 +6,11 @@ use glyim_type::Ty;
 use std::sync::Arc;
 
 fn make_body_with_terminator(term: TerminatorKind) -> Body {
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: term,
         source_info: SourceInfo::new(Span::DUMMY),
     };
@@ -16,14 +19,17 @@ fn make_body_with_terminator(term: TerminatorKind) -> Body {
 
 #[test]
 fn emit_call() {
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-    let dest = LocalIdx::from_raw(1);
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Call {
             func: Operand::Constant(MirConst {
                 kind: MirConstKind::Int(0xdead),
@@ -36,7 +42,7 @@ fn emit_call() {
                 span: Span::DUMMY,
             })],
             destination: Place::new(dest),
-            target: Some(BasicBlockIdx::from_raw(2)),
+            target: Some(BasicBlockIdx::from_usize(2)),
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -51,15 +57,18 @@ fn emit_call() {
 
 #[test]
 fn emit_switch_int() {
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
     let targets = SwitchTargets::new(
         Box::new([
-            (1u128, BasicBlockIdx::from_raw(3)),
-            (2u128, BasicBlockIdx::from_raw(4)),
+            (1u128, BasicBlockIdx::from_usize(3)),
+            (2u128, BasicBlockIdx::from_usize(4)),
         ]),
-        BasicBlockIdx::from_raw(5),
+        BasicBlockIdx::from_usize(5),
     );
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::SwitchInt {
             discr: Operand::Constant(MirConst {
                 kind: MirConstKind::Int(1),
@@ -88,7 +97,7 @@ fn emit_assert() {
             span: Span::DUMMY,
         }),
         expected: true,
-        target: BasicBlockIdx::from_raw(2),
+        target: BasicBlockIdx::from_usize(2),
         cleanup: None,
         msg: glyim_mir::AssertMessage::Overflow(glyim_core::primitives::BinOp::Add),
     });
@@ -103,8 +112,8 @@ fn emit_assert() {
 #[test]
 fn emit_drop_is_nop() {
     let body = make_body_with_terminator(TerminatorKind::Drop {
-        place: Place::new(LocalIdx::from_raw(0)),
-        target: BasicBlockIdx::from_raw(1),
+        place: Place::new(LocalIdx::from_usize(0)),
+        target: BasicBlockIdx::from_usize(1),
         cleanup: None,
     });
     let backend = BytecodeBackend::with_ty_ctx(
