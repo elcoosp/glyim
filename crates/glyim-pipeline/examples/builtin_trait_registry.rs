@@ -45,7 +45,7 @@ fn main() {
     for name in ["Default", "Any", "Copy"] {
         let t = BuiltinTraitDef::from_name(name).expect("registry name must resolve");
         let solver_name = trait_ctx
-            .trait_name(TraitDefId::from_raw(t.trait_id()))
+            .trait_name(TraitDefId::from_usize(t.trait_id() as usize))
             .map(|n| interner.resolve(n));
         println!(
             "  {name:<8} id {:>4}  lang-trait: {:<5}  solver registers it as {solver_name:?}",
