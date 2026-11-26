@@ -25,16 +25,16 @@ fn nested_def_map(interner: &mut glyim_core::interner::Interner) -> CrateDefMap 
     // The submodule id is 1.
     root_scope.types.insert(
         zoo,
-        (LocalDefId::from_raw(1), Visibility::Public, Span::DUMMY),
+        (LocalDefId::from_usize(1), Visibility::Public, Span::DUMMY),
     );
 
     let root = ModuleData {
         parent: None,
-        children: vec![(zoo, ModuleId::from_raw(1))],
+        children: vec![(zoo, ModuleId::from_usize(1))],
         scope: root_scope,
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(0),
+        def_id: LocalDefId::from_usize(0),
         visibility: Visibility::Public,
     };
 
@@ -42,15 +42,15 @@ fn nested_def_map(interner: &mut glyim_core::interner::Interner) -> CrateDefMap 
     let mut zoo_scope = ItemScope::default();
     zoo_scope.types.insert(
         point,
-        (LocalDefId::from_raw(2), Visibility::Public, Span::DUMMY),
+        (LocalDefId::from_usize(2), Visibility::Public, Span::DUMMY),
     );
     let zoo_mod = ModuleData {
-        parent: Some(ModuleId::from_raw(0)),
+        parent: Some(ModuleId::from_usize(0)),
         children: vec![],
         scope: zoo_scope,
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(1),
+        def_id: LocalDefId::from_usize(1),
         visibility: Visibility::Public,
     };
 
@@ -59,9 +59,9 @@ fn nested_def_map(interner: &mut glyim_core::interner::Interner) -> CrateDefMap 
     modules.push(zoo_mod);
 
     CrateDefMap {
-        root: ModuleId::from_raw(0),
+        root: ModuleId::from_usize(0),
         modules,
-        krate: CrateId::from_raw(0),
+        krate: CrateId::from_usize(0),
         interner: interner.clone(),
         variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
@@ -94,7 +94,7 @@ fn multi_segment_struct_pattern_resolves_to_adt() {
     );
     assert_eq!(
         resolved.unwrap(),
-        AdtId::from_raw(2),
+        AdtId::from_usize(2),
         "must resolve to the nested ADT's id"
     );
 }
@@ -107,7 +107,7 @@ fn single_segment_struct_pattern_still_resolves() {
     let mut root_scope = ItemScope::default();
     root_scope.types.insert(
         point,
-        (LocalDefId::from_raw(7), Visibility::Public, Span::DUMMY),
+        (LocalDefId::from_usize(7), Visibility::Public, Span::DUMMY),
     );
     let root = ModuleData {
         parent: None,
@@ -115,15 +115,15 @@ fn single_segment_struct_pattern_still_resolves() {
         scope: root_scope,
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(0),
+        def_id: LocalDefId::from_usize(0),
         visibility: Visibility::Public,
     };
     let mut modules = IndexVec::new();
     modules.push(root);
     let def_map = CrateDefMap {
-        root: ModuleId::from_raw(0),
+        root: ModuleId::from_usize(0),
         modules,
-        krate: CrateId::from_raw(0),
+        krate: CrateId::from_usize(0),
         interner: interner.clone(),
         variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
@@ -133,7 +133,7 @@ fn single_segment_struct_pattern_still_resolves() {
 
     let path = Path::from_single(point);
     let resolved = resolve_path_to_adt_id(&ctx, &def_map, &path);
-    assert_eq!(resolved, Some(AdtId::from_raw(7)));
+    assert_eq!(resolved, Some(AdtId::from_usize(7)));
 }
 
 use glyim_core::primitives::Visibility;
