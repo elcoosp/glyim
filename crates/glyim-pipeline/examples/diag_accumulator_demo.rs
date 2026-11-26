@@ -43,7 +43,7 @@ fn main() {
     // terminator so the drop-glue check is skipped and the ctx content is
     // irrelevant for this body.
     let ty_ctx = glyim_test::test_ty_ctx().freeze();
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1));
 
     // First call: cache miss → compute runs, emits two warnings out of stable
     // order, the body is validated (M5.5) and cached WITH the (stable-sorted)
