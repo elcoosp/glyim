@@ -68,7 +68,7 @@ fn match_literal_to_switch_int() {
 
     // Verify the SwitchInt has branches for values 1 and 2
     if let Some(idx) = switch_bb {
-        let bb_idx = glyim_mir::BasicBlockIdx::from_raw(idx as u32);
+        let bb_idx = glyim_mir::BasicBlockIdx::from_usize(idx);
         // Sequential-arm-testing shape: the switch discriminates a *bool*
         // produced by the arm's pattern test (see `lower_pattern_test`), so
         // there are no literal-value branches to check here.
@@ -177,7 +177,7 @@ fn match_enum_uses_discriminant_and_switch() {
     let interner = ctx_mut.resolver().clone();
 
     // Create an Option-like enum type
-    let adt_id = glyim_core::def_id::AdtId::from_raw(100);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(100);
     let adt_substs = ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let enum_ty = ctx_mut.mk_ty(TyKind::Adt(adt_id, adt_substs));
 
@@ -191,7 +191,7 @@ fn match_enum_uses_discriminant_and_switch() {
     let scrutinee = b.var_ref_expr("opt", enum_ty);
     // Register x in var_names so var_ref_expr works
     let x_name = b.make_name("x");
-    let x_var_id = thir::LocalVarId::from_raw(100);
+    let x_var_id = thir::LocalVarId::from_usize(100);
     b.var_names.insert(x_name, x_var_id);
 
     // Arm 1: Some(x) => x (variant 1)
@@ -204,7 +204,7 @@ fn match_enum_uses_discriminant_and_switch() {
                     field: b.make_name("0"),
                     pattern: thir::Pattern {
                         kind: PatternKind::Binding {
-                            var_id: thir::LocalVarId::from_raw(0),
+                            var_id: thir::LocalVarId::from_usize(0),
                             name: x_name,
                             mutability: glyim_core::primitives::Mutability::Not,
                             binding_ty: None,
