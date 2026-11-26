@@ -203,7 +203,7 @@ impl FnCtxt<'_> {
         // with no root `Block`. For those we fall back to driving every
         // expression in the body as a top-level statement.
         let top_level: Vec<glyim_hir::ExprId> = match (0..self.body.exprs.len())
-            .map(|i| glyim_hir::ExprId::from_raw(i as u32))
+            .map(|i| glyim_hir::ExprId::from_usize(i))
             .rfind(|&rid| matches!(self.body.exprs[rid], glyim_hir::Expr::Block { .. }))
         {
             Some(root) => {
@@ -218,7 +218,7 @@ impl FnCtxt<'_> {
                 }
             }
             None => (0..self.body.exprs.len())
-                .map(|i| glyim_hir::ExprId::from_raw(i as u32))
+                .map(|i| glyim_hir::ExprId::from_usize(i))
                 .collect(),
         };
 
