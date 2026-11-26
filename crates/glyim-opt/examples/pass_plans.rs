@@ -45,7 +45,7 @@ fn dead_store_body(ctx: &mut TyCtxMut) -> Body {
         (i32_ty, Mutability::Mut), // _2 dead store target
     ];
     let assign = |place: u32, rv: Rvalue| Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(place)), rv),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(place as usize)), rv),
         source_info: SourceInfo::new(Span::DUMMY),
     };
     let block = BasicBlockData {
@@ -54,7 +54,7 @@ fn dead_store_body(ctx: &mut TyCtxMut) -> Body {
             assign(1, Rvalue::Use(const_int(10, i32_ty))),
             assign(
                 0,
-                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(1)))),
+                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(1)))),
             ),
         ],
         terminator: Terminator {
@@ -65,11 +65,11 @@ fn dead_store_body(ctx: &mut TyCtxMut) -> Body {
     };
     Body {
         owner: glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ),
-        basic_blocks: IndexVec::from_raw(vec![block]),
-        locals: IndexVec::from_raw(
+        basic_blocks: IndexVec::from_vec(vec![block]),
+        locals: IndexVec::from_vec(
             locals
                 .into_iter()
                 .map(|(ty, mutability)| LocalDecl {
