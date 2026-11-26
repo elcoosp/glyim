@@ -57,7 +57,7 @@ fn const_eval_additive_constant() {
             is_cleanup: false,
         });
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: blocks,
             locals,
             arg_count: 0,
@@ -120,7 +120,7 @@ fn const_eval_division_by_zero_is_error() {
             is_cleanup: false,
         });
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: blocks,
             locals,
             arg_count: 0,
