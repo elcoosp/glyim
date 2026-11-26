@@ -5,7 +5,7 @@ use glyim_span::Span;
 use glyim_test::test_ty_ctx;
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 #[test]
@@ -13,15 +13,15 @@ fn remove_block_after_return() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(glyim_type::TyKind::Int(IntTy::I32));
     let mut body = Body::dummy(dummy_def_id());
-    let local0 = LocalIdx::from_raw(0);
+    let local0 = LocalIdx::from_usize(0);
     body.locals.push(LocalDecl {
         ty: i32_ty,
         mutability: glyim_core::primitives::Mutability::Mut,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    let bb0 = BasicBlockIdx::from_raw(0);
-    let _bb1 = BasicBlockIdx::from_raw(1);
-    body.basic_blocks = IndexVec::from_raw(vec![
+    let bb0 = BasicBlockIdx::from_usize(0);
+    let _bb1 = BasicBlockIdx::from_usize(1);
+    body.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![Statement {
                 kind: StatementKind::Assign(
