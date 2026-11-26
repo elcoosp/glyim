@@ -12,7 +12,7 @@ fn test_many_statements_in_block() {
     let mut body = empty_body(Ty::UNIT);
     let local_sum = add_local(&mut body, i32_ty, Mutability::Mut);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     // sum = 0; sum += 1; sum += 2; ... sum += 9; (10 operations)
     add_statement(
         &mut body,
@@ -36,7 +36,7 @@ fn test_many_statements_in_block() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -62,7 +62,7 @@ fn test_nested_aggregate_5_levels() {
         .collect();
     let result_local = add_local(&mut body, i32_ty, Mutability::Not);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
 
     // locals[0] = (42,)
     add_statement(
@@ -90,7 +90,7 @@ fn test_nested_aggregate_5_levels() {
 
     // Read through 5 field-0 projections
     let proj: Vec<ProjectionElem> = (0..5)
-        .map(|_| ProjectionElem::Field(FieldIdx::from_raw(0)))
+        .map(|_| ProjectionElem::Field(FieldIdx::from_usize(0)))
         .collect();
     add_statement(
         &mut body,
@@ -107,7 +107,7 @@ fn test_nested_aggregate_5_levels() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -139,7 +139,7 @@ fn test_all_binary_ops_on_ints() {
 
         let mut body = empty_body(Ty::UNIT);
         let local_r = add_local(&mut body, i32_ty, Mutability::Mut);
-        let bb0 = BasicBlockIdx::from_raw(0);
+        let bb0 = BasicBlockIdx::from_usize(0);
         add_statement(
             &mut body,
             bb0,
@@ -151,7 +151,7 @@ fn test_all_binary_ops_on_ints() {
         let tcx = ctx.freeze();
         let mut interp = Interpreter::new(&tcx);
         interp.add_function(
-            DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             body,
         );
         interp
@@ -184,7 +184,7 @@ fn test_comparison_ops() {
 
         let mut body = empty_body(Ty::UNIT);
         let local_r = add_local(&mut body, Ty::BOOL, Mutability::Mut);
-        let bb0 = BasicBlockIdx::from_raw(0);
+        let bb0 = BasicBlockIdx::from_usize(0);
         add_statement(
             &mut body,
             bb0,
@@ -196,7 +196,7 @@ fn test_comparison_ops() {
         let tcx = ctx.freeze();
         let mut interp = Interpreter::new(&tcx);
         interp.add_function(
-            DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             body,
         );
         interp
@@ -217,7 +217,7 @@ fn test_division_by_zero_panics() {
 
     let mut body = empty_body(Ty::UNIT);
     let local_r = add_local(&mut body, i32_ty, Mutability::Mut);
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(
         &mut body,
         bb0,
@@ -230,7 +230,7 @@ fn test_division_by_zero_panics() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -245,7 +245,7 @@ fn test_unary_not_and_neg() {
     // Test Neg
     let mut body = empty_body(Ty::UNIT);
     let local_r = add_local(&mut body, i32_ty, Mutability::Mut);
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(
         &mut body,
         bb0,
@@ -257,7 +257,7 @@ fn test_unary_not_and_neg() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     interp
@@ -272,7 +272,7 @@ fn test_unary_not_and_neg() {
     let ctx2 = glyim_test::test_ty_ctx();
     let mut body = empty_body(Ty::UNIT);
     let local_r = add_local(&mut body, Ty::BOOL, Mutability::Mut);
-    let bb0_not = BasicBlockIdx::from_raw(0);
+    let bb0_not = BasicBlockIdx::from_usize(0);
     add_statement(
         &mut body,
         bb0_not,
@@ -284,7 +284,7 @@ fn test_unary_not_and_neg() {
     let tcx2 = ctx2.freeze();
     let mut interp2 = Interpreter::new(&tcx2);
     interp2.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     interp2
@@ -306,7 +306,7 @@ fn test_storage_live_dead() {
     let local_x = add_local(&mut body, i32_ty, Mutability::Mut);
     let local_y = add_local(&mut body, i32_ty, Mutability::Not);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(&mut body, bb0, StatementKind::StorageLive(local_x));
     add_statement(
         &mut body,
@@ -327,7 +327,7 @@ fn test_storage_live_dead() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     interp
@@ -347,7 +347,7 @@ fn test_nop_statement_ignored() {
     let mut body = empty_body(Ty::UNIT);
     let local_x = add_local(&mut body, i32_ty, Mutability::Mut);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(&mut body, bb0, StatementKind::Nop);
     add_statement(&mut body, bb0, StatementKind::Nop);
     add_statement(
@@ -360,7 +360,7 @@ fn test_nop_statement_ignored() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     interp
@@ -387,7 +387,7 @@ fn test_len_on_different_array_sizes() {
             Mutability::Mut,
         );
 
-        let bb0 = BasicBlockIdx::from_raw(0);
+        let bb0 = BasicBlockIdx::from_usize(0);
         add_statement(
             &mut body,
             bb0,
@@ -397,7 +397,7 @@ fn test_len_on_different_array_sizes() {
         let tcx = ctx.freeze();
         let mut interp = Interpreter::new(&tcx);
         interp.add_function(
-            DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             body,
         );
         interp
@@ -415,5 +415,5 @@ fn test_len_on_different_array_sizes() {
 fn test_get_local_value_uninitialized() {
     let ctx = glyim_test::test_frozen_ty_ctx();
     let interp = Interpreter::new(&ctx);
-    assert!(interp.get_local_value(LocalIdx::from_raw(0)).is_none());
+    assert!(interp.get_local_value(LocalIdx::from_usize(0)).is_none());
 }
