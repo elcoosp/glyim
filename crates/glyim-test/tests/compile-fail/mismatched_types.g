@@ -1,4 +1,5 @@
 //@ mode: compile-fail
+//@ expect-error-code: T0001
 //@ feature: COMPILER-TI-UNIFICATION, TOOL-TEST-COMPILE-FAIL
 //@ backends: gam
 fn main() -> i32 {
