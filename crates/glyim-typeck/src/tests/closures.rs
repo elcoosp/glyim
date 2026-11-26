@@ -82,19 +82,19 @@ fn closure_captures_enclosing_param() {
 
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pats,
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.len()]),
     };
     let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
     let body_id = bodies.push(body);
 
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: main_name,
         kind: ItemKind::Fn(FnItem {
             params: vec![glyim_hir::Param {
@@ -121,7 +121,7 @@ fn closure_captures_enclosing_param() {
     let mut items: IndexVec<ItemId, Item> = IndexVec::new();
     items.push(item);
     let mut body_owners = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
     let hir = CrateHir {
         items,
         bodies,
@@ -196,19 +196,19 @@ fn move_closure_captures_by_value() {
 
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pats,
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.len()]),
     };
     let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
     let body_id = bodies.push(body);
 
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: main_name,
         kind: ItemKind::Fn(FnItem {
             params: vec![glyim_hir::Param {
@@ -235,7 +235,7 @@ fn move_closure_captures_by_value() {
     let mut items: IndexVec<ItemId, Item> = IndexVec::new();
     items.push(item);
     let mut body_owners = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
     let hir = CrateHir {
         items,
         bodies,
