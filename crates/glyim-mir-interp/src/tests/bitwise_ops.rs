@@ -50,7 +50,7 @@ fn w1_c03_t01_left_shift() {
             is_cleanup: false,
         });
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: blocks,
             locals,
             arg_count: 0,
@@ -106,7 +106,7 @@ fn bitwise_and() {
             is_cleanup: false,
         });
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: blocks,
             locals,
             arg_count: 0,
@@ -166,7 +166,7 @@ fn bitwise_or() {
             is_cleanup: false,
         });
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: blocks,
             locals,
             arg_count: 0,
@@ -226,7 +226,7 @@ fn bitwise_xor() {
             is_cleanup: false,
         });
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: blocks,
             locals,
             arg_count: 0,
@@ -286,7 +286,7 @@ fn right_shift() {
             is_cleanup: false,
         });
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: blocks,
             locals,
             arg_count: 0,
