@@ -21,8 +21,11 @@ mod env;
 pub mod thir;
 /// tyconv.
 pub mod tyconv;
+mod typed_body;
 mod unify;
 pub mod zonk;
+
+pub use typed_body::{ResolvedTy, TypedBody, UnresolvedTy};
 
 use rustc_hash::FxHashMap;
 
@@ -45,8 +48,13 @@ use glyim_type::{
 #[derive(Clone, Debug)]
 /// `TypeckResult`.
 pub struct TypeckResult {
-    #[doc = "field"]
-    pub thir_bodies: Vec<(LocalDefId, thir::Body)>,
+    /// The fully-zonked, signature-verified THIR bodies (plan M5.2): only
+    /// bodies that passed [`TypedBody::try_from_body`] appear here, and MIR
+    /// lowering accepts only this form. Owners whose bodies failed the
+    /// check are absent — they are reported via
+    /// [`TypeckResult::unresolved_ty_var_spans`] and diagnosed by the
+    /// pipeline for reachable owners.
+    pub typed_bodies: Vec<(LocalDefId, TypedBody)>,
     /// `Struct`.
     pub diagnostics: Vec<GlyimDiagnostic>,
     /// Evaluated values of constant definitions (Part C: const value
@@ -1162,33 +1170,23 @@ pub fn typeck_crate(
     // (`Adt(1011, [i32, ERROR])`) and ICEs the LLVM layout pass with
     // `UnknownType(Ty(0))`.
     //
-    // Collected per-owner into `unresolved_ty_var_spans` but *not* emitted
-    // here: typeck checks every body in the crate, including unused stdlib
-    // templates whose unbound generics are expected. The pipeline consults
-    // this map after mono discovery and emits the diagnostic only for
-    // owners that are actually reachable from `main`.
+    // Collected by `zonk_bodies` itself (plan M5.2 `zonk -> Result`): the
+    // fold and the unresolved-walk share one pass, and the `Err` map —
+    // keyed per owner with the spans the diagnostic must point at — feeds
+    // `unresolved_ty_var_spans` below. The pipeline consults this map after
+    // mono discovery and emits the diagnostic only for owners that are
+    // actually reachable from `main`; unused stdlib templates stay silent.
     //
-    // Runs *before* the zonk passes below because once zonk has run the
-    // unbound var has been replaced by `Ty::ERROR` and the distinction
-    // between "no annotation possible" and "explicit error sentinel" is
-    // lost.
-    let mut unresolved_ty_var_spans: std::collections::HashMap<LocalDefId, Vec<glyim_span::Span>> =
-        std::collections::HashMap::new();
-    for (owner, body) in &thir_bodies {
-        let spans = zonk::collect_unresolved_ty_var_spans(&infer, &frozen_ctx, body);
-        if !spans.is_empty() {
-            unresolved_ty_var_spans.insert(*owner, spans);
-        }
-    }
+    // The collection runs *before* the fold inside `zonk_bodies` because
+    // once zonk has run the unbound var has been replaced by `Ty::ERROR`
+    // and the distinction between "no annotation possible" and "explicit
+    // error sentinel" is lost.
+    let unresolved_ty_var_spans: std::collections::HashMap<LocalDefId, Vec<glyim_span::Span>> =
+        match zonk::zonk_bodies(&infer, &frozen_ctx, &mut thir_bodies) {
+            Ok(()) => std::collections::HashMap::new(),
+            Err(map) => map.into_iter().collect(),
+        };
 
-    // Zonk THIR bodies: fold every `Ty` slot through the now-complete
-    // inference table so that downstream phases (MIR lowering, codegen-llvm,
-    // bytecode VM) never see a raw `Infer(Int(_))` / `Infer(Float(_))`.
-    // Before this pass, an unsuffixed literal such as the `41` in
-    // `add_one(41)` still carried its pre-unification `Infer(Int(_))` even
-    // though unification had long since bound it to `i32`, and the LLVM
-    // backend subsequently ICEd on the raw variable.
-    zonk::zonk_bodies(&infer, &frozen_ctx, &mut thir_bodies);
     // §3.5.18: after zonk, every literal's type is concrete — flag
     // unsuffixed literals whose value does not fit their inferred type.
     // Without this, `let a = 4294967296;` type-checks as i32 and wraps
@@ -1228,8 +1226,22 @@ pub fn typeck_crate(
         expr_types.insert(*body_id, resolved);
     }
 
+    // Typed THIR boundary (plan M5.2): only bodies whose zonk passed and
+    // whose declared signature slots carry no inference variable and no
+    // `Ty::ERROR` sentinel become `TypedBody` — the only body form that
+    // leaves typeck, and the only one MIR lowering accepts. Bodies rejected
+    // here are exactly the ones `unresolved_ty_var_spans` reports; the
+    // pipeline diagnoses the reachable ones after mono discovery and never
+    // monomorphizes an unverified body.
+    let mut typed_bodies: Vec<(LocalDefId, TypedBody)> = Vec::with_capacity(thir_bodies.len());
+    for (owner, body) in thir_bodies {
+        if let Ok(typed) = TypedBody::try_from_body(body, &frozen_ctx) {
+            typed_bodies.push((owner, typed));
+        }
+    }
+
     let result = TypeckResult {
-        thir_bodies,
+        typed_bodies,
         diagnostics,
         const_values: all_const_values.clone(),
         expr_types,
