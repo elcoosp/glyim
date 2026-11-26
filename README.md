@@ -154,7 +154,7 @@ That's the whole loop: scaffold, build, run. The project template is a working "
 
 ### Tooling
 
-- **`glyim` CLI** — 9 emit kinds (`obj|exec|mir|llvm-ir|asm|cdylib|syntax|stats|run`), backend selection, opt-level, LTO, codegen units, `--time-passes`, `--self-profile`
+- **`glyim` CLI** — 9 emit kinds (`obj|exec|mir|llvm-ir|asm|cdylib|syntax|stats|run`), backend selection, opt-level, LTO, codegen units, `--time-passes`, `--self-profile`, `--opt-bisect-limit`
 - **`glyip` build tool** — Cargo-like project manager with SemVer 2.0 resolution, path/git deps, lockfiles, registry client
 - **Full LSP** — pushed + pulled + workspace diagnostics, hover, completion, goto-definition/type-definition/declaration/implementation, references, rename, semantic tokens, call hierarchy, type hierarchy, inlay hints, and 30+ more capabilities
 - **Test harness** — compile-pass, compile-fail, run-pass, run-fail with inline annotations, snapshot testing (CST, def-map, MIR), mocks for every phase, property-based type generation
