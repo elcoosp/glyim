@@ -181,7 +181,15 @@ pub enum AdtKind {
 }
 
 /// Lower a THIR body to MIR.
-pub fn lower_body(ctx: &dyn LowerCtx, thir: &thir::Body) -> LowerResult {
+///
+/// Crate-internal primitive: it trusts its caller to have zonked the body
+/// and verified its signature slots. The *public* lowering entry point is
+/// [`lower_typed_body`], which accepts only
+/// [`TypedBody`](glyim_typeck::TypedBody) — the plan M5.2 seam that makes an
+/// unverified body (raw inference variables, the `Ty::ERROR` sentinel from
+/// an unbound type variable) unrepresentable at the lowering boundary
+/// (constitution C3).
+pub(crate) fn lower_body(ctx: &dyn LowerCtx, thir: &thir::Body) -> LowerResult {
     let mut builder = crate::builder::MirBuilder::new(ctx, thir);
     builder.lower_body(thir);
 
@@ -204,4 +212,18 @@ pub fn lower_body(ctx: &dyn LowerCtx, thir: &thir::Body) -> LowerResult {
         closure_bodies: builder.closure_bodies,
         async_transform: Some(async_transform),
     }
+}
+
+/// Lower a *verified* THIR body to MIR (plan M5.2: "lowering accepts only
+/// `TypedBody`").
+///
+/// A [`TypedBody`](glyim_typeck::TypedBody) is constructible only through its
+/// checked constructor, which refuses any body whose parameter or return
+/// slots still carry an inference variable or the post-zonk `Ty::ERROR`
+/// sentinel. Bodies rejected at that boundary never arrive here: the
+/// pipeline reports them via the reachability-gated "type annotations
+/// needed" diagnostic instead of lowering them with fabricated sentinel
+/// types (the F10 error-arm sentinel class).
+pub fn lower_typed_body(ctx: &dyn LowerCtx, typed: &glyim_typeck::TypedBody) -> LowerResult {
+    lower_body(ctx, typed.get())
 }
