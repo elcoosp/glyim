@@ -100,6 +100,11 @@ glyim-cli = { path = "crates/glyim-cli" }
 glyim-test = { path = "crates/glyim-test" }
 glyim-lang-std = { path = "crates/glyim-lang-std" }
 lasso = "0.7.3"
+# M3.4 safe append-only arena: the vetted, loom-tested append-only vector —
+# chunk storage whose entries never move, lock-free `&self` push/get, freed
+# with the arena (no process-lifetime leak). Replaces the raw-pointer
+# `Box::into_raw` tables and the `unsafe impl Send/Sync` they forced.
+boxcar = "0.2.14"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 parking_lot = "0.13"
