@@ -21,8 +21,8 @@ fn s08_t36_concurrent_generate_independent_backends() {
                 let output_path = tpath(&format!("glyim_concurrent_{i}.o"));
                 let output = Path::new(&output_path);
                 let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-                    glyim_core::CrateId::from_raw(0),
-                    glyim_core::LocalDefId::from_raw(i * 1000),
+                    glyim_core::CrateId::from_usize(0),
+                    glyim_core::LocalDefId::from_usize(i * 1000),
                 )));
                 let bodies = vec![body];
                 let result = backend.generate(&crate::tests::to_pairs(&bodies), &output_path);
@@ -45,8 +45,8 @@ fn s08_t37_concurrent_generate_function_independent() {
             thread::spawn(move || {
                 let backend = LlvmBackend::new();
                 let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-                    glyim_core::CrateId::from_raw(0),
-                    glyim_core::LocalDefId::from_raw(i * 2000),
+                    glyim_core::CrateId::from_usize(0),
+                    glyim_core::LocalDefId::from_usize(i * 2000),
                 )));
                 let result = backend.generate_function(&body);
                 assert!(
@@ -70,8 +70,8 @@ fn s08_t38_rapid_backend_creation_and_drop() {
     for i in 0..20 {
         let backend = LlvmBackend::new();
         let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(i),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(i),
         )));
         let _ = backend.generate_function(&body);
         // backend drops here
@@ -83,8 +83,8 @@ fn s08_t39_generate_to_file_then_overwrite() {
     let backend = LlvmBackend::new();
     let output = tpath("glyim_overwrite.o");
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(999),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(999),
     )));
     let bodies = vec![body.clone()];
     backend
