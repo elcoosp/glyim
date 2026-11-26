@@ -6,7 +6,7 @@ use std::collections::HashSet;
 pub(crate) fn run(_ctx: &TyCtx, body: &mut Body) {
     let used = collect_used_locals(body);
     for bb in 0..body.basic_blocks.len() {
-        let block = &mut body.basic_blocks[BasicBlockIdx::from_raw(bb as u32)];
+        let block = &mut body.basic_blocks[BasicBlockIdx::from_usize(bb)];
         block.statements.retain(|stmt| {
             if let StatementKind::Assign(place, _) = &stmt.kind
                 && place.projection.is_empty()
@@ -22,12 +22,12 @@ fn collect_used_locals(body: &Body) -> HashSet<LocalIdx> {
     let mut used = HashSet::new();
     // The return place (_0) and function arguments are always considered used
     // because they communicate values to/from the caller.
-    used.insert(LocalIdx::from_raw(0));
+    used.insert(LocalIdx::from_usize(0));
     for i in 0..body.arg_count {
-        used.insert(LocalIdx::from_raw(u32::try_from(i + 1).unwrap_or(u32::MAX)));
+        used.insert(LocalIdx::from_usize(i + 1));
     }
     for bb in 0..body.basic_blocks.len() {
-        let block = &body.basic_blocks[BasicBlockIdx::from_raw(bb as u32)];
+        let block = &body.basic_blocks[BasicBlockIdx::from_usize(bb)];
         for stmt in &block.statements {
             if let StatementKind::Assign(place, rvalue) = &stmt.kind {
                 collect_uses_in_rvalue(rvalue, &mut used);
