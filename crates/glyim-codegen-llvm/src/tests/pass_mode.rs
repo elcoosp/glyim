@@ -100,7 +100,7 @@ fn ignore_pass_mode_skips_zero_sized_args() {
 #[test]
 fn fn_def_constant_lowering_produces_pointer() {
     let (ctx, (fn_def_ty, fn_def_id, substs)) = with_fresh_ty_ctx(|c| {
-        let fn_def_id = FnDefId::from_raw(42);
+        let fn_def_id = FnDefId::from_usize(42);
         let substs = c.intern_substitution(vec![]);
         let fn_def_ty = c.mk_ty(TyKind::FnDef(fn_def_id, substs));
         (fn_def_ty, fn_def_id, substs)
@@ -128,7 +128,7 @@ fn const_ref_constant_lowering_produces_pointer() {
     // MirConstKind values first. This test exercises the ICE path: the
     // diagnostic must name the const id and mention "const evaluation".
     let (ctx, (const_ref_ty, const_def_id, substs)) = with_fresh_ty_ctx(|c| {
-        let const_def_id = ConstDefId::from_raw(7);
+        let const_def_id = ConstDefId::from_usize(7);
         let substs = c.intern_substitution(vec![]);
         let const_ref_ty = c.mk_ty(TyKind::Uint(UintTy::U32));
         (const_ref_ty, const_def_id, substs)
