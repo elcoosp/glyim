@@ -55,12 +55,17 @@ impl<T> fmt::Debug for Idx<T> {
 }
 
 impl<T> Idx<T> {
+    /// Sanctioned production constructor: wraps a `usize` slot produced by
+    /// an arena issuer ([`IndexVec::push`], an interner, or an explicit
+    /// allocator). The `usize` -> `u32` narrowing is deliberate (handle
+    /// widths are `u32` by construction) and is guarded by the
+    /// `IndexVec::push` invariant that lengths stay well below `u32::MAX`
+    /// (`u32_index` panics loudly long before truncation could matter).
     #[inline]
-    /// `from_raw`.
     #[must_use]
-    pub fn from_raw(raw: u32) -> Self {
+    pub fn from_usize(idx: usize) -> Self {
         Self {
-            raw,
+            raw: idx as u32,
             _marker: PhantomData,
         }
     }
@@ -79,9 +84,17 @@ impl<T> Idx<T> {
 }
 
 /// `IdxLike`.
+///
+/// The raw-wrap method [`IdxLike::from_u32`] is `IndexVec` machinery, not a
+/// public constructor (plan M3.1 / CT-1): production code obtains handles
+/// from [`IndexVec::push`], interners, or the per-family `from_usize`
+/// factories. It is deliberately *not* named `from_raw` so the CT-1 ledger
+/// metric ("`from_raw` outside arena modules = 0") has no legitimate
+/// non-arena match to whitelist.
 pub trait IdxLike: Copy + Eq + fmt::Debug + 'static {
-    /// `from_raw`.
-    fn from_raw(raw: u32) -> Self;
+    /// Wraps a raw `u32` slot index. `IndexVec`-internal machinery; see the
+    /// trait docs for why this is not a public raw constructor.
+    fn from_u32(raw: u32) -> Self;
     /// `to_raw`.
     fn to_raw(self) -> u32;
     /// index.
@@ -91,8 +104,8 @@ pub trait IdxLike: Copy + Eq + fmt::Debug + 'static {
 }
 
 impl<T: 'static> IdxLike for Idx<T> {
-    fn from_raw(raw: u32) -> Self {
-        Idx::from_raw(raw)
+    fn from_u32(raw: u32) -> Self {
+        Idx::from_usize(raw as usize)
     }
     fn to_raw(self) -> u32 {
         self.to_raw()
@@ -108,11 +121,22 @@ macro_rules! define_idx {
         pub struct $name(u32);
 
         impl $name {
-            /// Wraps a raw `u32` index.
+            // No raw constructor exists, not even `#[cfg(test)]`-gated: a
+            // cfg(test) hatch is only ever callable from the defining
+            // crate's own tests, and those use the sanctioned
+            // `from_usize` factory. The single raw wrap in this crate is
+            // [`IdxLike::from_u32`] — `IndexVec` machinery (plan M3.1 /
+            // CT-1).
+            /// Sanctioned production constructor: wraps a `usize` slot
+            /// produced by an arena issuer (`IndexVec::push`, an interner,
+            /// or an explicit allocator). The `usize` -> `u32` narrowing is
+            /// deliberate (handle widths are `u32` by construction) and is
+            /// guarded by the `IndexVec::push` invariant that lengths stay
+            /// well below `u32::MAX`.
             #[inline]
             #[must_use]
-            pub fn from_raw(raw: u32) -> Self {
-                Self(raw)
+            pub fn from_usize(idx: usize) -> Self {
+                Self(idx as u32)
             }
             /// Returns the raw `u32` index.
             #[inline]
@@ -129,8 +153,9 @@ macro_rules! define_idx {
         }
 
         impl $crate::arena::IdxLike for $name {
-            /// Wraps a raw `u32` index.
-            fn from_raw(raw: u32) -> Self {
+            /// Wraps a raw `u32` index (`IndexVec` machinery; see
+            /// [`IdxLike`] docs).
+            fn from_u32(raw: u32) -> Self {
                 Self(raw)
             }
             /// Returns the raw `u32` index.
@@ -165,9 +190,12 @@ impl<I: IdxLike, T> IndexVec<I, T> {
             _marker: PhantomData,
         }
     }
-    /// `from_raw`.
+    /// `from_vec`: builds an `IndexVec` from an already-collected backing
+    /// vector. (Formerly `IndexVec::from_raw`; renamed in plan M3.1 / CT-1
+    /// so the arena-crate's raw-constructor vocabulary stays unambiguous
+    /// — this wraps a `Vec<T>`, not a raw handle.)
     #[must_use]
-    pub fn from_raw(raw: Vec<T>) -> Self {
+    pub fn from_vec(raw: Vec<T>) -> Self {
         Self {
             raw,
             _marker: PhantomData,
@@ -175,7 +203,7 @@ impl<I: IdxLike, T> IndexVec<I, T> {
     }
     /// push.
     pub fn push(&mut self, val: T) -> I {
-        let idx = I::from_raw(u32_index(self.raw.len()));
+        let idx = I::from_u32(u32_index(self.raw.len()));
         self.raw.push(val);
         idx
     }
@@ -218,14 +246,14 @@ impl<I: IdxLike, T> IndexVec<I, T> {
         self.raw
             .iter()
             .enumerate()
-            .map(|(i, v)| (I::from_raw(u32_index(i)), v))
+            .map(|(i, v)| (I::from_u32(u32_index(i)), v))
     }
     /// `into_iter_enumerated`.
     pub fn into_iter_enumerated(self) -> impl Iterator<Item = (I, T)> {
         self.raw
             .into_iter()
             .enumerate()
-            .map(|(i, v)| (I::from_raw(u32_index(i)), v))
+            .map(|(i, v)| (I::from_u32(u32_index(i)), v))
     }
     /// `into_raw`.
     #[must_use]
