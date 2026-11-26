@@ -31,7 +31,10 @@ fn multiple_distinct_adts_get_increasing_indices() {
     let (frozen, tys) = with_fresh_ty_ctx(|c| {
         let mut mk = |id: u32| {
             let substs = c.intern_substitution(vec![]);
-            c.mk_adt(glyim_core::def_id::AdtId::from_raw(1_000_000 + id), substs)
+            c.mk_adt(
+                glyim_core::def_id::AdtId::from_usize(1_000_000 + id as usize),
+                substs,
+            )
         };
         vec![mk(0), mk(1), mk(2)]
     });
@@ -122,7 +125,7 @@ fn freeze_after_many_operations() {
         let t_bool = c.bool_ty();
         let t_i32 = c.mk_ty(TyKind::Int(IntTy::I32));
         let substs = c.intern_substitution(vec![GenericArg::Ty(t_bool), GenericArg::Ty(t_i32)]);
-        let adt = c.mk_adt(glyim_core::def_id::AdtId::from_raw(99), substs);
+        let adt = c.mk_adt(glyim_core::def_id::AdtId::from_usize(99), substs);
         let ref_ty = c.mk_ref(Region::Erased, adt, Mutability::Mut);
         let _vid = c.new_region_var(Region::Static);
         (t_bool, t_i32, adt, ref_ty)
@@ -144,7 +147,7 @@ fn freeze_after_many_operations() {
         panic!("expected Ref");
     }
     assert!(matches!(
-        frozen.region(RegionVid::from_raw(0)),
+        frozen.region(RegionVid::from_usize(0)),
         Region::Static
     ));
 }
