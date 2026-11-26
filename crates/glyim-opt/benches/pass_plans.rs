@@ -26,7 +26,7 @@ use std::time::Instant;
 
 use glyim_core::{IndexVec, Interner, Mutability};
 use glyim_mir::*;
-use glyim_opt::{BuiltinMirPass, PassPlan, optimize_at_level};
+use glyim_opt::{BuiltinMirPass, PassPlan, optimize_at_level, optimize_with_bisect};
 use glyim_span::Span;
 use glyim_type::{Ty, TyCtxMut, TyKind};
 
@@ -76,13 +76,23 @@ fn synthetic_body(ctx: &mut TyCtxMut, blocks: usize) -> Body {
     let mut bbs = Vec::with_capacity(blocks);
     for i in 0..blocks {
         let last = i + 1 == blocks;
-        let stmts = vec![
-            storage_live(1),
-            assign(2, 42),              // dead store — never read
-            assign(1, i as i128),       // live value
-            assign(1, (i as i128) + 1), // immediate overwrite (const-prop fodder)
-            storage_dead(2),
-        ];
+        // StorageLive/StorageDead are function-entry/exit statements in real
+        // lowering — one pair per local, not one per block. Emitting them per
+        // block would make `cfg_simplify`'s block merge violate the M5.5
+        // validator's `DoubleStorageLive` check (a fixture bug: real bodies
+        // never look like that).
+        let mut stmts = Vec::new();
+        if i == 0 {
+            stmts.push(storage_live(1));
+            stmts.push(storage_live(2));
+            stmts.push(assign(2, 42)); // dead store — never read (DCE fodder)
+        }
+        stmts.push(assign(1, i as i128)); // live value
+        stmts.push(assign(1, (i as i128) + 1)); // immediate overwrite (const-prop fodder)
+        if last {
+            stmts.push(storage_dead(1));
+            stmts.push(storage_dead(2));
+        }
         let term = if last {
             Terminator {
                 kind: TerminatorKind::Return,
@@ -181,5 +191,38 @@ fn main() {
         "  blocks after O0/O2         : {}/{}",
         o0.body.basic_blocks.len(),
         o2.body.basic_blocks.len()
+    );
+
+    // 4. M5.11 bisect/stats overhead: `optimize_with_bisect` at the full
+    //    limit (one `PassStats` row per pass, verify-after-each-pass always
+    //    on) versus the stats-free `optimize_at_level` path — the collection
+    //    cost `--opt-bisect-limit` adds must stay negligible next to the
+    //    passes themselves. The limit=1 row shows the skipped-pass cost a
+    //    bisect probe pays (most passes run no work).
+    let plan = PassPlan::for_opt_level(2);
+    let full_len = plan.passes().len();
+
+    let t4 = Instant::now();
+    let bisected = optimize_with_bisect(&frozen, Arc::clone(&arc), &plan, full_len)
+        .expect("bisect at full limit must succeed");
+    let bisect_full_us = t4.elapsed();
+
+    let t5 = Instant::now();
+    let probe = optimize_with_bisect(&frozen, Arc::clone(&arc), &plan, 1)
+        .expect("bisect at limit 1 must succeed");
+    let bisect_probe_us = t5.elapsed();
+
+    println!("glyim-opt bisect/stats cost (M5.11, 512-block synthetic body)");
+    println!(
+        "  optimize_with_bisect(limit={full_len}) : {bisect_full_us:12?}  (stats collected, {} rows)",
+        bisected.1.len()
+    );
+    println!(
+        "  optimize_with_bisect(limit=1)     : {bisect_probe_us:12?}  (probe: slice_desugar only, {} rows)",
+        probe.1.len()
+    );
+    println!(
+        "  stats overhead vs optimize_at_level: {:.2}x",
+        bisect_full_us.as_secs_f64() / o2_us.as_secs_f64().max(f64::EPSILON)
     );
 }
