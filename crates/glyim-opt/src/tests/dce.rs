@@ -6,7 +6,7 @@ fn make_int_ty(ctx: &mut glyim_type::TyCtxMut) -> glyim_type::Ty {
     ctx.mk_ty(glyim_type::TyKind::Int(glyim_core::IntTy::I32))
 }
 fn make_place(idx: u32) -> Place {
-    Place::new(LocalIdx::from_raw(idx))
+    Place::new(LocalIdx::from_usize(idx as usize))
 }
 fn make_copy(idx: u32) -> Operand {
     Operand::Copy(make_place(idx))
@@ -55,8 +55,8 @@ fn make_body_multi_dead(ctx: &mut glyim_type::TyCtxMut) -> Body {
             discr: make_copy(3),
             switch_ty: int_ty,
             targets: SwitchTargets::new(
-                vec![(0, BasicBlockIdx::from_raw(1))].into_boxed_slice(),
-                BasicBlockIdx::from_raw(1),
+                vec![(0, BasicBlockIdx::from_usize(1))].into_boxed_slice(),
+                BasicBlockIdx::from_usize(1),
             ),
         },
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -72,11 +72,11 @@ fn make_body_multi_dead(ctx: &mut glyim_type::TyCtxMut) -> Body {
         is_cleanup: false,
     };
     let mut body = Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     ));
-    body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-    body.locals = glyim_core::IndexVec::from_raw(
+    body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+    body.locals = glyim_core::IndexVec::from_vec(
         (0..4)
             .map(|_| LocalDecl {
                 ty: int_ty,
@@ -108,7 +108,7 @@ fn make_body_all_live(ctx: &mut glyim_type::TyCtxMut) -> Body {
             func: make_copy(1),
             args: vec![make_copy(2)],
             destination: make_place(0),
-            target: Some(BasicBlockIdx::from_raw(1)),
+            target: Some(BasicBlockIdx::from_usize(1)),
             cleanup: None,
         },
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -124,11 +124,11 @@ fn make_body_all_live(ctx: &mut glyim_type::TyCtxMut) -> Body {
         is_cleanup: false,
     };
     let mut body = Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     ));
-    body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-    body.locals = glyim_core::IndexVec::from_raw(
+    body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+    body.locals = glyim_core::IndexVec::from_vec(
         (0..3)
             .map(|_| LocalDecl {
                 ty: int_ty,
@@ -170,8 +170,8 @@ fn make_body_aggregate_use(ctx: &mut glyim_type::TyCtxMut) -> Body {
             discr: make_copy(3),
             switch_ty: int_ty,
             targets: SwitchTargets::new(
-                vec![(0, BasicBlockIdx::from_raw(1))].into_boxed_slice(),
-                BasicBlockIdx::from_raw(1),
+                vec![(0, BasicBlockIdx::from_usize(1))].into_boxed_slice(),
+                BasicBlockIdx::from_usize(1),
             ),
         },
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -187,11 +187,11 @@ fn make_body_aggregate_use(ctx: &mut glyim_type::TyCtxMut) -> Body {
         is_cleanup: false,
     };
     let mut body = Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     ));
-    body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-    body.locals = glyim_core::IndexVec::from_raw(
+    body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+    body.locals = glyim_core::IndexVec::from_vec(
         (0..4)
             .map(|_| LocalDecl {
                 ty: int_ty,
@@ -236,8 +236,8 @@ fn eliminates_single_dead_store() {
                 discr: make_copy(2),
                 switch_ty: int_ty,
                 targets: SwitchTargets::new(
-                    vec![(0, BasicBlockIdx::from_raw(1))].into_boxed_slice(),
-                    BasicBlockIdx::from_raw(1),
+                    vec![(0, BasicBlockIdx::from_usize(1))].into_boxed_slice(),
+                    BasicBlockIdx::from_usize(1),
                 ),
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -253,11 +253,11 @@ fn eliminates_single_dead_store() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-        body.locals = glyim_core::IndexVec::from_raw(
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+        body.locals = glyim_core::IndexVec::from_vec(
             (0..3)
                 .map(|_| LocalDecl {
                     ty: int_ty,
@@ -269,7 +269,7 @@ fn eliminates_single_dead_store() {
         body
     });
     crate::dce::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     assert_eq!(
         block.statements.len(),
         1,
@@ -288,7 +288,7 @@ fn eliminates_single_dead_store() {
 fn removes_multiple_dead_stores() {
     let (ctx, mut body) = with_fresh_ty_ctx(make_body_multi_dead);
     crate::dce::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     assert_eq!(
         block.statements.len(),
         1,
@@ -307,7 +307,7 @@ fn removes_multiple_dead_stores() {
 fn keeps_live_stores_with_aggregate_use() {
     let (ctx, mut body) = with_fresh_ty_ctx(make_body_aggregate_use);
     crate::dce::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     assert_eq!(
         block.statements.len(),
         3,
@@ -319,7 +319,7 @@ fn keeps_live_stores_with_aggregate_use() {
 fn all_live_preserves_everything() {
     let (ctx, mut body) = with_fresh_ty_ctx(make_body_all_live);
     crate::dce::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     assert_eq!(
         block.statements.len(),
         2,
@@ -333,7 +333,7 @@ fn storage_live_dead_kept() {
         let int_ty = make_int_ty(ctx_mut);
         let stmts = vec![
             Statement {
-                kind: StatementKind::StorageLive(LocalIdx::from_raw(1)),
+                kind: StatementKind::StorageLive(LocalIdx::from_usize(1)),
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
             },
             Statement {
@@ -344,7 +344,7 @@ fn storage_live_dead_kept() {
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
             },
             Statement {
-                kind: StatementKind::StorageDead(LocalIdx::from_raw(1)),
+                kind: StatementKind::StorageDead(LocalIdx::from_usize(1)),
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
             },
             // live assignment to local2 that is used in terminator
@@ -361,8 +361,8 @@ fn storage_live_dead_kept() {
                 discr: make_copy(2),
                 switch_ty: int_ty,
                 targets: SwitchTargets::new(
-                    vec![(0, BasicBlockIdx::from_raw(1))].into_boxed_slice(),
-                    BasicBlockIdx::from_raw(1),
+                    vec![(0, BasicBlockIdx::from_usize(1))].into_boxed_slice(),
+                    BasicBlockIdx::from_usize(1),
                 ),
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -378,11 +378,11 @@ fn storage_live_dead_kept() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-        body.locals = glyim_core::IndexVec::from_raw(
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+        body.locals = glyim_core::IndexVec::from_vec(
             (0..3)
                 .map(|_| LocalDecl {
                     ty: int_ty,
@@ -394,7 +394,7 @@ fn storage_live_dead_kept() {
         body
     });
     crate::dce::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     assert_eq!(
         block.statements.len(),
         3,
@@ -441,8 +441,8 @@ fn cast_operand_keeps_assignment_live() {
                 discr: make_copy(2),
                 switch_ty: i64_ty,
                 targets: SwitchTargets::new(
-                    vec![(0, BasicBlockIdx::from_raw(1))].into_boxed_slice(),
-                    BasicBlockIdx::from_raw(1),
+                    vec![(0, BasicBlockIdx::from_usize(1))].into_boxed_slice(),
+                    BasicBlockIdx::from_usize(1),
                 ),
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -458,11 +458,11 @@ fn cast_operand_keeps_assignment_live() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-        body.locals = glyim_core::IndexVec::from_raw(
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+        body.locals = glyim_core::IndexVec::from_vec(
             (0..3)
                 .map(|_| LocalDecl {
                     ty: int_ty,
@@ -474,7 +474,7 @@ fn cast_operand_keeps_assignment_live() {
         body
     });
     crate::dce::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     assert_eq!(
         block.statements.len(),
         2,
@@ -508,8 +508,8 @@ fn ref_operand_keeps_assignment_live() {
                 discr: make_copy(2),
                 switch_ty: ref_ty,
                 targets: SwitchTargets::new(
-                    vec![(0, BasicBlockIdx::from_raw(1))].into_boxed_slice(),
-                    BasicBlockIdx::from_raw(1),
+                    vec![(0, BasicBlockIdx::from_usize(1))].into_boxed_slice(),
+                    BasicBlockIdx::from_usize(1),
                 ),
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -525,11 +525,11 @@ fn ref_operand_keeps_assignment_live() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-        body.locals = glyim_core::IndexVec::from_raw(
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+        body.locals = glyim_core::IndexVec::from_vec(
             (0..3)
                 .map(|_| LocalDecl {
                     ty: int_ty,
@@ -541,7 +541,7 @@ fn ref_operand_keeps_assignment_live() {
         body
     });
     crate::dce::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     assert_eq!(
         block.statements.len(),
         2,
@@ -582,8 +582,8 @@ fn dead_store_with_live_operands() {
                 discr: make_copy(3),
                 switch_ty: int_ty,
                 targets: SwitchTargets::new(
-                    vec![(0, BasicBlockIdx::from_raw(1))].into_boxed_slice(),
-                    BasicBlockIdx::from_raw(1),
+                    vec![(0, BasicBlockIdx::from_usize(1))].into_boxed_slice(),
+                    BasicBlockIdx::from_usize(1),
                 ),
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -599,11 +599,11 @@ fn dead_store_with_live_operands() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-        body.locals = glyim_core::IndexVec::from_raw(
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+        body.locals = glyim_core::IndexVec::from_vec(
             (0..4)
                 .map(|_| LocalDecl {
                     ty: int_ty,
@@ -615,7 +615,7 @@ fn dead_store_with_live_operands() {
         body
     });
     crate::dce::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     assert_eq!(
         block.statements.len(),
         2,
