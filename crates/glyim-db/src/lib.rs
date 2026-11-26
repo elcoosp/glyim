@@ -82,7 +82,7 @@ impl Database {
             interner: Interner::new(),
             vfs: Vfs::new(),
             ty_ctx: Arc::new(std::sync::RwLock::new(None)),
-            krate: CrateId::from_raw(0),
+            krate: CrateId::from_usize(0),
             mono_cache: RwLock::new(None),
             config,
             lints: glyim_core::lint::LintMap::new(),
