@@ -9,8 +9,8 @@ fn discriminant_returns_variant_index() {
     let ctx = glyim_test::test_frozen_ty_ctx();
     let mut interp = Interpreter::new(&ctx);
 
-    let crate_id = CrateId::from_raw(0);
-    let local_def_id = LocalDefId::from_raw(0);
+    let crate_id = CrateId::from_usize(0);
+    let local_def_id = LocalDefId::from_usize(0);
     let owner = DefId::new(crate_id, local_def_id);
 
     let mut locals = IndexVec::with_capacity(3);
@@ -30,8 +30,8 @@ fn discriminant_returns_variant_index() {
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     });
 
-    let enum_place = Place::new(LocalIdx::from_raw(1));
-    let return_place = Place::new(LocalIdx::from_raw(0));
+    let enum_place = Place::new(LocalIdx::from_usize(1));
+    let return_place = Place::new(LocalIdx::from_usize(0));
 
     // Assign local 1 = Aggregate([Int(2), Unit, Unit])
     let agg_stmt = Statement {
@@ -92,7 +92,7 @@ fn discriminant_returns_variant_index() {
     let result = interp.run_body(&body);
     assert!(result.is_ok(), "run_body failed: {result:?}");
 
-    let ret = interp.get_local_value(LocalIdx::from_raw(0));
+    let ret = interp.get_local_value(LocalIdx::from_usize(0));
     assert!(ret.is_some(), "return place not set");
     assert_eq!(
         ret.unwrap(),
@@ -107,8 +107,8 @@ fn discriminant_empty_aggregate_returns_zero() {
     let ctx = glyim_test::test_frozen_ty_ctx();
     let mut interp = Interpreter::new(&ctx);
 
-    let crate_id = CrateId::from_raw(0);
-    let local_def_id = LocalDefId::from_raw(0);
+    let crate_id = CrateId::from_usize(0);
+    let local_def_id = LocalDefId::from_usize(0);
     let owner = DefId::new(crate_id, local_def_id);
 
     let mut locals = IndexVec::with_capacity(2);
@@ -123,8 +123,8 @@ fn discriminant_empty_aggregate_returns_zero() {
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     });
 
-    let enum_place = Place::new(LocalIdx::from_raw(1));
-    let return_place = Place::new(LocalIdx::from_raw(0));
+    let enum_place = Place::new(LocalIdx::from_usize(1));
+    let return_place = Place::new(LocalIdx::from_usize(0));
 
     let agg_stmt = Statement {
         kind: StatementKind::Assign(
@@ -164,7 +164,7 @@ fn discriminant_empty_aggregate_returns_zero() {
     let result = interp.run_body(&body);
     assert!(result.is_ok(), "run_body failed: {result:?}");
 
-    let ret = interp.get_local_value(LocalIdx::from_raw(0));
+    let ret = interp.get_local_value(LocalIdx::from_usize(0));
     assert!(ret.is_some(), "return place not set");
     assert_eq!(
         ret.unwrap(),
@@ -179,8 +179,8 @@ fn discriminant_non_aggregate_errors() {
     let ctx = glyim_test::test_frozen_ty_ctx();
     let mut interp = Interpreter::new(&ctx);
 
-    let crate_id = CrateId::from_raw(0);
-    let local_def_id = LocalDefId::from_raw(0);
+    let crate_id = CrateId::from_usize(0);
+    let local_def_id = LocalDefId::from_usize(0);
     let owner = DefId::new(crate_id, local_def_id);
 
     let mut locals = IndexVec::with_capacity(2);
@@ -195,8 +195,8 @@ fn discriminant_non_aggregate_errors() {
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     });
 
-    let enum_place = Place::new(LocalIdx::from_raw(1));
-    let return_place = Place::new(LocalIdx::from_raw(0));
+    let enum_place = Place::new(LocalIdx::from_usize(1));
+    let return_place = Place::new(LocalIdx::from_usize(0));
 
     let int_stmt = Statement {
         kind: StatementKind::Assign(
