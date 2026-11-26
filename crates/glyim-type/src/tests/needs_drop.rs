@@ -58,7 +58,7 @@ fn struct_of_primitives_does_not_need_drop() {
         let mut fields: IndexVec<FieldIdx, FieldDef> = IndexVec::new();
         fields.push(FieldDef { name, ty: i32_ty });
         fields.push(FieldDef { name, ty: i32_ty });
-        let adt_id = AdtId::from_raw(0);
+        let adt_id = AdtId::from_usize(0);
         let adt_def = AdtDef {
             kind: AdtKind::Struct,
             fields: fields.clone(),
@@ -81,7 +81,7 @@ fn struct_containing_droppable_field_needs_drop() {
     // A struct whose field is itself a registered ADT that has a Drop impl.
     let (ctx, (inner_ty, outer_ty)) = with_fresh_ty_ctx(|c| {
         // Inner "owning" type (e.g. a simplified String): mark it as having Drop.
-        let inner_id = AdtId::from_raw(1);
+        let inner_id = AdtId::from_usize(1);
         let f = c.resolver().intern("f");
         let inner_def = AdtDef {
             kind: AdtKind::Struct,
@@ -99,7 +99,7 @@ fn struct_containing_droppable_field_needs_drop() {
         let inner_ty = c.mk_adt(inner_id, inner_substs);
 
         // Outer struct holding the inner type.
-        let outer_id = AdtId::from_raw(2);
+        let outer_id = AdtId::from_usize(2);
         let mut of = IndexVec::new();
         of.push(FieldDef {
             name: f,
@@ -130,7 +130,7 @@ fn struct_containing_droppable_field_needs_drop() {
 #[test]
 fn array_and_slice_of_droppable_need_drop() {
     let (ctx, (arr, slice)) = with_fresh_ty_ctx(|c| {
-        let id = AdtId::from_raw(5);
+        let id = AdtId::from_usize(5);
         let f = c.resolver().intern("f");
         let def = AdtDef {
             kind: AdtKind::Struct,
@@ -185,7 +185,7 @@ fn tuple_of_primitives_does_not_need_drop() {
 #[test]
 fn union_always_needs_drop() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
-        let id = AdtId::from_raw(9);
+        let id = AdtId::from_usize(9);
         let f = c.resolver().intern("f");
         let def = AdtDef {
             kind: AdtKind::Union,
@@ -214,7 +214,7 @@ fn unknown_unregistered_adt_does_not_need_drop() {
     // — the divergence this unification closes. The agreed answer is `false`
     // (no spurious destructors for unmodellable types).
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
-        let id = AdtId::from_raw(999); // never registered
+        let id = AdtId::from_usize(999); // never registered
         let substs = c.intern_substitution(vec![]);
         c.mk_adt(id, substs)
     });
