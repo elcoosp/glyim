@@ -2,11 +2,11 @@
 
 # Readiness status
 
-Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **254** features over **632** evidence record(s) (0 error(s), 0 warning(s)).
+Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml`: **255** features over **632** evidence record(s) (0 error(s), 0 warning(s)).
 
 | Level | Features |
 |---|---|
-| L0 | 241 |
+| L0 | 242 |
 | L1 | 7 |
 | L2 | 2 |
 | L3 | 0 |
@@ -199,6 +199,7 @@ Computed from the registry, `glyim.evidence/1` evidence, and `ledger/policy.toml
 | `TOOL-CLI-DIAG-JSON` | tooling | L4 | L0 | - | - |
 | `TOOL-CLI-EMIT-FLAGS` | tooling | L4 | L0 | - | - |
 | `TOOL-CLI-LTO` | tooling | L4 | L0 | - | - |
+| `TOOL-CLI-OPT-BISECT` | tooling | L4 | L0 | - | - |
 | `TOOL-CLI-OPT-LEVEL` | tooling | L4 | L0 | - | - |
 | `TOOL-CLI-TARGET` | tooling | L4 | L0 | - | - |
 | `TOOL-GLYIP-BUILD` | tooling | L4 | L0 | - | - |
