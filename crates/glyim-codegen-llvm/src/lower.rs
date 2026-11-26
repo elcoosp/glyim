@@ -436,7 +436,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                 // via `closure_sig` and use the plain name for those.
                 let is_closure = self
                     .ty_ctx
-                    .closure_sig(glyim_core::def_id::ClosureId::from_raw(fn_def_id.to_raw()))
+                    .closure_sig(glyim_core::def_id::ClosureId::from_usize(fn_def_id.index()))
                     .is_some();
                 let fn_name = match self.ty_ctx.extern_fn_name(*fn_def_id) {
                     Some(ext) => ext.to_string(),
@@ -462,7 +462,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                     // returns void while the ABI expected an int/struct).
                     // Fall back to the closure sig for that case.
                     let sig_opt = self.ty_ctx.fn_sig(*fn_def_id).cloned().or_else(|| {
-                        let cid = glyim_core::def_id::ClosureId::from_raw(fn_def_id.to_raw());
+                        let cid = glyim_core::def_id::ClosureId::from_usize(fn_def_id.index());
                         self.ty_ctx.closure_sig(cid).cloned()
                     });
                     // Session 14 fix: the registered `fn_sig` for a
@@ -971,9 +971,8 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                                         if let FieldsShape::Arbitrary { offsets } = &variant.fields
                                         {
                                             if idx_raw < offsets.len() {
-                                                let per_variant = offsets
-                                                    [FieldIdx::from_raw(idx_raw as u32)]
-                                                .as_u64();
+                                                let per_variant =
+                                                    offsets[FieldIdx::from_usize(idx_raw)].as_u64();
                                                 found = Some(tag_prefix + per_variant);
                                                 break;
                                             }
@@ -3725,7 +3724,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                 } else if self.is_sret {
                     // Composite return via hidden sret pointer (first parameter).
                     let ret_op =
-                        glyim_mir::Operand::Move(glyim_mir::Place::new(LocalIdx::from_raw(0)));
+                        glyim_mir::Operand::Move(glyim_mir::Place::new(LocalIdx::from_usize(0)));
                     let val = self.lower_operand(&ret_op)?;
                     let params = self.function.get_params();
                     let sret_ptr = params
@@ -3738,7 +3737,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                     self.builder.build_return(None).expect("return failed");
                 } else {
                     let ret_op =
-                        glyim_mir::Operand::Move(glyim_mir::Place::new(LocalIdx::from_raw(0)));
+                        glyim_mir::Operand::Move(glyim_mir::Place::new(LocalIdx::from_usize(0)));
                     let val = self.lower_operand(&ret_op)?;
                     self.builder
                         .build_return(Some(&val))
@@ -4388,7 +4387,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
         // `Future::Output` case and only triggers when the substitution is empty.
         let output = match ty_ctx.ty_kind(output) {
             TyKind::Adt(poll_adt, poll_sub)
-                if *poll_adt == glyim_core::def_id::AdtId::from_raw(1) =>
+                if *poll_adt == glyim_core::def_id::AdtId::from_usize(1) =>
             {
                 if let Some(GenericArg::Ty(self_ty)) = param_map.first() {
                     // `Self` is `&mut Future` here; the impl table is keyed by the bare ADT.
@@ -4896,12 +4895,12 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                     };
                     let ok_val = self.build_layout_aggregate(
                         dest_ty,
-                        Some(VariantIdx::from_raw(0)),
+                        Some(VariantIdx::from_usize(0)),
                         &[payload],
                     )?;
                     let err_val = self.build_layout_aggregate(
                         dest_ty,
-                        Some(VariantIdx::from_raw(1)),
+                        Some(VariantIdx::from_usize(1)),
                         &[payload],
                     )?;
                     let result = self
@@ -5484,10 +5483,10 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
 
             // Build `None` (variant 0, no payload) and `Some(wrapped)` (variant 1).
             let none_val =
-                self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(0)), &[])?;
+                self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_usize(0)), &[])?;
             let some_val = self.build_layout_aggregate(
                 dest_ty,
-                Some(VariantIdx::from_raw(1)),
+                Some(VariantIdx::from_usize(1)),
                 &[wrapped.into()],
             )?;
 
@@ -6862,9 +6861,9 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                 .map_err(|e| vec![GlyimDiagnostic::internal_error(format!("pop pload: {e:?}"))])?;
             let dest_ty = self.place_ty(destination);
             let none_val =
-                self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(0)), &[])?;
+                self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_usize(0)), &[])?;
             let some_val =
-                self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(1)), &[payload])?;
+                self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_usize(1)), &[payload])?;
             let result = self
                 .builder
                 .build_select(is_empty, none_val, some_val, "pop_sel")
@@ -7590,7 +7589,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                     ))]
                 })?;
             let ok_agg =
-                self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(0)), &[str_val])?;
+                self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_usize(0)), &[str_val])?;
             self.builder.build_store(dest_ptr, ok_agg).map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
                     "fu ok store: {e:?}"
@@ -7603,7 +7602,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
             // --- Err branch: `Result::Err(the original Vec<u8>)`.
             self.builder.position_at_end(err_bb);
             let err_agg =
-                self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_raw(1)), &[vec_val])?;
+                self.build_layout_aggregate(dest_ty, Some(VariantIdx::from_usize(1)), &[vec_val])?;
             self.builder.build_store(dest_ptr, err_agg).map_err(|e| {
                 vec![GlyimDiagnostic::internal_error(format!(
                     "fu err store: {e:?}"
@@ -8441,10 +8440,10 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                 present_tag as u32
             };
             let mut proj: Vec<ProjectionElem> = recv_place.projection.to_vec();
-            proj.push(ProjectionElem::Downcast(VariantIdx::from_raw(
-                variant_for_payload,
+            proj.push(ProjectionElem::Downcast(VariantIdx::from_usize(
+                variant_for_payload as usize,
             )));
-            proj.push(ProjectionElem::Field(FieldIdx::from_raw(0)));
+            proj.push(ProjectionElem::Field(FieldIdx::from_usize(0)));
             let payload_place = Place {
                 local: recv_place.local,
                 projection: proj.into_boxed_slice(),
@@ -9096,7 +9095,7 @@ impl<'ctx> LoweringCtx<'ctx, '_> {
                 let mut captures: Vec<BasicValueEnum<'ctx>> = Vec::new();
                 for i in 0..capture_count {
                     let mut proj = base_place.projection.to_vec();
-                    proj.push(ProjectionElem::Field(FieldIdx::from_raw((i + 1) as u32)));
+                    proj.push(ProjectionElem::Field(FieldIdx::from_usize(i + 1)));
                     let cap_place = Place {
                         local: base_place.local,
                         projection: proj.into_boxed_slice(),
@@ -9605,7 +9604,7 @@ pub(crate) fn lower_body<'ctx>(
         None => format!("__glyim_fn_{}", body.owner.local_id.to_raw()),
     };
     let layout_computer = FullLayoutComputer::new(ty_ctx, target_info.clone());
-    let fn_def_id = glyim_core::def_id::FnDefId::from_raw(body.owner.local_id.to_raw());
+    let fn_def_id = glyim_core::def_id::FnDefId::from_usize(body.owner.local_id.index());
     // Build the FnSig from the (already-monomorphized) body so that generic /
     // async functions like `block_on<F>` or `Future::poll` lower without an
     // `UnknownType(Param)` ICE in `fn_abi_of`. The LLVM function *type* below is
@@ -9614,7 +9613,7 @@ pub(crate) fn lower_body<'ctx>(
     let fn_sig = {
         let mut input_args: Vec<GenericArg> = Vec::new();
         for i in 1..=body.arg_count {
-            let local_idx = LocalIdx::from_raw(i as u32);
+            let local_idx = LocalIdx::from_usize(i);
             if let Some(local_decl) = body.locals.get(local_idx) {
                 // Unsized types (slice, str) cannot be passed by value — the
                 // ABI layout of an unsized `Ty` is an error (`Unsized(Ty)`).
@@ -9757,9 +9756,9 @@ pub(crate) fn lower_body<'ctx>(
     let builder = context.create_builder();
     builder.position_at_end(entry_block);
     let mut bb_map: HashMap<BasicBlockIdx, inkwell::basic_block::BasicBlock<'ctx>> = HashMap::new();
-    bb_map.insert(BasicBlockIdx::from_raw(0), entry_block);
+    bb_map.insert(BasicBlockIdx::from_usize(0), entry_block);
     for (bb_idx, _bb_data) in body.basic_blocks.iter_enumerated() {
-        if bb_idx != BasicBlockIdx::from_raw(0) {
+        if bb_idx != BasicBlockIdx::from_usize(0) {
             let bb_name = format!("bb_{}", bb_idx.index());
             let llvm_bb = context.append_basic_block(function, &bb_name);
             bb_map.insert(bb_idx, llvm_bb);
@@ -9855,7 +9854,7 @@ pub(crate) fn lower_body<'ctx>(
         .iter()
         .enumerate()
     {
-        let local_idx = LocalIdx::from_raw(1 + arg_pos as u32);
+        let local_idx = LocalIdx::from_usize(1 + arg_pos);
         if matches!(arg_abi.mode, glyim_layout::PassMode::Ignore) {
             // No LLVM param for this ABI entry; skip.
             continue;
@@ -10029,11 +10028,11 @@ mod tests {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Call {
-                    func: Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                    func: Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                     args: vec![],
-                    destination: Place::new(LocalIdx::from_raw(0)),
-                    target: Some(BasicBlockIdx::from_raw(1)),
-                    cleanup: Some(BasicBlockIdx::from_raw(2)),
+                    destination: Place::new(LocalIdx::from_usize(0)),
+                    target: Some(BasicBlockIdx::from_usize(1)),
+                    cleanup: Some(BasicBlockIdx::from_usize(2)),
                 },
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
             },
@@ -10056,8 +10055,8 @@ mod tests {
             is_cleanup: true,
         };
         let body = Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(4)),
-            basic_blocks: IndexVec::from_raw(vec![bb0, bb1, bb2]),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(4)),
+            basic_blocks: IndexVec::from_vec(vec![bb0, bb1, bb2]),
             locals,
             arg_count: 1,
             return_ty: i32_ty,
