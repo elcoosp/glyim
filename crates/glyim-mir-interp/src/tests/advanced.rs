@@ -5,7 +5,7 @@ use glyim_test::test_ty_ctx;
 use glyim_type::{Ty, TyCtxMut, TyKind};
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
@@ -20,8 +20,8 @@ fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
 fn build_binop_body(tcx: &mut TyCtxMut, op: BinOp, lhs: i128, rhs: i128) -> Body {
     let ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(ty, Mutability::Mut),
     ]);
@@ -35,7 +35,7 @@ fn build_binop_body(tcx: &mut TyCtxMut, op: BinOp, lhs: i128, rhs: i128) -> Body
         ty,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
@@ -56,8 +56,8 @@ fn build_binop_body(tcx: &mut TyCtxMut, op: BinOp, lhs: i128, rhs: i128) -> Body
 fn build_unary_body(tcx: &mut TyCtxMut, op: UnOp, operand: i128) -> Body {
     let ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(ty, Mutability::Mut),
     ]);
@@ -66,7 +66,7 @@ fn build_unary_body(tcx: &mut TyCtxMut, op: UnOp, operand: i128) -> Body {
         ty,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
@@ -88,8 +88,8 @@ fn build_cmp_body(tcx: &mut TyCtxMut, op: BinOp, lhs: i128, rhs: i128) -> Body {
     let int_ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
     let bool_ty = Ty::BOOL;
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(bool_ty, Mutability::Mut),
     ]);
@@ -103,7 +103,7 @@ fn build_cmp_body(tcx: &mut TyCtxMut, op: BinOp, lhs: i128, rhs: i128) -> Body {
         ty: int_ty,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
@@ -123,8 +123,8 @@ fn build_cmp_body(tcx: &mut TyCtxMut, op: BinOp, lhs: i128, rhs: i128) -> Body {
 // ----- Helper: build multi-block body with Goto chain -----
 fn build_goto_chain_body(final_val: i128) -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(Ty::BOOL, Mutability::Mut),
     ]);
@@ -136,12 +136,12 @@ fn build_goto_chain_body(final_val: i128) -> Body {
     // BB0: goto BB1
     // BB1: goto BB2
     // BB2: assign val; return
-    body.basic_blocks = IndexVec::from_raw(vec![
+    body.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(1),
+                    target: BasicBlockIdx::from_usize(1),
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
             },
@@ -151,7 +151,7 @@ fn build_goto_chain_body(final_val: i128) -> Body {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(2),
+                    target: BasicBlockIdx::from_usize(2),
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
             },
@@ -179,8 +179,8 @@ fn build_goto_chain_body(final_val: i128) -> Body {
 fn build_assert_body(expected: bool, cond_val: bool) -> Body {
     let mut body = Body::dummy(dummy_def_id());
     let bool_ty = Ty::BOOL;
-    let cond_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let cond_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(bool_ty, Mutability::Not),
     ]);
@@ -195,14 +195,14 @@ fn build_assert_body(expected: bool, cond_val: bool) -> Body {
         ),
         source_info: SourceInfo::new(Span::DUMMY),
     };
-    body.basic_blocks = IndexVec::from_raw(vec![
+    body.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![assign],
             terminator: Terminator {
                 kind: TerminatorKind::Assert {
                     cond: Operand::Copy(Place::new(cond_local)),
                     expected,
-                    target: BasicBlockIdx::from_raw(1),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                     msg: AssertMessage::Overflow(BinOp::Add),
                 },
@@ -225,17 +225,17 @@ fn build_assert_body(expected: bool, cond_val: bool) -> Body {
 // ----- Helper: build body reading uninitialized local -----
 fn build_uninit_read_body() -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(Ty::BOOL, Mutability::Mut),
         local_decl(Ty::BOOL, Mutability::Mut),
     ]);
     // Read from local 2 (uninitialized), store to local 1
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
-                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(2)))),
+                Place::new(LocalIdx::from_usize(1)),
+                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(2)))),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         }],
@@ -251,19 +251,19 @@ fn build_uninit_read_body() -> Body {
 // ----- Helper: build body with nested function calls -----
 fn build_nested_call_bodies(tcx: &mut TyCtxMut) -> (Body, Body, Body, DefId, DefId) {
     // deepest: returns 100
-    let deepest_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1));
+    let deepest_id = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1));
     let i32_ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
     let mut deepest = Body::dummy(deepest_id);
-    deepest.locals = IndexVec::from_raw(vec![local_decl(i32_ty, Mutability::Mut)]);
+    deepest.locals = IndexVec::from_vec(vec![local_decl(i32_ty, Mutability::Mut)]);
     let c100 = MirConst {
         kind: MirConstKind::Int(100),
         ty: i32_ty,
         span: Span::DUMMY,
     };
-    deepest.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    deepest.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(c100)),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -276,11 +276,11 @@ fn build_nested_call_bodies(tcx: &mut TyCtxMut) -> (Body, Body, Body, DefId, Def
     }]);
 
     // middle: calls deepest, adds 50
-    let middle_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(2));
+    let middle_id = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(2));
     let mut middle = Body::dummy(middle_id);
-    middle.locals = IndexVec::from_raw(vec![
-        local_decl(i32_ty, Mutability::Mut), // return place
-        local_decl(i32_ty, Mutability::Mut), // temp for call result
+    middle.locals = IndexVec::from_vec(vec![
+        local_decl(i32_ty, Mutability::Mut),
+        local_decl(i32_ty, Mutability::Mut),
     ]);
     // Encode deepest_id as an Int constant for the call
     let fn_const = Operand::Constant(MirConst {
@@ -288,15 +288,15 @@ fn build_nested_call_bodies(tcx: &mut TyCtxMut) -> (Body, Body, Body, DefId, Def
         ty: i32_ty,
         span: Span::DUMMY,
     });
-    middle.basic_blocks = IndexVec::from_raw(vec![
+    middle.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Call {
                     func: fn_const,
                     args: vec![],
-                    destination: Place::new(LocalIdx::from_raw(1)),
-                    target: Some(BasicBlockIdx::from_raw(1)),
+                    destination: Place::new(LocalIdx::from_usize(1)),
+                    target: Some(BasicBlockIdx::from_usize(1)),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -306,11 +306,11 @@ fn build_nested_call_bodies(tcx: &mut TyCtxMut) -> (Body, Body, Body, DefId, Def
         BasicBlockData {
             statements: vec![Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::BinaryOp(
                         BinOp::Add,
                         [
-                            Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                             Operand::Constant(MirConst {
                                 kind: MirConstKind::Int(50),
                                 ty: i32_ty,
@@ -330,23 +330,23 @@ fn build_nested_call_bodies(tcx: &mut TyCtxMut) -> (Body, Body, Body, DefId, Def
     ]);
 
     // top: calls middle, returns result
-    let top_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(3));
+    let top_id = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(3));
     let mut top = Body::dummy(top_id);
-    top.locals = IndexVec::from_raw(vec![local_decl(i32_ty, Mutability::Mut)]);
+    top.locals = IndexVec::from_vec(vec![local_decl(i32_ty, Mutability::Mut)]);
     let fn_const2 = Operand::Constant(MirConst {
         kind: MirConstKind::Int(2), // middle LocalDefId raw
         ty: i32_ty,
         span: Span::DUMMY,
     });
-    top.basic_blocks = IndexVec::from_raw(vec![
+    top.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Call {
                     func: fn_const2,
                     args: vec![],
-                    destination: Place::new(LocalIdx::from_raw(0)),
-                    target: Some(BasicBlockIdx::from_raw(1)),
+                    destination: Place::new(LocalIdx::from_usize(0)),
+                    target: Some(BasicBlockIdx::from_usize(1)),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -378,7 +378,7 @@ fn interpret_multiplication() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(42))
     );
 }
@@ -391,7 +391,7 @@ fn interpret_division() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(7))
     );
 }
@@ -414,7 +414,7 @@ fn interpret_remainder() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(2))
     );
 }
@@ -440,7 +440,7 @@ fn interpret_bitwise_and() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(0b1000))
     );
 }
@@ -453,7 +453,7 @@ fn interpret_bitwise_or() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(0b1110))
     );
 }
@@ -466,7 +466,7 @@ fn interpret_bitwise_xor() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(0b0110))
     );
 }
@@ -479,7 +479,7 @@ fn interpret_shift_left() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(16))
     );
 }
@@ -492,7 +492,7 @@ fn interpret_shift_right() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(4))
     );
 }
@@ -505,7 +505,7 @@ fn interpret_eq_true() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(true))
     );
 }
@@ -518,7 +518,7 @@ fn interpret_eq_false() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(false))
     );
 }
@@ -531,7 +531,7 @@ fn interpret_ne() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(true))
     );
 }
@@ -544,7 +544,7 @@ fn interpret_lt_true() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(true))
     );
 }
@@ -557,7 +557,7 @@ fn interpret_lt_false() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(false))
     );
 }
@@ -570,7 +570,7 @@ fn interpret_gt() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(true))
     );
 }
@@ -583,7 +583,7 @@ fn interpret_lteq() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(true))
     );
 }
@@ -596,7 +596,7 @@ fn interpret_gteq() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(true))
     );
 }
@@ -609,7 +609,7 @@ fn interpret_unary_negate() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(-42))
     );
 }
@@ -621,7 +621,7 @@ fn interpret_goto_chain() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(99))
     );
 }
@@ -663,7 +663,7 @@ fn interpret_nested_function_calls() {
     interp.run_body(&top).unwrap();
     // deepest returns 100, middle adds 50 = 150
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(0)),
+        interp.get_local_value(LocalIdx::from_usize(0)),
         Some(&InterpValue::Int(150))
     );
 }
@@ -692,7 +692,7 @@ fn interpret_wrapping_add() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(i128::from(i32::MIN)))
     );
 }
@@ -706,7 +706,7 @@ fn interpret_wrapping_mul() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(i128::from(
             i128::from(i32::MAX).wrapping_mul(2) as i32
         )))
