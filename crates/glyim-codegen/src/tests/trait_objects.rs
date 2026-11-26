@@ -7,7 +7,7 @@ use std::sync::Arc;
 fn make_dyn_ty(ctx: &mut TyCtxMut) -> Ty {
     let empty_subst = ctx.intern_substitution(vec![]);
     let trait_ref = TraitRef {
-        def_id: TraitDefId::from_raw(0),
+        def_id: TraitDefId::from_usize(0),
         substs: empty_subst,
     };
     let predicate = Predicate::Trait(TraitPredicate {
@@ -34,8 +34,8 @@ fn create_trait_object_from_concrete_type() {
 fn call_method_through_trait_object() {
     let (ctx, dyn_ty) = with_fresh_ty_ctx(make_dyn_ty);
 
-    let local0 = LocalIdx::from_raw(0);
-    let local1 = LocalIdx::from_raw(1);
+    let local0 = LocalIdx::from_usize(0);
+    let local1 = LocalIdx::from_usize(1);
     let mut local_decls = glyim_core::IndexVec::new();
     local_decls.push(LocalDecl {
         ty: dyn_ty,
@@ -54,7 +54,7 @@ fn call_method_through_trait_object() {
             func: Operand::Copy(Place::new(local0)),
             args: vec![],
             destination: Place::new(local1),
-            target: Some(BasicBlockIdx::from_raw(1)),
+            target: Some(BasicBlockIdx::from_usize(1)),
             cleanup: None,
         },
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -70,7 +70,7 @@ fn call_method_through_trait_object() {
     basic_blocks.push(BasicBlockData::new(ret_term));
 
     let body = Arc::new(Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks,
         locals: local_decls,
         arg_count: 0,
@@ -105,8 +105,8 @@ fn call_method_through_trait_object() {
 fn upcast_to_supertrait_object() {
     let (ctx, dyn_ty) = with_fresh_ty_ctx(make_dyn_ty);
 
-    let _local0 = LocalIdx::from_raw(0);
-    let local1 = LocalIdx::from_raw(1);
+    let _local0 = LocalIdx::from_usize(0);
+    let local1 = LocalIdx::from_usize(1);
     let mut local_decls = glyim_core::IndexVec::new();
     local_decls.push(LocalDecl {
         ty: dyn_ty,
@@ -123,13 +123,13 @@ fn upcast_to_supertrait_object() {
     let term = Terminator {
         kind: TerminatorKind::Call {
             func: Operand::Constant(MirConst {
-                kind: MirConstKind::Fn(FnDefId::from_raw(42), Substitution::empty()),
+                kind: MirConstKind::Fn(FnDefId::from_usize(42), Substitution::empty()),
                 ty: dyn_ty,
                 span: glyim_span::Span::DUMMY,
             }),
             args: vec![],
             destination: Place::new(local1),
-            target: Some(BasicBlockIdx::from_raw(1)),
+            target: Some(BasicBlockIdx::from_usize(1)),
             cleanup: None,
         },
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -145,7 +145,7 @@ fn upcast_to_supertrait_object() {
     basic_blocks.push(BasicBlockData::new(ret_term));
 
     let body = Arc::new(Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks,
         locals: local_decls,
         arg_count: 0,
@@ -390,7 +390,7 @@ fn vtable_layout_matches_expectations() {
     let (ctx, dyn_ty) = with_fresh_ty_ctx(|ctx| {
         let empty_subst = ctx.intern_substitution(vec![]);
         let trait_ref = TraitRef {
-            def_id: TraitDefId::from_raw(0),
+            def_id: TraitDefId::from_usize(0),
             substs: empty_subst,
         };
         let predicate = Predicate::Trait(TraitPredicate {
@@ -431,7 +431,7 @@ fn vtable_layout_offsets_with_methods() {
         // is now a hard `UnknownTrait` error rather than a silent empty vtable).
         let trait_name = glyim_core::Interner::new().intern("TestTrait");
         ctx.register_trait_def(
-            TraitDefId::from_raw(1),
+            TraitDefId::from_usize(1),
             glyim_type::TraitDef {
                 name: trait_name,
                 methods: vec![],
@@ -440,7 +440,7 @@ fn vtable_layout_offsets_with_methods() {
         );
         let empty_subst = ctx.intern_substitution(vec![]);
         let trait_ref = TraitRef {
-            def_id: TraitDefId::from_raw(1),
+            def_id: TraitDefId::from_usize(1),
             substs: empty_subst,
         };
         let predicate = Predicate::Trait(TraitPredicate {
@@ -455,7 +455,7 @@ fn vtable_layout_offsets_with_methods() {
     });
     let computer = glyim_layout::SimpleLayoutComputer::new(&ctx, TargetInfo::x86_64());
     let vtable_layout = computer
-        .vtable_of(TraitDefId::from_raw(1), dyn_ty)
+        .vtable_of(TraitDefId::from_usize(1), dyn_ty)
         .expect("vtable_of should return Some");
     // Empty methods, so vtable has only metadata
     assert_eq!(vtable_layout.methods.len(), 0);
@@ -477,12 +477,12 @@ fn vtable_layout_offsets_with_methods() {
         VTableEntry {
             name: interner.intern("method1"),
             sig: sig.clone(),
-            fn_def_id: FnDefId::from_raw(100),
+            fn_def_id: FnDefId::from_usize(100),
         },
         VTableEntry {
             name: interner.intern("method2"),
             sig,
-            fn_def_id: FnDefId::from_raw(101),
+            fn_def_id: FnDefId::from_usize(101),
         },
     ];
     let vtable_with_methods = VTableLayout {
