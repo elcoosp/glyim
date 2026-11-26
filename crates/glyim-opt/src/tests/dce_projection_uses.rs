@@ -48,7 +48,7 @@ fn dce_keeps_local_read_only_through_index_projection() {
             // local1 = [10, 20, 30]
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Aggregate(
                         AggregateKind::Tuple,
                         vec![arr_elem(10), arr_elem(20), arr_elem(30)],
@@ -59,7 +59,7 @@ fn dce_keeps_local_read_only_through_index_projection() {
             // local2 = 1   <-- DCE used to delete this
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(2)),
+                    Place::new(LocalIdx::from_usize(2)),
                     Rvalue::Use(const_int(1, i32_ty)),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -67,10 +67,10 @@ fn dce_keeps_local_read_only_through_index_projection() {
             // local0 = local1[Index(local2)]
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     Rvalue::Use(Operand::Copy(Place {
-                        local: LocalIdx::from_raw(1),
-                        projection: vec![ProjectionElem::Index(LocalIdx::from_raw(2))]
+                        local: LocalIdx::from_usize(1),
+                        projection: vec![ProjectionElem::Index(LocalIdx::from_usize(2))]
                             .into_boxed_slice(),
                     })),
                 ),
