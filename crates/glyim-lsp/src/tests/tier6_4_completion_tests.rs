@@ -78,7 +78,7 @@ fn s12_impl_methods_indexed_with_receiver_type() {
     db.source_maps
         .write()
         .insert(file_id, SourceMap::new(file_id, source.to_string()));
-    let crate_id = glyim_core::CrateId::from_raw(0);
+    let crate_id = glyim_core::CrateId::from_usize(0);
     let parse_result = glyim_frontend::parse_to_syntax(source, file_id);
     let mut interner = glyim_core::Interner::new();
     let def_map = glyim_def_map::build_def_map(&parse_result.root, crate_id, interner.clone()).0;
@@ -148,9 +148,9 @@ fn main() {
     let main_name = interner.intern("main");
 
     // main body: receiver `x` (ExprId 0) + MethodCall { receiver: x } (ExprId 1).
-    let receiver_id = ExprId::from_raw(0);
-    let main_owner = LocalDefId::from_raw(0);
-    let main_body_id = glyim_hir::BodyId::from_raw(0);
+    let receiver_id = ExprId::from_usize(0);
+    let main_owner = LocalDefId::from_usize(0);
+    let main_body_id = glyim_hir::BodyId::from_usize(0);
     let ctx = SyntaxContext::ROOT;
     let span_for = |lo: usize, hi: usize| {
         Span::range(
@@ -191,7 +191,7 @@ fn main() {
     // impl methods with receiver `i32`, and the free functions with no receiver.
     let mut items: IndexVec<ItemId, Item> = IndexVec::new();
     let impl_item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: i32_name,
         kind: ItemKind::Impl(ImplItem {
             trait_ref: None,
@@ -224,7 +224,7 @@ fn main() {
         span: span_for(0, source.len()),
     };
     let fn_item = |name: Name| Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name,
         kind: ItemKind::Fn(FnItem {
             params: vec![],
@@ -273,7 +273,7 @@ fn main() {
         // TCK-SEAM: the single synthetic body is HIR BodyId 0 and its
         // typeck-side owner is `main_owner`; `type_at_offset` translates
         // through this map since the counters are independent.
-        body_owners: HashMap::from([(glyim_hir::BodyId::from_raw(0), main_owner)]),
+        body_owners: HashMap::from([(glyim_hir::BodyId::from_usize(0), main_owner)]),
     };
     db.typeck
         .write()
@@ -350,8 +350,8 @@ fn main() {
     let method_name = interner.intern("show");
     let main_name = interner.intern("main");
 
-    let receiver_id = ExprId::from_raw(0);
-    let main_owner = LocalDefId::from_raw(0);
+    let receiver_id = ExprId::from_usize(0);
+    let main_owner = LocalDefId::from_usize(0);
 
     let ctx = SyntaxContext::ROOT;
     let span_for = |lo: usize, hi: usize| {
@@ -390,7 +390,7 @@ fn main() {
 
     let mut items: IndexVec<ItemId, Item> = IndexVec::new();
     let trait_impl_item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: i32_name,
         kind: ItemKind::Impl(ImplItem {
             trait_ref: Some(Path::from_single(show_name)),
@@ -413,12 +413,12 @@ fn main() {
     };
     items.push(trait_impl_item);
     items.push(Item {
-        id: ItemId::from_raw(1),
+        id: ItemId::from_usize(1),
         name: main_name,
         kind: ItemKind::Fn(FnItem {
             params: vec![],
             return_ty: None,
-            body: Some(glyim_hir::BodyId::from_raw(0)),
+            body: Some(glyim_hir::BodyId::from_usize(0)),
             is_unsafe: false,
             is_async: false,
             is_const: false,
@@ -459,7 +459,7 @@ fn main() {
         // TCK-SEAM: the single synthetic body is HIR BodyId 0 and its
         // typeck-side owner is `main_owner`; `type_at_offset` translates
         // through this map since the counters are independent.
-        body_owners: HashMap::from([(glyim_hir::BodyId::from_raw(0), main_owner)]),
+        body_owners: HashMap::from([(glyim_hir::BodyId::from_usize(0), main_owner)]),
     };
     db.typeck
         .write()
