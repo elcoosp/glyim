@@ -9,14 +9,19 @@ macro_rules! define_def_id {
             pub struct $name(u32);
 
             impl $name {
-                /// Wraps a raw `u32` index previously produced by
-                /// [`Self::to_raw`].
-                ///
-                /// Panics-free by construction: the caller must have obtained
-                /// the raw value from an ID of the same kind (the plan M3.1
-                /// private-constructor ratchet tracks tightening this to
-                /// arena-issued construction only).
-                pub fn from_raw(raw: u32) -> Self { Self(raw) }
+                // No raw constructor exists, not even `#[cfg(test)]`-gated
+                // (see `arena::define_idx!`); [`IdxLike::from_u32`] —
+                // `IndexVec` machinery — is the only raw wrap in this
+                // crate (plan M3.1 / CT-1).
+                /// Sanctioned production constructor: wraps a `usize` slot
+                /// produced by an arena issuer (`IndexVec::push`, an
+                /// interner, or an explicit allocator). The `usize` ->
+                /// `u32` narrowing is deliberate (handle widths are `u32`
+                /// by construction) and is guarded by the `IndexVec::push`
+                /// invariant that lengths stay well below `u32::MAX`.
+                #[inline]
+                #[must_use]
+                pub fn from_usize(idx: usize) -> Self { Self(idx as u32) }
                 /// The raw `u32` backing this ID, for interning tables that
                 /// key on the plain integer.
                 pub fn to_raw(self) -> u32 { self.0 }
@@ -25,7 +30,9 @@ macro_rules! define_def_id {
             }
 
             impl IdxLike for $name {
-                fn from_raw(raw: u32) -> Self { Self(raw) }
+                /// Wraps a raw `u32` index (`IndexVec` machinery; see
+                /// [`IdxLike`] docs).
+                fn from_u32(raw: u32) -> Self { Self(raw) }
                 fn to_raw(self) -> u32 { self.0 }
             }
         )*
