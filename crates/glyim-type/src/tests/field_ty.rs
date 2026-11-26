@@ -17,7 +17,7 @@ fn field_ty_returns_correct_type_from_adt_def() {
 
         let name_a = ctx.resolver().intern("a");
         let name_b = ctx.resolver().intern("b");
-        let adt_id = AdtId::from_raw(200);
+        let adt_id = AdtId::from_usize(200);
         let mut fields: IndexVec<FieldIdx, FieldDef> = IndexVec::new();
         fields.push(FieldDef {
             name: name_a,
@@ -70,7 +70,7 @@ fn field_ty_mut_returns_correct_type_from_adt_def() {
 
     let name_a = ctx.resolver().intern("a");
     let name_b = ctx.resolver().intern("b");
-    let adt_id = AdtId::from_raw(200);
+    let adt_id = AdtId::from_usize(200);
     let mut fields: IndexVec<FieldIdx, FieldDef> = IndexVec::new();
     fields.push(FieldDef {
         name: name_a,
@@ -120,7 +120,7 @@ fn field_ty_falls_back_to_adt_reprs() {
         let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let bool_ty = ctx.bool_ty();
 
-        let adt_id = AdtId::from_raw(201);
+        let adt_id = AdtId::from_usize(201);
         // Only register adt_reprs, NOT adt_defs
         ctx.register_adt_repr(adt_id, vec![i32_ty, bool_ty]);
         (adt_id, i32_ty, bool_ty)
@@ -141,7 +141,7 @@ fn field_ty_falls_back_to_adt_reprs() {
 /// S04-T02d: `field_ty` returns `error_ty` for unknown ADT.
 #[test]
 fn field_ty_returns_error_for_unknown_adt() {
-    let (frozen, adt_id) = with_fresh_ty_ctx(|_| AdtId::from_raw(999));
+    let (frozen, adt_id) = with_fresh_ty_ctx(|_| AdtId::from_usize(999));
     assert_eq!(
         frozen.field_ty(adt_id, 0),
         frozen.error_ty(),
