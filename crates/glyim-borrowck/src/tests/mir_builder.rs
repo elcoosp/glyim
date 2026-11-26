@@ -7,7 +7,7 @@ use glyim_type::Ty;
 
 /// Create a dummy `DefId` for test bodies.
 pub fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 /// Builder for constructing MIR bodies for borrowck tests.
@@ -35,7 +35,7 @@ impl MirBodyBuilder {
 
     /// Add a new local variable. Returns its `LocalIdx`.
     pub fn add_local(&mut self, ty: Ty, mutability: Mutability) -> LocalIdx {
-        let idx = LocalIdx::from_raw(self.locals.len() as u32);
+        let idx = LocalIdx::from_usize(self.locals.len());
         self.locals.push(LocalDecl {
             ty,
             mutability,
@@ -46,7 +46,7 @@ impl MirBodyBuilder {
 
     /// Add a new basic block with the given terminator. Returns its `BasicBlockIdx`.
     pub fn push_block(&mut self, terminator: Terminator) -> BasicBlockIdx {
-        let idx = BasicBlockIdx::from_raw(self.basic_blocks.len() as u32);
+        let idx = BasicBlockIdx::from_usize(self.basic_blocks.len());
         self.basic_blocks.push(BasicBlockData::new(terminator));
         idx
     }
@@ -65,8 +65,8 @@ impl MirBodyBuilder {
     pub fn build(self) -> Body {
         Body {
             owner: dummy_def_id(),
-            basic_blocks: IndexVec::<BasicBlockIdx, _>::from_raw(self.basic_blocks),
-            locals: IndexVec::<LocalIdx, _>::from_raw(self.locals),
+            basic_blocks: IndexVec::<BasicBlockIdx, _>::from_vec(self.basic_blocks),
+            locals: IndexVec::<LocalIdx, _>::from_vec(self.locals),
             arg_count: self.arg_count,
             return_ty: self.return_ty,
             span: Span::DUMMY,
@@ -79,7 +79,7 @@ impl MirBodyBuilder {
 pub fn goto(target: u32) -> Terminator {
     Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(target),
+            target: BasicBlockIdx::from_usize(target as usize),
         },
         source_info: SourceInfo::new(Span::DUMMY),
     }
@@ -100,8 +100,8 @@ pub fn if_switch(discr: LocalIdx, switch_ty: Ty, then_bb: u32, else_bb: u32) -> 
             discr: Operand::Copy(Place::new(discr)),
             switch_ty,
             targets: SwitchTargets::if_switch(
-                BasicBlockIdx::from_raw(then_bb),
-                BasicBlockIdx::from_raw(else_bb),
+                BasicBlockIdx::from_usize(then_bb as usize),
+                BasicBlockIdx::from_usize(else_bb as usize),
             ),
         },
         source_info: SourceInfo::new(Span::DUMMY),
