@@ -76,7 +76,7 @@ fn mk_ref_with_not_mutability() {
 #[test]
 fn mk_adt_with_empty_substitution() {
     let (ctx, adt_ty) = with_fresh_ty_ctx(|c| {
-        let adt_id = AdtId::from_raw(42);
+        let adt_id = AdtId::from_usize(42);
         let substs = c.intern_substitution(vec![]);
         c.mk_adt(adt_id, substs)
     });
@@ -94,7 +94,7 @@ fn mk_adt_with_empty_substitution() {
 #[test]
 fn mk_adt_with_substitution_containing_ty_args() {
     let (ctx, adt_ty) = with_fresh_ty_ctx(|c| {
-        let adt_id = AdtId::from_raw(7);
+        let adt_id = AdtId::from_usize(7);
         let bool_arg = GenericArg::Ty(c.bool_ty());
         let i32_arg = GenericArg::Ty(c.mk_ty(TyKind::Int(IntTy::I32)));
         let substs = c.intern_substitution(vec![bool_arg, i32_arg]);
