@@ -30,21 +30,17 @@ fn build_def_map_with_names(
         let name = interner.intern(name_str);
         scope.types.insert(
             name,
-            (
-                LocalDefId::from_raw(i as u32),
-                Visibility::Public,
-                Span::DUMMY,
-            ),
+            (LocalDefId::from_usize(i), Visibility::Public, Span::DUMMY),
         );
     }
-    let root_id = ModuleId::from_raw(0);
+    let root_id = ModuleId::from_usize(0);
     let root_data = ModuleData {
         parent: None,
         children: vec![],
         scope,
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(0),
+        def_id: LocalDefId::from_usize(0),
         visibility: Visibility::Public,
     };
     let mut modules = IndexVec::new();
@@ -81,18 +77,18 @@ fn build_simple_hir(
     }
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: Vec::new(),
         span: dummy_span(),
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.len()]),
     };
     let body_id = hir.bodies.push(body);
 
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: inter.intern("test_fn"),
         kind: ItemKind::Fn(FnItem {
             params: params.clone(),
@@ -112,7 +108,7 @@ fn build_simple_hir(
     hir.items.push(item);
 
     let mut owners = IndexVec::new();
-    owners.push(LocalDefId::from_raw(0));
+    owners.push(LocalDefId::from_usize(0));
     hir.body_owners = owners;
 
     (hir, body_id)
@@ -216,7 +212,7 @@ fn t01_fn_where_clone_satisfied() {
 
     let ctx = TyCtxMut::new(inter.clone());
     let mut solver = ApproveSolver;
-    let def_map = build_def_map_with_names(&mut inter, CrateId::from_raw(0), &["Clone", "T"]);
+    let def_map = build_def_map_with_names(&mut inter, CrateId::from_usize(0), &["Clone", "T"]);
     let (_tcx, result) = crate::typeck_crate(ctx, &def_map, &hir, &mut solver);
     assert_no_errors(&result.diagnostics);
 }
@@ -269,7 +265,7 @@ fn t02_supertrait_impl_satisfies_both() {
     let ctx = TyCtxMut::new(inter.clone());
     let mut solver = ApproveSolver;
     let def_map =
-        build_def_map_with_names(&mut inter, CrateId::from_raw(0), &["Copy", "Clone", "T"]);
+        build_def_map_with_names(&mut inter, CrateId::from_usize(0), &["Copy", "Clone", "T"]);
     let (_tcx, result) = crate::typeck_crate(ctx, &def_map, &hir, &mut solver);
     assert_no_errors(&result.diagnostics);
 }
@@ -322,7 +318,7 @@ fn t04_multiple_where_bounds() {
     let ctx = TyCtxMut::new(inter.clone());
     let mut solver = ApproveSolver;
     let def_map =
-        build_def_map_with_names(&mut inter, CrateId::from_raw(0), &["Clone", "Debug", "T"]);
+        build_def_map_with_names(&mut inter, CrateId::from_usize(0), &["Clone", "Debug", "T"]);
     let (_tcx, result) = crate::typeck_crate(ctx, &def_map, &hir, &mut solver);
     assert_no_errors(&result.diagnostics);
 }
@@ -366,7 +362,7 @@ fn t06_missing_supertrait_error() {
 
     let ctx = TyCtxMut::new(inter.clone());
     let mut solver = RejectSolver;
-    let def_map = build_def_map_with_names(&mut inter, CrateId::from_raw(0), &["Clone", "T"]);
+    let def_map = build_def_map_with_names(&mut inter, CrateId::from_usize(0), &["Clone", "T"]);
     let (_tcx, result) = crate::typeck_crate(ctx, &def_map, &hir, &mut solver);
     assert_has_errors(&result.diagnostics);
 }
@@ -410,7 +406,7 @@ fn t07_where_bound_not_satisfied_error() {
 
     let ctx = TyCtxMut::new(inter.clone());
     let mut solver = RejectSolver;
-    let def_map = build_def_map_with_names(&mut inter, CrateId::from_raw(0), &["Copy", "T"]);
+    let def_map = build_def_map_with_names(&mut inter, CrateId::from_usize(0), &["Copy", "T"]);
     let (_tcx, result) = crate::typeck_crate(ctx, &def_map, &hir, &mut solver);
     assert_has_errors(&result.diagnostics);
 }
@@ -427,11 +423,11 @@ fn build_def_map_with_nested_trait(
     let trait_n = interner.intern(trait_name);
 
     let mut root_scope = ItemScope::default();
-    let root_id = ModuleId::from_raw(0);
-    let child_id = ModuleId::from_raw(1);
+    let root_id = ModuleId::from_usize(0);
+    let child_id = ModuleId::from_usize(1);
     root_scope.types.insert(
         mod_n,
-        (LocalDefId::from_raw(0), Visibility::Public, Span::DUMMY),
+        (LocalDefId::from_usize(0), Visibility::Public, Span::DUMMY),
     );
     let root_data = ModuleData {
         parent: None,
@@ -439,7 +435,7 @@ fn build_def_map_with_nested_trait(
         scope: root_scope,
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(0),
+        def_id: LocalDefId::from_usize(0),
         visibility: Visibility::Public,
     };
 
@@ -447,7 +443,7 @@ fn build_def_map_with_nested_trait(
     child_scope.types.insert(
         trait_n,
         (
-            LocalDefId::from_raw(trait_local_id),
+            LocalDefId::from_usize(trait_local_id as usize),
             Visibility::Public,
             Span::DUMMY,
         ),
@@ -458,7 +454,7 @@ fn build_def_map_with_nested_trait(
         scope: child_scope,
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(1),
+        def_id: LocalDefId::from_usize(1),
         visibility: Visibility::Public,
     };
 
@@ -529,7 +525,7 @@ fn t08_where_clause_multi_segment_path_resolves() {
     let mut solver = ApproveSolver;
     let def_map = build_def_map_with_nested_trait(
         &mut inter,
-        CrateId::from_raw(0),
+        CrateId::from_usize(0),
         mod_name,
         trait_name,
         trait_local_id,
