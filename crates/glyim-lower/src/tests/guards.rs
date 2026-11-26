@@ -41,7 +41,7 @@ fn lower_guard_branch() {
     // the guard/body avoids needing the pattern-bound `n` to be a named var).
     let n_pat = b.pat(
         PatternKind::Binding {
-            var_id: glyim_typeck::thir::LocalVarId::from_raw(0),
+            var_id: glyim_typeck::thir::LocalVarId::from_usize(0),
             name: b.make_name("n"),
             mutability: glyim_core::primitives::Mutability::Not,
             binding_ty: None,
