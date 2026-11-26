@@ -53,7 +53,7 @@ fn aggregate_tuple_field_write() {
 
         let place = Place {
             local: mut_var,
-            projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+            projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
         };
         let stmt_write = Statement {
             kind: StatementKind::Assign(
@@ -68,7 +68,7 @@ fn aggregate_tuple_field_write() {
         };
         let place2 = Place {
             local: mut_var,
-            projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+            projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
         };
         let stmt_read = Statement {
             kind: StatementKind::Assign(Place::new(ret_local), Rvalue::Use(Operand::Copy(place2))),
@@ -84,7 +84,7 @@ fn aggregate_tuple_field_write() {
             is_cleanup: false,
         });
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: blocks,
             locals,
             arg_count: 0,
@@ -153,8 +153,8 @@ fn aggregate_nested_projection_write() {
         let place = Place {
             local: mut_var,
             projection: Box::new([
-                ProjectionElem::Field(FieldIdx::from_raw(0)),
-                ProjectionElem::Field(FieldIdx::from_raw(0)),
+                ProjectionElem::Field(FieldIdx::from_usize(0)),
+                ProjectionElem::Field(FieldIdx::from_usize(0)),
             ]),
         };
         let stmt_write = Statement {
@@ -171,8 +171,8 @@ fn aggregate_nested_projection_write() {
         let place2 = Place {
             local: mut_var,
             projection: Box::new([
-                ProjectionElem::Field(FieldIdx::from_raw(0)),
-                ProjectionElem::Field(FieldIdx::from_raw(0)),
+                ProjectionElem::Field(FieldIdx::from_usize(0)),
+                ProjectionElem::Field(FieldIdx::from_usize(0)),
             ]),
         };
         let stmt_read = Statement {
@@ -189,7 +189,7 @@ fn aggregate_nested_projection_write() {
             is_cleanup: false,
         });
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: blocks,
             locals,
             arg_count: 0,
