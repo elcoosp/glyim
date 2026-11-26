@@ -158,11 +158,44 @@ pub fn registry_entries() -> &'static [ErrorCodeEntry] {
 /// user-facing CLI surface and must reject typos gracefully.
 #[must_use]
 pub fn explain_code(code_str: &str) -> Option<&'static str> {
+    let (category, n) = parse_display_form(code_str)?;
+    lookup(category, n).map(|e| e.explanation.as_str())
+}
+
+/// The full-entry `--explain <code>` lookup: parse a display-form code
+/// string and return the whole registered [`ErrorCodeEntry`] — title and
+/// explanation together — or `None` if the string is not a registered code.
+///
+/// [`explain_code`] answers "why is this an error"; this answers
+/// "`T0050` is: *non-exhaustive match*, and here is the long-form
+/// explanation", which is what the CLI flag prints. The parse and rejection
+/// semantics are identical to [`explain_code`].
+#[must_use]
+pub fn explain_entry(code_str: &str) -> Option<&'static ErrorCodeEntry> {
+    let (category, n) = parse_display_form(code_str)?;
+    lookup(category, n)
+}
+
+/// Parse a display-form code string into its `(category, number)` pair.
+///
+/// Shared by [`explain_code`] and [`explain_entry`]; see those for the
+/// accepted grammar and the no-panic rejection contract.
+fn parse_display_form(code_str: &str) -> Option<(ErrorCategory, u16)> {
     let mut chars = code_str.chars();
     let letter = chars.next()?;
     let rest = chars.as_str();
     let category = ErrorCategory::from_letter(letter)?;
     let trimmed = rest.trim_start_matches('0');
-    let n = trimmed.parse::<u16>().ok()?;
-    lookup(category, n).map(|e| e.explanation.as_str())
+    let n = if trimmed.is_empty() {
+        // The tail was all zeros (`"T0000"`, `"T0"`) and the zero-trim
+        // consumed every digit: the number is 0. An EMPTY tail (`"T"`) is
+        // not a number at all and stays rejected.
+        if rest.is_empty() {
+            return None;
+        }
+        0
+    } else {
+        trimmed.parse::<u16>().ok()?
+    };
+    Some((category, n))
 }
