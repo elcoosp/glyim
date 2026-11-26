@@ -13,10 +13,10 @@ use crate::*;
 #[test]
 fn regression_opaque_with_infer_propagates_has_ty_infer() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let substs = c.intern_substitution(vec![GenericArg::Ty(infer)]);
-        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_raw(1), substs))
+        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_usize(1), substs))
     });
     assert!(
         frozen.ty_flags(ty).contains(TypeFlags::HAS_TY_INFER),
@@ -28,7 +28,7 @@ fn regression_opaque_with_infer_propagates_has_ty_infer() {
 fn regression_opaque_with_error_propagates_has_error() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![GenericArg::Ty(Ty::ERROR)]);
-        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_raw(1), substs))
+        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_usize(1), substs))
     });
     assert!(
         frozen.ty_flags(ty).contains(TypeFlags::HAS_ERROR),
@@ -42,7 +42,7 @@ fn regression_opaque_with_param_propagates_has_ty_param() {
         let name = c.resolver().intern("T");
         let param = c.mk_ty(TyKind::Param(ParamTy { index: 0, name }));
         let substs = c.intern_substitution(vec![GenericArg::Ty(param)]);
-        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_raw(1), substs))
+        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_usize(1), substs))
     });
     assert!(
         frozen.ty_flags(ty).contains(TypeFlags::HAS_TY_PARAM),
@@ -72,7 +72,7 @@ fn regression_dynamic_with_box_annotation() {
         let trait_substs = c.intern_substitution(vec![]);
         let pred = Predicate::Trait(TraitPredicate {
             trait_ref: TraitRef {
-                def_id: glyim_core::def_id::TraitDefId::from_raw(1),
+                def_id: glyim_core::def_id::TraitDefId::from_usize(1),
                 substs: trait_substs,
             },
             polarity: ImplPolarity::Positive,
