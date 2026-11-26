@@ -533,7 +533,7 @@ impl InferenceTable {
                         if let (K::Adt(vid, vsubsts), K::Slice(u)) =
                             (ctx.ty_kind(ty_a).clone(), ctx.ty_kind(ty_b).clone())
                         {
-                            if vid == glyim_core::def_id::AdtId::from_raw(1020) {
+                            if vid == glyim_core::def_id::AdtId::from_usize(1020) {
                                 ctx.substitution_args(vsubsts)
                                     .first()
                                     .and_then(|a| match a {
@@ -565,7 +565,7 @@ impl InferenceTable {
                         if let (K::Adt(vid, vsubsts), K::Slice(u)) =
                             (ctx.ty_kind(ty_b).clone(), ctx.ty_kind(ty_a).clone())
                         {
-                            if vid == glyim_core::def_id::AdtId::from_raw(1020) {
+                            if vid == glyim_core::def_id::AdtId::from_usize(1020) {
                                 ctx.substitution_args(vsubsts)
                                     .first()
                                     .and_then(|a| match a {
@@ -637,12 +637,12 @@ impl InferenceTable {
             // net.g unified a `String` argument against the `&str` param and
             // reported "Adt1050<u8> vs str".
             (TyKind::String, TyKind::Adt(id, _))
-                if id == glyim_core::def_id::AdtId::from_raw(1050) =>
+                if id == glyim_core::def_id::AdtId::from_usize(1050) =>
             {
                 Ok(Vec::new())
             }
             (TyKind::Adt(id, _), TyKind::String)
-                if id == glyim_core::def_id::AdtId::from_raw(1050) =>
+                if id == glyim_core::def_id::AdtId::from_usize(1050) =>
             {
                 Ok(Vec::new())
             }
