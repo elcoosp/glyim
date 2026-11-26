@@ -68,7 +68,7 @@ fn build_switch_body(ctx: &mut TyCtxMut, switch_ty: Ty, targets: SwitchTargets) 
 
     let bb0 = BasicBlockData::new(Terminator {
         kind: TerminatorKind::SwitchInt {
-            discr: Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+            discr: Operand::Copy(Place::new(LocalIdx::from_usize(1))),
             switch_ty,
             targets,
         },
@@ -84,7 +84,7 @@ fn build_switch_body(ctx: &mut TyCtxMut, switch_ty: Ty, targets: SwitchTargets) 
     }
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks,
         locals,
         arg_count,
@@ -100,8 +100,8 @@ fn v29_t05_bool_switch_only_true_branch() {
     let bool_ty = make_bool_ty(&mut ctx);
 
     let targets = SwitchTargets::new(
-        Box::new([(1u128, BasicBlockIdx::from_raw(1))]),
-        BasicBlockIdx::from_raw(2),
+        Box::new([(1u128, BasicBlockIdx::from_usize(1))]),
+        BasicBlockIdx::from_usize(2),
     );
 
     let body = build_switch_body(&mut ctx, bool_ty, targets);
@@ -123,8 +123,8 @@ fn v29_t06_bool_switch_only_false_branch() {
     let bool_ty = make_bool_ty(&mut ctx);
 
     let targets = SwitchTargets::new(
-        Box::new([(0u128, BasicBlockIdx::from_raw(1))]),
-        BasicBlockIdx::from_raw(2),
+        Box::new([(0u128, BasicBlockIdx::from_usize(1))]),
+        BasicBlockIdx::from_usize(2),
     );
 
     let body = build_switch_body(&mut ctx, bool_ty, targets);
@@ -141,7 +141,7 @@ fn v29_t07_empty_switch_always_default() {
     let mut ctx = TyCtxMut::new(Interner::default());
     let i32_ty = make_i32_ty(&mut ctx);
 
-    let targets = SwitchTargets::new(Box::new([]), BasicBlockIdx::from_raw(1));
+    let targets = SwitchTargets::new(Box::new([]), BasicBlockIdx::from_usize(1));
 
     let body = build_switch_body(&mut ctx, i32_ty, targets);
     let ir = lower_and_get_ir_with_ctx(ctx, &body);
@@ -159,13 +159,13 @@ fn v29_t08_u8_switch_medium_range() {
 
     let targets = SwitchTargets::new(
         Box::new([
-            (0u128, BasicBlockIdx::from_raw(1)),
-            (1u128, BasicBlockIdx::from_raw(2)),
-            (2u128, BasicBlockIdx::from_raw(3)),
-            (3u128, BasicBlockIdx::from_raw(4)),
-            (4u128, BasicBlockIdx::from_raw(5)),
+            (0u128, BasicBlockIdx::from_usize(1)),
+            (1u128, BasicBlockIdx::from_usize(2)),
+            (2u128, BasicBlockIdx::from_usize(3)),
+            (3u128, BasicBlockIdx::from_usize(4)),
+            (4u128, BasicBlockIdx::from_usize(5)),
         ]),
-        BasicBlockIdx::from_raw(6),
+        BasicBlockIdx::from_usize(6),
     );
 
     let body = build_switch_body(&mut ctx, u8_ty, targets);
@@ -188,13 +188,13 @@ fn v29_t09_u64_switch_large_values() {
 
     let targets = SwitchTargets::new(
         Box::new([
-            (100u128, BasicBlockIdx::from_raw(1)),
-            (1000u128, BasicBlockIdx::from_raw(2)),
-            (1000000u128, BasicBlockIdx::from_raw(3)),
-            (999999999u128, BasicBlockIdx::from_raw(4)),
-            (u128::from(u64::MAX), BasicBlockIdx::from_raw(5)),
+            (100u128, BasicBlockIdx::from_usize(1)),
+            (1000u128, BasicBlockIdx::from_usize(2)),
+            (1000000u128, BasicBlockIdx::from_usize(3)),
+            (999999999u128, BasicBlockIdx::from_usize(4)),
+            (u128::from(u64::MAX), BasicBlockIdx::from_usize(5)),
         ]),
-        BasicBlockIdx::from_raw(6),
+        BasicBlockIdx::from_usize(6),
     );
 
     let body = build_switch_body(&mut ctx, u64_ty, targets);
@@ -217,13 +217,13 @@ fn v29_t10_i64_signed_switch() {
 
     let targets = SwitchTargets::new(
         Box::new([
-            (0u128, BasicBlockIdx::from_raw(1)),
-            (1u128, BasicBlockIdx::from_raw(2)),
-            (2u128, BasicBlockIdx::from_raw(3)),
-            (3u128, BasicBlockIdx::from_raw(4)),
-            (4u128, BasicBlockIdx::from_raw(5)),
+            (0u128, BasicBlockIdx::from_usize(1)),
+            (1u128, BasicBlockIdx::from_usize(2)),
+            (2u128, BasicBlockIdx::from_usize(3)),
+            (3u128, BasicBlockIdx::from_usize(4)),
+            (4u128, BasicBlockIdx::from_usize(5)),
         ]),
-        BasicBlockIdx::from_raw(6),
+        BasicBlockIdx::from_usize(6),
     );
 
     let body = build_switch_body(&mut ctx, i64_ty, targets);
@@ -240,7 +240,7 @@ fn v29_t11_bool_switch_empty_branches() {
     let mut ctx = TyCtxMut::new(Interner::default());
     let bool_ty = make_bool_ty(&mut ctx);
 
-    let targets = SwitchTargets::new(Box::new([]), BasicBlockIdx::from_raw(1));
+    let targets = SwitchTargets::new(Box::new([]), BasicBlockIdx::from_usize(1));
 
     let body = build_switch_body(&mut ctx, bool_ty, targets);
     let ir = lower_and_get_ir_with_ctx(ctx, &body);
@@ -258,11 +258,11 @@ fn v29_t12_three_case_switch_uses_llvm_switch() {
 
     let targets = SwitchTargets::new(
         Box::new([
-            (5u128, BasicBlockIdx::from_raw(1)),
-            (10u128, BasicBlockIdx::from_raw(2)),
-            (15u128, BasicBlockIdx::from_raw(3)),
+            (5u128, BasicBlockIdx::from_usize(1)),
+            (10u128, BasicBlockIdx::from_usize(2)),
+            (15u128, BasicBlockIdx::from_usize(3)),
         ]),
-        BasicBlockIdx::from_raw(4),
+        BasicBlockIdx::from_usize(4),
     );
 
     let body = build_switch_body(&mut ctx, i32_ty, targets);
@@ -293,12 +293,12 @@ fn v29_t13_four_case_switch_uses_llvm_switch() {
 
     let targets = SwitchTargets::new(
         Box::new([
-            (1u128, BasicBlockIdx::from_raw(1)),
-            (2u128, BasicBlockIdx::from_raw(2)),
-            (3u128, BasicBlockIdx::from_raw(3)),
-            (4u128, BasicBlockIdx::from_raw(4)),
+            (1u128, BasicBlockIdx::from_usize(1)),
+            (2u128, BasicBlockIdx::from_usize(2)),
+            (3u128, BasicBlockIdx::from_usize(3)),
+            (4u128, BasicBlockIdx::from_usize(4)),
         ]),
-        BasicBlockIdx::from_raw(5),
+        BasicBlockIdx::from_usize(5),
     );
 
     let body = build_switch_body(&mut ctx, i32_ty, targets);
@@ -317,11 +317,11 @@ fn v29_t14_switch_with_same_target_blocks() {
 
     let targets = SwitchTargets::new(
         Box::new([
-            (1u128, BasicBlockIdx::from_raw(1)),
-            (2u128, BasicBlockIdx::from_raw(1)),
-            (3u128, BasicBlockIdx::from_raw(2)),
+            (1u128, BasicBlockIdx::from_usize(1)),
+            (2u128, BasicBlockIdx::from_usize(1)),
+            (3u128, BasicBlockIdx::from_usize(2)),
         ]),
-        BasicBlockIdx::from_raw(3),
+        BasicBlockIdx::from_usize(3),
     );
 
     let body = build_switch_body(&mut ctx, i32_ty, targets);
@@ -339,8 +339,8 @@ fn v29_t15_single_case_switch_icmp() {
     let i32_ty = make_i32_ty(&mut ctx);
 
     let targets = SwitchTargets::new(
-        Box::new([(42u128, BasicBlockIdx::from_raw(1))]),
-        BasicBlockIdx::from_raw(2),
+        Box::new([(42u128, BasicBlockIdx::from_usize(1))]),
+        BasicBlockIdx::from_usize(2),
     );
 
     let body = build_switch_body(&mut ctx, i32_ty, targets);
@@ -367,10 +367,10 @@ fn v29_t16_two_case_switch_icmp_ladder() {
 
     let targets = SwitchTargets::new(
         Box::new([
-            (7u128, BasicBlockIdx::from_raw(1)),
-            (13u128, BasicBlockIdx::from_raw(2)),
+            (7u128, BasicBlockIdx::from_usize(1)),
+            (13u128, BasicBlockIdx::from_usize(2)),
         ]),
-        BasicBlockIdx::from_raw(3),
+        BasicBlockIdx::from_usize(3),
     );
 
     let body = build_switch_body(&mut ctx, i32_ty, targets);
@@ -397,10 +397,10 @@ fn v29_t17_switch_with_zero_case_value() {
 
     let targets = SwitchTargets::new(
         Box::new([
-            (0u128, BasicBlockIdx::from_raw(1)),
-            (1u128, BasicBlockIdx::from_raw(2)),
+            (0u128, BasicBlockIdx::from_usize(1)),
+            (1u128, BasicBlockIdx::from_usize(2)),
         ]),
-        BasicBlockIdx::from_raw(3),
+        BasicBlockIdx::from_usize(3),
     );
 
     let body = build_switch_body(&mut ctx, i32_ty, targets);
@@ -420,9 +420,9 @@ fn v29_t18_large_switch_many_cases_all_unique_blocks() {
     let num_cases = 50u128;
     let mut branches: Vec<(u128, BasicBlockIdx)> = Vec::new();
     for i in 0..num_cases {
-        branches.push((i * 3, BasicBlockIdx::from_raw((i + 1) as u32)));
+        branches.push((i * 3, BasicBlockIdx::from_usize(i as usize + 1)));
     }
-    let otherwise_bb = BasicBlockIdx::from_raw((num_cases + 1) as u32);
+    let otherwise_bb = BasicBlockIdx::from_usize(num_cases as usize + 1);
 
     let targets = SwitchTargets::new(branches.into_boxed_slice(), otherwise_bb);
 
@@ -442,10 +442,10 @@ fn v29_t19_bool_switch_both_branches_same_block() {
 
     let targets = SwitchTargets::new(
         Box::new([
-            (0u128, BasicBlockIdx::from_raw(1)),
-            (1u128, BasicBlockIdx::from_raw(1)),
+            (0u128, BasicBlockIdx::from_usize(1)),
+            (1u128, BasicBlockIdx::from_usize(1)),
         ]),
-        BasicBlockIdx::from_raw(2),
+        BasicBlockIdx::from_usize(2),
     );
 
     let body = build_switch_body(&mut ctx, bool_ty, targets);
@@ -464,13 +464,13 @@ fn v29_t20_switch_with_max_u32_value() {
 
     let targets = SwitchTargets::new(
         Box::new([
-            (0u128, BasicBlockIdx::from_raw(1)),
-            (1u128, BasicBlockIdx::from_raw(2)),
-            (2u128, BasicBlockIdx::from_raw(3)),
-            (u128::from(u32::MAX), BasicBlockIdx::from_raw(4)),
-            (2147483647u128, BasicBlockIdx::from_raw(5)),
+            (0u128, BasicBlockIdx::from_usize(1)),
+            (1u128, BasicBlockIdx::from_usize(2)),
+            (2u128, BasicBlockIdx::from_usize(3)),
+            (u128::from(u32::MAX), BasicBlockIdx::from_usize(4)),
+            (2147483647u128, BasicBlockIdx::from_usize(5)),
         ]),
-        BasicBlockIdx::from_raw(6),
+        BasicBlockIdx::from_usize(6),
     );
 
     let body = build_switch_body(&mut ctx, i32_ty, targets);
