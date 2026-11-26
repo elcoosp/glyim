@@ -9,7 +9,7 @@ use crate::*;
 fn const_int_kind() {
     let c = Const {
         kind: ConstKind::Int(-42i128),
-        ty: Ty::from_raw(4), // placeholder
+        ty: Ty::from_usize(4), // placeholder
     };
     assert!(matches!(c.kind, ConstKind::Int(-42)));
 }
@@ -18,7 +18,7 @@ fn const_int_kind() {
 fn const_uint_kind() {
     let c = Const {
         kind: ConstKind::Uint(42u128),
-        ty: Ty::from_raw(4),
+        ty: Ty::from_usize(4),
     };
     assert!(matches!(c.kind, ConstKind::Uint(42)));
 }
@@ -27,7 +27,7 @@ fn const_uint_kind() {
 fn const_float_bits_kind() {
     let c = Const {
         kind: ConstKind::FloatBits(0x4000000000000000u64), // 2.0 f64 bits
-        ty: Ty::from_raw(4),
+        ty: Ty::from_usize(4),
     };
     assert!(matches!(c.kind, ConstKind::FloatBits(_)));
 }
@@ -36,7 +36,7 @@ fn const_float_bits_kind() {
 fn const_bool_kind() {
     let c = Const {
         kind: ConstKind::Bool(true),
-        ty: Ty::from_raw(4),
+        ty: Ty::from_usize(4),
     };
     assert!(matches!(c.kind, ConstKind::Bool(true)));
 }
@@ -45,7 +45,7 @@ fn const_bool_kind() {
 fn const_char_kind() {
     let c = Const {
         kind: ConstKind::Char('x'),
-        ty: Ty::from_raw(4),
+        ty: Ty::from_usize(4),
     };
     assert!(matches!(c.kind, ConstKind::Char('x')));
 }
@@ -84,8 +84,8 @@ fn const_error_kind() {
 #[test]
 fn const_infer_kind() {
     let c = Const {
-        kind: ConstKind::Infer(ConstVar::from_raw(0)),
-        ty: Ty::from_raw(4),
+        kind: ConstKind::Infer(ConstVar::from_usize(0)),
+        ty: Ty::from_usize(4),
     };
     assert!(matches!(c.kind, ConstKind::Infer(_)));
 }
