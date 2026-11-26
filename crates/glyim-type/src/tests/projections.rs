@@ -32,7 +32,7 @@ fn make_projection(
 #[test]
 fn projection_type_construction() {
     let (ctx, proj_ty) = with_fresh_ty_ctx(|ctx| {
-        let trait_id = TraitDefId::from_raw(0);
+        let trait_id = TraitDefId::from_usize(0);
         let self_ty = ctx.bool_ty();
         make_projection(ctx, trait_id, self_ty, "Item")
     });
@@ -44,7 +44,7 @@ fn projection_type_construction() {
 #[test]
 fn projection_type_flags() {
     let (ctx, proj_ty) = with_fresh_ty_ctx(|ctx| {
-        let trait_id = TraitDefId::from_raw(0);
+        let trait_id = TraitDefId::from_usize(0);
         let self_ty = ctx.bool_ty();
         make_projection(ctx, trait_id, self_ty, "Item")
     });
@@ -56,8 +56,8 @@ fn projection_type_flags() {
 #[test]
 fn projection_type_flags_with_infer() {
     let (ctx, proj_ty) = with_fresh_ty_ctx(|ctx| {
-        let trait_id = TraitDefId::from_raw(0);
-        let infer_var = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_raw(0))));
+        let trait_id = TraitDefId::from_usize(0);
+        let infer_var = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_usize(0))));
         make_projection(ctx, trait_id, infer_var, "Item")
     });
     let flags = ctx.ty_flags(proj_ty);
@@ -67,7 +67,7 @@ fn projection_type_flags_with_infer() {
 #[test]
 fn projection_display() {
     let (ctx, proj_ty) = with_fresh_ty_ctx(|ctx| {
-        let trait_id = TraitDefId::from_raw(0);
+        let trait_id = TraitDefId::from_usize(0);
         let self_ty = ctx.bool_ty();
         make_projection(ctx, trait_id, self_ty, "Item")
     });
@@ -80,7 +80,7 @@ fn projection_display() {
 #[test]
 fn projection_equality() {
     let (ctx, (p1, p2, p3)) = with_fresh_ty_ctx(|ctx| {
-        let trait_id = TraitDefId::from_raw(1);
+        let trait_id = TraitDefId::from_usize(1);
         let self_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let item = ctx.resolver().intern("Item");
         let substs = ctx.intern_substitution(vec![GenericArg::Ty(self_ty)]);
@@ -115,7 +115,7 @@ fn projection_equality() {
 #[test]
 fn projection_inside_ref() {
     let (ctx, ref_ty) = with_fresh_ty_ctx(|ctx| {
-        let trait_id = TraitDefId::from_raw(7);
+        let trait_id = TraitDefId::from_usize(7);
         let self_ty = ctx.bool_ty();
         let proj = make_projection(ctx, trait_id, self_ty, "Item");
         ctx.mk_ref(Region::Erased, proj, Mutability::Not)
@@ -131,7 +131,7 @@ fn projection_inside_ref() {
 #[test]
 fn projection_with_param_self() {
     let (ctx, proj_ty) = with_fresh_ty_ctx(|ctx| {
-        let trait_id = TraitDefId::from_raw(0);
+        let trait_id = TraitDefId::from_usize(0);
         let param_ty = ctx.mk_ty(TyKind::Param(ParamTy {
             index: 0,
             name: ctx.resolver().intern("T"),
@@ -146,7 +146,7 @@ fn projection_with_param_self() {
 #[test]
 fn projection_with_error_self() {
     let (ctx, proj_ty) = with_fresh_ty_ctx(|ctx| {
-        let trait_id = TraitDefId::from_raw(0);
+        let trait_id = TraitDefId::from_usize(0);
         let error_ty = Ty::ERROR;
         make_projection(ctx, trait_id, error_ty, "Item")
     });
@@ -162,12 +162,12 @@ fn projection_different_trait_ids_unequal() {
         let item = ctx.resolver().intern("Item");
         let substs = ctx.intern_substitution(vec![GenericArg::Ty(self_ty)]);
         let tr1 = TraitRef {
-            def_id: TraitDefId::from_raw(0),
+            def_id: TraitDefId::from_usize(0),
             substs,
         };
         let substs2 = ctx.intern_substitution(vec![GenericArg::Ty(self_ty)]);
         let tr2 = TraitRef {
-            def_id: TraitDefId::from_raw(1),
+            def_id: TraitDefId::from_usize(1),
             substs: substs2,
         };
         let proj1 = ctx.mk_ty(TyKind::Projection(ProjectionTy {
@@ -187,7 +187,7 @@ fn projection_different_trait_ids_unequal() {
 #[test]
 fn projection_empty_substitution() {
     let (ctx, proj_ty) = with_fresh_ty_ctx(|ctx| {
-        let trait_id = TraitDefId::from_raw(42);
+        let trait_id = TraitDefId::from_usize(42);
         let substs = ctx.intern_substitution(vec![]);
         let trait_ref = TraitRef {
             def_id: trait_id,
@@ -206,7 +206,7 @@ fn projection_empty_substitution() {
 #[test]
 fn projection_with_multiple_substs() {
     let (ctx, proj_ty) = with_fresh_ty_ctx(|ctx| {
-        let trait_id = TraitDefId::from_raw(5);
+        let trait_id = TraitDefId::from_usize(5);
         let t1 = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let t2 = ctx.mk_ty(TyKind::Bool);
         let substs = ctx.intern_substitution(vec![GenericArg::Ty(t1), GenericArg::Ty(t2)]);
@@ -232,7 +232,7 @@ fn projection_with_multiple_substs() {
 #[test]
 fn projection_display_multi_subst() {
     let (ctx, proj_ty) = with_fresh_ty_ctx(|ctx| {
-        let trait_id = TraitDefId::from_raw(0);
+        let trait_id = TraitDefId::from_usize(0);
         let t1 = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let t2 = ctx.mk_ty(TyKind::Bool);
         let substs = ctx.intern_substitution(vec![GenericArg::Ty(t1), GenericArg::Ty(t2)]);
@@ -255,7 +255,7 @@ fn projection_display_multi_subst() {
 #[test]
 fn fn_ptr_returning_projection() {
     let (ctx, fn_ty) = with_fresh_ty_ctx(|ctx| {
-        let trait_id = TraitDefId::from_raw(0);
+        let trait_id = TraitDefId::from_usize(0);
         let self_ty = ctx.bool_ty();
         let proj = make_projection(ctx, trait_id, self_ty, "Item");
         let inputs = ctx.intern_substitution(vec![]);
@@ -276,7 +276,7 @@ fn fn_ptr_returning_projection() {
 #[test]
 fn projection_in_tuple() {
     let (ctx, tuple_ty) = with_fresh_ty_ctx(|ctx| {
-        let trait_id = TraitDefId::from_raw(0);
+        let trait_id = TraitDefId::from_usize(0);
         let proj = make_projection(ctx, trait_id, ctx.bool_ty(), "Item");
         let int32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let substs = ctx.intern_substitution(vec![GenericArg::Ty(proj), GenericArg::Ty(int32_ty)]);
