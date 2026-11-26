@@ -14,7 +14,7 @@
 //! glyim-core intentionally has no dev-dependency that reaches the LLVM
 //! toolchain (see this crate's `Cargo.toml`).
 
-use crate::arena::{Idx, IndexVec};
+use crate::arena::{Idx, IdxLike, IndexVec};
 use crate::define_idx;
 use crate::interner::Interner;
 use proptest::prelude::*;
@@ -35,10 +35,10 @@ proptest! {
     /// inside the handle space).
     #[test]
     fn idx_raw_round_trip(raw in any::<u32>()) {
-        let idx = Idx::<u8>::from_raw(raw);
+        let idx = Idx::<u8>::from_u32(raw);
         prop_assert_eq!(idx.to_raw(), raw);
         prop_assert_eq!(idx.index(), raw as usize);
-        let macro_idx = PropIdx::from_raw(raw);
+        let macro_idx = PropIdx::from_usize(raw as usize);
         prop_assert_eq!(macro_idx.to_raw(), raw);
         prop_assert_eq!(macro_idx.index(), raw as usize);
     }
@@ -47,10 +47,10 @@ proptest! {
     /// ordering — the arena can rely on `Idx` sorts being index sorts.
     #[test]
     fn idx_ordering_matches_raw(a in any::<u32>(), b in any::<u32>()) {
-        let (a, b) = (Idx::<u8>::from_raw(a), Idx::<u8>::from_raw(b));
+        let (a, b) = (Idx::<u8>::from_u32(a), Idx::<u8>::from_u32(b));
         prop_assert_eq!(a == b, a.to_raw() == b.to_raw());
         prop_assert_eq!(a.cmp(&b), a.to_raw().cmp(&b.to_raw()));
-        let (ma, mb) = (PropIdx::from_raw(a.to_raw()), PropIdx::from_raw(b.to_raw()));
+        let (ma, mb) = (PropIdx::from_usize(a.index()), PropIdx::from_usize(b.index()));
         prop_assert_eq!(ma == mb, ma.to_raw() == mb.to_raw());
         prop_assert_eq!(ma.cmp(&mb), ma.to_raw().cmp(&mb.to_raw()));
     }
@@ -65,7 +65,7 @@ proptest! {
             i.hash(&mut h);
             h.finish()
         };
-        let (a, b) = (Idx::<u8>::from_raw(a), Idx::<u8>::from_raw(b));
+        let (a, b) = (Idx::<u8>::from_u32(a), Idx::<u8>::from_u32(b));
         if a == b {
             prop_assert_eq!(hash(a), hash(b));
         }
@@ -76,13 +76,13 @@ proptest! {
     /// them only through their raw projections, never across types.
     #[test]
     fn idx_types_do_not_share_identity(raw in any::<u32>()) {
-        let generic = Idx::<u8>::from_raw(raw);
-        let macro_typed = PropIdx::from_raw(raw);
+        let generic = Idx::<u8>::from_u32(raw);
+        let macro_typed = PropIdx::from_usize(raw as usize);
         // Same raw projection...
         prop_assert_eq!(generic.to_raw(), macro_typed.to_raw());
         // ...but each type's own equality is closed over itself.
-        prop_assert_eq!(generic, Idx::<u8>::from_raw(raw));
-        prop_assert_eq!(macro_typed, PropIdx::from_raw(raw));
+        prop_assert_eq!(generic, Idx::<u8>::from_u32(raw));
+        prop_assert_eq!(macro_typed, PropIdx::from_usize(raw as usize));
     }
 
     // ------------------------------------------------------------------
@@ -128,12 +128,12 @@ proptest! {
     /// the borrowed form; `into_raw` inverts `from_raw`.
     #[test]
     fn into_iter_and_into_raw_round_trip(vals in proptest::collection::vec(any::<u32>(), 0..64)) {
-        let v: IndexVec<Idx<u8>, u32> = IndexVec::from_raw(vals.clone());
+        let v: IndexVec<Idx<u8>, u32> = IndexVec::from_vec(vals.clone());
         for (pos, (idx, val)) in v.into_iter_enumerated().enumerate() {
             prop_assert_eq!(idx.index(), pos);
             prop_assert_eq!(val, vals[pos]);
         }
-        let rebuilt = IndexVec::<Idx<u8>, u32>::from_raw(vals.clone());
+        let rebuilt = IndexVec::<Idx<u8>, u32>::from_vec(vals.clone());
         prop_assert_eq!(rebuilt.into_raw(), vals);
     }
 
@@ -145,12 +145,12 @@ proptest! {
         new_val in any::<u32>(),
     ) {
         prop_assume!(!vals.is_empty(), "need a slot to write");
-        let mut v: IndexVec<Idx<u8>, u32> = IndexVec::from_raw(vals.clone());
-        let target = Idx::<u8>::from_raw(0);
+        let mut v: IndexVec<Idx<u8>, u32> = IndexVec::from_vec(vals.clone());
+        let target = Idx::<u8>::from_u32(0);
         *v.get_mut(target).expect("slot 0 exists") = new_val;
         prop_assert_eq!(v.get(target), Some(&new_val));
         for (pos, val) in vals.iter().enumerate().skip(1) {
-            prop_assert_eq!(v.get(Idx::<u8>::from_raw(pos as u32)), Some(val));
+            prop_assert_eq!(v.get(Idx::<u8>::from_u32(pos as u32)), Some(val));
         }
     }
 
@@ -176,7 +176,7 @@ proptest! {
     fn with_capacity_push_equivalence(vals in proptest::collection::vec(any::<u32>(), 0..64), cap in 0_usize..64) {
         let mut v: IndexVec<Idx<u8>, u32> = IndexVec::with_capacity(cap);
         prop_assert!(v.is_empty());
-        let expected: IndexVec<Idx<u8>, u32> = IndexVec::from_raw(vals.clone());
+        let expected: IndexVec<Idx<u8>, u32> = IndexVec::from_vec(vals.clone());
         for (pos, val) in vals.iter().enumerate() {
             let idx = v.push(*val);
             prop_assert_eq!(idx.index(), pos);
@@ -292,7 +292,7 @@ proptest! {
         vals in proptest::collection::vec(any::<u32>(), 1..32),
         new_val in any::<u32>(),
     ) {
-        let mut v: IndexVec<Idx<u8>, u32> = IndexVec::from_raw(vals);
+        let mut v: IndexVec<Idx<u8>, u32> = IndexVec::from_vec(vals);
         for slot in v.as_mut_slice() {
             *slot = new_val;
         }
@@ -332,11 +332,11 @@ proptest! {
     fn idx_hashes_as_map_keys(a in any::<u32>(), b in any::<u32>()) {
         use std::collections::HashMap;
         let mut map: HashMap<Idx<u8>, u32> = HashMap::new();
-        map.insert(Idx::<u8>::from_raw(a), 1);
-        map.insert(Idx::<u8>::from_raw(b), 2);
+        map.insert(Idx::<u8>::from_u32(a), 1);
+        map.insert(Idx::<u8>::from_u32(b), 2);
         let expected_len = if a == b { 1 } else { 2 };
         prop_assert_eq!(map.len(), expected_len);
-        prop_assert_eq!(map.get(&Idx::<u8>::from_raw(a)), Some(&if a == b { 2 } else { 1 }));
+        prop_assert_eq!(map.get(&Idx::<u8>::from_u32(a)), Some(&if a == b { 2 } else { 1 }));
     }
 
     /// `iter_enumerated` handles stay valid after `get_mut` edits: the
@@ -346,7 +346,7 @@ proptest! {
         vals in proptest::collection::vec(any::<u32>(), 0..16),
         new_val in any::<u32>(),
     ) {
-        let mut v: IndexVec<Idx<u8>, u32> = IndexVec::from_raw(vals);
+        let mut v: IndexVec<Idx<u8>, u32> = IndexVec::from_vec(vals);
         let indices: Vec<Idx<u8>> = v.iter_enumerated().map(|(idx, _)| idx).collect();
         for idx in &indices {
             prop_assert!(idx.index() < v.len());
