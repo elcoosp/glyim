@@ -58,7 +58,7 @@ fn test_coerce_fn_item_to_fn_ptr() {
         unsafety: Safety::Safe,
         abi: Abi::Glyim,
     };
-    let fn_def_id = FnDefId::from_raw(900);
+    let fn_def_id = FnDefId::from_usize(900);
     ctx_mut.register_fn_sig(fn_def_id, sig.clone());
 
     let fn_subst = ctx_mut.intern_substitution(vec![]);
@@ -83,7 +83,7 @@ fn test_coerce_non_capturing_closure_to_fn_ptr() {
 
     // Non-capturing closure: signature `fn(i32) -> i32`, no capture environment.
     let closure_adt = ctx_mut.register_closure(vec![]);
-    let closure_id = ClosureId::from_raw(closure_adt.to_raw());
+    let closure_id = ClosureId::from_usize(closure_adt.index());
     let closure_sig = FnSig {
         inputs: ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty)]),
         output: i32_ty,
@@ -133,7 +133,7 @@ fn test_coerce_capturing_closure_rejects_fn_ptr() {
     // Capturing closure: one captured i32 in its environment.
     let capture_name = ctx_mut.resolver().intern("capture_0");
     let closure_adt = ctx_mut.register_closure(vec![(capture_name, i32_ty)]);
-    let closure_id = ClosureId::from_raw(closure_adt.to_raw());
+    let closure_id = ClosureId::from_usize(closure_adt.index());
     let closure_sig = FnSig {
         inputs: ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty), GenericArg::Ty(i32_ty)]),
         output: i32_ty,
@@ -177,7 +177,7 @@ fn test_coerce_fn_item_to_fn_ptr_rejects_mismatched_sig() {
         unsafety: Safety::Safe,
         abi: Abi::Glyim,
     };
-    let fn_def_id = FnDefId::from_raw(901);
+    let fn_def_id = FnDefId::from_usize(901);
     ctx_mut.register_fn_sig(fn_def_id, def_sig);
 
     let fn_subst = ctx_mut.intern_substitution(vec![]);
@@ -215,7 +215,7 @@ fn test_solver_coerce_fn_item_to_fn_ptr() {
         unsafety: Safety::Safe,
         abi: Abi::Glyim,
     };
-    let fn_def_id = FnDefId::from_raw(902);
+    let fn_def_id = FnDefId::from_usize(902);
     ctx_mut.register_fn_sig(fn_def_id, sig.clone());
 
     let fn_subst = ctx_mut.intern_substitution(vec![]);
@@ -244,7 +244,7 @@ fn test_solver_coerce_fn_item_to_fn_ptr_rejects_mismatch() {
         unsafety: Safety::Safe,
         abi: Abi::Glyim,
     };
-    let fn_def_id = FnDefId::from_raw(903);
+    let fn_def_id = FnDefId::from_usize(903);
     ctx_mut.register_fn_sig(fn_def_id, def_sig);
 
     let fn_subst = ctx_mut.intern_substitution(vec![]);
