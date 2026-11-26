@@ -54,7 +54,7 @@ fn write_through_constant_index() {
     let mut body = empty_body(Ty::UNIT);
     let local_arr = add_local(&mut body, i32_ty, Mutability::Mut);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     // Write 7 into local_arr via a ConstantIndex projection (offset 2), but
     // the interpreter's write path operates on the aggregate value directly.
     // We model this as: assign an aggregate to the local, then mutate a slot
@@ -129,7 +129,7 @@ fn write_through_subslice() {
     let mut body = empty_body(Ty::UNIT);
     let local_arr = add_local(&mut body, i32_ty, Mutability::Mut);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     let new_slice = Rvalue::Aggregate(
         AggregateKind::Tuple,
         vec![
