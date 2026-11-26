@@ -119,7 +119,7 @@ fn raw_ptr_is_unpin() {
 #[test]
 fn adt_with_send_fields_is_send() {
     let (ctx, adt_ty) = with_fresh_ty_ctx(|c| {
-        let adt_id = AdtId::from_raw(300);
+        let adt_id = AdtId::from_usize(300);
         let field = c.mk_ty(TyKind::Int(IntTy::I32));
         c.register_adt_repr(adt_id, vec![field]);
         let substs = c.intern_substitution(vec![]);
@@ -132,7 +132,7 @@ fn adt_with_send_fields_is_send() {
 #[test]
 fn adt_with_non_send_field_is_not_send() {
     let (ctx, adt_ty) = with_fresh_ty_ctx(|c| {
-        let adt_id = AdtId::from_raw(301);
+        let adt_id = AdtId::from_usize(301);
         let inner = c.bool_ty();
         let raw_ptr = c.mk_ty(TyKind::RawPtr(inner, Mutability::Not));
         c.register_adt_repr(adt_id, vec![raw_ptr]);
@@ -146,7 +146,7 @@ fn adt_with_non_send_field_is_not_send() {
 #[test]
 fn adt_negative_impl_removes_send() {
     let (ctx, adt_ty) = with_fresh_ty_ctx(|c| {
-        let adt_id = AdtId::from_raw(302);
+        let adt_id = AdtId::from_usize(302);
         let field = c.mk_ty(TyKind::Int(IntTy::I32));
         c.register_adt_repr(adt_id, vec![field]);
         c.register_negative_impl(adt_id, AutoTrait::Send);
@@ -163,7 +163,7 @@ fn adt_negative_impl_removes_send() {
 #[test]
 fn adt_manual_impl_preserves_trait() {
     let (ctx, adt_ty) = with_fresh_ty_ctx(|c| {
-        let adt_id = AdtId::from_raw(303);
+        let adt_id = AdtId::from_usize(303);
         let inner = c.bool_ty();
         let raw_ptr = c.mk_ty(TyKind::RawPtr(inner, Mutability::Not));
         c.register_adt_repr(adt_id, vec![raw_ptr]);
@@ -180,7 +180,7 @@ fn adt_manual_impl_preserves_trait() {
 #[test]
 fn adt_with_no_repr_gets_no_auto_traits() {
     let (ctx, adt_ty) = with_fresh_ty_ctx(|c| {
-        let adt_id = AdtId::from_raw(304);
+        let adt_id = AdtId::from_usize(304);
         let substs = c.intern_substitution(vec![]);
         c.mk_adt(adt_id, substs)
     });
