@@ -49,6 +49,13 @@ pub struct FixtureAnnotations {
     pub expect_stderr: Option<String>,
     /// Diagnostic substring expectations (`//@ expect-error:`), repeatable.
     pub expect_errors: Vec<String>,
+    /// Diagnostic-code expectations (`//@ expect-error-code: T0050`),
+    /// repeatable — the CT-5 negative-fixture contract (plan §6 M3.3):
+    /// a compile-fail fixture asserting its diagnostics carry a specific
+    /// registered error code. Every registered code must be declared by at
+    /// least one fixture (the ledger's `errors` cross-check fails
+    /// `ledger check` otherwise) and any declared code must be registered.
+    pub expect_error_codes: Vec<String>,
     /// Warning-presence patterns (`//@ expect-warning:`), repeatable.
     pub expect_warnings: Vec<String>,
     /// Warning-absence patterns (`//@ forbid-warning:`), repeatable.
@@ -294,6 +301,10 @@ fn parse_directive_body(
         }
         "expect-error" => {
             out.expect_errors.push(value.to_string());
+            Ok(())
+        }
+        "expect-error-code" => {
+            out.expect_error_codes.push(value.to_string());
             Ok(())
         }
         "expect-warning" => {
