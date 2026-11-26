@@ -16,8 +16,8 @@ fn string_constant_emitted_to_string_table() {
     let ctx_mut = TyCtxMut::new(interner.clone());
 
     let mut body = Body::dummy(glyim_core::DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(0),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
     ));
 
     body.locals.push(LocalDecl {
@@ -36,16 +36,16 @@ fn string_constant_emitted_to_string_table() {
 
     let stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Use(Operand::Constant(mir_const)),
         ),
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     };
 
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(stmt);
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     };
@@ -72,8 +72,8 @@ fn function_constant_emitted_to_fn_table() {
     let ctx_mut = TyCtxMut::new(interner.clone());
 
     let mut body = Body::dummy(glyim_core::DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(0),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
     ));
 
     body.locals.push(LocalDecl {
@@ -82,7 +82,7 @@ fn function_constant_emitted_to_fn_table() {
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     });
 
-    let def_id = FnDefId::from_raw(42);
+    let def_id = FnDefId::from_usize(42);
     let substs = Substitution::empty();
 
     let mir_const = MirConst {
@@ -93,16 +93,16 @@ fn function_constant_emitted_to_fn_table() {
 
     let stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Use(Operand::Constant(mir_const)),
         ),
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     };
 
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(stmt);
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     };
