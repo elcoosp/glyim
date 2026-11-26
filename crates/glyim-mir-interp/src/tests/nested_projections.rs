@@ -21,7 +21,7 @@ fn test_nested_field_projection_read() {
     let inner_agg = InterpValue::Aggregate(vec![InterpValue::Int(100), InterpValue::Int(200)]);
     let _outer_agg = InterpValue::Aggregate(vec![inner_agg, InterpValue::Int(999)]);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     // Store the outer aggregate
     body.basic_blocks[bb0].statements.insert(
         0,
@@ -109,8 +109,8 @@ fn test_nested_field_projection_read() {
             Rvalue::Use(Operand::Copy(Place {
                 local: local_outer2,
                 projection: vec![
-                    ProjectionElem::Field(FieldIdx::from_raw(0)),
-                    ProjectionElem::Field(FieldIdx::from_raw(1)),
+                    ProjectionElem::Field(FieldIdx::from_usize(0)),
+                    ProjectionElem::Field(FieldIdx::from_usize(1)),
                 ]
                 .into_boxed_slice(),
             })),
@@ -120,7 +120,7 @@ fn test_nested_field_projection_read() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -139,7 +139,7 @@ fn test_write_through_field_projection() {
     let local_agg = add_local(&mut body, i32_ty, Mutability::Mut);
     let local_field = add_local(&mut body, i32_ty, Mutability::Not);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(
         &mut body,
         bb0,
@@ -155,7 +155,7 @@ fn test_write_through_field_projection() {
         StatementKind::Assign(
             Place {
                 local: local_agg,
-                projection: vec![ProjectionElem::Field(FieldIdx::from_raw(1))].into_boxed_slice(),
+                projection: vec![ProjectionElem::Field(FieldIdx::from_usize(1))].into_boxed_slice(),
             },
             Rvalue::Use(const_int(99)),
         ),
@@ -168,7 +168,7 @@ fn test_write_through_field_projection() {
             Place::new(local_field),
             Rvalue::Use(Operand::Copy(Place {
                 local: local_agg,
-                projection: vec![ProjectionElem::Field(FieldIdx::from_raw(1))].into_boxed_slice(),
+                projection: vec![ProjectionElem::Field(FieldIdx::from_usize(1))].into_boxed_slice(),
             })),
         ),
     );
@@ -176,7 +176,7 @@ fn test_write_through_field_projection() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -196,7 +196,7 @@ fn test_deref_projection_read() {
     let local_r = add_local(&mut body, i32_ty, Mutability::Mut);
     let local_y = add_local(&mut body, i32_ty, Mutability::Not);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(
         &mut body,
         bb0,
@@ -226,7 +226,7 @@ fn test_deref_projection_read() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -246,7 +246,7 @@ fn test_write_through_deref_projection() {
     let local_r = add_local(&mut body, i32_ty, Mutability::Mut);
     let local_check = add_local(&mut body, i32_ty, Mutability::Not);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(
         &mut body,
         bb0,
@@ -290,7 +290,7 @@ fn test_write_through_deref_projection() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
