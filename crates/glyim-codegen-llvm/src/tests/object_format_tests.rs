@@ -16,8 +16,8 @@ fn s08_t21_generate_output_is_elf() {
     let backend = LlvmBackend::new();
     let output = tpath("glyim_test_elf_check.o");
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(100),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(100),
     )));
     let bodies = vec![body];
     let result = backend.generate(&crate::tests::to_pairs(&bodies), &output);
@@ -41,8 +41,8 @@ fn s08_t22_generate_output_non_empty() {
     let backend = LlvmBackend::new();
     let output = tpath("glyim_test_nonempty.o");
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(101),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(101),
     )));
     let bodies = vec![body];
     backend
@@ -59,8 +59,8 @@ fn s08_t22_generate_output_non_empty() {
 fn s08_t23_generate_function_bytes_consistent() {
     let backend = LlvmBackend::new();
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(102),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(102),
     )));
     let r1 = backend
         .generate_function(&body)
@@ -81,8 +81,8 @@ fn s08_t24_many_functions_no_oom() {
     let backend = LlvmBackend::new();
     for i in 0..200 {
         let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(i as u32),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(i),
         )));
         let result = backend.generate_function(&body);
         assert!(
@@ -98,8 +98,8 @@ fn s08_t25_generate_after_many_functions() {
     // Call generate_function many times first
     for i in 0..50 {
         let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(i as u32),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(i),
         )));
         backend.generate_function(&body).unwrap();
     }
@@ -108,8 +108,8 @@ fn s08_t25_generate_after_many_functions() {
     let bodies: Vec<_> = (0..10)
         .map(|i| {
             std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-                glyim_core::CrateId::from_raw(0),
-                glyim_core::LocalDefId::from_raw(1000 + i as u32),
+                glyim_core::CrateId::from_usize(0),
+                glyim_core::LocalDefId::from_usize(1000 + i),
             )))
         })
         .collect();
@@ -150,8 +150,8 @@ fn s08_t27_emit_thinlto_bitcode_files_writes_one_bc_per_cgu() {
     let bodies: Vec<_> = (0..3)
         .map(|i| {
             std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::DefId::new(
-                glyim_core::CrateId::from_raw(0),
-                glyim_core::LocalDefId::from_raw(2000 + i as u32),
+                glyim_core::CrateId::from_usize(0),
+                glyim_core::LocalDefId::from_usize(2000 + i),
             )))
         })
         .collect();
