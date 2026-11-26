@@ -58,7 +58,7 @@ fn make_enum_ty(
 #[test]
 fn s15_t02_enum_simple_two_variants_no_data() {
     let (ctx, enum_ty) = with_fresh_ty_ctx(|c| {
-        make_enum_ty(c, glyim_core::AdtId::from_raw(200), vec![vec![], vec![]])
+        make_enum_ty(c, glyim_core::AdtId::from_usize(200), vec![vec![], vec![]])
     });
     let computer = SimpleLayoutComputer::new(&ctx, TargetInfo::x86_64());
     let layout = computer
@@ -90,7 +90,7 @@ fn s15_t02_enum_with_data_variants() {
         let bool_ty = c.bool_ty();
         make_enum_ty(
             c,
-            glyim_core::AdtId::from_raw(201),
+            glyim_core::AdtId::from_usize(201),
             vec![vec![i32_ty], vec![bool_ty]],
         )
     });
@@ -135,7 +135,7 @@ fn s15_t02_enum_niche_option_bool() {
         let bool_ty = c.bool_ty();
         make_enum_ty(
             c,
-            glyim_core::AdtId::from_raw(202),
+            glyim_core::AdtId::from_usize(202),
             vec![vec![bool_ty], vec![]],
         )
     });
@@ -170,7 +170,7 @@ fn s15_t02_enum_three_variants_no_data() {
     let (ctx, enum_ty) = with_fresh_ty_ctx(|c| {
         make_enum_ty(
             c,
-            glyim_core::AdtId::from_raw(203),
+            glyim_core::AdtId::from_usize(203),
             vec![vec![], vec![], vec![]],
         )
     });
@@ -192,7 +192,7 @@ fn s15_t02_enum_three_variants_no_data() {
 fn s15_t02_enum_large_discriminant() {
     let (ctx, enum_ty) = with_fresh_ty_ctx(|c| {
         let variants: Vec<Vec<glyim_type::Ty>> = (0..256).map(|_| vec![]).collect();
-        make_enum_ty(c, glyim_core::AdtId::from_raw(204), variants)
+        make_enum_ty(c, glyim_core::AdtId::from_usize(204), variants)
     });
     let computer = SimpleLayoutComputer::new(&ctx, TargetInfo::x86_64());
     let layout = computer
@@ -205,7 +205,7 @@ fn s15_t02_enum_large_discriminant() {
 fn s15_t02_enum_257_variants_needs_u16() {
     let (ctx, enum_ty) = with_fresh_ty_ctx(|c| {
         let variants: Vec<Vec<glyim_type::Ty>> = (0..257).map(|_| vec![]).collect();
-        make_enum_ty(c, glyim_core::AdtId::from_raw(205), variants)
+        make_enum_ty(c, glyim_core::AdtId::from_usize(205), variants)
     });
     let computer = SimpleLayoutComputer::new(&ctx, TargetInfo::x86_64());
     let layout = computer
@@ -226,13 +226,13 @@ fn s15_t02_enum_nested_option_niche() {
         // Option<bool> = enum { None, Some(bool) }
         let option_bool = make_enum_ty(
             c,
-            glyim_core::AdtId::from_raw(206),
+            glyim_core::AdtId::from_usize(206),
             vec![vec![bool_ty], vec![]],
         );
         // Option<Option<bool>> = enum { None, Some(Option<bool>) }
         make_enum_ty(
             c,
-            glyim_core::AdtId::from_raw(207),
+            glyim_core::AdtId::from_usize(207),
             vec![vec![option_bool], vec![]],
         )
     });
@@ -264,13 +264,13 @@ fn s15_t02_enum_direct_tag_recursive_niche() {
         // leaving [3,255) free.
         let inner = make_enum_ty(
             c,
-            glyim_core::AdtId::from_raw(208),
+            glyim_core::AdtId::from_usize(208),
             vec![vec![], vec![], vec![]],
         );
         // Outer: Option<inner>
         make_enum_ty(
             c,
-            glyim_core::AdtId::from_raw(209),
+            glyim_core::AdtId::from_usize(209),
             vec![vec![inner], vec![]],
         )
     });
