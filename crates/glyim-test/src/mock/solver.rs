@@ -119,7 +119,7 @@ mod tests {
 
     fn sample_info() -> SolverIteratorNextInfo {
         SolverIteratorNextInfo {
-            fn_def_id: FnDefId::from_raw(0),
+            fn_def_id: FnDefId::from_usize(0),
             fn_substs: glyim_type::Substitution::empty(),
             fn_ty: Ty::ERROR,
             option_ty: Ty::UNIT,
@@ -140,7 +140,7 @@ mod tests {
             got.is_some(),
             "iterator_next_info should return the override's Some(info)"
         );
-        assert_eq!(got.unwrap().fn_def_id, FnDefId::from_raw(0));
+        assert_eq!(got.unwrap().fn_def_id, FnDefId::from_usize(0));
     }
 
     #[test]
