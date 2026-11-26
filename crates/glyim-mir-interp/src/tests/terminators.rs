@@ -13,9 +13,9 @@ fn test_assert_true_continues() {
     let mut body = empty_body(Ty::UNIT);
     let local_x = add_local(&mut body, i32_ty, Mutability::Mut);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
-    let bb1 = BasicBlockIdx::from_raw(1);
-    let _bb2 = BasicBlockIdx::from_raw(2);
+    let bb0 = BasicBlockIdx::from_usize(0);
+    let bb1 = BasicBlockIdx::from_usize(1);
+    let _bb2 = BasicBlockIdx::from_usize(2);
     body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(Span::DUMMY),
@@ -50,7 +50,7 @@ fn test_assert_true_continues() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -69,9 +69,9 @@ fn test_assert_false_panics() {
     let mut body = empty_body(Ty::UNIT);
     let _local_x = add_local(&mut body, i32_ty, Mutability::Mut);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
-    let bb1 = BasicBlockIdx::from_raw(1);
-    let _bb2 = BasicBlockIdx::from_raw(2);
+    let bb0 = BasicBlockIdx::from_usize(0);
+    let bb1 = BasicBlockIdx::from_usize(1);
+    let _bb2 = BasicBlockIdx::from_usize(2);
     body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(Span::DUMMY),
@@ -100,7 +100,7 @@ fn test_assert_false_panics() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -116,8 +116,8 @@ fn test_unreachable_panics() {
     let ctx = glyim_test::test_ty_ctx();
 
     let mut body = empty_body(Ty::UNIT);
-    let bb0 = BasicBlockIdx::from_raw(0);
-    let bb1 = BasicBlockIdx::from_raw(1);
+    let bb0 = BasicBlockIdx::from_usize(0);
+    let bb1 = BasicBlockIdx::from_usize(1);
     body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Unreachable,
         source_info: SourceInfo::new(Span::DUMMY),
@@ -128,7 +128,7 @@ fn test_unreachable_panics() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -154,9 +154,9 @@ fn test_drop_terminator_proceeds() {
     let local_x = add_local(&mut body, i32_ty, Mutability::Mut);
     let local_dummy = add_local(&mut body, i32_ty, Mutability::Mut);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
-    let bb1 = BasicBlockIdx::from_raw(1);
-    let _bb2 = BasicBlockIdx::from_raw(2);
+    let bb0 = BasicBlockIdx::from_usize(0);
+    let bb1 = BasicBlockIdx::from_usize(1);
+    let _bb2 = BasicBlockIdx::from_usize(2);
     body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(Span::DUMMY),
@@ -189,7 +189,7 @@ fn test_drop_terminator_proceeds() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     // A bare `Drop` reaching the interpreter must be rejected loudly (plan
@@ -207,12 +207,12 @@ fn test_switch_int_multiple_targets() {
     let local_x = add_local(&mut body, i32_ty, Mutability::Mut);
     let local_discr = add_local(&mut body, i32_ty, Mutability::Mut);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
-    let bb1 = BasicBlockIdx::from_raw(1);
-    let bb2 = BasicBlockIdx::from_raw(2);
-    let bb3 = BasicBlockIdx::from_raw(3);
-    let bb4 = BasicBlockIdx::from_raw(4);
-    let bb5 = BasicBlockIdx::from_raw(5);
+    let bb0 = BasicBlockIdx::from_usize(0);
+    let bb1 = BasicBlockIdx::from_usize(1);
+    let bb2 = BasicBlockIdx::from_usize(2);
+    let bb3 = BasicBlockIdx::from_usize(3);
+    let bb4 = BasicBlockIdx::from_usize(4);
+    let bb5 = BasicBlockIdx::from_usize(5);
     body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Goto { target: bb5 },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -275,7 +275,7 @@ fn test_switch_int_multiple_targets() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -294,7 +294,7 @@ fn test_step_limit_enforced() {
     let mut body = empty_body(Ty::UNIT);
     let local_i = add_local(&mut body, i32_ty, Mutability::Mut);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     // Infinite loop: bb0: i = i + 1; goto bb0
     add_statement(
         &mut body,
@@ -321,7 +321,7 @@ fn test_step_limit_enforced() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx).with_step_limit(10);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -334,12 +334,15 @@ fn test_recursion_limit_enforced() {
     let mut ctx = glyim_test::test_ty_ctx();
     let _i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
 
-    let fn_def = FnDefId::from_raw(0);
-    let fn_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(fn_def.to_raw()));
+    let fn_def = FnDefId::from_usize(0);
+    let fn_id = DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(fn_def.index()),
+    );
 
     let mut body = empty_body(Ty::UNIT);
-    let bb0 = BasicBlockIdx::from_raw(0);
-    let bb1 = BasicBlockIdx::from_raw(1);
+    let bb0 = BasicBlockIdx::from_usize(0);
+    let bb1 = BasicBlockIdx::from_usize(1);
     body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(Span::DUMMY),
@@ -355,7 +358,7 @@ fn test_recursion_limit_enforced() {
                 span: Span::DUMMY,
             }),
             args: vec![],
-            destination: Place::new(LocalIdx::from_raw(0)),
+            destination: Place::new(LocalIdx::from_usize(0)),
             target: Some(bb1),
             cleanup: None,
         },
@@ -374,21 +377,21 @@ fn test_call_with_cleanup_on_panic() {
     let mut ctx = glyim_test::test_ty_ctx();
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
 
-    let callee_def = FnDefId::from_raw(10);
+    let callee_def = FnDefId::from_usize(10);
     let callee_id = DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(callee_def.to_raw()),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(callee_def.index()),
     );
     let mut callee_body = empty_body(Ty::UNIT);
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     set_terminator(&mut callee_body, bb0, TerminatorKind::Unreachable);
 
-    let caller_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(20));
+    let caller_id = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(20));
     let mut caller_body = empty_body(Ty::UNIT);
     let local_result = add_local(&mut caller_body, i32_ty, Mutability::Mut);
-    let bb0_caller = BasicBlockIdx::from_raw(0);
-    let bb1_caller = BasicBlockIdx::from_raw(1);
-    let bb2_caller = BasicBlockIdx::from_raw(2);
+    let bb0_caller = BasicBlockIdx::from_usize(0);
+    let bb1_caller = BasicBlockIdx::from_usize(1);
+    let bb2_caller = BasicBlockIdx::from_usize(2);
     caller_body
         .basic_blocks
         .push(BasicBlockData::new(Terminator {
@@ -445,7 +448,7 @@ fn test_discriminant_on_non_empty_aggregate() {
     let local_enum = add_local(&mut body, i32_ty, Mutability::Mut);
     let local_discr = add_local(&mut body, i32_ty, Mutability::Not);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(
         &mut body,
         bb0,
@@ -466,7 +469,7 @@ fn test_discriminant_on_non_empty_aggregate() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -486,7 +489,7 @@ fn test_downcast_projection_is_noop() {
     let local_val = add_local(&mut body, i32_ty, Mutability::Mut);
     let local_result = add_local(&mut body, i32_ty, Mutability::Not);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(
         &mut body,
         bb0,
@@ -499,8 +502,10 @@ fn test_downcast_projection_is_noop() {
             Place::new(local_result),
             Rvalue::Use(Operand::Copy(Place {
                 local: local_val,
-                projection: vec![ProjectionElem::Downcast(glyim_mir::VariantIdx::from_raw(0))]
-                    .into_boxed_slice(),
+                projection: vec![ProjectionElem::Downcast(glyim_mir::VariantIdx::from_usize(
+                    0,
+                ))]
+                .into_boxed_slice(),
             })),
         ),
     );
@@ -508,7 +513,7 @@ fn test_downcast_projection_is_noop() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
