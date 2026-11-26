@@ -26,7 +26,7 @@ fn property_ty_roundtrip_via_index() {
     });
     for ty in &tys {
         let raw = ty.to_raw();
-        let reconstructed = Ty::from_raw(raw);
+        let reconstructed = Ty::from_usize(raw as usize);
         assert_eq!(*ty, reconstructed);
         assert_eq!(frozen.ty_kind(*ty), frozen.ty_kind(reconstructed));
     }
@@ -35,7 +35,7 @@ fn property_ty_roundtrip_via_index() {
 #[test]
 fn property_type_flags_consistent_with_kind() {
     let (frozen, tys) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let i32_ty = c.mk_ty(TyKind::Int(IntTy::I32));
         let ref_to_infer = c.mk_ref(Region::Erased, infer, Mutability::Not);
@@ -91,7 +91,7 @@ fn property_freeze_preserves_all_data() {
         let t_i32 = c.mk_ty(TyKind::Int(IntTy::I32));
         let t_ref = c.mk_ref(Region::Erased, t_bool, Mutability::Mut);
         let substs = c.intern_substitution(vec![GenericArg::Ty(t_i32)]);
-        let t_adt = c.mk_adt(AdtId::from_raw(42), substs);
+        let t_adt = c.mk_adt(AdtId::from_usize(42), substs);
         let vid = c.new_region_var(Region::Static);
         (t_bool, t_i32, t_ref, t_adt, vid)
     });
@@ -117,17 +117,17 @@ fn property_freeze_preserves_all_data() {
 #[test]
 fn property_ty_equality_by_index() {
     // Ty equality is by raw index
-    let t1 = Ty::from_raw(42);
-    let t2 = Ty::from_raw(42);
-    let t3 = Ty::from_raw(43);
+    let t1 = Ty::from_usize(42);
+    let t2 = Ty::from_usize(42);
+    let t3 = Ty::from_usize(43);
     assert_eq!(t1, t2);
     assert_ne!(t1, t3);
 }
 
 #[test]
 fn property_ty_ordering_by_index() {
-    let t1 = Ty::from_raw(1);
-    let t2 = Ty::from_raw(2);
+    let t1 = Ty::from_usize(1);
+    let t2 = Ty::from_usize(2);
     assert!(t1 < t2);
     assert!(t2 > t1);
 }
@@ -168,7 +168,7 @@ fn property_error_propagates_through_all_wrappers() {
     let (frozen3, slice_ty) = with_fresh_ty_ctx(|c| c.mk_ty(TyKind::Slice(Ty::ERROR)));
     let (frozen4, inner) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![GenericArg::Ty(Ty::ERROR)]);
-        c.mk_adt(AdtId::from_raw(1), substs)
+        c.mk_adt(AdtId::from_usize(1), substs)
     });
     assert!(frozen.ty_flags(ref_ty).contains(TypeFlags::HAS_ERROR));
     assert!(frozen2.ty_flags(raw_ty).contains(TypeFlags::HAS_ERROR));
