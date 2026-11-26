@@ -1,0 +1,14 @@
+# CT-1 raw-constructor watchlist (plan M3.1, §5.2): the workspace-wide
+# `from_raw` ID constructors were deleted by the M3.1 R3 codemod (every ID
+# family is built via its sanctioned `from_usize(usize)` factory; the only
+# raw wrap left is `IdxLike::from_u32`, which is `IndexVec` machinery).
+# These entries are the deliberate watchlist: if one of the
+# `#[cfg(test)]`-only escape hatches below is ever re-widened to a
+# production constructor, any external call site trips this lint instead of
+# silently reopening the escape hatch.
+disallowed-methods = [
+    "glyim_span::FileId::from_raw",
+    "glyim_span::ByteIdx::from_raw",
+    "glyim_span::SyntaxContext::from_raw",
+    "glyim_span::ExpnId::from_raw",
+]
