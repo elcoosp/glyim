@@ -91,7 +91,7 @@ pub struct TyCtxMut {
     /// Counter for compiler-synthesized ADT ids (closures, etc.). Seeded far
     /// above any user-defined ADT id and the 1000-1005 builtin range ids so it
     /// can never collide.
-    synthetic_adt_counter: u32,
+    synthetic_adt_counter: usize,
     /// Maps a closure's `ClosureId` to the synthetic `AdtId` representing its
     /// captured environment. Populated by `register_closure` so downstream
     /// passes (e.g. the DWARF debug-info pass) can recover the per-capture
@@ -172,8 +172,8 @@ pub struct TyCtxMut {
     pub primitive_method_fns: HashMap<(Ty, Name), (FnDefId, FnSig)>,
     /// Counter for synthetic `FnDefId`s handed out to builtin methods. Seeded
     /// far above user/closure fn ids so it can never collide.
-    next_builtin_fn_id: u32,
-    next_ctor_fn_id: u32,
+    next_builtin_fn_id: usize,
+    next_ctor_fn_id: usize,
 }
 
 impl TyCtxMut {
@@ -925,7 +925,7 @@ impl TyCtxMut {
     pub fn next_synthetic_adt_id(&mut self) -> AdtId {
         let id = self.synthetic_adt_counter;
         self.synthetic_adt_counter += 1;
-        AdtId::from_raw(id)
+        AdtId::from_usize(id)
     }
 
     /// Register a type alias (`type X<..> = RHS;`) for expansion during type
@@ -974,7 +974,7 @@ impl TyCtxMut {
         // ADT id) to the ADT so the DWARF debug pass can recover per-capture
         // member types from a `TyKind::Closure` value (Phase 6.2).
         self.closure_adt_map
-            .insert(ClosureId::from_raw(id.to_raw()), id);
+            .insert(ClosureId::from_usize(id.index()), id);
         id
     }
     /// `adt_def`.
@@ -1019,7 +1019,7 @@ impl TyCtxMut {
         for (adt_id, def) in &self.adt_defs {
             for (i, v) in def.variants.iter().enumerate() {
                 if v.name == name {
-                    return Some((*adt_id, glyim_core::def_id::VariantIdx::from_raw(i as u32)));
+                    return Some((*adt_id, glyim_core::def_id::VariantIdx::from_usize(i)));
                 }
             }
         }
@@ -1077,7 +1077,7 @@ impl TyCtxMut {
     /// `ExprKind::VariantCtor { adt_id, variant_idx }`, not this id, so a
     /// fresh id is safe.
     pub fn alloc_variant_ctor_fn_def_id(&mut self) -> FnDefId {
-        let id = FnDefId::from_raw(self.next_ctor_fn_id);
+        let id = FnDefId::from_usize(self.next_ctor_fn_id);
         self.next_ctor_fn_id += 1;
         id
     }
@@ -1477,7 +1477,7 @@ impl TyCtxMut {
                     m.insert(*fn_id, (*adt, *name));
                 }
                 for ((_recv, name), (fn_id, _)) in &self.primitive_method_fns {
-                    m.insert(*fn_id, (AdtId::from_raw(0), *name));
+                    m.insert(*fn_id, (AdtId::from_usize(0), *name));
                 }
                 m
             },
@@ -1523,7 +1523,7 @@ impl TyCtxMut {
                     m.insert(*fn_id, (*adt, *name));
                 }
                 for ((_recv, name), (fn_id, _)) in &self.primitive_method_fns {
-                    m.insert(*fn_id, (AdtId::from_raw(0), *name));
+                    m.insert(*fn_id, (AdtId::from_usize(0), *name));
                 }
                 m
             },
@@ -1680,7 +1680,8 @@ impl TyCtxMut {
 
         // Builtin ADTs live in the implicit builtin/core crate (krate 0). Map a
         // local id to its `DefId` for the lang-item registry.
-        let def_id = |n: u32| DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(n));
+        let def_id =
+            |n: u32| DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(n as usize));
 
         // Helper to create a struct AdtDef with given field types.
         // This is a plain function, not a closure, so it doesn't capture self.
@@ -1725,35 +1726,35 @@ impl TyCtxMut {
 
         // Register Range<T> (start, end) - ID 1000
         let def = make_struct_def(vec![t_var, t_var], self);
-        self.register_adt(AdtId::from_raw(1000), def);
+        self.register_adt(AdtId::from_usize(1000), def);
         self.lang_items
             .register(LangItem::Range, def_id(1000))
             .expect("builtin lang item registration must not duplicate");
 
         // Register RangeInclusive<T> (start, end) - ID 1001
         let def = make_struct_def(vec![t_var, t_var], self);
-        self.register_adt(AdtId::from_raw(1001), def);
+        self.register_adt(AdtId::from_usize(1001), def);
         self.lang_items
             .register(LangItem::RangeInclusive, def_id(1001))
             .expect("builtin lang item registration must not duplicate");
 
         // Register RangeFrom<T> (start) - ID 1002
         let def = make_struct_def(vec![t_var], self);
-        self.register_adt(AdtId::from_raw(1002), def);
+        self.register_adt(AdtId::from_usize(1002), def);
         self.lang_items
             .register(LangItem::RangeFrom, def_id(1002))
             .expect("builtin lang item registration must not duplicate");
 
         // Register RangeTo<T> (end) - ID 1003
         let def = make_struct_def(vec![t_var], self);
-        self.register_adt(AdtId::from_raw(1003), def);
+        self.register_adt(AdtId::from_usize(1003), def);
         self.lang_items
             .register(LangItem::RangeTo, def_id(1003))
             .expect("builtin lang item registration must not duplicate");
 
         // Register RangeToInclusive<T> (end) - ID 1004
         let def = make_struct_def(vec![t_var], self);
-        self.register_adt(AdtId::from_raw(1004), def);
+        self.register_adt(AdtId::from_usize(1004), def);
         self.lang_items
             .register(LangItem::RangeToInclusive, def_id(1004))
             .expect("builtin lang item registration must not duplicate");
@@ -1783,12 +1784,12 @@ impl TyCtxMut {
                 generic_params: vec![],
             }
         };
-        self.register_adt(AdtId::from_raw(1005), unsafe_cell_def);
+        self.register_adt(AdtId::from_usize(1005), unsafe_cell_def);
         self.lang_items
             .register(LangItem::UnsafeCellAdt, def_id(1005))
             .ok();
         // Mark it as interior mutable.
-        self.mark_adt_interior_mutable(AdtId::from_raw(1005));
+        self.mark_adt_interior_mutable(AdtId::from_usize(1005));
 
         // Register Option<T> - ID 1010
         // A two-variant enum: `None` (no fields) and `Some(T)`.
@@ -1815,7 +1816,7 @@ impl TyCtxMut {
             ],
             generic_params: vec![self.resolver.intern("T")],
         };
-        self.register_adt(AdtId::from_raw(1010), option_def.clone());
+        self.register_adt(AdtId::from_usize(1010), option_def.clone());
         self.lang_items
             .register(LangItem::Option, def_id(1010))
             .expect("builtin lang item registration must not duplicate");
@@ -1824,7 +1825,7 @@ impl TyCtxMut {
         // `Option` lang item, not the name used in type position).
         self.register_adt_with_name(
             self.resolver.intern("Option"),
-            AdtId::from_raw(1010),
+            AdtId::from_usize(1010),
             option_def,
         );
 
@@ -1872,12 +1873,16 @@ impl TyCtxMut {
             }],
             generic_params: vec![self.resolver.intern("T")],
         };
-        self.register_adt(AdtId::from_raw(1020), vec_def.clone());
+        self.register_adt(AdtId::from_usize(1020), vec_def.clone());
         self.lang_items.register(LangItem::Vec, def_id(1020)).ok();
-        self.register_adt_with_name(self.resolver.intern("Vec"), AdtId::from_raw(1020), vec_def);
+        self.register_adt_with_name(
+            self.resolver.intern("Vec"),
+            AdtId::from_usize(1020),
+            vec_def,
+        );
         // `Vec` is an owning builtin (it owns a heap buffer) — record that it
         // carries a `Drop` impl so `needs_drop` is correct (see `mark_has_drop`).
-        self.mark_has_drop(AdtId::from_raw(1020));
+        self.mark_has_drop(AdtId::from_usize(1020));
 
         // Register `PhantomData<T>` - ID 1030.
         // A zero-sized marker type. Only its name + arity matter for resolution.
@@ -1900,13 +1905,13 @@ impl TyCtxMut {
             }],
             generic_params: vec![self.resolver.intern("T")],
         };
-        self.register_adt(AdtId::from_raw(1030), pd_def.clone());
+        self.register_adt(AdtId::from_usize(1030), pd_def.clone());
         self.lang_items
             .register(LangItem::PhantomDataAdt, def_id(1030))
             .ok();
         self.register_adt_with_name(
             self.resolver.intern("PhantomData"),
-            AdtId::from_raw(1030),
+            AdtId::from_usize(1030),
             pd_def,
         );
 
@@ -1952,10 +1957,10 @@ impl TyCtxMut {
             ],
             generic_params: vec![self.resolver.intern("T"), self.resolver.intern("E")],
         };
-        self.register_adt(AdtId::from_raw(1011), result_def.clone());
+        self.register_adt(AdtId::from_usize(1011), result_def.clone());
         self.register_adt_with_name(
             self.resolver.intern("Result"),
-            AdtId::from_raw(1011),
+            AdtId::from_usize(1011),
             result_def,
         );
         self.lang_items
@@ -1988,13 +1993,13 @@ impl TyCtxMut {
             ],
             generic_params: Vec::new(),
         };
-        self.register_adt(AdtId::from_raw(1015), ordering_def.clone());
+        self.register_adt(AdtId::from_usize(1015), ordering_def.clone());
         self.lang_items
             .register(LangItem::Ordering, def_id(1015))
             .ok();
         self.register_adt_with_name(
             self.resolver.intern("Ordering"),
-            AdtId::from_raw(1015),
+            AdtId::from_usize(1015),
             ordering_def,
         );
 
@@ -2037,11 +2042,11 @@ impl TyCtxMut {
         let ab_usize = self.mk_ty(TyKind::Uint(UintTy::Usize));
         let ab_i32 = self.mk_ty(TyKind::Int(IntTy::I32));
         let ab_u32 = self.mk_ty(TyKind::Uint(UintTy::U32));
-        atomic_struct(self, "AtomicBool", AdtId::from_raw(1016), ab_u8);
-        atomic_struct(self, "AtomicUsize", AdtId::from_raw(1017), ab_usize);
-        atomic_struct(self, "AtomicU8", AdtId::from_raw(1018), ab_u8);
-        atomic_struct(self, "AtomicI32", AdtId::from_raw(1019), ab_i32);
-        atomic_struct(self, "AtomicU32", AdtId::from_raw(1021), ab_u32);
+        atomic_struct(self, "AtomicBool", AdtId::from_usize(1016), ab_u8);
+        atomic_struct(self, "AtomicUsize", AdtId::from_usize(1017), ab_usize);
+        atomic_struct(self, "AtomicU8", AdtId::from_usize(1018), ab_u8);
+        atomic_struct(self, "AtomicI32", AdtId::from_usize(1019), ab_i32);
+        atomic_struct(self, "AtomicU32", AdtId::from_usize(1021), ab_u32);
         // `ExitStatus` (1022) — a unit struct carrying a `code` field for the
         // stdlib's `Child::wait` result. Register with one `i32`-typed field.
         let i32_ty = self.mk_ty(TyKind::Int(IntTy::I32));
@@ -2060,13 +2065,13 @@ impl TyCtxMut {
             }],
             generic_params: Vec::new(),
         };
-        self.register_adt(AdtId::from_raw(1022), exit_status_def.clone());
+        self.register_adt(AdtId::from_usize(1022), exit_status_def.clone());
         self.lang_items
             .register(LangItem::ExitStatus, def_id(1022))
             .ok();
         self.register_adt_with_name(
             self.resolver.intern("ExitStatus"),
-            AdtId::from_raw(1022),
+            AdtId::from_usize(1022),
             exit_status_def,
         );
 
@@ -2075,7 +2080,7 @@ impl TyCtxMut {
         // position).
         self.register_adt_with_name(
             self.resolver.intern("UnsafeCell"),
-            AdtId::from_raw(1005),
+            AdtId::from_usize(1005),
             AdtDef {
                 kind: AdtKind::Struct,
                 fields: IndexVec::new(),
@@ -2110,12 +2115,16 @@ impl TyCtxMut {
             }],
             generic_params: vec![self.resolver.intern("T")],
         };
-        self.register_adt(AdtId::from_raw(1040), box_def.clone());
+        self.register_adt(AdtId::from_usize(1040), box_def.clone());
         self.lang_items
             .register(LangItem::BoxAdt, def_id(1040))
             .ok();
-        self.register_adt_with_name(self.resolver.intern("Box"), AdtId::from_raw(1040), box_def);
-        self.mark_has_drop(AdtId::from_raw(1040));
+        self.register_adt_with_name(
+            self.resolver.intern("Box"),
+            AdtId::from_usize(1040),
+            box_def,
+        );
+        self.mark_has_drop(AdtId::from_usize(1040));
 
         // Register `String` as a builtin ADT (id 1050). The stdlib's
         // `string.g` declares `struct String { inner: Vec<u8> }` with ZERO
@@ -2135,16 +2144,16 @@ impl TyCtxMut {
             }],
             generic_params: Vec::new(),
         };
-        self.register_adt(AdtId::from_raw(1050), string_def.clone());
+        self.register_adt(AdtId::from_usize(1050), string_def.clone());
         self.lang_items
             .register(LangItem::StringAdt, def_id(1050))
             .ok();
         self.register_adt_with_name(
             self.resolver.intern("String"),
-            AdtId::from_raw(1050),
+            AdtId::from_usize(1050),
             string_def,
         );
-        self.mark_has_drop(AdtId::from_raw(1050));
+        self.mark_has_drop(AdtId::from_usize(1050));
 
         // stdlib fixed-id ADTs (`Error`, `ErrorKind`, `BufReader`,
         // `BufWriter`). Pass 1 and Pass 2 (in `glyim-typeck`) overwrite these
@@ -2161,10 +2170,10 @@ impl TyCtxMut {
                 this.register_adt(id, def.clone());
                 this.register_adt_with_name(this.resolver.intern(name), id, def);
             };
-            placeholder_struct(self, "Error", AdtId::from_raw(1070));
-            placeholder_struct(self, "ErrorKind", AdtId::from_raw(1071));
-            placeholder_struct(self, "BufReader", AdtId::from_raw(1072));
-            placeholder_struct(self, "BufWriter", AdtId::from_raw(1073));
+            placeholder_struct(self, "Error", AdtId::from_usize(1070));
+            placeholder_struct(self, "ErrorKind", AdtId::from_usize(1071));
+            placeholder_struct(self, "BufReader", AdtId::from_usize(1072));
+            placeholder_struct(self, "BufWriter", AdtId::from_usize(1073));
         }
 
         // Populate the builtin inherent-method table (Vec/String/Result/Option
@@ -2178,51 +2187,51 @@ impl TyCtxMut {
         // (e.g. Adt9 for Option) — producing "Adt1010 vs Adt9" mismatches.
         {
             // Result<T, E> at AdtId(1011) — already registered as AdtDef.
-            if let Some(def) = self.adt_defs.get(&AdtId::from_raw(1011)).cloned() {
+            if let Some(def) = self.adt_defs.get(&AdtId::from_usize(1011)).cloned() {
                 self.register_adt_with_name(
                     self.resolver.intern("Result"),
-                    AdtId::from_raw(1011),
+                    AdtId::from_usize(1011),
                     def,
                 );
             }
             // Box<T> at AdtId(1040).
-            if let Some(def) = self.adt_defs.get(&AdtId::from_raw(1040)).cloned() {
+            if let Some(def) = self.adt_defs.get(&AdtId::from_usize(1040)).cloned() {
                 self.register_adt_with_name(
                     self.resolver.intern("Box"),
-                    AdtId::from_raw(1040),
+                    AdtId::from_usize(1040),
                     def,
                 );
             }
             // Vec<T> at AdtId(1020) — already has a name mapping at line
             // 1509, but be defensive in case that changes.
-            if let Some(def) = self.adt_defs.get(&AdtId::from_raw(1020)).cloned() {
+            if let Some(def) = self.adt_defs.get(&AdtId::from_usize(1020)).cloned() {
                 self.register_adt_with_name(
                     self.resolver.intern("Vec"),
-                    AdtId::from_raw(1020),
+                    AdtId::from_usize(1020),
                     def,
                 );
             }
             // String at AdtId(1050) — has a mapping at line 1744, defensive.
-            if let Some(def) = self.adt_defs.get(&AdtId::from_raw(1050)).cloned() {
+            if let Some(def) = self.adt_defs.get(&AdtId::from_usize(1050)).cloned() {
                 self.register_adt_with_name(
                     self.resolver.intern("String"),
-                    AdtId::from_raw(1050),
+                    AdtId::from_usize(1050),
                     def,
                 );
             }
             // PhantomData<T> at AdtId(1030).
-            if let Some(def) = self.adt_defs.get(&AdtId::from_raw(1030)).cloned() {
+            if let Some(def) = self.adt_defs.get(&AdtId::from_usize(1030)).cloned() {
                 self.register_adt_with_name(
                     self.resolver.intern("PhantomData"),
-                    AdtId::from_raw(1030),
+                    AdtId::from_usize(1030),
                     def,
                 );
             }
             // UnsafeCell<T> at AdtId(1005).
-            if let Some(def) = self.adt_defs.get(&AdtId::from_raw(1005)).cloned() {
+            if let Some(def) = self.adt_defs.get(&AdtId::from_usize(1005)).cloned() {
                 self.register_adt_with_name(
                     self.resolver.intern("UnsafeCell"),
-                    AdtId::from_raw(1005),
+                    AdtId::from_usize(1005),
                     def,
                 );
             }
@@ -2274,14 +2283,14 @@ impl TyCtxMut {
         // Precompute every method's output type so the registration closure
         // only mutates the table (avoids holding `&mut self` across repeated
         // `self.mk_ty` calls, which the borrow checker rejects).
-        let vec_id = AdtId::from_raw(1020);
-        let string_id = AdtId::from_raw(1050);
-        let result_id = AdtId::from_raw(1011);
-        let option_id = AdtId::from_raw(1010);
-        let slice_id = AdtId::from_raw(1060);
-        let str_id = AdtId::from_raw(1061);
-        let box_id = AdtId::from_raw(1040);
-        let unsafe_cell_id = AdtId::from_raw(1005);
+        let vec_id = AdtId::from_usize(1020);
+        let string_id = AdtId::from_usize(1050);
+        let result_id = AdtId::from_usize(1011);
+        let option_id = AdtId::from_usize(1010);
+        let slice_id = AdtId::from_usize(1060);
+        let str_id = AdtId::from_usize(1061);
+        let box_id = AdtId::from_usize(1040);
+        let unsafe_cell_id = AdtId::from_usize(1005);
 
         let vec_as_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Not));
         let vec_as_mut_ptr = self.mk_ty(TyKind::RawPtr(t_var, Mutability::Mut));
@@ -2350,29 +2359,29 @@ impl TyCtxMut {
         // list below doesn't hold two `&mut self` borrows across a call).
         let ordering_ty = {
             let s = self.intern_substitution(vec![]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1015), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1015), s))
         };
         let atomic_bool_ty = {
             let s = self.intern_substitution(vec![]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1016), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1016), s))
         };
         let atomic_usize_ty = {
             let s = self.intern_substitution(vec![]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1017), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1017), s))
         };
         let atomic_u8_ty = {
             let s = self.intern_substitution(vec![]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1018), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1018), s))
         };
         let result_bool_bool = {
             let s =
                 self.intern_substitution(vec![GenericArg::Ty(bool_ty), GenericArg::Ty(bool_ty)]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1011), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1011), s))
         };
         let result_usize_usize = {
             let s =
                 self.intern_substitution(vec![GenericArg::Ty(usize_ty), GenericArg::Ty(usize_ty)]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1011), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1011), s))
         };
         let i32_ty = self.mk_ty(TyKind::Int(IntTy::I32));
         let i64_ty = self.mk_ty(TyKind::Int(IntTy::I64));
@@ -2381,25 +2390,25 @@ impl TyCtxMut {
         // `Option<u64>` / `Option<usize>` for `checked_add`/`checked_sub`.
         let option_u64_ty = {
             let s = self.intern_substitution(vec![GenericArg::Ty(u64_ty)]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1010), s))
         };
         let option_usize_ty = {
             let s = self.intern_substitution(vec![GenericArg::Ty(usize_ty)]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1010), s))
         };
         let option_i32_ty = {
             let s = self.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1010), s))
         };
         let option_i64_ty = {
             let s = self.intern_substitution(vec![GenericArg::Ty(i64_ty)]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1010), s))
         };
         // `Option<&T>` for `Option::as_ref`.
         let option_ref_t_ty = {
             let ref_t = self.mk_ty(TyKind::Ref(Region::Erased, t_var, Mutability::Not));
             let s = self.intern_substitution(vec![GenericArg::Ty(ref_t)]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1010), s))
         };
         // `&Vec<T>` / `&[T]` for `Vec::as_slice` / `Vec::as_ref`.
         let ref_slice_t_for_vec = {
@@ -2412,7 +2421,7 @@ impl TyCtxMut {
         // String <-> Vec conversions: `String::into_bytes` -> `Vec<u8>`.
         let vec_u8_ty = {
             let s = self.intern_substitution(vec![GenericArg::Ty(u8_ty)]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1020), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1020), s))
         };
         // Script 366: `String::from_utf8(Vec<u8>) -> Result<String, Vec<u8>>`.
         // Precomputed here because `self.mk_ty` needs `&mut self` and cannot
@@ -2431,7 +2440,7 @@ impl TyCtxMut {
         let char_ty = self.mk_ty(TyKind::Char);
         let vec_char_ty = {
             let s = self.intern_substitution(vec![GenericArg::Ty(char_ty)]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1020), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1020), s))
         };
         let ref_slice_t_ty = {
             let s = self.mk_ty(TyKind::Slice(t_var));
@@ -2443,7 +2452,7 @@ impl TyCtxMut {
         };
         let option_ref_t_ty2 = {
             let s = self.intern_substitution(vec![GenericArg::Ty(ref_slice_t_ty)]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1010), s))
         };
         let tuple_ref_slice_pair = {
             let s = self.intern_substitution(vec![
@@ -2454,7 +2463,7 @@ impl TyCtxMut {
         };
         let option_u32_ty = {
             let s = self.intern_substitution(vec![GenericArg::Ty(u32_ty)]);
-            self.mk_ty(TyKind::Adt(AdtId::from_raw(1010), s))
+            self.mk_ty(TyKind::Adt(AdtId::from_usize(1010), s))
         };
 
         // (adt_id, method_name, inputs, output) tuples.
@@ -2629,76 +2638,81 @@ impl TyCtxMut {
             (option_id, "map", vec![fn_t_to_u], option_u_ty),
             // Ordering — unit variants only, no methods.
             // AtomicBool
-            (AdtId::from_raw(1016), "new", vec![bool_ty], atomic_bool_ty),
-            (AdtId::from_raw(1016), "load", vec![ordering_ty], bool_ty),
             (
-                AdtId::from_raw(1016),
+                AdtId::from_usize(1016),
+                "new",
+                vec![bool_ty],
+                atomic_bool_ty,
+            ),
+            (AdtId::from_usize(1016), "load", vec![ordering_ty], bool_ty),
+            (
+                AdtId::from_usize(1016),
                 "store",
                 vec![bool_ty, ordering_ty],
                 Ty::UNIT,
             ),
             (
-                AdtId::from_raw(1016),
+                AdtId::from_usize(1016),
                 "compare_exchange",
                 vec![bool_ty, bool_ty, ordering_ty],
                 result_bool_bool,
             ),
             (
-                AdtId::from_raw(1016),
+                AdtId::from_usize(1016),
                 "fetch_and",
                 vec![bool_ty, ordering_ty],
                 bool_ty,
             ),
             (
-                AdtId::from_raw(1016),
+                AdtId::from_usize(1016),
                 "fetch_or",
                 vec![bool_ty, ordering_ty],
                 bool_ty,
             ),
             // AtomicUsize
             (
-                AdtId::from_raw(1017),
+                AdtId::from_usize(1017),
                 "new",
                 vec![usize_ty],
                 atomic_usize_ty,
             ),
-            (AdtId::from_raw(1017), "load", vec![ordering_ty], usize_ty),
+            (AdtId::from_usize(1017), "load", vec![ordering_ty], usize_ty),
             (
-                AdtId::from_raw(1017),
+                AdtId::from_usize(1017),
                 "store",
                 vec![usize_ty, ordering_ty],
                 Ty::UNIT,
             ),
             (
-                AdtId::from_raw(1017),
+                AdtId::from_usize(1017),
                 "fetch_add",
                 vec![usize_ty, ordering_ty],
                 usize_ty,
             ),
             (
-                AdtId::from_raw(1017),
+                AdtId::from_usize(1017),
                 "fetch_sub",
                 vec![usize_ty, ordering_ty],
                 usize_ty,
             ),
             (
-                AdtId::from_raw(1017),
+                AdtId::from_usize(1017),
                 "compare_exchange",
                 vec![usize_ty, usize_ty, ordering_ty],
                 result_usize_usize,
             ),
             // AtomicU8
-            (AdtId::from_raw(1018), "new", vec![u8_ty], atomic_u8_ty),
-            (AdtId::from_raw(1018), "load", vec![ordering_ty], u8_ty),
+            (AdtId::from_usize(1018), "new", vec![u8_ty], atomic_u8_ty),
+            (AdtId::from_usize(1018), "load", vec![ordering_ty], u8_ty),
             (
-                AdtId::from_raw(1018),
+                AdtId::from_usize(1018),
                 "store",
                 vec![u8_ty, ordering_ty],
                 Ty::UNIT,
             ),
             // ExitStatus
-            (AdtId::from_raw(1022), "code", vec![], i32_ty),
-            (AdtId::from_raw(1022), "success", vec![], bool_ty),
+            (AdtId::from_usize(1022), "code", vec![], i32_ty),
+            (AdtId::from_usize(1022), "success", vec![], bool_ty),
             // Vec — additional methods
             (vec_id, "join", vec![str_ty], string_ty),
             (vec_id, "as_slice", vec![], ref_slice_t_for_vec),
@@ -2829,7 +2843,7 @@ impl TyCtxMut {
             (i32_ty, "abs", vec![], i32_ty),
         ];
         for (recv_ty, name, inputs, output) in prim_bit_methods {
-            let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
+            let fn_id = FnDefId::from_usize(self.next_builtin_fn_id);
             if std::env::var("GLYIM_DBG_FNID").is_ok() {
                 eprintln!("[FNID] prim_bit fn_id={} name={}", fn_id.to_raw(), name);
             }
@@ -2900,7 +2914,7 @@ impl TyCtxMut {
             (i64_ty, "checked_mul", vec![i64_ty], option_i64_ty),
         ];
         for (recv_ty, name, inputs, output) in prim_entries {
-            let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
+            let fn_id = FnDefId::from_usize(self.next_builtin_fn_id);
             if std::env::var("GLYIM_DBG_FNID").is_ok() {
                 eprintln!("[FNID] prim fn_id={} name={}", fn_id.to_raw(), name);
             }
@@ -2920,7 +2934,7 @@ impl TyCtxMut {
         }
 
         for (adt_id, name, inputs, output) in entries {
-            let fn_id = FnDefId::from_raw(self.next_builtin_fn_id);
+            let fn_id = FnDefId::from_usize(self.next_builtin_fn_id);
             if std::env::var("GLYIM_DBG_FNID").is_ok() {
                 eprintln!(
                     "[FNID] builtin adt={:?} fn_id={} name={}",
@@ -2998,7 +3012,7 @@ impl TyCtxMut {
 impl crate::builtin_traits::BuiltinTraitSink for TyCtxMut {
     fn register_builtin_trait(&mut self, trait_id: u32, name: &'static str) {
         let n = self.resolver.intern(name);
-        let tid = glyim_core::def_id::TraitDefId::from_raw(trait_id);
+        let tid = glyim_core::def_id::TraitDefId::from_usize(trait_id as usize);
         self.trait_defs.insert(
             tid,
             crate::TraitDef {
@@ -3062,7 +3076,7 @@ mod interior_mutability_tests {
         let ctx_mut = TyCtxMut::new(Interner::new());
         // register_builtin_ranges is called in new, so UnsafeCell (1005) is registered.
         let ctx = ctx_mut.freeze();
-        let unsafe_cell_adt = AdtId::from_raw(1005);
+        let unsafe_cell_adt = AdtId::from_usize(1005);
         assert!(ctx.is_interior_mutable_adt(unsafe_cell_adt));
     }
 
@@ -3076,7 +3090,7 @@ mod interior_mutability_tests {
         }));
         // Build substitution for UnsafeCell<T>
         let subst = ctx_mut.intern_substitution(vec![GenericArg::Ty(t_var)]);
-        let unsafe_cell_ty = ctx_mut.mk_ty(TyKind::Adt(AdtId::from_raw(1005), subst));
+        let unsafe_cell_ty = ctx_mut.mk_ty(TyKind::Adt(AdtId::from_usize(1005), subst));
         let cell_def = {
             let mut field_defs = IndexVec::new();
             field_defs.push(FieldDef {
@@ -3095,9 +3109,9 @@ mod interior_mutability_tests {
                 generic_params: vec![],
             }
         };
-        ctx_mut.register_adt(AdtId::from_raw(1006), cell_def);
+        ctx_mut.register_adt(AdtId::from_usize(1006), cell_def);
         let ctx = ctx_mut.freeze();
-        let cell_adt = AdtId::from_raw(1006);
+        let cell_adt = AdtId::from_usize(1006);
         assert!(ctx.is_interior_mutable_adt(cell_adt));
     }
 
@@ -3112,11 +3126,11 @@ mod interior_mutability_tests {
             name: ctx_mut.resolver.intern("T"),
         }));
         let opt_subst = ctx_mut.intern_substitution(vec![GenericArg::Ty(t_var)]);
-        let option_ty = ctx_mut.mk_ty(TyKind::Adt(AdtId::from_raw(1010), opt_subst));
+        let option_ty = ctx_mut.mk_ty(TyKind::Adt(AdtId::from_usize(1010), opt_subst));
         let ctx = ctx_mut.freeze();
         match ctx.ty_kind(option_ty) {
             TyKind::Adt(adt_id, _) => {
-                assert_eq!(*adt_id, AdtId::from_raw(1010));
+                assert_eq!(*adt_id, AdtId::from_usize(1010));
                 let def = ctx
                     .adt_def(*adt_id)
                     .expect("Option ADT should be registered");
@@ -3150,9 +3164,9 @@ mod interior_mutability_tests {
                 generic_params: vec![],
             }
         };
-        ctx_mut.register_adt(AdtId::from_raw(1007), plain_def);
+        ctx_mut.register_adt(AdtId::from_usize(1007), plain_def);
         let ctx = ctx_mut.freeze();
-        let plain_adt = AdtId::from_raw(1007);
+        let plain_adt = AdtId::from_usize(1007);
         assert!(!ctx.is_interior_mutable_adt(plain_adt));
     }
 
@@ -3165,7 +3179,7 @@ mod interior_mutability_tests {
             name: ctx_mut.resolver.intern("T"),
         }));
         let subst = ctx_mut.intern_substitution(vec![GenericArg::Ty(t_var)]);
-        let unsafe_cell_ty = ctx_mut.mk_ty(TyKind::Adt(AdtId::from_raw(1005), subst));
+        let unsafe_cell_ty = ctx_mut.mk_ty(TyKind::Adt(AdtId::from_usize(1005), subst));
         let ref_cell_def = {
             let mut field_defs = IndexVec::new();
             field_defs.push(FieldDef {
@@ -3184,9 +3198,9 @@ mod interior_mutability_tests {
                 generic_params: vec![],
             }
         };
-        ctx_mut.register_adt(AdtId::from_raw(1008), ref_cell_def);
+        ctx_mut.register_adt(AdtId::from_usize(1008), ref_cell_def);
         let ctx = ctx_mut.freeze();
-        let ref_cell_adt = AdtId::from_raw(1008);
+        let ref_cell_adt = AdtId::from_usize(1008);
         assert!(ctx.is_interior_mutable_adt(ref_cell_adt));
     }
 
@@ -3217,12 +3231,12 @@ mod interior_mutability_tests {
                 generic_params: vec![],
             }
         };
-        ctx_mut.register_adt(AdtId::from_raw(2000), b_def);
+        ctx_mut.register_adt(AdtId::from_usize(2000), b_def);
 
         // `A` contains `B`. Register it and freeze. A's interior mutability is
         // `false` because `B` is plain here.
         let b_subst = ctx_mut.intern_substitution(vec![]);
-        let b_ty = ctx_mut.mk_ty(TyKind::Adt(AdtId::from_raw(2000), b_subst));
+        let b_ty = ctx_mut.mk_ty(TyKind::Adt(AdtId::from_usize(2000), b_subst));
         let a_def = {
             let mut field_defs = IndexVec::new();
             field_defs.push(FieldDef {
@@ -3241,9 +3255,9 @@ mod interior_mutability_tests {
                 generic_params: vec![],
             }
         };
-        ctx_mut.register_adt(AdtId::from_raw(2001), a_def);
+        ctx_mut.register_adt(AdtId::from_usize(2001), a_def);
         let ctx = ctx_mut.freeze();
-        let a_adt = AdtId::from_raw(2001);
+        let a_adt = AdtId::from_usize(2001);
         assert!(
             !ctx.is_interior_mutable_adt(a_adt),
             "A transitively contains plain B -> false"
@@ -3258,7 +3272,8 @@ mod interior_mutability_tests {
             name: ctx_mut2.resolver.intern("T"),
         }));
         let unsafe_cell_subst = ctx_mut2.intern_substitution(vec![GenericArg::Ty(t_var)]);
-        let unsafe_cell_ty = ctx_mut2.mk_ty(TyKind::Adt(AdtId::from_raw(1005), unsafe_cell_subst));
+        let unsafe_cell_ty =
+            ctx_mut2.mk_ty(TyKind::Adt(AdtId::from_usize(1005), unsafe_cell_subst));
         let b2_def = {
             let mut field_defs = IndexVec::new();
             field_defs.push(FieldDef {
@@ -3277,9 +3292,9 @@ mod interior_mutability_tests {
                 generic_params: vec![],
             }
         };
-        ctx_mut2.register_adt(AdtId::from_raw(2000), b2_def);
+        ctx_mut2.register_adt(AdtId::from_usize(2000), b2_def);
         let b2_subst = ctx_mut2.intern_substitution(vec![]);
-        let b2_ty = ctx_mut2.mk_ty(TyKind::Adt(AdtId::from_raw(2000), b2_subst));
+        let b2_ty = ctx_mut2.mk_ty(TyKind::Adt(AdtId::from_usize(2000), b2_subst));
         let a2_def = {
             let mut field_defs = IndexVec::new();
             field_defs.push(FieldDef {
@@ -3298,13 +3313,13 @@ mod interior_mutability_tests {
                 generic_params: vec![],
             }
         };
-        ctx_mut2.register_adt(AdtId::from_raw(2001), a2_def);
+        ctx_mut2.register_adt(AdtId::from_usize(2001), a2_def);
         let ctx2 = ctx_mut2.freeze();
         assert!(
             ctx2.is_interior_mutable_adt(a_adt),
             "after B gains an UnsafeCell, A must recompute true"
         );
-        assert!(ctx2.is_interior_mutable_adt(AdtId::from_raw(2000)));
+        assert!(ctx2.is_interior_mutable_adt(AdtId::from_usize(2000)));
     }
 }
 
