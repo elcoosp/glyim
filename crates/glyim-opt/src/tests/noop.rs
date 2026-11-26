@@ -5,7 +5,7 @@ use glyim_test::with_fresh_ty_ctx;
 use std::sync::Arc;
 
 fn make_place(idx: u32) -> Place {
-    Place::new(LocalIdx::from_raw(idx))
+    Place::new(LocalIdx::from_usize(idx as usize))
 }
 fn make_copy(idx: u32) -> Operand {
     Operand::Copy(make_place(idx))
@@ -22,11 +22,11 @@ fn make_minimal_body(ctx: &mut glyim_type::TyCtxMut) -> Body {
         is_cleanup: false,
     };
     let mut body = Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     ));
-    body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block]);
-    body.locals = glyim_core::IndexVec::from_raw(vec![LocalDecl {
+    body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block]);
+    body.locals = glyim_core::IndexVec::from_vec(vec![LocalDecl {
         ty: unit_ty,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -46,7 +46,7 @@ fn make_body_optimization_resistant(ctx: &mut glyim_type::TyCtxMut) -> Body {
         }],
         terminator: Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(1),
+                target: BasicBlockIdx::from_usize(1),
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
         },
@@ -66,8 +66,8 @@ fn make_body_optimization_resistant(ctx: &mut glyim_type::TyCtxMut) -> Body {
                 discr: make_copy(2),
                 switch_ty: int_ty,
                 targets: SwitchTargets::new(
-                    vec![(0, BasicBlockIdx::from_raw(2))].into_boxed_slice(),
-                    BasicBlockIdx::from_raw(2),
+                    vec![(0, BasicBlockIdx::from_usize(2))].into_boxed_slice(),
+                    BasicBlockIdx::from_usize(2),
                 ),
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -83,11 +83,11 @@ fn make_body_optimization_resistant(ctx: &mut glyim_type::TyCtxMut) -> Body {
         is_cleanup: false,
     };
     let mut body = Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     ));
-    body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1, block2]);
-    body.locals = glyim_core::IndexVec::from_raw(
+    body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1, block2]);
+    body.locals = glyim_core::IndexVec::from_vec(
         (0..3)
             .map(|_| LocalDecl {
                 ty: int_ty,
@@ -112,7 +112,7 @@ fn noop_body_is_unchanged() {
     );
     assert!(
         matches!(
-            optimized.body.basic_blocks[BasicBlockIdx::from_raw(0)]
+            optimized.body.basic_blocks[BasicBlockIdx::from_usize(0)]
                 .terminator
                 .kind,
             TerminatorKind::Return
@@ -184,7 +184,7 @@ fn make_loop_body(ctx: &mut glyim_type::TyCtxMut) -> Body {
         }],
         terminator: Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(1),
+                target: BasicBlockIdx::from_usize(1),
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
         },
@@ -213,8 +213,8 @@ fn make_loop_body(ctx: &mut glyim_type::TyCtxMut) -> Body {
                 discr: make_copy(1),
                 switch_ty: int_ty,
                 targets: SwitchTargets::new(
-                    vec![(10, BasicBlockIdx::from_raw(1))].into_boxed_slice(),
-                    BasicBlockIdx::from_raw(2),
+                    vec![(10, BasicBlockIdx::from_usize(1))].into_boxed_slice(),
+                    BasicBlockIdx::from_usize(2),
                 ),
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -230,11 +230,11 @@ fn make_loop_body(ctx: &mut glyim_type::TyCtxMut) -> Body {
         is_cleanup: false,
     };
     let mut body = Body::dummy(glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(0),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(0),
     ));
-    body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1, block2]);
-    body.locals = glyim_core::IndexVec::from_raw(
+    body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1, block2]);
+    body.locals = glyim_core::IndexVec::from_vec(
         (0..2)
             .map(|_| LocalDecl {
                 ty: int_ty,
@@ -305,8 +305,8 @@ fn many_locals_stress() {
                 discr: make_copy(20),
                 switch_ty: int_ty,
                 targets: SwitchTargets::new(
-                    vec![(0, BasicBlockIdx::from_raw(1))].into_boxed_slice(),
-                    BasicBlockIdx::from_raw(1),
+                    vec![(0, BasicBlockIdx::from_usize(1))].into_boxed_slice(),
+                    BasicBlockIdx::from_usize(1),
                 ),
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -325,11 +325,11 @@ fn many_locals_stress() {
             is_cleanup: false,
         };
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![block0, block1]);
-        body.locals = glyim_core::IndexVec::from_raw(
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![block0, block1]);
+        body.locals = glyim_core::IndexVec::from_vec(
             (0..21)
                 .map(|_| LocalDecl {
                     ty: int_ty,
