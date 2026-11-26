@@ -18,7 +18,7 @@ fn test_t06_len_on_array() {
         Mutability::Mut,
     );
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     // local_arr doesn't need initialization; its type is known.
     add_statement(
         &mut body,
@@ -29,7 +29,7 @@ fn test_t06_len_on_array() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
