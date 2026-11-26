@@ -8,8 +8,8 @@ fn function_call_with_args() {
         Expr::Literal(Literal::Int(1, None)),
         Expr::Literal(Literal::Bool(true)),
         Expr::Call {
-            func: ExprId::from_raw(0),
-            args: vec![ExprId::from_raw(1), ExprId::from_raw(2)],
+            func: ExprId::from_usize(0),
+            args: vec![ExprId::from_usize(1), ExprId::from_usize(2)],
         },
     ];
 
