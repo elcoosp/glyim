@@ -22,7 +22,7 @@ fn two_phase_reservation_allows_shared_borrow() {
     let ctx = ctx_mut.freeze();
 
     let mut body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: IndexVec::new(),
         locals: IndexVec::new(),
         arg_count: 0,
