@@ -13,7 +13,7 @@ fn interpret_integer_add() {
     let tcx = tcx_mut.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
-    let val = interp.get_local_value(LocalIdx::from_raw(1)).unwrap();
+    let val = interp.get_local_value(LocalIdx::from_usize(1)).unwrap();
     assert_eq!(val, &InterpValue::Int(7));
 }
 
@@ -25,6 +25,6 @@ fn interpret_integer_sub() {
     let tcx = tcx_mut.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
-    let val = interp.get_local_value(LocalIdx::from_raw(1)).unwrap();
+    let val = interp.get_local_value(LocalIdx::from_usize(1)).unwrap();
     assert_eq!(val, &InterpValue::Int(7));
 }
