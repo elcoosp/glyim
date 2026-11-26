@@ -18,7 +18,10 @@ use std::sync::Arc;
 /// `Debug` → different fingerprint).
 fn thir_body_for(local: u32) -> thir::Body {
     thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(local)),
+        owner: DefId::new(
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(local as usize),
+        ),
         params: Vec::new(),
         return_ty: Ty::UNIT,
         stmts: Vec::new(),
@@ -32,7 +35,7 @@ fn thir_body_for(local: u32) -> thir::Body {
 #[test]
 fn thir_body_records_miss_then_backdated() {
     let db = Database::default();
-    let def_id = LocalDefId::from_raw(21);
+    let def_id = LocalDefId::from_usize(21);
 
     // Fresh: no cache → compute + cache + record Miss.
     db.thir_body_query(def_id, || thir_body_for(21));
@@ -57,7 +60,7 @@ fn thir_body_records_miss_then_backdated() {
 #[test]
 fn mir_build_records_miss_then_hit() {
     let db = Database::default();
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(22));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(22));
     let ty_ctx = glyim_test::test_ty_ctx().freeze();
 
     // Fresh: cache miss → compute + validate + cache + record Miss.
