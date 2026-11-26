@@ -40,7 +40,7 @@ fn type_ref_to_ty(
             {
                 // Generic ADT: `Name<Arg1, Arg2, ...>`.
                 let adt_id = match def_map.modules[def_map.root].scope.resolve(name) {
-                    Some(res) => glyim_core::def_id::AdtId::from_raw(res.0.to_raw()),
+                    Some(res) => glyim_core::def_id::AdtId::from_usize(res.0.index()),
                     None => return Ty::ERROR,
                 };
                 let generic_args: Vec<glyim_type::GenericArg> = args
@@ -51,7 +51,7 @@ fn type_ref_to_ty(
                 return ctx.mk_ty(TyKind::Adt(adt_id, substs));
             }
             if let Some(res) = def_map.modules[def_map.root].scope.resolve(name) {
-                let adt_id = glyim_core::def_id::AdtId::from_raw(res.0.to_raw());
+                let adt_id = glyim_core::def_id::AdtId::from_usize(res.0.index());
                 let substs = ctx.intern_substitution(vec![]);
                 ctx.mk_ty(TyKind::Adt(adt_id, substs))
             } else {
@@ -93,7 +93,7 @@ fn impl_item_to_header(
         def_map.modules[def_map.root]
             .scope
             .resolve(name)
-            .map(|res| TraitDefId::from_raw(res.0.to_raw()))
+            .map(|res| TraitDefId::from_usize(res.0.index()))
     } else {
         None
     };
@@ -151,21 +151,17 @@ fn build_def_map(
         let name = interner.intern(name_str);
         scope.types.insert(
             name,
-            (
-                LocalDefId::from_raw(i as u32),
-                Visibility::Public,
-                Span::DUMMY,
-            ),
+            (LocalDefId::from_usize(i), Visibility::Public, Span::DUMMY),
         );
     }
-    let root_id = ModuleId::from_raw(0);
+    let root_id = ModuleId::from_usize(0);
     let root_data = ModuleData {
         parent: None,
         children: vec![],
         scope,
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(0),
+        def_id: LocalDefId::from_usize(0),
         visibility: Visibility::Public,
     };
     let mut modules = IndexVec::new();
@@ -217,7 +213,7 @@ fn make_blanket_impl_item(interner: &mut Interner, trait_name: &str, param_name:
 
 #[test]
 fn t01_duplicate_impl_should_error() {
-    let local_krate = CrateId::from_raw(0);
+    let local_krate = CrateId::from_usize(0);
     let mut interner = global_interner();
     let def_map = build_def_map(&mut interner, local_krate, &["MyType", "Send"]);
     let mut ctx = make_ty_ctx();
@@ -250,7 +246,7 @@ fn t01_duplicate_impl_should_error() {
 
 #[test]
 fn t02_orphan_rule_foreign_trait_foreign_type_error() {
-    let local_krate = CrateId::from_raw(0);
+    let local_krate = CrateId::from_usize(0);
     let mut interner = global_interner();
     let def_map = build_def_map(&mut interner, local_krate, &[]);
     let mut ctx = make_ty_ctx();
@@ -274,7 +270,7 @@ fn t02_orphan_rule_foreign_trait_foreign_type_error() {
 
 #[test]
 fn t03_blanket_impl_conflicts_with_concrete() {
-    let local_krate = CrateId::from_raw(0);
+    let local_krate = CrateId::from_usize(0);
     let mut interner = global_interner();
     let def_map = build_def_map(&mut interner, local_krate, &["MyTrait"]);
     let mut ctx = make_ty_ctx();
@@ -307,7 +303,7 @@ fn t03_blanket_impl_conflicts_with_concrete() {
 
 #[test]
 fn t04_valid_orphan_foreign_trait_local_type() {
-    let local_krate = CrateId::from_raw(0);
+    let local_krate = CrateId::from_usize(0);
     let mut interner = global_interner();
     let def_map = build_def_map(&mut interner, local_krate, &["LocalType"]);
     let mut ctx = make_ty_ctx();
@@ -328,7 +324,7 @@ fn t04_valid_orphan_foreign_trait_local_type() {
 
 #[test]
 fn t05_negative_impl_overrides_auto_trait() {
-    let local_krate = CrateId::from_raw(0);
+    let local_krate = CrateId::from_usize(0);
     let mut interner = global_interner();
     let def_map = build_def_map(&mut interner, local_krate, &["MyType", "Send"]);
     let mut ctx = make_ty_ctx();
@@ -347,7 +343,7 @@ fn t05_negative_impl_overrides_auto_trait() {
 
 #[test]
 fn t06_duplicate_with_different_polarity_error() {
-    let local_krate = CrateId::from_raw(0);
+    let local_krate = CrateId::from_usize(0);
     let mut interner = global_interner();
     let def_map = build_def_map(&mut interner, local_krate, &["MyType", "Send"]);
     let mut ctx = make_ty_ctx();
@@ -380,7 +376,7 @@ fn t06_duplicate_with_different_polarity_error() {
 
 #[test]
 fn t07_orphan_local_trait_foreign_type_allowed() {
-    let local_krate = CrateId::from_raw(0);
+    let local_krate = CrateId::from_usize(0);
     let mut interner = global_interner();
     let def_map = build_def_map(&mut interner, local_krate, &["MyTrait"]);
     let mut ctx = make_ty_ctx();
@@ -401,7 +397,7 @@ fn t07_orphan_local_trait_foreign_type_allowed() {
 
 #[test]
 fn t08_two_non_overlapping_blanket_impls_allowed() {
-    let local_krate = CrateId::from_raw(0);
+    let local_krate = CrateId::from_usize(0);
     let mut interner = global_interner();
     let def_map = build_def_map(&mut interner, local_krate, &["From"]);
     let mut ctx = make_ty_ctx();
@@ -433,7 +429,7 @@ fn t08_two_non_overlapping_blanket_impls_allowed() {
 
 #[test]
 fn t09_negative_impl_orphan_error() {
-    let local_krate = CrateId::from_raw(0);
+    let local_krate = CrateId::from_usize(0);
     let mut interner = global_interner();
     let def_map = build_def_map(&mut interner, local_krate, &[]);
     let mut ctx = make_ty_ctx();
@@ -454,7 +450,7 @@ fn t09_negative_impl_orphan_error() {
 
 #[test]
 fn t10_different_traits_no_conflict() {
-    let local_krate = CrateId::from_raw(0);
+    let local_krate = CrateId::from_usize(0);
     let mut interner = global_interner();
     let def_map = build_def_map(&mut interner, local_krate, &["MyType", "TraitA", "TraitB"]);
     let mut ctx = make_ty_ctx();
@@ -513,7 +509,7 @@ fn make_generic_impl_item(
 fn t11_distinct_generic_args_do_not_overlap() {
     // Regression for Tier 2.1: `impl Foo for Vec<i32>` and
     // `impl Foo for Vec<String>` must NOT be treated as overlapping.
-    let local_krate = CrateId::from_raw(0);
+    let local_krate = CrateId::from_usize(0);
     let mut interner = global_interner();
     let def_map = build_def_map(&mut interner, local_krate, &["Foo", "Vec", "String"]);
     let mut ctx = make_ty_ctx();
@@ -546,7 +542,7 @@ fn t11_distinct_generic_args_do_not_overlap() {
 #[test]
 fn t12_same_generic_args_do_overlap() {
     // Sanity check: two impls with identical generic self types still conflict.
-    let local_krate = CrateId::from_raw(0);
+    let local_krate = CrateId::from_usize(0);
     let mut interner = global_interner();
     let def_map = build_def_map(&mut interner, local_krate, &["Foo", "Vec", "String"]);
     let mut ctx = make_ty_ctx();
