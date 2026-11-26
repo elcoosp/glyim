@@ -11,7 +11,7 @@ fn unify_projection_with_concrete() {
     let mut infer = InferenceTable::new();
 
     let item_name = ctx.resolver().intern("Item");
-    let trait_id = TraitDefId::from_raw(0);
+    let trait_id = TraitDefId::from_usize(0);
     let self_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(self_ty)]);
     let trait_ref = TraitRef {
@@ -40,7 +40,7 @@ fn unify_projection_with_projection() {
     let mut infer = InferenceTable::new();
 
     let name = ctx.resolver().intern("Item");
-    let tid = TraitDefId::from_raw(0);
+    let tid = TraitDefId::from_usize(0);
     let s = ctx.intern_substitution(vec![GenericArg::Ty(ctx.bool_ty())]);
     let tr = TraitRef {
         def_id: tid,
