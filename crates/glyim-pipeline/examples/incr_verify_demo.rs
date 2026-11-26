@@ -33,7 +33,7 @@ fn main() {
     // demo deterministic without env mutation).
     db.set_incr_verify_for_test(true);
 
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1));
     let ty_ctx = glyim_test::test_ty_ctx().freeze();
 
     // Fresh: cache miss → compute + validate + cache. Verify does not run on
