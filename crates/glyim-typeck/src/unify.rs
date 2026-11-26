@@ -41,7 +41,7 @@ impl FnCtxt<'_> {
     pub fn lookup_field_ty(&mut self, adt_id: AdtId, field: Name, span: Span) -> Ty {
         if let Some(field_idx) = self.ctx.field_index(adt_id, field)
             && let Some(def) = self.ctx.adt_def(adt_id)
-            && let Some(field_def) = def.fields.get(FieldIdx::from_raw(field_idx as u32))
+            && let Some(field_def) = def.fields.get(FieldIdx::from_usize(field_idx))
         {
             let field_ty = field_def.ty;
             return field_ty;
@@ -100,7 +100,7 @@ impl FnCtxt<'_> {
             // unit-returning fn value rather than an unresolved-name error.
             if bare_name == "drop" {
                 let substs = self.ctx.intern_substitution(vec![]);
-                let fn_id = FnDefId::from_raw(u32::MAX - 4);
+                let fn_id = FnDefId::from_usize((u32::MAX - 4) as usize);
                 let fn_ty = self.ctx.mk_ty(TyKind::FnDef(fn_id, substs));
                 let thir_expr = thir::Expr {
                     kind: thir::ExprKind::FnRef(fn_id),
@@ -304,7 +304,7 @@ impl FnCtxt<'_> {
                                     .iter()
                                     .position(|v| v.name == path.segments[1].name)
                             })
-                            .map(|i| glyim_core::def_id::VariantIdx::from_raw(i as u32))
+                            .map(|i| glyim_core::def_id::VariantIdx::from_usize(i))
                         {
                             // §3.5.24 Bug B: forward the enum segment's
                             // turbofish so `Option::<i32>::None` carries
@@ -320,7 +320,7 @@ impl FnCtxt<'_> {
                 }
             }
 
-            let fn_def_id = FnDefId::from_raw(local.to_raw());
+            let fn_def_id = FnDefId::from_usize(local.index());
             if self.ctx.fn_sig(fn_def_id).is_some() {
                 // Turbofish: `path.segments.last().generic_args` carries the
                 // explicit type arguments written after `::<...>`
@@ -370,7 +370,7 @@ impl FnCtxt<'_> {
             // initializer); without this ordering, a `static` would resolve
             // to `ConstRef` (folded to its initial value) and `static mut`
             // writes would land in a discarded stack temp.
-            let static_def_id = StaticDefId::from_raw(local.to_raw());
+            let static_def_id = StaticDefId::from_usize(local.index());
             if let Some(static_ty) = self.ctx.static_ty(static_def_id) {
                 let thir_expr = thir::Expr {
                     kind: thir::ExprKind::StaticRef(static_def_id),
@@ -382,7 +382,7 @@ impl FnCtxt<'_> {
             // A constant in the value namespace: emit a `ConstRef` carrying the
             // constant's value type. The def map is the source of truth for the
             // LocalDefId; convert it to a ConstDefId for the THIR node.
-            let const_def_id = ConstDefId::from_raw(local.to_raw());
+            let const_def_id = ConstDefId::from_usize(local.index());
             if let Some(const_ty) = self.ctx.const_ty(const_def_id) {
                 let thir_expr = thir::Expr {
                     kind: thir::ExprKind::ConstRef(const_def_id),
@@ -610,7 +610,7 @@ impl FnCtxt<'_> {
                     // straight to the HIR impl scan with the correct AdtId.
                     Some((adt_id, ty))
                 } else if first_name_str == "slice" {
-                    Some((glyim_core::def_id::AdtId::from_raw(1060), adt_ty_resolved))
+                    Some((glyim_core::def_id::AdtId::from_usize(1060), adt_ty_resolved))
                 } else {
                     match self.ctx.ty_kind(adt_ty_resolved) {
                         glyim_type::TyKind::Adt(id, _) => Some((*id, adt_ty_resolved)),
@@ -620,7 +620,7 @@ impl FnCtxt<'_> {
                         // methods under the synthetic id 1061. Route it there so
                         // path-form associated fns on `str` resolve.
                         glyim_type::TyKind::String => {
-                            Some((glyim_core::def_id::AdtId::from_raw(1061), adt_ty_resolved))
+                            Some((glyim_core::def_id::AdtId::from_usize(1061), adt_ty_resolved))
                         }
                         _ => None,
                     }
@@ -736,7 +736,7 @@ impl FnCtxt<'_> {
                         let Some(local) = self.body_owner_map.get(&body_id).copied() else {
                             continue;
                         };
-                        let fn_def_id = FnDefId::from_raw(local.to_raw());
+                        let fn_def_id = FnDefId::from_usize(local.index());
                         // Instantiate the impl's own generic params (e.g.
                         // `impl<T> OO<T>`) with fresh inference vars, then
                         // substitute them through the method's signature so
@@ -853,7 +853,7 @@ impl FnCtxt<'_> {
                             .iter()
                             .position(|v| v.name == path.segments[1].name)
                     })
-                    .map(|i| glyim_core::def_id::VariantIdx::from_raw(i as u32));
+                    .map(|i| glyim_core::def_id::VariantIdx::from_usize(i));
                 if let Some(variant_idx) = variant_idx {
                     // §3.5.24 Bug B: same turbofish forwarding as the
                     // fallback branch above.
@@ -933,7 +933,7 @@ impl FnCtxt<'_> {
         //    (Structs with fields must use `Dog { .. }`, handled in
         //    `check_expr` via `Expr::Struct`.)
         if let Some((type_local, _vis)) = resolved.types {
-            let adt_id = AdtId::from_raw(type_local.to_raw());
+            let adt_id = AdtId::from_usize(type_local.index());
             let is_unit_struct = self
                 .ctx
                 .adt_def(adt_id)
@@ -1000,7 +1000,7 @@ impl FnCtxt<'_> {
                     // `PhantomData` is written as a bare value (`_marker: PhantomData`)
                     // even though it is declared with a `marker: T` field; treat
                     // the builtin zero-sized marker type as a unit value.
-                    if is_unit || *adt_id == glyim_core::def_id::AdtId::from_raw(1030) {
+                    if is_unit || *adt_id == glyim_core::def_id::AdtId::from_usize(1030) {
                         return Some(*adt_id);
                     }
                 }
