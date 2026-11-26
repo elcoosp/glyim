@@ -8,7 +8,7 @@ fn create_dummy_hir(interner: &Interner) -> CrateHir {
     let key = interner.intern("main");
     let name = key;
     let fn_item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name,
         kind: ItemKind::Fn(FnItem {
             params: vec![],
