@@ -22,7 +22,7 @@ fn partial_move_allows_other_field_use() {
     let ctx = ctx_mut.freeze();
 
     let mut body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: IndexVec::new(),
         locals: IndexVec::new(),
         arg_count: 0,
@@ -47,8 +47,8 @@ fn partial_move_allows_other_field_use() {
         source_info: SourceInfo::new(Span::DUMMY),
     });
 
-    let field0_proj = ProjectionElem::Field(FieldIdx::from_raw(0));
-    let field1_proj = ProjectionElem::Field(FieldIdx::from_raw(1));
+    let field0_proj = ProjectionElem::Field(FieldIdx::from_usize(0));
+    let field1_proj = ProjectionElem::Field(FieldIdx::from_usize(1));
     let place_field0 = Place {
         local: local_tup,
         projection: Box::new([field0_proj]),
