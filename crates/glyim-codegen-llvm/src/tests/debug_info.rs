@@ -28,7 +28,10 @@ fn make_test_body(ctx: &TyCtxMut, var_name: Name) -> Body {
     let bool_ty = ctx.bool_ty();
     let unit_ty = ctx.unit_ty();
 
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
     body.return_ty = unit_ty;
     let mut locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::new();
     locals.push(LocalDecl {
@@ -55,12 +58,12 @@ fn make_test_body(ctx: &TyCtxMut, var_name: Name) -> Body {
 
     body.var_debug_info = vec![VarDebugInfo {
         name: var_name,
-        value: VarDebugInfoValue::Place(Place::new(LocalIdx::from_raw(1))),
+        value: VarDebugInfoValue::Place(Place::new(LocalIdx::from_usize(1))),
     }];
 
     let stmts = vec![Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::Use(Operand::Constant(MirConst {
                 kind: MirConstKind::Bool(false),
                 ty: bool_ty,
@@ -330,7 +333,10 @@ fn test_debug_info_var_debug_const_value() {
         let bool_ty = ctx_mut.bool_ty();
         let unit_ty = ctx_mut.unit_ty();
 
-        let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+        let mut body = Body::dummy(DefId::new(
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(0),
+        ));
         let mut locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::new();
         locals.push(LocalDecl {
             ty: unit_ty,
@@ -611,8 +617,8 @@ fn macro_defined_function_has_correct_line_numbers_in_ir() {
     });
     let body = Body {
         owner: glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(1),
-            glyim_core::LocalDefId::from_raw(1),
+            glyim_core::CrateId::from_usize(1),
+            glyim_core::LocalDefId::from_usize(1),
         ),
         basic_blocks,
         locals,
@@ -729,8 +735,8 @@ fn nested_macro_expansions_produce_correct_inline_locations() {
     });
     let body = Body {
         owner: glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(1),
-            glyim_core::LocalDefId::from_raw(1),
+            glyim_core::CrateId::from_usize(1),
+            glyim_core::LocalDefId::from_usize(1),
         ),
         basic_blocks,
         locals,
@@ -866,7 +872,7 @@ fn phase6_2_closure_debug_type_has_capture_members() {
     let name_a = ctx_mut.resolver().intern("captured_x");
     let name_b = ctx_mut.resolver().intern("captured_flag");
     let adt_id: AdtId = ctx_mut.register_closure(vec![(name_a, i32_ty), (name_b, bool_ty)]);
-    let closure_id = ClosureId::from_raw(adt_id.to_raw());
+    let closure_id = ClosureId::from_usize(adt_id.index());
 
     // The debug pass sees a `TyKind::Closure(closure_id, _)`; it must recover
     // the captured-environment ADT via `closure_adt` and emit member types.
