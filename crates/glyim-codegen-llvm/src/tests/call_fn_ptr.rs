@@ -47,17 +47,17 @@ fn make_fn_ptr_call_body(ctx: &mut TyCtxMut) -> Body {
     let bb0 = BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(2)),
+                Place::new(LocalIdx::from_usize(2)),
                 Rvalue::Use(Operand::Constant(const_99)),
             ),
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
         }],
         terminator: Terminator {
             kind: TerminatorKind::Call {
-                func: Operand::Move(Place::new(LocalIdx::from_raw(2))),
-                args: vec![Operand::Copy(Place::new(LocalIdx::from_raw(1)))],
-                destination: Place::new(LocalIdx::from_raw(0)),
-                target: Some(BasicBlockIdx::from_raw(1)),
+                func: Operand::Move(Place::new(LocalIdx::from_usize(2))),
+                args: vec![Operand::Copy(Place::new(LocalIdx::from_usize(1)))],
+                destination: Place::new(LocalIdx::from_usize(0)),
+                target: Some(BasicBlockIdx::from_usize(1)),
                 cleanup: None,
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -75,8 +75,8 @@ fn make_fn_ptr_call_body(ctx: &mut TyCtxMut) -> Body {
     };
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
-        basic_blocks: IndexVec::from_raw(vec![bb0, bb1]),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1)),
+        basic_blocks: IndexVec::from_vec(vec![bb0, bb1]),
         locals,
         arg_count,
         return_ty,
