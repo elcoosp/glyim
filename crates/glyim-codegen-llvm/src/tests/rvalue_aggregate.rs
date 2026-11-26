@@ -23,7 +23,7 @@ fn make_simple_body_with_rvalue(rvalue: Rvalue, result_ty: Ty) -> Body {
     });
 
     let stmt = Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(1)), rvalue),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(1)), rvalue),
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     };
 
@@ -42,7 +42,7 @@ fn make_simple_body_with_rvalue(rvalue: Rvalue, result_ty: Ty) -> Body {
     bbs.push(bb0);
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: bbs,
         locals,
         arg_count: 0,
@@ -70,10 +70,10 @@ fn make_ref_body() -> Body {
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     });
 
-    let rvalue = Rvalue::Ref(Place::new(LocalIdx::from_raw(1)), BorrowKind::Shared);
+    let rvalue = Rvalue::Ref(Place::new(LocalIdx::from_usize(1)), BorrowKind::Shared);
 
     let stmt = Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(2)), rvalue),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(2)), rvalue),
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     };
 
@@ -92,7 +92,7 @@ fn make_ref_body() -> Body {
     bbs.push(bb0);
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: bbs,
         locals,
         arg_count: 0,
@@ -175,7 +175,7 @@ fn v13_t03_ref_local_alloca() {
 fn v13_t04_discriminant_enum() {
     Target::initialize_all(&InitializationConfig::default());
     let backend = LlvmBackend::new();
-    let discr_place = Place::new(LocalIdx::from_raw(1));
+    let discr_place = Place::new(LocalIdx::from_usize(1));
     let rvalue = Rvalue::Discriminant(discr_place);
     let mut locals = IndexVec::<LocalIdx, LocalDecl>::new();
     locals.push(LocalDecl {
@@ -195,7 +195,7 @@ fn v13_t04_discriminant_enum() {
     });
 
     let stmt = Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(2)), rvalue),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(2)), rvalue),
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     };
     let term = Terminator {
@@ -211,7 +211,7 @@ fn v13_t04_discriminant_enum() {
     bbs.push(bb0);
 
     let body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: bbs,
         locals,
         arg_count: 0,
@@ -278,9 +278,9 @@ fn v13_t05_len_array() {
         });
 
         // Rvalue: Len of local 1 (the array)
-        let rvalue = Rvalue::Len(Place::new(LocalIdx::from_raw(1)));
+        let rvalue = Rvalue::Len(Place::new(LocalIdx::from_usize(1)));
         let stmt = Statement {
-            kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(2)), rvalue),
+            kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(2)), rvalue),
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
         };
 
@@ -299,7 +299,7 @@ fn v13_t05_len_array() {
         bbs.push(bb0);
 
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: bbs,
             locals,
             arg_count: 0,
