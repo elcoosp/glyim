@@ -161,11 +161,11 @@ fn root_expr_id(body: &Body) -> ExprId {
     // *last* `Expr::Block` allocated, not the first.
     let block = (0..body.exprs.len())
         .rev()
-        .map(|i| ExprId::from_raw(i as u32))
+        .map(|i| ExprId::from_usize(i))
         .find(|&rid| matches!(body.exprs[rid], Expr::Block { .. }));
     match block {
         Some(rid) => rid,
-        None => ExprId::from_raw((body.exprs.len().saturating_sub(1)) as u32),
+        None => ExprId::from_usize(body.exprs.len().saturating_sub(1)),
     }
 }
 
@@ -309,7 +309,7 @@ fn collect_suspend_points(body: &Body, root: ExprId, out: &mut Vec<SuspendPoint>
 fn collect_loop_body_descendants(body: &Body, set: &mut std::collections::HashSet<ExprId>) {
     // First, gather every loop node's body so we can descend into each.
     let loops: Vec<ExprId> = (0..body.exprs.len())
-        .map(|i| ExprId::from_raw(i as u32))
+        .map(|i| ExprId::from_usize(i))
         .filter(|&id| {
             matches!(
                 body.exprs[id],
@@ -496,7 +496,7 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
         });
     }
     let future_struct_item = Item {
-        id: ItemId::from_raw(hir.items.len() as u32),
+        id: ItemId::from_usize(hir.items.len()),
         name: future_name_id,
         kind: ItemKind::Struct(StructItem {
             fields,
@@ -585,7 +585,7 @@ fn desugar_one_async_fn(hir: &mut crate::CrateHir, item_id: ItemId) {
         attrs: Vec::new(),
     };
     let impl_item = Item {
-        id: ItemId::from_raw(hir.items.len() as u32 + 1),
+        id: ItemId::from_usize(hir.items.len() + 1),
         name: future_name_id,
         kind: ItemKind::Impl(ImplItem {
             trait_ref: Some(plain_path(interner, "Future")),
@@ -688,12 +688,12 @@ fn rewrite_for_poll(
     // exact intended root.
     let pre_rewrite_root_block: Option<ExprId> = (0..body.exprs.len())
         .rev()
-        .map(|i| ExprId::from_raw(i as u32))
+        .map(|i| ExprId::from_usize(i))
         .find(|&rid| matches!(body.exprs[rid], Expr::Block { .. }));
 
     // Snapshot expr ids to avoid iterating while mutating.
     let ids: Vec<ExprId> = (0..body.exprs.len())
-        .map(|i| ExprId::from_raw(i as u32))
+        .map(|i| ExprId::from_usize(i))
         .collect();
     for eid in ids {
         let expr = body.exprs[eid].clone();
@@ -736,7 +736,7 @@ fn rewrite_for_poll(
             _ => return,
         },
         // Non-block body: the sole/top-level expr is the tail.
-        None => ExprId::from_raw(0),
+        None => ExprId::from_usize(0),
     };
     // Wrap the tail value in `Poll::Ready(..)`. `fresh_tail` is a *separate*
     // slot holding a clone of the original tail, so the wrapper's argument
@@ -793,7 +793,7 @@ fn build_future_wrapper_struct(
     let interner = &hir.interner;
     let future_name_id = interner.intern(future_name);
     Item {
-        id: ItemId::from_raw(hir.items.len() as u32),
+        id: ItemId::from_usize(hir.items.len()),
         name: future_name_id,
         kind: ItemKind::Struct(StructItem {
             fields: vec![Field {
@@ -831,7 +831,7 @@ fn build_future_impl(
         span: Span::DUMMY,
     };
     Item {
-        id: ItemId::from_raw(hir.items.len() as u32),
+        id: ItemId::from_usize(hir.items.len()),
         name: future_name_id,
         kind: ItemKind::Impl(ImplItem {
             trait_ref: Some(plain_path(interner, "Future")),
@@ -3936,7 +3936,7 @@ fn build_loop_state_enum(
     });
 
     Item {
-        id: ItemId::from_raw(hir.items.len() as u32),
+        id: ItemId::from_usize(hir.items.len()),
         name: state_name_id,
         kind: ItemKind::Enum(EnumItem {
             variants,
@@ -4114,7 +4114,7 @@ fn build_multi_state_enum(
 
     let _ = future_name;
     Item {
-        id: ItemId::from_raw(hir.items.len() as u32),
+        id: ItemId::from_usize(hir.items.len()),
         name: state_name_id,
         kind: ItemKind::Enum(EnumItem {
             variants,
@@ -4131,7 +4131,7 @@ fn await_infos_await_exprs(body: &Body) -> Vec<ExprId> {
     let mut out = Vec::new();
     let mut stack: Vec<ExprId> = Vec::new();
     for i in 0..body.exprs.len() {
-        stack.push(ExprId::from_raw(i as u32));
+        stack.push(ExprId::from_usize(i));
     }
     while let Some(id) = stack.pop() {
         match &body.exprs[id] {
