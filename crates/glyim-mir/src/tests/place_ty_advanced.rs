@@ -12,7 +12,7 @@ fn ty_field_on_unit_tuple() {
         c.mk_ty(TyKind::Tuple(substs))
     });
 
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: unit_tuple_ty,
@@ -22,7 +22,7 @@ fn ty_field_on_unit_tuple() {
 
     let place = Place {
         local,
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
     };
 
     assert_eq!(place.ty(&ctx, &locals), Ty::ERROR);
@@ -32,7 +32,7 @@ fn ty_field_on_unit_tuple() {
 fn ty_deref_on_unit_type() {
     let (ctx, unit_ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| c.unit_ty());
 
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: unit_ty,
@@ -52,7 +52,7 @@ fn ty_deref_on_unit_type() {
 fn ty_deref_on_int_type() {
     let (ctx, i32_ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| c.mk_ty(TyKind::Int(IntTy::I32)));
 
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: i32_ty,
@@ -75,7 +75,7 @@ fn ty_field_on_ref_returns_error() {
         c.mk_ref(Region::Erased, inner, Mutability::Not)
     });
 
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: ref_bool_ty,
@@ -85,7 +85,7 @@ fn ty_field_on_ref_returns_error() {
 
     let place = Place {
         local,
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
     };
 
     assert_eq!(place.ty(&ctx, &locals), Ty::ERROR);
@@ -99,7 +99,7 @@ fn ty_index_on_tuple_returns_error() {
         c.mk_ty(TyKind::Tuple(substs))
     });
 
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: tuple_ty,
@@ -109,7 +109,7 @@ fn ty_index_on_tuple_returns_error() {
 
     let place = Place {
         local,
-        projection: Box::new([ProjectionElem::Index(LocalIdx::from_raw(1))]),
+        projection: Box::new([ProjectionElem::Index(LocalIdx::from_usize(1))]),
     };
 
     assert_eq!(place.ty(&ctx, &locals), Ty::ERROR);
@@ -125,7 +125,7 @@ fn ty_downcast_preserves_through_chain() {
         (tuple_ty, i32_ty)
     });
 
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: tuple_ty,
@@ -136,8 +136,8 @@ fn ty_downcast_preserves_through_chain() {
     let place = Place {
         local,
         projection: Box::new([
-            ProjectionElem::Downcast(VariantIdx::from_raw(0)),
-            ProjectionElem::Field(FieldIdx::from_raw(0)),
+            ProjectionElem::Downcast(VariantIdx::from_usize(0)),
+            ProjectionElem::Field(FieldIdx::from_usize(0)),
         ]),
     };
 
@@ -155,7 +155,7 @@ fn ty_deref_raw_ptr_to_tuple_then_field() {
         (raw_ptr_tuple_ty, i32_ty)
     });
 
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: raw_ptr_tuple_ty,
@@ -167,7 +167,7 @@ fn ty_deref_raw_ptr_to_tuple_then_field() {
         local,
         projection: Box::new([
             ProjectionElem::Deref,
-            ProjectionElem::Field(FieldIdx::from_raw(0)),
+            ProjectionElem::Field(FieldIdx::from_usize(0)),
         ]),
     };
 
@@ -195,7 +195,7 @@ fn ty_multiple_locals() {
     });
 
     let place_local1 = Place {
-        local: LocalIdx::from_raw(1),
+        local: LocalIdx::from_usize(1),
         projection: Box::new([ProjectionElem::Deref]),
     };
 
@@ -211,7 +211,7 @@ fn ty_ref_to_slice_then_deref_then_index() {
         (ref_slice_ty, i32_ty)
     });
 
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: ref_slice_ty,
@@ -223,7 +223,7 @@ fn ty_ref_to_slice_then_deref_then_index() {
         local,
         projection: Box::new([
             ProjectionElem::Deref,
-            ProjectionElem::Index(LocalIdx::from_raw(1)),
+            ProjectionElem::Index(LocalIdx::from_usize(1)),
         ]),
     };
 
@@ -243,7 +243,7 @@ fn ty_ref_to_array_then_deref_then_field_fails() {
         c.mk_ref(Region::Erased, array_ty, Mutability::Not)
     });
 
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: ref_array_ty,
@@ -255,7 +255,7 @@ fn ty_ref_to_array_then_deref_then_field_fails() {
         local,
         projection: Box::new([
             ProjectionElem::Deref,
-            ProjectionElem::Field(FieldIdx::from_raw(0)),
+            ProjectionElem::Field(FieldIdx::from_usize(0)),
         ]),
     };
 
@@ -266,7 +266,7 @@ fn ty_ref_to_array_then_deref_then_field_fails() {
 fn ty_bool_local_no_projection() {
     let (ctx, bool_ty) = with_fresh_ty_ctx(|c: &mut TyCtxMut| c.bool_ty());
 
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: bool_ty,
@@ -280,7 +280,7 @@ fn ty_bool_local_no_projection() {
 
 #[test]
 fn ty_error_local_no_projection() {
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: Ty::ERROR,
@@ -303,7 +303,7 @@ fn ty_deeply_nested_refs() {
         (ref3, bool_ty)
     });
 
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: triple_ref_bool,
@@ -340,7 +340,7 @@ fn ty_large_tuple_field_access() {
         (tuple_ty, f3_ty)
     });
 
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: tuple_ty,
@@ -350,7 +350,7 @@ fn ty_large_tuple_field_access() {
 
     let place = Place {
         local,
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(1))]),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(1))]),
     };
 
     assert_eq!(place.ty(&ctx, &locals), f3_ty);
