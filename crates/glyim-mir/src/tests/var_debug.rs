@@ -13,7 +13,7 @@ fn var_debug_info_place() {
     let name = make_name("x");
     let info = VarDebugInfo {
         name,
-        value: VarDebugInfoValue::Place(Place::new(LocalIdx::from_raw(1))),
+        value: VarDebugInfoValue::Place(Place::new(LocalIdx::from_usize(1))),
     };
     assert!(matches!(info.value, VarDebugInfoValue::Place(_)));
 }
@@ -35,8 +35,8 @@ fn var_debug_info_const() {
 #[test]
 fn body_with_var_debug_info() {
     let mut body = Body::dummy(glyim_core::def_id::DefId::new(
-        glyim_core::def_id::CrateId::from_raw(0),
-        glyim_core::def_id::LocalDefId::from_raw(0),
+        glyim_core::def_id::CrateId::from_usize(0),
+        glyim_core::def_id::LocalDefId::from_usize(0),
     ));
 
     let name_x = make_name("x");
@@ -44,7 +44,7 @@ fn body_with_var_debug_info() {
 
     body.var_debug_info.push(VarDebugInfo {
         name: name_x,
-        value: VarDebugInfoValue::Place(Place::new(LocalIdx::from_raw(1))),
+        value: VarDebugInfoValue::Place(Place::new(LocalIdx::from_usize(1))),
     });
     body.var_debug_info.push(VarDebugInfo {
         name: name_y,
