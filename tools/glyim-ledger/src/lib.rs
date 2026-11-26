@@ -167,6 +167,7 @@ use ledger_schema::{
 
 pub mod compute;
 pub mod diff;
+pub mod error_codes;
 pub mod evidence;
 pub mod explain;
 pub mod gaps;
@@ -5093,6 +5094,12 @@ pub fn run_check(root: &Path) -> CheckOutcome {
         &ignores.ignores,
         loaded.registry.features(),
     ));
+    // CT-5 (plan §6 M3.3): the registry's `errors` cross-check — every
+    // registered diagnostic code must have a negative fixture declaring it
+    // via `//@ expect-error-code:`, and no fixture may declare an
+    // unregistered code. A code without a negative fixture fails
+    // `ledger check`.
+    diagnostics.extend(error_codes::error_code_coverage_diagnostics(root));
 
     diagnostics.sort_by(|a, b| a.code.cmp(b.code).then(a.message.cmp(&b.message)));
     diagnostics.dedup();
