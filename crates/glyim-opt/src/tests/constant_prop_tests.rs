@@ -6,7 +6,7 @@ use glyim_span::Span;
 use glyim_test::test_ty_ctx;
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 #[test]
@@ -14,9 +14,9 @@ fn constant_prop_single_block() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(glyim_type::TyKind::Int(IntTy::I32));
     let mut body = Body::dummy(dummy_def_id());
-    let local0 = LocalIdx::from_raw(0);
-    let local1 = LocalIdx::from_raw(1);
-    let local2 = LocalIdx::from_raw(2);
+    let local0 = LocalIdx::from_usize(0);
+    let local1 = LocalIdx::from_usize(1);
+    let local2 = LocalIdx::from_usize(2);
     body.locals.push(LocalDecl {
         ty: i32_ty,
         mutability: glyim_core::primitives::Mutability::Mut,
@@ -32,7 +32,7 @@ fn constant_prop_single_block() {
         mutability: glyim_core::primitives::Mutability::Mut,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![
             Statement {
                 kind: StatementKind::Assign(
@@ -76,11 +76,11 @@ fn constant_prop_single_block() {
     }]);
     let ctx = ctx_mut.freeze();
     crate::constant_prop::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     let stmt = &block.statements[1];
     match &stmt.kind {
         StatementKind::Assign(place, rvalue) => {
-            assert_eq!(place.local, LocalIdx::from_raw(2));
+            assert_eq!(place.local, LocalIdx::from_usize(2));
             // Expect binary op with constant operands (5 and 1), not folded into 6
             match rvalue {
                 Rvalue::BinaryOp(op, box_ops) => {
@@ -136,21 +136,21 @@ fn const_prop_uses_entry_state_not_exit_state() {
         })
     };
     let asn = |dst: u32, rv: Rvalue| Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(dst)), rv),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(dst as usize)), rv),
         source_info: SourceInfo::new(Span::DUMMY),
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![
-            asn(1, Rvalue::Use(c(10))), // _1 = 10
+            asn(1, Rvalue::Use(c(10))),
             asn(
                 2,
-                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_raw(1)))),
-            ), // _2 = move _1
-            asn(1, Rvalue::Use(c(3))),  // _1 = 3
+                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_usize(1)))),
+            ),
+            asn(1, Rvalue::Use(c(3))),
             asn(
                 3,
-                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_raw(1)))),
-            ), // _3 = move _1
+                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_usize(1)))),
+            ),
         ],
         terminator: Terminator {
             kind: TerminatorKind::Return,
@@ -160,7 +160,7 @@ fn const_prop_uses_entry_state_not_exit_state() {
     }]);
     let ctx = ctx_mut.freeze();
     crate::constant_prop::run(&ctx, &mut body);
-    let block = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
 
     // `_2 = move _1` must see `_1 == 10`, the value at that *point*, not 3.
     match &block.statements[1].kind {
