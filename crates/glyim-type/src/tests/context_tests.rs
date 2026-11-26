@@ -79,7 +79,7 @@ fn test_deref_ty_consults_deref_impl_registry() {
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
 
     // Self type = a Box-like ADT parameterized by [T]; Target = T.
-    let box_adt = AdtId::from_raw(1);
+    let box_adt = AdtId::from_usize(1);
     let empty_substs = ctx.intern_substitution(vec![]);
     let box_i32_ty = ctx.mk_adt(box_adt, empty_substs);
 
@@ -87,7 +87,7 @@ fn test_deref_ty_consults_deref_impl_registry() {
     ctx.register_deref_impl(box_i32_ty, i32_ty);
 
     // An unregistered ADT (a fresh ADT id with no Deref impl) must deref to None.
-    let other_adt = AdtId::from_raw(2);
+    let other_adt = AdtId::from_usize(2);
     let other_ty = ctx.mk_adt(other_adt, empty_substs);
 
     assert_eq!(
