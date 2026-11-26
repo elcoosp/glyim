@@ -33,8 +33,8 @@
 //! lives in the module docs of `crates/glyim-test/src/exhaustive.rs`.
 
 use glyim_test::exhaustive::{
-    BINARY_SWEEPS, CAST_SWEEPS, SweepCase, SweepOutcome, UNARY_SWEEPS, check_const_leg,
-    check_sweep, sampled_const_pairs,
+    BINARY_SWEEPS, CAST_SWEEPS, SweepOutcome, UNARY_SWEEPS, check_const_leg, check_sweep,
+    sampled_const_pairs,
 };
 use glyim_test::metamorphic::MetamorphicRunner;
 
