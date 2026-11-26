@@ -87,6 +87,8 @@ fn expect_family_parses() {
          //@ expect-stderr: thread panicked\n\
          //@ expect-error: index out of bounds\n\
          //@ expect-error: no field\n\
+         //@ expect-error-code: T0050\n\
+         //@ expect-error-code: B0001\n\
          //@ expect-warning: unused\n\
          //@ forbid-warning: dead code\n",
     );
@@ -94,6 +96,11 @@ fn expect_family_parses() {
     assert_eq!(a.expect_stdout.as_deref(), Some("hello"));
     assert_eq!(a.expect_stderr.as_deref(), Some("thread panicked"));
     assert_eq!(a.expect_errors.len(), 2);
+    assert_eq!(
+        a.expect_error_codes,
+        vec!["T0050".to_string(), "B0001".to_string()],
+        "expect-error-code is repeatable and preserves declaration order",
+    );
     assert_eq!(a.expect_warnings, vec!["unused".to_string()]);
     assert_eq!(a.forbid_warnings, vec!["dead code".to_string()]);
     assert!(a.has_outcome_expectation());
