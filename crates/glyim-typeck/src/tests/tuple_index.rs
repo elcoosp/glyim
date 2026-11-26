@@ -6,11 +6,11 @@ fn tuple_index() {
     let exprs = vec![
         Expr::Literal(Literal::Int(1, None)),
         Expr::Literal(Literal::Bool(true)),
-        Expr::Tuple(vec![ExprId::from_raw(0), ExprId::from_raw(1)]),
+        Expr::Tuple(vec![ExprId::from_usize(0), ExprId::from_usize(1)]),
         Expr::Literal(Literal::Int(0, None)),
         Expr::Index {
-            base: ExprId::from_raw(2),
-            index: ExprId::from_raw(3),
+            base: ExprId::from_usize(2),
+            index: ExprId::from_usize(3),
         },
     ];
 
