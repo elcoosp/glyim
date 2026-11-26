@@ -871,7 +871,7 @@ impl Body {
     /// `return_place`.
     #[must_use]
     pub fn return_place(&self) -> Place {
-        Place::new(LocalIdx::from_raw(0))
+        Place::new(LocalIdx::from_usize(0))
     }
 }
 
