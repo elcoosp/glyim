@@ -7,9 +7,12 @@ use std::sync::Arc;
 
 #[test]
 fn emit_discriminant() {
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-    let src = LocalIdx::from_raw(1);
-    let dest = LocalIdx::from_raw(2);
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
+    let src = LocalIdx::from_usize(1);
+    let dest = LocalIdx::from_usize(2);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
@@ -20,7 +23,7 @@ fn emit_discriminant() {
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(Place::new(dest), Rvalue::Discriminant(Place::new(src))),
@@ -36,9 +39,12 @@ fn emit_discriminant() {
 
 #[test]
 fn emit_len() {
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-    let src = LocalIdx::from_raw(1);
-    let dest = LocalIdx::from_raw(2);
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
+    let src = LocalIdx::from_usize(1);
+    let dest = LocalIdx::from_usize(2);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
@@ -49,7 +55,7 @@ fn emit_len() {
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(Place::new(dest), Rvalue::Len(Place::new(src))),
