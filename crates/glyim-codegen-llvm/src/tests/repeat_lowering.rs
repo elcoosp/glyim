@@ -51,16 +51,16 @@ fn build_repeat_body(ctx: &mut TyCtxMut) -> Body {
 
     let stmt_elem = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::Use(Operand::Constant(const_42)),
         ),
         source_info: SourceInfo::new(Span::DUMMY),
     };
     let stmt_repeat = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Repeat(
-                Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                 count_const,
             ),
         ),
@@ -76,7 +76,7 @@ fn build_repeat_body(ctx: &mut TyCtxMut) -> Body {
     basic_blocks.push(bb0);
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(3)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(3)),
         basic_blocks,
         locals,
         arg_count: 0,
