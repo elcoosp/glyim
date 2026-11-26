@@ -27,14 +27,14 @@ fn build_from_hir_records_definitions_and_references() {
         attrs: Vec::new(),
     };
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: fn_name,
         kind: ItemKind::Fn(fn_item),
         visibility: Visibility::Public,
         span,
     };
     let hir = CrateHir {
-        items: glyim_core::IndexVec::from_raw(vec![item]),
+        items: glyim_core::IndexVec::from_vec(vec![item]),
         bodies: glyim_core::IndexVec::new(),
         body_owners: glyim_core::IndexVec::new(),
         interner: Interner::default(),
