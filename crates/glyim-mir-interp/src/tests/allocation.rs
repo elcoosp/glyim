@@ -11,6 +11,6 @@ fn interpret_allocate_write_read() {
     let tcx = tcx_mut.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
-    let stored = interp.get_local_value(LocalIdx::from_raw(1)).unwrap();
+    let stored = interp.get_local_value(LocalIdx::from_usize(1)).unwrap();
     assert_eq!(stored, &InterpValue::Int(val));
 }
