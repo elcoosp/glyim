@@ -42,7 +42,7 @@ fn display_triple_ref() {
 #[test]
 fn display_ref_to_infer() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(5);
+        let var = TyVar::from_usize(5);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         c.mk_ref(Region::Erased, infer, Mutability::Not)
     });
@@ -53,7 +53,7 @@ fn display_ref_to_infer() {
 #[test]
 fn display_mut_ref_to_infer() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
-        let var = IntVar::from_raw(2);
+        let var = IntVar::from_usize(2);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Int(var)));
         c.mk_ref(Region::Erased, infer, Mutability::Mut)
     });
@@ -64,7 +64,7 @@ fn display_mut_ref_to_infer() {
 #[test]
 fn display_complex_nested() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
-        let fvar = FloatVar::from_raw(0);
+        let fvar = FloatVar::from_usize(0);
         let fty = c.mk_ty(TyKind::Infer(InferVar::Float(fvar)));
         let r1 = c.mk_ref(Region::Erased, fty, Mutability::Not);
         c.mk_ref(Region::Erased, r1, Mutability::Mut)
@@ -102,7 +102,7 @@ fn display_fallthrough_for_adt() {
     // Adt, Tuple, FnPtr etc. fall through to the Debug arm
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![]);
-        c.mk_adt(AdtId::from_raw(1), substs)
+        c.mk_adt(AdtId::from_usize(1), substs)
     });
     let printed = format!("{}", PrintTy::new(ty, &ctx));
     // Should contain "Adt" since it falls back to Debug
