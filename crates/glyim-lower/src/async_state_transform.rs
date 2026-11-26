@@ -230,13 +230,13 @@ mod tests {
             let term = Terminator {
                 kind: TerminatorKind::Call {
                     func: Operand::Constant(MirConst {
-                        kind: MirConstKind::Fn(FnDefId::from_raw(0), Substitution::empty()),
+                        kind: MirConstKind::Fn(FnDefId::from_usize(0), Substitution::empty()),
                         ty: Ty::ERROR,
                         span: Span::DUMMY,
                     }),
                     args: Vec::new(),
-                    destination: Place::new(LocalIdx::from_raw(0)),
-                    target: Some(BasicBlockIdx::from_raw(ret_idx as u32)),
+                    destination: Place::new(LocalIdx::from_usize(0)),
+                    target: Some(BasicBlockIdx::from_usize(ret_idx)),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -251,8 +251,8 @@ mod tests {
 
         Body {
             owner: glyim_core::def_id::DefId::new(
-                glyim_core::def_id::CrateId::from_raw(0),
-                glyim_core::def_id::LocalDefId::from_raw(0),
+                glyim_core::def_id::CrateId::from_usize(0),
+                glyim_core::def_id::LocalDefId::from_usize(0),
             ),
             basic_blocks: blocks,
             locals,
