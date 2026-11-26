@@ -68,10 +68,10 @@ fn block(stmts: Vec<Statement>, terminator: TerminatorKind) -> BasicBlockData {
 /// `_0 = _1; return`.
 fn loop_sum_body(owner_raw: u32, n: i128, ty: Ty) -> Body {
     let mut body = Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(owner_raw),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(owner_raw as usize),
     ));
-    body.locals = IndexVec::from_raw(vec![
+    body.locals = IndexVec::from_vec(vec![
         decl(ty, Mutability::Not),
         decl(ty, Mutability::Mut),
         decl(ty, Mutability::Mut),
@@ -79,14 +79,14 @@ fn loop_sum_body(owner_raw: u32, n: i128, ty: Ty) -> Body {
     ]);
     let zero = int_const(ty, 0);
     let one = int_const(ty, 1);
-    let sum = || Place::new(LocalIdx::from_raw(1));
-    let i = || Place::new(LocalIdx::from_raw(2));
-    let tmp = || Place::new(LocalIdx::from_raw(3));
-    let ret = || Place::new(LocalIdx::from_raw(0));
-    let head = BasicBlockIdx::from_raw(1);
-    let body_bb = BasicBlockIdx::from_raw(2);
-    let exit_bb = BasicBlockIdx::from_raw(3);
-    body.basic_blocks = IndexVec::from_raw(vec![
+    let sum = || Place::new(LocalIdx::from_usize(1));
+    let i = || Place::new(LocalIdx::from_usize(2));
+    let tmp = || Place::new(LocalIdx::from_usize(3));
+    let ret = || Place::new(LocalIdx::from_usize(0));
+    let head = BasicBlockIdx::from_usize(1);
+    let body_bb = BasicBlockIdx::from_usize(2);
+    let exit_bb = BasicBlockIdx::from_usize(3);
+    body.basic_blocks = IndexVec::from_vec(vec![
         block(
             vec![
                 stmt(StatementKind::Assign(i(), Rvalue::Use(zero.clone()))),
@@ -147,7 +147,7 @@ fn main() {
         let mut interp = Interpreter::new(&tcx).with_trace_collector();
         interp.run_body(&body).unwrap();
         let val = interp
-            .get_local_value(LocalIdx::from_raw(0))
+            .get_local_value(LocalIdx::from_usize(0))
             .expect("return place");
         assert_eq!(
             val,
