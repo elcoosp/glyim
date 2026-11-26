@@ -4,7 +4,7 @@ use glyim_span::Span;
 use glyim_type::{Const, ConstKind, Ty, TyCtxMut, TyKind};
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
@@ -17,12 +17,12 @@ fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
 
 fn empty_body(ret_ty: Ty) -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![local_decl(ret_ty, Mutability::Mut)]);
+    body.locals = IndexVec::from_vec(vec![local_decl(ret_ty, Mutability::Mut)]);
     body
 }
 
 fn add_local(body: &mut Body, ty: Ty, mutability: Mutability) -> LocalIdx {
-    let idx = LocalIdx::from_raw(body.locals.len() as u32);
+    let idx = LocalIdx::from_usize(body.locals.len());
     body.locals.push(local_decl(ty, mutability));
     idx
 }
@@ -82,7 +82,7 @@ fn test_t09_repeat_rvalue() {
     let array_ty = mk_array_ty(&mut tcx, elem_ty, 3);
     let mut body = empty_body(Ty::UNIT);
     let local = add_local(&mut body, array_ty, Mutability::Mut);
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     let repeat = Rvalue::Repeat(
         const_int(&mut tcx, 5, elem_ty),
         MirConst {
