@@ -1343,7 +1343,7 @@ impl crate::vtable::VTableComputer for SimpleLayoutComputer<'_> {
                 sig: method.sig.clone(),
                 fn_def_id: method
                     .fn_def_id
-                    .unwrap_or_else(|| glyim_core::def_id::FnDefId::from_raw(u32::MAX)),
+                    .unwrap_or_else(|| glyim_core::def_id::FnDefId::from_usize(u32::MAX as usize)),
             })
             .collect::<Vec<_>>();
 
