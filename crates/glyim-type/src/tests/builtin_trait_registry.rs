@@ -153,7 +153,7 @@ fn ty_ctx_registration_matches_the_registry_exactly() {
         let got = ctx.trait_by_name.get(&name).copied();
         assert_eq!(
             got,
-            Some(TraitDefId::from_raw(t.trait_id())),
+            Some(TraitDefId::from_usize(t.trait_id() as usize)),
             "TyCtx registered `{}` under {:?}, expected the reserved id {} — \
              parallel-table drift between the registry and register_builtin_ranges",
             t.name(),
