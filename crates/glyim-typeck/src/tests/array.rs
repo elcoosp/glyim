@@ -9,14 +9,14 @@ fn array_literal_and_index() {
         Expr::Literal(Literal::Int(3, None)),
     ];
     exprs.push(Expr::Array(vec![
-        ExprId::from_raw(0),
-        ExprId::from_raw(1),
-        ExprId::from_raw(2),
+        ExprId::from_usize(0),
+        ExprId::from_usize(1),
+        ExprId::from_usize(2),
     ]));
     exprs.push(Expr::Literal(Literal::Int(1, None)));
     exprs.push(Expr::Index {
-        base: ExprId::from_raw(3),
-        index: ExprId::from_raw(4),
+        base: ExprId::from_usize(3),
+        index: ExprId::from_usize(4),
     });
 
     let (hir, body_id) = make_single_body_hir(exprs);
