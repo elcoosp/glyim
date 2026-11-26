@@ -104,8 +104,8 @@ fn property_mir_every_used_local_is_declared() {
     const N: usize = 128;
     let mut body_gen = property::mir::MirBodyGenerator::new(4242);
     let owner = glyim_core::def_id::DefId::new(
-        glyim_core::def_id::CrateId::from_raw(0),
-        glyim_core::def_id::LocalDefId::from_raw(0),
+        glyim_core::def_id::CrateId::from_usize(0),
+        glyim_core::def_id::LocalDefId::from_usize(0),
     );
     for i in 0..N {
         let body = body_gen.generate_well_formed_body(owner);
@@ -142,8 +142,8 @@ fn property_mir_validator_never_panics_on_10k_malformed_bodies() {
     let frozen = ctx.freeze();
     let mut body_gen = property::mir::MirBodyGenerator::new(2026);
     let owner = glyim_core::def_id::DefId::new(
-        glyim_core::def_id::CrateId::from_raw(0),
-        glyim_core::def_id::LocalDefId::from_raw(0),
+        glyim_core::def_id::CrateId::from_usize(0),
+        glyim_core::def_id::LocalDefId::from_usize(0),
     );
     let mut rejected = 0usize;
     for _ in 0..N {
