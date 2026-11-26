@@ -146,7 +146,7 @@ mod tests {
     #[test]
     fn test_same_block_no_activation() {
         let mut body = Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: glyim_core::arena::IndexVec::new(),
             locals: glyim_core::arena::IndexVec::new(),
             arg_count: 0,
@@ -188,15 +188,16 @@ mod tests {
         };
         body.basic_blocks.push(block);
 
-        let analysis = ReservationAnalysis::compute(&body, BasicBlockIdx::from_raw(0), 0, local_2);
-        assert!(analysis.is_reservation(BasicBlockIdx::from_raw(0), 1));
-        assert!(!analysis.is_reservation(BasicBlockIdx::from_raw(0), 0));
+        let analysis =
+            ReservationAnalysis::compute(&body, BasicBlockIdx::from_usize(0), 0, local_2);
+        assert!(analysis.is_reservation(BasicBlockIdx::from_usize(0), 1));
+        assert!(!analysis.is_reservation(BasicBlockIdx::from_usize(0), 0));
     }
 
     #[test]
     fn test_cross_block_extends_if_not_activated() {
         let mut body = Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: glyim_core::arena::IndexVec::new(),
             locals: glyim_core::arena::IndexVec::new(),
             arg_count: 0,
@@ -230,7 +231,7 @@ mod tests {
             statements: vec![borrow_stmt],
             terminator: Terminator {
                 kind: TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(1),
+                    target: BasicBlockIdx::from_usize(1),
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
             },
@@ -246,14 +247,15 @@ mod tests {
         };
         body.basic_blocks.push(block0);
         body.basic_blocks.push(block1);
-        let analysis = ReservationAnalysis::compute(&body, BasicBlockIdx::from_raw(0), 0, local_2);
-        assert!(analysis.is_reservation(BasicBlockIdx::from_raw(1), 0));
+        let analysis =
+            ReservationAnalysis::compute(&body, BasicBlockIdx::from_usize(0), 0, local_2);
+        assert!(analysis.is_reservation(BasicBlockIdx::from_usize(1), 0));
     }
 
     #[test]
     fn test_multiple_loans_index_alignment() {
         let mut body = Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: glyim_core::arena::IndexVec::new(),
             locals: glyim_core::arena::IndexVec::new(),
             arg_count: 0,
@@ -339,11 +341,11 @@ mod tests {
         // Test that the activation cache is keyed by global index
         let analysis = ReservationAnalysis::compute(
             &body,
-            BasicBlockIdx::from_raw(0),
+            BasicBlockIdx::from_usize(0),
             1, // loan 1
             local_3,
         );
         // Loan 1 is in reservation at stmt 2
-        assert!(analysis.is_reservation(BasicBlockIdx::from_raw(0), 2));
+        assert!(analysis.is_reservation(BasicBlockIdx::from_usize(0), 2));
     }
 }
