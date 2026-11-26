@@ -21,10 +21,13 @@ fn xref_probe_cross_frame_mut_self_deref() {
     // ---- next: fn next(&mut self) -> i32 ----
     // arg 1 = &mut self (points into caller frame, target local).
     // body: return_place = (self.deref).field0
-    let mut next = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)));
+    let mut next = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(1),
+    ));
     next.return_ty = i32_ty;
     next.arg_count = 1;
-    next.locals = IndexVec::from_raw(vec![
+    next.locals = IndexVec::from_vec(vec![
         LocalDecl {
             ty: i32_ty,
             mutability: Mutability::Not,
@@ -36,8 +39,8 @@ fn xref_probe_cross_frame_mut_self_deref() {
             source_info: SourceInfo::new(Span::DUMMY),
         },
     ]);
-    let nbb0 = BasicBlockIdx::from_raw(0);
-    next.basic_blocks = IndexVec::from_raw(vec![BasicBlockData::new(Terminator {
+    let nbb0 = BasicBlockIdx::from_usize(0);
+    next.basic_blocks = IndexVec::from_vec(vec![BasicBlockData::new(Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(Span::DUMMY),
     })]);
@@ -45,25 +48,28 @@ fn xref_probe_cross_frame_mut_self_deref() {
         &mut next,
         nbb0,
         StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Use(Operand::Copy(Place {
-                local: LocalIdx::from_raw(1),
+                local: LocalIdx::from_usize(1),
                 projection: Box::new([
                     ProjectionElem::Deref,
-                    ProjectionElem::Field(FieldIdx::from_raw(0)),
+                    ProjectionElem::Field(FieldIdx::from_usize(0)),
                 ]),
             })),
         ),
     );
 
     // ---- main ----
-    let mut main = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let mut main = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
     main.return_ty = Ty::UNIT;
     main.arg_count = 0;
-    let main_agg = LocalIdx::from_raw(1);
-    let main_ref = LocalIdx::from_raw(2);
-    let main_tmp = LocalIdx::from_raw(3);
-    main.locals = IndexVec::from_raw(vec![
+    let main_agg = LocalIdx::from_usize(1);
+    let main_ref = LocalIdx::from_usize(2);
+    let main_tmp = LocalIdx::from_usize(3);
+    main.locals = IndexVec::from_vec(vec![
         LocalDecl {
             ty: Ty::UNIT,
             mutability: Mutability::Not,
@@ -85,9 +91,9 @@ fn xref_probe_cross_frame_mut_self_deref() {
             source_info: SourceInfo::new(Span::DUMMY),
         },
     ]);
-    let bb0 = BasicBlockIdx::from_raw(0);
-    let bb1 = BasicBlockIdx::from_raw(1);
-    main.basic_blocks = IndexVec::from_raw(vec![
+    let bb0 = BasicBlockIdx::from_usize(0);
+    let bb1 = BasicBlockIdx::from_usize(1);
+    main.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData::new(Terminator {
             kind: TerminatorKind::Return,
             source_info: SourceInfo::new(Span::DUMMY),
@@ -131,7 +137,7 @@ fn xref_probe_cross_frame_mut_self_deref() {
         bb0,
         TerminatorKind::Call {
             func: Operand::Constant(MirConst {
-                kind: MirConstKind::Fn(FnDefId::from_raw(1), Substitution::empty()),
+                kind: MirConstKind::Fn(FnDefId::from_usize(1), Substitution::empty()),
                 ty: ref_ty,
                 span: Span::DUMMY,
             }),
@@ -144,10 +150,10 @@ fn xref_probe_cross_frame_mut_self_deref() {
 
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
-    let main_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let main_id = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     interp.add_function(main_id, main);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1)),
         next,
     );
     let main_body = interp.function_table.get(&main_id).unwrap().clone();
