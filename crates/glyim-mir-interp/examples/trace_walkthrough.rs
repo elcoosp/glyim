@@ -26,22 +26,22 @@ use glyim_type::{Substitution, Ty, TyCtxMut, TyKind};
 
 /// `DefId(0, raw)`.
 fn id(raw: u32) -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(raw))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(raw as usize))
 }
 
 /// `fn() -> i32 { _0 = val; return }` — a single-block returning callee.
 fn returning_body(tcx: &mut TyCtxMut, owner: DefId, val: i128) -> Body {
     let i32_ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
     let mut body = Body::dummy(owner);
-    body.locals = IndexVec::from_raw(vec![LocalDecl {
+    body.locals = IndexVec::from_vec(vec![LocalDecl {
         ty: i32_ty,
         mutability: Mutability::Mut,
         source_info: SourceInfo::new(Span::DUMMY),
     }]);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Int(val),
                     ty: i32_ty,
@@ -64,7 +64,7 @@ fn returning_body(tcx: &mut TyCtxMut, owner: DefId, val: i128) -> Body {
 fn caller_body(tcx: &mut TyCtxMut, caller: DefId, callee_raw: u32) -> Body {
     let i32_ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
     let mut body = Body::dummy(caller);
-    body.locals = IndexVec::from_raw(vec![
+    body.locals = IndexVec::from_vec(vec![
         LocalDecl {
             ty: Ty::UNIT,
             mutability: Mutability::Mut,
@@ -76,22 +76,22 @@ fn caller_body(tcx: &mut TyCtxMut, caller: DefId, callee_raw: u32) -> Body {
             source_info: SourceInfo::new(Span::DUMMY),
         },
     ]);
-    body.basic_blocks = IndexVec::from_raw(vec![
+    body.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Call {
                     func: Operand::Constant(MirConst {
                         kind: MirConstKind::Fn(
-                            FnDefId::from_raw(callee_raw),
+                            FnDefId::from_usize(callee_raw as usize),
                             Substitution::empty(),
                         ),
                         ty: i32_ty,
                         span: Span::DUMMY,
                     }),
                     args: vec![],
-                    destination: Place::new(LocalIdx::from_raw(1)),
-                    target: Some(BasicBlockIdx::from_raw(1)),
+                    destination: Place::new(LocalIdx::from_usize(1)),
+                    target: Some(BasicBlockIdx::from_usize(1)),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -123,7 +123,7 @@ fn main() {
     interp.run_body(&caller).unwrap();
 
     let result = interp
-        .get_local_value(LocalIdx::from_raw(1))
+        .get_local_value(LocalIdx::from_usize(1))
         .map(|v| match v {
             InterpValue::Int(n) => *n,
             other => panic!("expected Int result, got {other:?}"),
