@@ -14,7 +14,7 @@ fn get_body_hir(source: &str) -> (crate::CrateHir, Interner, BodyId) {
     let parse_result = parse_to_syntax(source, file_id);
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
-    let body_id = match &hir.items[ItemId::from_raw(0)].kind {
+    let body_id = match &hir.items[ItemId::from_usize(0)].kind {
         ItemKind::Fn(fn_item) => fn_item.body.expect("no body"),
         other => panic!("expected Fn item, got {other:?}"),
     };
@@ -95,8 +95,7 @@ fn test_tuple_field_access_zero() {
     let (hir, interner, body_id) = get_body_hir(source);
     let body = get_body(&hir, body_id);
 
-    let last_id =
-        ExprId::from_raw(body.exprs.len().checked_sub(1).expect("body has no exprs") as u32);
+    let last_id = ExprId::from_usize(body.exprs.len().checked_sub(1).expect("body has no exprs"));
     let result = find_field_expr(body, last_id);
     assert!(
         result.is_some(),
@@ -124,8 +123,7 @@ fn test_tuple_field_access_index_one() {
     let (hir, interner, body_id) = get_body_hir(source);
     let body = get_body(&hir, body_id);
 
-    let last_id =
-        ExprId::from_raw(body.exprs.len().checked_sub(1).expect("body has no exprs") as u32);
+    let last_id = ExprId::from_usize(body.exprs.len().checked_sub(1).expect("body has no exprs"));
     let result = find_field_expr(body, last_id);
     assert!(
         result.is_some(),
@@ -146,8 +144,7 @@ fn test_struct_field_access() {
     let (hir, interner, body_id) = get_body_hir(source);
     let body = get_body(&hir, body_id);
 
-    let last_id =
-        ExprId::from_raw(body.exprs.len().checked_sub(1).expect("body has no exprs") as u32);
+    let last_id = ExprId::from_usize(body.exprs.len().checked_sub(1).expect("body has no exprs"));
     let result = find_field_expr(body, last_id);
     assert!(
         result.is_some(),
@@ -168,8 +165,7 @@ fn test_tuple_field_access_with_path_receiver() {
     let (hir, interner, body_id) = get_body_hir(source);
     let body = get_body(&hir, body_id);
 
-    let last_id =
-        ExprId::from_raw(body.exprs.len().checked_sub(1).expect("body has no exprs") as u32);
+    let last_id = ExprId::from_usize(body.exprs.len().checked_sub(1).expect("body has no exprs"));
     let result = find_field_expr(body, last_id);
     assert!(
         result.is_some(),
