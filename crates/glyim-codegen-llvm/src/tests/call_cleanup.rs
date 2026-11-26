@@ -37,11 +37,11 @@ fn make_cleanup_call_body(ctx: &mut TyCtxMut) -> Body {
         statements: vec![],
         terminator: Terminator {
             kind: TerminatorKind::Call {
-                func: Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                func: Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                 args: vec![],
-                destination: Place::new(LocalIdx::from_raw(0)),
-                target: Some(BasicBlockIdx::from_raw(1)),
-                cleanup: Some(BasicBlockIdx::from_raw(2)),
+                destination: Place::new(LocalIdx::from_usize(0)),
+                target: Some(BasicBlockIdx::from_usize(1)),
+                cleanup: Some(BasicBlockIdx::from_usize(2)),
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
         },
@@ -67,8 +67,8 @@ fn make_cleanup_call_body(ctx: &mut TyCtxMut) -> Body {
     };
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(4)),
-        basic_blocks: IndexVec::from_raw(vec![bb0, bb1, bb2]),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(4)),
+        basic_blocks: IndexVec::from_vec(vec![bb0, bb1, bb2]),
         locals,
         arg_count,
         return_ty,
