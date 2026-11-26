@@ -31,12 +31,12 @@ fn for_loop_lowers_to_loop_with_next_call() {
     ));
 
     // Construct Option<i32> type for the next() return type
-    let option_adt_id = glyim_core::def_id::AdtId::from_raw(0);
+    let option_adt_id = glyim_core::def_id::AdtId::from_usize(0);
     let option_substs = ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let option_ty = ctx_mut.mk_ty(TyKind::Adt(option_adt_id, option_substs));
 
     // Construct the next() function type
-    let next_fn_def_id = FnDefId::from_raw(999);
+    let next_fn_def_id = FnDefId::from_usize(999);
     let next_fn_substs = ctx_mut.intern_substitution(vec![]);
     let next_fn_ty = ctx_mut.mk_ty(TyKind::FnDef(next_fn_def_id, next_fn_substs));
 
@@ -76,7 +76,7 @@ fn for_loop_lowers_to_loop_with_next_call() {
     // for elem in arr { }
     let elem_pat = Pattern {
         kind: PatternKind::Binding {
-            var_id: thir::LocalVarId::from_raw(0),
+            var_id: thir::LocalVarId::from_usize(0),
             name: b.make_name("elem"),
             mutability: Mutability::Not,
             binding_ty: None,
@@ -170,7 +170,7 @@ fn for_loop_simplified_without_iterator_info() {
 
     let elem_pat = Pattern {
         kind: PatternKind::Binding {
-            var_id: thir::LocalVarId::from_raw(0),
+            var_id: thir::LocalVarId::from_usize(0),
             name: b.make_name("elem"),
             mutability: Mutability::Not,
             binding_ty: None,
@@ -234,7 +234,7 @@ fn for_loop_break_targets_exit() {
 
     let elem_pat = Pattern {
         kind: PatternKind::Binding {
-            var_id: thir::LocalVarId::from_raw(0),
+            var_id: thir::LocalVarId::from_usize(0),
             name: b.make_name("elem"),
             mutability: Mutability::Not,
             binding_ty: None,
