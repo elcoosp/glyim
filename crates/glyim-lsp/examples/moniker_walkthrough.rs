@@ -60,7 +60,7 @@ fn main() {
         .write()
         .insert(file_id, SourceMap::new(file_id, DOC.to_string()));
 
-    let crate_id = CrateId::from_raw(0);
+    let crate_id = CrateId::from_usize(0);
     let parse_result = parse_to_syntax(DOC, file_id);
     let mut interner = Interner::new();
     let (_def_map, _def_diags) = build_def_map(&parse_result.root, crate_id, interner.clone());
