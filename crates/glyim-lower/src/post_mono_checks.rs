@@ -148,8 +148,8 @@ pub fn check_unused_generic_params(
             let checked_body = pre_mono_bodies
                 .and_then(|m| {
                     m.get(&glyim_core::def_id::DefId::new(
-                        glyim_core::def_id::CrateId::from_raw(0),
-                        glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()),
+                        glyim_core::def_id::CrateId::from_usize(0),
+                        glyim_core::def_id::LocalDefId::from_usize(def_id.index()),
                     ))
                 })
                 .map_or_else(|| item.body.as_ref(), std::convert::AsRef::as_ref);
