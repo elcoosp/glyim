@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 fn dummy_body() -> Arc<Body> {
     Arc::new(Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(0),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
     )))
 }
 
@@ -23,7 +23,7 @@ fn sequential_mono_item_ids() {
 
     let items: Vec<MonoItem> = (0..5)
         .map(|i| MonoItem::Fn {
-            def_id: FnDefId::from_raw(i),
+            def_id: FnDefId::from_usize(i),
             substs: empty_subst,
         })
         .collect();
@@ -50,7 +50,7 @@ fn lookup_nonexistent_returns_none() {
     let mut ctx = MonoCtx::new();
 
     let item = MonoItem::Fn {
-        def_id: FnDefId::from_raw(1),
+        def_id: FnDefId::from_usize(1),
         substs: empty_subst,
     };
     ctx.collect(
@@ -60,7 +60,7 @@ fn lookup_nonexistent_returns_none() {
     );
 
     let other = MonoItem::Fn {
-        def_id: FnDefId::from_raw(999),
+        def_id: FnDefId::from_usize(999),
         substs: empty_subst,
     };
     assert!(
@@ -77,11 +77,11 @@ fn same_def_id_different_kinds() {
     let mut ctx = MonoCtx::new();
 
     let fn_item = MonoItem::Fn {
-        def_id: FnDefId::from_raw(1),
+        def_id: FnDefId::from_usize(1),
         substs: empty_subst,
     };
     let const_item = MonoItem::Const {
-        def_id: ConstDefId::from_raw(1),
+        def_id: ConstDefId::from_usize(1),
         substs: empty_subst,
     };
 
@@ -113,22 +113,22 @@ fn items_data_has_correct_bodies() {
 
     // Create two distinct bodies
     let body_a = Arc::new(Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(1),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(1),
     )));
     let body_b = Arc::new(Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(2),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(2),
     )));
     let ptr_a = Arc::as_ptr(&body_a);
     let ptr_b = Arc::as_ptr(&body_b);
 
     let item_a = MonoItem::Fn {
-        def_id: FnDefId::from_raw(1),
+        def_id: FnDefId::from_usize(1),
         substs: empty_subst,
     };
     let item_b = MonoItem::Fn {
-        def_id: FnDefId::from_raw(2),
+        def_id: FnDefId::from_usize(2),
         substs: empty_subst,
     };
 
@@ -139,7 +139,7 @@ fn items_data_has_correct_bodies() {
         &move |def_id, _substs| {
             // collect() constructs DefId with CrateId(0) and LocalDefId
             // derived from the FnDefId raw value
-            if def_id.local_id == LocalDefId::from_raw(1) {
+            if def_id.local_id == LocalDefId::from_usize(1) {
                 body_a_clone.clone()
             } else {
                 body_b_clone.clone()
@@ -172,7 +172,7 @@ fn symbol_names_generated() {
     let mut ctx = MonoCtx::new();
 
     let item = MonoItem::Static {
-        def_id: StaticDefId::from_raw(42),
+        def_id: StaticDefId::from_usize(42),
     };
     ctx.collect(
         std::slice::from_ref(&item),
@@ -206,7 +206,7 @@ fn all_duplicates_in_start() {
     let mut ctx = MonoCtx::new();
 
     let item = MonoItem::Fn {
-        def_id: FnDefId::from_raw(1),
+        def_id: FnDefId::from_usize(1),
         substs: empty_subst,
     };
 
@@ -239,7 +239,7 @@ fn cache_consistency_after_many_ops() {
 
     for i in 0u32..20 {
         let item = MonoItem::Fn {
-            def_id: FnDefId::from_raw(i),
+            def_id: FnDefId::from_usize(i as usize),
             substs: empty_subst,
         };
         ctx.collect(&[item], &|_def_id, _substs| dummy_body(), &|_ty| {
@@ -252,7 +252,7 @@ fn cache_consistency_after_many_ops() {
 
     for i in 0u32..20 {
         let item = MonoItem::Fn {
-            def_id: FnDefId::from_raw(i),
+            def_id: FnDefId::from_usize(i as usize),
             substs: empty_subst,
         };
         ctx.collect(&[item], &|_def_id, _substs| dummy_body(), &|_ty| {
@@ -272,7 +272,7 @@ fn empty_vs_nonempty_substitution() {
     let one_arg_subst = ty_ctx.intern_substitution(vec![GenericArg::Ty(ty_ctx.bool_ty())]);
     let mut ctx = MonoCtx::new();
 
-    let fn_id = FnDefId::from_raw(1);
+    let fn_id = FnDefId::from_usize(1);
     let item_empty = MonoItem::Fn {
         def_id: fn_id,
         substs: empty_subst,
@@ -303,11 +303,11 @@ fn static_vs_fn_same_raw_id() {
     let mut ctx = MonoCtx::new();
 
     let fn_item = MonoItem::Fn {
-        def_id: FnDefId::from_raw(7),
+        def_id: FnDefId::from_usize(7),
         substs: empty_subst,
     };
     let static_item = MonoItem::Static {
-        def_id: StaticDefId::from_raw(7),
+        def_id: StaticDefId::from_usize(7),
     };
 
     ctx.collect(
