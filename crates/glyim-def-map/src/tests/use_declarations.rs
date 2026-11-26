@@ -16,7 +16,7 @@ fn get_def_map(source: &str) -> (crate::CrateDefMap, Vec<glyim_diag::GlyimDiagno
     let root = trace.parse_tree.expect("Parse tree should exist");
     crate::build_def_map(
         &root,
-        CrateId::from_raw(0),
+        CrateId::from_usize(0),
         glyim_core::interner::Interner::new(),
     )
 }
