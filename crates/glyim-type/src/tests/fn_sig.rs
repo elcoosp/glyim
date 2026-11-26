@@ -125,7 +125,7 @@ fn fn_sig_equality() {
 #[test]
 fn fn_sig_debug_format() {
     let sig = FnSig {
-        inputs: Substitution::from_raw(0, 1),
+        inputs: Substitution::from_parts(0, 1),
         output: Ty::BOOL,
         c_variadic: false,
         unsafety: Safety::Safe,
@@ -141,7 +141,7 @@ fn fn_sig_debug_format() {
 #[test]
 fn fn_sig_clone() {
     let sig = FnSig {
-        inputs: Substitution::from_raw(0, 0),
+        inputs: Substitution::from_parts(0, 0),
         output: Ty::UNIT,
         c_variadic: false,
         unsafety: Safety::Safe,
