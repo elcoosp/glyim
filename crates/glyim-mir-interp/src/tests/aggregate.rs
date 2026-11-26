@@ -8,7 +8,7 @@ use glyim_type::{FieldIdx, Ty, TyKind};
 fn test_t01_struct_construction_and_field_access() {
     let mut ctx = glyim_test::test_ty_ctx();
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
-    let adt_id = AdtId::from_raw(42);
+    let adt_id = AdtId::from_usize(42);
     let subst = ctx.intern_substitution(vec![]);
     let struct_ty = ctx.mk_ty(TyKind::Adt(adt_id, subst));
 
@@ -17,7 +17,7 @@ fn test_t01_struct_construction_and_field_access() {
     let local_field0 = add_local(&mut body, i32_ty, Mutability::Not);
     let local_field1 = add_local(&mut body, i32_ty, Mutability::Not);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(&mut body, bb0, StatementKind::StorageLive(local_struct));
     add_statement(
         &mut body,
@@ -25,7 +25,7 @@ fn test_t01_struct_construction_and_field_access() {
         StatementKind::Assign(
             Place::new(local_struct),
             Rvalue::Aggregate(
-                AggregateKind::Adt(adt_id, glyim_mir::VariantIdx::from_raw(0), subst),
+                AggregateKind::Adt(adt_id, glyim_mir::VariantIdx::from_usize(0), subst),
                 vec![const_int(42), const_int(10)],
             ),
         ),
@@ -37,7 +37,7 @@ fn test_t01_struct_construction_and_field_access() {
             Place::new(local_field0),
             Rvalue::Use(Operand::Copy(place_with_proj(
                 local_struct,
-                vec![ProjectionElem::Field(FieldIdx::from_raw(0))],
+                vec![ProjectionElem::Field(FieldIdx::from_usize(0))],
             ))),
         ),
     );
@@ -48,7 +48,7 @@ fn test_t01_struct_construction_and_field_access() {
             Place::new(local_field1),
             Rvalue::Use(Operand::Copy(place_with_proj(
                 local_struct,
-                vec![ProjectionElem::Field(FieldIdx::from_raw(1))],
+                vec![ProjectionElem::Field(FieldIdx::from_usize(1))],
             ))),
         ),
     );
@@ -57,7 +57,7 @@ fn test_t01_struct_construction_and_field_access() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -80,7 +80,7 @@ fn test_t02_tuple_construction_and_indexing() {
     let local_0 = add_local(&mut body, i32_ty, Mutability::Not);
     let local_1 = add_local(&mut body, i32_ty, Mutability::Not);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(&mut body, bb0, StatementKind::StorageLive(local_tuple));
     add_statement(
         &mut body,
@@ -97,7 +97,7 @@ fn test_t02_tuple_construction_and_indexing() {
             Place::new(local_0),
             Rvalue::Use(Operand::Copy(place_with_proj(
                 local_tuple,
-                vec![ProjectionElem::Field(FieldIdx::from_raw(0))],
+                vec![ProjectionElem::Field(FieldIdx::from_usize(0))],
             ))),
         ),
     );
@@ -108,7 +108,7 @@ fn test_t02_tuple_construction_and_indexing() {
             Place::new(local_1),
             Rvalue::Use(Operand::Copy(place_with_proj(
                 local_tuple,
-                vec![ProjectionElem::Field(FieldIdx::from_raw(1))],
+                vec![ProjectionElem::Field(FieldIdx::from_usize(1))],
             ))),
         ),
     );
@@ -117,7 +117,7 @@ fn test_t02_tuple_construction_and_indexing() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
@@ -139,7 +139,7 @@ fn test_t03_array_literal_and_index() {
     );
     let local_elem = add_local(&mut body, i32_ty, Mutability::Not);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(&mut body, bb0, StatementKind::StorageLive(local_arr));
     add_statement(
         &mut body,
@@ -175,7 +175,7 @@ fn test_t03_array_literal_and_index() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
