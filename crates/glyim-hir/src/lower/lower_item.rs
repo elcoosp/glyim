@@ -246,8 +246,8 @@ pub(crate) fn collect_struct_fields(
 pub(crate) fn lower_fn_def(
     node: &SyntaxNode,
     interner: &mut Interner,
-    local_def_counter: &mut u32,
-    item_id_counter: &mut u32,
+    local_def_counter: &mut usize,
+    item_id_counter: &mut usize,
     bodies: &mut IndexVec<BodyId, Body>,
     body_owners: &mut IndexVec<BodyId, LocalDefId>,
     diags: &mut Vec<GlyimDiagnostic>,
@@ -350,7 +350,7 @@ pub(crate) fn lower_fn_def(
         None
     };
 
-    let id = ItemId::from_raw(*item_id_counter);
+    let id = ItemId::from_usize(*item_id_counter);
     *item_id_counter += 1;
 
     // Plan §6.1: detect `const fn` / `async fn` modifiers (the parser embeds
@@ -508,8 +508,8 @@ pub(crate) fn lower_param(
 pub(crate) fn lower_struct_def(
     node: &SyntaxNode,
     interner: &mut Interner,
-    _local_def_counter: &mut u32,
-    item_id_counter: &mut u32,
+    _local_def_counter: &mut usize,
+    item_id_counter: &mut usize,
 ) -> Option<Item> {
     let name_str = first_ident_text(node)?;
     let name = interner.intern(&name_str);
@@ -577,7 +577,7 @@ pub(crate) fn lower_struct_def(
             kind = StructKind::Tuple;
         }
     }
-    let id = ItemId::from_raw(*item_id_counter);
+    let id = ItemId::from_usize(*item_id_counter);
     *item_id_counter += 1;
     Some(Item {
         id,
@@ -596,8 +596,8 @@ pub(crate) fn lower_struct_def(
 pub(crate) fn lower_enum_def(
     node: &SyntaxNode,
     interner: &mut Interner,
-    _local_def_counter: &mut u32,
-    item_id_counter: &mut u32,
+    _local_def_counter: &mut usize,
+    item_id_counter: &mut usize,
 ) -> Option<Item> {
     let name_str = first_ident_text(node)?;
     let name = interner.intern(&name_str);
@@ -615,7 +615,7 @@ pub(crate) fn lower_enum_def(
             }
         }
     }
-    let id = ItemId::from_raw(*item_id_counter);
+    let id = ItemId::from_usize(*item_id_counter);
     *item_id_counter += 1;
     Some(Item {
         id,
@@ -704,8 +704,8 @@ pub(crate) fn lower_variant(node: &SyntaxNode, interner: &mut Interner) -> Optio
 pub(crate) fn lower_impl_def(
     node: &SyntaxNode,
     interner: &mut Interner,
-    local_def_counter: &mut u32,
-    item_id_counter: &mut u32,
+    local_def_counter: &mut usize,
+    item_id_counter: &mut usize,
     bodies: &mut IndexVec<BodyId, Body>,
     body_owners: &mut IndexVec<BodyId, LocalDefId>,
     diags: &mut Vec<GlyimDiagnostic>,
@@ -894,7 +894,7 @@ pub(crate) fn lower_impl_def(
             u32::from(r.end())
         );
     }
-    let id = ItemId::from_raw(*item_id_counter);
+    let id = ItemId::from_usize(*item_id_counter);
     *item_id_counter += 1;
     Some(Item {
         id,
@@ -920,8 +920,8 @@ pub(crate) fn lower_impl_def(
 pub(crate) fn lower_trait_def(
     node: &SyntaxNode,
     interner: &mut Interner,
-    local_def_counter: &mut u32,
-    item_id_counter: &mut u32,
+    local_def_counter: &mut usize,
+    item_id_counter: &mut usize,
     bodies: &mut IndexVec<BodyId, Body>,
     body_owners: &mut IndexVec<BodyId, LocalDefId>,
     diags: &mut Vec<GlyimDiagnostic>,
@@ -1027,7 +1027,7 @@ pub(crate) fn lower_trait_def(
         });
     }
 
-    let id = ItemId::from_raw(*item_id_counter);
+    let id = ItemId::from_usize(*item_id_counter);
     *item_id_counter += 1;
     Some(Item {
         id,
@@ -1058,8 +1058,8 @@ pub(crate) fn lower_trait_def(
 pub(crate) fn lower_const_def(
     node: &SyntaxNode,
     interner: &mut Interner,
-    local_def_counter: &mut u32,
-    item_id_counter: &mut u32,
+    local_def_counter: &mut usize,
+    item_id_counter: &mut usize,
     bodies: &mut IndexVec<BodyId, Body>,
     body_owners: &mut IndexVec<BodyId, LocalDefId>,
     diags: &mut Vec<GlyimDiagnostic>,
@@ -1124,7 +1124,7 @@ pub(crate) fn lower_const_def(
         None
     };
 
-    let id = ItemId::from_raw(*item_id_counter);
+    let id = ItemId::from_usize(*item_id_counter);
     *item_id_counter += 1;
     Some(Item {
         id,
@@ -1148,8 +1148,8 @@ pub(crate) fn lower_const_def(
 pub(crate) fn lower_static_def(
     node: &SyntaxNode,
     interner: &mut Interner,
-    local_def_counter: &mut u32,
-    item_id_counter: &mut u32,
+    local_def_counter: &mut usize,
+    item_id_counter: &mut usize,
     bodies: &mut IndexVec<BodyId, Body>,
     body_owners: &mut IndexVec<BodyId, LocalDefId>,
     diags: &mut Vec<GlyimDiagnostic>,
@@ -1221,7 +1221,7 @@ pub(crate) fn lower_static_def(
             (None, None)
         };
 
-    let id = ItemId::from_raw(*item_id_counter);
+    let id = ItemId::from_usize(*item_id_counter);
     *item_id_counter += 1;
     Some(Item {
         id,
@@ -1249,8 +1249,8 @@ pub(crate) fn lower_static_def(
 pub(crate) fn lower_mod_def(
     node: &SyntaxNode,
     interner: &mut Interner,
-    local_def_counter: &mut u32,
-    item_id_counter: &mut u32,
+    local_def_counter: &mut usize,
+    item_id_counter: &mut usize,
     items: &mut IndexVec<ItemId, Item>,
     bodies: &mut IndexVec<BodyId, Body>,
     body_owners: &mut IndexVec<BodyId, LocalDefId>,
@@ -1380,7 +1380,7 @@ pub(crate) fn lower_mod_def(
         }
     }
 
-    let id = ItemId::from_raw(*item_id_counter);
+    let id = ItemId::from_usize(*item_id_counter);
     *item_id_counter += 1;
     Some(Item {
         id,
@@ -1398,7 +1398,7 @@ pub(crate) fn lower_mod_def(
 pub(crate) fn lower_type_alias(
     node: &SyntaxNode,
     interner: &mut Interner,
-    item_id_counter: &mut u32,
+    item_id_counter: &mut usize,
 ) -> Option<Item> {
     let name_str = first_ident_text(node)?;
     let name = interner.intern(&name_str);
@@ -1407,7 +1407,7 @@ pub(crate) fn lower_type_alias(
         .children()
         .find(is_type_node)
         .and_then(|t| lower_type_ref(&t, interner));
-    let id = ItemId::from_raw(*item_id_counter);
+    let id = ItemId::from_usize(*item_id_counter);
     *item_id_counter += 1;
     Some(Item {
         id,
