@@ -18,7 +18,7 @@ fn no_stub_warning_when_adt_def_registered() {
     let (frozen, adt_ty) = with_fresh_ty_ctx(|ctx| {
         let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let name_field = ctx.resolver().intern("x");
-        let adt_id = AdtId::from_raw(400);
+        let adt_id = AdtId::from_usize(400);
         let mut fields: IndexVec<FieldIdx, FieldDef> = IndexVec::new();
         fields.push(FieldDef {
             name: name_field,
@@ -63,7 +63,7 @@ fn no_stub_warning_when_adt_def_registered() {
 fn no_stub_warning_when_adt_repr_registered() {
     let (frozen, adt_ty) = with_fresh_ty_ctx(|ctx| {
         let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
-        let adt_id = AdtId::from_raw(401);
+        let adt_id = AdtId::from_usize(401);
         ctx.register_adt_repr(adt_id, vec![i32_ty]);
 
         let substs = ctx.intern_substitution(vec![]);
