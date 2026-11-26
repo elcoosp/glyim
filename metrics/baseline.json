@@ -1,14 +1,14 @@
 {
-  "HashMap_hot_sites": 492,
-  "code_lines": 355411,
-  "documented_items": 3678,
-  "from_raw_count": 614,
+  "HashMap_hot_sites": 480,
+  "code_lines": 364988,
+  "documented_items": 3796,
+  "from_raw_count": 0,
   "inline_allows": 0,
   "public_IR_fields": 142,
-  "public_items": 4168,
-  "rust_files": 1346,
-  "test_functions": 6563,
-  "unsafe_count": 207,
-  "unwrap_count": 1427,
-  "workspace_members": 40
+  "public_items": 4312,
+  "rust_files": 1398,
+  "test_functions": 6722,
+  "unsafe_count": 198,
+  "unwrap_count": 1474,
+  "workspace_members": 42
 }
