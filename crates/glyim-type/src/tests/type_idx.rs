@@ -4,79 +4,79 @@ use crate::*;
 
 #[test]
 fn ty_var_from_raw_to_raw() {
-    let v = TyVar::from_raw(42);
+    let v = TyVar::from_usize(42);
     assert_eq!(v.to_raw(), 42);
 }
 
 #[test]
 fn int_var_from_raw_to_raw() {
-    let v = IntVar::from_raw(100);
+    let v = IntVar::from_usize(100);
     assert_eq!(v.to_raw(), 100);
 }
 
 #[test]
 fn float_var_from_raw_to_raw() {
-    let v = FloatVar::from_raw(200);
+    let v = FloatVar::from_usize(200);
     assert_eq!(v.to_raw(), 200);
 }
 
 #[test]
 fn region_vid_from_raw_to_raw() {
-    let v = RegionVid::from_raw(5);
+    let v = RegionVid::from_usize(5);
     assert_eq!(v.to_raw(), 5);
 }
 
 #[test]
 fn const_var_from_raw_to_raw() {
-    let v = ConstVar::from_raw(10);
+    let v = ConstVar::from_usize(10);
     assert_eq!(v.to_raw(), 10);
 }
 
 #[test]
 fn field_idx_from_raw_to_raw() {
-    let f = FieldIdx::from_raw(3);
+    let f = FieldIdx::from_usize(3);
     assert_eq!(f.to_raw(), 3);
 }
 
 #[test]
 fn ty_var_zero() {
-    let v = TyVar::from_raw(0);
+    let v = TyVar::from_usize(0);
     assert_eq!(v.to_raw(), 0);
 }
 
 #[test]
 fn ty_var_large() {
-    let v = TyVar::from_raw(u32::MAX);
+    let v = TyVar::from_usize(u32::MAX as usize);
     assert_eq!(v.to_raw(), u32::MAX);
 }
 
 #[test]
 fn infer_var_ty_variant() {
-    let v = TyVar::from_raw(0);
+    let v = TyVar::from_usize(0);
     let iv = InferVar::Ty(v);
     assert!(matches!(iv, InferVar::Ty(_)));
 }
 
 #[test]
 fn infer_var_int_variant() {
-    let v = IntVar::from_raw(0);
+    let v = IntVar::from_usize(0);
     let iv = InferVar::Int(v);
     assert!(matches!(iv, InferVar::Int(_)));
 }
 
 #[test]
 fn infer_var_float_variant() {
-    let v = FloatVar::from_raw(0);
+    let v = FloatVar::from_usize(0);
     let iv = InferVar::Float(v);
     assert!(matches!(iv, InferVar::Float(_)));
 }
 
 #[test]
 fn infer_var_equality() {
-    let iv1 = InferVar::Ty(TyVar::from_raw(5));
-    let iv2 = InferVar::Ty(TyVar::from_raw(5));
-    let iv3 = InferVar::Ty(TyVar::from_raw(6));
-    let iv4 = InferVar::Int(IntVar::from_raw(5));
+    let iv1 = InferVar::Ty(TyVar::from_usize(5));
+    let iv2 = InferVar::Ty(TyVar::from_usize(5));
+    let iv3 = InferVar::Ty(TyVar::from_usize(6));
+    let iv4 = InferVar::Int(IntVar::from_usize(5));
     assert_eq!(iv1, iv2);
     assert_ne!(iv1, iv3);
     assert_ne!(iv1, iv4);
