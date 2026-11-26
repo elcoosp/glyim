@@ -22,9 +22,9 @@ pub fn build_test_body(
         .collect();
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
-        basic_blocks: IndexVec::from_raw(blocks),
-        locals: IndexVec::from_raw(local_decls),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
+        basic_blocks: IndexVec::from_vec(blocks),
+        locals: IndexVec::from_vec(local_decls),
         arg_count,
         return_ty,
         span: Span::DUMMY,
@@ -156,10 +156,10 @@ pub fn make_block(stmts: Vec<Statement>, term: Terminator) -> BasicBlockData {
 
 /// Helper to create a `LocalIdx` from a raw u32.
 pub fn local(idx: u32) -> LocalIdx {
-    LocalIdx::from_raw(idx)
+    LocalIdx::from_usize(idx as usize)
 }
 
 /// Helper to create a `BasicBlockIdx` from a raw u32.
 pub fn bb(idx: u32) -> BasicBlockIdx {
-    BasicBlockIdx::from_raw(idx)
+    BasicBlockIdx::from_usize(idx as usize)
 }
