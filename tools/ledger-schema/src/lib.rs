@@ -674,6 +674,14 @@ pub const CODE_TIER_TARGET: &str = "LEDGER-TIER-TARGET";
 /// under the registry root (plan M1.2: curated entries point at real
 /// documentation; dead pointers are a check failure).
 pub const CODE_SPEC_MISSING: &str = "LEDGER-SPEC-MISSING";
+/// A registered diagnostic code has no compile-fail fixture declaring it via
+/// `//@ expect-error-code:` (plan M3.3, CT-5: "a code without a negative
+/// fixture fails `ledger check`").
+pub const CODE_ERROR_CODE_UNCOVERED: &str = "LEDGER-ERROR-CODE-UNCOVERED";
+/// A fixture declares `//@ expect-error-code:` for a code the registry
+/// (`crates/glyim-diag/errors/codes.toml`) does not list — the reverse
+/// direction of the same cross-check.
+pub const CODE_ERROR_CODE_UNREGISTERED: &str = "LEDGER-ERROR-CODE-UNREGISTERED";
 
 /// Marker a witness fixture must carry (plan §3.3): the pinned-outcome
 /// witness shape (`KnownGapWitness::Pinned` on the harness side).
