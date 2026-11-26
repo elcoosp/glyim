@@ -66,26 +66,26 @@ fn make_struct_call_body(ctx: &mut TyCtxMut) -> Body {
         statements: vec![
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(3)),
+                    Place::new(LocalIdx::from_usize(3)),
                     Rvalue::Use(Operand::Constant(const_1)),
                 ),
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
             },
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(4)),
+                    Place::new(LocalIdx::from_usize(4)),
                     Rvalue::Use(Operand::Constant(const_2)),
                 ),
                 source_info: SourceInfo::new(glyim_span::Span::DUMMY),
             },
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Aggregate(
                         AggregateKind::Tuple,
                         vec![
-                            Operand::Copy(Place::new(LocalIdx::from_raw(3))),
-                            Operand::Copy(Place::new(LocalIdx::from_raw(4))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(3))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(4))),
                         ],
                     ),
                 ),
@@ -94,10 +94,10 @@ fn make_struct_call_body(ctx: &mut TyCtxMut) -> Body {
         ],
         terminator: Terminator {
             kind: TerminatorKind::Call {
-                func: Operand::Copy(Place::new(LocalIdx::from_raw(2))),
-                args: vec![Operand::Move(Place::new(LocalIdx::from_raw(1)))],
-                destination: Place::new(LocalIdx::from_raw(0)),
-                target: Some(BasicBlockIdx::from_raw(1)),
+                func: Operand::Copy(Place::new(LocalIdx::from_usize(2))),
+                args: vec![Operand::Move(Place::new(LocalIdx::from_usize(1)))],
+                destination: Place::new(LocalIdx::from_usize(0)),
+                target: Some(BasicBlockIdx::from_usize(1)),
                 cleanup: None,
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -115,8 +115,8 @@ fn make_struct_call_body(ctx: &mut TyCtxMut) -> Body {
     };
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(2)),
-        basic_blocks: IndexVec::from_raw(vec![bb0, bb1]),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(2)),
+        basic_blocks: IndexVec::from_vec(vec![bb0, bb1]),
         locals,
         arg_count,
         return_ty,
