@@ -46,3 +46,4 @@ mod generic_in_module_typeck;
 mod len_ambiguity;
 
 mod harness_tests;
+mod typed_body;
