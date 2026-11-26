@@ -4,13 +4,19 @@ use glyim_codegen::BytecodeBackend;
 use glyim_codegen_llvm::LlvmBackend;
 use glyim_codegen_llvm::passes::LtoKind;
 use glyim_db::{CrateConfig, Database};
+use std::fmt::Write as _;
 use std::path::PathBuf;
 
 /// linker.
 pub mod linker;
 
 #[derive(Parser, Debug)]
-#[command(name = "glyim", version, about = "The Glyim compiler")]
+#[command(
+    name = "glyim",
+    version,
+    about = "The Glyim compiler",
+    after_help = "Special flags answered before <INPUT> validation:\n  --explain [CODE]  Print a registered diagnostic code's explanation (bare: list every code)\n  -W help           List the available lints\n"
+)]
 /// `CliArgs`.
 pub struct CliArgs {
     #[arg(value_name = "INPUT")]
@@ -183,6 +189,17 @@ pub fn run() -> Result<i32, Vec<glyim_diag::GlyimDiagnostic>> {
         }
     }
 
+    // CT-5 (plan §6 M3.3 / §5.2): `glyim --explain [CODE]` must be answered
+    // before clap enforces the required `<INPUT>` arg — explaining an error
+    // code never compiles anything, so demanding an input file would be
+    // wrong. Same pre-scan shape as the `-W help` surface above.
+    {
+        let argv: Vec<String> = std::env::args().collect();
+        if let Some(requested) = explain_requested_from_argv(&argv) {
+            return Ok(run_explain(requested.as_deref()));
+        }
+    }
+
     // Capture args (incl. `error-format`) before entering the panic catcher,
     // so we can print any returned diagnostics in the requested format.
     let cli_args = CliArgs::parse();
@@ -318,6 +335,88 @@ fn print_diagnostics(diags: &[glyim_diag::GlyimDiagnostic], format: &str) {
     } else {
         let rendered = HumanDiagnosticRenderer.render(diags);
         eprint!("{rendered}");
+    }
+}
+
+/// Parse argv for the CT-5 `--explain [CODE]` surface (plan §6 M3.3 /
+/// §5.2 CT-5: "errors/*.toml ... generates ... `glyim --explain E0123`").
+///
+/// Returns `Some(code)` when argv requests the explain surface — `code`
+/// being `Some("T0050")` for `--explain T0050` / `--explain=T0050`, or
+/// `None` for a bare `--explain` (list every registered code) — and `None`
+/// when argv does not mention `--explain` at all. The scan mirrors the
+/// `-W help` pre-scan in [`run`]: `--explain` must answer before clap
+/// enforces the required `<INPUT>` argument, because explaining an error
+/// code never compiles anything.
+///
+/// A value that starts with `-` is NOT taken as a code (`glyim --explain
+/// --emit=obj` is a bare explain), and only the first `--explain` wins.
+#[must_use]
+pub fn explain_requested_from_argv(argv: &[String]) -> Option<Option<String>> {
+    for (i, a) in argv.iter().enumerate().skip(1) {
+        if a == "--explain" {
+            let next = argv.get(i + 1).filter(|s| !s.starts_with('-')).cloned();
+            return Some(next);
+        }
+        if let Some(rest) = a.strip_prefix("--explain=") {
+            return Some(if rest.is_empty() {
+                None
+            } else {
+                Some(rest.to_string())
+            });
+        }
+    }
+    None
+}
+
+/// Render the `--explain` output for `code` (pure; [`run_explain`] prints).
+///
+/// `Some(code)` looks the display-form string up in the compiled-in
+/// registry (`glyim_diag::error_registry`) and renders the registered
+/// title + long-form explanation; `None` renders the full listing — every
+/// registered code with its title. `Err` is the user-facing one-liner for
+/// an unregistered code string.
+pub fn explain_render(code: Option<&str>) -> Result<String, String> {
+    use glyim_diag::error_registry::{explain_entry, registry_entries};
+    match code {
+        Some(code) => {
+            let entry = explain_entry(code).ok_or_else(|| {
+                format!(
+                    "error: unknown error code `{code}`\n\
+                     note: run `glyim --explain` with no code to list every registered code"
+                )
+            })?;
+            Ok(format!(
+                "{} — {}\n\n{}\n",
+                entry.code, entry.title, entry.explanation
+            ))
+        }
+        None => {
+            let entries = registry_entries();
+            let mut out = format!("Glyim error codes ({})\n", entries.len());
+            for entry in entries {
+                let _ = writeln!(out, "  {} — {}", entry.code, entry.title);
+            }
+            out.push_str("\nPass a code to see its explanation: `glyim --explain T0060`.\n");
+            Ok(out)
+        }
+    }
+}
+
+/// Print the `--explain` result and return the process exit code: `0` when
+/// the code (or the listing) was rendered, `2` for an unregistered code —
+/// a CLI misuse, matching clap's own usage-error exit code, not a compile
+/// failure (`1`) and not an ICE (`101`).
+pub fn run_explain(code: Option<&str>) -> i32 {
+    match explain_render(code) {
+        Ok(text) => {
+            print!("{text}");
+            0
+        }
+        Err(message) => {
+            eprintln!("{message}");
+            2
+        }
     }
 }
 
