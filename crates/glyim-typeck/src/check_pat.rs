@@ -82,7 +82,7 @@ impl FnCtxt<'_> {
         match pat {
             Pat::Binding { name, .. } => {
                 let id = self.env.add_binding(*name, ty);
-                thir::LocalVarId::from_raw(id.to_raw())
+                thir::LocalVarId::from_usize(id.index())
             }
             Pat::RefBinding {
                 name,
@@ -93,11 +93,11 @@ impl FnCtxt<'_> {
                     .ctx
                     .mk_ref(glyim_type::Region::Erased, ty, *ref_mutability);
                 let id = self.env.add_binding(*name, ref_ty);
-                thir::LocalVarId::from_raw(id.to_raw())
+                thir::LocalVarId::from_usize(id.index())
             }
             _ => {
                 let id = self.env.add_binding(self.ctx.resolver().intern("_"), ty);
-                thir::LocalVarId::from_raw(id.to_raw())
+                thir::LocalVarId::from_usize(id.index())
             }
         }
     }
@@ -183,7 +183,7 @@ impl FnCtxt<'_> {
                     .map(|sub_id| Box::new(self.check_pattern(sub_id, expected_ty, span)));
                 thir::Pattern {
                     kind: thir::PatternKind::Binding {
-                        var_id: thir::LocalVarId::from_raw(id.to_raw()),
+                        var_id: thir::LocalVarId::from_usize(id.index()),
                         name: ctx_name,
                         mutability: *mutability,
                         binding_ty: Some(ref_ty),
@@ -219,7 +219,7 @@ impl FnCtxt<'_> {
                     .map(|sub_id| Box::new(self.check_pattern(sub_id, expected_ty, span)));
                 thir::Pattern {
                     kind: thir::PatternKind::Binding {
-                        var_id: thir::LocalVarId::from_raw(id.to_raw()),
+                        var_id: thir::LocalVarId::from_usize(id.index()),
                         name: ctx_name,
                         mutability: *mutability,
                         binding_ty: None,
@@ -344,7 +344,7 @@ impl FnCtxt<'_> {
                         }
                         return thir::Pattern {
                             kind: thir::PatternKind::Binding {
-                                var_id: thir::LocalVarId::from_raw(id.to_raw()),
+                                var_id: thir::LocalVarId::from_usize(id.index()),
                                 name: ctx_name,
                                 mutability: Mutability::Not,
                                 binding_ty: None,
@@ -381,7 +381,7 @@ impl FnCtxt<'_> {
                                 true,
                             )
                         } else {
-                            (AdtId::from_raw(local.to_raw()), 0, false)
+                            (AdtId::from_usize(local.index()), 0, false)
                         }
                     }
                     None => {
