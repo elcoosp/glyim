@@ -49,14 +49,22 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 /// Output of [`LowerPhase`]: the optimized MIR body map, the pre-optimization
-/// body map (`--emit=mir`), and the closure bodies paired with their codegen
-/// symbols.
+/// body map (`--emit=mir`), the closure bodies paired with their codegen
+/// symbols, and the per-pass optimization stats (M5.11).
 pub struct LowerOutput {
     /// `DefId` → optimized MIR body, ready for monomorphization.
     pub mir_bodies_map: BTreeMap<DefId, Arc<Body>>,
     /// `DefId` → the same bodies *before* `glyim_opt::optimize`, so
     /// `--emit=mir` shows lowering artifacts DCE would otherwise erase.
     pub pre_opt_bodies_map: HashMap<DefId, Arc<Body>>,
+    /// Per-pass optimization stats, one row per planned pass per optimized
+    /// body (M5.11 `--opt-bisect-limit` observability). Populated only when
+    /// the compile runs bisected (`LowerPhase::opt_bisect_limit` is
+    /// `Some`); empty otherwise, so the default path pays nothing. Rows are
+    /// appended in the per-body loop order, which is the deterministic
+    /// `thir_bodies` order, so the aggregation the CLI prints under
+    /// `--time-passes` is reproducible across runs (C6).
+    pub pass_stats: Vec<(DefId, glyim_opt::PassStats)>,
     /// Closure bodies captured while lowering, each paired with its
     /// `__glyim_fn_{closure_id}` codegen symbol.
     pub closure_bodies_codegen: Vec<(String, Arc<Body>)>,
@@ -76,6 +84,12 @@ pub struct LowerPhase<'a> {
     pub const_values: &'a HashMap<ConstDefId, ConstValue>,
     /// The caller's `--opt-level`, threaded into `glyim_opt::optimize_at_level`.
     pub opt_level: u8,
+    /// The caller's `--opt-bisect-limit=N` (M5.11). `Some(n)` runs only the
+    /// first `n` passes of [`glyim_opt::PassPlan::for_opt_level`] via
+    /// `glyim_opt::optimize_with_bisect` and collects one
+    /// [`glyim_opt::PassStats`] row per planned pass; `None` keeps the
+    /// plain `optimize_at_level` path (no stats collected, no bisect).
+    pub opt_bisect_limit: Option<usize>,
 }
 
 impl CompilerPhase for LowerPhase<'_> {
@@ -87,6 +101,7 @@ impl CompilerPhase for LowerPhase<'_> {
         let mut mir_bodies_map: BTreeMap<DefId, Arc<Body>> = BTreeMap::new();
         let mut pre_opt_bodies_map: HashMap<DefId, Arc<Body>> = HashMap::new();
         let mut closure_bodies_codegen: Vec<(String, Arc<Body>)> = Vec::new();
+        let mut pass_stats: Vec<(DefId, glyim_opt::PassStats)> = Vec::new();
 
         let ty_ctx_guard = ty_ctx_after_analysis(ctx.db, "lowering")?;
         let ty_ctx_ref = ty_ctx_guard.as_ref();
@@ -129,14 +144,26 @@ impl CompilerPhase for LowerPhase<'_> {
             // regression test relies on seeing).
             pre_opt_bodies_map.insert(owner, mir_arc.clone());
 
-            let opt_body = {
+            // M5.11: with `--opt-bisect-limit` the plan runs bisected and
+            // collects one `PassStats` row per planned pass; without it the
+            // plain path runs (no stats, no collection cost).
+            let (opt_body, body_stats) = {
                 let _guard = ctx.recorder.enter(Phase::Opt);
-                glyim_opt::optimize_at_level(ty_ctx_ref, mir_arc, self.opt_level).map_err(|e| {
-                    vec![GlyimDiagnostic::internal_error(format!(
-                        "MIR optimization failed for {owner:?}: {e:?}"
-                    ))]
-                })?
-            };
+                match self.opt_bisect_limit {
+                    Some(limit) => {
+                        let plan = glyim_opt::PassPlan::for_opt_level(self.opt_level);
+                        glyim_opt::optimize_with_bisect(ty_ctx_ref, mir_arc, &plan, limit)
+                    }
+                    None => glyim_opt::optimize_at_level(ty_ctx_ref, mir_arc, self.opt_level)
+                        .map(|optimized| (optimized, Vec::new())),
+                }
+            }
+            .map_err(|e| {
+                vec![GlyimDiagnostic::internal_error(format!(
+                    "MIR optimization failed for {owner:?}: {e:?}"
+                ))]
+            })?;
+            pass_stats.extend(body_stats.into_iter().map(|s| (owner, s)));
             mir_bodies_map.insert(owner, Arc::new(opt_body.body));
 
             // P6.2: closures captured while lowering this function are real
@@ -163,16 +190,24 @@ impl CompilerPhase for LowerPhase<'_> {
                 if ctx.sink.borrow().has_errors() {
                     return Err(extract_diagnostics(ctx));
                 }
-                let c_opt = {
+                let c_owner = c_mir_arc.owner;
+                let (c_opt, c_stats) = {
                     let _guard = ctx.recorder.enter(Phase::Opt);
-                    glyim_opt::optimize_at_level(ty_ctx_ref, c_mir_arc, self.opt_level).map_err(
-                        |e| {
-                            vec![GlyimDiagnostic::internal_error(format!(
-                                "MIR optimization failed for closure body: {e:?}"
-                            ))]
-                        },
-                    )?
-                };
+                    match self.opt_bisect_limit {
+                        Some(limit) => {
+                            let plan = glyim_opt::PassPlan::for_opt_level(self.opt_level);
+                            glyim_opt::optimize_with_bisect(ty_ctx_ref, c_mir_arc, &plan, limit)
+                        }
+                        None => glyim_opt::optimize_at_level(ty_ctx_ref, c_mir_arc, self.opt_level)
+                            .map(|optimized| (optimized, Vec::new())),
+                    }
+                }
+                .map_err(|e| {
+                    vec![GlyimDiagnostic::internal_error(format!(
+                        "MIR optimization failed for closure body: {e:?}"
+                    ))]
+                })?;
+                pass_stats.extend(c_stats.into_iter().map(|s| (c_owner, s)));
                 let c_body = c_opt.body;
                 let c_sym = format!("__glyim_fn_{}", c_body.owner.local_id.to_raw());
                 closure_bodies_codegen.push((c_sym, Arc::new(c_body)));
@@ -182,6 +217,7 @@ impl CompilerPhase for LowerPhase<'_> {
         Ok(LowerOutput {
             mir_bodies_map,
             pre_opt_bodies_map,
+            pass_stats,
             closure_bodies_codegen,
         })
     }
