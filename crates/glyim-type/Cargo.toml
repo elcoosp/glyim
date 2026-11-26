@@ -13,6 +13,13 @@ version.workspace = true
 [dependencies]
 glyim-core = { workspace = true }
 glyim-span = { workspace = true }
+# M3.4 "safe append-only arena": the three interner tables (types, flags,
+# substitution data) live in this vetted, loom-tested append-only vector —
+# entries never move, `&self` push/get is lock-free, storage is freed when
+# the arena drops. Replaces the `Box::into_raw` tables + `unsafe impl
+# Send/Sync` + `unsafe` `Drop` the old design needed (glyim-type now
+# contains zero `unsafe`).
+boxcar = { workspace = true }
 smallvec = { workspace = true }
 bitflags = { workspace = true }
 tracing = { workspace = true }
@@ -28,6 +35,11 @@ proptest = { workspace = true }
 name = "builtin_trait_registry"
 harness = false
 path = "benches/builtin_trait_registry.rs"
+
+[[bench]]
+name = "type_arena"
+harness = false
+path = "benches/type_arena.rs"
 
 # Inherit the workspace lint set (missing_docs + clippy::pedantic baseline).
 [lints]
