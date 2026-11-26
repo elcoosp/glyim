@@ -21,13 +21,13 @@ fn multiple_functions() {
         exprs.push(Expr::Literal(glyim_hir::Literal::Unit));
         Body {
             unsafe_blocks: std::collections::HashSet::new(),
-            owner: LocalDefId::from_raw(0),
+            owner: LocalDefId::from_usize(0),
             exprs: exprs.clone(),
             pats: IndexVec::new(),
             pat_spans: glyim_core::arena::IndexVec::new(),
             params: vec![],
             span: Span::DUMMY,
-            expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.clone().len()]),
+            expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.clone().len()]),
         }
     };
 
@@ -37,7 +37,7 @@ fn multiple_functions() {
 
     let mut items: IndexVec<ItemId, Item> = IndexVec::new();
     items.push(Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: fn_a_name,
         kind: ItemKind::Fn(FnItem {
             params: vec![],
@@ -55,7 +55,7 @@ fn multiple_functions() {
         span: Span::DUMMY,
     });
     items.push(Item {
-        id: ItemId::from_raw(1),
+        id: ItemId::from_usize(1),
         name: fn_b_name,
         kind: ItemKind::Fn(FnItem {
             params: vec![],
@@ -74,8 +74,8 @@ fn multiple_functions() {
     });
 
     let mut body_owners = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
-    body_owners.push(LocalDefId::from_raw(1));
+    body_owners.push(LocalDefId::from_usize(0));
+    body_owners.push(LocalDefId::from_usize(1));
 
     let hir = CrateHir {
         items,
@@ -124,13 +124,13 @@ fn multiple_params() {
 
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pats,
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![x_pat, y_pat],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.clone().len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.clone().len()]),
     };
     let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
     let body_id = bodies.push(body);
@@ -151,7 +151,7 @@ fn multiple_params() {
     };
 
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: main_name,
         kind: ItemKind::Fn(FnItem {
             params: vec![param_x, param_y],
@@ -172,7 +172,7 @@ fn multiple_params() {
     let mut items: IndexVec<ItemId, Item> = IndexVec::new();
     items.push(item);
     let mut body_owners = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
 
     let hir = CrateHir {
         items,
@@ -206,19 +206,19 @@ fn binary_multiply() {
 
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.clone().len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.clone().len()]),
     };
     let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
     let body_id = bodies.push(body);
 
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: main_name,
         kind: ItemKind::Fn(FnItem {
             params: vec![],
@@ -239,7 +239,7 @@ fn binary_multiply() {
     let mut items: IndexVec<ItemId, Item> = IndexVec::new();
     items.push(item);
     let mut body_owners = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
 
     let hir = CrateHir {
         items,
@@ -273,19 +273,19 @@ fn binary_comparison() {
 
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.clone().len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.clone().len()]),
     };
     let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
     let body_id = bodies.push(body);
 
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: main_name,
         kind: ItemKind::Fn(FnItem {
             params: vec![],
@@ -306,7 +306,7 @@ fn binary_comparison() {
     let mut items: IndexVec<ItemId, Item> = IndexVec::new();
     items.push(item);
     let mut body_owners = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
 
     let hir = CrateHir {
         items,
@@ -341,19 +341,19 @@ fn if_expression() {
 
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.clone().len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.clone().len()]),
     };
     let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
     let body_id = bodies.push(body);
 
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: main_name,
         kind: ItemKind::Fn(FnItem {
             params: vec![],
@@ -374,7 +374,7 @@ fn if_expression() {
     let mut items: IndexVec<ItemId, Item> = IndexVec::new();
     items.push(item);
     let mut body_owners = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
 
     let hir = CrateHir {
         items,
@@ -408,19 +408,19 @@ fn block_expression() {
 
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.clone().len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.clone().len()]),
     };
     let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
     let body_id = bodies.push(body);
 
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: main_name,
         kind: ItemKind::Fn(FnItem {
             params: vec![],
@@ -441,7 +441,7 @@ fn block_expression() {
     let mut items: IndexVec<ItemId, Item> = IndexVec::new();
     items.push(item);
     let mut body_owners = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
 
     let hir = CrateHir {
         items,
@@ -471,19 +471,19 @@ fn unresolved_variable() {
 
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: exprs.clone(),
         pats: IndexVec::new(),
         pat_spans: glyim_core::arena::IndexVec::new(),
         params: vec![],
         span: Span::DUMMY,
-        expr_spans: IndexVec::from_raw(vec![Span::DUMMY; exprs.clone().len()]),
+        expr_spans: IndexVec::from_vec(vec![Span::DUMMY; exprs.clone().len()]),
     };
     let mut bodies: IndexVec<BodyId, Body> = IndexVec::new();
     let body_id = bodies.push(body);
 
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: main_name,
         kind: ItemKind::Fn(FnItem {
             params: vec![],
@@ -504,7 +504,7 @@ fn unresolved_variable() {
     let mut items: IndexVec<ItemId, Item> = IndexVec::new();
     items.push(item);
     let mut body_owners = IndexVec::new();
-    body_owners.push(LocalDefId::from_raw(0));
+    body_owners.push(LocalDefId::from_usize(0));
 
     let hir = CrateHir {
         items,
