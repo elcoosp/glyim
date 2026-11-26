@@ -1,4 +1,5 @@
 //@ mode: compile-fail
+//@ expect-error-code: C0001
 // T-ICE-5 regression: a const index of 2^64 + 1 must be reported as
 // out of bounds, not silently aliased to element 1 by a usize truncation.
 //@ feature: LANG-SYN-CONST-ITEM, COMPILER-INTERP-CONST-EVAL, TOOL-TEST-COMPILE-FAIL
