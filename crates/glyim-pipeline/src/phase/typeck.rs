@@ -61,7 +61,7 @@ use std::collections::HashMap;
 /// not duplicated in the output — successor phases read it via
 /// `ty_ctx_after_analysis`.
 pub struct TypeckOutput {
-    /// The type-check result (`LowerPhase` reads `thir_bodies` + `const_values`;
+    /// The type-check result (`LowerPhase` reads `typed_bodies` + `const_values`;
     /// `EmitPhase` reads `unresolved_ty_var_spans`).
     pub typeck_result: TypeckResult,
 }
