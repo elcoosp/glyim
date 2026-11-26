@@ -31,7 +31,7 @@ fn build_body_without_fn_sig(ctx: &mut TyCtxMut) -> Body {
     basic_blocks.push(bb0);
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(7)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(7)),
         basic_blocks,
         locals,
         arg_count: 0,
