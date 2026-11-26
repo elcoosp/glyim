@@ -25,8 +25,8 @@ fn place_ty_deref_then_field_on_tuple() {
         });
         crate::Body {
             owner: glyim_core::def_id::DefId::new(
-                glyim_core::def_id::CrateId::from_raw(0),
-                glyim_core::def_id::LocalDefId::from_raw(0),
+                glyim_core::def_id::CrateId::from_usize(0),
+                glyim_core::def_id::LocalDefId::from_usize(0),
             ),
             basic_blocks: IndexVec::new(),
             locals,
@@ -37,10 +37,10 @@ fn place_ty_deref_then_field_on_tuple() {
         }
     });
     let place = crate::Place {
-        local: crate::LocalIdx::from_raw(0),
+        local: crate::LocalIdx::from_usize(0),
         projection: Box::new([
             crate::ProjectionElem::Deref,
-            crate::ProjectionElem::Field(glyim_type::FieldIdx::from_raw(0)),
+            crate::ProjectionElem::Field(glyim_type::FieldIdx::from_usize(0)),
         ]),
     };
     let ty = place.ty(&ctx, &body.locals);
@@ -65,8 +65,8 @@ fn place_ty_field_on_tuple() {
         });
         crate::Body {
             owner: glyim_core::def_id::DefId::new(
-                glyim_core::def_id::CrateId::from_raw(0),
-                glyim_core::def_id::LocalDefId::from_raw(0),
+                glyim_core::def_id::CrateId::from_usize(0),
+                glyim_core::def_id::LocalDefId::from_usize(0),
             ),
             basic_blocks: IndexVec::new(),
             locals,
@@ -77,9 +77,9 @@ fn place_ty_field_on_tuple() {
         }
     });
     let place = crate::Place {
-        local: crate::LocalIdx::from_raw(0),
+        local: crate::LocalIdx::from_usize(0),
         projection: Box::new([crate::ProjectionElem::Field(
-            glyim_type::FieldIdx::from_raw(1),
+            glyim_type::FieldIdx::from_usize(1),
         )]),
     };
     let ty = place.ty(&ctx, &body.locals);
