@@ -19,13 +19,13 @@ fn make_ty_ctx() -> (glyim_type::TyCtx, Ty) {
 }
 
 fn simple_body_with_local(ty: Ty) -> Body {
-    let owner = DefId::new(CrateId::from_raw(1), LocalDefId::from_raw(1));
+    let owner = DefId::new(CrateId::from_usize(1), LocalDefId::from_usize(1));
     // Build fresh IndexVecs
     let mut basic_blocks = IndexVec::new();
     let mut locals = IndexVec::new();
 
     // Local 0 is the return place
-    let ret_local = LocalIdx::from_raw(0);
+    let ret_local = LocalIdx::from_usize(0);
     locals.push(LocalDecl {
         ty,
         mutability: Mutability::Mut,
@@ -144,9 +144,9 @@ fn test_oz_size_optimization() {
 fn test_lto_across_cgus() {
     let (ctx, int_ty) = make_ty_ctx();
     let backend = LlvmBackend::new().with_ty_ctx(ctx).with_opt_level(2);
-    let callee_owner = DefId::new(CrateId::from_raw(1), LocalDefId::from_raw(10));
+    let callee_owner = DefId::new(CrateId::from_usize(1), LocalDefId::from_usize(10));
     let mut callee_body = Body::dummy(callee_owner);
-    let callee_local = LocalIdx::from_raw(0);
+    let callee_local = LocalIdx::from_usize(0);
     let const_val = MirConst {
         kind: MirConstKind::Int(41),
         ty: int_ty,
@@ -173,7 +173,7 @@ fn test_lto_across_cgus() {
     callee_body.arg_count = 0;
     callee_body.return_ty = int_ty;
 
-    let caller_owner = DefId::new(CrateId::from_raw(1), LocalDefId::from_raw(20));
+    let caller_owner = DefId::new(CrateId::from_usize(1), LocalDefId::from_usize(20));
     let caller_body = Body::dummy(caller_owner);
 
     let bodies = vec![Arc::new(callee_body), Arc::new(caller_body)];
@@ -259,7 +259,7 @@ fn test_multiple_bodies_pass_together() {
     // function (the test verifies that lowering multiple bodies into one module
     // produces at least two functions).
     let mut body2_raw = simple_body_with_local(int_ty);
-    body2_raw.owner = DefId::new(CrateId::from_raw(1), LocalDefId::from_raw(2));
+    body2_raw.owner = DefId::new(CrateId::from_usize(1), LocalDefId::from_usize(2));
     let body2 = Arc::new(body2_raw);
     let context = Context::create();
     let module = backend
@@ -278,7 +278,7 @@ fn test_multiple_bodies_pass_together() {
 #[test]
 fn test_empty_body_passes_without_error() {
     let (ctx, _) = make_ty_ctx();
-    let owner = DefId::new(CrateId::from_raw(1), LocalDefId::from_raw(100));
+    let owner = DefId::new(CrateId::from_usize(1), LocalDefId::from_usize(100));
     let empty_body = Arc::new(Body::dummy(owner));
     let backend = LlvmBackend::new().with_ty_ctx(ctx).with_opt_level(2);
     let context = Context::create();
