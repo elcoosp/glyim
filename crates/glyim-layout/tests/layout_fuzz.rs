@@ -83,7 +83,7 @@ fn fuzz_random_adt_layouts() {
         }
         let adt_def = AdtDef {
             kind: AdtKind::Struct,
-            fields: IndexVec::from_raw(fields),
+            fields: IndexVec::from_vec(fields),
             variants: vec![VariantDef {
                 name: ctx_mut.resolver().intern("v0"),
                 style: glyim_type::adt_def::VariantStyle::Unit,
@@ -91,7 +91,7 @@ fn fuzz_random_adt_layouts() {
             }],
             generic_params: vec![],
         };
-        let adt_id = AdtId::from_raw(rng.random_range(1000..2000));
+        let adt_id = AdtId::from_usize(rng.random_range(1000..2000));
         ctx_mut.register_adt(adt_id, adt_def.clone());
 
         // Get the ADT type and compute its layout.
@@ -181,11 +181,11 @@ fn fuzz_random_enum_layouts() {
             .collect();
         let adt_def = AdtDef {
             kind: AdtKind::Enum,
-            fields: IndexVec::from_raw(all_fields),
+            fields: IndexVec::from_vec(all_fields),
             variants: variants.clone(),
             generic_params: vec![],
         };
-        let adt_id = AdtId::from_raw(rng.random_range(3000..4000));
+        let adt_id = AdtId::from_usize(rng.random_range(3000..4000));
         ctx_mut.register_adt(adt_id, adt_def);
 
         let subst = ctx_mut.intern_substitution(vec![]);
@@ -276,11 +276,11 @@ fn test_niche_encoding_option_like() {
 
     let adt_def = AdtDef {
         kind: AdtKind::Enum,
-        fields: IndexVec::from_raw(all_fields),
+        fields: IndexVec::from_vec(all_fields),
         variants: variant_defs,
         generic_params: vec![],
     };
-    let adt_id = AdtId::from_raw(5000);
+    let adt_id = AdtId::from_usize(5000);
     ctx_mut.register_adt(adt_id, adt_def);
 
     let int_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
