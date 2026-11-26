@@ -301,6 +301,7 @@ pub fn reason_class(reason: &crate::error::FailureReason) -> String {
         F::AnnotationParseError { .. } => "annotation parse error".to_string(),
         F::DiagnosticMismatch { .. } => "diagnostic mismatch".to_string(),
         F::ErrorPatternNotFound { .. } => "error pattern not found".to_string(),
+        F::ErrorCodeNotFound { .. } => "error code not produced".to_string(),
         F::UiOutputDiffers { .. } => "ui output differs".to_string(),
         F::UiNoExpectedFile { .. } => "ui expected file missing".to_string(),
         F::UiExpectedUnreadable { .. } => "ui expected file unreadable".to_string(),
