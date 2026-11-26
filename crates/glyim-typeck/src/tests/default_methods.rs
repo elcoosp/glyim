@@ -214,10 +214,11 @@ fn v03_t01_trait_default_method_impl_no_override() {
     let (_frozen_ctx, result) = typeck_crate(ctx, &def_map, &hir, &mut solver);
 
     assert!(
-        !result.thir_bodies.is_empty(),
+        !result.typed_bodies.is_empty(),
         "Expected at least one THIR body"
     );
-    let (_owner, thir_body) = &result.thir_bodies[0];
+    let (_owner, thir_body) = &result.typed_bodies[0];
+    let thir_body = thir_body.get();
     assert_eq!(thir_body.stmts.len(), 2);
     assert!(matches!(
         thir_body.stmts[1],
@@ -232,8 +233,9 @@ fn v03_t02_overridden_default_method() {
     let mut solver = MockSolver::new().respond_for_any(SolverResult::Proven);
     let (_frozen_ctx, result) = typeck_crate(ctx, &def_map, &hir, &mut solver);
 
-    assert!(!result.thir_bodies.is_empty());
-    let (_owner, thir_body) = &result.thir_bodies[0];
+    assert!(!result.typed_bodies.is_empty());
+    let (_owner, thir_body) = &result.typed_bodies[0];
+    let thir_body = thir_body.get();
     assert_eq!(thir_body.stmts.len(), 2);
     assert!(matches!(
         thir_body.stmts[1],
@@ -356,9 +358,9 @@ fn v03_t03_default_method_calling_another_default_method() {
     let mut solver = MockSolver::new().respond_for_any(SolverResult::Proven);
     let (_frozen_ctx, result) = typeck_crate(ctx, &def_map, &hir, &mut solver);
 
-    assert_eq!(result.thir_bodies.len(), 2, "Expected two method bodies");
-    let has_call = result.thir_bodies.iter().any(|(_owner, body)| {
-        body.stmts.iter().any(|stmt| {
+    assert_eq!(result.typed_bodies.len(), 2, "Expected two method bodies");
+    let has_call = result.typed_bodies.iter().any(|(_owner, body)| {
+        body.get().stmts.iter().any(|stmt| {
             if let crate::thir::Stmt::Expr { expr } = stmt {
                 matches!(expr.kind, crate::thir::ExprKind::Call { .. })
             } else {
@@ -514,7 +516,7 @@ fn v03_t04_default_method_with_generic_params() {
     let mut solver = MockSolver::new().respond_for_any(SolverResult::Proven);
     let (_frozen_ctx, result) = typeck_crate(ctx, &def_map, &hir, &mut solver);
 
-    assert!(!result.thir_bodies.is_empty());
+    assert!(!result.typed_bodies.is_empty());
 }
 #[test]
 fn v03_t05_default_method_calls_missing_method_error() {
