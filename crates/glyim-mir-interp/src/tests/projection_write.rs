@@ -17,8 +17,8 @@ fn write_through_deref_field_updates_nested_value() {
     let ctx = glyim_test::test_frozen_ty_ctx();
     let mut interp = Interpreter::new(&ctx);
 
-    let crate_id = CrateId::from_raw(0);
-    let local_def_id = LocalDefId::from_raw(0);
+    let crate_id = CrateId::from_usize(0);
+    let local_def_id = LocalDefId::from_usize(0);
     let owner = DefId::new(crate_id, local_def_id);
 
     // 4 locals: return, ref, struct, unused
@@ -47,7 +47,7 @@ fn write_through_deref_field_updates_nested_value() {
     // Statement 1: Assign local 2 = Aggregate([Int(100), Int(200)])
     let agg_stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(2)),
+            Place::new(LocalIdx::from_usize(2)),
             Rvalue::Aggregate(
                 AggregateKind::Tuple,
                 vec![
@@ -70,9 +70,9 @@ fn write_through_deref_field_updates_nested_value() {
     // Statement 2: Assign local 1 = Ref(local 2) — we use Rvalue::Ref to create the ref
     let ref_stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::Ref(
-                Place::new(LocalIdx::from_raw(2)),
+                Place::new(LocalIdx::from_usize(2)),
                 BorrowKind::Mut {
                     allow_two_phase_borrow: false,
                 },
@@ -84,10 +84,10 @@ fn write_through_deref_field_updates_nested_value() {
     // Statement 3: Assign (*local 1).0 = Int(999)
     // Place: local=1, projection=[Deref, Field(0)]
     let deref_field_place = Place {
-        local: LocalIdx::from_raw(1),
+        local: LocalIdx::from_usize(1),
         projection: Box::new([
             ProjectionElem::Deref,
-            ProjectionElem::Field(FieldIdx::from_raw(0)),
+            ProjectionElem::Field(FieldIdx::from_usize(0)),
         ]),
     };
     let write_stmt = Statement {
@@ -104,15 +104,15 @@ fn write_through_deref_field_updates_nested_value() {
 
     // Statement 4: Assign local 0 = (*local 1).0  (read back the field)
     let read_place = Place {
-        local: LocalIdx::from_raw(1),
+        local: LocalIdx::from_usize(1),
         projection: Box::new([
             ProjectionElem::Deref,
-            ProjectionElem::Field(FieldIdx::from_raw(0)),
+            ProjectionElem::Field(FieldIdx::from_usize(0)),
         ]),
     };
     let read_stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Use(Operand::Copy(read_place)),
         ),
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -143,7 +143,7 @@ fn write_through_deref_field_updates_nested_value() {
     let result = interp.run_body(&body);
     assert!(result.is_ok(), "run_body failed: {result:?}");
 
-    let ret = interp.get_local_value(LocalIdx::from_raw(0));
+    let ret = interp.get_local_value(LocalIdx::from_usize(0));
     assert!(ret.is_some(), "return place not set");
     assert_eq!(
         ret.unwrap(),
@@ -152,7 +152,7 @@ fn write_through_deref_field_updates_nested_value() {
     );
 
     // Also verify the struct in local 2 has been updated
-    let struct_val = interp.get_local_value(LocalIdx::from_raw(2));
+    let struct_val = interp.get_local_value(LocalIdx::from_usize(2));
     assert!(struct_val.is_some(), "struct local not set");
     match struct_val.unwrap() {
         InterpValue::Aggregate(fields) => {
@@ -173,8 +173,8 @@ fn write_through_deref_only() {
     let ctx = glyim_test::test_frozen_ty_ctx();
     let mut interp = Interpreter::new(&ctx);
 
-    let crate_id = CrateId::from_raw(0);
-    let local_def_id = LocalDefId::from_raw(0);
+    let crate_id = CrateId::from_usize(0);
+    let local_def_id = LocalDefId::from_usize(0);
     let owner = DefId::new(crate_id, local_def_id);
 
     let mut locals = IndexVec::with_capacity(3);
@@ -197,7 +197,7 @@ fn write_through_deref_only() {
     // local 2 = Int(10)
     let init_stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(2)),
+            Place::new(LocalIdx::from_usize(2)),
             Rvalue::Use(Operand::Constant(MirConst {
                 kind: MirConstKind::Int(10),
                 ty: Ty::UNIT,
@@ -210,9 +210,9 @@ fn write_through_deref_only() {
     // local 1 = Ref(local 2)
     let ref_stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::Ref(
-                Place::new(LocalIdx::from_raw(2)),
+                Place::new(LocalIdx::from_usize(2)),
                 BorrowKind::Mut {
                     allow_two_phase_borrow: false,
                 },
@@ -223,7 +223,7 @@ fn write_through_deref_only() {
 
     // *local 1 = Int(99)
     let deref_place = Place {
-        local: LocalIdx::from_raw(1),
+        local: LocalIdx::from_usize(1),
         projection: Box::new([ProjectionElem::Deref]),
     };
     let write_stmt = Statement {
@@ -240,12 +240,12 @@ fn write_through_deref_only() {
 
     // local 0 = *local 1
     let read_deref = Place {
-        local: LocalIdx::from_raw(1),
+        local: LocalIdx::from_usize(1),
         projection: Box::new([ProjectionElem::Deref]),
     };
     let read_stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Use(Operand::Copy(read_deref)),
         ),
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -276,7 +276,7 @@ fn write_through_deref_only() {
     let result = interp.run_body(&body);
     assert!(result.is_ok(), "run_body failed: {result:?}");
 
-    let ret = interp.get_local_value(LocalIdx::from_raw(0));
+    let ret = interp.get_local_value(LocalIdx::from_usize(0));
     assert!(ret.is_some(), "return place not set");
     assert_eq!(
         ret.unwrap(),
@@ -291,8 +291,8 @@ fn write_through_field_only() {
     let ctx = glyim_test::test_frozen_ty_ctx();
     let mut interp = Interpreter::new(&ctx);
 
-    let crate_id = CrateId::from_raw(0);
-    let local_def_id = LocalDefId::from_raw(0);
+    let crate_id = CrateId::from_usize(0);
+    let local_def_id = LocalDefId::from_usize(0);
     let owner = DefId::new(crate_id, local_def_id);
 
     let mut locals = IndexVec::with_capacity(2);
@@ -310,7 +310,7 @@ fn write_through_field_only() {
     // local 1 = Aggregate([Int(1), Int(2)])
     let agg_stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::Aggregate(
                 AggregateKind::Tuple,
                 vec![
@@ -332,8 +332,8 @@ fn write_through_field_only() {
 
     // local 1.1 = Int(77)
     let field_place = Place {
-        local: LocalIdx::from_raw(1),
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(1))]),
+        local: LocalIdx::from_usize(1),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(1))]),
     };
     let write_stmt = Statement {
         kind: StatementKind::Assign(
@@ -349,12 +349,12 @@ fn write_through_field_only() {
 
     // local 0 = local 1.1
     let read_field = Place {
-        local: LocalIdx::from_raw(1),
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(1))]),
+        local: LocalIdx::from_usize(1),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(1))]),
     };
     let read_stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Use(Operand::Copy(read_field)),
         ),
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -385,7 +385,7 @@ fn write_through_field_only() {
     let result = interp.run_body(&body);
     assert!(result.is_ok(), "run_body failed: {result:?}");
 
-    let ret = interp.get_local_value(LocalIdx::from_raw(0));
+    let ret = interp.get_local_value(LocalIdx::from_usize(0));
     assert!(ret.is_some(), "return place not set");
     assert_eq!(
         ret.unwrap(),
