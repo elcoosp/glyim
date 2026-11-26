@@ -55,7 +55,7 @@ pub fn register_builtin_traits(
     impl glyim_type::builtin_traits::BuiltinTraitSink for SolverBootstrapSink<'_> {
         fn register_builtin_trait(&mut self, trait_id: u32, name: &'static str) {
             let n = self.interner.intern(name);
-            let tid = SolveTraitDefId::from_raw(trait_id);
+            let tid = SolveTraitDefId::from_usize(trait_id as usize);
             self.trait_ctx.register_trait(TraitDef {
                 def_id: tid,
                 name: n,
@@ -71,7 +71,7 @@ pub fn register_builtin_traits(
     });
     for t in glyim_type::builtin_traits::BuiltinTraitDef::ALL {
         if let Some(kind) = structural_builtin_kind(*t) {
-            trait_ctx.register_lang_trait(SolveTraitDefId::from_raw(t.trait_id()), kind);
+            trait_ctx.register_lang_trait(SolveTraitDefId::from_usize(t.trait_id() as usize), kind);
         }
     }
 }
@@ -727,8 +727,8 @@ impl MirCompilation {
             crate::mono_cache::make_mir_body_provider(&self.bodies, &sink, &self.ty_ctx);
         let drop_glue = |_ty: glyim_type::Ty| {
             Arc::new(glyim_mir::Body::dummy(glyim_core::def_id::DefId::new(
-                glyim_core::def_id::CrateId::from_raw(0),
-                glyim_core::def_id::LocalDefId::from_raw(0),
+                glyim_core::def_id::CrateId::from_usize(0),
+                glyim_core::def_id::LocalDefId::from_usize(0),
             )))
         };
         mono.collect(
