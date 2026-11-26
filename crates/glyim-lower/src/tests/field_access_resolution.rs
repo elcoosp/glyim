@@ -13,7 +13,7 @@ use glyim_typeck::thir::{self, ExprKind};
 fn field_access_uses_resolved_field_idx() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
-    let adt_id = AdtId::from_raw(42);
+    let adt_id = AdtId::from_usize(42);
     let subst = ctx_mut.intern_substitution(vec![]);
     let struct_ty = ctx_mut.mk_adt(adt_id, subst);
     let interner = ctx_mut.resolver().clone();
@@ -22,7 +22,7 @@ fn field_access_uses_resolved_field_idx() {
     let mut mock = TestLowerCtx::new(&ctx);
     // Register field "y" at index 1 for adt_id=42, variant=0
     let field_y = interner.intern("y");
-    mock.add_field_index(adt_id, 0, field_y, FieldIdx::from_raw(1));
+    mock.add_field_index(adt_id, 0, field_y, FieldIdx::from_usize(1));
 
     let mut b = ThirBuilder::new(i32_ty, interner.clone());
     let mut stmts = Vec::new();
@@ -66,7 +66,7 @@ fn field_access_uses_resolved_field_idx() {
 fn field_access_with_no_resolution_emits_error_const() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
-    let adt_id = AdtId::from_raw(99);
+    let adt_id = AdtId::from_usize(99);
     let subst = ctx_mut.intern_substitution(vec![]);
     let struct_ty = ctx_mut.mk_adt(adt_id, subst);
     let interner = ctx_mut.resolver().clone();
@@ -119,8 +119,8 @@ fn non_copy_field_access_lowers_as_move_with_drop_flag() {
     // `elaborate_scope_drops`).
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
-    let parent_adt = AdtId::from_raw(42);
-    let inner_adt = AdtId::from_raw(43);
+    let parent_adt = AdtId::from_usize(42);
+    let inner_adt = AdtId::from_usize(43);
     let subst = ctx_mut.intern_substitution(vec![]);
     let struct_ty = ctx_mut.mk_adt(parent_adt, subst);
     let inner_ty = ctx_mut.mk_adt(inner_adt, subst); // ADT => non-Copy
@@ -129,7 +129,7 @@ fn non_copy_field_access_lowers_as_move_with_drop_flag() {
 
     let mut mock = TestLowerCtx::new(&ctx);
     let field_f = interner.intern("f");
-    mock.add_field_index(parent_adt, 0, field_f, FieldIdx::from_raw(0));
+    mock.add_field_index(parent_adt, 0, field_f, FieldIdx::from_usize(0));
 
     let mut b = ThirBuilder::new(i32_ty, interner.clone());
     let mut stmts = Vec::new();
@@ -195,7 +195,7 @@ fn copy_field_access_lowers_as_copy_without_drop_flag() {
     // `Operand::Copy` and must NOT register/clear a drop-flag.
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
-    let parent_adt = AdtId::from_raw(42);
+    let parent_adt = AdtId::from_usize(42);
     let subst = ctx_mut.intern_substitution(vec![]);
     let struct_ty = ctx_mut.mk_adt(parent_adt, subst);
     let interner = ctx_mut.resolver().clone();
@@ -203,7 +203,7 @@ fn copy_field_access_lowers_as_copy_without_drop_flag() {
 
     let mut mock = TestLowerCtx::new(&ctx);
     let field_f = interner.intern("f");
-    mock.add_field_index(parent_adt, 0, field_f, FieldIdx::from_raw(0));
+    mock.add_field_index(parent_adt, 0, field_f, FieldIdx::from_usize(0));
 
     let mut b = ThirBuilder::new(i32_ty, interner.clone());
     let mut stmts = Vec::new();
