@@ -13,8 +13,8 @@ use glyim_typeck::thir::{self, ExprKind};
 fn nested_field_access_creates_projection_chain() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
-    let inner_adt_id = AdtId::from_raw(1);
-    let outer_adt_id = AdtId::from_raw(2);
+    let inner_adt_id = AdtId::from_usize(1);
+    let outer_adt_id = AdtId::from_usize(2);
     let inner_subst = ctx_mut.intern_substitution(vec![]);
     let outer_subst = ctx_mut.intern_substitution(vec![]);
     let inner_ty = ctx_mut.mk_adt(inner_adt_id, inner_subst);
@@ -25,8 +25,8 @@ fn nested_field_access_creates_projection_chain() {
     let mut mock = TestLowerCtx::new(&ctx);
     let field_inner = interner.intern("inner");
     let field_val = interner.intern("val");
-    mock.add_field_index(outer_adt_id, 0, field_inner, FieldIdx::from_raw(0));
-    mock.add_field_index(inner_adt_id, 0, field_val, FieldIdx::from_raw(0));
+    mock.add_field_index(outer_adt_id, 0, field_inner, FieldIdx::from_usize(0));
+    mock.add_field_index(inner_adt_id, 0, field_val, FieldIdx::from_usize(0));
 
     let mut b = ThirBuilder::new(i32_ty, interner.clone());
     let mut stmts = Vec::new();
