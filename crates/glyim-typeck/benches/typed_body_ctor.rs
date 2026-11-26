@@ -38,7 +38,7 @@ fn resolved_body(name: glyim_core::interner::Name, return_ty: Ty) -> thir::Body 
         })
         .collect();
     thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         params: vec![thir::Param {
             name,
             ty: Ty::I32,
@@ -48,7 +48,7 @@ fn resolved_body(name: glyim_core::interner::Name, return_ty: Ty) -> thir::Body 
                 ty: Ty::I32,
                 span: Span::DUMMY,
             },
-            local: thir::LocalVarId::from_raw(0),
+            local: thir::LocalVarId::from_usize(0),
         }],
         return_ty,
         stmts,
