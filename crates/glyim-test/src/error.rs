@@ -154,6 +154,13 @@ pub enum FailureReason {
         /// `Struct`.
         pattern: String,
     },
+    /// CT-5 negative-fixture contract (plan §6 M3.3): a fixture declared
+    /// `//@ expect-error-code: <code>` but none of its diagnostics carried
+    /// that registered code.
+    ErrorCodeNotFound {
+        /// The declared but unproduced display-form code, e.g. `"T0050"`.
+        code: String,
+    },
     /// `Variant`.
     UiOutputDiffers {
         /// `Struct`.
@@ -270,6 +277,12 @@ impl std::fmt::Display for FailureReason {
             }
             Self::ErrorPatternNotFound { pattern } => {
                 write!(f, "error-pattern '{pattern}' not found")
+            }
+            Self::ErrorCodeNotFound { code } => {
+                write!(
+                    f,
+                    "expect-error-code '{code}' not produced by any diagnostic"
+                )
             }
             Self::UiOutputDiffers { diff } => write!(f, "output differs:\n{diff}"),
             Self::UiNoExpectedFile { path } => write!(f, "no expected file: {}", path.display()),
