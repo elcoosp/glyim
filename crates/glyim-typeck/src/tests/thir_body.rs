@@ -73,11 +73,12 @@ fn thir_body_constructed() {
     let (_, result) = typeck_crate(ctx, &def_map, &hir, &mut solver);
     assert_no_errors(&result.diagnostics);
     assert_eq!(
-        result.thir_bodies.len(),
+        result.typed_bodies.len(),
         1,
         "one THIR body should be produced"
     );
-    let (_, thir_body) = &result.thir_bodies[0];
+    let (_, thir_body) = &result.typed_bodies[0];
+    let thir_body = thir_body.get();
     assert_eq!(thir_body.params.len(), 1, "one parameter");
     assert_eq!(thir_body.params[0].name, x_name, "parameter name");
     assert!(
