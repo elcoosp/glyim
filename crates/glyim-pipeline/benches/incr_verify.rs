@@ -41,7 +41,7 @@ fn setup(verify_enabled: bool) -> (Database, DefId, TyCtx) {
         opt_level: 0,
     });
     db.set_incr_verify_for_test(verify_enabled);
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1));
     let ty_ctx = glyim_test::test_ty_ctx().freeze();
     (db, owner, ty_ctx)
 }
@@ -103,10 +103,10 @@ fn bench_hit_enabled() {
 /// recomputes the fingerprint; the seam records the conclusion).
 fn bench_thir_backdate_enabled() {
     let (db, _, _) = setup(true);
-    let def_id = LocalDefId::from_raw(2);
+    let def_id = LocalDefId::from_usize(2);
     // A minimal THIR body distinct per `local`.
     let body = || glyim_typeck::thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), def_id),
+        owner: DefId::new(CrateId::from_usize(0), def_id),
         params: Vec::new(),
         return_ty: glyim_type::Ty::UNIT,
         stmts: Vec::new(),
