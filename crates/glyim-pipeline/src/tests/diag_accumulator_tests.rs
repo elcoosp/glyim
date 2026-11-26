@@ -46,7 +46,7 @@ fn mir_build_id(krate: CrateId, local: LocalDefId) -> u64 {
 #[test]
 fn mir_build_cache_hit_replays_identical_diagnostics() {
     let db = Database::default();
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(11));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(11));
     let ty_ctx = glyim_test::test_ty_ctx().freeze();
 
     let warn_a = GlyimDiagnostic::warning(Span::DUMMY, "unused local a");
@@ -93,7 +93,7 @@ fn mir_build_cache_hit_replays_identical_diagnostics() {
 #[test]
 fn accumulator_materializes_diagnostics_in_stable_order() {
     let db = Database::default();
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(12));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(12));
     let ty_ctx = glyim_test::test_ty_ctx().freeze();
 
     // Emit in reverse message order; the accumulator must sort to (a, b).
@@ -128,7 +128,7 @@ fn accumulator_materializes_diagnostics_in_stable_order() {
 #[test]
 fn cached_diagnostics_are_persisted_in_the_storage_entry() {
     let db = Database::default();
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(13));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(13));
     let ty_ctx = glyim_test::test_ty_ctx().freeze();
 
     let (_arc, diags) = db
@@ -156,7 +156,7 @@ fn cached_diagnostics_are_persisted_in_the_storage_entry() {
 #[test]
 fn body_invalidation_clears_the_accumulator() {
     let db = Database::default();
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(14));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(14));
     let ty_ctx = glyim_test::test_ty_ctx().freeze();
     let id = mir_build_id(owner.krate, owner.local_id);
 
