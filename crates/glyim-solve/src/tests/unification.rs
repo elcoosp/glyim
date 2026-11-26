@@ -657,7 +657,7 @@ fn test_unify_adt_same_id_and_substs_ok() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
-    let adt_id = glyim_core::def_id::AdtId::from_raw(1);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(1);
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let adt_a = ctx.mk_ty(TyKind::Adt(adt_id, subst));
     let adt_b = ctx.mk_ty(TyKind::Adt(adt_id, subst));
@@ -671,9 +671,15 @@ fn test_unify_adt_different_id_err() {
     let mut infer = InferenceTable::new();
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let subst1 = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
-    let adt_a = ctx.mk_ty(TyKind::Adt(glyim_core::def_id::AdtId::from_raw(1), subst1));
+    let adt_a = ctx.mk_ty(TyKind::Adt(
+        glyim_core::def_id::AdtId::from_usize(1),
+        subst1,
+    ));
     let subst2 = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
-    let adt_b = ctx.mk_ty(TyKind::Adt(glyim_core::def_id::AdtId::from_raw(2), subst2));
+    let adt_b = ctx.mk_ty(TyKind::Adt(
+        glyim_core::def_id::AdtId::from_usize(2),
+        subst2,
+    ));
     let result = infer.unify(&mut ctx, adt_a, adt_b, glyim_span::Span::DUMMY);
     assert!(result.is_err());
 }
@@ -684,7 +690,7 @@ fn test_unify_adt_with_inner_inference_var_ok() {
     let mut infer = InferenceTable::new();
     let var = infer.new_ty_var(&mut ctx);
     let var_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
-    let adt_id = glyim_core::def_id::AdtId::from_raw(1);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(1);
     let subst_a = ctx.intern_substitution(vec![GenericArg::Ty(var_ty)]);
     let adt_a = ctx.mk_ty(TyKind::Adt(adt_id, subst_a));
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
@@ -700,7 +706,7 @@ fn test_unify_adt_with_inner_inference_var_ok() {
 fn test_unify_fn_def_same_id_ok() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
-    let fn_id = glyim_core::def_id::FnDefId::from_raw(1);
+    let fn_id = glyim_core::def_id::FnDefId::from_usize(1);
     let subst = ctx.intern_substitution(Vec::new());
     let fn_a = ctx.mk_ty(TyKind::FnDef(fn_id, subst));
     let fn_b = ctx.mk_ty(TyKind::FnDef(fn_id, subst));
@@ -714,11 +720,11 @@ fn test_unify_fn_def_different_id_err() {
     let mut infer = InferenceTable::new();
     let subst = ctx.intern_substitution(Vec::new());
     let fn_a = ctx.mk_ty(TyKind::FnDef(
-        glyim_core::def_id::FnDefId::from_raw(1),
+        glyim_core::def_id::FnDefId::from_usize(1),
         subst,
     ));
     let fn_b = ctx.mk_ty(TyKind::FnDef(
-        glyim_core::def_id::FnDefId::from_raw(2),
+        glyim_core::def_id::FnDefId::from_usize(2),
         subst,
     ));
     let result = infer.unify(&mut ctx, fn_a, fn_b, glyim_span::Span::DUMMY);
@@ -729,7 +735,7 @@ fn test_unify_fn_def_different_id_err() {
 fn test_unify_closure_same_id_ok() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
-    let closure_id = glyim_core::def_id::ClosureId::from_raw(1);
+    let closure_id = glyim_core::def_id::ClosureId::from_usize(1);
     let subst = ctx.intern_substitution(Vec::new());
     let cl_a = ctx.mk_ty(TyKind::Closure(closure_id, subst));
     let cl_b = ctx.mk_ty(TyKind::Closure(closure_id, subst));
@@ -743,11 +749,11 @@ fn test_unify_closure_different_id_err() {
     let mut infer = InferenceTable::new();
     let subst = ctx.intern_substitution(Vec::new());
     let cl_a = ctx.mk_ty(TyKind::Closure(
-        glyim_core::def_id::ClosureId::from_raw(1),
+        glyim_core::def_id::ClosureId::from_usize(1),
         subst,
     ));
     let cl_b = ctx.mk_ty(TyKind::Closure(
-        glyim_core::def_id::ClosureId::from_raw(2),
+        glyim_core::def_id::ClosureId::from_usize(2),
         subst,
     ));
     let result = infer.unify(&mut ctx, cl_a, cl_b, glyim_span::Span::DUMMY);
@@ -760,7 +766,7 @@ fn test_fully_resolve_adt_with_unresolved_var() {
     let mut infer = InferenceTable::new();
     let var = infer.new_ty_var(&mut ctx);
     let var_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
-    let adt_id = glyim_core::def_id::AdtId::from_raw(1);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(1);
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(var_ty)]);
     let adt_ty = ctx.mk_ty(TyKind::Adt(adt_id, subst));
     let frozen = ctx.freeze();
@@ -775,7 +781,7 @@ fn test_fully_resolve_fn_def_with_unresolved_var() {
     let mut infer = InferenceTable::new();
     let var = infer.new_ty_var(&mut ctx);
     let var_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
-    let fn_id = glyim_core::def_id::FnDefId::from_raw(1);
+    let fn_id = glyim_core::def_id::FnDefId::from_usize(1);
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(var_ty)]);
     let fn_ty = ctx.mk_ty(TyKind::FnDef(fn_id, subst));
     let frozen = ctx.freeze();
@@ -1731,7 +1737,7 @@ fn test_unify_adt_with_generic_param() {
         index: 0,
         name: glyim_core::interner::Interner::new().intern("a"),
     }));
-    let adt_id = glyim_core::def_id::AdtId::from_raw(1);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(1);
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(param_ty)]);
     let adt_a = ctx.mk_ty(TyKind::Adt(adt_id, subst));
     let adt_b = ctx.mk_ty(TyKind::Adt(adt_id, subst));
@@ -1747,7 +1753,7 @@ fn test_unify_fn_def_with_generic_param() {
         index: 0,
         name: glyim_core::interner::Interner::new().intern("a"),
     }));
-    let fn_id = glyim_core::def_id::FnDefId::from_raw(1);
+    let fn_id = glyim_core::def_id::FnDefId::from_usize(1);
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(param_ty)]);
     let fn_a = ctx.mk_ty(TyKind::FnDef(fn_id, subst));
     let fn_b = ctx.mk_ty(TyKind::FnDef(fn_id, subst));
@@ -1763,7 +1769,7 @@ fn test_unify_closure_with_generic_param() {
         index: 0,
         name: glyim_core::interner::Interner::new().intern("a"),
     }));
-    let cl_id = glyim_core::def_id::ClosureId::from_raw(1);
+    let cl_id = glyim_core::def_id::ClosureId::from_usize(1);
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(param_ty)]);
     let cl_a = ctx.mk_ty(TyKind::Closure(cl_id, subst));
     let cl_b = ctx.mk_ty(TyKind::Closure(cl_id, subst));
@@ -2008,7 +2014,7 @@ fn test_unify_adt_recursive_substs() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
-    let adt_id = glyim_core::def_id::AdtId::from_raw(1);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(1);
     // Adt<Adt<i32>>
     let inner_subst = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let inner_adt = ctx.mk_ty(TyKind::Adt(adt_id, inner_subst));
@@ -2191,7 +2197,7 @@ fn test_fully_resolve_returns_error_for_unresolved_in_adt_subst() {
     let mut infer = InferenceTable::new();
     let var = infer.new_ty_var(&mut ctx);
     let var_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
-    let adt_id = glyim_core::def_id::AdtId::from_raw(1);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(1);
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(var_ty)]);
     let adt_ty = ctx.mk_ty(TyKind::Adt(adt_id, subst));
     let frozen = ctx.freeze();
@@ -2220,7 +2226,7 @@ fn test_unify_opaque_with_substitution() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
-    let opaque_id = glyim_core::def_id::OpaqueTyId::from_raw(1);
+    let opaque_id = glyim_core::def_id::OpaqueTyId::from_usize(1);
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let op_a = ctx.mk_ty(TyKind::Opaque(opaque_id, subst));
     let op_b = ctx.mk_ty(TyKind::Opaque(opaque_id, subst));
@@ -2235,7 +2241,7 @@ fn test_unify_opaque_with_inference_var_subst() {
     let var = infer.new_ty_var(&mut ctx);
     let var_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
-    let opaque_id = glyim_core::def_id::OpaqueTyId::from_raw(1);
+    let opaque_id = glyim_core::def_id::OpaqueTyId::from_usize(1);
     let subst_a = ctx.intern_substitution(vec![GenericArg::Ty(var_ty)]);
     let subst_b = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let op_a = ctx.mk_ty(TyKind::Opaque(opaque_id, subst_a));
@@ -2274,7 +2280,7 @@ fn test_fully_resolve_opaque_with_unresolved_var_in_subst() {
     let mut infer = InferenceTable::new();
     let var = infer.new_ty_var(&mut ctx);
     let var_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
-    let opaque_id = glyim_core::def_id::OpaqueTyId::from_raw(1);
+    let opaque_id = glyim_core::def_id::OpaqueTyId::from_usize(1);
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(var_ty)]);
     let op_ty = ctx.mk_ty(TyKind::Opaque(opaque_id, subst));
     let frozen = ctx.freeze();
@@ -2354,7 +2360,7 @@ fn test_unify_adt_with_fn_ptr_subst() {
         abi: glyim_core::primitives::Abi::Glyim,
     };
     let fn_ty = ctx.mk_ty(TyKind::FnPtr(sig));
-    let adt_id = glyim_core::def_id::AdtId::from_raw(1);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(1);
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(fn_ty)]);
     let adt_a = ctx.mk_ty(TyKind::Adt(adt_id, subst));
     let adt_b = ctx.mk_ty(TyKind::Adt(adt_id, subst));
@@ -2366,10 +2372,10 @@ fn test_unify_adt_with_fn_ptr_subst() {
 fn test_unify_adt_with_closure_subst() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
-    let cl_id = glyim_core::def_id::ClosureId::from_raw(1);
+    let cl_id = glyim_core::def_id::ClosureId::from_usize(1);
     let cl_subst = ctx.intern_substitution(Vec::new());
     let cl_ty = ctx.mk_ty(TyKind::Closure(cl_id, cl_subst));
-    let adt_id = glyim_core::def_id::AdtId::from_raw(1);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(1);
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(cl_ty)]);
     let adt_a = ctx.mk_ty(TyKind::Adt(adt_id, subst));
     let adt_b = ctx.mk_ty(TyKind::Adt(adt_id, subst));
@@ -2406,7 +2412,7 @@ fn test_fully_resolve_deeply_nested_adt_with_var() {
     let var = infer.new_ty_var(&mut ctx);
     let var_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)));
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
-    let adt_id = glyim_core::def_id::AdtId::from_raw(1);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(1);
     // Adt<Adt<Adt<?var>>>
     let inner_subst = ctx.intern_substitution(vec![GenericArg::Ty(var_ty)]);
     let inner_adt = ctx.mk_ty(TyKind::Adt(adt_id, inner_subst));
@@ -2439,7 +2445,7 @@ fn test_fully_resolve_mixed_adt_fn_ptr_var() {
     };
     let fn_ty = ctx.mk_ty(TyKind::FnPtr(sig));
     // Adt<FnPtr>
-    let adt_id = glyim_core::def_id::AdtId::from_raw(1);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(1);
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(fn_ty)]);
     let adt_ty = ctx.mk_ty(TyKind::Adt(adt_id, subst));
     infer
@@ -2729,7 +2735,7 @@ fn test_unify_bound_ty_with_different_debruijn() {
 fn test_unify_never_with_adt() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
-    let adt_id = glyim_core::def_id::AdtId::from_raw(1);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(1);
     let subst = ctx.intern_substitution(Vec::new());
     let adt_ty = ctx.mk_ty(TyKind::Adt(adt_id, subst));
     let result = infer.unify(&mut ctx, Ty::NEVER, adt_ty, glyim_span::Span::DUMMY);
@@ -2740,7 +2746,7 @@ fn test_unify_never_with_adt() {
 fn test_unify_error_with_opaque() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
-    let opaque_id = glyim_core::def_id::OpaqueTyId::from_raw(1);
+    let opaque_id = glyim_core::def_id::OpaqueTyId::from_usize(1);
     let subst = ctx.intern_substitution(Vec::new());
     let op_ty = ctx.mk_ty(TyKind::Opaque(opaque_id, subst));
     let result = infer.unify(&mut ctx, Ty::ERROR, op_ty, glyim_span::Span::DUMMY);
@@ -2779,7 +2785,7 @@ fn test_unify_never_with_dynamic() {
 fn test_unify_never_with_opaque() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
-    let opaque_id = glyim_core::def_id::OpaqueTyId::from_raw(1);
+    let opaque_id = glyim_core::def_id::OpaqueTyId::from_usize(1);
     let subst = ctx.intern_substitution(Vec::new());
     let op_ty = ctx.mk_ty(TyKind::Opaque(opaque_id, subst));
     let result = infer.unify(&mut ctx, Ty::NEVER, op_ty, glyim_span::Span::DUMMY);
@@ -2931,7 +2937,7 @@ fn test_general_var_kind_preserved_after_use() {
 fn test_unify_adt_different_subst_counts_error() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
-    let adt_id = glyim_core::def_id::AdtId::from_raw(1);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(1);
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let bool_ty = ctx.bool_ty();
     let subst_a = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
@@ -2946,7 +2952,7 @@ fn test_unify_adt_different_subst_counts_error() {
 fn test_unify_fn_def_different_subst_counts_error() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
-    let fn_id = glyim_core::def_id::FnDefId::from_raw(1);
+    let fn_id = glyim_core::def_id::FnDefId::from_usize(1);
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let bool_ty = ctx.bool_ty();
     let subst_a = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
@@ -2961,7 +2967,7 @@ fn test_unify_fn_def_different_subst_counts_error() {
 fn test_unify_closure_different_subst_counts_error() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
-    let cl_id = glyim_core::def_id::ClosureId::from_raw(1);
+    let cl_id = glyim_core::def_id::ClosureId::from_usize(1);
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let bool_ty = ctx.bool_ty();
     let subst_a = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
@@ -2976,7 +2982,7 @@ fn test_unify_closure_different_subst_counts_error() {
 fn test_unify_opaque_different_subst_counts_error() {
     let mut ctx = test_ty_ctx();
     let mut infer = InferenceTable::new();
-    let op_id = glyim_core::def_id::OpaqueTyId::from_raw(1);
+    let op_id = glyim_core::def_id::OpaqueTyId::from_usize(1);
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let bool_ty = ctx.bool_ty();
     let subst_a = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
@@ -3033,7 +3039,7 @@ fn test_fully_resolve_deeply_nested_adt_no_vars() {
     let mut ctx = test_ty_ctx();
     let infer = InferenceTable::new();
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
-    let adt_id = glyim_core::def_id::AdtId::from_raw(1);
+    let adt_id = glyim_core::def_id::AdtId::from_usize(1);
     let inner_subst = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let inner_adt = ctx.mk_ty(TyKind::Adt(adt_id, inner_subst));
     let mid_subst = ctx.intern_substitution(vec![GenericArg::Ty(inner_adt)]);
