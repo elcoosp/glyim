@@ -15,7 +15,7 @@ use crate::*;
 #[test]
 fn field_ty_from_adt_def() {
     let mut ctx = test_ty_ctx();
-    let adt_id = AdtId::from_raw(100);
+    let adt_id = AdtId::from_usize(100);
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let bool_ty = ctx.bool_ty();
     let mut fields = IndexVec::new();
@@ -41,7 +41,7 @@ fn field_ty_from_adt_def() {
 #[test]
 fn field_ty_from_adt_repr_fallback() {
     let mut ctx = test_ty_ctx();
-    let adt_id = AdtId::from_raw(101);
+    let adt_id = AdtId::from_usize(101);
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     ctx.register_adt_repr(adt_id, vec![i32_ty]);
     assert_eq!(ctx.field_ty(adt_id, 0), i32_ty);
@@ -50,21 +50,21 @@ fn field_ty_from_adt_repr_fallback() {
 #[test]
 fn field_ty_out_of_bounds_returns_error() {
     let ctx = test_ty_ctx();
-    let adt_id = AdtId::from_raw(102);
+    let adt_id = AdtId::from_usize(102);
     assert_eq!(ctx.field_ty(adt_id, 0), Ty::ERROR);
 }
 
 #[test]
 fn field_ty_unknown_adt_returns_error() {
     let ctx = test_ty_ctx();
-    let adt_id = AdtId::from_raw(103);
+    let adt_id = AdtId::from_usize(103);
     assert_eq!(ctx.field_ty(adt_id, 5), Ty::ERROR);
 }
 
 #[test]
 fn field_ty_adt_def_takes_priority_over_repr() {
     let mut ctx = test_ty_ctx();
-    let adt_id = AdtId::from_raw(104);
+    let adt_id = AdtId::from_usize(104);
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let bool_ty = ctx.bool_ty();
     ctx.register_adt_repr(adt_id, vec![bool_ty]);
@@ -92,7 +92,7 @@ fn field_ty_adt_def_takes_priority_over_repr() {
 #[test]
 fn frozen_field_ty_from_adt_def() {
     let (frozen, i32_ty) = with_fresh_ty_ctx(|ctx| {
-        let adt_id = AdtId::from_raw(200);
+        let adt_id = AdtId::from_usize(200);
         let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let mut fields = IndexVec::new();
         fields.push(FieldDef {
@@ -108,26 +108,26 @@ fn frozen_field_ty_from_adt_def() {
         ctx.register_adt(adt_id, def);
         i32_ty
     });
-    let adt_id = AdtId::from_raw(200);
+    let adt_id = AdtId::from_usize(200);
     assert_eq!(frozen.field_ty(adt_id, 0), i32_ty);
 }
 
 #[test]
 fn frozen_field_ty_from_adt_repr_fallback() {
     let (frozen, i32_ty) = with_fresh_ty_ctx(|ctx| {
-        let adt_id = AdtId::from_raw(201);
+        let adt_id = AdtId::from_usize(201);
         let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
         ctx.register_adt_repr(adt_id, vec![i32_ty]);
         i32_ty
     });
-    let adt_id = AdtId::from_raw(201);
+    let adt_id = AdtId::from_usize(201);
     assert_eq!(frozen.field_ty(adt_id, 0), i32_ty);
 }
 
 #[test]
 fn frozen_field_ty_unknown_adt_returns_error() {
     let frozen = test_frozen_ty_ctx();
-    let adt_id = AdtId::from_raw(202);
+    let adt_id = AdtId::from_usize(202);
     assert_eq!(frozen.field_ty(adt_id, 0), Ty::ERROR);
 }
 
@@ -165,7 +165,7 @@ impl TypeLookup for MinimalTypeLookup {
 fn type_lookup_field_ty_default_returns_error_when_no_adt_def() {
     let error_ty = Ty::ERROR;
     let lookup = MinimalTypeLookup { error: error_ty };
-    let adt_id = AdtId::from_raw(999);
+    let adt_id = AdtId::from_usize(999);
     let result = lookup.field_ty(adt_id, 0);
     assert_eq!(
         result, error_ty,
@@ -176,7 +176,7 @@ fn type_lookup_field_ty_default_returns_error_when_no_adt_def() {
 #[test]
 fn type_lookup_adt_def_default_returns_none() {
     let lookup = MinimalTypeLookup { error: Ty::ERROR };
-    let adt_id = AdtId::from_raw(999);
+    let adt_id = AdtId::from_usize(999);
     assert!(
         lookup.adt_def(adt_id).is_none(),
         "default adt_def should return None"
