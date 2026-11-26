@@ -115,6 +115,19 @@ impl TyCtx {
         self.arena.ty_kind(ty)
     }
 
+    /// The shared, canonical [`TypeArena`] every view of this compilation
+    /// resolves handles through.
+    ///
+    /// Exposing the arena is the consumer face of the shared-interner
+    /// design (see `type_arena`): the returned `Arc` clones are cheap, and
+    /// the arena's allocation face is `&self`, so concurrent views may
+    /// intern and read through the same table (plan §6 M3.4: the soundness
+    /// model must not rest on a single-threaded-per-compilation convention).
+    #[must_use]
+    pub fn shared_arena(&self) -> &std::sync::Arc<TypeArena> {
+        &self.arena
+    }
+
     /// Access the language-item registry (builtin `Option`/`Range`/`Drop`/…).
     #[must_use]
     pub fn lang_items(&self) -> &LangItems {
