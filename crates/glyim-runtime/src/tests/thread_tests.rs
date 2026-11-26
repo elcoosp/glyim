@@ -121,6 +121,6 @@ fn glyim_thread_spawn_named_joins_value() {
     );
     // Reclaim the Arc so we don't leak it.
     unsafe {
-        let _ = Arc::from_raw(shared_ptr as *mut AtomicI32);
+        let _ = Arc::from_raw(shared_ptr);
     }
 }
