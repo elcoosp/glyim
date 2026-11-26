@@ -75,7 +75,7 @@ fn main() {
 
     // The driver's exact pipeline, so the request path walks real
     // recorded state (the parse tree carries the `use` declarations).
-    let crate_id = glyim_core::CrateId::from_raw(0);
+    let crate_id = glyim_core::CrateId::from_usize(0);
     let parse_result = glyim_frontend::parse_to_syntax(DOC, file_id);
     let mut interner = glyim_core::Interner::new();
     let (def_map, _def_diags) =
