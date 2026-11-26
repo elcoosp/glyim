@@ -350,7 +350,7 @@ mod tests {
 
     fn make_place(local: u32, projections: &[ProjectionElem]) -> Place {
         Place {
-            local: LocalIdx::from_raw(local),
+            local: LocalIdx::from_usize(local as usize),
             projection: projections.iter().cloned().collect(),
         }
     }
@@ -483,8 +483,8 @@ mod tests {
 
     #[test]
     fn test_field_vs_index_disjoint() {
-        let p1 = make_place(0, &[ProjectionElem::Field(FieldIdx::from_raw(0))]);
-        let p2 = make_place(0, &[ProjectionElem::Index(LocalIdx::from_raw(1))]);
+        let p1 = make_place(0, &[ProjectionElem::Field(FieldIdx::from_usize(0))]);
+        let p2 = make_place(0, &[ProjectionElem::Index(LocalIdx::from_usize(1))]);
         assert!(!places_conflict(&p1, &p2));
     }
 }
