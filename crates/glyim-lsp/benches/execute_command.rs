@@ -62,7 +62,7 @@ fn main() {
     let parse_result = parse_to_syntax(&source, file_id);
     let mut interner = Interner::new();
     let (_def_map, _def_diags) =
-        build_def_map(&parse_result.root, CrateId::from_raw(0), interner.clone());
+        build_def_map(&parse_result.root, CrateId::from_usize(0), interner.clone());
     let (hir, _hir_diags) = lower_crate_for_pipeline(&parse_result.root, &mut interner);
     db.reference_graph
         .write()
