@@ -9,7 +9,7 @@ use glyim_type::{GenericArg, ProjectionTy, TraitRef, TyCtxMut};
 fn unresolved_projection_diagnostic() {
     let mut ctx = TyCtxMut::new(Interner::default());
     let name = ctx.resolver().intern("Item");
-    let trait_id = TraitDefId::from_raw(42);
+    let trait_id = TraitDefId::from_usize(42);
     let self_ty = ctx.bool_ty();
     let substs = ctx.intern_substitution(vec![GenericArg::Ty(self_ty)]);
     let trait_ref = TraitRef {
