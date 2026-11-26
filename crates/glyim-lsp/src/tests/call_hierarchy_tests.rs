@@ -61,7 +61,7 @@ fn populated_db() -> (AnalysisDatabase, FileMap, PathBuf, FileId) {
     // symbol index → reference graph). The call-hierarchy path reads the
     // reference graph and the source maps; the rest is populated to
     // mirror the driver so the request runs against a real session state.
-    let crate_id = glyim_core::CrateId::from_raw(0);
+    let crate_id = glyim_core::CrateId::from_usize(0);
     let parse_result = glyim_frontend::parse_to_syntax(DOC, file_id);
     let mut interner = glyim_core::Interner::new();
     let (def_map, _def_diags) =
