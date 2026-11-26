@@ -12,7 +12,7 @@ use glyim_typeck::thir::{self, FieldPat, PatternKind};
 fn struct_pattern_binds_fields() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
-    let adt_id = AdtId::from_raw(10);
+    let adt_id = AdtId::from_usize(10);
     let subst = ctx_mut.intern_substitution(vec![]);
     let struct_ty = ctx_mut.mk_adt(adt_id, subst);
     let interner = ctx_mut.resolver().clone();
@@ -22,8 +22,8 @@ fn struct_pattern_binds_fields() {
     // Register fields: x=0, y=1
     let field_x = interner.intern("x");
     let field_y = interner.intern("y");
-    mock.add_field_index(adt_id, 0, field_x, FieldIdx::from_raw(0));
-    mock.add_field_index(adt_id, 0, field_y, FieldIdx::from_raw(1));
+    mock.add_field_index(adt_id, 0, field_x, FieldIdx::from_usize(0));
+    mock.add_field_index(adt_id, 0, field_y, FieldIdx::from_usize(1));
 
     let mut b = ThirBuilder::new(Ty::UNIT, interner.clone());
     let mut stmts = Vec::new();
@@ -34,7 +34,7 @@ fn struct_pattern_binds_fields() {
     // let Struct { x, y } = s;
     let x_pat = thir::Pattern {
         kind: PatternKind::Binding {
-            var_id: thir::LocalVarId::from_raw(0),
+            var_id: thir::LocalVarId::from_usize(0),
             name: field_x,
             mutability: glyim_core::primitives::Mutability::Not,
             binding_ty: None,
@@ -45,7 +45,7 @@ fn struct_pattern_binds_fields() {
     };
     let y_pat = thir::Pattern {
         kind: PatternKind::Binding {
-            var_id: thir::LocalVarId::from_raw(0),
+            var_id: thir::LocalVarId::from_usize(0),
             name: field_y,
             mutability: glyim_core::primitives::Mutability::Not,
             binding_ty: None,
