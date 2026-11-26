@@ -22,7 +22,7 @@ fn drop_terminator_enqueues_drop_glue() {
     let mut mono = MonoCtx::new();
 
     // Create a MIR body with a Drop terminator for an i32 local
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: Ty::UNIT,
@@ -37,8 +37,8 @@ fn drop_terminator_enqueues_drop_glue() {
 
     let drop_term = Terminator {
         kind: TerminatorKind::Drop {
-            place: Place::new(LocalIdx::from_raw(1)),
-            target: BasicBlockIdx::from_raw(1),
+            place: Place::new(LocalIdx::from_usize(1)),
+            target: BasicBlockIdx::from_usize(1),
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -73,16 +73,16 @@ fn drop_terminator_enqueues_drop_glue() {
     // Provide a trivial drop_glue_body implementation
     let drop_glue_fn = |_ty: Ty| -> Arc<Body> {
         Arc::new(Body::dummy(DefId::new(
-            CrateId::from_raw(0),
-            LocalDefId::from_raw(0),
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(0),
         )))
     };
 
     // Provide a trivial mir_bodies implementation
     let mir_bodies_fn = |_def_id: DefId, _substs: &Substitution| -> Arc<Body> {
         Arc::new(Body::dummy(DefId::new(
-            CrateId::from_raw(0),
-            LocalDefId::from_raw(0),
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(0),
         )))
     };
 
@@ -90,7 +90,7 @@ fn drop_terminator_enqueues_drop_glue() {
 
     // Now test: collect a start item that references the body with Drop
     let start_fn = MonoItem::Fn {
-        def_id: FnDefId::from_raw(0),
+        def_id: FnDefId::from_usize(0),
         substs: Substitution::empty(),
     };
 
@@ -100,8 +100,8 @@ fn drop_terminator_enqueues_drop_glue() {
     let mir_fn = move |_def_id: DefId, _substs: &Substitution| -> Arc<Body> { body_clone.clone() };
     let drop_fn = |_ty: Ty| -> Arc<Body> {
         Arc::new(Body::dummy(DefId::new(
-            CrateId::from_raw(0),
-            LocalDefId::from_raw(0),
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(0),
         )))
     };
 
@@ -127,12 +127,12 @@ fn drop_terminator_scan_no_stub() {
     // handles Drop by looking for the DropGlue in collected items.
     let struct_ty = {
         let mut ctx = glyim_test::test_ty_ctx();
-        let adt_id = AdtId::from_raw(42);
+        let adt_id = AdtId::from_usize(42);
         let substs = ctx.intern_substitution(vec![]);
         ctx.mk_ty(TyKind::Adt(adt_id, substs))
     };
 
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
         ty: Ty::UNIT,
@@ -147,8 +147,8 @@ fn drop_terminator_scan_no_stub() {
 
     let drop_term = Terminator {
         kind: TerminatorKind::Drop {
-            place: Place::new(LocalIdx::from_raw(1)),
-            target: BasicBlockIdx::from_raw(1),
+            place: Place::new(LocalIdx::from_usize(1)),
+            target: BasicBlockIdx::from_usize(1),
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -181,7 +181,7 @@ fn drop_terminator_scan_no_stub() {
     });
 
     let start_fn = MonoItem::Fn {
-        def_id: FnDefId::from_raw(0),
+        def_id: FnDefId::from_usize(0),
         substs: Substitution::empty(),
     };
 
@@ -189,8 +189,8 @@ fn drop_terminator_scan_no_stub() {
     let mir_fn = move |_def_id: DefId, _substs: &Substitution| -> Arc<Body> { body_clone.clone() };
     let drop_fn = |_ty: Ty| -> Arc<Body> {
         Arc::new(Body::dummy(DefId::new(
-            CrateId::from_raw(0),
-            LocalDefId::from_raw(0),
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(0),
         )))
     };
 
