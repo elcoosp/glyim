@@ -9,7 +9,7 @@ use glyim_test::with_fresh_ty_ctx;
 fn s15_vtable_memory_size_no_methods() {
     let (_ctx, concrete_ty) = with_fresh_ty_ctx(|c| c.bool_ty());
     let layout = VTableLayout {
-        trait_def_id: glyim_core::TraitDefId::from_raw(1),
+        trait_def_id: glyim_core::TraitDefId::from_usize(1),
         concrete_ty,
         size: Size::bytes(1),
         align: Align::ONE,
@@ -39,7 +39,7 @@ fn s15_vtable_memory_size_with_methods() {
         (bool_ty, sig, foo_name, bar_name)
     });
     let layout = VTableLayout {
-        trait_def_id: glyim_core::TraitDefId::from_raw(1),
+        trait_def_id: glyim_core::TraitDefId::from_usize(1),
         concrete_ty,
         size: Size::bytes(1),
         align: Align::ONE,
@@ -48,12 +48,12 @@ fn s15_vtable_memory_size_with_methods() {
             VTableEntry {
                 name: foo_name,
                 sig: sig.clone(),
-                fn_def_id: glyim_core::FnDefId::from_raw(10),
+                fn_def_id: glyim_core::FnDefId::from_usize(10),
             },
             VTableEntry {
                 name: bar_name,
                 sig,
-                fn_def_id: glyim_core::FnDefId::from_raw(11),
+                fn_def_id: glyim_core::FnDefId::from_usize(11),
             },
         ],
     };
@@ -66,7 +66,7 @@ fn s15_vtable_memory_size_with_methods() {
 fn s15_vtable_method_offset() {
     let (_ctx, concrete_ty) = with_fresh_ty_ctx(|c| c.bool_ty());
     let layout = VTableLayout {
-        trait_def_id: glyim_core::TraitDefId::from_raw(1),
+        trait_def_id: glyim_core::TraitDefId::from_usize(1),
         concrete_ty,
         size: Size::bytes(1),
         align: Align::ONE,
@@ -104,35 +104,35 @@ fn s15_vtable_computer_populates_methods_from_trait_def() {
                 has_generic_params: false,
                 name: foo_name,
                 sig: sig.clone(),
-                fn_def_id: Some(glyim_core::FnDefId::from_raw(10)),
+                fn_def_id: Some(glyim_core::FnDefId::from_usize(10)),
             },
             glyim_type::MethodDef {
                 has_generic_params: false,
                 name: bar_name,
                 sig,
-                fn_def_id: Some(glyim_core::FnDefId::from_raw(11)),
+                fn_def_id: Some(glyim_core::FnDefId::from_usize(11)),
             },
         ],
         associated_types: vec![],
     };
-    ctx_mut.register_trait_def(glyim_core::TraitDefId::from_raw(7), trait_def);
+    ctx_mut.register_trait_def(glyim_core::TraitDefId::from_usize(7), trait_def);
     let ctx = ctx_mut.freeze();
 
     let computer = SimpleLayoutComputer::new(&ctx, TargetInfo::x86_64());
     let vtable = computer
-        .vtable_of(glyim_core::TraitDefId::from_raw(7), concrete_ty)
+        .vtable_of(glyim_core::TraitDefId::from_usize(7), concrete_ty)
         .expect("vtable_of with a registered trait should return Some");
 
     assert_eq!(vtable.methods.len(), 2, "methods derived from trait def");
     assert_eq!(vtable.methods[0].name, foo_name);
     assert_eq!(
         vtable.methods[0].fn_def_id,
-        glyim_core::FnDefId::from_raw(10)
+        glyim_core::FnDefId::from_usize(10)
     );
     assert_eq!(vtable.methods[1].name, bar_name);
     assert_eq!(
         vtable.methods[1].fn_def_id,
-        glyim_core::FnDefId::from_raw(11)
+        glyim_core::FnDefId::from_usize(11)
     );
     // One method slot per trait method: 3 metadata + 2 methods.
     let mem = vtable.memory_size(8);
@@ -146,7 +146,7 @@ fn s15_vtable_computer_populates_methods_from_trait_def() {
 fn s15_vtable_unknown_trait_is_hard_error() {
     let (_ctx, concrete_ty) = with_fresh_ty_ctx(|c| c.bool_ty());
     let computer = SimpleLayoutComputer::new(&_ctx, TargetInfo::x86_64());
-    let result = computer.vtable_of(glyim_core::TraitDefId::from_raw(999), concrete_ty);
+    let result = computer.vtable_of(glyim_core::TraitDefId::from_usize(999), concrete_ty);
     assert!(
         matches!(result, Err(crate::LayoutError::UnknownTrait(_))),
         "missing trait must be a hard error, got {result:?}"
