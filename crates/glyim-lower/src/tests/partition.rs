@@ -5,12 +5,12 @@ use std::sync::Arc;
 fn make_item(index: u32, module: u32) -> MonoItemData {
     use glyim_core::def_id::{CrateId, DefId, LocalDefId};
     let body = Arc::new(glyim_mir::Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(0),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
     )));
     MonoItemData {
         item: crate::mono::MonoItem::Fn {
-            def_id: glyim_core::def_id::FnDefId::from_raw(index),
+            def_id: glyim_core::def_id::FnDefId::from_usize(index as usize),
             substs: glyim_type::Substitution::empty(),
         },
         body,
