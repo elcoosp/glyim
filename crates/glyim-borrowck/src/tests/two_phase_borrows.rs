@@ -49,22 +49,22 @@ fn local_decl(ty: Ty) -> LocalDecl {
 }
 
 fn make_body(statements: Vec<Statement>, locals: Vec<LocalDecl>) -> Body {
-    let def_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let def_id = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut body = Body::dummy(def_id);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData::new(Terminator {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData::new(Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(Span::DUMMY),
     })]);
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].statements = statements;
-    body.locals = IndexVec::from_raw(locals);
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].statements = statements;
+    body.locals = IndexVec::from_vec(locals);
     body
 }
 
 fn make_body_multi_blocks(locals: Vec<LocalDecl>, blocks: Vec<BasicBlockData>) -> Body {
-    let def_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let def_id = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut body = Body::dummy(def_id);
-    body.basic_blocks = IndexVec::<BasicBlockIdx, _>::from_raw(blocks);
-    body.locals = IndexVec::<LocalIdx, _>::from_raw(locals);
+    body.basic_blocks = IndexVec::<BasicBlockIdx, _>::from_vec(blocks);
+    body.locals = IndexVec::<LocalIdx, _>::from_vec(locals);
     body
 }
 
@@ -109,7 +109,7 @@ fn make_one_phase_mut() -> BorrowKind {
 fn dummy_terminator_goto(target: u32) -> Terminator {
     Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(target),
+            target: BasicBlockIdx::from_usize(target as usize),
         },
         source_info: SourceInfo::new(Span::DUMMY),
     }
@@ -143,17 +143,17 @@ fn t01_two_phase_borrow_with_intervening_shared_read() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -182,17 +182,17 @@ fn t02_two_phase_reservation_allows_shared_borrow() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -222,18 +222,18 @@ fn t03_activation_conflict_with_shared_read() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(3)),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(3)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -262,17 +262,17 @@ fn t04_reservation_conflict_with_other_mutable() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(3)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(3)),
         ];
         make_body(stmts, locals)
     });
@@ -302,17 +302,17 @@ fn t05_one_phase_mut_conflicts_with_shared() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_one_phase_mut(),
             ),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(3)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(3)),
         ];
         make_body(stmts, locals)
     });
@@ -341,16 +341,16 @@ fn t06_two_phase_borrow_never_activated_no_conflict() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)),
         ];
         make_body(stmts, locals)
     });
@@ -378,12 +378,12 @@ fn t07_two_phase_reservation_allows_read_of_borrowed_place() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
-            use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -411,18 +411,18 @@ fn t08_two_phase_reservation_write_to_borrowed_place_error() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
-                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(3)))),
+                    Place::new(LocalIdx::from_usize(1)),
+                    Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(3)))),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -451,17 +451,17 @@ fn t09_two_phase_reservation_conflicts_with_unique_borrow() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Unique,
             ),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(3)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(3)),
         ];
         make_body(stmts, locals)
     });
@@ -491,17 +491,17 @@ fn t10_two_phase_borrows_different_places_no_conflict() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             assign_borrow(
-                LocalIdx::from_raw(4),
-                Place::new(LocalIdx::from_raw(2)),
+                LocalIdx::from_usize(4),
+                Place::new(LocalIdx::from_usize(2)),
                 make_two_phase_mut(),
             ),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(3)),
-            use_local(LocalIdx::from_raw(6), LocalIdx::from_raw(4)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(3)),
+            use_local(LocalIdx::from_usize(6), LocalIdx::from_usize(4)),
         ];
         make_body(stmts, locals)
     });
@@ -533,23 +533,23 @@ fn t11_two_phase_reservation_multiple_shared_borrows() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
             assign_borrow(
-                LocalIdx::from_raw(4),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(4),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(3)),
-            use_local(LocalIdx::from_raw(6), LocalIdx::from_raw(4)),
-            use_local(LocalIdx::from_raw(7), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(3)),
+            use_local(LocalIdx::from_usize(6), LocalIdx::from_usize(4)),
+            use_local(LocalIdx::from_usize(7), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -578,17 +578,17 @@ fn t12_shared_ref_dies_before_two_phase_activation() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -618,17 +618,17 @@ fn t13_one_phase_mut_after_shared_expires_no_conflict() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 make_one_phase_mut(),
             ),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(3)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(3)),
         ];
         make_body(stmts, locals)
     });
@@ -658,23 +658,23 @@ fn t14_two_phase_cross_block_conservatively_activated() {
         ];
         let mut block0 = BasicBlockData::new(dummy_terminator_goto(1));
         block0.statements.push(assign_borrow(
-            LocalIdx::from_raw(2),
-            Place::new(LocalIdx::from_raw(1)),
+            LocalIdx::from_usize(2),
+            Place::new(LocalIdx::from_usize(1)),
             make_two_phase_mut(),
         ));
         let mut block1 = BasicBlockData::new(dummy_terminator_goto(2));
         block1.statements.push(assign_borrow(
-            LocalIdx::from_raw(3),
-            Place::new(LocalIdx::from_raw(1)),
+            LocalIdx::from_usize(3),
+            Place::new(LocalIdx::from_usize(1)),
             BorrowKind::Shared,
         ));
         let mut block2 = BasicBlockData::new(dummy_terminator_return());
         block2
             .statements
-            .push(use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)));
+            .push(use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)));
         block2
             .statements
-            .push(use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(2)));
+            .push(use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(2)));
         make_body_multi_blocks(locals, vec![block0, block1, block2])
     });
     let mock = LocalMockBorrowckCtx { ty_ctx: ctx, body };
@@ -704,18 +704,18 @@ fn t15_two_phase_activated_then_shared_in_same_block_error() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
-            use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(2)),
             assign_borrow(
-                LocalIdx::from_raw(4),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(4),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(4)),
-            use_local(LocalIdx::from_raw(6), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(4)),
+            use_local(LocalIdx::from_usize(6), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -744,17 +744,17 @@ fn t16_two_two_phase_mut_borrows_same_place_error() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(3)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(3)),
         ];
         make_body(stmts, locals)
     });
@@ -784,17 +784,17 @@ fn t17_shared_borrow_before_two_phase_mut_conflict() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(3)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(3)),
         ];
         make_body(stmts, locals)
     });
@@ -825,18 +825,18 @@ fn t18_two_phase_reservation_read_and_shared_borrow() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
-            use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(1)),
+            use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(1)),
             assign_borrow(
-                LocalIdx::from_raw(4),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(4),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(4)),
-            use_local(LocalIdx::from_raw(6), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(4)),
+            use_local(LocalIdx::from_usize(6), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -867,18 +867,18 @@ fn t19_two_phase_immediate_activation_no_reservation_window() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
-            use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(2)),
             assign_borrow(
-                LocalIdx::from_raw(4),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(4),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(4)),
-            use_local(LocalIdx::from_raw(6), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(4)),
+            use_local(LocalIdx::from_usize(6), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -911,25 +911,25 @@ fn t20_two_phase_long_reservation_window_multiple_reads() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(1)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(1)),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(6), LocalIdx::from_raw(3)),
+            use_local(LocalIdx::from_usize(6), LocalIdx::from_usize(3)),
             assign_borrow(
-                LocalIdx::from_raw(4),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(4),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(7), LocalIdx::from_raw(4)),
-            use_local(LocalIdx::from_raw(8), LocalIdx::from_raw(1)),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(7), LocalIdx::from_usize(4)),
+            use_local(LocalIdx::from_usize(8), LocalIdx::from_usize(1)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -957,18 +957,18 @@ fn t21_two_phase_reservation_discriminant_read() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(3)),
-                    Rvalue::Discriminant(Place::new(LocalIdx::from_raw(1))),
+                    Place::new(LocalIdx::from_usize(3)),
+                    Rvalue::Discriminant(Place::new(LocalIdx::from_usize(1))),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -996,18 +996,18 @@ fn t22_two_phase_reservation_len_read() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(3)),
-                    Rvalue::Len(Place::new(LocalIdx::from_raw(1))),
+                    Place::new(LocalIdx::from_usize(3)),
+                    Rvalue::Len(Place::new(LocalIdx::from_usize(1))),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -1037,17 +1037,17 @@ fn t23_shared_dies_then_two_phase_activated_no_conflict() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -1083,20 +1083,20 @@ fn t24_two_phase_activation_via_copy_use() {
         let stmts = vec![
             // local_2 = &mut local_1 (two-phase reservation)
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             // local_3 = *local_2 (Copy use of local_2 — activates, local_2 stays live)
-            use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(2)),
             // local_4 = &local_1 (shared borrow after activation — conflict!)
             assign_borrow(
-                LocalIdx::from_raw(4),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(4),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(4)),
-            use_local(LocalIdx::from_raw(6), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(4)),
+            use_local(LocalIdx::from_usize(6), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -1124,24 +1124,24 @@ fn t25_two_phase_reservation_binary_op_read() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(3)),
+                    Place::new(LocalIdx::from_usize(3)),
                     Rvalue::BinaryOp(
                         glyim_core::BinOp::Add,
                         [
-                            Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                            Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(1))),
+                            Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                         ],
                     ),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -1169,21 +1169,21 @@ fn t26_two_phase_reservation_unary_op_read() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(3)),
+                    Place::new(LocalIdx::from_usize(3)),
                     Rvalue::UnaryOp(
                         glyim_core::UnOp::Neg,
-                        Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                     ),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -1218,29 +1218,29 @@ fn t27_two_phase_different_places_each_with_shared_reads() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(3),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(3),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             assign_borrow(
-                LocalIdx::from_raw(4),
-                Place::new(LocalIdx::from_raw(2)),
+                LocalIdx::from_usize(4),
+                Place::new(LocalIdx::from_usize(2)),
                 make_two_phase_mut(),
             ),
             assign_borrow(
-                LocalIdx::from_raw(5),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(5),
+                Place::new(LocalIdx::from_usize(1)),
                 BorrowKind::Shared,
             ),
             assign_borrow(
-                LocalIdx::from_raw(6),
-                Place::new(LocalIdx::from_raw(2)),
+                LocalIdx::from_usize(6),
+                Place::new(LocalIdx::from_usize(2)),
                 BorrowKind::Shared,
             ),
-            use_local(LocalIdx::from_raw(7), LocalIdx::from_raw(5)),
-            use_local(LocalIdx::from_raw(8), LocalIdx::from_raw(6)),
-            use_local(LocalIdx::from_raw(9), LocalIdx::from_raw(3)),
-            use_local(LocalIdx::from_raw(10), LocalIdx::from_raw(4)),
+            use_local(LocalIdx::from_usize(7), LocalIdx::from_usize(5)),
+            use_local(LocalIdx::from_usize(8), LocalIdx::from_usize(6)),
+            use_local(LocalIdx::from_usize(9), LocalIdx::from_usize(3)),
+            use_local(LocalIdx::from_usize(10), LocalIdx::from_usize(4)),
         ];
         make_body(stmts, locals)
     });
@@ -1269,22 +1269,22 @@ fn t28_two_phase_reservation_cast_read() {
         ];
         let stmts = vec![
             assign_borrow(
-                LocalIdx::from_raw(2),
-                Place::new(LocalIdx::from_raw(1)),
+                LocalIdx::from_usize(2),
+                Place::new(LocalIdx::from_usize(1)),
                 make_two_phase_mut(),
             ),
             Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(3)),
+                    Place::new(LocalIdx::from_usize(3)),
                     Rvalue::Cast(
                         glyim_mir::CastKind::IntToInt,
-                        Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(1))),
                         i64_ty,
                     ),
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
-            use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(2)),
+            use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(2)),
         ];
         make_body(stmts, locals)
     });
@@ -1312,23 +1312,23 @@ fn t14_two_phase_cross_block_reservation_extends() {
         ];
         let mut block0 = BasicBlockData::new(dummy_terminator_goto(1));
         block0.statements.push(assign_borrow(
-            LocalIdx::from_raw(2),
-            Place::new(LocalIdx::from_raw(1)),
+            LocalIdx::from_usize(2),
+            Place::new(LocalIdx::from_usize(1)),
             make_two_phase_mut(),
         ));
         let mut block1 = BasicBlockData::new(dummy_terminator_goto(2));
         block1.statements.push(assign_borrow(
-            LocalIdx::from_raw(3),
-            Place::new(LocalIdx::from_raw(1)),
+            LocalIdx::from_usize(3),
+            Place::new(LocalIdx::from_usize(1)),
             BorrowKind::Shared,
         ));
         let mut block2 = BasicBlockData::new(dummy_terminator_return());
         block2
             .statements
-            .push(use_local(LocalIdx::from_raw(4), LocalIdx::from_raw(3)));
+            .push(use_local(LocalIdx::from_usize(4), LocalIdx::from_usize(3)));
         block2
             .statements
-            .push(use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(2)));
+            .push(use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(2)));
         make_body_multi_blocks(locals, vec![block0, block1, block2])
     });
     let mock = LocalMockBorrowckCtx { ty_ctx: ctx, body };
@@ -1354,26 +1354,26 @@ fn t15_two_phase_cross_block_activation_conflict() {
         ];
         let mut block0 = BasicBlockData::new(dummy_terminator_goto(1));
         block0.statements.push(assign_borrow(
-            LocalIdx::from_raw(2),
-            Place::new(LocalIdx::from_raw(1)),
+            LocalIdx::from_usize(2),
+            Place::new(LocalIdx::from_usize(1)),
             make_two_phase_mut(),
         ));
         block0
             .statements
-            .push(use_local(LocalIdx::from_raw(3), LocalIdx::from_raw(2))); // activates
+            .push(use_local(LocalIdx::from_usize(3), LocalIdx::from_usize(2))); // activates
         let mut block1 = BasicBlockData::new(dummy_terminator_goto(2));
         block1.statements.push(assign_borrow(
-            LocalIdx::from_raw(4),
-            Place::new(LocalIdx::from_raw(1)),
+            LocalIdx::from_usize(4),
+            Place::new(LocalIdx::from_usize(1)),
             BorrowKind::Shared,
         ));
         let mut block2 = BasicBlockData::new(dummy_terminator_return());
         block2
             .statements
-            .push(use_local(LocalIdx::from_raw(5), LocalIdx::from_raw(4)));
+            .push(use_local(LocalIdx::from_usize(5), LocalIdx::from_usize(4)));
         block2
             .statements
-            .push(use_local(LocalIdx::from_raw(6), LocalIdx::from_raw(2)));
+            .push(use_local(LocalIdx::from_usize(6), LocalIdx::from_usize(2)));
         make_body_multi_blocks(locals, vec![block0, block1, block2])
     });
     let mock = LocalMockBorrowckCtx { ty_ctx: ctx, body };
