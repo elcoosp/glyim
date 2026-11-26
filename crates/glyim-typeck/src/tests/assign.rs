@@ -8,8 +8,8 @@ fn assign_to_local() {
         Expr::Path(glyim_hir::Path::from_single(name("x"))),
         Expr::Literal(Literal::Int(5, None)),
         Expr::Assign {
-            lhs: ExprId::from_raw(0),
-            rhs: ExprId::from_raw(1),
+            lhs: ExprId::from_usize(0),
+            rhs: ExprId::from_usize(1),
         },
     ];
 
