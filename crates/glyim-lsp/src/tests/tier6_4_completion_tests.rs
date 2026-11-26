@@ -265,7 +265,7 @@ fn main() {
     let mut expr_types: HashMap<LocalDefId, HashMap<ExprId, Ty>> = HashMap::new();
     expr_types.insert(main_owner, type_map);
     let typeck = TypeckResult {
-        thir_bodies: vec![],
+        typed_bodies: vec![],
         diagnostics: vec![],
         const_values: std::collections::HashMap::new(),
         expr_types,
@@ -451,7 +451,7 @@ fn main() {
     let mut expr_types: HashMap<LocalDefId, HashMap<ExprId, Ty>> = HashMap::new();
     expr_types.insert(main_owner, type_map);
     let typeck = TypeckResult {
-        thir_bodies: vec![],
+        typed_bodies: vec![],
         diagnostics: vec![],
         const_values: std::collections::HashMap::new(),
         expr_types,
