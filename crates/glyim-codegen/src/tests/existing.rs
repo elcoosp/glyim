@@ -4,20 +4,23 @@ use std::sync::Arc;
 
 #[test]
 fn test_ref_succeeds() {
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-    let local_idx = LocalIdx::from_raw(1);
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
+    let local_idx = LocalIdx::from_usize(1);
     body.locals.push(glyim_mir::LocalDecl {
         ty: glyim_type::Ty::ERROR,
         mutability: glyim_core::primitives::Mutability::Not,
         source_info: glyim_mir::SourceInfo::new(glyim_span::Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(glyim_mir::Statement {
             kind: glyim_mir::StatementKind::Assign(
                 glyim_mir::Place::new(local_idx),
                 glyim_mir::Rvalue::Ref(
-                    glyim_mir::Place::new(LocalIdx::from_raw(0)),
+                    glyim_mir::Place::new(LocalIdx::from_usize(0)),
                     glyim_mir::BorrowKind::Shared,
                 ),
             ),
@@ -34,14 +37,17 @@ fn test_ref_succeeds() {
 
 #[test]
 fn test_call_terminator_succeeds() {
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-    let dest = LocalIdx::from_raw(1);
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: glyim_type::Ty::ERROR,
         mutability: glyim_core::primitives::Mutability::Not,
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Call {
             func: Operand::Constant(MirConst {
                 kind: MirConstKind::Int(0),
@@ -50,7 +56,7 @@ fn test_call_terminator_succeeds() {
             }),
             args: Vec::new(),
             destination: Place::new(dest),
-            target: Some(BasicBlockIdx::from_raw(1)),
+            target: Some(BasicBlockIdx::from_usize(1)),
             cleanup: None,
         },
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -69,8 +75,11 @@ fn test_call_terminator_succeeds() {
 
 #[test]
 fn test_projection_succeeds() {
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
-    let local_idx = LocalIdx::from_raw(1);
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
+    let local_idx = LocalIdx::from_usize(1);
     body.locals.push(glyim_mir::LocalDecl {
         ty: glyim_type::Ty::ERROR,
         mutability: glyim_core::primitives::Mutability::Not,
@@ -80,7 +89,7 @@ fn test_projection_succeeds() {
         local: local_idx,
         projection: Box::new([ProjectionElem::Deref]),
     };
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(glyim_mir::Statement {
             kind: glyim_mir::StatementKind::Assign(
@@ -107,7 +116,10 @@ fn test_projection_succeeds() {
 
 #[test]
 fn test_dummy_body_succeeds() {
-    let body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
     let backend = BytecodeBackend::with_ty_ctx(
         std::sync::Arc::new(glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze()),
         glyim_core::TargetInfo::default(),
