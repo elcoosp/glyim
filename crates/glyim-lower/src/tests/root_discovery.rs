@@ -41,7 +41,7 @@ fn dummy_span() -> Span {
 
 fn fn_item(interner: &mut Interner, id: u32, name: &str, body: Option<BodyId>) -> Item {
     Item {
-        id: ItemId::from_raw(id),
+        id: ItemId::from_usize(id as usize),
         name: make_name(interner, name),
         kind: ItemKind::Fn(FnItem {
             params: vec![],
@@ -62,7 +62,7 @@ fn fn_item(interner: &mut Interner, id: u32, name: &str, body: Option<BodyId>) -
 
 fn static_item(interner: &mut Interner, id: u32, name: &str) -> Item {
     Item {
-        id: ItemId::from_raw(id),
+        id: ItemId::from_usize(id as usize),
         name: make_name(interner, name),
         kind: ItemKind::Static(StaticItem {
             ty: TypeRef::Path(Path::from_single(make_name(interner, "i32"))),
@@ -198,7 +198,7 @@ fn t06_no_mangle_function_detected() {
     let mut interner = Interner::default();
     let (root, span) = build_attr_syntax("no_mangle");
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: make_name(&mut interner, "custom_name"),
         kind: ItemKind::Fn(FnItem {
             params: vec![],
@@ -227,7 +227,7 @@ fn t07_start_function_detected() {
     let mut interner = Interner::default();
     let (root, span) = build_attr_syntax("start");
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: make_name(&mut interner, "any_name"),
         kind: ItemKind::Fn(FnItem {
             params: vec![],
@@ -256,7 +256,7 @@ fn t08_used_static_detected() {
     let mut interner = Interner::default();
     let (root, span) = build_attr_syntax("used");
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: make_name(&mut interner, "MY_STATIC"),
         kind: ItemKind::Static(StaticItem {
             ty: TypeRef::Path(Path::from_single(make_name(&mut interner, "i32"))),
@@ -280,7 +280,7 @@ fn t09_unknown_attribute_not_detected() {
     let mut interner = Interner::default();
     let (root, span) = build_attr_syntax("unknown");
     let item = Item {
-        id: ItemId::from_raw(0),
+        id: ItemId::from_usize(0),
         name: make_name(&mut interner, "f"),
         kind: ItemKind::Fn(FnItem {
             params: vec![],
