@@ -8,7 +8,7 @@ fn test_real_iterator_next_info_returns_some_when_builtin_set() {
     let mut trait_ctx = TraitContext::new();
 
     // Set the builtin next function ID
-    let next_def_id = FnDefId::from_raw(42);
+    let next_def_id = FnDefId::from_usize(42);
     trait_ctx.set_builtin_iterator_next(next_def_id);
 
     let solver = SimpleTraitSolver::new(&trait_ctx);
