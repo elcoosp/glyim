@@ -17,11 +17,11 @@ use glyim_type::{Ty, TyKind};
 fn use_after_move_error() {
     let mut ctx_mut = test_ty_ctx();
     let subst = ctx_mut.intern_substitution(vec![]);
-    let non_copy_ty = ctx_mut.mk_ty(TyKind::Adt(glyim_core::AdtId::from_raw(1), subst));
+    let non_copy_ty = ctx_mut.mk_ty(TyKind::Adt(glyim_core::AdtId::from_usize(1), subst));
     let ctx = ctx_mut.freeze();
 
     let mut body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks: IndexVec::new(),
         locals: IndexVec::new(),
         arg_count: 0,
