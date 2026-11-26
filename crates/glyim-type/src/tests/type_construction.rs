@@ -117,21 +117,22 @@ fn ty_kind_error() {
 
 #[test]
 fn ty_kind_infer_ty_var() {
-    let (ctx, ty) = with_fresh_ty_ctx(|c| c.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_raw(0)))));
+    let (ctx, ty) =
+        with_fresh_ty_ctx(|c| c.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_usize(0)))));
     assert!(matches!(ctx.ty_kind(ty), TyKind::Infer(InferVar::Ty(_))));
 }
 
 #[test]
 fn ty_kind_infer_int_var() {
     let (ctx, ty) =
-        with_fresh_ty_ctx(|c| c.mk_ty(TyKind::Infer(InferVar::Int(IntVar::from_raw(0)))));
+        with_fresh_ty_ctx(|c| c.mk_ty(TyKind::Infer(InferVar::Int(IntVar::from_usize(0)))));
     assert!(matches!(ctx.ty_kind(ty), TyKind::Infer(InferVar::Int(_))));
 }
 
 #[test]
 fn ty_kind_infer_float_var() {
     let (ctx, ty) =
-        with_fresh_ty_ctx(|c| c.mk_ty(TyKind::Infer(InferVar::Float(FloatVar::from_raw(0)))));
+        with_fresh_ty_ctx(|c| c.mk_ty(TyKind::Infer(InferVar::Float(FloatVar::from_usize(0)))));
     assert!(matches!(ctx.ty_kind(ty), TyKind::Infer(InferVar::Float(_))));
 }
 
@@ -139,7 +140,7 @@ fn ty_kind_infer_float_var() {
 fn ty_kind_adt() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![]);
-        c.mk_adt(AdtId::from_raw(1), substs)
+        c.mk_adt(AdtId::from_usize(1), substs)
     });
     assert!(matches!(ctx.ty_kind(ty), TyKind::Adt(_, _)));
 }
@@ -148,7 +149,7 @@ fn ty_kind_adt() {
 fn ty_kind_fn_def() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![]);
-        c.mk_ty(TyKind::FnDef(FnDefId::from_raw(1), substs))
+        c.mk_ty(TyKind::FnDef(FnDefId::from_usize(1), substs))
     });
     assert!(matches!(ctx.ty_kind(ty), TyKind::FnDef(_, _)));
 }
@@ -157,7 +158,7 @@ fn ty_kind_fn_def() {
 fn ty_kind_closure() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![]);
-        c.mk_ty(TyKind::Closure(ClosureId::from_raw(1), substs))
+        c.mk_ty(TyKind::Closure(ClosureId::from_usize(1), substs))
     });
     assert!(matches!(ctx.ty_kind(ty), TyKind::Closure(_, _)));
 }
@@ -223,7 +224,7 @@ fn ty_kind_dynamic() {
         let trait_substs = c.intern_substitution(vec![]);
         let pred = Predicate::Trait(TraitPredicate {
             trait_ref: TraitRef {
-                def_id: TraitDefId::from_raw(1),
+                def_id: TraitDefId::from_usize(1),
                 substs: trait_substs,
             },
             polarity: ImplPolarity::Positive,
@@ -239,7 +240,7 @@ fn ty_kind_dynamic() {
 fn ty_kind_opaque() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![]);
-        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_raw(1), substs))
+        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_usize(1), substs))
     });
     assert!(matches!(ctx.ty_kind(ty), TyKind::Opaque(_, _)));
 }
