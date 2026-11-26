@@ -1107,7 +1107,7 @@ impl<'a> ConstEvaluator<'a> {
         }
         Some(ConstValue::Variant(
             adt_id,
-            glyim_core::def_id::VariantIdx::from_raw(idx as u32),
+            glyim_core::def_id::VariantIdx::from_usize(idx),
             Vec::new(),
         ))
     }
