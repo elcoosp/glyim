@@ -59,7 +59,7 @@ mod tests {
     use glyim_type::TyKind;
 
     fn def_id() -> DefId {
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
     }
 
     #[test]
@@ -78,14 +78,14 @@ mod tests {
         let name = super::format::intern_name("x");
         body.var_debug_info.push(VarDebugInfo {
             name,
-            value: VarDebugInfoValue::Place(Place::new(LocalIdx::from_raw(0))),
+            value: VarDebugInfoValue::Place(Place::new(LocalIdx::from_usize(0))),
         });
         // A statement assigning a constant to local 0, so verbose output
         // annotates the place with its resolved type.
         let bb = BasicBlockData {
             statements: vec![Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(0)),
+                    Place::new(LocalIdx::from_usize(0)),
                     glyim_mir::Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Uint(0),
                         ty: i32_ty,
@@ -100,7 +100,7 @@ mod tests {
             },
             is_cleanup: false,
         };
-        body.basic_blocks = glyim_core::IndexVec::from_raw(vec![bb]);
+        body.basic_blocks = glyim_core::IndexVec::from_vec(vec![bb]);
 
         let terse = super::format::format_mir_body(&ctx, &body);
         let verbose = super::format::format_mir_body_verbose(&ctx, &body);
