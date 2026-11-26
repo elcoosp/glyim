@@ -5,9 +5,11 @@ impl MirGenTester {
     /// `lower_body`.
     pub fn lower_body(
         ctx: &mut dyn glyim_lower::LowerCtx,
-        thir: &glyim_typeck::thir::Body,
+        typed: &glyim_typeck::TypedBody,
     ) -> Result<glyim_mir::Body, Vec<glyim_diag::GlyimDiagnostic>> {
-        let result = glyim_lower::lower_body(ctx, thir);
+        // Plan M5.2: the harness lowers through the typed boundary too —
+        // only verified bodies can reach MIR here.
+        let result = glyim_lower::lower_typed_body(ctx, typed);
         if result.diagnostics.is_empty() {
             Ok(result.body)
         } else {
