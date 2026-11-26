@@ -73,13 +73,13 @@ fn constant_index_array_from_end_is_constant_offset() {
     // RT-13: the index stride uses the ELEMENT size. Register 4 for i32.
     let backend = BytecodeBackend::with_ty_ctx(ctx, glyim_core::TargetInfo::default())
         .with_layout_provider(Box::new(TestLayoutProvider::new().with_size(Ty::I32, 4)));
-    let local_tys = IndexVec::from_raw(vec![LocalDecl {
+    let local_tys = IndexVec::from_vec(vec![LocalDecl {
         ty: arr_ty,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     }]);
     let place = Place {
-        local: LocalIdx::from_raw(0),
+        local: LocalIdx::from_usize(0),
         projection: Box::new([ProjectionElem::ConstantIndex {
             offset: 1,
             min_length: 0,
@@ -105,13 +105,13 @@ fn constant_index_slice_from_end_emits_runtime_len_sub() {
     // RT-13: register the ELEMENT (i32) size, not the container's.
     let backend = BytecodeBackend::with_ty_ctx(ctx, glyim_core::TargetInfo::default())
         .with_layout_provider(Box::new(TestLayoutProvider::new().with_size(Ty::I32, 4)));
-    let local_tys = IndexVec::from_raw(vec![LocalDecl {
+    let local_tys = IndexVec::from_vec(vec![LocalDecl {
         ty: slice_ty,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     }]);
     let place = Place {
-        local: LocalIdx::from_raw(0),
+        local: LocalIdx::from_usize(0),
         projection: Box::new([ProjectionElem::ConstantIndex {
             offset: 1,
             min_length: 0,
@@ -164,8 +164,8 @@ fn index_projection_strides_by_element_size() {
     // Element (i32) size = 4; container (array) size would be 16.
     let backend = BytecodeBackend::with_ty_ctx(ctx, glyim_core::TargetInfo::default())
         .with_layout_provider(Box::new(TestLayoutProvider::new().with_size(Ty::I32, 4)));
-    let idx_local = LocalIdx::from_raw(1);
-    let local_tys = IndexVec::from_raw(vec![
+    let idx_local = LocalIdx::from_usize(1);
+    let local_tys = IndexVec::from_vec(vec![
         LocalDecl {
             ty: arr_ty,
             mutability: Mutability::Not,
@@ -178,7 +178,7 @@ fn index_projection_strides_by_element_size() {
         },
     ]);
     let place = Place {
-        local: LocalIdx::from_raw(0),
+        local: LocalIdx::from_usize(0),
         projection: Box::new([ProjectionElem::Index(idx_local)]),
     };
     let mut bc = Vec::new();
