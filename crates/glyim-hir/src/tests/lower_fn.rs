@@ -12,7 +12,7 @@ fn test_fn_with_params() {
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
     assert_eq!(hir.items.len(), 1);
-    let item = &hir.items[ItemId::from_raw(0)];
+    let item = &hir.items[ItemId::from_usize(0)];
     assert_eq!(interner.resolve(item.name), "add");
     match &item.kind {
         ItemKind::Fn(fn_item) => {
@@ -36,7 +36,7 @@ fn test_extern_c_fn_gets_c_abi() {
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
     assert_eq!(hir.items.len(), 1);
-    let item = &hir.items[ItemId::from_raw(0)];
+    let item = &hir.items[ItemId::from_usize(0)];
     assert_eq!(interner.resolve(item.name), "add");
     match &item.kind {
         ItemKind::Fn(fn_item) => {
@@ -58,7 +58,7 @@ fn test_bare_extern_fn_defaults_to_c_abi() {
     let parse_result = parse_to_syntax(source, file_id);
     let mut interner = Interner::new();
     let hir = lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
-    let item = &hir.items[ItemId::from_raw(0)];
+    let item = &hir.items[ItemId::from_usize(0)];
     match &item.kind {
         ItemKind::Fn(fn_item) => {
             let abi = fn_item.abi.expect("bare extern fn must carry an abi name");
@@ -84,7 +84,7 @@ fn unsafe_fn_sets_is_unsafe() {
     let mut interner = Interner::new();
     let hir = crate::lower::lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
 
-    let item = &hir.items[crate::ItemId::from_raw(0)];
+    let item = &hir.items[crate::ItemId::from_usize(0)];
     match &item.kind {
         ItemKind::Fn(f) => assert!(
             f.is_unsafe,
@@ -108,7 +108,7 @@ fn plain_fn_is_not_unsafe() {
     let mut interner = Interner::new();
     let hir = crate::lower::lower_crate(&parse_result.root, &mut interner, &mut Vec::new());
 
-    let item = &hir.items[crate::ItemId::from_raw(0)];
+    let item = &hir.items[crate::ItemId::from_usize(0)];
     match &item.kind {
         ItemKind::Fn(f) => assert!(!f.is_unsafe, "plain fn must not set is_unsafe"),
         other => panic!("expected Fn item, got {other:?}"),
