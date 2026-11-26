@@ -600,7 +600,7 @@ impl TraitSolver for SimpleTraitSolver<'_> {
         let fn_ty = ctx_mut.mk_ty(glyim_type::TyKind::FnDef(next_def_id, substs));
         // Option<elem_ty> - the builtin `Option` lang item (registered at a
         // fixed id in register_builtin_ranges), not a magic number.
-        let option_adt = glyim_core::def_id::AdtId::from_raw(1010);
+        let option_adt = glyim_core::def_id::AdtId::from_usize(1010);
         let opt_subst = ctx_mut.intern_substitution(vec![glyim_type::GenericArg::Ty(elem_ty)]);
         let option_ty = ctx_mut.mk_ty(glyim_type::TyKind::Adt(option_adt, opt_subst));
         let discr_ty = ctx_mut.mk_ty(glyim_type::TyKind::Uint(glyim_core::primitives::UintTy::U8));
