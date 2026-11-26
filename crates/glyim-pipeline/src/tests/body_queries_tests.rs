@@ -25,7 +25,10 @@ use std::sync::Arc;
 /// distinct per `local` so two bodies with different owners hash differently.
 fn thir_body_for(local: u32) -> thir::Body {
     thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(local)),
+        owner: DefId::new(
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(local as usize),
+        ),
         params: Vec::new(),
         return_ty: Ty::UNIT,
         stmts: Vec::new(),
@@ -45,14 +48,14 @@ fn mir_build_id(krate: CrateId, local: LocalDefId) -> u64 {
 #[test]
 fn thir_body_backdate_returns_same_arc_and_keeps_mir_build_cache() {
     let db = Database::default();
-    let def_id = LocalDefId::from_raw(7);
+    let def_id = LocalDefId::from_usize(7);
 
     // First thir_body: cache miss → insert + invalidate mir_build (no-op, empty).
     let arc1 = db.thir_body_query(def_id, || thir_body_for(7));
 
     // Simulate a prior mir_build_query by inserting a mir_build entry for this def.
-    let mir_id = mir_build_id(CrateId::from_raw(0), def_id);
-    let mir_arc = Arc::new(Body::dummy(DefId::new(CrateId::from_raw(0), def_id)));
+    let mir_id = mir_build_id(CrateId::from_usize(0), def_id);
+    let mir_arc = Arc::new(Body::dummy(DefId::new(CrateId::from_usize(0), def_id)));
     db.query_cache_insert(
         QueryKind::MirBuild,
         mir_id,
@@ -83,18 +86,18 @@ fn thir_body_backdate_returns_same_arc_and_keeps_mir_build_cache() {
 #[test]
 fn thir_body_change_returns_fresh_arc_and_invalidates_mir_build() {
     let db = Database::default();
-    let def_id = LocalDefId::from_raw(9);
+    let def_id = LocalDefId::from_usize(9);
 
     // First thir_body (owner local 9).
     let arc1 = db.thir_body_query(def_id, || thir_body_for(9));
 
     // Seed the mir_build cache for this def.
-    let mir_id = mir_build_id(CrateId::from_raw(0), def_id);
+    let mir_id = mir_build_id(CrateId::from_usize(0), def_id);
     db.query_cache_insert(
         QueryKind::MirBuild,
         mir_id,
         glyim_db::body_queries::sentinel_fingerprint(),
-        Arc::new(Body::dummy(DefId::new(CrateId::from_raw(0), def_id))),
+        Arc::new(Body::dummy(DefId::new(CrateId::from_usize(0), def_id))),
     );
     assert!(db.query_cache_value(QueryKind::MirBuild, mir_id).is_some());
 
@@ -116,7 +119,7 @@ fn thir_body_change_returns_fresh_arc_and_invalidates_mir_build() {
 #[test]
 fn mir_build_cache_hit_does_not_recompute() {
     let db = Database::default();
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(5));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(5));
 
     // Seed the mir_build cache (simulating a prior mir_build_query that
     // validated + cached the body).
