@@ -39,7 +39,7 @@ fn main() {
         ty: i32_ty,
         span: Span::DUMMY,
     });
-    let rhs = Operand::Copy(Place::new(LocalIdx::from_raw(1)));
+    let rhs = Operand::Copy(Place::new(LocalIdx::from_usize(1)));
     let rv = Rvalue::binary_op(BinOp::Add, lhs, rhs);
     println!("rvalue = {rv:?}");
 
@@ -57,7 +57,7 @@ fn main() {
         source_info: SourceInfo::new(Span::DUMMY),
     });
     entry.statements.push(Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(0)), rv),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(0)), rv),
         source_info: SourceInfo::new(Span::DUMMY),
     });
     basic_blocks.push(entry);
@@ -73,7 +73,7 @@ fn main() {
         source_info: SourceInfo::new(Span::DUMMY),
     });
     let body = glyim_mir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks,
         locals,
         arg_count: 0,
