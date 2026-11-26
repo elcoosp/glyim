@@ -125,8 +125,8 @@ impl TypeArena {
         self.type_index
             .write()
             .unwrap()
-            .insert(kind, Ty::from_raw(raw));
-        Ty::from_raw(raw)
+            .insert(kind, Ty::from_usize(raw as usize));
+        Ty::from_usize(raw as usize)
     }
 
     #[inline]
@@ -169,8 +169,8 @@ impl TypeArena {
         self.subst_index
             .write()
             .unwrap()
-            .insert(small, Substitution::from_raw(index, len));
-        Substitution::from_raw(index, len)
+            .insert(small, Substitution::from_parts(index, len));
+        Substitution::from_parts(index, len)
     }
 
     #[inline]
