@@ -258,7 +258,7 @@ fn main() -> i32 {
     // Now run it for real through the interpreter, after monomorphization.
     let comp = compile_async_full(src).expect("full compile for runtime");
     let main_def_id = resolve_main_def_id(&comp).expect("main DefId resolvable");
-    let main_fn_def_id = glyim_core::def_id::FnDefId::from_raw(main_def_id.local_id.to_raw());
+    let main_fn_def_id = glyim_core::def_id::FnDefId::from_usize(main_def_id.local_id.index());
 
     // Monomorphize: yields concrete (substituted + devirtualized) bodies keyed
     // by DefId, exactly as the codegen path does, so `block_on<F>` becomes
@@ -381,7 +381,7 @@ fn main() -> i32 {
     // Now run it for real through the interpreter, after monomorphization.
     let comp = compile_async_full(src).expect("full compile for runtime");
     let main_def_id = resolve_main_def_id(&comp).expect("main DefId resolvable");
-    let main_fn_def_id = glyim_core::def_id::FnDefId::from_raw(main_def_id.local_id.to_raw());
+    let main_fn_def_id = glyim_core::def_id::FnDefId::from_usize(main_def_id.local_id.index());
 
     let mono_bodies = comp.monomorphize(main_fn_def_id);
 
@@ -448,7 +448,7 @@ fn main() -> i32 {
     // Execute: dep(1) -> x=1, mid=101, dep(101) -> y=101, out=103.
     let comp = compile_async_full(src).expect("full compile for runtime");
     let main_def_id = resolve_main_def_id(&comp).expect("main DefId resolvable");
-    let main_fn_def_id = glyim_core::def_id::FnDefId::from_raw(main_def_id.local_id.to_raw());
+    let main_fn_def_id = glyim_core::def_id::FnDefId::from_usize(main_def_id.local_id.index());
     let mono_bodies = comp.monomorphize(main_fn_def_id);
     let main_body = mono_bodies
         .iter()
