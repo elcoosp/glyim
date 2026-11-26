@@ -111,7 +111,7 @@ fn display_nested_ref() {
 #[test]
 fn display_infer_ty_var() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         c.mk_ty(TyKind::Infer(InferVar::Ty(var)))
     });
     let printed = format!("{}", PrintTy::new(ty, &ctx));
@@ -121,7 +121,7 @@ fn display_infer_ty_var() {
 #[test]
 fn display_infer_int_var() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
-        let var = IntVar::from_raw(3);
+        let var = IntVar::from_usize(3);
         c.mk_ty(TyKind::Infer(InferVar::Int(var)))
     });
     let printed = format!("{}", PrintTy::new(ty, &ctx));
@@ -131,7 +131,7 @@ fn display_infer_int_var() {
 #[test]
 fn display_infer_float_var() {
     let (ctx, ty) = with_fresh_ty_ctx(|c| {
-        let var = FloatVar::from_raw(7);
+        let var = FloatVar::from_usize(7);
         c.mk_ty(TyKind::Infer(InferVar::Float(var)))
     });
     let printed = format!("{}", PrintTy::new(ty, &ctx));
