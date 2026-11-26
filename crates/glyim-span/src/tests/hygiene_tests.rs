@@ -44,9 +44,9 @@ fn test_push_expansion_adds_data() {
 #[test]
 fn test_apply_remove_mark_roundtrip() {
     let mut ctx = HygieneCtx::new();
-    let file = FileId::from_raw(42);
+    let file = FileId::from_usize(42);
     let lo = ByteIdx::ZERO;
-    let hi = ByteIdx::from_raw(10);
+    let hi = ByteIdx::from_usize(10);
     let root_span = Span::range(file, lo, hi, SyntaxContext::ROOT);
     let mark = Mark {
         expn_id: ExpnId::ROOT, // use root mark for simplicity
@@ -74,9 +74,9 @@ fn test_remove_mark_on_root_returns_none() {
 #[test]
 fn test_adjust_strips_context_and_applies_scope() {
     let mut ctx = HygieneCtx::new();
-    let file = FileId::from_raw(1);
+    let file = FileId::from_usize(1);
     let lo = ByteIdx::ZERO;
-    let hi = ByteIdx::from_raw(5);
+    let hi = ByteIdx::from_usize(5);
     let root_span = Span::range(file, lo, hi, SyntaxContext::ROOT);
     let mark1 = Mark {
         expn_id: ExpnId::ROOT,
@@ -107,9 +107,9 @@ fn test_adjust_strips_context_and_applies_scope() {
 fn test_adjust_on_root_span_just_changes_ctx() {
     let mut ctx = HygieneCtx::new();
     let span = Span::range(
-        FileId::from_raw(10),
-        ByteIdx::from_raw(0),
-        ByteIdx::from_raw(8),
+        FileId::from_usize(10),
+        ByteIdx::from_usize(0),
+        ByteIdx::from_usize(8),
         SyntaxContext::ROOT,
     );
     let target_ctx = SyntaxContext::ROOT; // same
@@ -125,9 +125,9 @@ fn test_adjust_on_root_span_just_changes_ctx() {
 fn test_syntax_context_distinguishes_marked_spans() {
     let mut ctx = HygieneCtx::new();
     let span = Span::range(
-        FileId::from_raw(1),
+        FileId::from_usize(1),
         ByteIdx::ZERO,
-        ByteIdx::from_raw(5),
+        ByteIdx::from_usize(5),
         SyntaxContext::ROOT,
     );
     let macro_mark = Mark {
