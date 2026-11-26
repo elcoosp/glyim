@@ -31,10 +31,10 @@ fn switch_int_three_targets() {
                 switch_ty: i32_ty,
                 targets: SwitchTargets::new(
                     Box::new([
-                        (1, BasicBlockIdx::from_raw(1)),
-                        (2, BasicBlockIdx::from_raw(2)),
+                        (1, BasicBlockIdx::from_usize(1)),
+                        (2, BasicBlockIdx::from_usize(2)),
                     ]),
-                    BasicBlockIdx::from_raw(3),
+                    BasicBlockIdx::from_usize(3),
                 ),
             },
             source_info: SourceInfo::new(Span::DUMMY),
@@ -58,7 +58,7 @@ fn switch_int_three_targets() {
         };
         let term1 = Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(4),
+                target: BasicBlockIdx::from_usize(4),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         };
@@ -81,7 +81,7 @@ fn switch_int_three_targets() {
         };
         let term2 = Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(4),
+                target: BasicBlockIdx::from_usize(4),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         };
@@ -104,7 +104,7 @@ fn switch_int_three_targets() {
         };
         let term3 = Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(4),
+                target: BasicBlockIdx::from_usize(4),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         };
@@ -125,7 +125,7 @@ fn switch_int_three_targets() {
         });
 
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: blocks,
             locals,
             arg_count: 0,
