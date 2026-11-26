@@ -240,7 +240,7 @@ fn constrained_associated_type_is_object_safe() {
 fn unsafe_supertrait_is_not_object_safe() {
     let methods = vec![method("f", MethodSelfKind::ByReference, false)];
     let supertrait_safety = vec![SupertraitSafety {
-        trait_id: TraitDefId::from_raw(7),
+        trait_id: TraitDefId::from_usize(7),
         is_safe: false,
         span: test_span(),
     }];
@@ -262,7 +262,7 @@ fn unsafe_supertrait_is_not_object_safe() {
 fn safe_supertrait_is_object_safe() {
     let methods = vec![method("f", MethodSelfKind::ByReference, false)];
     let supertrait_safety = vec![SupertraitSafety {
-        trait_id: TraitDefId::from_raw(7),
+        trait_id: TraitDefId::from_usize(7),
         is_safe: true,
         span: test_span(),
     }];
