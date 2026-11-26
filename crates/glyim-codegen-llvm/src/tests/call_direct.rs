@@ -49,17 +49,17 @@ fn make_simple_call_body(ctx: &mut TyCtxMut) -> Body {
     let bb0 = BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(2)),
+                Place::new(LocalIdx::from_usize(2)),
                 Rvalue::Use(Operand::Constant(const_42)),
             ),
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
         }],
         terminator: Terminator {
             kind: TerminatorKind::Call {
-                func: Operand::Copy(Place::new(LocalIdx::from_raw(2))),
-                args: vec![Operand::Copy(Place::new(LocalIdx::from_raw(1)))],
-                destination: Place::new(LocalIdx::from_raw(0)),
-                target: Some(BasicBlockIdx::from_raw(1)),
+                func: Operand::Copy(Place::new(LocalIdx::from_usize(2))),
+                args: vec![Operand::Copy(Place::new(LocalIdx::from_usize(1)))],
+                destination: Place::new(LocalIdx::from_usize(0)),
+                target: Some(BasicBlockIdx::from_usize(1)),
                 cleanup: None,
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -77,8 +77,8 @@ fn make_simple_call_body(ctx: &mut TyCtxMut) -> Body {
     };
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
-        basic_blocks: IndexVec::from_raw(vec![bb0, bb1]),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
+        basic_blocks: IndexVec::from_vec(vec![bb0, bb1]),
         locals,
         arg_count,
         return_ty,
@@ -149,7 +149,7 @@ fn call_via_fndef_const_resolves_to_glyim_fn_symbol() {
     };
     let fn_ptr_ty = ctx_mut.mk_ty(TyKind::FnPtr(fn_sig.clone()));
     // The callee's FnDefId — by convention it equals the function's local def id.
-    let callee_id = glyim_core::def_id::FnDefId::from_raw(7);
+    let callee_id = glyim_core::def_id::FnDefId::from_usize(7);
     ctx_mut.register_fn_sig(callee_id, fn_sig);
 
     let return_ty = i32_ty;
@@ -178,17 +178,17 @@ fn call_via_fndef_const_resolves_to_glyim_fn_symbol() {
     let bb0 = BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(2)),
+                Place::new(LocalIdx::from_usize(2)),
                 Rvalue::Use(Operand::Constant(fn_const)),
             ),
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
         }],
         terminator: Terminator {
             kind: TerminatorKind::Call {
-                func: Operand::Copy(Place::new(LocalIdx::from_raw(2))),
-                args: vec![Operand::Copy(Place::new(LocalIdx::from_raw(1)))],
-                destination: Place::new(LocalIdx::from_raw(0)),
-                target: Some(BasicBlockIdx::from_raw(1)),
+                func: Operand::Copy(Place::new(LocalIdx::from_usize(2))),
+                args: vec![Operand::Copy(Place::new(LocalIdx::from_usize(1)))],
+                destination: Place::new(LocalIdx::from_usize(0)),
+                target: Some(BasicBlockIdx::from_usize(1)),
                 cleanup: None,
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -204,8 +204,8 @@ fn call_via_fndef_const_resolves_to_glyim_fn_symbol() {
         is_cleanup: false,
     };
     let body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
-        basic_blocks: IndexVec::from_raw(vec![bb0, bb1]),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
+        basic_blocks: IndexVec::from_vec(vec![bb0, bb1]),
         locals,
         arg_count: 2,
         return_ty,
@@ -249,7 +249,7 @@ fn call_closure_value_lowers_to_defined_closure_fn() {
     // convention maps AdtId <-> ClosureId by their raw value.
     let closure_adt =
         ctx_mut.register_closure(vec![(ctx_mut.resolver().intern("capture_0"), i32_ty)]);
-    let closure_id = ClosureId::from_raw(closure_adt.to_raw());
+    let closure_id = ClosureId::from_usize(closure_adt.index());
     // The closure *value* type is `TyKind::Closure`; its `substs` carry the
     // capture types so the value lays out as a struct of captures (matching the
     // synthetic ADT's fields used for call-site extraction).
@@ -296,7 +296,7 @@ fn call_closure_value_lowers_to_defined_closure_fn() {
     };
     let build_closure = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(2)),
+            Place::new(LocalIdx::from_usize(2)),
             Rvalue::Aggregate(
                 AggregateKind::Closure(closure_id, glyim_type::Substitution::empty()),
                 vec![Operand::Constant(capture_const)],
@@ -313,10 +313,10 @@ fn call_closure_value_lowers_to_defined_closure_fn() {
         statements: vec![build_closure],
         terminator: Terminator {
             kind: TerminatorKind::Call {
-                func: Operand::Copy(Place::new(LocalIdx::from_raw(2))),
+                func: Operand::Copy(Place::new(LocalIdx::from_usize(2))),
                 args: vec![Operand::Constant(arg_const)],
-                destination: Place::new(LocalIdx::from_raw(0)),
-                target: Some(BasicBlockIdx::from_raw(1)),
+                destination: Place::new(LocalIdx::from_usize(0)),
+                target: Some(BasicBlockIdx::from_usize(1)),
                 cleanup: None,
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -332,8 +332,8 @@ fn call_closure_value_lowers_to_defined_closure_fn() {
         is_cleanup: false,
     };
     let caller_body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
-        basic_blocks: IndexVec::from_raw(vec![bb0, bb1]),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
+        basic_blocks: IndexVec::from_vec(vec![bb0, bb1]),
         locals: caller_locals,
         arg_count: 0,
         return_ty,
@@ -362,8 +362,8 @@ fn call_closure_value_lowers_to_defined_closure_fn() {
     let clo_bb = BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
-                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(1)))),
+                Place::new(LocalIdx::from_usize(0)),
+                Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(1)))),
             ),
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
         }],
@@ -375,10 +375,10 @@ fn call_closure_value_lowers_to_defined_closure_fn() {
     };
     let closure_body = Body {
         owner: DefId::new(
-            CrateId::from_raw(0),
-            LocalDefId::from_raw(closure_id.to_raw()),
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(closure_id.index()),
         ),
-        basic_blocks: IndexVec::from_raw(vec![clo_bb]),
+        basic_blocks: IndexVec::from_vec(vec![clo_bb]),
         locals: clo_locals,
         arg_count: 2,
         return_ty,
