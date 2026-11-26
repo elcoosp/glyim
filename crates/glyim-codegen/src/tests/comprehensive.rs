@@ -6,7 +6,10 @@ use glyim_type::Ty;
 use std::sync::Arc;
 
 fn dummy_body() -> Body {
-    Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)))
+    Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ))
 }
 
 // ─── Binary Ops Edge Cases ───
@@ -14,13 +17,13 @@ fn dummy_body() -> Body {
 #[test]
 fn binary_op_zero_values() {
     let mut body = dummy_body();
-    let dest = LocalIdx::from_raw(1);
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(
@@ -56,13 +59,13 @@ fn binary_op_zero_values() {
 #[test]
 fn binary_op_negative_values() {
     let mut body = dummy_body();
-    let dest = LocalIdx::from_raw(1);
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(
@@ -97,13 +100,13 @@ fn binary_op_negative_values() {
 #[test]
 fn binary_op_large_values() {
     let mut body = dummy_body();
-    let dest = LocalIdx::from_raw(1);
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(
@@ -140,13 +143,13 @@ fn binary_op_large_values() {
 #[test]
 fn uint_constant_emission() {
     let mut body = dummy_body();
-    let dest = LocalIdx::from_raw(1);
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(
@@ -173,14 +176,14 @@ fn uint_constant_emission() {
 #[test]
 fn float_constant_emission() {
     let mut body = dummy_body();
-    let dest = LocalIdx::from_raw(1);
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
     let pi_bits = std::f64::consts::PI.to_bits();
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(
@@ -204,13 +207,13 @@ fn float_constant_emission() {
 #[test]
 fn char_constant_emission() {
     let mut body = dummy_body();
-    let dest = LocalIdx::from_raw(1);
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(
@@ -236,7 +239,7 @@ fn char_constant_emission() {
 #[test]
 fn aggregate_array() {
     let mut body = dummy_body();
-    let dest = LocalIdx::from_raw(1);
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
@@ -259,7 +262,7 @@ fn aggregate_array() {
             span: Span::DUMMY,
         }),
     ];
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(
@@ -284,7 +287,7 @@ fn aggregate_array() {
 #[test]
 fn aggregate_adt() {
     let mut body = dummy_body();
-    let dest = LocalIdx::from_raw(1);
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
@@ -298,15 +301,15 @@ fn aggregate_adt() {
     // Create an empty Substitution via TyCtxMut
     let mut tcx = glyim_test::test_ty_ctx();
     let empty_substs = tcx.intern_substitution(vec![]);
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(
                 Place::new(dest),
                 Rvalue::Aggregate(
                     AggregateKind::Adt(
-                        glyim_core::def_id::AdtId::from_raw(0),
-                        glyim_mir::VariantIdx::from_raw(0),
+                        glyim_core::def_id::AdtId::from_usize(0),
+                        glyim_mir::VariantIdx::from_usize(0),
                         empty_substs,
                     ),
                     operands,
@@ -336,13 +339,13 @@ fn cast_kind_bytes() {
     ];
     for (kind, expected_byte) in cast_kinds {
         let mut body = dummy_body();
-        let dest = LocalIdx::from_raw(1);
+        let dest = LocalIdx::from_usize(1);
         body.locals.push(LocalDecl {
             ty: Ty::ERROR,
             mutability: Mutability::Not,
             source_info: SourceInfo::new(Span::DUMMY),
         });
-        body.basic_blocks[BasicBlockIdx::from_raw(0)]
+        body.basic_blocks[BasicBlockIdx::from_usize(0)]
             .statements
             .push(Statement {
                 kind: StatementKind::Assign(
@@ -385,13 +388,13 @@ fn cast_kind_bytes() {
 #[test]
 fn emit_repeat() {
     let mut body = dummy_body();
-    let dest = LocalIdx::from_raw(1);
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(
@@ -424,9 +427,9 @@ fn emit_repeat() {
 #[test]
 fn multiple_statements_in_block() {
     let mut body = dummy_body();
-    let a = LocalIdx::from_raw(1);
-    let b = LocalIdx::from_raw(2);
-    let c = LocalIdx::from_raw(3);
+    let a = LocalIdx::from_usize(1);
+    let b = LocalIdx::from_usize(2);
+    let c = LocalIdx::from_usize(3);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
@@ -442,7 +445,7 @@ fn multiple_statements_in_block() {
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    let block = &mut body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block = &mut body.basic_blocks[BasicBlockIdx::from_usize(0)];
     block.statements.push(Statement {
         kind: StatementKind::Assign(
             Place::new(a),
@@ -525,14 +528,14 @@ fn multiple_statements_in_block() {
 #[test]
 fn multiple_basic_blocks_with_goto() {
     let mut body = dummy_body();
-    let a = LocalIdx::from_raw(1);
+    let a = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
     // BB0: assign 1 to a, goto BB1
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(
@@ -545,9 +548,9 @@ fn multiple_basic_blocks_with_goto() {
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(1),
+            target: BasicBlockIdx::from_usize(1),
         },
         source_info: SourceInfo::new(Span::DUMMY),
     };
@@ -572,13 +575,13 @@ fn multiple_basic_blocks_with_goto() {
 #[test]
 fn call_with_cleanup() {
     let mut body = dummy_body();
-    let dest = LocalIdx::from_raw(1);
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Call {
             func: Operand::Constant(MirConst {
                 kind: MirConstKind::Int(0),
@@ -587,8 +590,8 @@ fn call_with_cleanup() {
             }),
             args: vec![],
             destination: Place::new(dest),
-            target: Some(BasicBlockIdx::from_raw(1)),
-            cleanup: Some(BasicBlockIdx::from_raw(2)),
+            target: Some(BasicBlockIdx::from_usize(1)),
+            cleanup: Some(BasicBlockIdx::from_usize(2)),
         },
         source_info: SourceInfo::new(Span::DUMMY),
     };
@@ -606,7 +609,7 @@ fn call_with_cleanup() {
 #[test]
 fn switch_int_bool() {
     let mut body = dummy_body();
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::SwitchInt {
             discr: Operand::Constant(MirConst {
                 kind: MirConstKind::Bool(true),
@@ -615,8 +618,8 @@ fn switch_int_bool() {
             }),
             switch_ty: Ty::BOOL,
             targets: SwitchTargets::new(
-                Box::new([(0u128, BasicBlockIdx::from_raw(1))]),
-                BasicBlockIdx::from_raw(2),
+                Box::new([(0u128, BasicBlockIdx::from_usize(1))]),
+                BasicBlockIdx::from_usize(2),
             ),
         },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -639,20 +642,20 @@ fn switch_int_bool() {
 #[test]
 fn unary_deref_succeeds() {
     let mut body = dummy_body();
-    let dest = LocalIdx::from_raw(1);
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(
                 Place::new(dest),
                 Rvalue::UnaryOp(
                     UnOp::Deref,
-                    Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+                    Operand::Copy(Place::new(LocalIdx::from_usize(0))),
                 ),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -670,7 +673,7 @@ fn unary_deref_succeeds() {
 #[test]
 fn assert_false_expected() {
     let mut body = dummy_body();
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Assert {
             cond: Operand::Constant(MirConst {
                 kind: MirConstKind::Bool(false),
@@ -678,7 +681,7 @@ fn assert_false_expected() {
                 span: Span::DUMMY,
             }),
             expected: false,
-            target: BasicBlockIdx::from_raw(1),
+            target: BasicBlockIdx::from_usize(1),
             cleanup: None,
             msg: AssertMessage::DivisionByZero,
         },
@@ -702,16 +705,16 @@ fn assert_false_expected() {
 #[test]
 fn storage_live_dead_nop() {
     let mut body = dummy_body();
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
-            kind: StatementKind::StorageLive(LocalIdx::from_raw(1)),
+            kind: StatementKind::StorageLive(LocalIdx::from_usize(1)),
             source_info: SourceInfo::new(Span::DUMMY),
         });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
-            kind: StatementKind::StorageDead(LocalIdx::from_raw(1)),
+            kind: StatementKind::StorageDead(LocalIdx::from_usize(1)),
             source_info: SourceInfo::new(Span::DUMMY),
         });
     let backend = BytecodeBackend::with_ty_ctx(
@@ -727,13 +730,13 @@ fn storage_live_dead_nop() {
 #[test]
 fn unit_constant_stub() {
     let mut body = dummy_body();
-    let dest = LocalIdx::from_raw(1);
+    let dest = LocalIdx::from_usize(1);
     body.locals.push(LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Assign(
@@ -760,7 +763,7 @@ fn unit_constant_stub() {
 #[test]
 fn unreachable_terminator_nop() {
     let mut body = dummy_body();
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Unreachable,
         source_info: SourceInfo::new(Span::DUMMY),
     };
@@ -777,9 +780,9 @@ fn unreachable_terminator_nop() {
 #[test]
 fn goto_terminator() {
     let mut body = dummy_body();
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(5),
+            target: BasicBlockIdx::from_usize(5),
         },
         source_info: SourceInfo::new(Span::DUMMY),
     };
@@ -806,7 +809,7 @@ fn goto_terminator() {
 #[test]
 fn nop_statement() {
     let mut body = dummy_body();
-    body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .statements
         .push(Statement {
             kind: StatementKind::Nop,
