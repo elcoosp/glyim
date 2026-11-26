@@ -7,7 +7,7 @@ fn return_expression() {
     let exprs = vec![
         Expr::Literal(Literal::Int(42, None)),
         Expr::Return {
-            value: Some(ExprId::from_raw(0)),
+            value: Some(ExprId::from_usize(0)),
         },
     ];
 
