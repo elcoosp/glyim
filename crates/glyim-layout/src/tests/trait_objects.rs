@@ -6,7 +6,7 @@ use glyim_type::*;
 fn make_dyn_tykind(ctx: &mut TyCtxMut) -> TyKind {
     let empty_subst = ctx.intern_substitution(vec![]);
     let trait_ref = TraitRef {
-        def_id: TraitDefId::from_raw(0),
+        def_id: TraitDefId::from_usize(0),
         substs: empty_subst,
     };
     let predicate = Predicate::Trait(TraitPredicate {
@@ -46,12 +46,12 @@ fn vtable_size_and_alignment() {
         FieldsShape::Arbitrary { offsets } => {
             assert_eq!(offsets.len(), 2, "two fields");
             assert_eq!(
-                offsets[FieldIdx::from_raw(0)],
+                offsets[FieldIdx::from_usize(0)],
                 Size::ZERO,
                 "data ptr at offset 0"
             );
             assert_eq!(
-                offsets[FieldIdx::from_raw(1)],
+                offsets[FieldIdx::from_usize(1)],
                 Size::bytes(ptr_size.0),
                 "vtable ptr at offset ptr_size"
             );
