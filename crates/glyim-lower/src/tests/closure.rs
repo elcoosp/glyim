@@ -17,7 +17,7 @@ fn closure_lowering_does_not_panic() {
 
     let b = ThirBuilder::new(i32_ty, interner);
     let closure_body = thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1)),
         params: vec![],
         return_ty: i32_ty,
         stmts: vec![],
