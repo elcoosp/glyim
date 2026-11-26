@@ -31,13 +31,13 @@ fn test_frontend_tester() {
 fn test_mir_assert() {
     let ctx = test_frozen_ty_ctx();
     let body = glyim_mir::Body::dummy(glyim_core::def_id::DefId::new(
-        glyim_core::def_id::CrateId::from_raw(0),
-        glyim_core::def_id::LocalDefId::from_raw(0),
+        glyim_core::def_id::CrateId::from_usize(0),
+        glyim_core::def_id::LocalDefId::from_usize(0),
     ));
     let _ = assert_mir(&ctx, &body)
         .block_count(1)
         .local_count(1)
-        .block_terminator(glyim_mir::BasicBlockIdx::from_raw(0), "Unreachable");
+        .block_terminator(glyim_mir::BasicBlockIdx::from_usize(0), "Unreachable");
 }
 
 #[test]
