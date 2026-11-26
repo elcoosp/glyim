@@ -141,12 +141,12 @@ impl CompilerPhase for TypeckPhase<'_> {
                 // the name→id mapping, which is what we do here.
                 let adt_id = (0..self.def_map.modules.len())
                     .find_map(|i| {
-                        self.def_map.modules[ModuleId::from_raw(i as u32)]
+                        self.def_map.modules[ModuleId::from_usize(i)]
                             .scope
                             .types
                             .get(&item.name)
                     })
-                    .map(|(id, _, _)| glyim_core::def_id::AdtId::from_raw(id.to_raw()))
+                    .map(|(id, _, _)| glyim_core::def_id::AdtId::from_usize(id.index()))
                     .or_else(|| ty_ctx_mut.adt_id_by_name(item.name))
                     .unwrap_or_else(|| ty_ctx_mut.next_synthetic_adt_id());
                 ty_ctx_mut.register_adt_name(item.name, adt_id);
@@ -207,7 +207,8 @@ impl CompilerPhase for TypeckPhase<'_> {
                         item.span,
                     );
                     if let Some(trait_def_id) = header.trait_def_id {
-                        let impl_def_id = glyim_core::def_id::ImplDefId::from_raw(item.id.to_raw());
+                        let impl_def_id =
+                            glyim_core::def_id::ImplDefId::from_usize(item.id.index());
                         let substs = ty_ctx_mut
                             .intern_substitution(vec![glyim_type::GenericArg::Ty(header.self_ty)]);
                         trait_ctx.register_impl(ImplDef {
