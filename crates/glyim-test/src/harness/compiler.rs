@@ -432,6 +432,7 @@ impl TestCompiler for PipelineCompiler {
             None,
             None,
             opt_level,
+            None,
         ) {
             Ok(artifacts) => {
                 // Tier 7.2: link the produced object file into a real executable
