@@ -28,9 +28,9 @@ use std::sync::Arc;
 
 /// `leaf` (local def id 1): a body whose single block returns.
 fn leaf_body() -> Arc<Body> {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1));
     let mut body = Body::dummy(owner);
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Return,
         source_info: SourceInfo::new(Span::DUMMY),
     };
@@ -41,18 +41,18 @@ fn leaf_body() -> Arc<Body> {
 /// `leaf` (fn-const with local id 1), stores into local 1, resumes at block
 /// 1, and returns that local.
 fn main_body() -> Arc<Body> {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut body = Body::dummy(owner);
-    body.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = Terminator {
+    body.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = Terminator {
         kind: TerminatorKind::Call {
             func: Operand::Constant(MirConst {
-                kind: MirConstKind::Fn(FnDefId::from_raw(1), Substitution::empty()),
+                kind: MirConstKind::Fn(FnDefId::from_usize(1), Substitution::empty()),
                 ty: Ty::ERROR,
                 span: Span::DUMMY,
             }),
             args: vec![],
-            destination: Place::new(LocalIdx::from_raw(1)),
-            target: Some(BasicBlockIdx::from_raw(1)),
+            destination: Place::new(LocalIdx::from_usize(1)),
+            target: Some(BasicBlockIdx::from_usize(1)),
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
