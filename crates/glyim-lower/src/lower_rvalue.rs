@@ -130,6 +130,15 @@ impl MirBuilder<'_> {
                                 glyim_type::GenericArg::Ty(t) => Some(*t),
                                 _ => None,
                             })
+                            // Designed representation, not an error-arm
+                            // sentinel (plan M5.2 review): for `RangeFull`
+                            // (`s[..]`) the range ADT has an *empty*
+                            // substitution, so there is no element type to
+                            // extract. `elem_ty` then only types the
+                            // synthetic `MirConstKind::Error` operand standing
+                            // in for the missing bound — a pair every
+                            // consumer already handles — and is never read
+                            // semantically.
                             .unwrap_or_else(|| self.ctx.ty_ctx().error_ty());
                         (*s, elem)
                     } else {
@@ -137,6 +146,10 @@ impl MirBuilder<'_> {
                             .as_ref()
                             .map(|e| e.ty)
                             .or_else(|| end.as_ref().map(|e| e.ty))
+                            // Same designed case as above: a range expression
+                            // with no resolved ADT substitution and no bound
+                            // operand carries its element type on the
+                            // synthetic `MirConstKind::Error` operand only.
                             .unwrap_or_else(|| self.ctx.ty_ctx().error_ty());
                         // No resolved substitution available; emit an empty one
                         // and rely on the element type for operand shapes.
@@ -1891,12 +1904,17 @@ impl MirBuilder<'_> {
                 // closure body's leading arguments. Emitting only the captures
                 // here made every runtime closure call fail with "indirect call
                 // through non-function value".
+                //
+                // Plan M5.2 (sentinel deletion): the constant carries the
+                // closure's *real* resolved type — `expr.ty` is the
+                // `TyKind::Closure(id, substs)` the guard above matched —
+                // not a fabricated `error_ty()` sentinel.
                 let fn_const = glyim_mir::MirConst {
                     kind: glyim_mir::MirConstKind::Fn(
                         glyim_core::def_id::FnDefId::from_raw(closure_id.to_raw()),
                         *closure_substs,
                     ),
-                    ty: self.ctx.ty_ctx().error_ty(),
+                    ty: expr.ty,
                     span: expr.span,
                 };
                 let mut operands = Vec::with_capacity(capture_operands.len() + 1);
@@ -3468,6 +3486,14 @@ impl MirBuilder<'_> {
             // `Vec<T>` (builtin ADT id 1020) also supports dynamic range
             // slicing (via `Index<Range<usize>> -> [T]`). Extract `T` from
             // the substitution so the slice element type lines up.
+            //
+            // Plan M5.2 (sentinel deletion): the element type *is* consumed
+            // here — it types the slice result — so a `Vec` place whose
+            // substitution carries no type argument is a compiler invariant
+            // break, not a benign shape. It is diagnosed loudly (the compile
+            // fails) instead of silently fabricating an `error_ty()` element
+            // that would miscompile the slice; the sentinel remains only as
+            // recovery so the pass can keep diagnosing.
             TyKind::Adt(adt_id, substs) if *adt_id == glyim_core::def_id::AdtId::from_raw(1020) => {
                 self.ctx
                     .ty_ctx()
@@ -3477,7 +3503,14 @@ impl MirBuilder<'_> {
                         glyim_type::GenericArg::Ty(t) => Some(*t),
                         _ => None,
                     })
-                    .unwrap_or_else(|| self.ctx.ty_ctx().error_ty())
+                    .unwrap_or_else(|| {
+                        self.diagnostics
+                            .push(GlyimDiagnostic::internal_error(format!(
+                                "Vec place {base_place:?} carries no element-type \
+                             substitution; cannot type the dynamic range slice"
+                            )));
+                        self.ctx.ty_ctx().error_ty()
+                    })
             }
             // STR-SLICE-ELEM: `str` / `String` slice by *byte* range, element
             // type `u8`. `str` is `TyKind::String` (primitive) or `Adt(1050)`
