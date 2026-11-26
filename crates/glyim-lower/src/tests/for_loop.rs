@@ -23,7 +23,7 @@ fn create_for_loop_body(
     let pat = Pattern {
         ty: elem_ty,
         kind: PatternKind::Binding {
-            var_id: thir::LocalVarId::from_raw(0),
+            var_id: thir::LocalVarId::from_usize(0),
             name: name("x"),
             mutability: Mutability::Not,
             binding_ty: None,
@@ -54,13 +54,13 @@ fn create_for_loop_body(
     };
     let stmt = Stmt::Expr { expr: for_expr };
     thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1)),
         params: vec![Param {
             name: name("iter_var"),
             pat: Pattern {
                 ty: iter_ty,
                 kind: PatternKind::Binding {
-                    var_id: thir::LocalVarId::from_raw(0),
+                    var_id: thir::LocalVarId::from_usize(0),
                     name: name("iter_var"),
                     mutability: Mutability::Not,
                     binding_ty: None,
@@ -70,7 +70,7 @@ fn create_for_loop_body(
             },
             ty: iter_ty,
             span,
-            local: thir::LocalVarId::from_raw(0),
+            local: thir::LocalVarId::from_usize(0),
         }],
         stmts: vec![stmt],
         return_ty: Ty::UNIT,
@@ -82,15 +82,15 @@ fn create_for_loop_body(
 fn for_loop_desugaring_uses_iterator_next() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
-    let vec_adt = glyim_core::def_id::AdtId::from_raw(100);
-    let option_adt = glyim_core::def_id::AdtId::from_raw(101);
+    let vec_adt = glyim_core::def_id::AdtId::from_usize(100);
+    let option_adt = glyim_core::def_id::AdtId::from_usize(101);
     let subst = ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let iter_ty = ctx_mut.mk_ty(TyKind::Adt(vec_adt, subst));
     let option_subst = ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let option_ty = ctx_mut.mk_ty(TyKind::Adt(option_adt, option_subst));
     let ref_iter_ty = ctx_mut.mk_ref(Region::Erased, iter_ty, Mutability::Mut);
     let discr_ty = ctx_mut.mk_ty(TyKind::Uint(UintTy::U8));
-    let next_fn_id = FnDefId::from_raw(200);
+    let next_fn_id = FnDefId::from_usize(200);
     let next_substs = ctx_mut.intern_substitution(Vec::new());
     let next_fn_ty = ctx_mut.mk_ty(TyKind::FnDef(next_fn_id, next_substs));
     let iter_info = IteratorNextInfo {
@@ -104,7 +104,7 @@ fn for_loop_desugaring_uses_iterator_next() {
     let thir_body = create_for_loop_body(
         iter_ty,
         i32_ty,
-        thir::LocalVarId::from_raw(0),
+        thir::LocalVarId::from_usize(0),
         Span::DUMMY,
         None,
     );
@@ -123,7 +123,7 @@ fn for_loop_desugaring_uses_iterator_next() {
         "Expected at least 4 blocks, got {}",
         body.basic_blocks.len()
     );
-    let next_fn_id = FnDefId::from_raw(200);
+    let next_fn_id = FnDefId::from_usize(200);
     let mut found_next_call = false;
     for block in body.basic_blocks.iter() {
         if let glyim_mir::TerminatorKind::Call { func, .. } = &block.terminator.kind
@@ -149,7 +149,7 @@ fn for_loop_fallback_when_no_iterator_info() {
     let thir_body = create_for_loop_body(
         iter_ty,
         i32_ty,
-        thir::LocalVarId::from_raw(0),
+        thir::LocalVarId::from_usize(0),
         Span::DUMMY,
         None,
     );
@@ -175,15 +175,15 @@ fn for_loop_fallback_when_no_iterator_info() {
 fn for_loop_desugaring_uses_thir_next_without_ctx_override() {
     let mut ctx_mut = test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
-    let vec_adt = glyim_core::def_id::AdtId::from_raw(100);
-    let option_adt = glyim_core::def_id::AdtId::from_raw(101);
+    let vec_adt = glyim_core::def_id::AdtId::from_usize(100);
+    let option_adt = glyim_core::def_id::AdtId::from_usize(101);
     let subst = ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let iter_ty = ctx_mut.mk_ty(TyKind::Adt(vec_adt, subst));
     let option_subst = ctx_mut.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
     let option_ty = ctx_mut.mk_ty(TyKind::Adt(option_adt, option_subst));
     let ref_iter_ty = ctx_mut.mk_ref(Region::Erased, iter_ty, Mutability::Mut);
     let discr_ty = ctx_mut.mk_ty(TyKind::Uint(UintTy::U8));
-    let next_fn_id = FnDefId::from_raw(200);
+    let next_fn_id = FnDefId::from_usize(200);
     let next_substs = ctx_mut.intern_substitution(Vec::new());
     let next_fn_ty = ctx_mut.mk_ty(TyKind::FnDef(next_fn_id, next_substs));
     let thir_next = thir::ForIteratorNext {
@@ -197,7 +197,7 @@ fn for_loop_desugaring_uses_thir_next_without_ctx_override() {
     let thir_body = create_for_loop_body(
         iter_ty,
         i32_ty,
-        thir::LocalVarId::from_raw(0),
+        thir::LocalVarId::from_usize(0),
         Span::DUMMY,
         Some(thir_next),
     );
