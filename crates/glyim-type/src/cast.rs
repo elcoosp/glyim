@@ -182,7 +182,7 @@ mod tests {
         // `error_ty()` (no Adt arm to exercise); here we register a real
         // fieldless enum ADT so `is_valid_cast`'s Adt arm actually runs.
         let mut tcx_mut = TyCtxMut::new(Interner::new());
-        let enum_id = AdtId::from_raw(501);
+        let enum_id = AdtId::from_usize(501);
         let variants = vec![VariantDef {
             name: tcx_mut.resolver().intern("A"),
             style: crate::adt_def::VariantStyle::Unit,
@@ -209,7 +209,7 @@ mod tests {
         // Plan §13.2: an enum carrying data (a variant with a field) is NOT a
         // fieldless enum, so its cast to an integer must be rejected.
         let mut tcx_mut = TyCtxMut::new(Interner::new());
-        let enum_id = AdtId::from_raw(502);
+        let enum_id = AdtId::from_usize(502);
         let u8 = tcx_mut.mk_ty(TyKind::Uint(UintTy::U8));
         let field = FieldDef {
             name: tcx_mut.resolver().intern("x"),
