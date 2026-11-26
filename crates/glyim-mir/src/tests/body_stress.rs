@@ -5,7 +5,7 @@ use glyim_span::Span;
 
 #[test]
 fn test_large_body_construction() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut basic_blocks: IndexVec<BasicBlockIdx, BasicBlockData> = IndexVec::new();
 
     for i in 0..1000 {
@@ -13,7 +13,7 @@ fn test_large_body_construction() {
             TerminatorKind::Return
         } else {
             TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(i + 1),
+                target: BasicBlockIdx::from_usize(i + 1),
             }
         };
 
@@ -48,7 +48,7 @@ fn test_large_body_construction() {
 
 #[test]
 fn test_complex_switch_targets() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut basic_blocks: IndexVec<BasicBlockIdx, BasicBlockData> = IndexVec::new();
 
     let mut branches = Vec::new();
@@ -95,14 +95,14 @@ fn test_complex_switch_targets() {
 
 #[test]
 fn test_deeply_nested_terminators() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut basic_blocks: IndexVec<BasicBlockIdx, BasicBlockData> = IndexVec::new();
 
-    let _prev_bb = BasicBlockIdx::from_raw(0);
+    let _prev_bb = BasicBlockIdx::from_usize(0);
     for i in 0..100 {
         let next_bb = basic_blocks.push(BasicBlockData::new(Terminator {
             kind: TerminatorKind::Goto {
-                target: BasicBlockIdx::from_raw(i + 1),
+                target: BasicBlockIdx::from_usize(i + 1),
             },
             source_info: SourceInfo::new(Span::DUMMY),
         }));
@@ -129,7 +129,7 @@ fn test_deeply_nested_terminators() {
 
 #[test]
 fn test_many_locals() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut basic_blocks: IndexVec<BasicBlockIdx, BasicBlockData> = IndexVec::new();
 
     basic_blocks.push(BasicBlockData::new(Terminator {
@@ -169,7 +169,7 @@ fn test_many_locals() {
 
 #[test]
 fn test_mixed_projection_chains() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut basic_blocks: IndexVec<BasicBlockIdx, BasicBlockData> = IndexVec::new();
     let mut locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::new();
 
@@ -180,18 +180,18 @@ fn test_mixed_projection_chains() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
+        local: LocalIdx::from_usize(0),
         projection: Box::new([
             ProjectionElem::Deref,
-            ProjectionElem::Field(glyim_type::FieldIdx::from_raw(1)),
-            ProjectionElem::Index(LocalIdx::from_raw(2)),
+            ProjectionElem::Field(glyim_type::FieldIdx::from_usize(1)),
+            ProjectionElem::Index(LocalIdx::from_usize(2)),
         ]),
     };
 
     let stmt = Statement {
         kind: StatementKind::Assign(
             place,
-            Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_raw(0)))),
+            Rvalue::Use(Operand::Copy(Place::new(LocalIdx::from_usize(0)))),
         ),
         source_info: SourceInfo::new(Span::DUMMY),
     };
@@ -220,7 +220,7 @@ fn test_mixed_projection_chains() {
 
 #[test]
 fn test_large_aggregate_construction() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut basic_blocks: IndexVec<BasicBlockIdx, BasicBlockData> = IndexVec::new();
     let locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::new();
 
@@ -235,7 +235,7 @@ fn test_large_aggregate_construction() {
 
     let rvalue = Rvalue::Aggregate(AggregateKind::Tuple, operands);
     let stmt = Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(0)), rvalue),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(0)), rvalue),
         source_info: SourceInfo::new(Span::DUMMY),
     };
 
