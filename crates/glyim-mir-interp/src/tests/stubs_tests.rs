@@ -6,7 +6,7 @@ use glyim_span::Span;
 use glyim_type::{Const, ConstKind, GenericArg, Ty, TyCtxMut, TyKind};
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
@@ -19,12 +19,12 @@ fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
 
 fn empty_body(ret_ty: Ty) -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![local_decl(ret_ty, Mutability::Mut)]);
+    body.locals = IndexVec::from_vec(vec![local_decl(ret_ty, Mutability::Mut)]);
     body
 }
 
 fn add_local(body: &mut Body, ty: Ty, mutability: Mutability) -> LocalIdx {
-    let idx = LocalIdx::from_raw(body.locals.len() as u32);
+    let idx = LocalIdx::from_usize(body.locals.len());
     body.locals.push(local_decl(ty, mutability));
     idx
 }
@@ -87,7 +87,7 @@ fn discriminant_returns_tag() {
     let mut body = empty_body(Ty::UNIT);
     let local_enum = add_local(&mut body, tuple_ty, Mutability::Mut);
     let local_result = add_local(&mut body, int_ty, Mutability::Mut);
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     let agg = Rvalue::Aggregate(
         AggregateKind::Tuple,
         vec![
@@ -125,7 +125,7 @@ fn cast_int_to_float() {
     let float_ty = tcx.mk_ty(TyKind::Float(FloatTy::F64));
     let mut body = empty_body(Ty::UNIT);
     let local = add_local(&mut body, float_ty, Mutability::Mut);
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(
         &mut body,
         bb0,
@@ -155,7 +155,7 @@ fn cast_float_to_int() {
     let float_ty = tcx.mk_ty(TyKind::Float(FloatTy::F64));
     let mut body = empty_body(Ty::UNIT);
     let local = add_local(&mut body, int_ty, Mutability::Mut);
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     let float_const = MirConst {
         kind: MirConstKind::FloatBits(123.456_f64.to_bits()),
         ty: float_ty,
@@ -186,7 +186,7 @@ fn repeat_creates_array() {
     let array_ty = mk_array_ty(&mut tcx, int_ty, 5);
     let mut body = empty_body(Ty::UNIT);
     let local = add_local(&mut body, array_ty, Mutability::Mut);
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     let repeat = Rvalue::Repeat(
         const_int(&mut tcx, 42, int_ty),
         MirConst {
@@ -223,7 +223,7 @@ fn len_of_array() {
         tcx.mk_ty(TyKind::Uint(UintTy::Usize)),
         Mutability::Mut,
     );
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     let init = Rvalue::Repeat(
         const_int(&mut tcx, 0, int_ty),
         MirConst {
@@ -255,11 +255,11 @@ fn len_of_array() {
 #[test]
 fn fn_constant_used_as_operand() {
     let tcx = glyim_test::test_ty_ctx();
-    let fn_def_id = glyim_core::def_id::FnDefId::from_raw(100);
+    let fn_def_id = glyim_core::def_id::FnDefId::from_usize(100);
     let dummy_ty = Ty::UNIT;
     let mut body = empty_body(Ty::UNIT);
     let local = add_local(&mut body, dummy_ty, Mutability::Mut);
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     let const_val = MirConst {
         kind: MirConstKind::Fn(fn_def_id, glyim_type::Substitution::empty()),
         ty: dummy_ty,
@@ -278,8 +278,8 @@ fn fn_constant_used_as_operand() {
     assert!(res.is_ok());
     let val = interp.get_local_value(local).unwrap();
     let expected_def_id = DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(fn_def_id.to_raw()),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(fn_def_id.index()),
     );
     assert_eq!(val, &InterpValue::Fn(expected_def_id));
 }
