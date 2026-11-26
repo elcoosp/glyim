@@ -880,7 +880,7 @@ fn resolve_qualified_path(
     // module tree, then build the ADT type with the final segment's generic
     // arguments (if any).
     let local = resolve_path_to_local_def_id(ctx, def_map, path)?;
-    let from_defmap = AdtId::from_raw(local.to_raw());
+    let from_defmap = AdtId::from_usize(local.index());
     // Script 150: re-intern the name before falling back to `adt_id_by_name`.
     // Same rodeo mismatch as resolve_name_to_adt_ty.
     let adt_id = if ctx.adt_def(from_defmap).is_some() {
@@ -1025,7 +1025,7 @@ pub(crate) fn resolve_path_to_adt_id(
     def_map: &glyim_def_map::CrateDefMap,
     path: &glyim_hir::Path,
 ) -> Option<AdtId> {
-    resolve_path_to_local_def_id(ctx, def_map, path).map(|l| AdtId::from_raw(l.to_raw()))
+    resolve_path_to_local_def_id(ctx, def_map, path).map(|l| AdtId::from_usize(l.index()))
 }
 
 /// Resolve a two-segment `Enum::Variant` path to `(AdtId, VariantIdx)` by
@@ -1100,7 +1100,7 @@ pub(crate) fn resolve_path_to_trait_def_id(
     }
     // Fallback: user-declared trait not yet seen by `register_trait_def`.
     if let Some(local) = resolve_path_to_local_def_id(ctx, def_map, path) {
-        return Some(TraitDefId::from_raw(local.to_raw()));
+        return Some(TraitDefId::from_usize(local.index()));
     }
     // Script 89: module-scoped trait fallback. The impl header's trait
     // path (`impl GlobalAlloc for Global` inside `pub mod alloc { ... }`)
@@ -1116,7 +1116,7 @@ pub(crate) fn resolve_path_to_trait_def_id(
             if let Some((id, _vis, _sp)) = module.scope.types.get(&name) {
                 // Confirm it's a trait (not a struct/enum) by looking for
                 // a registered trait with this id.
-                let tid = TraitDefId::from_raw(id.to_raw());
+                let tid = TraitDefId::from_usize(id.index());
                 return Some(tid);
             }
         }
@@ -1246,7 +1246,7 @@ pub(crate) fn resolve_name_to_adt_ty(
     {
         let hir_name_str = def_map.interner.resolve(name);
         if let Some(builtin) = glyim_type::builtin_adts::BuiltinAdt::from_name(hir_name_str) {
-            let builtin_id = AdtId::from_raw(builtin.adt_id());
+            let builtin_id = AdtId::from_usize(builtin.adt_id() as usize);
             if ctx.adt_def(builtin_id).is_some() {
                 let arity = ctx.adt_generic_arity(builtin_id);
                 let args = path.segments.last().and_then(|s| s.generic_args.as_deref());
@@ -1326,7 +1326,7 @@ pub(crate) fn resolve_name_to_adt_ty(
         let from_defmap = path
             .as_name()
             .and_then(|hir_name| resolve_name_to_def_id(def_map, hir_name))
-            .map(|def_id| AdtId::from_raw(def_id.local_id.to_raw()));
+            .map(|def_id| AdtId::from_usize(def_id.local_id.index()));
         // Script 172: accept a def-map-derived AdtId even when no
         // `adt_def` is registered yet. The def-map is the authoritative
         // declaration source; the ADT body is only registered when the
