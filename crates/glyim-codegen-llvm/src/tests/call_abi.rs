@@ -28,8 +28,8 @@ fn make_fn_sig(
 
 fn dummy_def_id(idx: u32) -> glyim_core::DefId {
     glyim_core::DefId::new(
-        glyim_core::CrateId::from_raw(0),
-        glyim_core::LocalDefId::from_raw(idx),
+        glyim_core::CrateId::from_usize(0),
+        glyim_core::LocalDefId::from_usize(idx as usize),
     )
 }
 
@@ -59,10 +59,10 @@ fn v27_t01_sret_large_struct_return() {
         let mut bbs = glyim_core::arena::IndexVec::new();
         bbs.push(BasicBlockData::new(Terminator {
             kind: TerminatorKind::Call {
-                func: Operand::Move(Place::new(LocalIdx::from_raw(1))),
+                func: Operand::Move(Place::new(LocalIdx::from_usize(1))),
                 args: vec![],
-                destination: Place::new(LocalIdx::from_raw(0)),
-                target: Some(BasicBlockIdx::from_raw(1)),
+                destination: Place::new(LocalIdx::from_usize(0)),
+                target: Some(BasicBlockIdx::from_usize(1)),
                 cleanup: None,
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -125,10 +125,10 @@ fn v27_t02_argument_byval_with_abi_alignment() {
         let mut bbs = glyim_core::arena::IndexVec::new();
         bbs.push(BasicBlockData::new(Terminator {
             kind: TerminatorKind::Call {
-                func: Operand::Move(Place::new(LocalIdx::from_raw(1))),
-                args: vec![Operand::Move(Place::new(LocalIdx::from_raw(2)))],
-                destination: Place::new(LocalIdx::from_raw(0)),
-                target: Some(BasicBlockIdx::from_raw(1)),
+                func: Operand::Move(Place::new(LocalIdx::from_usize(1))),
+                args: vec![Operand::Move(Place::new(LocalIdx::from_usize(2)))],
+                destination: Place::new(LocalIdx::from_usize(0)),
+                target: Some(BasicBlockIdx::from_usize(1)),
                 cleanup: None,
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -179,10 +179,10 @@ fn v27_t03_variadic_function_call() {
         let mut bbs = glyim_core::arena::IndexVec::new();
         bbs.push(BasicBlockData::new(Terminator {
             kind: TerminatorKind::Call {
-                func: Operand::Move(Place::new(LocalIdx::from_raw(1))),
+                func: Operand::Move(Place::new(LocalIdx::from_usize(1))),
                 args: vec![],
-                destination: Place::new(LocalIdx::from_raw(0)),
-                target: Some(BasicBlockIdx::from_raw(1)),
+                destination: Place::new(LocalIdx::from_usize(0)),
+                target: Some(BasicBlockIdx::from_usize(1)),
                 cleanup: None,
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -240,10 +240,10 @@ fn v27_t04_arm_hva_struct_four_floats_simd() {
         let mut bbs = glyim_core::arena::IndexVec::new();
         bbs.push(BasicBlockData::new(Terminator {
             kind: TerminatorKind::Call {
-                func: Operand::Move(Place::new(LocalIdx::from_raw(1))),
-                args: vec![Operand::Move(Place::new(LocalIdx::from_raw(2)))],
-                destination: Place::new(LocalIdx::from_raw(0)),
-                target: Some(BasicBlockIdx::from_raw(1)),
+                func: Operand::Move(Place::new(LocalIdx::from_usize(1))),
+                args: vec![Operand::Move(Place::new(LocalIdx::from_usize(2)))],
+                destination: Place::new(LocalIdx::from_usize(0)),
+                target: Some(BasicBlockIdx::from_usize(1)),
                 cleanup: None,
             },
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
