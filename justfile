@@ -100,6 +100,7 @@ verify: require-llvm fmt-check clippy
     cargo run -q -p glyim-ledger -- status . --check
     cargo run -q -p glyim-ledger -- status . --check --format json
     bash scripts/readme-status-block.sh --check
+    python3 scripts/gen-diagnostics-docs.py --check
     echo "verify OK"
 
 # M0.1 `just ci-local`: the PR-tier CI gates, locally, in CI's own order.
