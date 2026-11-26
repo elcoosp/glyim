@@ -86,7 +86,7 @@ fn many_adts_with_substs() {
         for i in 0..200u32 {
             let inner = c.mk_ty(TyKind::Int(IntTy::I32));
             let substs = c.intern_substitution(vec![GenericArg::Ty(inner)]);
-            let adt = c.mk_adt(AdtId::from_raw(i), substs);
+            let adt = c.mk_adt(AdtId::from_usize(i as usize), substs);
             tys.push(adt);
         }
         tys
@@ -136,7 +136,7 @@ fn mixed_type_allocation_stress() {
             let _ = c.mk_ty(TyKind::Slice(c.bool_ty()));
             let inner = c.mk_ty(TyKind::Uint(UintTy::U64));
             let substs = c.intern_substitution(vec![GenericArg::Ty(inner)]);
-            last = c.mk_adt(AdtId::from_raw(i), substs);
+            last = c.mk_adt(AdtId::from_usize(i as usize), substs);
             count += 5;
         }
         (count, last)
