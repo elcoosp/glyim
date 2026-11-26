@@ -14,7 +14,7 @@ fn test_t07_ref_take_address_of_local() {
     let local_val = add_local(&mut body, i32_ty, Mutability::Mut);
     let local_ref = add_local(&mut body, ref_ty, Mutability::Mut);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(
         &mut body,
         bb0,
@@ -32,7 +32,7 @@ fn test_t07_ref_take_address_of_local() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
