@@ -73,7 +73,7 @@ impl MirBodyGenerator {
             source_info: SourceInfo::new(Span::DUMMY),
         });
         // `body.locals.len()` is 1 (the dummy local); index 5 is undeclared.
-        let undeclared = LocalIdx::from_raw(5);
+        let undeclared = LocalIdx::from_usize(5);
         block.statements.push(Statement {
             kind: StatementKind::StorageLive(undeclared),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -101,13 +101,13 @@ impl MirBodyGenerator {
     ///  * cleanup edge on a cleanup block (cleanup-edge validity).
     pub fn generate_malformed_body(&mut self, owner: DefId) -> Body {
         let mut body = self.generate_well_formed_body(owner);
-        let bb0 = BasicBlockIdx::from_raw(0);
+        let bb0 = BasicBlockIdx::from_usize(0);
         // The well-formed body has at least block 0 (dummy) + one pushed block;
         // operate on block 0, which always exists.
         match self.rng.random_range(0..6) {
             0 => {
                 // Undeclared local: StorageLive an index beyond locals.len().
-                let undeclared = LocalIdx::from_raw((body.locals.len() + 5) as u32);
+                let undeclared = LocalIdx::from_usize(body.locals.len() + 5);
                 body.basic_blocks[bb0].statements.push(Statement {
                     kind: StatementKind::StorageLive(undeclared),
                     source_info: SourceInfo::new(Span::DUMMY),
@@ -117,7 +117,7 @@ impl MirBodyGenerator {
                 // Missing block target: retarget block 0's terminator to 99.
                 body.basic_blocks[bb0].terminator = Terminator {
                     kind: TerminatorKind::Goto {
-                        target: BasicBlockIdx::from_raw(99),
+                        target: BasicBlockIdx::from_usize(99),
                     },
                     source_info: SourceInfo::new(Span::DUMMY),
                 };
@@ -127,9 +127,9 @@ impl MirBodyGenerator {
                 // else the return place 0 — both are valid locals, so this is
                 // purely the double-live violation).
                 let local = if body.locals.len() > 1 {
-                    LocalIdx::from_raw(1)
+                    LocalIdx::from_usize(1)
                 } else {
-                    LocalIdx::from_raw(0)
+                    LocalIdx::from_usize(0)
                 };
                 body.basic_blocks[bb0].statements.push(Statement {
                     kind: StatementKind::StorageLive(local),
@@ -148,7 +148,7 @@ impl MirBodyGenerator {
                 // Subslice inside an Aggregate operand (MIR-31): the validator
                 // must scan every rvalue operand, not just the first place.
                 let subslice_place = Place {
-                    local: LocalIdx::from_raw(0),
+                    local: LocalIdx::from_usize(0),
                     projection: Box::new([glyim_mir::ProjectionElem::Subslice {
                         from: 1,
                         to: 2,
@@ -157,7 +157,7 @@ impl MirBodyGenerator {
                 };
                 body.basic_blocks[bb0].statements.push(Statement {
                     kind: StatementKind::Assign(
-                        Place::new(LocalIdx::from_raw(0)),
+                        Place::new(LocalIdx::from_usize(0)),
                         Rvalue::Aggregate(
                             glyim_mir::AggregateKind::Tuple,
                             vec![Operand::Copy(subslice_place)],
@@ -172,7 +172,7 @@ impl MirBodyGenerator {
                 body.basic_blocks[bb0].is_cleanup = true;
                 body.basic_blocks[bb0].terminator = Terminator {
                     kind: TerminatorKind::Drop {
-                        place: Place::new(LocalIdx::from_raw(0)),
+                        place: Place::new(LocalIdx::from_usize(0)),
                         target: bb0,
                         cleanup: Some(bb0),
                     },
