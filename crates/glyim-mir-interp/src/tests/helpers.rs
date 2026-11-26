@@ -4,7 +4,10 @@ use glyim_span::Span;
 use glyim_type::{Const, ConstKind, Ty, TyCtxMut, TyKind};
 
 pub(crate) fn empty_body(return_ty: Ty) -> Body {
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
     body.return_ty = return_ty;
     let mut locals = IndexVec::new();
     // local 0 is return place
@@ -29,7 +32,7 @@ pub(crate) fn add_local(body: &mut Body, ty: Ty, mutability: Mutability) -> Loca
         mutability,
         source_info: SourceInfo::new(Span::DUMMY),
     });
-    LocalIdx::from_raw(idx as u32)
+    LocalIdx::from_usize(idx)
 }
 
 pub(crate) fn add_statement(body: &mut Body, bb: BasicBlockIdx, kind: StatementKind) {
