@@ -76,11 +76,11 @@ fn usize_ty(tcx: &mut TyCtxMut) -> Ty {
 /// `_0 = _1; return`.
 fn loop_sum_body(owner_raw: u32, n: i128, ty: Ty) -> Body {
     let mut body = Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(owner_raw),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(owner_raw as usize),
     ));
     // _0 = return place, _1 = sum, _2 = i, _3 = comparison temp.
-    body.locals = IndexVec::from_raw(vec![
+    body.locals = IndexVec::from_vec(vec![
         decl(ty, Mutability::Not),
         decl(ty, Mutability::Mut),
         decl(ty, Mutability::Mut),
@@ -88,14 +88,14 @@ fn loop_sum_body(owner_raw: u32, n: i128, ty: Ty) -> Body {
     ]);
     let zero = int_const(ty, 0);
     let one = int_const(ty, 1);
-    let sum = || Place::new(LocalIdx::from_raw(1));
-    let i = || Place::new(LocalIdx::from_raw(2));
-    let tmp = || Place::new(LocalIdx::from_raw(3));
-    let ret = || Place::new(LocalIdx::from_raw(0));
-    let head = BasicBlockIdx::from_raw(1);
-    let body_bb = BasicBlockIdx::from_raw(2);
-    let exit_bb = BasicBlockIdx::from_raw(3);
-    body.basic_blocks = IndexVec::from_raw(vec![
+    let sum = || Place::new(LocalIdx::from_usize(1));
+    let i = || Place::new(LocalIdx::from_usize(2));
+    let tmp = || Place::new(LocalIdx::from_usize(3));
+    let ret = || Place::new(LocalIdx::from_usize(0));
+    let head = BasicBlockIdx::from_usize(1);
+    let body_bb = BasicBlockIdx::from_usize(2);
+    let exit_bb = BasicBlockIdx::from_usize(3);
+    body.basic_blocks = IndexVec::from_vec(vec![
         block(
             vec![
                 stmt(StatementKind::Assign(i(), Rvalue::Use(zero.clone()))),
@@ -111,8 +111,7 @@ fn loop_sum_body(owner_raw: u32, n: i128, ty: Ty) -> Body {
             TerminatorKind::SwitchInt {
                 discr: Operand::Copy(tmp()),
                 switch_ty: ty,
-                // The discr is the `i == N` comparison result (0/1); a `1`
-                // routes to the exit block, everything else takes the body.
+
                 targets: SwitchTargets::new(Box::new([(1, exit_bb)]), body_bb),
             },
         ),
@@ -149,11 +148,11 @@ fn loop_sum_body(owner_raw: u32, n: i128, ty: Ty) -> Body {
 /// _6 = fib(_4) → bb4` · bb4 (join): `_0 = _5 + _6; return`.
 fn fib_body(owner_raw: u32, ty: Ty) -> Body {
     let mut body = Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(owner_raw),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(owner_raw as usize),
     ));
     // _0 return, _1 n, _2 cmp, _3/_4 argument temps, _5/_6 call results.
-    body.locals = IndexVec::from_raw(vec![
+    body.locals = IndexVec::from_vec(vec![
         decl(ty, Mutability::Not),
         decl(ty, Mutability::Mut),
         decl(ty, Mutability::Mut),
@@ -162,25 +161,28 @@ fn fib_body(owner_raw: u32, ty: Ty) -> Body {
         decl(ty, Mutability::Mut),
         decl(ty, Mutability::Mut),
     ]);
-    let n = || Place::new(LocalIdx::from_raw(1));
-    let tmp = |raw: u32| Place::new(LocalIdx::from_raw(raw));
-    let ret = || Place::new(LocalIdx::from_raw(0));
+    let n = || Place::new(LocalIdx::from_usize(1));
+    let tmp = |raw: u32| Place::new(LocalIdx::from_usize(raw as usize));
+    let ret = || Place::new(LocalIdx::from_usize(0));
     let call_fib = |arg: Operand, dest: u32, target: BasicBlockIdx| TerminatorKind::Call {
         func: Operand::Constant(MirConst {
-            kind: MirConstKind::Fn(FnDefId::from_raw(owner_raw), Substitution::empty()),
+            kind: MirConstKind::Fn(
+                FnDefId::from_usize(owner_raw as usize),
+                Substitution::empty(),
+            ),
             ty,
             span: Span::DUMMY,
         }),
         args: vec![arg],
-        destination: Place::new(LocalIdx::from_raw(dest)),
+        destination: Place::new(LocalIdx::from_usize(dest as usize)),
         target: Some(target),
         cleanup: None,
     };
-    let then_bb = BasicBlockIdx::from_raw(1);
-    let else_bb = BasicBlockIdx::from_raw(2);
-    let call1_bb = BasicBlockIdx::from_raw(3);
-    let call2_bb = BasicBlockIdx::from_raw(4);
-    body.basic_blocks = IndexVec::from_raw(vec![
+    let then_bb = BasicBlockIdx::from_usize(1);
+    let else_bb = BasicBlockIdx::from_usize(2);
+    let call1_bb = BasicBlockIdx::from_usize(3);
+    let call2_bb = BasicBlockIdx::from_usize(4);
+    body.basic_blocks = IndexVec::from_vec(vec![
         block(
             vec![stmt(StatementKind::Assign(
                 tmp(2),
@@ -206,8 +208,6 @@ fn fib_body(owner_raw: u32, ty: Ty) -> Body {
             ))],
             call_fib(Operand::Copy(tmp(3)), 5, call1_bb),
         ),
-        // Second call writes its result to _6 (not the shared _5), so the
-        // join can add the two recursive results without an extra copy.
         block(
             vec![stmt(StatementKind::Assign(
                 tmp(4),
@@ -232,25 +232,25 @@ fn fib_body(owner_raw: u32, ty: Ty) -> Body {
 /// body, which receives no arguments).
 fn main_calls_fib_body(owner_raw: u32, callee_owner_raw: u32, ty: Ty) -> Body {
     let mut body = Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(owner_raw),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(owner_raw as usize),
     ));
-    body.locals = IndexVec::from_raw(vec![decl(ty, Mutability::Not)]);
-    body.basic_blocks = IndexVec::from_raw(vec![
+    body.locals = IndexVec::from_vec(vec![decl(ty, Mutability::Not)]);
+    body.basic_blocks = IndexVec::from_vec(vec![
         block(
             vec![],
             TerminatorKind::Call {
                 func: Operand::Constant(MirConst {
                     kind: MirConstKind::Fn(
-                        FnDefId::from_raw(callee_owner_raw),
+                        FnDefId::from_usize(callee_owner_raw as usize),
                         Substitution::empty(),
                     ),
                     ty,
                     span: Span::DUMMY,
                 }),
                 args: vec![int_const(ty, 15)],
-                destination: Place::new(LocalIdx::from_raw(0)),
-                target: Some(BasicBlockIdx::from_raw(1)),
+                destination: Place::new(LocalIdx::from_usize(0)),
+                target: Some(BasicBlockIdx::from_usize(1)),
                 cleanup: None,
             },
         ),
