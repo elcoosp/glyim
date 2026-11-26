@@ -565,12 +565,20 @@ impl<'a> MirBuilder<'a> {
         self.closure_bodies.push((closure_id, substs, closure_body));
 
         // Build the aggregate: function pointer + captures.
+        //
+        // Plan M5.2 (sentinel deletion): the constant carries the closure's
+        // real type. `mk_ty` interns `TyKind::Closure(closure_id, substs)` to
+        // the same handle typeck minted for the closure expression, so the
+        // constant no longer fabricates a `Ty::ERROR` sentinel.
         let fn_const = glyim_mir::MirConst {
             kind: glyim_mir::MirConstKind::Fn(
                 glyim_core::def_id::FnDefId::from_raw(closure_id.to_raw()),
                 substs,
             ),
-            ty: self.ctx.ty_ctx().error_ty(),
+            ty: self
+                .ctx
+                .ty_ctx()
+                .mk_ty(glyim_type::TyKind::Closure(closure_id, substs)),
             span,
         };
         let fn_operand = glyim_mir::Operand::Constant(fn_const);
