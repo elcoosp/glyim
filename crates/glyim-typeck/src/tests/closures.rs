@@ -138,7 +138,8 @@ fn closure_captures_enclosing_param() {
     }
     assert_no_errors(&result.diagnostics);
 
-    let (_, thir_body) = &result.thir_bodies[0];
+    let (_, thir_body) = &result.typed_bodies[0];
+    let thir_body = thir_body.get();
     let closures = collect_closures(thir_body);
     assert_eq!(closures.len(), 1, "exactly one closure should be produced");
 
@@ -251,7 +252,8 @@ fn move_closure_captures_by_value() {
     }
     assert_no_errors(&result.diagnostics);
 
-    let (_, thir_body) = &result.thir_bodies[0];
+    let (_, thir_body) = &result.typed_bodies[0];
+    let thir_body = thir_body.get();
     let closures = collect_closures(thir_body);
     assert_eq!(closures.len(), 1, "exactly one closure should be produced");
 
