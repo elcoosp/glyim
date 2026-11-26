@@ -13,14 +13,14 @@ fn test_const() -> MirConst {
 
 #[test]
 fn rvalue_use_copy() {
-    let place = Place::new(LocalIdx::from_raw(0));
+    let place = Place::new(LocalIdx::from_usize(0));
     let rv = Rvalue::Use(Operand::Copy(place));
     assert!(matches!(rv, Rvalue::Use(Operand::Copy(_))));
 }
 
 #[test]
 fn rvalue_use_move() {
-    let place = Place::new(LocalIdx::from_raw(0));
+    let place = Place::new(LocalIdx::from_usize(0));
     let rv = Rvalue::Use(Operand::Move(place));
     assert!(matches!(rv, Rvalue::Use(Operand::Move(_))));
 }
@@ -33,14 +33,14 @@ fn rvalue_use_constant() {
 
 #[test]
 fn rvalue_ref_shared() {
-    let place = Place::new(LocalIdx::from_raw(1));
+    let place = Place::new(LocalIdx::from_usize(1));
     let rv = Rvalue::Ref(place, BorrowKind::Shared);
     assert!(matches!(rv, Rvalue::Ref(_, BorrowKind::Shared)));
 }
 
 #[test]
 fn rvalue_ref_mut() {
-    let place = Place::new(LocalIdx::from_raw(2));
+    let place = Place::new(LocalIdx::from_usize(2));
     let rv = Rvalue::Ref(
         place,
         BorrowKind::Mut {
@@ -60,22 +60,22 @@ fn rvalue_ref_mut() {
 
 #[test]
 fn rvalue_ref_unique() {
-    let place = Place::new(LocalIdx::from_raw(3));
+    let place = Place::new(LocalIdx::from_usize(3));
     let rv = Rvalue::Ref(place, BorrowKind::Unique);
     assert!(matches!(rv, Rvalue::Ref(_, BorrowKind::Unique)));
 }
 
 #[test]
 fn rvalue_binary_op() {
-    let lhs = Operand::Copy(Place::new(LocalIdx::from_raw(0)));
-    let rhs = Operand::Copy(Place::new(LocalIdx::from_raw(1)));
+    let lhs = Operand::Copy(Place::new(LocalIdx::from_usize(0)));
+    let rhs = Operand::Copy(Place::new(LocalIdx::from_usize(1)));
     let rv = Rvalue::binary_op(BinOp::Add, lhs, rhs);
     assert!(matches!(rv, Rvalue::BinaryOp(BinOp::Add, _)));
 }
 
 #[test]
 fn rvalue_unary_op() {
-    let operand = Operand::Copy(Place::new(LocalIdx::from_raw(0)));
+    let operand = Operand::Copy(Place::new(LocalIdx::from_usize(0)));
     let rv = Rvalue::UnaryOp(UnOp::Not, operand);
     assert!(matches!(rv, Rvalue::UnaryOp(UnOp::Not, _)));
 }
@@ -90,21 +90,21 @@ fn rvalue_aggregate_tuple() {
 
 #[test]
 fn rvalue_discriminant() {
-    let place = Place::new(LocalIdx::from_raw(0));
+    let place = Place::new(LocalIdx::from_usize(0));
     let rv = Rvalue::Discriminant(place);
     assert!(matches!(rv, Rvalue::Discriminant(_)));
 }
 
 #[test]
 fn rvalue_len() {
-    let place = Place::new(LocalIdx::from_raw(0));
+    let place = Place::new(LocalIdx::from_usize(0));
     let rv = Rvalue::Len(place);
     assert!(matches!(rv, Rvalue::Len(_)));
 }
 
 #[test]
 fn rvalue_cast() {
-    let op = Operand::Copy(Place::new(LocalIdx::from_raw(0)));
+    let op = Operand::Copy(Place::new(LocalIdx::from_usize(0)));
     let rv = Rvalue::Cast(CastKind::IntToInt, op, Ty::BOOL);
     assert!(matches!(rv, Rvalue::Cast(CastKind::IntToInt, _, Ty::BOOL)));
 }
