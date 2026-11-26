@@ -6,25 +6,25 @@ use glyim_type::Ty;
 
 #[test]
 fn dummy_creates_valid_structure() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let body = Body::dummy(owner);
 
-    assert_eq!(body.owner.krate, CrateId::from_raw(0));
-    assert_eq!(body.owner.local_id, LocalDefId::from_raw(0));
+    assert_eq!(body.owner.krate, CrateId::from_usize(0));
+    assert_eq!(body.owner.local_id, LocalDefId::from_usize(0));
     assert_eq!(body.arg_count, 0);
     assert_eq!(body.return_ty, Ty::UNIT);
     assert_eq!(body.basic_blocks.len(), 1);
     assert_eq!(body.locals.len(), 1);
-    assert_eq!(body.locals[LocalIdx::from_raw(0)].ty, Ty::UNIT);
+    assert_eq!(body.locals[LocalIdx::from_usize(0)].ty, Ty::UNIT);
     assert!(body.var_debug_info.is_empty());
 }
 
 #[test]
 fn dummy_has_unreachable_terminator() {
-    let owner = DefId::new(CrateId::from_raw(1), LocalDefId::from_raw(2));
+    let owner = DefId::new(CrateId::from_usize(1), LocalDefId::from_usize(2));
     let body = Body::dummy(owner);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     match &body.basic_blocks[bb0].terminator.kind {
         TerminatorKind::Unreachable => {}
         other => panic!("Expected Unreachable, got {other:?}"),
@@ -33,17 +33,17 @@ fn dummy_has_unreachable_terminator() {
 
 #[test]
 fn dummy_return_place() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let body = Body::dummy(owner);
 
     let ret = body.return_place();
-    assert_eq!(ret.local, LocalIdx::from_raw(0));
+    assert_eq!(ret.local, LocalIdx::from_usize(0));
     assert!(ret.projection.is_empty());
 }
 
 #[test]
 fn body_args_returns_correct_slice() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut body = Body::dummy(owner);
 
     let arg1 = LocalDecl {
@@ -68,7 +68,7 @@ fn body_args_returns_correct_slice() {
 
 #[test]
 fn body_args_empty_when_no_args() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let body = Body::dummy(owner);
 
     assert!(body.args().is_empty());
@@ -76,7 +76,7 @@ fn body_args_empty_when_no_args() {
 
 #[test]
 fn body_basic_blocks_mutable() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut body = Body::dummy(owner);
 
     let bb1 = body.basic_blocks.push(BasicBlockData::new(Terminator {
@@ -93,33 +93,33 @@ fn body_basic_blocks_mutable() {
 
 #[test]
 fn dummy_with_different_owner() {
-    let owner1 = DefId::new(CrateId::from_raw(5), LocalDefId::from_raw(10));
-    let owner2 = DefId::new(CrateId::from_raw(99), LocalDefId::from_raw(200));
+    let owner1 = DefId::new(CrateId::from_usize(5), LocalDefId::from_usize(10));
+    let owner2 = DefId::new(CrateId::from_usize(99), LocalDefId::from_usize(200));
 
     let body1 = Body::dummy(owner1);
     let body2 = Body::dummy(owner2);
 
-    assert_eq!(body1.owner.krate, CrateId::from_raw(5));
-    assert_eq!(body1.owner.local_id, LocalDefId::from_raw(10));
-    assert_eq!(body2.owner.krate, CrateId::from_raw(99));
-    assert_eq!(body2.owner.local_id, LocalDefId::from_raw(200));
+    assert_eq!(body1.owner.krate, CrateId::from_usize(5));
+    assert_eq!(body1.owner.local_id, LocalDefId::from_usize(10));
+    assert_eq!(body2.owner.krate, CrateId::from_usize(99));
+    assert_eq!(body2.owner.local_id, LocalDefId::from_usize(200));
 }
 
 #[test]
 fn dummy_locals_have_correct_mutability() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let body = Body::dummy(owner);
 
     assert_eq!(
-        body.locals[LocalIdx::from_raw(0)].mutability,
+        body.locals[LocalIdx::from_usize(0)].mutability,
         Mutability::Not
     );
 }
 
 #[test]
 fn dummy_is_not_cleanup() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let body = Body::dummy(owner);
 
-    assert!(!body.basic_blocks[BasicBlockIdx::from_raw(0)].is_cleanup);
+    assert!(!body.basic_blocks[BasicBlockIdx::from_usize(0)].is_cleanup);
 }
