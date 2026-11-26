@@ -63,11 +63,11 @@ fn make_body(owner_def_id: DefId, return_ty: Ty, locals_ty: Vec<Ty>) -> Body {
 }
 
 fn make_fn_def_id(raw: u32) -> FnDefId {
-    FnDefId::from_raw(raw)
+    FnDefId::from_usize(raw as usize)
 }
 
 fn make_def_id(raw: u32) -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(raw))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(raw as usize))
 }
 
 /// Create a `MonoItemData` for a function with the given substitution.
@@ -346,7 +346,7 @@ fn const_item_ignored_for_unused_params() {
     let body = make_body(make_def_id(15), Ty::UNIT, vec![]);
     let item = MonoItemData {
         item: MonoItem::Const {
-            def_id: ConstDefId::from_raw(15),
+            def_id: ConstDefId::from_usize(15),
             substs: subst,
         },
         body: Arc::new(body),
@@ -429,7 +429,7 @@ fn static_item_ignored_for_unused_params() {
     let body = make_body(make_def_id(18), Ty::UNIT, vec![]);
     let item = MonoItemData {
         item: MonoItem::Static {
-            def_id: StaticDefId::from_raw(18),
+            def_id: StaticDefId::from_usize(18),
         },
         body: Arc::new(body),
         symbol: "static_18".to_string(),
@@ -527,7 +527,7 @@ fn collect_then_check_unsized_local_fires() {
     let mir_bodies = |d: DefId, _s: &glyim_type::Substitution| -> Arc<glyim_mir::Body> {
         assert_eq!(
             d,
-            DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(90))
+            DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(90))
         );
         Arc::new(body.clone())
     };
@@ -563,7 +563,7 @@ fn collect_then_check_sized_local_clean() {
     let mir_bodies = |d: DefId, _s: &glyim_type::Substitution| -> Arc<glyim_mir::Body> {
         assert_eq!(
             d,
-            DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(91))
+            DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(91))
         );
         Arc::new(body.clone())
     };
