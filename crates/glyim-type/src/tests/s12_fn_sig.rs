@@ -24,7 +24,7 @@ fn register_fn_sig_and_retrieve() {
         unsafety: Safety::Safe,
         abi: Abi::Glyim,
     };
-    let fn_id = FnDefId::from_raw(42);
+    let fn_id = FnDefId::from_usize(42);
     ctx.register_fn_sig(fn_id, sig.clone());
     let retrieved = ctx.fn_sig(fn_id);
     assert!(
@@ -40,7 +40,7 @@ fn register_fn_sig_and_retrieve() {
 #[test]
 fn fn_sig_returns_none_for_unregistered() {
     let ctx = test_ty_ctx();
-    let fn_id = FnDefId::from_raw(999);
+    let fn_id = FnDefId::from_usize(999);
     assert!(
         ctx.fn_sig(fn_id).is_none(),
         "fn_sig should return None for unregistered id"
@@ -68,8 +68,8 @@ fn register_multiple_fn_sigs() {
         unsafety: Safety::Unsafe,
         abi: Abi::C,
     };
-    let id1 = FnDefId::from_raw(1);
-    let id2 = FnDefId::from_raw(2);
+    let id1 = FnDefId::from_usize(1);
+    let id2 = FnDefId::from_usize(2);
     ctx.register_fn_sig(id1, sig1);
     ctx.register_fn_sig(id2, sig2);
     assert_eq!(ctx.fn_sig(id1).unwrap().unsafety, Safety::Safe);
@@ -89,10 +89,10 @@ fn fn_sig_survives_freeze() {
             unsafety: Safety::Safe,
             abi: Abi::Glyim,
         };
-        let fn_id = FnDefId::from_raw(7);
+        let fn_id = FnDefId::from_usize(7);
         ctx.register_fn_sig(fn_id, sig);
     });
-    let fn_id = FnDefId::from_raw(7);
+    let fn_id = FnDefId::from_usize(7);
     assert!(
         frozen.fn_sig(fn_id).is_some(),
         "fn_sig should survive freeze"
@@ -112,7 +112,7 @@ fn fn_sig_variadic() {
         unsafety: Safety::Safe,
         abi: Abi::C,
     };
-    let fn_id = FnDefId::from_raw(10);
+    let fn_id = FnDefId::from_usize(10);
     ctx.register_fn_sig(fn_id, sig);
     assert!(ctx.fn_sig(fn_id).unwrap().c_variadic);
 }
@@ -131,7 +131,7 @@ fn register_closure_sig_and_retrieve() {
         unsafety: Safety::Safe,
         abi: Abi::Glyim,
     };
-    let closure_id = ClosureId::from_raw(5);
+    let closure_id = ClosureId::from_usize(5);
     ctx.register_closure_sig(closure_id, sig.clone());
     let retrieved = ctx.closure_sig(closure_id);
     assert!(
@@ -144,7 +144,7 @@ fn register_closure_sig_and_retrieve() {
 #[test]
 fn closure_sig_returns_none_for_unregistered() {
     let ctx = test_ty_ctx();
-    let closure_id = ClosureId::from_raw(999);
+    let closure_id = ClosureId::from_usize(999);
     assert!(ctx.closure_sig(closure_id).is_none());
 }
 
@@ -160,10 +160,10 @@ fn closure_sig_survives_freeze() {
             unsafety: Safety::Safe,
             abi: Abi::Glyim,
         };
-        let closure_id = ClosureId::from_raw(3);
+        let closure_id = ClosureId::from_usize(3);
         ctx.register_closure_sig(closure_id, sig);
     });
-    let closure_id = ClosureId::from_raw(3);
+    let closure_id = ClosureId::from_usize(3);
     assert!(frozen.closure_sig(closure_id).is_some());
 }
 
@@ -173,7 +173,7 @@ fn closure_sig_survives_freeze() {
 fn register_body_ty_and_retrieve() {
     let mut ctx = test_ty_ctx();
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
-    let def_id = LocalDefId::from_raw(1);
+    let def_id = LocalDefId::from_usize(1);
     ctx.register_body_ty(def_id, i32_ty);
     assert_eq!(ctx.body_ty(def_id), Some(i32_ty));
 }
@@ -181,26 +181,26 @@ fn register_body_ty_and_retrieve() {
 #[test]
 fn body_ty_returns_none_for_unregistered() {
     let ctx = test_ty_ctx();
-    let def_id = LocalDefId::from_raw(999);
+    let def_id = LocalDefId::from_usize(999);
     assert!(ctx.body_ty(def_id).is_none());
 }
 
 #[test]
 fn body_ty_survives_freeze() {
     let (frozen, bool_ty) = with_fresh_ty_ctx(|ctx| {
-        let def_id = LocalDefId::from_raw(10);
+        let def_id = LocalDefId::from_usize(10);
         let ty = ctx.bool_ty();
         ctx.register_body_ty(def_id, ty);
         ty
     });
-    let def_id = LocalDefId::from_raw(10);
+    let def_id = LocalDefId::from_usize(10);
     assert_eq!(frozen.body_ty(def_id), Some(bool_ty));
 }
 
 #[test]
 fn register_body_ty_overwrites() {
     let mut ctx = test_ty_ctx();
-    let def_id = LocalDefId::from_raw(1);
+    let def_id = LocalDefId::from_usize(1);
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let bool_ty = ctx.bool_ty();
     ctx.register_body_ty(def_id, i32_ty);
@@ -218,7 +218,7 @@ fn impl_assoc_type_projection_resolves() {
     let mut ctx = test_ty_ctx();
     let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
     let self_ty = ctx.mk_ty(TyKind::Int(IntTy::I64)); // stand-in for `AddOne`
-    let trait_def_id = TraitDefId::from_raw(7);
+    let trait_def_id = TraitDefId::from_usize(7);
     let output_name = ctx.resolver().intern("Output");
 
     ctx.register_impl_assoc_types(self_ty, trait_def_id, vec![(output_name, i32_ty)]);
@@ -248,7 +248,7 @@ fn impl_assoc_type_projection_survives_freeze() {
     let (frozen, (i32_ty, self_ty, trait_def_id, output_name)) = with_fresh_ty_ctx(|ctx| {
         let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let self_ty = ctx.mk_ty(TyKind::Int(IntTy::I64));
-        let trait_def_id = TraitDefId::from_raw(7);
+        let trait_def_id = TraitDefId::from_usize(7);
         let output_name = ctx.resolver().intern("Output");
         ctx.register_impl_assoc_types(self_ty, trait_def_id, vec![(output_name, i32_ty)]);
         (i32_ty, self_ty, trait_def_id, output_name)
