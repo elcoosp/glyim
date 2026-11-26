@@ -10,14 +10,20 @@ fn si() -> SourceInfo {
 
 #[test]
 fn body_args_with_no_args_returns_empty() {
-    let body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
     assert!(body.args().is_empty());
     assert_eq!(body.args().len(), 0);
 }
 
 #[test]
 fn body_args_with_one_arg() {
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
     body.locals.push(LocalDecl {
         ty: Ty::BOOL,
         mutability: Mutability::Not,
@@ -30,7 +36,10 @@ fn body_args_with_one_arg() {
 
 #[test]
 fn body_args_with_multiple_args() {
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
     body.locals.push(LocalDecl {
         ty: Ty::BOOL,
         mutability: Mutability::Not,
@@ -55,21 +64,30 @@ fn body_args_with_multiple_args() {
 
 #[test]
 fn body_return_place_is_local_zero() {
-    let body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
     let rp = body.return_place();
-    assert_eq!(rp.local, LocalIdx::from_raw(0));
+    assert_eq!(rp.local, LocalIdx::from_usize(0));
     assert!(rp.projection.is_empty());
 }
 
 #[test]
 fn body_dummy_span_is_dummy() {
-    let body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
     assert!(body.span.is_dummy());
 }
 
 #[test]
 fn body_multiple_blocks_with_statements() {
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
 
     body.locals.push(LocalDecl {
         ty: Ty::BOOL,
@@ -79,12 +97,12 @@ fn body_multiple_blocks_with_statements() {
 
     let mut bb0 = BasicBlockData::new(Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(1),
+            target: BasicBlockIdx::from_usize(1),
         },
         source_info: si(),
     });
     bb0.statements.push(Statement {
-        kind: StatementKind::StorageLive(LocalIdx::from_raw(1)),
+        kind: StatementKind::StorageLive(LocalIdx::from_usize(1)),
         source_info: si(),
     });
     body.basic_blocks.push(bb0);
@@ -95,7 +113,7 @@ fn body_multiple_blocks_with_statements() {
     });
     bb1.statements.push(Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::Use(Operand::Constant(MirConst {
                 kind: MirConstKind::Bool(true),
                 ty: Ty::BOOL,
@@ -105,20 +123,20 @@ fn body_multiple_blocks_with_statements() {
         source_info: si(),
     });
     bb1.statements.push(Statement {
-        kind: StatementKind::StorageDead(LocalIdx::from_raw(1)),
+        kind: StatementKind::StorageDead(LocalIdx::from_usize(1)),
         source_info: si(),
     });
     body.basic_blocks.push(bb1);
 
     assert_eq!(body.basic_blocks.len(), 3);
     assert_eq!(
-        body.basic_blocks[BasicBlockIdx::from_raw(1)]
+        body.basic_blocks[BasicBlockIdx::from_usize(1)]
             .statements
             .len(),
         1
     );
     assert_eq!(
-        body.basic_blocks[BasicBlockIdx::from_raw(2)]
+        body.basic_blocks[BasicBlockIdx::from_usize(2)]
             .statements
             .len(),
         2
@@ -127,7 +145,10 @@ fn body_multiple_blocks_with_statements() {
 
 #[test]
 fn body_clone() {
-    let body = Body::dummy(DefId::new(CrateId::from_raw(5), LocalDefId::from_raw(10)));
+    let body = Body::dummy(DefId::new(
+        CrateId::from_usize(5),
+        LocalDefId::from_usize(10),
+    ));
     let cloned = body.clone();
     assert_eq!(body.owner.krate, cloned.owner.krate);
     assert_eq!(body.owner.local_id, cloned.owner.local_id);
@@ -137,7 +158,10 @@ fn body_clone() {
 
 #[test]
 fn body_debug_format() {
-    let body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
     let debug_str = format!("{body:?}");
     assert!(debug_str.contains("Body"));
 }
