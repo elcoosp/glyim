@@ -11,7 +11,7 @@ fn make_source_info() -> SourceInfo {
 
 #[test]
 fn build_simple_function_body() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
 
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
@@ -44,7 +44,7 @@ fn build_simple_function_body() {
 
 #[test]
 fn build_function_with_args_and_locals() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1));
 
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
@@ -66,11 +66,11 @@ fn build_function_with_args_and_locals() {
     let mut basic_blocks = IndexVec::new();
     let _bb0 = basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::SwitchInt {
-            discr: Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+            discr: Operand::Copy(Place::new(LocalIdx::from_usize(1))),
             switch_ty: Ty::BOOL,
             targets: SwitchTargets::if_switch(
-                BasicBlockIdx::from_raw(1),
-                BasicBlockIdx::from_raw(2),
+                BasicBlockIdx::from_usize(1),
+                BasicBlockIdx::from_usize(2),
             ),
         },
         source_info: make_source_info(),
@@ -78,7 +78,7 @@ fn build_function_with_args_and_locals() {
 
     let _bb1 = basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(2),
+            target: BasicBlockIdx::from_usize(2),
         },
         source_info: make_source_info(),
     }));
@@ -107,7 +107,7 @@ fn build_function_with_args_and_locals() {
 
 #[test]
 fn build_body_with_assignments() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(2));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(2));
 
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
@@ -127,13 +127,13 @@ fn build_body_with_assignments() {
     });
 
     bb0.statements.push(Statement {
-        kind: StatementKind::StorageLive(LocalIdx::from_raw(1)),
+        kind: StatementKind::StorageLive(LocalIdx::from_usize(1)),
         source_info: make_source_info(),
     });
 
     bb0.statements.push(Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::Use(Operand::Constant(MirConst {
                 kind: MirConstKind::Bool(true),
                 ty: Ty::BOOL,
@@ -144,7 +144,7 @@ fn build_body_with_assignments() {
     });
 
     bb0.statements.push(Statement {
-        kind: StatementKind::StorageDead(LocalIdx::from_raw(1)),
+        kind: StatementKind::StorageDead(LocalIdx::from_usize(1)),
         source_info: make_source_info(),
     });
 
@@ -162,28 +162,28 @@ fn build_body_with_assignments() {
     };
 
     assert_eq!(
-        body.basic_blocks[BasicBlockIdx::from_raw(0)]
+        body.basic_blocks[BasicBlockIdx::from_usize(0)]
             .statements
             .len(),
         3
     );
     assert!(matches!(
-        body.basic_blocks[BasicBlockIdx::from_raw(0)].statements[0].kind,
+        body.basic_blocks[BasicBlockIdx::from_usize(0)].statements[0].kind,
         StatementKind::StorageLive(_)
     ));
     assert!(matches!(
-        body.basic_blocks[BasicBlockIdx::from_raw(0)].statements[1].kind,
+        body.basic_blocks[BasicBlockIdx::from_usize(0)].statements[1].kind,
         StatementKind::Assign(_, _)
     ));
     assert!(matches!(
-        body.basic_blocks[BasicBlockIdx::from_raw(0)].statements[2].kind,
+        body.basic_blocks[BasicBlockIdx::from_usize(0)].statements[2].kind,
         StatementKind::StorageDead(_)
     ));
 }
 
 #[test]
 fn build_body_with_call() {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(3));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(3));
 
     let mut locals = IndexVec::new();
     locals.push(LocalDecl {
@@ -205,10 +205,10 @@ fn build_body_with_call() {
                 ty: Ty::BOOL,
                 span: Span::DUMMY,
             }),
-            args: vec![Operand::Copy(Place::new(LocalIdx::from_raw(1)))],
-            destination: Place::new(LocalIdx::from_raw(1)),
-            target: Some(BasicBlockIdx::from_raw(1)),
-            cleanup: Some(BasicBlockIdx::from_raw(2)),
+            args: vec![Operand::Copy(Place::new(LocalIdx::from_usize(1)))],
+            destination: Place::new(LocalIdx::from_usize(1)),
+            target: Some(BasicBlockIdx::from_usize(1)),
+            cleanup: Some(BasicBlockIdx::from_usize(2)),
         },
         source_info: make_source_info(),
     }));
@@ -236,9 +236,9 @@ fn build_body_with_call() {
     };
 
     assert_eq!(body.basic_blocks.len(), 3);
-    assert!(body.basic_blocks[BasicBlockIdx::from_raw(2)].is_cleanup);
+    assert!(body.basic_blocks[BasicBlockIdx::from_usize(2)].is_cleanup);
     assert!(matches!(
-        body.basic_blocks[BasicBlockIdx::from_raw(0)]
+        body.basic_blocks[BasicBlockIdx::from_usize(0)]
             .terminator
             .kind,
         TerminatorKind::Call { .. }
@@ -256,7 +256,7 @@ fn build_body_with_assert() {
                 span: Span::DUMMY,
             }),
             expected: true,
-            target: BasicBlockIdx::from_raw(1),
+            target: BasicBlockIdx::from_usize(1),
             cleanup: None,
             msg: AssertMessage::BoundsCheck,
         },
@@ -268,9 +268,9 @@ fn build_body_with_assert() {
     }));
 
     let body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks,
-        locals: IndexVec::from_raw(vec![LocalDecl {
+        locals: IndexVec::from_vec(vec![LocalDecl {
             ty: Ty::UNIT,
             mutability: Mutability::Not,
             source_info: make_source_info(),
@@ -282,7 +282,7 @@ fn build_body_with_assert() {
     };
 
     assert_eq!(body.basic_blocks.len(), 2);
-    if let TerminatorKind::Assert { msg, .. } = &body.basic_blocks[BasicBlockIdx::from_raw(0)]
+    if let TerminatorKind::Assert { msg, .. } = &body.basic_blocks[BasicBlockIdx::from_usize(0)]
         .terminator
         .kind
     {
@@ -301,12 +301,12 @@ fn build_body_with_binary_op_rvalue() {
 
     bb0.statements.push(Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::BinaryOp(
                 BinOp::Add,
                 [
-                    Operand::Copy(Place::new(LocalIdx::from_raw(2))),
-                    Operand::Copy(Place::new(LocalIdx::from_raw(3))),
+                    Operand::Copy(Place::new(LocalIdx::from_usize(2))),
+                    Operand::Copy(Place::new(LocalIdx::from_usize(3))),
                 ],
             ),
         ),
@@ -329,8 +329,11 @@ fn build_body_with_unary_op_rvalue() {
 
     bb0.statements.push(Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
-            Rvalue::UnaryOp(UnOp::Not, Operand::Copy(Place::new(LocalIdx::from_raw(2)))),
+            Place::new(LocalIdx::from_usize(1)),
+            Rvalue::UnaryOp(
+                UnOp::Not,
+                Operand::Copy(Place::new(LocalIdx::from_usize(2))),
+            ),
         ),
         source_info: make_source_info(),
     });
@@ -351,9 +354,9 @@ fn build_body_with_ref_rvalue() {
 
     bb0.statements.push(Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::Ref(
-                Place::new(LocalIdx::from_raw(2)),
+                Place::new(LocalIdx::from_usize(2)),
                 BorrowKind::Mut {
                     allow_two_phase_borrow: false,
                 },
@@ -387,16 +390,16 @@ fn build_body_with_discriminant_and_len() {
 
     bb0.statements.push(Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
-            Rvalue::Discriminant(Place::new(LocalIdx::from_raw(2))),
+            Place::new(LocalIdx::from_usize(1)),
+            Rvalue::Discriminant(Place::new(LocalIdx::from_usize(2))),
         ),
         source_info: make_source_info(),
     });
 
     bb0.statements.push(Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(3)),
-            Rvalue::Len(Place::new(LocalIdx::from_raw(4))),
+            Place::new(LocalIdx::from_usize(3)),
+            Rvalue::Len(Place::new(LocalIdx::from_usize(4))),
         ),
         source_info: make_source_info(),
     });
@@ -421,10 +424,10 @@ fn build_body_with_cast_and_repeat() {
 
     bb0.statements.push(Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::Cast(
                 CastKind::IntToInt,
-                Operand::Copy(Place::new(LocalIdx::from_raw(2))),
+                Operand::Copy(Place::new(LocalIdx::from_usize(2))),
                 Ty::BOOL,
             ),
         ),
@@ -433,7 +436,7 @@ fn build_body_with_cast_and_repeat() {
 
     bb0.statements.push(Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(3)),
+            Place::new(LocalIdx::from_usize(3)),
             Rvalue::Repeat(
                 Operand::Constant(MirConst {
                     kind: MirConstKind::Bool(false),
@@ -470,7 +473,7 @@ fn build_body_with_aggregate_tuple() {
 
     bb0.statements.push(Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(1)),
+            Place::new(LocalIdx::from_usize(1)),
             Rvalue::Aggregate(
                 AggregateKind::Tuple,
                 vec![
