@@ -18,7 +18,7 @@ fn send_computed_for_struct_with_raw_ptr_field() {
         let raw_ptr_ty = ctx.mk_ty(TyKind::RawPtr(i32_ty, Mutability::Not));
 
         let name_field = ctx.resolver().intern("ptr_field");
-        let adt_id = AdtId::from_raw(100);
+        let adt_id = AdtId::from_usize(100);
         let mut fields: IndexVec<FieldIdx, FieldDef> = IndexVec::new();
         fields.push(FieldDef {
             name: name_field,
@@ -67,7 +67,7 @@ fn send_computed_for_struct_with_primitive_fields() {
 
         let name_a = ctx.resolver().intern("a");
         let name_b = ctx.resolver().intern("b");
-        let adt_id = AdtId::from_raw(101);
+        let adt_id = AdtId::from_usize(101);
         let mut fields: IndexVec<FieldIdx, FieldDef> = IndexVec::new();
         fields.push(FieldDef {
             name: name_a,
@@ -115,7 +115,7 @@ fn send_negative_impl_overrides_field_computation() {
     let (frozen, adt_ty) = with_fresh_ty_ctx(|ctx| {
         let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let name_field = ctx.resolver().intern("x");
-        let adt_id = AdtId::from_raw(102);
+        let adt_id = AdtId::from_usize(102);
         let mut fields: IndexVec<FieldIdx, FieldDef> = IndexVec::new();
         fields.push(FieldDef {
             name: name_field,
