@@ -1344,14 +1344,14 @@ impl FnCtxt<'_> {
                             sig.output,
                         );
                     }
-                    TyKind::Error => (false, FnDefId::from_raw(0), true),
+                    TyKind::Error => (false, FnDefId::from_usize(0), true),
                     // Script 412: an unresolved `Infer` callee. Treat as
                     // callable (returning Ty::ERROR) rather than emitting
                     // "call to non-function type". This covers cases where a
                     // value's type was left as an inference variable by an
                     // upstream substitution step (e.g. `f()` where `f` was
                     // bound from a `.take().expect()` chain that lost `F`).
-                    TyKind::Infer(InferVar::Ty(_)) => (false, FnDefId::from_raw(0), true),
+                    TyKind::Infer(InferVar::Ty(_)) => (false, FnDefId::from_usize(0), true),
                     TyKind::Param(p) => {
                         // `f()` where `f: F` and `F: FnOnce(..) -> R`. The
                         // bound's signature was recorded by
@@ -1378,7 +1378,7 @@ impl FnCtxt<'_> {
                                 sig.output,
                             );
                         }
-                        (false, FnDefId::from_raw(0), false)
+                        (false, FnDefId::from_usize(0), false)
                     }
                     TyKind::Closure(closure_id, _) => {
                         // A closure-typed callee: the closure's registered
@@ -1415,9 +1415,9 @@ impl FnCtxt<'_> {
                                 sig.output,
                             );
                         }
-                        (false, FnDefId::from_raw(0), false)
+                        (false, FnDefId::from_usize(0), false)
                     }
-                    _ => (false, FnDefId::from_raw(0), false),
+                    _ => (false, FnDefId::from_usize(0), false),
                 };
 
                 let (ret_ty, callee_ty) = if is_fn_def {
@@ -2486,7 +2486,7 @@ impl FnCtxt<'_> {
                         }
                         // Vec<T> indexes like [T]
                         TyKind::Adt(adt_id, substs) => {
-                            if *adt_id == AdtId::from_raw(1020) {
+                            if *adt_id == AdtId::from_usize(1020) {
                                 // Vec<T> - extract element type
                                 let elem = ctx
                                     .substitution_args(*substs)
@@ -3014,7 +3014,7 @@ impl FnCtxt<'_> {
                 // `closure_adt_map`) supplies the capture field types. The
                 // `substs` carry the capture types so the value lays out as a
                 // struct of captures (mirroring the synthetic ADT's fields).
-                let closure_id = ClosureId::from_raw(closure_adt.to_raw());
+                let closure_id = ClosureId::from_usize(closure_adt.index());
                 let closure_substs = self.ctx.intern_substitution(
                     capture_tys
                         .iter()
@@ -3026,7 +3026,7 @@ impl FnCtxt<'_> {
                 // Register the closure's full signature (captures followed by
                 // its own parameters) so `Expr::Call` can resolve a call through
                 // a closure-typed value and `lower_call` can emit the target.
-                let closure_id = ClosureId::from_raw(closure_adt.to_raw());
+                let closure_id = ClosureId::from_usize(closure_adt.index());
                 let mut sig_inputs: Vec<GenericArg> = capture_tys
                     .iter()
                     .map(|(_, t)| GenericArg::Ty(*t))
@@ -3173,7 +3173,7 @@ impl FnCtxt<'_> {
                     .or_else(|| end_expr.as_ref().map(|e| e.ty))
                     .unwrap_or_else(|| self.ctx.error_ty());
                 let adt_id =
-                    glyim_core::def_id::AdtId::from_raw(if *inclusive { 1001 } else { 1000 });
+                    glyim_core::def_id::AdtId::from_usize(if *inclusive { 1001 } else { 1000 });
                 let substs = self
                     .ctx
                     .intern_substitution(vec![glyim_type::GenericArg::Ty(elem_ty)]);
@@ -3321,7 +3321,7 @@ impl FnCtxt<'_> {
         );
         let per_ns = resolver.resolve_path(&core_path);
         if let Some((local_id, _)) = per_ns.values.or(per_ns.types) {
-            return Some(FnDefId::from_raw(local_id.to_raw()));
+            return Some(FnDefId::from_usize(local_id.index()));
         }
         // §3.5.30 item 2: `Type::assoc` associated function — the def-map
         // does not expose inherent methods as path entries, so fall back
@@ -3710,7 +3710,7 @@ impl FnCtxt<'_> {
                 );
                 // User impls registered via `register_impl_method` (e.g.
                 // `impl Clone for MyType`).
-                let clone_trait = glyim_core::def_id::TraitDefId::from_raw(2005);
+                let clone_trait = glyim_core::def_id::TraitDefId::from_usize(2005);
                 let user_impl_ok = self
                     .ctx
                     .resolve_trait_method(clone_trait, step_ty, method_name)
@@ -3748,7 +3748,7 @@ impl FnCtxt<'_> {
                             let var = self.infer.new_ty_var(self.ctx);
                             self.ctx.mk_ty(TyKind::Infer(InferVar::Ty(var)))
                         };
-                        let fn_id = FnDefId::from_raw(u32::MAX - 1);
+                        let fn_id = FnDefId::from_usize((u32::MAX - 1) as usize);
                         return Some((out_ty, fn_id));
                     }
                     if mn == "to_owned" || mn == "to_string" {
@@ -3765,19 +3765,19 @@ impl FnCtxt<'_> {
                         // the receiver has no real builtin (the generic
                         // `Display::to_string` case).
                         let canon: Option<AdtId> = match self.ctx.ty_kind(step_ty) {
-                            TyKind::String => Some(AdtId::from_raw(1061)),
+                            TyKind::String => Some(AdtId::from_usize(1061)),
                             TyKind::Slice(e)
                                 if matches!(self.ctx.ty_kind(*e), TyKind::Uint(UintTy::U8)) =>
                             {
-                                Some(AdtId::from_raw(1061))
+                                Some(AdtId::from_usize(1061))
                             }
                             TyKind::Adt(id, _) => Some(*id),
                             TyKind::Ref(_, inner, _) => match self.ctx.ty_kind(*inner) {
-                                TyKind::String => Some(AdtId::from_raw(1061)),
+                                TyKind::String => Some(AdtId::from_usize(1061)),
                                 TyKind::Slice(e)
                                     if matches!(self.ctx.ty_kind(*e), TyKind::Uint(UintTy::U8)) =>
                                 {
-                                    Some(AdtId::from_raw(1061))
+                                    Some(AdtId::from_usize(1061))
                                 }
                                 TyKind::Adt(id, _) => Some(*id),
                                 _ => None,
@@ -3827,11 +3827,11 @@ impl FnCtxt<'_> {
                             );
                             let resolved = resolver.resolve_path(&core_path);
                             if let Some((local, _vis)) = resolved.values.or(resolved.types) {
-                                let fn_id = FnDefId::from_raw(local.to_raw());
+                                let fn_id = FnDefId::from_usize(local.index());
                                 return Some((out_ty, fn_id));
                             }
                         }
-                        let fn_id = FnDefId::from_raw(u32::MAX - 2);
+                        let fn_id = FnDefId::from_usize((u32::MAX - 2) as usize);
                         return Some((out_ty, fn_id));
                     }
                     // clone
@@ -3867,7 +3867,7 @@ impl FnCtxt<'_> {
                     {
                         return Some((inner, fn_id));
                     }
-                    let fn_id = FnDefId::from_raw(u32::MAX - 3);
+                    let fn_id = FnDefId::from_usize((u32::MAX - 3) as usize);
                     return Some((inner, fn_id));
                 }
             }
@@ -3876,9 +3876,9 @@ impl FnCtxt<'_> {
         // Map the receiver step to a `(lookup_adt_id, optional_slice_elem)`.
         let (lookup_id, elem): (Option<AdtId>, Option<Ty>) = match self.ctx.ty_kind(step_ty) {
             TyKind::Adt(id, _) => (Some(*id), None),
-            TyKind::Slice(elem) => (Some(AdtId::from_raw(1060)), Some(*elem)),
-            TyKind::Array(elem, _) => (Some(AdtId::from_raw(1060)), Some(*elem)),
-            TyKind::String => (Some(AdtId::from_raw(1061)), None),
+            TyKind::Slice(elem) => (Some(AdtId::from_usize(1060)), Some(*elem)),
+            TyKind::Array(elem, _) => (Some(AdtId::from_usize(1060)), Some(*elem)),
+            TyKind::String => (Some(AdtId::from_usize(1061)), None),
             TyKind::Ref(_, inner, _) => match self.ctx.ty_kind(*inner) {
                 TyKind::Adt(id, _) => (Some(*id), None),
                 // `&str` is `&[u8]`: route it to the `str` (1061) builtin
@@ -3887,11 +3887,11 @@ impl FnCtxt<'_> {
                 TyKind::Slice(elem)
                     if matches!(self.ctx.ty_kind(*elem), TyKind::Uint(UintTy::U8)) =>
                 {
-                    (Some(AdtId::from_raw(1061)), Some(*elem))
+                    (Some(AdtId::from_usize(1061)), Some(*elem))
                 }
-                TyKind::Slice(elem) => (Some(AdtId::from_raw(1060)), Some(*elem)),
-                TyKind::Array(elem, _) => (Some(AdtId::from_raw(1060)), Some(*elem)),
-                TyKind::String => (Some(AdtId::from_raw(1061)), None),
+                TyKind::Slice(elem) => (Some(AdtId::from_usize(1060)), Some(*elem)),
+                TyKind::Array(elem, _) => (Some(AdtId::from_usize(1060)), Some(*elem)),
+                TyKind::String => (Some(AdtId::from_usize(1061)), None),
                 _ => (None, None),
             },
             _ => (None, None),
@@ -3965,7 +3965,7 @@ impl FnCtxt<'_> {
                 if receiver_name.as_deref() == Some(*expected_name)
                     && let Some(hit) = self
                         .ctx
-                        .lookup_builtin_method(AdtId::from_raw(*cand), method_name)
+                        .lookup_builtin_method(AdtId::from_usize(*cand as usize), method_name)
                 {
                     found = Some(hit);
                     break;
@@ -4350,7 +4350,7 @@ impl FnCtxt<'_> {
                                     this.body_owner_map
                                         .get(&bid)
                                         .copied()
-                                        .map(|local| FnDefId::from_raw(local.to_raw()))
+                                        .map(|local| FnDefId::from_usize(local.index()))
                                 });
                                 let dispatch =
                                     fn_def_id.map(MethodDispatch::Static).or_else(|| {
@@ -4679,8 +4679,8 @@ impl FnCtxt<'_> {
                                         return_ty,
                                         Vec::new(),
                                         Vec::new(),
-                                        Some(MethodDispatch::Static(FnDefId::from_raw(
-                                            local.to_raw(),
+                                        Some(MethodDispatch::Static(FnDefId::from_usize(
+                                            local.index(),
                                         ))),
                                     ));
                                     break 'concrete;
@@ -4704,7 +4704,7 @@ impl FnCtxt<'_> {
                                 ) else {
                                     continue;
                                 };
-                                if TraitDefId::from_raw(local.to_raw()) != trait_id {
+                                if TraitDefId::from_usize(local.index()) != trait_id {
                                     continue;
                                 }
                                 for m in &ti.methods {
@@ -4748,7 +4748,7 @@ impl FnCtxt<'_> {
                                                         Vec::new(),
                                                         Vec::new(),
                                                         Some(MethodDispatch::Static(
-                                                            FnDefId::from_raw(local.to_raw()),
+                                                            FnDefId::from_usize(local.index()),
                                                         )),
                                                     ));
                                                 }
@@ -5038,7 +5038,7 @@ impl FnCtxt<'_> {
                     Some(l) => l,
                     None => continue,
                 };
-                let fn_def_id = FnDefId::from_raw(local.to_raw());
+                let fn_def_id = FnDefId::from_usize(local.index());
                 let recv_substs = match self.ctx.ty_kind(recv_ty) {
                     TyKind::Adt(_, s) => *s,
                     _ => self.ctx.intern_substitution(vec![]),
@@ -5180,7 +5180,7 @@ impl FnCtxt<'_> {
                                     })
                                     .collect();
                                 let substs = self.ctx.intern_substitution(resolved_params);
-                                return Some((FnDefId::from_raw(local.to_raw()), substs));
+                                return Some((FnDefId::from_usize(local.index()), substs));
                             }
                         }
                     }
