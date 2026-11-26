@@ -56,7 +56,7 @@ pub fn check_function_body(
         owner,
         expr_cache: FxHashMap::default(),
         def_map,
-        current_module: glyim_def_map::ModuleId::from_raw(0),
+        current_module: glyim_def_map::ModuleId::from_usize(0),
         capture_log: Vec::new(),
         body_owner_map: &std::collections::HashMap::default(),
         param_map: FxHashMap::default(),
@@ -87,21 +87,21 @@ pub fn make_single_body_hir(
     for expr in exprs {
         expr_vec.push(expr);
     }
-    let expr_spans = IndexVec::from_raw(vec![Span::DUMMY; expr_vec.len() + 1]);
+    let expr_spans = IndexVec::from_vec(vec![Span::DUMMY; expr_vec.len() + 1]);
     // Wrap the expression list in a root `Block` so the type checker's
     // root-Block driver (check_stmt.rs) iterates every expression as a
     // top-level statement — matching both real HIR lowering (which always
     // produces a root block) and the pre-flat-iteration test expectations.
     let block_expr = glyim_hir::Expr::Block {
         stmts: (0..expr_vec.len() as u32)
-            .map(glyim_hir::ExprId::from_raw)
+            .map(|raw| glyim_hir::ExprId::from_usize(raw as usize))
             .collect(),
         tail: None,
     };
     expr_vec.push(block_expr);
     let body = Body {
         unsafe_blocks: std::collections::HashSet::new(),
-        owner: LocalDefId::from_raw(0),
+        owner: LocalDefId::from_usize(0),
         exprs: expr_vec,
         pats: IndexVec::new(),
         pat_spans: glyim_core::arena::IndexVec::new(),
@@ -118,7 +118,7 @@ pub fn typeck_single_body(hir: &CrateHir, body_id: BodyId) -> crate::thir::Body 
     let mut ctx = make_ty_ctx();
     let mut infer = InferenceTable::new();
     let def_map = empty_def_map();
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
 
     let (thir_body, _diags) = check_function_body(
         &mut ctx,
@@ -140,7 +140,7 @@ pub fn empty_def_map() -> glyim_def_map::CrateDefMap {
     use glyim_def_map::{CrateDefMap, ItemScope, ModuleData, ModuleId, ModuleOrigin};
     use glyim_span::{ByteIdx, FileId, Span, SyntaxContext};
     let interner = global_interner();
-    let root = ModuleId::from_raw(0);
+    let root = ModuleId::from_usize(0);
     let module_data = ModuleData {
         parent: None,
         children: vec![],
@@ -152,14 +152,14 @@ pub fn empty_def_map() -> glyim_def_map::CrateDefMap {
             ByteIdx::from_usize(0),
             SyntaxContext::ROOT,
         ),
-        def_id: glyim_core::def_id::LocalDefId::from_raw(0),
+        def_id: glyim_core::def_id::LocalDefId::from_usize(0),
         visibility: glyim_core::primitives::Visibility::Public,
     };
-    let modules = IndexVec::from_raw(vec![module_data]);
+    let modules = IndexVec::from_vec(vec![module_data]);
     CrateDefMap {
         root,
         modules,
-        krate: CrateId::from_raw(0),
+        krate: CrateId::from_usize(0),
         interner,
         variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
