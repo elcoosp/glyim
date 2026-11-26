@@ -25,7 +25,7 @@ fn test_place_ty_deref_on_ref() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
+        local: LocalIdx::from_usize(0),
         projection: Box::new([ProjectionElem::Deref]),
     };
 
@@ -52,7 +52,7 @@ fn test_place_ty_deref_on_mut_ref() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
+        local: LocalIdx::from_usize(0),
         projection: Box::new([ProjectionElem::Deref]),
     };
 
@@ -78,7 +78,7 @@ fn test_place_ty_deref_on_raw_ptr() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
+        local: LocalIdx::from_usize(0),
         projection: Box::new([ProjectionElem::Deref]),
     };
 
@@ -112,15 +112,15 @@ fn test_place_ty_field_on_tuple() {
     });
 
     let place0 = Place {
-        local: LocalIdx::from_raw(0),
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+        local: LocalIdx::from_usize(0),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
     };
     let ty0 = place0.ty(&ctx, &locals);
     assert_eq!(ty0, bool_ty);
 
     let place1 = Place {
-        local: LocalIdx::from_raw(0),
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(1))]),
+        local: LocalIdx::from_usize(0),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(1))]),
     };
     let ty1 = place1.ty(&ctx, &locals);
     assert_eq!(ty1, i32_ty);
@@ -145,8 +145,8 @@ fn test_place_ty_index_on_array() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
-        projection: Box::new([ProjectionElem::Index(LocalIdx::from_raw(1))]),
+        local: LocalIdx::from_usize(0),
+        projection: Box::new([ProjectionElem::Index(LocalIdx::from_usize(1))]),
     };
 
     let ty = place.ty(&ctx, &locals);
@@ -168,8 +168,8 @@ fn test_place_ty_index_on_slice() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
-        projection: Box::new([ProjectionElem::Index(LocalIdx::from_raw(1))]),
+        local: LocalIdx::from_usize(0),
+        projection: Box::new([ProjectionElem::Index(LocalIdx::from_usize(1))]),
     };
 
     let ty = place.ty(&ctx, &locals);
@@ -199,10 +199,10 @@ fn test_place_ty_chained_deref_field() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
+        local: LocalIdx::from_usize(0),
         projection: Box::new([
             ProjectionElem::Deref,
-            ProjectionElem::Field(FieldIdx::from_raw(0)),
+            ProjectionElem::Field(FieldIdx::from_usize(0)),
         ]),
     };
 
@@ -224,7 +224,7 @@ fn test_place_ty_deref_on_non_pointer_returns_error() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
+        local: LocalIdx::from_usize(0),
         projection: Box::new([ProjectionElem::Deref]),
     };
 
@@ -246,8 +246,8 @@ fn test_place_ty_field_on_non_tuple_returns_error() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
-        projection: Box::new([ProjectionElem::Field(FieldIdx::from_raw(0))]),
+        local: LocalIdx::from_usize(0),
+        projection: Box::new([ProjectionElem::Field(FieldIdx::from_usize(0))]),
     };
 
     let ty = place.ty(&ctx, &locals);
@@ -268,8 +268,8 @@ fn test_place_ty_index_on_non_array_returns_error() {
     });
 
     let place = Place {
-        local: LocalIdx::from_raw(0),
-        projection: Box::new([ProjectionElem::Index(LocalIdx::from_raw(1))]),
+        local: LocalIdx::from_usize(0),
+        projection: Box::new([ProjectionElem::Index(LocalIdx::from_usize(1))]),
     };
 
     let ty = place.ty(&ctx, &locals);
