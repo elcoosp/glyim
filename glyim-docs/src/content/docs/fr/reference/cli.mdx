@@ -33,6 +33,7 @@ Le pilote de compilateur `glyim` (compilé comme `glyim-cli`) compile un seul fi
 | `--error-format <FMT>` | énumération | `human` | non | Format de diagnostic : `human` (rendu par miette) ou `json` (un objet JSON par diagnostic). |
 | `--time-passes` | drapeau | off | non | Imprime les mesures de timing par passe après compilation. |
 | `--self-profile[=FILE]` | chemin | aucun | non | Enregistre un journal d'événements de profilage Chrome-trace (`FILE`, défaut `trace.json`) ; s'ouvre dans Perfetto. |
+| `--opt-bisect-limit <N>` | entier | aucun | non | Arrête le plan de passes MIR du `-O<niveau>` après les `N` premières passes (M5.11 opt-bisect) ; à combiner avec `--time-passes` pour voir une ligne ran/changed/stmtsΔ/blocksΔ par passe planifiée. Une recherche dichotomique sur `N` localise une mauvaise compilation à la première passe dont la sortie est incorrecte. |
 | `--with-stdlib` | drapeau | off | non | Préfixe la bibliothèque standard assemblée à l'entrée, pour que `println`, `Vec`, `Option`, `Result`, `String`, `Box`, `Rc` et `Iterator` se résolvent sans déclarations `use` explicites. |
 | `-A`, `--allow <LINT>` | nom de lint | aucun | non | Supprime le lint nommé. Répétable. |
 | `-W`, `--warn <LINT>` | nom de lint | aucun | non | Règle le lint nommé au niveau warning (le défaut). Répétable. `glyim -W help` liste tous les lints. |
