@@ -5,8 +5,8 @@ use glyim_type::Ty;
 
 /// Helper: build a body that computes `left_val` OP `right_val` and returns the result.
 fn build_binop_body_int(op: BinOp, left: i128, right: i128) -> Body {
-    let crate_id = CrateId::from_raw(0);
-    let local_def_id = LocalDefId::from_raw(0);
+    let crate_id = CrateId::from_usize(0);
+    let local_def_id = LocalDefId::from_usize(0);
     let owner = DefId::new(crate_id, local_def_id);
 
     let mut locals = IndexVec::with_capacity(3);
@@ -26,9 +26,9 @@ fn build_binop_body_int(op: BinOp, left: i128, right: i128) -> Body {
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     });
 
-    let return_place = Place::new(LocalIdx::from_raw(0));
-    let left_place = Place::new(LocalIdx::from_raw(1));
-    let right_place = Place::new(LocalIdx::from_raw(2));
+    let return_place = Place::new(LocalIdx::from_usize(0));
+    let left_place = Place::new(LocalIdx::from_usize(1));
+    let right_place = Place::new(LocalIdx::from_usize(2));
 
     let stmts = vec![
         Statement {
@@ -59,8 +59,8 @@ fn build_binop_body_int(op: BinOp, left: i128, right: i128) -> Body {
                 Rvalue::BinaryOp(
                     op,
                     [
-                        Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                        Operand::Copy(Place::new(LocalIdx::from_raw(2))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(1))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(2))),
                     ],
                 ),
             ),
@@ -93,8 +93,8 @@ fn build_binop_body_int(op: BinOp, left: i128, right: i128) -> Body {
 
 /// Helper: build a body for uint binop
 fn build_binop_body_uint(op: BinOp, left: u128, right: u128) -> Body {
-    let crate_id = CrateId::from_raw(0);
-    let local_def_id = LocalDefId::from_raw(0);
+    let crate_id = CrateId::from_usize(0);
+    let local_def_id = LocalDefId::from_usize(0);
     let owner = DefId::new(crate_id, local_def_id);
 
     let mut locals = IndexVec::with_capacity(3);
@@ -114,12 +114,12 @@ fn build_binop_body_uint(op: BinOp, left: u128, right: u128) -> Body {
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     });
 
-    let return_place = Place::new(LocalIdx::from_raw(0));
+    let return_place = Place::new(LocalIdx::from_usize(0));
 
     let stmts = vec![
         Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
+                Place::new(LocalIdx::from_usize(1)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Uint(left),
                     ty: Ty::UNIT,
@@ -130,7 +130,7 @@ fn build_binop_body_uint(op: BinOp, left: u128, right: u128) -> Body {
         },
         Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(2)),
+                Place::new(LocalIdx::from_usize(2)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Uint(right),
                     ty: Ty::UNIT,
@@ -145,8 +145,8 @@ fn build_binop_body_uint(op: BinOp, left: u128, right: u128) -> Body {
                 Rvalue::BinaryOp(
                     op,
                     [
-                        Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                        Operand::Copy(Place::new(LocalIdx::from_raw(2))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(1))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(2))),
                     ],
                 ),
             ),
@@ -179,8 +179,8 @@ fn build_binop_body_uint(op: BinOp, left: u128, right: u128) -> Body {
 
 /// Helper: build a body for bool binop
 fn build_binop_body_bool(op: BinOp, left: bool, right: bool) -> Body {
-    let crate_id = CrateId::from_raw(0);
-    let local_def_id = LocalDefId::from_raw(0);
+    let crate_id = CrateId::from_usize(0);
+    let local_def_id = LocalDefId::from_usize(0);
     let owner = DefId::new(crate_id, local_def_id);
 
     let mut locals = IndexVec::with_capacity(3);
@@ -200,12 +200,12 @@ fn build_binop_body_bool(op: BinOp, left: bool, right: bool) -> Body {
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
     });
 
-    let return_place = Place::new(LocalIdx::from_raw(0));
+    let return_place = Place::new(LocalIdx::from_usize(0));
 
     let stmts = vec![
         Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
+                Place::new(LocalIdx::from_usize(1)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Bool(left),
                     ty: Ty::UNIT,
@@ -216,7 +216,7 @@ fn build_binop_body_bool(op: BinOp, left: bool, right: bool) -> Body {
         },
         Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(2)),
+                Place::new(LocalIdx::from_usize(2)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::Bool(right),
                     ty: Ty::UNIT,
@@ -231,8 +231,8 @@ fn build_binop_body_bool(op: BinOp, left: bool, right: bool) -> Body {
                 Rvalue::BinaryOp(
                     op,
                     [
-                        Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                        Operand::Copy(Place::new(LocalIdx::from_raw(2))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(1))),
+                        Operand::Copy(Place::new(LocalIdx::from_usize(2))),
                     ],
                 ),
             ),
@@ -269,7 +269,7 @@ fn run_int_body(body: &Body) -> InterpValue {
     let result = interp.run_body(body);
     assert!(result.is_ok(), "run_body failed: {result:?}");
     interp
-        .get_local_value(LocalIdx::from_raw(0))
+        .get_local_value(LocalIdx::from_usize(0))
         .cloned()
         .unwrap()
 }
@@ -313,7 +313,7 @@ fn uint_bitand() {
     assert!(result.is_ok());
     assert_eq!(
         interp
-            .get_local_value(LocalIdx::from_raw(0))
+            .get_local_value(LocalIdx::from_usize(0))
             .cloned()
             .unwrap(),
         InterpValue::Uint(0b1000)
@@ -329,7 +329,7 @@ fn uint_bitor() {
     assert!(result.is_ok());
     assert_eq!(
         interp
-            .get_local_value(LocalIdx::from_raw(0))
+            .get_local_value(LocalIdx::from_usize(0))
             .cloned()
             .unwrap(),
         InterpValue::Uint(0b1110)
@@ -345,7 +345,7 @@ fn uint_bitxor() {
     assert!(result.is_ok());
     assert_eq!(
         interp
-            .get_local_value(LocalIdx::from_raw(0))
+            .get_local_value(LocalIdx::from_usize(0))
             .cloned()
             .unwrap(),
         InterpValue::Uint(0b0110)
@@ -361,7 +361,7 @@ fn uint_shl() {
     assert!(result.is_ok());
     assert_eq!(
         interp
-            .get_local_value(LocalIdx::from_raw(0))
+            .get_local_value(LocalIdx::from_usize(0))
             .cloned()
             .unwrap(),
         InterpValue::Uint(16)
@@ -377,7 +377,7 @@ fn uint_shr() {
     assert!(result.is_ok());
     assert_eq!(
         interp
-            .get_local_value(LocalIdx::from_raw(0))
+            .get_local_value(LocalIdx::from_usize(0))
             .cloned()
             .unwrap(),
         InterpValue::Uint(1)
@@ -393,7 +393,7 @@ fn bool_and() {
     assert!(result.is_ok());
     assert_eq!(
         interp
-            .get_local_value(LocalIdx::from_raw(0))
+            .get_local_value(LocalIdx::from_usize(0))
             .cloned()
             .unwrap(),
         InterpValue::Bool(false)
@@ -409,7 +409,7 @@ fn bool_or() {
     assert!(result.is_ok());
     assert_eq!(
         interp
-            .get_local_value(LocalIdx::from_raw(0))
+            .get_local_value(LocalIdx::from_usize(0))
             .cloned()
             .unwrap(),
         InterpValue::Bool(true)
@@ -425,7 +425,7 @@ fn bool_and_both_true() {
     assert!(result.is_ok());
     assert_eq!(
         interp
-            .get_local_value(LocalIdx::from_raw(0))
+            .get_local_value(LocalIdx::from_usize(0))
             .cloned()
             .unwrap(),
         InterpValue::Bool(true)
@@ -441,7 +441,7 @@ fn bool_or_both_false() {
     assert!(result.is_ok());
     assert_eq!(
         interp
-            .get_local_value(LocalIdx::from_raw(0))
+            .get_local_value(LocalIdx::from_usize(0))
             .cloned()
             .unwrap(),
         InterpValue::Bool(false)
