@@ -12,16 +12,16 @@ fn test_const() -> MirConst {
 
 #[test]
 fn operand_copy() {
-    let place = Place::new(LocalIdx::from_raw(0));
+    let place = Place::new(LocalIdx::from_usize(0));
     let op = Operand::Copy(place);
-    assert!(matches!(op, Operand::Copy(p) if p.local == LocalIdx::from_raw(0)));
+    assert!(matches!(op, Operand::Copy(p) if p.local == LocalIdx::from_usize(0)));
 }
 
 #[test]
 fn operand_move() {
-    let place = Place::new(LocalIdx::from_raw(3));
+    let place = Place::new(LocalIdx::from_usize(3));
     let op = Operand::Move(place);
-    assert!(matches!(op, Operand::Move(p) if p.local == LocalIdx::from_raw(3)));
+    assert!(matches!(op, Operand::Move(p) if p.local == LocalIdx::from_usize(3)));
 }
 
 #[test]
@@ -33,10 +33,10 @@ fn operand_constant() {
 #[test]
 fn operand_copy_with_projection() {
     let place = Place {
-        local: LocalIdx::from_raw(1),
+        local: LocalIdx::from_usize(1),
         projection: Box::new([
             ProjectionElem::Deref,
-            ProjectionElem::Field(FieldIdx::from_raw(0)),
+            ProjectionElem::Field(FieldIdx::from_usize(0)),
         ]),
     };
     let op = Operand::Copy(place);
