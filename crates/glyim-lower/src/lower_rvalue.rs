@@ -80,7 +80,7 @@ impl MirBuilder<'_> {
             thir::Stmt::Return { value, span } => {
                 if let Some(val_expr) = value {
                     let rvalue = self.lower_expr_to_rvalue(val_expr);
-                    let ret_place = glyim_mir::Place::new(LocalIdx::from_raw(0));
+                    let ret_place = glyim_mir::Place::new(LocalIdx::from_usize(0));
                     self.push_stmt(glyim_mir::StatementKind::Assign(ret_place, rvalue), *span);
                 }
                 self.terminate(glyim_mir::TerminatorKind::Return, *span);
@@ -116,7 +116,7 @@ impl MirBuilder<'_> {
                 // carrying its `start` and `end` operands, instead of a dummy
                 // empty tuple.
                 let adt_id =
-                    glyim_core::def_id::AdtId::from_raw(if *inclusive { 1001 } else { 1000 });
+                    glyim_core::def_id::AdtId::from_usize(if *inclusive { 1001 } else { 1000 });
 
                 // The range type is resolved during type-checking to
                 // `Adt(1000|1001, [T])`; reuse its substitution so the element
@@ -176,7 +176,7 @@ impl MirBuilder<'_> {
                 glyim_mir::Rvalue::Aggregate(
                     glyim_mir::AggregateKind::Adt(
                         adt_id,
-                        glyim_mir::VariantIdx::from_raw(0),
+                        glyim_mir::VariantIdx::from_usize(0),
                         substs,
                     ),
                     vec![start_op, end_op],
@@ -249,7 +249,7 @@ impl MirBuilder<'_> {
                 //
                 // Fallback: if the initializer hasn't been const-evaluated
                 // (e.g. it references a runtime value), surface a diagnostic.
-                let const_alias = glyim_core::def_id::ConstDefId::from_raw(static_def_id.to_raw());
+                let const_alias = glyim_core::def_id::ConstDefId::from_usize(static_def_id.index());
                 let substs = glyim_type::Substitution::empty();
                 let Some(init) = self.ctx.const_value(const_alias, substs) else {
                     // Typeck must have rejected a non-const-evaluable
@@ -312,7 +312,7 @@ impl MirBuilder<'_> {
                 glyim_mir::Rvalue::Aggregate(
                     glyim_mir::AggregateKind::Adt(
                         *adt_id,
-                        glyim_mir::VariantIdx::from_raw(variant_idx.to_raw()),
+                        glyim_mir::VariantIdx::from_usize(variant_idx.index()),
                         substs,
                     ),
                     vec![],
@@ -409,7 +409,7 @@ impl MirBuilder<'_> {
                 // pointer directly avoids it).
                 if let thir::ExprKind::StaticRef(static_def_id) = &operand.kind {
                     let const_alias =
-                        glyim_core::def_id::ConstDefId::from_raw(static_def_id.to_raw());
+                        glyim_core::def_id::ConstDefId::from_usize(static_def_id.index());
                     let substs = glyim_type::Substitution::empty();
                     if let Some(init) = self.ctx.const_value(const_alias, substs) {
                         let is_mut = self.ctx.ty_ctx().static_is_mut(*static_def_id);
@@ -525,7 +525,7 @@ impl MirBuilder<'_> {
                     return glyim_mir::Rvalue::Aggregate(
                         glyim_mir::AggregateKind::Adt(
                             *adt_id,
-                            glyim_mir::VariantIdx::from_raw(variant_idx.to_raw()),
+                            glyim_mir::VariantIdx::from_usize(variant_idx.index()),
                             substs,
                         ),
                         mir_args,
@@ -1054,7 +1054,7 @@ impl MirBuilder<'_> {
                                             .ctx
                                             .ty_ctx()
                                             .builtin_method_fn_id(
-                                                glyim_core::def_id::AdtId::from_raw(1020),
+                                                glyim_core::def_id::AdtId::from_usize(1020),
                                                 "as_slice",
                                             )
                                             .expect(
@@ -1405,9 +1405,9 @@ impl MirBuilder<'_> {
                     self.current_block = Some(some_bb);
                     let payload_place = {
                         let mut proj = vec![glyim_mir::ProjectionElem::Downcast(
-                            glyim_mir::VariantIdx::from_raw(1),
+                            glyim_mir::VariantIdx::from_usize(1),
                         )];
-                        proj.push(glyim_mir::ProjectionElem::Field(FieldIdx::from_raw(0)));
+                        proj.push(glyim_mir::ProjectionElem::Field(FieldIdx::from_usize(0)));
                         glyim_mir::Place {
                             local: option_local,
                             projection: proj.into_boxed_slice(),
@@ -1662,7 +1662,7 @@ impl MirBuilder<'_> {
                 // source *didn't* override, project that field out of the
                 // temporary into the aggregate. This is what `..p` desugars
                 // to in rustc.
-                let variant = glyim_mir::VariantIdx::from_raw(*variant_idx);
+                let variant = glyim_mir::VariantIdx::from_usize(*variant_idx as usize);
                 let mut resolved: Vec<(usize, glyim_mir::Operand)> = fields
                     .iter()
                     .enumerate()
@@ -1729,7 +1729,7 @@ impl MirBuilder<'_> {
                         let field_place = glyim_mir::Place {
                             local: sl,
                             projection: Box::new([glyim_mir::ProjectionElem::Field(
-                                glyim_type::FieldIdx::from_raw(i as u32),
+                                glyim_type::FieldIdx::from_usize(i),
                             )]),
                         };
                         mir_operands.push(glyim_mir::Operand::Copy(field_place));
@@ -1752,7 +1752,7 @@ impl MirBuilder<'_> {
             thir::ExprKind::Return { value } => {
                 if let Some(val_expr) = value {
                     let rvalue = self.lower_expr_to_rvalue(val_expr);
-                    let ret_place = glyim_mir::Place::new(LocalIdx::from_raw(0));
+                    let ret_place = glyim_mir::Place::new(LocalIdx::from_usize(0));
                     self.push_stmt(
                         glyim_mir::StatementKind::Assign(ret_place, rvalue),
                         expr.span,
@@ -1911,7 +1911,7 @@ impl MirBuilder<'_> {
                 // not a fabricated `error_ty()` sentinel.
                 let fn_const = glyim_mir::MirConst {
                     kind: glyim_mir::MirConstKind::Fn(
-                        glyim_core::def_id::FnDefId::from_raw(closure_id.to_raw()),
+                        glyim_core::def_id::FnDefId::from_usize(closure_id.index()),
                         *closure_substs,
                     ),
                     ty: expr.ty,
@@ -2034,10 +2034,10 @@ impl MirBuilder<'_> {
                 let succ_payload = glyim_mir::Place {
                     local: operand_local,
                     projection: vec![
-                        glyim_mir::ProjectionElem::Downcast(glyim_mir::VariantIdx::from_raw(
-                            success_variant,
+                        glyim_mir::ProjectionElem::Downcast(glyim_mir::VariantIdx::from_usize(
+                            success_variant as usize,
                         )),
-                        glyim_mir::ProjectionElem::Field(glyim_type::FieldIdx::from_raw(0)),
+                        glyim_mir::ProjectionElem::Field(glyim_type::FieldIdx::from_usize(0)),
                     ]
                     .into_boxed_slice(),
                 };
@@ -2082,10 +2082,10 @@ impl MirBuilder<'_> {
                     let err_payload = glyim_mir::Place {
                         local: operand_local,
                         projection: vec![
-                            glyim_mir::ProjectionElem::Downcast(glyim_mir::VariantIdx::from_raw(
-                                err_variant,
+                            glyim_mir::ProjectionElem::Downcast(glyim_mir::VariantIdx::from_usize(
+                                err_variant as usize,
                             )),
-                            glyim_mir::ProjectionElem::Field(glyim_type::FieldIdx::from_raw(0)),
+                            glyim_mir::ProjectionElem::Field(glyim_type::FieldIdx::from_usize(0)),
                         ]
                         .into_boxed_slice(),
                     };
@@ -2096,7 +2096,7 @@ impl MirBuilder<'_> {
                 let ret_agg = glyim_mir::Rvalue::Aggregate(
                     glyim_mir::AggregateKind::Adt(
                         ret_adt_id,
-                        glyim_mir::VariantIdx::from_raw(err_variant),
+                        glyim_mir::VariantIdx::from_usize(err_variant as usize),
                         ret_substs,
                     ),
                     agg_args,
@@ -2109,7 +2109,7 @@ impl MirBuilder<'_> {
                 );
                 // `Return` reads local 0 (the function's return slot). Copy
                 // our aggregate into local 0 before returning.
-                let local0 = glyim_mir::LocalIdx::from_raw(0);
+                let local0 = glyim_mir::LocalIdx::from_usize(0);
                 self.push_stmt(
                     glyim_mir::StatementKind::Assign(
                         glyim_mir::Place::new(local0),
@@ -2199,7 +2199,7 @@ impl MirBuilder<'_> {
         if let Some(&local) = hit {
             local
         } else {
-            LocalIdx::from_raw(var_id.to_raw())
+            LocalIdx::from_usize(var_id.index())
         }
     }
     /// Lowers `expr` to a MIR operand, specializing the literal,
@@ -2320,7 +2320,7 @@ impl MirBuilder<'_> {
                 // `Place{temp, [Deref]}` so the caller writes THROUGH the
                 // global, not into a stack temporary. Mirrors the rvalue
                 // arm's two-step lowering.
-                let const_alias = glyim_core::def_id::ConstDefId::from_raw(static_def_id.to_raw());
+                let const_alias = glyim_core::def_id::ConstDefId::from_usize(static_def_id.index());
                 let substs = glyim_type::Substitution::empty();
                 let Some(init) = self.ctx.const_value(const_alias, substs) else {
                     // Typeck must have rejected a non-const-evaluable
@@ -2415,7 +2415,7 @@ impl MirBuilder<'_> {
                 let field_idx = self.resolve_field_index(receiver.ty, *field, expr.span);
                 let field_idx = match field_idx {
                     Some(idx) => idx,
-                    None => FieldIdx::from_raw(0),
+                    None => FieldIdx::from_usize(0),
                 };
                 self.place_with_projection(base_place, ProjectionElem::Field(field_idx))
             }
@@ -2596,7 +2596,7 @@ impl MirBuilder<'_> {
             thir::PatternKind::Tuple(fields) => {
                 if let (Some(init), Some(orig)) = (copy_place.clone(), orig_place.clone()) {
                     for (idx, field_pat) in fields.iter().enumerate() {
-                        let field_proj = ProjectionElem::Field(FieldIdx::from_raw(idx as u32));
+                        let field_proj = ProjectionElem::Field(FieldIdx::from_usize(idx));
                         let copy_field =
                             self.place_with_projection(init.clone(), field_proj.clone());
                         let orig_field = self.place_with_projection(orig.clone(), field_proj);
@@ -2655,8 +2655,9 @@ impl MirBuilder<'_> {
                     // advanced `written` and looped forever / panicked.
                     let is_enum = self.ctx.adt_def(*adt_id).kind == crate::lower::AdtKind::Enum;
                     let (field_base, orig_base) = if is_enum {
-                        let dc =
-                            ProjectionElem::Downcast(glyim_mir::VariantIdx::from_raw(*variant_idx));
+                        let dc = ProjectionElem::Downcast(glyim_mir::VariantIdx::from_usize(
+                            *variant_idx as usize,
+                        ));
                         (
                             self.place_with_projection(init_place.clone(), dc.clone()),
                             self.place_with_projection(orig.clone(), dc),
@@ -2666,7 +2667,7 @@ impl MirBuilder<'_> {
                     };
                     for (pos, field_pat) in fields.iter().enumerate() {
                         let field_idx: Option<FieldIdx> = if is_tuple_variant {
-                            Some(FieldIdx::from_raw(pos as u32))
+                            Some(FieldIdx::from_usize(pos))
                         } else {
                             self.ctx
                                 .field_index_by_name(*adt_id, *variant_idx, field_pat.field)
@@ -3226,7 +3227,9 @@ impl MirBuilder<'_> {
                     let field_base = if is_enum {
                         self.place_with_projection(
                             scrut_place.clone(),
-                            ProjectionElem::Downcast(glyim_mir::VariantIdx::from_raw(*variant_idx)),
+                            ProjectionElem::Downcast(glyim_mir::VariantIdx::from_usize(
+                                *variant_idx as usize,
+                            )),
                         )
                     } else {
                         scrut_place.clone()
@@ -3249,7 +3252,7 @@ impl MirBuilder<'_> {
                 for (i, field_pat) in fields.iter().enumerate() {
                     let field_place = self.place_with_projection(
                         scrut_place.clone(),
-                        ProjectionElem::Field(FieldIdx::from_raw(i as u32)),
+                        ProjectionElem::Field(FieldIdx::from_usize(i)),
                     );
                     if let Some(fl) = self.lower_pattern_test(field_pat, &field_place, span) {
                         acc = Some(match acc {
@@ -3440,7 +3443,10 @@ impl MirBuilder<'_> {
             TyKind::Adt(adt_id, _substs) => self.ctx.field_index_by_name(*adt_id, 0, field_name),
             TyKind::Tuple(_substs) => {
                 let name_str = self.ctx.ty_ctx().name_str(field_name);
-                name_str.parse::<u32>().ok().map(FieldIdx::from_raw)
+                name_str
+                    .parse::<u32>()
+                    .ok()
+                    .map(|raw| FieldIdx::from_usize(raw as usize))
             }
             _ => None,
         }
@@ -3494,7 +3500,9 @@ impl MirBuilder<'_> {
             // fails) instead of silently fabricating an `error_ty()` element
             // that would miscompile the slice; the sentinel remains only as
             // recovery so the pass can keep diagnosing.
-            TyKind::Adt(adt_id, substs) if *adt_id == glyim_core::def_id::AdtId::from_raw(1020) => {
+            TyKind::Adt(adt_id, substs)
+                if *adt_id == glyim_core::def_id::AdtId::from_usize(1020) =>
+            {
                 self.ctx
                     .ty_ctx()
                     .substitution_args(*substs)
@@ -3521,10 +3529,11 @@ impl MirBuilder<'_> {
                 .ctx
                 .ty_ctx()
                 .mk_ty(TyKind::Uint(glyim_core::UintTy::U8)),
-            TyKind::Adt(adt_id, _) if *adt_id == glyim_core::def_id::AdtId::from_raw(1050) => self
-                .ctx
-                .ty_ctx()
-                .mk_ty(TyKind::Uint(glyim_core::UintTy::U8)),
+            TyKind::Adt(adt_id, _) if *adt_id == glyim_core::def_id::AdtId::from_usize(1050) => {
+                self.ctx
+                    .ty_ctx()
+                    .mk_ty(TyKind::Uint(glyim_core::UintTy::U8))
+            }
             _ => {
                 self.diagnostics.push(GlyimDiagnostic::type_error(
                     span,
@@ -3813,7 +3822,7 @@ impl MirBuilder<'_> {
             }
         } else {
             let mut proj = base_place.projection.to_vec();
-            proj.push(ProjectionElem::Field(glyim_type::FieldIdx::from_raw(0)));
+            proj.push(ProjectionElem::Field(glyim_type::FieldIdx::from_usize(0)));
             Place {
                 local: base_place.local,
                 projection: proj.into_boxed_slice(),
@@ -4027,7 +4036,7 @@ mod t121_two_phase_tests {
 
     fn var(v: u32) -> thir::Expr {
         thir::Expr {
-            kind: thir::ExprKind::VarRef(thir::LocalVarId::from_raw(v)),
+            kind: thir::ExprKind::VarRef(thir::LocalVarId::from_usize(v as usize)),
             ty: Ty::ERROR,
             span: glyim_span::Span::DUMMY,
         }
