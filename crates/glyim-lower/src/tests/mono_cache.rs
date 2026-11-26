@@ -33,8 +33,8 @@ fn make_static_item(static_def_id: StaticDefId) -> MonoItem {
 /// Helper: create a dummy MIR body.
 fn dummy_body() -> Arc<Body> {
     Arc::new(Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(0),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
     )))
 }
 
@@ -43,7 +43,7 @@ fn dummy_body() -> Arc<Body> {
 fn same_instantiation_deduplicated() {
     let mut ty_ctx = test_ty_ctx();
     let empty_subst = ty_ctx.intern_substitution(Vec::new());
-    let fn_id = FnDefId::from_raw(1);
+    let fn_id = FnDefId::from_usize(1);
     let item = make_fn_item(fn_id, empty_subst);
 
     let mut ctx = MonoCtx::new();
@@ -72,7 +72,7 @@ fn different_substitutions_distinct() {
     );
 
     let mut ctx = MonoCtx::new();
-    let fn_id = FnDefId::from_raw(1);
+    let fn_id = FnDefId::from_usize(1);
 
     let item_a = make_fn_item(fn_id, subst_a);
     let item_b = make_fn_item(fn_id, subst_b);
@@ -95,7 +95,7 @@ fn different_substitutions_distinct() {
 fn cache_survives_across_collects() {
     let mut ty_ctx = test_ty_ctx();
     let empty_subst = ty_ctx.intern_substitution(Vec::new());
-    let fn_id = FnDefId::from_raw(1);
+    let fn_id = FnDefId::from_usize(1);
     let item = make_fn_item(fn_id, empty_subst);
 
     let mut ctx = MonoCtx::new();
@@ -138,7 +138,7 @@ fn cache_survives_across_collects() {
 fn no_duplicate_arc_body() {
     let mut ty_ctx = test_ty_ctx();
     let empty_subst = ty_ctx.intern_substitution(Vec::new());
-    let fn_id = FnDefId::from_raw(1);
+    let fn_id = FnDefId::from_usize(1);
     let item = make_fn_item(fn_id, empty_subst);
 
     let body = dummy_body();
@@ -156,8 +156,8 @@ fn no_duplicate_arc_body() {
 
     // Second collect: provide a different body via closure to prove it's not called
     let different_body = Arc::new(Body::dummy(DefId::new(
-        CrateId::from_raw(99),
-        LocalDefId::from_raw(99),
+        CrateId::from_usize(99),
+        LocalDefId::from_usize(99),
     )));
     ctx.collect(
         std::slice::from_ref(&item),
@@ -183,7 +183,7 @@ fn no_duplicate_arc_body() {
 fn lookup_returns_correct_id() {
     let mut ty_ctx = test_ty_ctx();
     let empty_subst = ty_ctx.intern_substitution(Vec::new());
-    let fn_id = FnDefId::from_raw(42);
+    let fn_id = FnDefId::from_usize(42);
     let item = make_fn_item(fn_id, empty_subst);
 
     let mut ctx = MonoCtx::new();
@@ -212,8 +212,8 @@ fn lookup_returns_correct_id() {
 fn lookup_across_collects() {
     let mut ty_ctx = test_ty_ctx();
     let empty_subst = ty_ctx.intern_substitution(Vec::new());
-    let fn_id_a = FnDefId::from_raw(1);
-    let fn_id_b = FnDefId::from_raw(2);
+    let fn_id_a = FnDefId::from_usize(1);
+    let fn_id_b = FnDefId::from_usize(2);
 
     let item_a = make_fn_item(fn_id_a, empty_subst);
     let item_b = make_fn_item(fn_id_b, empty_subst);
@@ -248,7 +248,7 @@ fn lookup_across_collects() {
 // Additional: static items are also cached.
 #[test]
 fn static_items_cached() {
-    let static_id = StaticDefId::from_raw(10);
+    let static_id = StaticDefId::from_usize(10);
     let item = make_static_item(static_id);
 
     let mut ctx = MonoCtx::new();
@@ -268,7 +268,7 @@ fn static_items_cached() {
 fn const_items_cached() {
     let mut ty_ctx = test_ty_ctx();
     let empty_subst = ty_ctx.intern_substitution(Vec::new());
-    let const_id = ConstDefId::from_raw(5);
+    let const_id = ConstDefId::from_usize(5);
     let item = make_const_item(const_id, empty_subst);
 
     let mut ctx = MonoCtx::new();
@@ -295,7 +295,7 @@ fn hash_consing_within_same_context() {
     // If hash consing works within the same context, they should be equal
     if substs1 == substs2 {
         let mut mono_ctx = MonoCtx::new();
-        let fn_id = FnDefId::from_raw(1);
+        let fn_id = FnDefId::from_usize(1);
 
         let item1 = make_fn_item(fn_id, substs1);
         let item2 = make_fn_item(fn_id, substs2);
@@ -322,7 +322,7 @@ fn cache_len_matches_item_count() {
 
     let mut ty_ctx = test_ty_ctx();
     let empty_subst = ty_ctx.intern_substitution(Vec::new());
-    let fn_id = FnDefId::from_raw(1);
+    let fn_id = FnDefId::from_usize(1);
     let item = make_fn_item(fn_id, empty_subst);
 
     ctx.collect(&[item], &|_def_id, _substs| dummy_body(), &|_ty| {
@@ -340,9 +340,9 @@ fn cache_len_matches_item_count() {
 fn multiple_items_unique_ids() {
     let mut ty_ctx = test_ty_ctx();
     let empty_subst = ty_ctx.intern_substitution(Vec::new());
-    let fn_id_1 = FnDefId::from_raw(1);
-    let fn_id_2 = FnDefId::from_raw(2);
-    let static_id = StaticDefId::from_raw(3);
+    let fn_id_1 = FnDefId::from_usize(1);
+    let fn_id_2 = FnDefId::from_usize(2);
+    let static_id = StaticDefId::from_usize(3);
 
     let item_fn1 = make_fn_item(fn_id_1, empty_subst);
     let item_fn2 = make_fn_item(fn_id_2, empty_subst);
@@ -372,7 +372,7 @@ fn multiple_items_unique_ids() {
 fn root_and_discovered_dedup() {
     let mut ty_ctx = test_ty_ctx();
     let empty_subst = ty_ctx.intern_substitution(Vec::new());
-    let fn_id = FnDefId::from_raw(1);
+    let fn_id = FnDefId::from_usize(1);
     let item = make_fn_item(fn_id, empty_subst);
 
     let mut ctx = MonoCtx::new();
