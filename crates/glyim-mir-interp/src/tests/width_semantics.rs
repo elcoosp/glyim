@@ -11,7 +11,7 @@ use glyim_test::test_ty_ctx;
 use glyim_type::{Ty, TyCtxMut, TyKind};
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
@@ -34,8 +34,8 @@ fn run_binop_kind(
     rhs: MirConstKind,
 ) -> InterpValue {
     let mut body = Body::dummy(dummy_def_id());
-    let res = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(ty, Mutability::Mut),
     ]);
@@ -49,7 +49,7 @@ fn run_binop_kind(
         ty,
         span: Span::DUMMY,
     });
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(Place::new(res), Rvalue::binary_op(op, c1, c2)),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -97,8 +97,8 @@ fn int_to_int_cast_truncates() {
     let i32_ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
     let u8_ty = tcx.mk_ty(TyKind::Uint(UintTy::U8));
     let mut body = Body::dummy(dummy_def_id());
-    let res = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(u8_ty, Mutability::Mut),
     ]);
@@ -107,7 +107,7 @@ fn int_to_int_cast_truncates() {
         ty: i32_ty,
         span: Span::DUMMY,
     });
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res),
