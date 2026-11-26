@@ -7,11 +7,11 @@ fn break_and_continue_inside_loop() {
         Expr::Break { value: None },
         Expr::Continue,
         Expr::Block {
-            stmts: vec![ExprId::from_raw(0), ExprId::from_raw(1)],
+            stmts: vec![ExprId::from_usize(0), ExprId::from_usize(1)],
             tail: None,
         },
         Expr::Loop {
-            body: ExprId::from_raw(2),
+            body: ExprId::from_usize(2),
         },
     ];
 
