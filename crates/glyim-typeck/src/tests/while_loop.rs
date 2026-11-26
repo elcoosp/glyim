@@ -10,8 +10,8 @@ fn while_loop_bool_condition() {
             tail: None,
         },
         Expr::While {
-            cond: ExprId::from_raw(0),
-            body: ExprId::from_raw(1),
+            cond: ExprId::from_usize(0),
+            body: ExprId::from_usize(1),
         },
     ];
 
