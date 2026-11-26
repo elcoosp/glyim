@@ -34,7 +34,7 @@ fn build_f32_body(ctx: &mut TyCtxMut) -> Body {
     let mut basic_blocks: IndexVec<glyim_mir::BasicBlockIdx, BasicBlockData> = IndexVec::new();
     let stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Use(Operand::Constant(const_f32_1)),
         ),
         source_info: SourceInfo::new(Span::DUMMY),
@@ -47,7 +47,7 @@ fn build_f32_body(ctx: &mut TyCtxMut) -> Body {
     basic_blocks.push(bb0);
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(4)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(4)),
         basic_blocks,
         locals,
         arg_count: 0,
@@ -81,7 +81,7 @@ fn build_f64_body(ctx: &mut TyCtxMut) -> Body {
     let mut basic_blocks: IndexVec<glyim_mir::BasicBlockIdx, BasicBlockData> = IndexVec::new();
     let stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Use(Operand::Constant(const_f64_1)),
         ),
         source_info: SourceInfo::new(Span::DUMMY),
@@ -94,7 +94,7 @@ fn build_f64_body(ctx: &mut TyCtxMut) -> Body {
     basic_blocks.push(bb0);
 
     Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(5)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(5)),
         basic_blocks,
         locals,
         arg_count: 0,
