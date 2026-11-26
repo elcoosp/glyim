@@ -22,54 +22,20 @@ for src_png in "$SRC_DIR"/mascot*.png; do
     out_svg="$SVG_DIR/${base}.svg"
 
     "$WRAITH_BIN" "$src_png" \
-        -m color --engine geometric \
-        --gradients off --no-primitives \
-        --colors 18 --merge 0.036 \
-        --min-area 20 --corner-angle 24 \
-        --tolerance 0.22 --smooth 3 \
-        --trap 2 --refine 2 --field-blur 1 \
+        --color \
+        --preset cel-art \
+        --background "#ffffff" \
+        --bg-tolerance 14 \
+        --colors 12 \
+        --merge 0.048 \
+        --blotch-fraction 0.025 \
+        --sever-bridges 1 \
+        --min-area 22 \
+        --smooth 4 \
+        --tolerance 0.35 \
         --precision 2 \
-        --background "#ffffff" --bg-tolerance 16 \
+        --trim \
         -o "$out_svg"
-
-    python3 - "$out_svg" <<'PY'
-import re, sys
-
-p = sys.argv[1]
-s = open(p, encoding="utf-8").read()
-m = re.search(r'<svg[^>]*?width="(\d+)"[^>]*?height="(\d+)"', s)
-W, H = (int(m.group(1)), int(m.group(2))) if m else (1024, 1024)
-
-# Supprimer un éventuel rectangle pleine page
-s = re.sub(rf'<path[^>]*d="M0 0h{W}v{H}H0Z"[^>]*/?>', '', s)
-
-# Calcul rapide de la bounding box via les points de départ M(x,y) et coordonnées absolues
-minx, miny, maxx, maxy = float(W), float(H), 0.0, 0.0
-found = False
-for d in re.findall(r'd="([^"]+)"', s):
-    # Extraire tous les M x y (point d'ancrage exact de chaque sous-tracé)
-    for mx, my in re.findall(r'M\s*(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)', d):
-        x, y = float(mx), float(my)
-        if 0 <= x <= W and 0 <= y <= H:
-            minx, miny = min(minx, x), min(miny, y)
-            maxx, maxy = max(maxx, x), max(maxy, y)
-            found = True
-
-if found and maxx > minx and maxy > miny:
-    pad = 24
-    vx = max(0, int(minx) - pad)
-    vy = max(0, int(miny) - pad)
-    vw = min(W - vx, int(maxx - minx) + pad * 2 + 1)
-    vh = min(H - vy, int(maxy - miny) + pad * 2 + 1)
-    s = re.sub(
-        r'<svg([^>]*?)width="\d+"\s+height="\d+"\s+viewBox="[^"]+"',
-        rf'<svg\1width="{vw}" height="{vh}" viewBox="{vx} {vy} {vw} {vh}"',
-        s,
-        count=1,
-    )
-
-open(p, "w", encoding="utf-8").write(s)
-PY
 
     cp "$out_svg" "$PUBLIC_DIR/${base}.svg"
     if [ "$base" = "mascot" ]; then
