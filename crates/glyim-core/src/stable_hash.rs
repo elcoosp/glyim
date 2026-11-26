@@ -216,10 +216,10 @@ mod tests {
     #[test]
     fn hir_id_stable_identity_is_path_based() {
         let owner = DefId::new(
-            crate::def_id::CrateId::from_raw(0),
-            crate::def_id::LocalDefId::from_raw(7),
+            crate::def_id::CrateId::from_usize(0),
+            crate::def_id::LocalDefId::from_usize(7),
         );
-        let id = HirId::new(owner, crate::def_id::LocalDefId::from_raw(3));
+        let id = HirId::new(owner, crate::def_id::LocalDefId::from_usize(3));
         let id_a = id.stable_identity("c", &["foo"]);
         let id_b = id.stable_identity("c", &["foo"]);
         assert_eq!(id_a, id_b);
