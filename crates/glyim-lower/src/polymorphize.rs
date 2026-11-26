@@ -191,16 +191,16 @@ pub fn deduplicate_with_pre_subst(
         let pre_body = pre_subst.and_then(|m| {
             let key = match &data.item {
                 MonoItem::Fn { def_id, .. } => Some(glyim_core::def_id::DefId::new(
-                    glyim_core::def_id::CrateId::from_raw(0),
-                    glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()),
+                    glyim_core::def_id::CrateId::from_usize(0),
+                    glyim_core::def_id::LocalDefId::from_usize(def_id.index()),
                 )),
                 MonoItem::Const { def_id, .. } => Some(glyim_core::def_id::DefId::new(
-                    glyim_core::def_id::CrateId::from_raw(0),
-                    glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()),
+                    glyim_core::def_id::CrateId::from_usize(0),
+                    glyim_core::def_id::LocalDefId::from_usize(def_id.index()),
                 )),
                 MonoItem::Static { def_id } => Some(glyim_core::def_id::DefId::new(
-                    glyim_core::def_id::CrateId::from_raw(0),
-                    glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()),
+                    glyim_core::def_id::CrateId::from_usize(0),
+                    glyim_core::def_id::LocalDefId::from_usize(def_id.index()),
                 )),
                 MonoItem::DropGlue { .. } => None,
             };
