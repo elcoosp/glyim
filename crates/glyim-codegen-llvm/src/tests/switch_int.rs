@@ -40,14 +40,14 @@ fn make_test_body_switch_small_int() -> (TyCtxMut, Body) {
 
     let bb0 = BasicBlockData::new(Terminator {
         kind: TerminatorKind::SwitchInt {
-            discr: Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+            discr: Operand::Copy(Place::new(LocalIdx::from_usize(1))),
             switch_ty: i32_ty,
             targets: SwitchTargets::new(
                 Box::new([
-                    (1u128, BasicBlockIdx::from_raw(1)),
-                    (2u128, BasicBlockIdx::from_raw(2)),
+                    (1u128, BasicBlockIdx::from_usize(1)),
+                    (2u128, BasicBlockIdx::from_usize(2)),
                 ]),
-                BasicBlockIdx::from_raw(3),
+                BasicBlockIdx::from_usize(3),
             ),
         },
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -62,7 +62,7 @@ fn make_test_body_switch_small_int() -> (TyCtxMut, Body) {
     }
 
     let body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks,
         locals,
         arg_count,
@@ -96,11 +96,11 @@ fn make_test_body_switch_with_default() -> (TyCtxMut, Body) {
 
     let bb0 = BasicBlockData::new(Terminator {
         kind: TerminatorKind::SwitchInt {
-            discr: Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+            discr: Operand::Copy(Place::new(LocalIdx::from_usize(1))),
             switch_ty: i32_ty,
             targets: SwitchTargets::new(
-                Box::new([(10u128, BasicBlockIdx::from_raw(1))]),
-                BasicBlockIdx::from_raw(2),
+                Box::new([(10u128, BasicBlockIdx::from_usize(1))]),
+                BasicBlockIdx::from_usize(2),
             ),
         },
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -115,7 +115,7 @@ fn make_test_body_switch_with_default() -> (TyCtxMut, Body) {
     }
 
     let body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks,
         locals,
         arg_count,
@@ -149,14 +149,14 @@ fn make_test_body_switch_bool() -> (TyCtxMut, Body) {
 
     let bb0 = BasicBlockData::new(Terminator {
         kind: TerminatorKind::SwitchInt {
-            discr: Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+            discr: Operand::Copy(Place::new(LocalIdx::from_usize(1))),
             switch_ty: bool_ty,
             targets: SwitchTargets::new(
                 Box::new([
-                    (0u128, BasicBlockIdx::from_raw(1)),
-                    (1u128, BasicBlockIdx::from_raw(2)),
+                    (0u128, BasicBlockIdx::from_usize(1)),
+                    (1u128, BasicBlockIdx::from_usize(2)),
                 ]),
-                BasicBlockIdx::from_raw(3),
+                BasicBlockIdx::from_usize(3),
             ),
         },
         source_info: SourceInfo::new(glyim_span::Span::DUMMY),
@@ -171,7 +171,7 @@ fn make_test_body_switch_bool() -> (TyCtxMut, Body) {
     }
 
     let body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks,
         locals,
         arg_count,
@@ -204,15 +204,15 @@ fn make_test_body_switch_large() -> (TyCtxMut, Body) {
     let num_cases = 25u128;
     let mut branches: Vec<(u128, BasicBlockIdx)> = Vec::new();
     for i in 0..num_cases {
-        branches.push((i, BasicBlockIdx::from_raw((i + 1) as u32)));
+        branches.push((i, BasicBlockIdx::from_usize(i as usize + 1)));
     }
-    let otherwise_bb = BasicBlockIdx::from_raw((num_cases + 1) as u32);
+    let otherwise_bb = BasicBlockIdx::from_usize(num_cases as usize + 1);
 
     let mut basic_blocks: IndexVec<BasicBlockIdx, BasicBlockData> = IndexVec::new();
 
     let bb0 = BasicBlockData::new(Terminator {
         kind: TerminatorKind::SwitchInt {
-            discr: Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+            discr: Operand::Copy(Place::new(LocalIdx::from_usize(1))),
             switch_ty: i32_ty,
             targets: SwitchTargets::new(branches.into_boxed_slice(), otherwise_bb),
         },
@@ -228,7 +228,7 @@ fn make_test_body_switch_large() -> (TyCtxMut, Body) {
     }
 
     let body = Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         basic_blocks,
         locals,
         arg_count,
