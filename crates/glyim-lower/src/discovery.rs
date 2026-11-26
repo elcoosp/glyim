@@ -39,8 +39,8 @@ pub fn discover_mono_roots(
 
                 if has_main_name || has_start_attr || has_no_mangle {
                     let local_def_id = resolve_root_id(item.name)
-                        .unwrap_or_else(|| LocalDefId::from_raw(item.id.to_raw()));
-                    let fn_def_id = FnDefId::from_raw(local_def_id.to_raw());
+                        .unwrap_or_else(|| LocalDefId::from_usize(item.id.index()));
+                    let fn_def_id = FnDefId::from_usize(local_def_id.index());
 
                     let empty_subst = ctx.intern_substitution(Vec::new());
                     let mono_item = MonoItem::Fn {
@@ -52,8 +52,8 @@ pub fn discover_mono_roots(
             }
             ItemKind::Static(_static_item) if has_attr_in_span(root, item.span, "used") => {
                 let local_def_id = resolve_root_id(item.name)
-                    .unwrap_or_else(|| LocalDefId::from_raw(item.id.to_raw()));
-                let static_def_id = StaticDefId::from_raw(local_def_id.to_raw());
+                    .unwrap_or_else(|| LocalDefId::from_usize(item.id.index()));
+                let static_def_id = StaticDefId::from_usize(local_def_id.index());
 
                 let mono_item = MonoItem::Static {
                     def_id: static_def_id,
