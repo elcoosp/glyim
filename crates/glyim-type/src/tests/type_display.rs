@@ -173,10 +173,10 @@ fn display_fn_ptr_variants() {
 #[test]
 fn display_adt_and_defs() {
     let (ctx, results) = with_fresh_ty_ctx(|ctx| {
-        let adt_id = AdtId::from_raw(5);
-        let fn_def_id = FnDefId::from_raw(10);
-        let closure_id = ClosureId::from_raw(15);
-        let opaque_id = OpaqueTyId::from_raw(20);
+        let adt_id = AdtId::from_usize(5);
+        let fn_def_id = FnDefId::from_usize(10);
+        let closure_id = ClosureId::from_usize(15);
+        let opaque_id = OpaqueTyId::from_usize(20);
         let empty_subst = ctx.intern_substitution(vec![]);
         let i32_ty = ctx.mk_ty(TyKind::Int(IntTy::I32));
         let subst = ctx.intern_substitution(vec![GenericArg::Ty(i32_ty)]);
@@ -208,7 +208,7 @@ fn display_adt_and_defs() {
 #[test]
 fn display_dynamic() {
     let (ctx, ty) = with_fresh_ty_ctx(|ctx| {
-        let trait_def_id = TraitDefId::from_raw(1);
+        let trait_def_id = TraitDefId::from_usize(1);
         let pred = Predicate::Trait(TraitPredicate {
             trait_ref: TraitRef {
                 def_id: trait_def_id,
@@ -256,9 +256,9 @@ fn display_param_and_bound() {
 #[test]
 fn display_infer_types() {
     let (ctx, results) = with_fresh_ty_ctx(|ctx| {
-        let ty_var = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_raw(0))));
-        let int_var = ctx.mk_ty(TyKind::Infer(InferVar::Int(IntVar::from_raw(1))));
-        let float_var = ctx.mk_ty(TyKind::Infer(InferVar::Float(FloatVar::from_raw(2))));
+        let ty_var = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_usize(0))));
+        let int_var = ctx.mk_ty(TyKind::Infer(InferVar::Int(IntVar::from_usize(1))));
+        let float_var = ctx.mk_ty(TyKind::Infer(InferVar::Float(FloatVar::from_usize(2))));
         vec![("?ty0", ty_var), ("?int1", int_var), ("?float2", float_var)]
     });
     for (expected, ty) in results {
@@ -340,7 +340,7 @@ fn ty_is_error_only_checks_has_error() {
 #[test]
 fn flags_propagate_through_wrappers() {
     let (ctx, results) = with_fresh_ty_ctx(|ctx| {
-        let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_raw(0))));
+        let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_usize(0))));
         let ref_ty = ctx.mk_ref(Region::Erased, infer_ty, Mutability::Not);
         let slice_ty = ctx.mk_ty(TyKind::Slice(infer_ty));
         let usize_ty = ctx.mk_ty(TyKind::Uint(UintTy::Usize));
@@ -371,10 +371,10 @@ fn flags_propagate_through_wrappers() {
 #[test]
 fn flags_propagate_through_substitution_types() {
     let (ctx, results) = with_fresh_ty_ctx(|ctx| {
-        let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_raw(0))));
+        let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_usize(0))));
         let subst = ctx.intern_substitution(vec![GenericArg::Ty(infer_ty)]);
-        let adt_id = AdtId::from_raw(1);
-        let fn_def_id = FnDefId::from_raw(1);
+        let adt_id = AdtId::from_usize(1);
+        let fn_def_id = FnDefId::from_usize(1);
         let tuple_ty = ctx.mk_ty(TyKind::Tuple(subst));
         let adt_ty = ctx.mk_ty(TyKind::Adt(adt_id, subst));
         let fn_def_ty = ctx.mk_ty(TyKind::FnDef(fn_def_id, subst));
