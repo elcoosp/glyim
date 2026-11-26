@@ -36,7 +36,7 @@ fn main() {
     // the signature slots come back as `ResolvedTy` (plan M5.2: "TypedBody
     // holds ResolvedTy").
     let clean = thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         params: vec![thir::Param {
             name: param_name,
             ty: Ty::I32,
@@ -46,7 +46,7 @@ fn main() {
                 ty: Ty::I32,
                 span: Span::DUMMY,
             },
-            local: thir::LocalVarId::from_raw(0),
+            local: thir::LocalVarId::from_usize(0),
         }],
         return_ty: Ty::I32,
         stmts: vec![thir::Stmt::Return {
@@ -78,7 +78,7 @@ fn main() {
     let var = infer.new_ty_var(&mut ctx2);
     let unbound = ctx2.mk_ty(TyKind::Infer(InferVar::Ty(var)));
     let error_body = thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)),
+        owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1)),
         params: Vec::new(),
         return_ty: unbound,
         stmts: vec![],
