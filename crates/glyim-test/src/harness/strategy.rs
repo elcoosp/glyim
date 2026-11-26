@@ -85,6 +85,7 @@ impl CompileFailStrategy {
         diagnostics: &[GlyimDiagnostic],
         source: &str,
         error_patterns: &[String],
+        error_codes: &[String],
     ) -> super::executor::TestOutcome {
         let annotations = match Annotation::parse_all(source) {
             Ok(a) => a,
@@ -112,6 +113,17 @@ impl CompileFailStrategy {
                         reason: FailureReason::ErrorPatternNotFound {
                             pattern: pattern.clone(),
                         },
+                    };
+                }
+            }
+            // CT-5 negative-fixture contract (plan §6 M3.3): every declared
+            // `//@ expect-error-code:` must appear among the diagnostics'
+            // registered codes — the fixture pins the code, not just the
+            // message prose.
+            for code in error_codes {
+                if !diagnostics.iter().any(|d| d.code.to_string() == *code) {
+                    return super::executor::TestOutcome::Failed {
+                        reason: FailureReason::ErrorCodeNotFound { code: code.clone() },
                     };
                 }
             }
@@ -466,4 +478,51 @@ fn format_mismatch(result: &comparison::ComparisonResult) -> String {
         ));
     }
     reasons.join("\n  ")
+}
+
+#[cfg(test)]
+mod code_check_tests {
+    use super::super::executor::TestOutcome;
+    use super::CompileFailStrategy;
+    use crate::error::FailureReason;
+    use glyim_diag::GlyimDiagnostic;
+
+    /// The CT-5 negative-fixture contract (plan §6 M3.3): the declared
+    /// `//@ expect-error-code:` codes must appear among the diagnostics.
+    /// The diagnostics are otherwise matched by the ordinary annotation
+    /// comparison, so the probe source carries one inline annotation that
+    /// consumes the single diagnostic.
+    const PROBE_SOURCE: &str = "//~ ERROR boom\nfn main() {}\n";
+
+    fn one_diag() -> Vec<GlyimDiagnostic> {
+        vec![GlyimDiagnostic::internal_error("boom")]
+    }
+
+    #[test]
+    fn declared_code_present_passes() {
+        let out =
+            CompileFailStrategy.evaluate(&one_diag(), PROBE_SOURCE, &[], &["X0000".to_string()]);
+        assert!(
+            matches!(out, TestOutcome::Passed),
+            "the produced X0000 must satisfy the declared code: {out:?}"
+        );
+    }
+
+    #[test]
+    fn no_declared_codes_passes() {
+        let out = CompileFailStrategy.evaluate(&one_diag(), PROBE_SOURCE, &[], &[]);
+        assert!(matches!(out, TestOutcome::Passed), "{out:?}");
+    }
+
+    #[test]
+    fn missing_declared_code_fails_with_the_code() {
+        let out =
+            CompileFailStrategy.evaluate(&one_diag(), PROBE_SOURCE, &[], &["T0050".to_string()]);
+        match out {
+            TestOutcome::Failed {
+                reason: FailureReason::ErrorCodeNotFound { code },
+            } => assert_eq!(code, "T0050"),
+            other => panic!("expected ErrorCodeNotFound, got {other:?}"),
+        }
+    }
 }
