@@ -17,8 +17,8 @@ fn field_projection_emits_offset_bytecode() {
         let ptr_ty = ctx.mk_ty(TyKind::RawPtr(unit_ty, Mutability::Not));
 
         let mut body = Body::dummy(glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ));
 
         body.locals.push(LocalDecl {
@@ -33,13 +33,13 @@ fn field_projection_emits_offset_bytecode() {
         });
 
         let place = Place {
-            local: LocalIdx::from_raw(0),
-            projection: vec![ProjectionElem::Field(FieldIdx::from_raw(1))].into_boxed_slice(),
+            local: LocalIdx::from_usize(0),
+            projection: vec![ProjectionElem::Field(FieldIdx::from_usize(1))].into_boxed_slice(),
         };
 
         let stmt = Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
+                Place::new(LocalIdx::from_usize(1)),
                 Rvalue::Ref(place, glyim_mir::BorrowKind::Shared),
             ),
             source_info: SourceInfo::new(glyim_span::Span::DUMMY),
