@@ -32,7 +32,7 @@ fn compute_flags_depth_overflow_no_error() {
 #[test]
 fn compute_flags_detects_has_ty_infer() {
     let ctx = test_ty_ctx();
-    let infer_kind = TyKind::Infer(InferVar::Ty(TyVar::from_raw(0)));
+    let infer_kind = TyKind::Infer(InferVar::Ty(TyVar::from_usize(0)));
     let flags = compute_flags(&infer_kind, &ctx, 0);
     assert!(
         flags.contains(TypeFlags::HAS_TY_INFER),
@@ -55,7 +55,7 @@ fn compute_flags_detects_has_error() {
 #[test]
 fn compute_flags_propagates_through_ref() {
     let mut ctx = test_ty_ctx();
-    let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_raw(0))));
+    let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_usize(0))));
     let ref_kind = TyKind::Ref(Region::Erased, infer_ty, Mutability::Not);
     let flags = compute_flags(&ref_kind, &ctx, 0);
     assert!(
@@ -67,7 +67,7 @@ fn compute_flags_propagates_through_ref() {
 #[test]
 fn compute_flags_propagates_through_slice() {
     let mut ctx = test_ty_ctx();
-    let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_raw(0))));
+    let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_usize(0))));
     let slice_kind = TyKind::Slice(infer_ty);
     let flags = compute_flags(&slice_kind, &ctx, 0);
     assert!(
@@ -79,7 +79,7 @@ fn compute_flags_propagates_through_slice() {
 #[test]
 fn compute_flags_propagates_through_array() {
     let mut ctx = test_ty_ctx();
-    let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_raw(0))));
+    let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_usize(0))));
     let usize_ty = ctx.mk_ty(TyKind::Uint(UintTy::Usize));
     let arr_kind = TyKind::Array(
         infer_ty,
@@ -100,7 +100,7 @@ fn compute_flags_propagates_through_array() {
 #[test]
 fn compute_flags_propagates_through_tuple_substitution() {
     let mut ctx = test_ty_ctx();
-    let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_raw(0))));
+    let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_usize(0))));
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(infer_ty)]);
     let tuple_kind = TyKind::Tuple(subst);
     let flags = compute_flags(&tuple_kind, &ctx, 0);
@@ -113,9 +113,9 @@ fn compute_flags_propagates_through_tuple_substitution() {
 #[test]
 fn compute_flags_propagates_through_adt_substitution() {
     let mut ctx = test_ty_ctx();
-    let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_raw(0))));
+    let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_usize(0))));
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(infer_ty)]);
-    let adt_kind = TyKind::Adt(AdtId::from_raw(1), subst);
+    let adt_kind = TyKind::Adt(AdtId::from_usize(1), subst);
     let flags = compute_flags(&adt_kind, &ctx, 0);
     assert!(
         flags.contains(TypeFlags::HAS_TY_INFER),
@@ -126,7 +126,7 @@ fn compute_flags_propagates_through_adt_substitution() {
 #[test]
 fn compute_flags_propagates_through_fn_ptr_substitution() {
     let mut ctx = test_ty_ctx();
-    let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_raw(0))));
+    let infer_ty = ctx.mk_ty(TyKind::Infer(InferVar::Ty(TyVar::from_usize(0))));
     let subst = ctx.intern_substitution(vec![GenericArg::Ty(infer_ty)]);
     let fn_sig = FnSig {
         inputs: subst,
