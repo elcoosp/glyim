@@ -29,9 +29,9 @@ fn test_ctx() -> glyim_type::TyCtx {
 }
 
 fn make_minimal_body(ctx: &glyim_type::TyCtx) -> Body {
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let unit_ty = ctx.unit_ty();
-    let locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::from_raw(vec![LocalDecl {
+    let locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::from_vec(vec![LocalDecl {
         ty: unit_ty,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
@@ -46,7 +46,7 @@ fn make_minimal_body(ctx: &glyim_type::TyCtx) -> Body {
     };
     Body {
         owner,
-        basic_blocks: IndexVec::from_raw(vec![bb0]),
+        basic_blocks: IndexVec::from_vec(vec![bb0]),
         locals,
         arg_count: 0,
         return_ty: unit_ty,
@@ -99,8 +99,8 @@ fn test_string_const_produces_fat_pointer() {
     let unit_ty = ctx_mut.unit_ty();
     let ctx = ctx_mut.freeze();
 
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
-    let locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::from_raw(vec![
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
+    let locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::from_vec(vec![
         LocalDecl {
             ty: unit_ty,
             mutability: Mutability::Not,
@@ -115,7 +115,7 @@ fn test_string_const_produces_fat_pointer() {
     let bb0 = BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
+                Place::new(LocalIdx::from_usize(1)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::String(name),
                     ty: string_ty,
@@ -132,7 +132,7 @@ fn test_string_const_produces_fat_pointer() {
     };
     let body = Body {
         owner,
-        basic_blocks: IndexVec::from_raw(vec![bb0]),
+        basic_blocks: IndexVec::from_vec(vec![bb0]),
         locals,
         arg_count: 0,
         return_ty: unit_ty,
@@ -156,8 +156,8 @@ fn test_ptr_cast_emits_bitcast() {
     let unit_ty = ctx_mut.unit_ty();
     let ctx = ctx_mut.freeze();
 
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
-    let locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::from_raw(vec![
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
+    let locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::from_vec(vec![
         LocalDecl {
             ty: unit_ty,
             mutability: Mutability::Not,
@@ -174,8 +174,8 @@ fn test_ptr_cast_emits_bitcast() {
             source_info: SourceInfo::new(Span::DUMMY),
         },
     ]);
-    let src_place = Place::new(LocalIdx::from_raw(1));
-    let dst_place = Place::new(LocalIdx::from_raw(2));
+    let src_place = Place::new(LocalIdx::from_usize(1));
+    let dst_place = Place::new(LocalIdx::from_usize(2));
     let bb0 = BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
@@ -192,7 +192,7 @@ fn test_ptr_cast_emits_bitcast() {
     };
     let body = Body {
         owner,
-        basic_blocks: IndexVec::from_raw(vec![bb0]),
+        basic_blocks: IndexVec::from_vec(vec![bb0]),
         locals,
         arg_count: 0,
         return_ty: unit_ty,
@@ -214,8 +214,8 @@ fn test_fnptr_cast_emits_bitcast() {
     let unit_ty = ctx_mut.unit_ty();
     let ctx = ctx_mut.freeze();
 
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
-    let locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::from_raw(vec![
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
+    let locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::from_vec(vec![
         LocalDecl {
             ty: unit_ty,
             mutability: Mutability::Not,
@@ -232,8 +232,8 @@ fn test_fnptr_cast_emits_bitcast() {
             source_info: SourceInfo::new(Span::DUMMY),
         },
     ]);
-    let src_place = Place::new(LocalIdx::from_raw(1));
-    let dst_place = Place::new(LocalIdx::from_raw(2));
+    let src_place = Place::new(LocalIdx::from_usize(1));
+    let dst_place = Place::new(LocalIdx::from_usize(2));
     let bb0 = BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
@@ -250,7 +250,7 @@ fn test_fnptr_cast_emits_bitcast() {
     };
     let body = Body {
         owner,
-        basic_blocks: IndexVec::from_raw(vec![bb0]),
+        basic_blocks: IndexVec::from_vec(vec![bb0]),
         locals,
         arg_count: 0,
         return_ty: unit_ty,
@@ -293,7 +293,7 @@ fn test_debug_declare_local_emits_intrinsic() {
         .expect("alloca failed");
     let var_info = VarDebugInfo {
         name: ctx.resolver().intern("test_var"),
-        value: VarDebugInfoValue::Place(Place::new(LocalIdx::from_raw(0))),
+        value: VarDebugInfoValue::Place(Place::new(LocalIdx::from_usize(0))),
     };
     debug_ctx.declare_local(
         &context,
@@ -323,11 +323,11 @@ fn test_const_ref_has_initializer() {
     let mut ctx_mut = glyim_test::test_ty_ctx();
     let i32_ty = ctx_mut.mk_ty(TyKind::Int(IntTy::I32));
     let unit_ty = ctx_mut.unit_ty();
-    let const_def_id = ConstDefId::from_raw(0);
+    let const_def_id = ConstDefId::from_usize(0);
     let ctx = ctx_mut.freeze();
 
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
-    let locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::from_raw(vec![
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
+    let locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::from_vec(vec![
         LocalDecl {
             ty: unit_ty,
             mutability: Mutability::Not,
@@ -342,7 +342,7 @@ fn test_const_ref_has_initializer() {
     let bb0 = BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
+                Place::new(LocalIdx::from_usize(1)),
                 Rvalue::Use(Operand::Constant(MirConst {
                     kind: MirConstKind::ConstRef(const_def_id, Substitution::empty()),
                     ty: i32_ty,
@@ -359,7 +359,7 @@ fn test_const_ref_has_initializer() {
     };
     let body = Body {
         owner,
-        basic_blocks: IndexVec::from_raw(vec![bb0]),
+        basic_blocks: IndexVec::from_vec(vec![bb0]),
         locals,
         arg_count: 0,
         return_ty: unit_ty,
@@ -398,8 +398,8 @@ fn test_storage_dead_drop_glue() {
     let unit_ty = ctx_mut.unit_ty();
     let ctx = ctx_mut.freeze();
 
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
-    let locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::from_raw(vec![
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
+    let locals: IndexVec<LocalIdx, LocalDecl> = IndexVec::from_vec(vec![
         LocalDecl {
             ty: unit_ty,
             mutability: Mutability::Not,
@@ -413,7 +413,7 @@ fn test_storage_dead_drop_glue() {
     ]);
     let bb0 = BasicBlockData {
         statements: vec![Statement {
-            kind: StatementKind::StorageDead(LocalIdx::from_raw(1)),
+            kind: StatementKind::StorageDead(LocalIdx::from_usize(1)),
             source_info: SourceInfo::new(Span::DUMMY),
         }],
         terminator: Terminator {
@@ -424,7 +424,7 @@ fn test_storage_dead_drop_glue() {
     };
     let body = Body {
         owner,
-        basic_blocks: IndexVec::from_raw(vec![bb0]),
+        basic_blocks: IndexVec::from_vec(vec![bb0]),
         locals,
         arg_count: 0,
         return_ty: unit_ty,
