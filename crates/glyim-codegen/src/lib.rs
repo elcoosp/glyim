@@ -360,7 +360,9 @@ impl BytecodeBackend {
                         bc.push(OP_ASSERT);
                         bc.push(1u8); // expected: index < len must hold
                         bc.extend_from_slice(
-                            &BasicBlockIdx::from_raw(u32::MAX).to_raw().to_le_bytes(),
+                            &BasicBlockIdx::from_usize(u32::MAX as usize)
+                                .to_raw()
+                                .to_le_bytes(),
                         );
                         // Address is base + 0 for a ZST element.
                         bc.push(OP_LOAD_CONST);
@@ -1331,7 +1333,7 @@ impl BytecodeBackend {
                 // so their byte layout is unchanged.
                 let has_local0 = !local_tys.is_empty();
                 let ret_ty = if has_local0 {
-                    local_tys[LocalIdx::from_raw(0)].ty
+                    local_tys[LocalIdx::from_usize(0)].ty
                 } else {
                     Ty::UNIT
                 };
@@ -1417,7 +1419,7 @@ impl BytecodeBackend {
                 });
                 bc.extend_from_slice(&(args.len() as u32).to_le_bytes());
                 bc.extend_from_slice(&destination.local.to_raw().to_le_bytes());
-                let t = target.unwrap_or_else(|| BasicBlockIdx::from_raw(u32::MAX));
+                let t = target.unwrap_or_else(|| BasicBlockIdx::from_usize(u32::MAX as usize));
                 bc.extend_from_slice(&t.to_raw().to_le_bytes());
                 Ok(())
             }
