@@ -12,7 +12,7 @@ fn test_mock_solver() {
 
     let trait_pred = glyim_type::TraitPredicate {
         trait_ref: glyim_type::TraitRef {
-            def_id: glyim_core::def_id::TraitDefId::from_raw(0),
+            def_id: glyim_core::def_id::TraitDefId::from_usize(0),
             substs,
         },
         polarity: glyim_type::ImplPolarity::Positive,
@@ -33,7 +33,7 @@ fn test_mock_solver_default_ambiguous() {
 
     let trait_pred = glyim_type::TraitPredicate {
         trait_ref: glyim_type::TraitRef {
-            def_id: glyim_core::def_id::TraitDefId::from_raw(99),
+            def_id: glyim_core::def_id::TraitDefId::from_usize(99),
             substs,
         },
         polarity: glyim_type::ImplPolarity::Positive,
@@ -56,8 +56,8 @@ fn test_mock_codegen_generate() {
     use glyim_codegen::CodegenBackend;
     let mock = mock::MockCodegen::new();
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::def_id::DefId::new(
-        glyim_core::def_id::CrateId::from_raw(0),
-        glyim_core::def_id::LocalDefId::from_raw(0),
+        glyim_core::def_id::CrateId::from_usize(0),
+        glyim_core::def_id::LocalDefId::from_usize(0),
     )));
     // `generate` now takes `(symbol, body)` pairs — the mangled FnDef
     // symbol the pipeline threads through for per-instantiation uniqueness
@@ -75,8 +75,8 @@ fn test_mock_codegen_generate_function() {
     use glyim_codegen::CodegenBackend;
     let mock = mock::MockCodegen::new();
     let body = std::sync::Arc::new(glyim_mir::Body::dummy(glyim_core::def_id::DefId::new(
-        glyim_core::def_id::CrateId::from_raw(0),
-        glyim_core::def_id::LocalDefId::from_raw(0),
+        glyim_core::def_id::CrateId::from_usize(0),
+        glyim_core::def_id::LocalDefId::from_usize(0),
     )));
     let result = mock.generate_function(&body);
     assert!(result.is_ok());
