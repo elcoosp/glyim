@@ -372,6 +372,8 @@ jobs:
           cargo run -p glyim-ledger -- status . --check --format json
       - name: README status block is up to date (M1.9 generated content)
         run: bash scripts/readme-status-block.sh --check
+      - name: Diagnostics reference is up to date (M3.3 CT-5 generated docs page)
+        run: python3 scripts/gen-diagnostics-docs.py --check
       - name: Export JSON schemas (determinism smoke)
         run: cargo run -p glyim-ledger -- schema /tmp/ledger-schema.json
 
