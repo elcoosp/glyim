@@ -17,9 +17,9 @@ fn call_no_target_unwinding() {
                 span: Span::DUMMY,
             }),
             args: vec![],
-            destination: Place::new(LocalIdx::from_raw(1)),
+            destination: Place::new(LocalIdx::from_usize(1)),
             target: None,
-            cleanup: Some(BasicBlockIdx::from_raw(5)),
+            cleanup: Some(BasicBlockIdx::from_usize(5)),
         },
         source_info: si(),
     };
@@ -29,7 +29,7 @@ fn call_no_target_unwinding() {
             cleanup: Some(cb),
             ..
         } => {
-            assert_eq!(*cb, BasicBlockIdx::from_raw(5));
+            assert_eq!(*cb, BasicBlockIdx::from_usize(5));
         }
         other => panic!("Expected Call with no target, got {other:?}"),
     }
@@ -45,7 +45,7 @@ fn call_no_target_no_cleanup() {
                 span: Span::DUMMY,
             }),
             args: vec![],
-            destination: Place::new(LocalIdx::from_raw(1)),
+            destination: Place::new(LocalIdx::from_usize(1)),
             target: None,
             cleanup: None,
         },
@@ -63,8 +63,8 @@ fn call_no_target_no_cleanup() {
 
 #[test]
 fn call_with_multiple_args() {
-    let arg1 = Operand::Copy(Place::new(LocalIdx::from_raw(1)));
-    let arg2 = Operand::Move(Place::new(LocalIdx::from_raw(2)));
+    let arg1 = Operand::Copy(Place::new(LocalIdx::from_usize(1)));
+    let arg2 = Operand::Move(Place::new(LocalIdx::from_usize(2)));
     let arg3 = Operand::Constant(MirConst {
         kind: MirConstKind::Bool(false),
         ty: Ty::BOOL,
@@ -79,8 +79,8 @@ fn call_with_multiple_args() {
                 span: Span::DUMMY,
             }),
             args: vec![arg1, arg2, arg3],
-            destination: Place::new(LocalIdx::from_raw(3)),
-            target: Some(BasicBlockIdx::from_raw(1)),
+            destination: Place::new(LocalIdx::from_usize(3)),
+            target: Some(BasicBlockIdx::from_usize(1)),
             cleanup: None,
         },
         source_info: si(),
@@ -111,7 +111,7 @@ fn assert_all_message_types() {
                     span: Span::DUMMY,
                 }),
                 expected: true,
-                target: BasicBlockIdx::from_raw(0),
+                target: BasicBlockIdx::from_usize(0),
                 cleanup: None,
                 msg,
             },
@@ -125,9 +125,9 @@ fn assert_all_message_types() {
 fn drop_with_cleanup() {
     let term = Terminator {
         kind: TerminatorKind::Drop {
-            place: Place::new(LocalIdx::from_raw(2)),
-            target: BasicBlockIdx::from_raw(3),
-            cleanup: Some(BasicBlockIdx::from_raw(4)),
+            place: Place::new(LocalIdx::from_usize(2)),
+            target: BasicBlockIdx::from_usize(3),
+            cleanup: Some(BasicBlockIdx::from_usize(4)),
         },
         source_info: si(),
     };
@@ -135,8 +135,8 @@ fn drop_with_cleanup() {
         target, cleanup, ..
     } = &term.kind
     {
-        assert_eq!(*target, BasicBlockIdx::from_raw(3));
-        assert_eq!(*cleanup, Some(BasicBlockIdx::from_raw(4)));
+        assert_eq!(*target, BasicBlockIdx::from_usize(3));
+        assert_eq!(*cleanup, Some(BasicBlockIdx::from_usize(4)));
     } else {
         panic!("Expected Drop");
     }
@@ -146,16 +146,16 @@ fn drop_with_cleanup() {
 fn switch_int_with_many_targets() {
     let targets = SwitchTargets::new(
         Box::new([
-            (0u128, BasicBlockIdx::from_raw(1)),
-            (1u128, BasicBlockIdx::from_raw(2)),
-            (2u128, BasicBlockIdx::from_raw(3)),
-            (100u128, BasicBlockIdx::from_raw(4)),
+            (0u128, BasicBlockIdx::from_usize(1)),
+            (1u128, BasicBlockIdx::from_usize(2)),
+            (2u128, BasicBlockIdx::from_usize(3)),
+            (100u128, BasicBlockIdx::from_usize(4)),
         ]),
-        BasicBlockIdx::from_raw(5),
+        BasicBlockIdx::from_usize(5),
     );
     let term = Terminator {
         kind: TerminatorKind::SwitchInt {
-            discr: Operand::Copy(Place::new(LocalIdx::from_raw(0))),
+            discr: Operand::Copy(Place::new(LocalIdx::from_usize(0))),
             switch_ty: Ty::BOOL,
             targets,
         },
@@ -163,7 +163,7 @@ fn switch_int_with_many_targets() {
     };
     if let TerminatorKind::SwitchInt { targets, .. } = &term.kind {
         assert_eq!(targets.iter().count(), 4);
-        assert_eq!(targets.otherwise(), BasicBlockIdx::from_raw(5));
+        assert_eq!(targets.otherwise(), BasicBlockIdx::from_usize(5));
     } else {
         panic!("Expected SwitchInt");
     }
