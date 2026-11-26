@@ -188,7 +188,7 @@ impl<'a> PipelineChain<'a> {
     /// Lower THIR → MIR + borrowck + opt (`LowerPhase`).
     pub(crate) fn lower(
         &mut self,
-        thir_bodies: &[(glyim_core::def_id::LocalDefId, glyim_typeck::thir::Body)],
+        typed_bodies: &[(glyim_core::def_id::LocalDefId, glyim_typeck::TypedBody)],
         hir: &glyim_hir::CrateHir,
         const_values: &std::collections::HashMap<
             glyim_core::def_id::ConstDefId,
@@ -198,7 +198,7 @@ impl<'a> PipelineChain<'a> {
         opt_bisect_limit: Option<usize>,
     ) -> CompResult<phase::lower::LowerOutput> {
         phase::lower::LowerPhase {
-            thir_bodies,
+            typed_bodies,
             hir,
             const_values,
             opt_level,
@@ -572,7 +572,7 @@ impl Pipeline {
         let hir_out = chain.hir(&dm.expanded_root, lp.file_id)?;
         let tck = chain.typeck(&hir_out.hir, &dm.def_map)?;
         let lower = chain.lower(
-            &tck.typeck_result.thir_bodies,
+            &tck.typeck_result.typed_bodies,
             &hir_out.hir,
             &tck.typeck_result.const_values,
             opt_level,
