@@ -1,3 +1,4 @@
+mod arena_concurrency;
 mod auto_trait;
 mod auto_traits;
 mod binder;
