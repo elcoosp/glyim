@@ -55,7 +55,7 @@ fn main() {
 
     // The driver's exact pipeline, so the request path walks real
     // typeck state (this is what makes the binding types resolve).
-    let crate_id = glyim_core::CrateId::from_raw(0);
+    let crate_id = glyim_core::CrateId::from_usize(0);
     let parse_result = glyim_frontend::parse_to_syntax(DOC, file_id);
     let mut interner = glyim_core::Interner::new();
     let (def_map, _def_diags) =
