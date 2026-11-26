@@ -5,7 +5,7 @@ use glyim_test::test_ty_ctx;
 use glyim_type::{Const, ConstKind, Ty, TyCtxMut, TyKind};
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
@@ -18,7 +18,7 @@ fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
 
 fn empty_body(ret_ty: Ty) -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![local_decl(ret_ty, Mutability::Mut)]);
+    body.locals = IndexVec::from_vec(vec![local_decl(ret_ty, Mutability::Mut)]);
     body
 }
 
@@ -43,12 +43,12 @@ fn cast_ptr_to_ptr_returns_value() {
     };
     let cast_rvalue = Rvalue::Cast(CastKind::PtrToPtr, Operand::Constant(const_val), ptr_ty);
     let assign_stmt = Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(0)), cast_rvalue),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(0)), cast_rvalue),
         source_info: SourceInfo::new(Span::DUMMY),
     };
     let mut body = empty_body(ptr_ty);
-    body.locals = IndexVec::from_raw(vec![local_decl(ptr_ty, Mutability::Mut)]);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.locals = IndexVec::from_vec(vec![local_decl(ptr_ty, Mutability::Mut)]);
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![assign_stmt],
         terminator: Terminator {
             kind: TerminatorKind::Return,
@@ -62,7 +62,7 @@ fn cast_ptr_to_ptr_returns_value() {
     let res = interp.run_body(&body);
     assert!(res.is_ok());
     let ret_val = interp
-        .get_local_value(LocalIdx::from_raw(0))
+        .get_local_value(LocalIdx::from_usize(0))
         .cloned()
         .unwrap();
     assert_eq!(ret_val, InterpValue::Int(42));
@@ -79,14 +79,14 @@ fn float_const_returns_value() {
     };
     let assign_stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Use(Operand::Constant(const_val)),
         ),
         source_info: SourceInfo::new(Span::DUMMY),
     };
     let mut body = empty_body(float_ty);
-    body.locals = IndexVec::from_raw(vec![local_decl(float_ty, Mutability::Mut)]);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.locals = IndexVec::from_vec(vec![local_decl(float_ty, Mutability::Mut)]);
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![assign_stmt],
         terminator: Terminator {
             kind: TerminatorKind::Return,
@@ -100,7 +100,7 @@ fn float_const_returns_value() {
     let res = interp.run_body(&body);
     assert!(res.is_ok());
     let ret_val = interp
-        .get_local_value(LocalIdx::from_raw(0))
+        .get_local_value(LocalIdx::from_usize(0))
         .cloned()
         .unwrap();
     assert_eq!(ret_val, InterpValue::Float(42.0));
@@ -123,12 +123,12 @@ fn repeat_rvalue_returns_array() {
     };
     let repeat_rvalue = Rvalue::Repeat(Operand::Constant(const_val), count_const);
     let assign_stmt = Statement {
-        kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(0)), repeat_rvalue),
+        kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(0)), repeat_rvalue),
         source_info: SourceInfo::new(Span::DUMMY),
     };
     let mut body = empty_body(array_ty);
-    body.locals = IndexVec::from_raw(vec![local_decl(array_ty, Mutability::Mut)]);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.locals = IndexVec::from_vec(vec![local_decl(array_ty, Mutability::Mut)]);
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![assign_stmt],
         terminator: Terminator {
             kind: TerminatorKind::Return,
@@ -141,7 +141,7 @@ fn repeat_rvalue_returns_array() {
     interp.add_function(dummy_def_id(), body.clone());
     interp.run_body(&body).unwrap();
     let ret_val = interp
-        .get_local_value(LocalIdx::from_raw(0))
+        .get_local_value(LocalIdx::from_usize(0))
         .cloned()
         .unwrap();
     let expected = InterpValue::Aggregate(vec![InterpValue::Int(7); 3]);
@@ -160,14 +160,14 @@ fn string_const_returns_value() {
     };
     let assign_stmt = Statement {
         kind: StatementKind::Assign(
-            Place::new(LocalIdx::from_raw(0)),
+            Place::new(LocalIdx::from_usize(0)),
             Rvalue::Use(Operand::Constant(const_val)),
         ),
         source_info: SourceInfo::new(Span::DUMMY),
     };
     let mut body = empty_body(string_ty);
-    body.locals = IndexVec::from_raw(vec![local_decl(string_ty, Mutability::Mut)]);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.locals = IndexVec::from_vec(vec![local_decl(string_ty, Mutability::Mut)]);
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![assign_stmt],
         terminator: Terminator {
             kind: TerminatorKind::Return,
@@ -181,7 +181,7 @@ fn string_const_returns_value() {
     let res = interp.run_body(&body);
     assert!(res.is_ok());
     let ret_val = interp
-        .get_local_value(LocalIdx::from_raw(0))
+        .get_local_value(LocalIdx::from_usize(0))
         .cloned()
         .unwrap();
     assert_eq!(ret_val, InterpValue::String("hello".to_string()));
