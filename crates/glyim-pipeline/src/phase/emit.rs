@@ -170,7 +170,7 @@ impl CompilerPhase for EmitPhase<'_> {
                 let mut synthetic_roots: Vec<MonoItem> = Vec::new();
                 for def_id in self.lower.mir_bodies_map.keys() {
                     synthetic_roots.push(MonoItem::Fn {
-                        def_id: FnDefId::from_raw(def_id.local_id.to_raw()),
+                        def_id: FnDefId::from_usize(def_id.local_id.index()),
                         substs: empty_subst,
                     });
                 }
