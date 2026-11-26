@@ -48,8 +48,8 @@ impl crate::BorrowckCtx for TestCtx<'_> {
 fn dummy_body() -> Body {
     Body {
         owner: glyim_core::DefId::new(
-            glyim_core::CrateId::from_raw(0),
-            glyim_core::LocalDefId::from_raw(0),
+            glyim_core::CrateId::from_usize(0),
+            glyim_core::LocalDefId::from_usize(0),
         ),
         basic_blocks: IndexVec::new(),
         locals: IndexVec::new(),
@@ -105,13 +105,13 @@ fn use_after_drop_error() {
     let (ctx, ()) = with_fresh_ty_ctx(|_ctx_mut| {});
     let stmts = vec![
         glyim_mir::Statement {
-            kind: StatementKind::StorageDead(LocalIdx::from_raw(0)),
+            kind: StatementKind::StorageDead(LocalIdx::from_usize(0)),
             source_info: SourceInfo::new(Span::DUMMY),
         },
         glyim_mir::Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
-                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_raw(0)))),
+                Place::new(LocalIdx::from_usize(1)),
+                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_usize(0)))),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         },
@@ -128,7 +128,7 @@ fn drop_order_mixed_fields() {
     // The test simply drops a local (representing a struct) and does not use it afterwards.
     let (ctx, ()) = with_fresh_ty_ctx(|_ctx_mut| {});
     let stmts = vec![glyim_mir::Statement {
-        kind: StatementKind::StorageDead(LocalIdx::from_raw(0)),
+        kind: StatementKind::StorageDead(LocalIdx::from_usize(0)),
         source_info: SourceInfo::new(Span::DUMMY),
     }];
     let body = body_with_statements(stmts);
@@ -146,16 +146,16 @@ fn use_after_drop_field_error() {
     let (ctx, ()) = with_fresh_ty_ctx(|_ctx_mut| {});
     let stmts = vec![
         glyim_mir::Statement {
-            kind: StatementKind::StorageDead(LocalIdx::from_raw(0)),
+            kind: StatementKind::StorageDead(LocalIdx::from_usize(0)),
             source_info: SourceInfo::new(Span::DUMMY),
         },
         glyim_mir::Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
+                Place::new(LocalIdx::from_usize(1)),
                 Rvalue::Use(Operand::Move(Place {
-                    local: LocalIdx::from_raw(0),
+                    local: LocalIdx::from_usize(0),
                     projection: Box::new([glyim_mir::ProjectionElem::Field(
-                        glyim_type::FieldIdx::from_raw(0),
+                        glyim_type::FieldIdx::from_usize(0),
                     )]),
                 })),
             ),
@@ -178,13 +178,13 @@ fn use_before_drop_no_error() {
     let stmts = vec![
         glyim_mir::Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
-                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_raw(0)))),
+                Place::new(LocalIdx::from_usize(1)),
+                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_usize(0)))),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         },
         glyim_mir::Statement {
-            kind: StatementKind::StorageDead(LocalIdx::from_raw(0)),
+            kind: StatementKind::StorageDead(LocalIdx::from_usize(0)),
             source_info: SourceInfo::new(Span::DUMMY),
         },
     ];
@@ -213,16 +213,16 @@ fn drop_then_use_copy_field_error() {
     let (ctx, ()) = with_fresh_ty_ctx(|_ctx_mut| {});
     let stmts = vec![
         glyim_mir::Statement {
-            kind: StatementKind::StorageDead(LocalIdx::from_raw(0)),
+            kind: StatementKind::StorageDead(LocalIdx::from_usize(0)),
             source_info: SourceInfo::new(Span::DUMMY),
         },
         glyim_mir::Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
+                Place::new(LocalIdx::from_usize(1)),
                 Rvalue::Use(Operand::Copy(Place {
-                    local: LocalIdx::from_raw(0),
+                    local: LocalIdx::from_usize(0),
                     projection: Box::new([glyim_mir::ProjectionElem::Field(
-                        glyim_type::FieldIdx::from_raw(0),
+                        glyim_type::FieldIdx::from_usize(0),
                     )]),
                 })),
             ),
@@ -247,19 +247,19 @@ fn conditional_drop_one_branch_only() {
         // Move(Copy) of local0 (Copy type) to local1 — not a real move, no error.
         glyim_mir::Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(1)),
-                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_raw(0)))),
+                Place::new(LocalIdx::from_usize(1)),
+                Rvalue::Use(Operand::Move(Place::new(LocalIdx::from_usize(0)))),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
         },
         // Drop local0
         glyim_mir::Statement {
-            kind: StatementKind::StorageDead(LocalIdx::from_raw(0)),
+            kind: StatementKind::StorageDead(LocalIdx::from_usize(0)),
             source_info: SourceInfo::new(Span::DUMMY),
         },
     ];
     let mut body = body_with_statements(stmts);
-    body.locals[LocalIdx::from_raw(0)].ty = Ty::BOOL; // Copy type
+    body.locals[LocalIdx::from_usize(0)].ty = Ty::BOOL; // Copy type
     let test_ctx = TestCtx::new(&ctx, &body.locals);
     let result = check_borrows(&test_ctx, &body);
     assert!(
