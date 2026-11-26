@@ -16,7 +16,7 @@ use glyim_test::test_ty_ctx;
 use glyim_type::{Substitution, Ty};
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 fn local_decl(ty: Ty) -> LocalDecl {
@@ -30,16 +30,19 @@ fn local_decl(ty: Ty) -> LocalDecl {
 /// A body whose only block calls `FnDefId(fn_id_raw)` and returns.
 fn sentinel_call_body(fn_id_raw: u32) -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    let ret_local = LocalIdx::from_raw(0);
-    let cont = BasicBlockIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![local_decl(Ty::UNIT)]);
-    body.basic_blocks = IndexVec::from_raw(vec![
+    let ret_local = LocalIdx::from_usize(0);
+    let cont = BasicBlockIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![local_decl(Ty::UNIT)]);
+    body.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Call {
                     func: Operand::Constant(MirConst {
-                        kind: MirConstKind::Fn(FnDefId::from_raw(fn_id_raw), Substitution::empty()),
+                        kind: MirConstKind::Fn(
+                            FnDefId::from_usize(fn_id_raw as usize),
+                            Substitution::empty(),
+                        ),
                         ty: Ty::ERROR,
                         span: Span::DUMMY,
                     }),
