@@ -42,7 +42,7 @@ impl BodyBuilder {
     }
 
     pub fn add_local(&mut self, ty: Ty) -> LocalIdx {
-        let idx = LocalIdx::from_raw(self.locals.len() as u32);
+        let idx = LocalIdx::from_usize(self.locals.len());
         self.locals.push(LocalDecl {
             ty,
             mutability: Mutability::Not,
@@ -58,17 +58,17 @@ impl BodyBuilder {
     }
 
     pub fn add_statement(&mut self, stmt: Statement) {
-        self.basic_blocks[BasicBlockIdx::from_raw(0)]
+        self.basic_blocks[BasicBlockIdx::from_usize(0)]
             .statements
             .push(stmt);
     }
 
     pub fn set_terminator(&mut self, term: Terminator) {
-        self.basic_blocks[BasicBlockIdx::from_raw(0)].terminator = term;
+        self.basic_blocks[BasicBlockIdx::from_usize(0)].terminator = term;
     }
 
     pub fn add_block(&mut self, term: Terminator) -> BasicBlockIdx {
-        let idx = BasicBlockIdx::from_raw(self.basic_blocks.len() as u32);
+        let idx = BasicBlockIdx::from_usize(self.basic_blocks.len());
         self.basic_blocks.push(BasicBlockData {
             statements: vec![],
             terminator: term,
@@ -79,7 +79,7 @@ impl BodyBuilder {
 
     pub fn build(self) -> Body {
         Body {
-            owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+            owner: DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
             basic_blocks: self.basic_blocks,
             locals: self.locals,
             arg_count: self.arg_count,
