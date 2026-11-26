@@ -83,7 +83,7 @@ fn main() {
     // graph (built from the real HIR — the same store rename and
     // find-references read); the rest mirrors what the driver stores so
     // the session state is complete.
-    let crate_id = glyim_core::CrateId::from_raw(0);
+    let crate_id = glyim_core::CrateId::from_usize(0);
     let parse_result = glyim_frontend::parse_to_syntax(DOC, file_id);
     let mut interner = glyim_core::Interner::new();
     let (_def_map, _def_diags) =
