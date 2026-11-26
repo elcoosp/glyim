@@ -26,16 +26,16 @@ fn def_map_with_trait(interner: &mut Interner, trait_name: &str) -> (CrateDefMap
     // The trait name resolves (single-segment) to a LocalDefId in the root scope.
     scope.types.insert(
         name,
-        (LocalDefId::from_raw(0), Visibility::Public, Span::DUMMY),
+        (LocalDefId::from_usize(0), Visibility::Public, Span::DUMMY),
     );
-    let root_id = ModuleId::from_raw(0);
+    let root_id = ModuleId::from_usize(0);
     let root_data = ModuleData {
         parent: None,
         children: vec![],
         scope,
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(0),
+        def_id: LocalDefId::from_usize(0),
         visibility: Visibility::Public,
     };
     let mut modules = glyim_core::arena::IndexVec::new();
@@ -43,13 +43,13 @@ fn def_map_with_trait(interner: &mut Interner, trait_name: &str) -> (CrateDefMap
     let def_map = CrateDefMap {
         root: root_id,
         modules,
-        krate: CrateId::from_raw(0),
+        krate: CrateId::from_usize(0),
         interner: interner.clone(),
         variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
         def_to_module: std::collections::HashMap::new(),
     };
-    (def_map, TraitDefId::from_raw(0))
+    (def_map, TraitDefId::from_usize(0))
 }
 
 #[test]
@@ -139,16 +139,16 @@ fn dyn_trait_non_object_safe_reports_diagnostic() {
         let mut scope = ItemScope::default();
         scope.types.insert(
             name,
-            (LocalDefId::from_raw(0), Visibility::Public, Span::DUMMY),
+            (LocalDefId::from_usize(0), Visibility::Public, Span::DUMMY),
         );
-        let root_id = ModuleId::from_raw(0);
+        let root_id = ModuleId::from_usize(0);
         let root_data = ModuleData {
             parent: None,
             children: vec![],
             scope,
             origin: ModuleOrigin::CrateRoot,
             span: Span::DUMMY,
-            def_id: LocalDefId::from_raw(0),
+            def_id: LocalDefId::from_usize(0),
             visibility: Visibility::Public,
         };
         let mut modules = glyim_core::arena::IndexVec::new();
@@ -157,13 +157,13 @@ fn dyn_trait_non_object_safe_reports_diagnostic() {
             CrateDefMap {
                 root: root_id,
                 modules,
-                krate: CrateId::from_raw(0),
+                krate: CrateId::from_usize(0),
                 interner: inter.clone(),
                 variant_map: std::collections::HashMap::new(),
                 max_local_def_id: 0,
                 def_to_module: std::collections::HashMap::new(),
             },
-            TraitDefId::from_raw(0),
+            TraitDefId::from_usize(0),
         )
     };
 
@@ -253,11 +253,11 @@ fn def_map_with_nested_trait(
 
     // Root module: no direct trait, but a child named `mod_name`.
     let mut root_scope = ItemScope::default();
-    let root_id = ModuleId::from_raw(0);
-    let child_id = ModuleId::from_raw(1);
+    let root_id = ModuleId::from_usize(0);
+    let child_id = ModuleId::from_usize(1);
     root_scope.types.insert(
         mod_n,
-        (LocalDefId::from_raw(0), Visibility::Public, Span::DUMMY),
+        (LocalDefId::from_usize(0), Visibility::Public, Span::DUMMY),
     );
 
     let root_data = ModuleData {
@@ -266,7 +266,7 @@ fn def_map_with_nested_trait(
         scope: root_scope,
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(0),
+        def_id: LocalDefId::from_usize(0),
         visibility: Visibility::Public,
     };
 
@@ -275,7 +275,7 @@ fn def_map_with_nested_trait(
     child_scope.types.insert(
         trait_n,
         (
-            LocalDefId::from_raw(trait_local_id),
+            LocalDefId::from_usize(trait_local_id as usize),
             Visibility::Public,
             Span::DUMMY,
         ),
@@ -286,7 +286,7 @@ fn def_map_with_nested_trait(
         scope: child_scope,
         origin: ModuleOrigin::CrateRoot,
         span: Span::DUMMY,
-        def_id: LocalDefId::from_raw(1),
+        def_id: LocalDefId::from_usize(1),
         visibility: Visibility::Public,
     };
 
@@ -297,7 +297,7 @@ fn def_map_with_nested_trait(
     CrateDefMap {
         root: root_id,
         modules,
-        krate: CrateId::from_raw(0),
+        krate: CrateId::from_usize(0),
         interner: interner.clone(),
         variant_map: std::collections::HashMap::new(),
         max_local_def_id: 0,
@@ -314,7 +314,7 @@ fn dyn_trait_multi_segment_path_resolves() {
     // must match so resolution lines up.
     let trait_local_id = 7u32;
     let def_map = def_map_with_nested_trait(&mut inter, mod_name, trait_name, trait_local_id);
-    let trait_def_id = TraitDefId::from_raw(trait_local_id);
+    let trait_def_id = TraitDefId::from_usize(trait_local_id as usize);
 
     let mut ctx = glyim_type::TyCtxMut::new(inter.clone());
     let self_ref_ty = ctx.mk_ref(
