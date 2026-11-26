@@ -30,7 +30,10 @@ use glyim_typeck::thir;
 /// `Debug` → different fingerprint).
 fn thir_body_for(local: u32) -> thir::Body {
     thir::Body {
-        owner: DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(local)),
+        owner: DefId::new(
+            CrateId::from_usize(0),
+            LocalDefId::from_usize(local as usize),
+        ),
         params: Vec::new(),
         return_ty: Ty::UNIT,
         stmts: Vec::new(),
@@ -50,7 +53,7 @@ fn thir_body_for(local: u32) -> thir::Body {
 fn thir_body_backdate_records_verified_when_enabled() {
     let db = Database::default();
     db.set_incr_verify_for_test(true);
-    let def_id = LocalDefId::from_raw(31);
+    let def_id = LocalDefId::from_usize(31);
 
     // Fresh: cache miss → compute + cache + record Miss. Verify does not run
     // on a miss (there is no cached entry to compare against).
@@ -75,7 +78,7 @@ fn thir_body_backdate_records_verified_when_enabled() {
 fn thir_body_backdate_skips_verify_when_disabled() {
     let db = Database::default();
     db.set_incr_verify_for_test(false);
-    let def_id = LocalDefId::from_raw(32);
+    let def_id = LocalDefId::from_usize(32);
 
     db.thir_body_query(def_id, || thir_body_for(32));
     db.clear_incr_verify();
@@ -98,7 +101,7 @@ fn thir_body_backdate_skips_verify_when_disabled() {
 fn thir_body_backdate_records_mismatch_on_stale_cache() {
     let db = Database::default();
     db.set_incr_verify_for_test(true);
-    let def_id = LocalDefId::from_raw(33);
+    let def_id = LocalDefId::from_usize(33);
 
     // Seed the cache with a body whose fingerprint is for `local=33`...
     db.thir_body_query(def_id, || thir_body_for(33));
@@ -136,7 +139,7 @@ fn thir_body_backdate_records_mismatch_on_stale_cache() {
 fn mir_build_hit_records_verified_when_enabled() {
     let db = Database::default();
     db.set_incr_verify_for_test(true);
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(34));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(34));
     let ty_ctx = glyim_test::test_ty_ctx().freeze();
 
     // Fresh: cache miss → compute + validate + cache + Miss.
@@ -166,7 +169,7 @@ fn mir_build_hit_records_verified_when_enabled() {
 fn mir_build_hit_records_mismatch_on_diverging_compute() {
     let db = Database::default();
     db.set_incr_verify_for_test(true);
-    let owner = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(35));
+    let owner = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(35));
     let ty_ctx = glyim_test::test_ty_ctx().freeze();
 
     // Seed the cache with one body shape (one local).
