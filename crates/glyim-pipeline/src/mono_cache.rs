@@ -415,8 +415,8 @@ pub(crate) fn make_mir_body_provider<'a>(
             // itself carries no payload — its existence is the proof.
             let _guaranteed = sink.borrow_mut().emit(diag);
             Arc::new(Body::dummy(DefId::new(
-                CrateId::from_raw(0),
-                LocalDefId::from_raw(0),
+                CrateId::from_usize(0),
+                LocalDefId::from_usize(0),
             )))
         }
     }
@@ -445,16 +445,19 @@ pub(crate) fn generate_drop_glue(ty: Ty, ty_ctx: &TyCtx) -> Arc<Body> {
     static DROP_GLUE_OWNER: AtomicU32 = AtomicU32::new(0);
     let unique = DROP_GLUE_OWNER.fetch_add(1, Ordering::Relaxed);
     let synthetic = 0x8000_0000u32 | (unique & 0x7FFF_FFFF);
-    let def_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(synthetic));
+    let def_id = DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(synthetic as usize),
+    );
     let mut body = Body::dummy(def_id);
     body.return_ty = ty_ctx.unit_ty();
 
-    let ptr_local = LocalIdx::from_raw(0);
+    let ptr_local = LocalIdx::from_usize(0);
     let place = Place::new(ptr_local);
 
     // Fast path: types that do not need dropping get a single `Return`.
     if !type_needs_drop(ty, ty_ctx, &mut HashSet::new()) {
-        set_return_terminator(&mut body, BasicBlockIdx::from_raw(0));
+        set_return_terminator(&mut body, BasicBlockIdx::from_usize(0));
         return Arc::new(body);
     }
 
@@ -471,11 +474,11 @@ pub(crate) fn generate_drop_glue(ty: Ty, ty_ctx: &TyCtx) -> Arc<Body> {
                     AdtKind::Union => {
                         // Unions do not have automatic drop glue; the user is responsible
                         // for unsafe union manipulation.
-                        set_return_terminator(&mut body, BasicBlockIdx::from_raw(0));
+                        set_return_terminator(&mut body, BasicBlockIdx::from_usize(0));
                     }
                 }
             } else {
-                set_return_terminator(&mut body, BasicBlockIdx::from_raw(0));
+                set_return_terminator(&mut body, BasicBlockIdx::from_usize(0));
             }
         }
         TyKind::Array(elem_ty, len) if type_needs_drop(*elem_ty, ty_ctx, &mut HashSet::new()) => {
@@ -495,7 +498,7 @@ pub(crate) fn generate_drop_glue(ty: Ty, ty_ctx: &TyCtx) -> Arc<Body> {
             generate_slice_drop_glue(&mut body, &place, *elem_ty, ty_ctx);
         }
         _ => {
-            set_return_terminator(&mut body, BasicBlockIdx::from_raw(0));
+            set_return_terminator(&mut body, BasicBlockIdx::from_usize(0));
         }
     }
 
@@ -540,7 +543,7 @@ fn generate_struct_drop_glue(body: &mut Body, place: &Place, adt_def: &AdtDef, t
         .collect();
 
     if fields_to_drop.is_empty() {
-        set_return_terminator(body, BasicBlockIdx::from_raw(0));
+        set_return_terminator(body, BasicBlockIdx::from_usize(0));
         return;
     }
 
@@ -554,7 +557,7 @@ fn generate_struct_drop_glue(body: &mut Body, place: &Place, adt_def: &AdtDef, t
     // Build the tail of the chain in reverse order (last field -> second field).
     for field_idx in fields_to_drop.iter().skip(1).rev() {
         let mut proj = place.projection.to_vec();
-        proj.push(ProjectionElem::Field(FieldIdx::from_raw(*field_idx as u32)));
+        proj.push(ProjectionElem::Field(FieldIdx::from_usize(*field_idx)));
         let field_place = Place {
             local: place.local,
             projection: proj.into_boxed_slice(),
@@ -574,15 +577,13 @@ fn generate_struct_drop_glue(body: &mut Body, place: &Place, adt_def: &AdtDef, t
     // The first field drop re-uses basic block 0.
     let first_field_idx = fields_to_drop[0];
     let mut proj = place.projection.to_vec();
-    proj.push(ProjectionElem::Field(FieldIdx::from_raw(
-        first_field_idx as u32,
-    )));
+    proj.push(ProjectionElem::Field(FieldIdx::from_usize(first_field_idx)));
     let field_place = Place {
         local: place.local,
         projection: proj.into_boxed_slice(),
     };
 
-    if let Some(block0) = body.basic_blocks.get_mut(BasicBlockIdx::from_raw(0)) {
+    if let Some(block0) = body.basic_blocks.get_mut(BasicBlockIdx::from_usize(0)) {
         block0.statements.clear();
         block0.terminator = Terminator {
             kind: TerminatorKind::Drop {
@@ -653,10 +654,10 @@ fn generate_enum_drop_glue(body: &mut Body, place: &Place, adt_def: &AdtDef, ty_
         // Reverse chain for all fields except the first.
         for field_idx in fields_to_drop.iter().skip(1).rev() {
             let mut proj = place.projection.to_vec();
-            proj.push(ProjectionElem::Downcast(VariantIdx::from_raw(
-                variant_idx as u32,
+            proj.push(ProjectionElem::Downcast(VariantIdx::from_usize(
+                variant_idx,
             )));
-            proj.push(ProjectionElem::Field(FieldIdx::from_raw(*field_idx as u32)));
+            proj.push(ProjectionElem::Field(FieldIdx::from_usize(*field_idx)));
             let field_place = Place {
                 local: place.local,
                 projection: proj.into_boxed_slice(),
@@ -676,12 +677,10 @@ fn generate_enum_drop_glue(body: &mut Body, place: &Place, adt_def: &AdtDef, ty_
         // First field for this variant gets its own block.
         let first_field_idx = fields_to_drop[0];
         let mut proj = place.projection.to_vec();
-        proj.push(ProjectionElem::Downcast(VariantIdx::from_raw(
-            variant_idx as u32,
+        proj.push(ProjectionElem::Downcast(VariantIdx::from_usize(
+            variant_idx,
         )));
-        proj.push(ProjectionElem::Field(FieldIdx::from_raw(
-            first_field_idx as u32,
-        )));
+        proj.push(ProjectionElem::Field(FieldIdx::from_usize(first_field_idx)));
         let field_place = Place {
             local: place.local,
             projection: proj.into_boxed_slice(),
@@ -707,7 +706,7 @@ fn generate_enum_drop_glue(body: &mut Body, place: &Place, adt_def: &AdtDef, ty_
     let otherwise = return_bb;
     let switch_targets = SwitchTargets::new(branches.into_boxed_slice(), otherwise);
 
-    if let Some(block0) = body.basic_blocks.get_mut(BasicBlockIdx::from_raw(0)) {
+    if let Some(block0) = body.basic_blocks.get_mut(BasicBlockIdx::from_usize(0)) {
         block0.statements.clear();
         block0.statements.push(Statement {
             kind: StatementKind::Assign(discr_place.clone(), Rvalue::Discriminant(place.clone())),
@@ -788,7 +787,7 @@ fn generate_array_drop_glue(
     }
 
     let first_elem = element_place_at(place, 0, n_u64);
-    if let Some(block0) = body.basic_blocks.get_mut(BasicBlockIdx::from_raw(0)) {
+    if let Some(block0) = body.basic_blocks.get_mut(BasicBlockIdx::from_usize(0)) {
         block0.statements.clear();
         block0.terminator = Terminator {
             kind: TerminatorKind::Drop {
@@ -946,7 +945,7 @@ fn generate_slice_drop_glue(body: &mut Body, place: &Place, _elem_ty: Ty, _ty_ct
     }
 
     // Entry (bb0): len = Len(place); idx = 0; Goto header.
-    if let Some(block0) = body.basic_blocks.get_mut(BasicBlockIdx::from_raw(0)) {
+    if let Some(block0) = body.basic_blocks.get_mut(BasicBlockIdx::from_usize(0)) {
         block0.statements.clear();
         block0.statements.push(Statement {
             kind: StatementKind::Assign(Place::new(len_local), Rvalue::Len(place.clone())),
