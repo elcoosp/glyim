@@ -27,7 +27,7 @@ fn first_body(hir: &CrateHir) -> &crate::Body {
         !hir.bodies.is_empty(),
         "expected at least one body in HIR, found none"
     );
-    &hir.bodies[BodyId::from_raw(0)]
+    &hir.bodies[BodyId::from_usize(0)]
 }
 
 /// GAP A closure: `let x = a.await` inside an `async fn` body must lower to
