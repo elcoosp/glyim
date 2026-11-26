@@ -11,10 +11,10 @@ use crate::*;
 #[test]
 fn adt_with_infer_propagates_has_ty_infer() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let substs = c.intern_substitution(vec![GenericArg::Ty(infer)]);
-        c.mk_adt(AdtId::from_raw(1), substs)
+        c.mk_adt(AdtId::from_usize(1), substs)
     });
     assert!(frozen.ty_flags(ty).contains(TypeFlags::HAS_TY_INFER));
 }
@@ -25,7 +25,7 @@ fn adt_with_param_propagates_has_ty_param() {
         let name = c.resolver().intern("T");
         let param = c.mk_ty(TyKind::Param(ParamTy { index: 0, name }));
         let substs = c.intern_substitution(vec![GenericArg::Ty(param)]);
-        c.mk_adt(AdtId::from_raw(1), substs)
+        c.mk_adt(AdtId::from_usize(1), substs)
     });
     assert!(frozen.ty_flags(ty).contains(TypeFlags::HAS_TY_PARAM));
 }
@@ -34,7 +34,7 @@ fn adt_with_param_propagates_has_ty_param() {
 fn adt_with_error_propagates_has_error() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![GenericArg::Ty(Ty::ERROR)]);
-        c.mk_adt(AdtId::from_raw(1), substs)
+        c.mk_adt(AdtId::from_usize(1), substs)
     });
     assert!(frozen.ty_flags(ty).contains(TypeFlags::HAS_ERROR));
 }
@@ -45,7 +45,7 @@ fn adt_with_no_special_args_has_no_flags() {
         let i32_ty = c.mk_ty(TyKind::Int(IntTy::I32));
         let substs =
             c.intern_substitution(vec![GenericArg::Ty(c.bool_ty()), GenericArg::Ty(i32_ty)]);
-        c.mk_adt(AdtId::from_raw(1), substs)
+        c.mk_adt(AdtId::from_usize(1), substs)
     });
     assert!(frozen.ty_flags(ty).is_empty());
 }
@@ -55,7 +55,7 @@ fn adt_with_no_special_args_has_no_flags() {
 #[test]
 fn tuple_with_infer_propagates() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let substs = c.intern_substitution(vec![GenericArg::Ty(infer)]);
         c.mk_tuple(substs)
@@ -66,7 +66,7 @@ fn tuple_with_infer_propagates() {
 #[test]
 fn tuple_mixed_infer_and_error_flags() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let substs = c.intern_substitution(vec![GenericArg::Ty(infer), GenericArg::Ty(Ty::ERROR)]);
         c.mk_tuple(substs)
@@ -81,10 +81,10 @@ fn tuple_mixed_infer_and_error_flags() {
 #[test]
 fn fn_def_with_infer_propagates() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let substs = c.intern_substitution(vec![GenericArg::Ty(infer)]);
-        c.mk_ty(TyKind::FnDef(FnDefId::from_raw(1), substs))
+        c.mk_ty(TyKind::FnDef(FnDefId::from_usize(1), substs))
     });
     assert!(frozen.ty_flags(ty).contains(TypeFlags::HAS_TY_INFER));
 }
@@ -93,7 +93,7 @@ fn fn_def_with_infer_propagates() {
 fn fn_def_with_error_propagates() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![GenericArg::Ty(Ty::ERROR)]);
-        c.mk_ty(TyKind::FnDef(FnDefId::from_raw(1), substs))
+        c.mk_ty(TyKind::FnDef(FnDefId::from_usize(1), substs))
     });
     assert!(frozen.ty_flags(ty).contains(TypeFlags::HAS_ERROR));
 }
@@ -103,10 +103,10 @@ fn fn_def_with_error_propagates() {
 #[test]
 fn closure_with_infer_propagates() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let substs = c.intern_substitution(vec![GenericArg::Ty(infer)]);
-        c.mk_ty(TyKind::Closure(ClosureId::from_raw(1), substs))
+        c.mk_ty(TyKind::Closure(ClosureId::from_usize(1), substs))
     });
     assert!(frozen.ty_flags(ty).contains(TypeFlags::HAS_TY_INFER));
 }
@@ -117,7 +117,7 @@ fn closure_with_param_propagates() {
         let name = c.resolver().intern("T");
         let param = c.mk_ty(TyKind::Param(ParamTy { index: 0, name }));
         let substs = c.intern_substitution(vec![GenericArg::Ty(param)]);
-        c.mk_ty(TyKind::Closure(ClosureId::from_raw(1), substs))
+        c.mk_ty(TyKind::Closure(ClosureId::from_usize(1), substs))
     });
     assert!(frozen.ty_flags(ty).contains(TypeFlags::HAS_TY_PARAM));
 }
@@ -127,10 +127,10 @@ fn closure_with_param_propagates() {
 #[test]
 fn opaque_with_infer_propagates() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let substs = c.intern_substitution(vec![GenericArg::Ty(infer)]);
-        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_raw(1), substs))
+        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_usize(1), substs))
     });
     assert!(frozen.ty_flags(ty).contains(TypeFlags::HAS_TY_INFER));
 }
@@ -139,7 +139,7 @@ fn opaque_with_infer_propagates() {
 fn opaque_with_error_propagates() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
         let substs = c.intern_substitution(vec![GenericArg::Ty(Ty::ERROR)]);
-        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_raw(1), substs))
+        c.mk_ty(TyKind::Opaque(OpaqueTyId::from_usize(1), substs))
     });
     assert!(frozen.ty_flags(ty).contains(TypeFlags::HAS_ERROR));
 }
@@ -149,7 +149,7 @@ fn opaque_with_error_propagates() {
 #[test]
 fn fn_ptr_propagates_input_infer() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let inputs = c.intern_substitution(vec![GenericArg::Ty(infer)]);
         let sig = FnSig {
@@ -209,7 +209,7 @@ fn ref_propagates_inner_error() {
 #[test]
 fn ref_propagates_inner_infer() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         c.mk_ref(Region::Erased, infer, Mutability::Not)
     });
@@ -232,7 +232,7 @@ fn ref_mut_with_region_var_flags() {
 #[test]
 fn raw_ptr_propagates_inner_infer() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         c.mk_ty(TyKind::RawPtr(infer, Mutability::Not))
     });
@@ -262,7 +262,7 @@ fn slice_propagates_inner_param() {
 #[test]
 fn array_propagates_inner_infer() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let len = Const {
             kind: ConstKind::Uint(3),
@@ -290,10 +290,10 @@ fn array_propagates_inner_error() {
 #[test]
 fn adt_with_infer_and_error_combines_flags() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let substs = c.intern_substitution(vec![GenericArg::Ty(infer), GenericArg::Ty(Ty::ERROR)]);
-        c.mk_adt(AdtId::from_raw(1), substs)
+        c.mk_adt(AdtId::from_usize(1), substs)
     });
     let flags = frozen.ty_flags(ty);
     assert!(flags.contains(TypeFlags::HAS_TY_INFER));
@@ -303,7 +303,7 @@ fn adt_with_infer_and_error_combines_flags() {
 #[test]
 fn fn_ptr_with_all_infer_flags() {
     let (frozen, ty) = with_fresh_ty_ctx(|c| {
-        let var = TyVar::from_raw(0);
+        let var = TyVar::from_usize(0);
         let infer = c.mk_ty(TyKind::Infer(InferVar::Ty(var)));
         let vid = c.new_region_var(Region::Erased);
         let inputs = c.intern_substitution(vec![GenericArg::Ty(infer)]);
