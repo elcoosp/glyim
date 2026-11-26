@@ -173,11 +173,17 @@ impl<'a> MonoCtx<'a> {
 
             let body = match &item {
                 MonoItem::Fn { def_id, substs } => mir_bodies(
-                    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(def_id.to_raw())),
+                    DefId::new(
+                        CrateId::from_usize(0),
+                        LocalDefId::from_usize(def_id.index()),
+                    ),
                     substs,
                 ),
                 MonoItem::Const { def_id, substs } => mir_bodies(
-                    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(def_id.to_raw())),
+                    DefId::new(
+                        CrateId::from_usize(0),
+                        LocalDefId::from_usize(def_id.index()),
+                    ),
                     substs,
                 ),
                 MonoItem::Static { def_id } => {
@@ -189,8 +195,10 @@ impl<'a> MonoCtx<'a> {
                     // same key used for fn bodies. Falls back to the
                     // dummy body only if the pipeline never registered
                     // one (i.e. an older caller that predates T177).
-                    let key =
-                        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(def_id.to_raw()));
+                    let key = DefId::new(
+                        CrateId::from_usize(0),
+                        LocalDefId::from_usize(def_id.index()),
+                    );
                     let empty_substs = Substitution::empty();
                     mir_bodies(key, &empty_substs)
                 }
@@ -230,15 +238,15 @@ impl<'a> MonoCtx<'a> {
                 // the map is absent or the def isn't found (e.g. drop glue).
                 source_module: match (&item, self.def_to_module) {
                     (MonoItem::Fn { def_id, .. }, Some(map)) => map
-                        .get(&glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()))
+                        .get(&glyim_core::def_id::LocalDefId::from_usize(def_id.index()))
                         .copied()
                         .unwrap_or(0),
                     (MonoItem::Const { def_id, .. }, Some(map)) => map
-                        .get(&glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()))
+                        .get(&glyim_core::def_id::LocalDefId::from_usize(def_id.index()))
                         .copied()
                         .unwrap_or(0),
                     (MonoItem::Static { def_id }, Some(map)) => map
-                        .get(&glyim_core::def_id::LocalDefId::from_raw(def_id.to_raw()))
+                        .get(&glyim_core::def_id::LocalDefId::from_usize(def_id.index()))
                         .copied()
                         .unwrap_or(0),
                     _ => 0,
@@ -263,10 +271,7 @@ impl<'a> MonoCtx<'a> {
         let pending_drops: Vec<_> = std::mem::take(&mut self.drop_locals);
         for local_idx in pending_drops {
             let local_raw = local_idx.to_raw() as usize;
-            if let Some(local_decl) = body
-                .locals
-                .get(glyim_mir::LocalIdx::from_raw(local_raw as u32))
-            {
+            if let Some(local_decl) = body.locals.get(glyim_mir::LocalIdx::from_usize(local_raw)) {
                 let drop_ty = local_decl.ty;
                 self.enqueue(MonoItem::DropGlue { ty: drop_ty });
             }
@@ -568,7 +573,7 @@ impl<'a> MonoCtx<'a> {
                                 {
                                     ty = def
                                         .fields
-                                        .get(glyim_type::FieldIdx::from_raw(idx.index() as u32))
+                                        .get(glyim_type::FieldIdx::from_usize(idx.index()))
                                         .map_or(ty, |f| f.ty);
                                 }
                             }
