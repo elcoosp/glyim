@@ -1,9 +1,9 @@
 {
   "schema": "glyim.status/1",
-  "features": 254,
+  "features": 255,
   "records": 632,
   "summary": {
-    "L0": 241,
+    "L0": 242,
     "L1": 7,
     "L2": 2,
     "L3": 0,
@@ -1827,6 +1827,14 @@
     },
     {
       "id": "TOOL-CLI-LTO",
+      "tier": "tooling",
+      "target_level": "L4",
+      "computed_level": "L0",
+      "capped_by": [],
+      "unmeasured": []
+    },
+    {
+      "id": "TOOL-CLI-OPT-BISECT",
       "tier": "tooling",
       "target_level": "L4",
       "computed_level": "L0",
