@@ -14,7 +14,10 @@ fn body_with_array_drop(ctx: &mut TyCtxMut, elem_ty: Ty, len: u64) -> Body {
         ty: ctx.mk_ty(TyKind::Uint(glyim_core::UintTy::Usize)),
     };
     let array_ty = ctx.mk_ty(TyKind::Array(elem_ty, const_len));
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
     let local = body.locals.push(LocalDecl {
         ty: array_ty,
         mutability: Mutability::Mut,
@@ -27,7 +30,7 @@ fn body_with_array_drop(ctx: &mut TyCtxMut, elem_ty: Ty, len: u64) -> Body {
     let term = Terminator {
         kind: TerminatorKind::Drop {
             place: Place::new(local),
-            target: BasicBlockIdx::from_raw(1),
+            target: BasicBlockIdx::from_usize(1),
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -46,7 +49,7 @@ fn body_with_array_drop(ctx: &mut TyCtxMut, elem_ty: Ty, len: u64) -> Body {
         terminator: return_term,
         is_cleanup: false,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![block0, block1]);
+    body.basic_blocks = IndexVec::from_vec(vec![block0, block1]);
     body
 }
 #[test]
@@ -55,10 +58,10 @@ fn array_drop_creates_loop() {
     let mut ctx_mut = glyim_test::test_ty_ctx();
     // Create a type that needs drop (a struct with a String field)
     let string_ty = ctx_mut.mk_ty(TyKind::String);
-    let adt_id = AdtId::from_raw(100);
+    let adt_id = AdtId::from_usize(100);
     let subst = ctx_mut.intern_substitution(vec![]);
     // Register a struct with one field: String
-    let field_defs = glyim_core::arena::IndexVec::from_raw(vec![glyim_type::FieldDef {
+    let field_defs = glyim_core::arena::IndexVec::from_vec(vec![glyim_type::FieldDef {
         name: ctx_mut.resolver().intern("s"),
         ty: string_ty,
     }]);
@@ -118,7 +121,7 @@ fn drop_on_projected_place_is_not_skipped() {
         Mutability::Mut,
     ));
 
-    let body_def = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let body_def = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut body = Body::dummy(body_def);
     let local = body.locals.push(LocalDecl {
         ty: ref_string_ty,
@@ -134,7 +137,7 @@ fn drop_on_projected_place_is_not_skipped() {
         terminator: Terminator {
             kind: TerminatorKind::Drop {
                 place: drop_place,
-                target: BasicBlockIdx::from_raw(1),
+                target: BasicBlockIdx::from_usize(1),
                 cleanup: None,
             },
             source_info: SourceInfo::new(Span::DUMMY),
@@ -149,14 +152,14 @@ fn drop_on_projected_place_is_not_skipped() {
         },
         is_cleanup: false,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![block0, block1]);
+    body.basic_blocks = IndexVec::from_vec(vec![block0, block1]);
 
     let ctx = ctx_mut.freeze();
     crate::drop_elaboration::run(&ctx, &mut body);
 
     // The elaborated block 0 must still be a Drop (not a Goto that skips it).
     let is_drop = matches!(
-        body.basic_blocks[BasicBlockIdx::from_raw(0)]
+        body.basic_blocks[BasicBlockIdx::from_usize(0)]
             .terminator
             .kind,
         TerminatorKind::Drop { .. }
@@ -177,9 +180,9 @@ fn loop_built_array_uses_per_element_flags() {
     use glyim_core::AdtId;
     let mut ctx_mut = glyim_test::test_ty_ctx();
     let string_ty = ctx_mut.mk_ty(TyKind::String);
-    let adt_id = AdtId::from_raw(100);
+    let adt_id = AdtId::from_usize(100);
     let subst = ctx_mut.intern_substitution(vec![]);
-    let field_defs = glyim_core::arena::IndexVec::from_raw(vec![glyim_type::FieldDef {
+    let field_defs = glyim_core::arena::IndexVec::from_vec(vec![glyim_type::FieldDef {
         name: ctx_mut.resolver().intern("s"),
         ty: string_ty,
     }]);
@@ -203,7 +206,7 @@ fn loop_built_array_uses_per_element_flags() {
         ty: ctx_mut.mk_ty(TyKind::Uint(glyim_core::UintTy::Usize)),
     };
     let array_ty = ctx_mut.mk_ty(TyKind::Array(struct_ty, const_len));
-    let body_def = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0));
+    let body_def = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0));
     let mut body = Body::dummy(body_def);
 
     // arr: the loop-built array local.
@@ -240,7 +243,7 @@ fn loop_built_array_uses_per_element_flags() {
     let term = Terminator {
         kind: TerminatorKind::Drop {
             place: Place::new(arr),
-            target: BasicBlockIdx::from_raw(1),
+            target: BasicBlockIdx::from_usize(1),
             cleanup: None,
         },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -258,7 +261,7 @@ fn loop_built_array_uses_per_element_flags() {
         },
         is_cleanup: false,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![block0, block1]);
+    body.basic_blocks = IndexVec::from_vec(vec![block0, block1]);
 
     let ctx = ctx_mut.freeze();
     crate::drop_elaboration::run(&ctx, &mut body);
@@ -308,9 +311,9 @@ fn array_drop_init_edge_is_not_a_self_loop() {
     use glyim_core::AdtId;
     let mut ctx_mut = glyim_test::test_ty_ctx();
     let string_ty = ctx_mut.mk_ty(TyKind::String);
-    let adt_id = AdtId::from_raw(100);
+    let adt_id = AdtId::from_usize(100);
     let subst = ctx_mut.intern_substitution(vec![]);
-    let field_defs = glyim_core::arena::IndexVec::from_raw(vec![glyim_type::FieldDef {
+    let field_defs = glyim_core::arena::IndexVec::from_vec(vec![glyim_type::FieldDef {
         name: ctx_mut.resolver().intern("s"),
         ty: string_ty,
     }]);
@@ -334,7 +337,7 @@ fn array_drop_init_edge_is_not_a_self_loop() {
 
     // Old block 0's terminator (was `Drop(array)`) must now be a `Goto` into
     // the loop init block, which is a *new* block (index >= the original 2).
-    let block0 = &body.basic_blocks[BasicBlockIdx::from_raw(0)];
+    let block0 = &body.basic_blocks[BasicBlockIdx::from_usize(0)];
     match &block0.terminator.kind {
         TerminatorKind::Goto { target } => {
             assert_ne!(
