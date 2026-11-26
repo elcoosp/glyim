@@ -14,7 +14,7 @@ fn test_t05_cast_int_to_float() {
     let local_int = add_local(&mut body, i32_ty, Mutability::Mut);
     let local_float = add_local(&mut body, f64_ty, Mutability::Mut);
 
-    let bb0 = BasicBlockIdx::from_raw(0);
+    let bb0 = BasicBlockIdx::from_usize(0);
     add_statement(
         &mut body,
         bb0,
@@ -32,7 +32,7 @@ fn test_t05_cast_int_to_float() {
     let tcx = ctx.freeze();
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(
-        DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)),
+        DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0)),
         body,
     );
     let result = interp.run_body(&interp.function_table.values().next().unwrap().clone());
