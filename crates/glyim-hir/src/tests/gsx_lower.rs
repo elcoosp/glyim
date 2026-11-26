@@ -32,11 +32,11 @@ fn fn_body_expr(ctx: &TestContext, fn_name: &str) -> Option<(BodyId, crate::Expr
             // tail (or a statement inside).
             let blk = ctx.hir.bodies[b].exprs.len() - 1;
             let body = &ctx.hir.bodies[b];
-            let inner = match &body.exprs[crate::ExprId::from_raw(blk as u32)] {
+            let inner = match &body.exprs[crate::ExprId::from_usize(blk)] {
                 Expr::Block { stmts, tail } => {
                     tail.or_else(|| stmts.last().copied()).expect("gsx expr")
                 }
-                _ => crate::ExprId::from_raw(blk as u32),
+                _ => crate::ExprId::from_usize(blk),
             };
             return Some((b, inner));
         }
