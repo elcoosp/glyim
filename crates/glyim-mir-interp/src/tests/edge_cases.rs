@@ -9,7 +9,7 @@ use glyim_test::test_ty_ctx;
 use glyim_type::{Ty, TyCtxMut, TyKind};
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
@@ -24,9 +24,9 @@ fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
 
 fn build_bool_binop_body(op: BinOp, left: bool, right: bool) -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
+    let res_local = LocalIdx::from_usize(1);
     let bool_ty = Ty::BOOL;
-    body.locals = IndexVec::from_raw(vec![
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(bool_ty, Mutability::Mut),
     ]);
@@ -40,7 +40,7 @@ fn build_bool_binop_body(op: BinOp, left: bool, right: bool) -> Body {
         ty: bool_ty,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
@@ -61,8 +61,8 @@ fn build_bool_binop_body(op: BinOp, left: bool, right: bool) -> Body {
 fn build_three_way_switch_body(tcx: &mut TyCtxMut, val: i128) -> Body {
     let i32_ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
     let mut body = Body::dummy(dummy_def_id());
-    let discr_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let discr_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(i32_ty, Mutability::Not),
     ]);
@@ -77,9 +77,9 @@ fn build_three_way_switch_body(tcx: &mut TyCtxMut, val: i128) -> Body {
         ),
         source_info: SourceInfo::new(Span::DUMMY),
     };
-    let then_target = BasicBlockIdx::from_raw(1);
-    let else_target = BasicBlockIdx::from_raw(2);
-    let otherwise_target = BasicBlockIdx::from_raw(3);
+    let then_target = BasicBlockIdx::from_usize(1);
+    let else_target = BasicBlockIdx::from_usize(2);
+    let otherwise_target = BasicBlockIdx::from_usize(3);
     let targets = SwitchTargets::new(
         vec![(1u128, then_target), (2u128, else_target)].into_boxed_slice(),
         otherwise_target,
@@ -97,7 +97,7 @@ fn build_three_way_switch_body(tcx: &mut TyCtxMut, val: i128) -> Body {
         BasicBlockData {
             statements: vec![Statement {
                 kind: StatementKind::Assign(
-                    Place::new(LocalIdx::from_raw(1)),
+                    Place::new(LocalIdx::from_usize(1)),
                     Rvalue::Use(Operand::Constant(MirConst {
                         kind: MirConstKind::Int(val),
                         ty,
@@ -113,7 +113,7 @@ fn build_three_way_switch_body(tcx: &mut TyCtxMut, val: i128) -> Body {
             is_cleanup: false,
         }
     }
-    body.basic_blocks = IndexVec::from_raw(vec![
+    body.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![assign_stmt],
             terminator: switch,
@@ -128,15 +128,18 @@ fn build_three_way_switch_body(tcx: &mut TyCtxMut, val: i128) -> Body {
 
 // ============ Call with arguments ============
 fn build_callee_with_args_body(tcx: &mut TyCtxMut) -> Body {
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1)));
-    let ret_local = LocalIdx::from_raw(0);
-    let arg_local = LocalIdx::from_raw(1);
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(1),
+    ));
+    let ret_local = LocalIdx::from_usize(0);
+    let arg_local = LocalIdx::from_usize(1);
     let i32_ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
-    body.locals = IndexVec::from_raw(vec![
-        local_decl(i32_ty, Mutability::Mut), // return
-        local_decl(i32_ty, Mutability::Not), // arg0
+    body.locals = IndexVec::from_vec(vec![
+        local_decl(i32_ty, Mutability::Mut),
+        local_decl(i32_ty, Mutability::Not),
     ]);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(ret_local),
@@ -166,8 +169,8 @@ fn build_callee_with_args_body(tcx: &mut TyCtxMut) -> Body {
 fn build_caller_with_args_body(tcx: &mut TyCtxMut, callee_def_id: DefId, arg_val: i128) -> Body {
     let i32_ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
     let mut body = Body::dummy(dummy_def_id());
-    let ret_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let ret_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(i32_ty, Mutability::Mut),
     ]);
@@ -181,7 +184,7 @@ fn build_caller_with_args_body(tcx: &mut TyCtxMut, callee_def_id: DefId, arg_val
         ty: i32_ty,
         span: Span::DUMMY,
     });
-    body.basic_blocks = IndexVec::from_raw(vec![
+    body.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![],
             terminator: Terminator {
@@ -189,7 +192,7 @@ fn build_caller_with_args_body(tcx: &mut TyCtxMut, callee_def_id: DefId, arg_val
                     func: fn_const,
                     args: vec![arg_const],
                     destination: Place::new(ret_local),
-                    target: Some(BasicBlockIdx::from_raw(1)),
+                    target: Some(BasicBlockIdx::from_usize(1)),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -211,8 +214,8 @@ fn build_caller_with_args_body(tcx: &mut TyCtxMut, callee_def_id: DefId, arg_val
 // ============ Nop statement ============
 fn build_nop_body() -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![local_decl(Ty::UNIT, Mutability::Mut)]);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.locals = IndexVec::from_vec(vec![local_decl(Ty::UNIT, Mutability::Mut)]);
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![
             Statement {
                 kind: StatementKind::Nop,
@@ -235,13 +238,13 @@ fn build_nop_body() -> Body {
 // ============ Step limit exact ============
 fn build_two_step_body() -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![local_decl(Ty::UNIT, Mutability::Mut)]);
-    body.basic_blocks = IndexVec::from_raw(vec![
+    body.locals = IndexVec::from_vec(vec![local_decl(Ty::UNIT, Mutability::Mut)]);
+    body.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![],
             terminator: Terminator {
                 kind: TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(1),
+                    target: BasicBlockIdx::from_usize(1),
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
             },
@@ -268,7 +271,7 @@ fn bool_and_true() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(true))
     );
 }
@@ -280,7 +283,7 @@ fn bool_and_false() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(false))
     );
 }
@@ -292,7 +295,7 @@ fn bool_or() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(true))
     );
 }
@@ -304,7 +307,7 @@ fn bool_or_false() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(false))
     );
 }
@@ -317,7 +320,7 @@ fn nested_switch_first_case() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(100))
     );
 }
@@ -330,7 +333,7 @@ fn nested_switch_second_case() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(200))
     );
 }
@@ -343,7 +346,7 @@ fn nested_switch_otherwise() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(300))
     );
 }
@@ -359,7 +362,7 @@ fn call_with_args_and_return() {
     interp.add_function(callee_id, callee_body);
     interp.run_body(&caller_body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(42))
     );
 }
@@ -397,8 +400,8 @@ fn bool_not_true() {
     let tcx_mut = test_ty_ctx();
     let bool_ty = Ty::BOOL;
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(bool_ty, Mutability::Mut),
     ]);
@@ -407,7 +410,7 @@ fn bool_not_true() {
         ty: bool_ty,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
@@ -425,7 +428,7 @@ fn bool_not_true() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(false))
     );
 }
@@ -436,8 +439,8 @@ fn bool_not_false() {
     let tcx_mut = test_ty_ctx();
     let bool_ty = Ty::BOOL;
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(bool_ty, Mutability::Mut),
     ]);
@@ -446,7 +449,7 @@ fn bool_not_false() {
         ty: bool_ty,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
                 Place::new(res_local),
@@ -464,7 +467,7 @@ fn bool_not_false() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Bool(true))
     );
 }
@@ -476,8 +479,8 @@ fn uint_constant_interpreted_as_int() {
     let mut tcx_mut = test_ty_ctx();
     let u32_ty = tcx_mut.mk_ty(TyKind::Uint(glyim_core::UintTy::U32));
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(u32_ty, Mutability::Mut),
     ]);
@@ -486,7 +489,7 @@ fn uint_constant_interpreted_as_int() {
         ty: u32_ty,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(Place::new(res_local), Rvalue::Use(Operand::Constant(c))),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -501,7 +504,7 @@ fn uint_constant_interpreted_as_int() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Uint(42))
     );
 }
@@ -512,8 +515,8 @@ fn uint_constant_interpreted_as_int() {
 fn unit_constant() {
     let tcx_mut = test_ty_ctx();
     let mut body = Body::dummy(dummy_def_id());
-    let res_local = LocalIdx::from_raw(1);
-    body.locals = IndexVec::from_raw(vec![
+    let res_local = LocalIdx::from_usize(1);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(Ty::UNIT, Mutability::Mut),
     ]);
@@ -522,7 +525,7 @@ fn unit_constant() {
         ty: Ty::UNIT,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(Place::new(res_local), Rvalue::Use(Operand::Constant(c))),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -537,7 +540,7 @@ fn unit_constant() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Unit)
     );
 }
@@ -556,16 +559,16 @@ fn unit_constant() {
 fn drop_terminator_proceeds_to_target() {
     let tcx = glyim_test::test_frozen_ty_ctx();
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(Ty::BOOL, Mutability::Mut),
     ]);
-    let local_to_drop = LocalIdx::from_raw(1);
+    let local_to_drop = LocalIdx::from_usize(1);
     // BB0: assign true to local 1, then Drop(local 1) -> BB1
     // BB1: Return
     // A bare `Drop` reaching the interpreter is a no-op until real drop
     // glue is wired end-to-end.
-    body.basic_blocks = IndexVec::from_raw(vec![
+    body.basic_blocks = IndexVec::from_vec(vec![
         BasicBlockData {
             statements: vec![Statement {
                 kind: StatementKind::Assign(
@@ -581,7 +584,7 @@ fn drop_terminator_proceeds_to_target() {
             terminator: Terminator {
                 kind: TerminatorKind::Drop {
                     place: Place::new(local_to_drop),
-                    target: BasicBlockIdx::from_raw(1),
+                    target: BasicBlockIdx::from_usize(1),
                     cleanup: None,
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
@@ -608,10 +611,10 @@ fn sequential_binary_ops() {
     let mut tcx_mut = test_ty_ctx();
     let i32_ty = tcx_mut.mk_ty(TyKind::Int(IntTy::I32));
     let mut body = Body::dummy(dummy_def_id());
-    let loc_a = LocalIdx::from_raw(1);
-    let loc_b = LocalIdx::from_raw(2);
-    let loc_result = LocalIdx::from_raw(3);
-    body.locals = IndexVec::from_raw(vec![
+    let loc_a = LocalIdx::from_usize(1);
+    let loc_b = LocalIdx::from_usize(2);
+    let loc_result = LocalIdx::from_usize(3);
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(i32_ty, Mutability::Mut),
         local_decl(i32_ty, Mutability::Mut),
@@ -632,9 +635,8 @@ fn sequential_binary_ops() {
         ty: i32_ty,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![
-            // a = 10 + 3 = 13
             Statement {
                 kind: StatementKind::Assign(
                     Place::new(loc_a),
@@ -642,7 +644,6 @@ fn sequential_binary_ops() {
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
-            // b = a * 2 = 26
             Statement {
                 kind: StatementKind::Assign(
                     Place::new(loc_b),
@@ -653,7 +654,6 @@ fn sequential_binary_ops() {
                 ),
                 source_info: SourceInfo::new(Span::DUMMY),
             },
-            // result = b - 6 = 20
             Statement {
                 kind: StatementKind::Assign(
                     Place::new(loc_result),
@@ -682,15 +682,15 @@ fn sequential_binary_ops() {
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(1)),
+        interp.get_local_value(LocalIdx::from_usize(1)),
         Some(&InterpValue::Int(13))
     );
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(2)),
+        interp.get_local_value(LocalIdx::from_usize(2)),
         Some(&InterpValue::Int(26))
     );
     assert_eq!(
-        interp.get_local_value(LocalIdx::from_raw(3)),
+        interp.get_local_value(LocalIdx::from_usize(3)),
         Some(&InterpValue::Int(20))
     );
 }
@@ -701,11 +701,11 @@ fn sequential_binary_ops() {
 fn get_local_value_none_for_uninitialized() {
     let tcx = glyim_test::test_frozen_ty_ctx();
     let mut body = Body::dummy(dummy_def_id());
-    body.locals = IndexVec::from_raw(vec![
+    body.locals = IndexVec::from_vec(vec![
         local_decl(Ty::UNIT, Mutability::Mut),
         local_decl(Ty::BOOL, Mutability::Mut),
     ]);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![],
         terminator: Terminator {
             kind: TerminatorKind::Return,
@@ -715,7 +715,7 @@ fn get_local_value_none_for_uninitialized() {
     }]);
     let mut interp = Interpreter::new(&tcx);
     interp.run_body(&body).unwrap();
-    assert_eq!(interp.get_local_value(LocalIdx::from_raw(1)), None);
+    assert_eq!(interp.get_local_value(LocalIdx::from_usize(1)), None);
 }
 
 // ============ Step limit 0 ============
