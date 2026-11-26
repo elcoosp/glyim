@@ -46,6 +46,20 @@ inventory    = [
 ]
 
 [[feature]]
+id            = "TOOL-CLI-OPT-BISECT"
+title         = "`--opt-bisect-limit` flag: bisect the MIR pass plan (M5.11)"
+area          = "tooling.cli"
+tier          = "tooling"
+spec          = "docs/roadmaps/glyim-master-plan.md"
+target_level  = "L4"
+backends      = ["gam", "llvm"]
+owner_lane    = "B"
+requires      = ["TOOL-CLI-OPT-LEVEL"]
+inventory    = [
+    "cli.flag.opt-bisect-limit",
+]
+
+[[feature]]
 id            = "TOOL-CLI-TARGET"
 title         = "`--target` triple flag for cross-compilation"
 area          = "tooling.cli"
