@@ -28,10 +28,10 @@ impl MirPass for CorruptingPass {
     }
     fn run(&self, _ctx: &glyim_type::TyCtx, body: &mut Body) {
         // `get_mut` so the construction never panics if block 0 is absent.
-        if let Some(data) = body.basic_blocks.get_mut(BasicBlockIdx::from_raw(0)) {
+        if let Some(data) = body.basic_blocks.get_mut(BasicBlockIdx::from_usize(0)) {
             data.terminator = Terminator {
                 kind: TerminatorKind::Goto {
-                    target: BasicBlockIdx::from_raw(999),
+                    target: BasicBlockIdx::from_usize(999),
                 },
                 source_info: SourceInfo::new(Span::DUMMY),
             };
