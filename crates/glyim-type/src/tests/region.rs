@@ -34,11 +34,11 @@ fn region_vars_preserved_after_freeze() {
         let _v1 = c.new_region_var(Region::Static);
     });
     assert!(matches!(
-        frozen.region(RegionVid::from_raw(0)),
+        frozen.region(RegionVid::from_usize(0)),
         Region::Erased
     ));
     assert!(matches!(
-        frozen.region(RegionVid::from_raw(1)),
+        frozen.region(RegionVid::from_usize(1)),
         Region::Static
     ));
 }
