@@ -133,7 +133,7 @@ fn explain_entry_covers_every_registered_code() {
         let display = entry.code.to_string();
         let looked = explain_entry(&display)
             .unwrap_or_else(|| panic!("explain_entry must accept its own display form {display}"));
-        assert!(looked.code == entry.code);
+        assert_eq!(looked.code, entry.code);
         assert!(!looked.title.is_empty());
         assert!(!looked.explanation.is_empty());
     }
