@@ -5,14 +5,14 @@ use glyim_test::test_ty_ctx;
 use glyim_type::{Ty, TyCtxMut, TyKind};
 
 fn dummy_def_id() -> DefId {
-    DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0))
+    DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(0))
 }
 
 fn build_callee_body(tcx: &mut TyCtxMut, val: i128) -> Body {
     let mut body = Body::dummy(dummy_def_id());
-    let ret_local = LocalIdx::from_raw(0);
+    let ret_local = LocalIdx::from_usize(0);
     let i32_ty = tcx.mk_ty(TyKind::Int(IntTy::I32));
-    body.locals = IndexVec::from_raw(vec![LocalDecl {
+    body.locals = IndexVec::from_vec(vec![LocalDecl {
         ty: i32_ty,
         mutability: Mutability::Mut,
         source_info: SourceInfo::new(Span::DUMMY),
@@ -22,7 +22,7 @@ fn build_callee_body(tcx: &mut TyCtxMut, val: i128) -> Body {
         ty: i32_ty,
         span: Span::DUMMY,
     };
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(Place::new(ret_local), Rvalue::Use(Operand::Constant(c))),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -45,8 +45,8 @@ fn interpret_function_call() {
     let i32_ty = tcx_mut.mk_ty(TyKind::Int(IntTy::I32));
     let caller_body = {
         let mut body = Body::dummy(dummy_def_id());
-        let ret_local = LocalIdx::from_raw(1);
-        body.locals = IndexVec::from_raw(vec![
+        let ret_local = LocalIdx::from_usize(1);
+        body.locals = IndexVec::from_vec(vec![
             LocalDecl {
                 ty: Ty::UNIT,
                 mutability: Mutability::Mut,
@@ -58,19 +58,19 @@ fn interpret_function_call() {
                 source_info: SourceInfo::new(Span::DUMMY),
             },
         ]);
-        body.basic_blocks = IndexVec::from_raw(vec![
+        body.basic_blocks = IndexVec::from_vec(vec![
             BasicBlockData {
                 statements: vec![],
                 terminator: Terminator {
                     kind: TerminatorKind::Call {
                         func: Operand::Constant(MirConst {
-                            kind: MirConstKind::Int(0), // placeholder; interpreter resolves by def_id
+                            kind: MirConstKind::Int(0),
                             ty: i32_ty,
                             span: Span::DUMMY,
                         }),
                         args: vec![],
                         destination: Place::new(ret_local),
-                        target: Some(BasicBlockIdx::from_raw(1)),
+                        target: Some(BasicBlockIdx::from_usize(1)),
                         cleanup: None,
                     },
                     source_info: SourceInfo::new(Span::DUMMY),
@@ -92,7 +92,7 @@ fn interpret_function_call() {
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(callee_id, callee_body);
     interp.run_body(&caller_body).unwrap();
-    let val = interp.get_local_value(LocalIdx::from_raw(1)).unwrap();
+    let val = interp.get_local_value(LocalIdx::from_usize(1)).unwrap();
     assert_eq!(val, &InterpValue::Int(42));
 }
 
@@ -109,8 +109,8 @@ fn interpret_indirect_function_call() {
     let caller_body = {
         let mut body = Body::dummy(dummy_def_id());
         // local 0: UNIT (return), local 1: i32 (call result), local 2: fn ptr
-        let fn_ptr_local = LocalIdx::from_raw(2);
-        body.locals = IndexVec::from_raw(vec![
+        let fn_ptr_local = LocalIdx::from_usize(2);
+        body.locals = IndexVec::from_vec(vec![
             LocalDecl {
                 ty: Ty::UNIT,
                 mutability: Mutability::Mut,
@@ -122,20 +122,20 @@ fn interpret_indirect_function_call() {
                 source_info: SourceInfo::new(Span::DUMMY),
             },
             LocalDecl {
-                ty: i32_ty, // type of the fn-reference slot (not semantically checked here)
+                ty: i32_ty,
                 mutability: Mutability::Mut,
                 source_info: SourceInfo::new(Span::DUMMY),
             },
         ]);
         // BB0: store the function reference into local 2, then call indirectly.
-        body.basic_blocks = IndexVec::from_raw(vec![
+        body.basic_blocks = IndexVec::from_vec(vec![
             BasicBlockData {
                 statements: vec![Statement {
                     kind: StatementKind::Assign(
                         Place::new(fn_ptr_local),
                         Rvalue::Use(Operand::Constant(MirConst {
                             kind: MirConstKind::Fn(
-                                FnDefId::from_raw(0),
+                                FnDefId::from_usize(0),
                                 glyim_type::Substitution::empty(),
                             ),
                             ty: i32_ty,
@@ -148,8 +148,8 @@ fn interpret_indirect_function_call() {
                     kind: TerminatorKind::Call {
                         func: Operand::Copy(Place::new(fn_ptr_local)),
                         args: vec![],
-                        destination: Place::new(LocalIdx::from_raw(1)),
-                        target: Some(BasicBlockIdx::from_raw(1)),
+                        destination: Place::new(LocalIdx::from_usize(1)),
+                        target: Some(BasicBlockIdx::from_usize(1)),
                         cleanup: None,
                     },
                     source_info: SourceInfo::new(Span::DUMMY),
@@ -171,7 +171,7 @@ fn interpret_indirect_function_call() {
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(callee_id, callee_body);
     interp.run_body(&caller_body).unwrap();
-    let val = interp.get_local_value(LocalIdx::from_raw(1)).unwrap();
+    let val = interp.get_local_value(LocalIdx::from_usize(1)).unwrap();
     assert_eq!(val, &InterpValue::Int(42));
 }
 
@@ -189,37 +189,37 @@ fn interpret_direct_closure_call_with_capture() {
     let i32_ty = tcx_mut.mk_ty(TyKind::Int(IntTy::I32));
 
     // Closure body: `_0 = arg0 (capture) + arg1 (param)`; arg0 = capture, arg1 = param.
-    let closure_id = DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(1));
+    let closure_id = DefId::new(CrateId::from_usize(0), LocalDefId::from_usize(1));
     let closure_body = {
         let mut body = Body::dummy(closure_id);
-        body.locals = IndexVec::from_raw(vec![
+        body.locals = IndexVec::from_vec(vec![
             LocalDecl {
                 ty: i32_ty,
                 mutability: Mutability::Mut,
                 source_info: SourceInfo::new(Span::DUMMY),
-            }, // _0 return
+            },
             LocalDecl {
                 ty: i32_ty,
                 mutability: Mutability::Not,
                 source_info: SourceInfo::new(Span::DUMMY),
-            }, // _1 capture
+            },
             LocalDecl {
                 ty: i32_ty,
                 mutability: Mutability::Not,
                 source_info: SourceInfo::new(Span::DUMMY),
-            }, // _2 param
+            },
         ]);
         // _0 = _1 + _2
         let sum = Rvalue::BinaryOp(
             glyim_core::primitives::BinOp::Add,
             [
-                Operand::Copy(Place::new(LocalIdx::from_raw(1))),
-                Operand::Copy(Place::new(LocalIdx::from_raw(2))),
+                Operand::Copy(Place::new(LocalIdx::from_usize(1))),
+                Operand::Copy(Place::new(LocalIdx::from_usize(2))),
             ],
         );
-        body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+        body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
             statements: vec![Statement {
-                kind: StatementKind::Assign(Place::new(LocalIdx::from_raw(0)), sum),
+                kind: StatementKind::Assign(Place::new(LocalIdx::from_usize(0)), sum),
                 source_info: SourceInfo::new(Span::DUMMY),
             }],
             terminator: Terminator {
@@ -235,8 +235,8 @@ fn interpret_direct_closure_call_with_capture() {
     // then call with argument `param=32`. Expected result = 10 + 32 = 42.
     let caller_body = {
         let mut body = Body::dummy(dummy_def_id());
-        let closure_local = LocalIdx::from_raw(2); // holds the closure aggregate
-        body.locals = IndexVec::from_raw(vec![
+        let closure_local = LocalIdx::from_usize(2); // holds the closure aggregate
+        body.locals = IndexVec::from_vec(vec![
             LocalDecl {
                 ty: Ty::UNIT,
                 mutability: Mutability::Mut,
@@ -246,21 +246,24 @@ fn interpret_direct_closure_call_with_capture() {
                 ty: i32_ty,
                 mutability: Mutability::Mut,
                 source_info: SourceInfo::new(Span::DUMMY),
-            }, // _1 result
+            },
             LocalDecl {
                 ty: i32_ty,
                 mutability: Mutability::Mut,
                 source_info: SourceInfo::new(Span::DUMMY),
-            }, // _2 closure aggregate
+            },
         ]);
         let closure_agg = Rvalue::Aggregate(
             glyim_mir::AggregateKind::Closure(
-                glyim_core::def_id::ClosureId::from_raw(1),
+                glyim_core::def_id::ClosureId::from_usize(1),
                 glyim_type::Substitution::empty(),
             ),
             vec![
                 Operand::Constant(MirConst {
-                    kind: MirConstKind::Fn(FnDefId::from_raw(1), glyim_type::Substitution::empty()),
+                    kind: MirConstKind::Fn(
+                        FnDefId::from_usize(1),
+                        glyim_type::Substitution::empty(),
+                    ),
                     ty: i32_ty,
                     span: Span::DUMMY,
                 }),
@@ -271,7 +274,7 @@ fn interpret_direct_closure_call_with_capture() {
                 }),
             ],
         );
-        body.basic_blocks = IndexVec::from_raw(vec![
+        body.basic_blocks = IndexVec::from_vec(vec![
             BasicBlockData {
                 statements: vec![Statement {
                     kind: StatementKind::Assign(Place::new(closure_local), closure_agg),
@@ -285,8 +288,8 @@ fn interpret_direct_closure_call_with_capture() {
                             ty: i32_ty,
                             span: Span::DUMMY,
                         })],
-                        destination: Place::new(LocalIdx::from_raw(1)),
-                        target: Some(BasicBlockIdx::from_raw(1)),
+                        destination: Place::new(LocalIdx::from_usize(1)),
+                        target: Some(BasicBlockIdx::from_usize(1)),
                         cleanup: None,
                     },
                     source_info: SourceInfo::new(Span::DUMMY),
@@ -309,7 +312,7 @@ fn interpret_direct_closure_call_with_capture() {
     let mut interp = Interpreter::new(&tcx);
     interp.add_function(closure_id, closure_body);
     interp.run_body(&caller_body).unwrap();
-    let val = interp.get_local_value(LocalIdx::from_raw(1)).unwrap();
+    let val = interp.get_local_value(LocalIdx::from_usize(1)).unwrap();
     assert_eq!(
         val,
         &InterpValue::Int(42),
