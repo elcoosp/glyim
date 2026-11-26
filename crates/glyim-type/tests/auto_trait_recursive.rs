@@ -41,10 +41,10 @@ fn mutually_recursive_send_sync() {
     let i32_ty = ctx_mut.mk_ty(glyim_type::TyKind::Int(IntTy::I32));
 
     // IDs for dummy and real ADTs.
-    let id_a = AdtId::from_raw(2000);
-    let id_b = AdtId::from_raw(2001);
-    let id_a2 = AdtId::from_raw(2002);
-    let id_b2 = AdtId::from_raw(2003);
+    let id_a = AdtId::from_usize(2000);
+    let id_b = AdtId::from_usize(2001);
+    let id_a2 = AdtId::from_usize(2002);
+    let id_b2 = AdtId::from_usize(2003);
 
     // 1. Register dummy ADTs.
     let dummy_def = mk_struct_def(&mut ctx_mut, vec![("data", i32_ty)]);
