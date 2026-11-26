@@ -76,7 +76,7 @@ fn downcast_on_direct_tagged_enum_emits_tag_offset() {
     // offset before the field projections run (plan §20.1).
     let enum_ty = Ty::ERROR;
     let variant_struct_ty = Ty::UNIT;
-    let field_idx = FieldIdx::from_raw(0);
+    let field_idx = FieldIdx::from_usize(0);
     let tag_offset = 4u64;
     let field_offset = 8u64;
 
@@ -84,22 +84,22 @@ fn downcast_on_direct_tagged_enum_emits_tag_offset() {
         .with_tag_offset(enum_ty, tag_offset)
         .with_field_offset(variant_struct_ty, field_idx, field_offset)
         .with_size(enum_ty, 32)
-        .with_variant_type(enum_ty, VariantIdx::from_raw(0), variant_struct_ty);
+        .with_variant_type(enum_ty, VariantIdx::from_usize(0), variant_struct_ty);
 
     let backend = BytecodeBackend::with_ty_ctx(
         std::sync::Arc::new(glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze()),
         glyim_core::TargetInfo::default(),
     )
     .with_layout_provider(Box::new(layout_provider));
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let place = Place {
         local,
         projection: Box::new([
-            ProjectionElem::Downcast(VariantIdx::from_raw(0)),
+            ProjectionElem::Downcast(VariantIdx::from_usize(0)),
             ProjectionElem::Field(field_idx),
         ]),
     };
-    let local_tys = IndexVec::from_raw(vec![LocalDecl {
+    let local_tys = IndexVec::from_vec(vec![LocalDecl {
         ty: enum_ty,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
@@ -123,16 +123,16 @@ fn downcast_on_direct_tagged_enum_emits_tag_offset() {
 
 #[test]
 fn downcast_projection_no_extra_instruction() {
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let place_no_downcast = Place {
         local,
         projection: Box::new([]),
     };
     let place_with_downcast = Place {
         local,
-        projection: Box::new([ProjectionElem::Downcast(VariantIdx::from_raw(0))]),
+        projection: Box::new([ProjectionElem::Downcast(VariantIdx::from_usize(0))]),
     };
-    let local_tys = IndexVec::from_raw(vec![LocalDecl {
+    let local_tys = IndexVec::from_vec(vec![LocalDecl {
         ty: Ty::UNIT,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
@@ -156,24 +156,24 @@ fn downcast_projection_no_extra_instruction() {
 fn downcast_with_field_emits_correct_offset() {
     let enum_ty = Ty::ERROR;
     let variant_struct_ty = Ty::UNIT;
-    let field_idx = FieldIdx::from_raw(0);
+    let field_idx = FieldIdx::from_usize(0);
     let expected_offset = 16u64;
 
     let layout_provider = TestLayoutProvider::new()
         .with_field_offset(variant_struct_ty, field_idx, expected_offset)
         .with_size(enum_ty, 32)
-        .with_variant_type(enum_ty, VariantIdx::from_raw(0), variant_struct_ty);
+        .with_variant_type(enum_ty, VariantIdx::from_usize(0), variant_struct_ty);
 
     let backend = BytecodeBackend::with_ty_ctx(std::sync::Arc::new(glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze()), glyim_core::TargetInfo::default()).with_layout_provider(Box::new(layout_provider));
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let place = Place {
         local,
         projection: Box::new([
-            ProjectionElem::Downcast(VariantIdx::from_raw(0)),
+            ProjectionElem::Downcast(VariantIdx::from_usize(0)),
             ProjectionElem::Field(field_idx),
         ]),
     };
-    let local_tys = IndexVec::from_raw(vec![LocalDecl {
+    let local_tys = IndexVec::from_vec(vec![LocalDecl {
         ty: enum_ty,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
@@ -195,12 +195,12 @@ fn downcast_with_field_emits_correct_offset() {
 
 #[test]
 fn downcast_does_not_affect_pointer_arithmetic() {
-    let local = LocalIdx::from_raw(1);
+    let local = LocalIdx::from_usize(1);
     let place = Place {
         local,
-        projection: Box::new([ProjectionElem::Downcast(VariantIdx::from_raw(0))]),
+        projection: Box::new([ProjectionElem::Downcast(VariantIdx::from_usize(0))]),
     };
-    let local_tys = IndexVec::from_raw(vec![
+    let local_tys = IndexVec::from_vec(vec![
         LocalDecl {
             ty: Ty::UNIT,
             mutability: Mutability::Not,
@@ -225,26 +225,26 @@ fn downcast_does_not_affect_pointer_arithmetic() {
 
 #[test]
 fn downcast_before_multiple_fields_no_extra_ops() {
-    let field1 = FieldIdx::from_raw(0);
-    let field2 = FieldIdx::from_raw(1);
+    let field1 = FieldIdx::from_usize(0);
+    let field2 = FieldIdx::from_usize(1);
     let variant_ty = Ty::ERROR;
     let layout_provider = TestLayoutProvider::new()
         .with_field_offset(variant_ty, field1, 8)
         .with_field_offset(variant_ty, field2, 12)
         .with_size(variant_ty, 24)
-        .with_variant_type(Ty::ERROR, VariantIdx::from_raw(0), variant_ty);
+        .with_variant_type(Ty::ERROR, VariantIdx::from_usize(0), variant_ty);
 
     let backend = BytecodeBackend::with_ty_ctx(std::sync::Arc::new(glyim_type::TyCtxMut::new(glyim_core::Interner::default()).freeze()), glyim_core::TargetInfo::default()).with_layout_provider(Box::new(layout_provider));
-    let local = LocalIdx::from_raw(0);
+    let local = LocalIdx::from_usize(0);
     let place = Place {
         local,
         projection: Box::new([
-            ProjectionElem::Downcast(VariantIdx::from_raw(0)),
+            ProjectionElem::Downcast(VariantIdx::from_usize(0)),
             ProjectionElem::Field(field1),
             ProjectionElem::Field(field2),
         ]),
     };
-    let local_tys = IndexVec::from_raw(vec![LocalDecl {
+    let local_tys = IndexVec::from_vec(vec![LocalDecl {
         ty: Ty::ERROR,
         mutability: Mutability::Not,
         source_info: SourceInfo::new(Span::DUMMY),
