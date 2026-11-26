@@ -14,8 +14,8 @@ use std::sync::Arc;
 fn v12_t01_empty_function_ret_void() {
     let backend = LlvmBackend::new();
     let body = Arc::new(Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(0),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
     )));
     let result = backend.generate_function(&body);
     assert!(
@@ -27,11 +27,14 @@ fn v12_t01_empty_function_ret_void() {
 #[test]
 fn v12_t02_function_with_if_conditional_branch() {
     let backend = LlvmBackend::new();
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
 
     let _bb0 = body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(1),
+            target: BasicBlockIdx::from_usize(1),
         },
         source_info: SourceInfo::new(Span::DUMMY),
     }));
@@ -52,7 +55,10 @@ fn v12_t02_function_with_if_conditional_branch() {
 #[test]
 fn v12_t03_switch_int_on_integer() {
     let backend = LlvmBackend::new();
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
 
     // Add a local with an integer type to switch on
     body.locals.push(LocalDecl {
@@ -63,18 +69,18 @@ fn v12_t03_switch_int_on_integer() {
 
     let _bb0 = body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(1),
+            target: BasicBlockIdx::from_usize(1),
         },
         source_info: SourceInfo::new(Span::DUMMY),
     }));
 
     let _bb1 = body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::SwitchInt {
-            discr: Operand::Copy(Place::new(LocalIdx::from_raw(1))),
+            discr: Operand::Copy(Place::new(LocalIdx::from_usize(1))),
             switch_ty: Ty::BOOL,
             targets: SwitchTargets::if_switch(
-                BasicBlockIdx::from_raw(2),
-                BasicBlockIdx::from_raw(3),
+                BasicBlockIdx::from_usize(2),
+                BasicBlockIdx::from_usize(3),
             ),
         },
         source_info: SourceInfo::new(Span::DUMMY),
@@ -101,7 +107,10 @@ fn v12_t03_switch_int_on_integer() {
 #[test]
 fn v12_t04_unreachable() {
     let backend = LlvmBackend::new();
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
 
     let _bb0 = body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Unreachable,
@@ -119,18 +128,21 @@ fn v12_t04_unreachable() {
 #[test]
 fn v12_t05_basic_block_ordering_preserved() {
     let backend = LlvmBackend::new();
-    let mut body = Body::dummy(DefId::new(CrateId::from_raw(0), LocalDefId::from_raw(0)));
+    let mut body = Body::dummy(DefId::new(
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(0),
+    ));
 
     let _bb0 = body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(1),
+            target: BasicBlockIdx::from_usize(1),
         },
         source_info: SourceInfo::new(Span::DUMMY),
     }));
 
     let _bb1 = body.basic_blocks.push(BasicBlockData::new(Terminator {
         kind: TerminatorKind::Goto {
-            target: BasicBlockIdx::from_raw(2),
+            target: BasicBlockIdx::from_usize(2),
         },
         source_info: SourceInfo::new(Span::DUMMY),
     }));
