@@ -41,14 +41,14 @@ fn local_decl(ty: Ty, mutability: Mutability) -> LocalDecl {
 /// `fn main() -> i32 { <value> }` at the MIR level.
 fn body_returning(value: MirConst, owner_raw: u32) -> Body {
     let mut body = Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(owner_raw),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(owner_raw as usize),
     ));
-    body.locals = IndexVec::from_raw(vec![local_decl(value.ty, Mutability::Not)]);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.locals = IndexVec::from_vec(vec![local_decl(value.ty, Mutability::Not)]);
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::Use(Operand::Constant(value)),
             ),
             source_info: SourceInfo::new(Span::DUMMY),
@@ -73,14 +73,14 @@ fn body_div_by_zero(owner_raw: u32, tcx: &mut TyCtxMut) -> Body {
         span: Span::DUMMY,
     };
     let mut body = Body::dummy(DefId::new(
-        CrateId::from_raw(0),
-        LocalDefId::from_raw(owner_raw),
+        CrateId::from_usize(0),
+        LocalDefId::from_usize(owner_raw as usize),
     ));
-    body.locals = IndexVec::from_raw(vec![local_decl(i32_ty, Mutability::Not)]);
-    body.basic_blocks = IndexVec::from_raw(vec![BasicBlockData {
+    body.locals = IndexVec::from_vec(vec![local_decl(i32_ty, Mutability::Not)]);
+    body.basic_blocks = IndexVec::from_vec(vec![BasicBlockData {
         statements: vec![Statement {
             kind: StatementKind::Assign(
-                Place::new(LocalIdx::from_raw(0)),
+                Place::new(LocalIdx::from_usize(0)),
                 Rvalue::BinaryOp(
                     BinOp::Div,
                     [
