@@ -129,7 +129,7 @@ impl CompilerPhase for EmitPhase<'_> {
         }
 
         let cache = PipelineMonoCache::from_items(&self.mono.mono_items);
-        ctx.db.set_mono_cache(cache.symbols().to_vec());
+        ctx.db.set_mono_cache(cache.into_symbols());
 
         let max_cgus = self.codegen_units.unwrap_or_else(compute_max_cgus);
         let cgus = partition(&self.mono.mono_items, max_cgus);
