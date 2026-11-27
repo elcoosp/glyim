@@ -1015,6 +1015,7 @@ dependencies = [
 name = "glyim-db"
 version = "0.10.0"
 dependencies = [
+ "glyim-bench",
  "glyim-core",
  "glyim-diag",
  "glyim-span",
