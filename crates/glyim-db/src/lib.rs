@@ -140,17 +140,41 @@ impl Database {
     }
 
     /// `set_mono_cache`.
-    pub fn set_mono_cache(&self, items: Vec<String>) {
+    pub fn set_mono_cache(&self, mut items: Vec<String>) {
         // Plan §3.1: the mono cache must not silently accumulate duplicate items
         // when the same monomorphization is requested more than once. De-duplicate
         // while preserving first-seen order so lookups via `mono_cache()` remain
         // stable and O(n) insertion cost stays bounded.
-        let mut seen = std::collections::HashSet::new();
-        let deduped: Vec<String> = items
-            .into_iter()
-            .filter(|item| seen.insert(item.clone()))
-            .collect();
-        *self.mono_cache.write() = Some(deduped);
+        //
+        // Plan M2.7 quick-win — "`set_mono_cache` without per-item string
+        // clones": the previous implementation cloned every input item into
+        // the dedup set (`seen.insert(item.clone())`), one `String`
+        // allocation per symbol on every compile's emit path. The rewrite
+        // never clones a string: pass 1 records each symbol's first index
+        // by *borrowing* the input (`BTreeMap<&str, usize>`), collapses it
+        // into a first-occurrence index set (`BTreeSet<usize>`, a value
+        // type that outlives the borrow), and pass 2 *moves* first-seen
+        // strings into place with `swap` before truncating the tail. The
+        // ordered collections are the C6 choice: every operation is
+        // deterministic regardless of hash seeds, and only their internal
+        // nodes allocate.
+        let first_seen: std::collections::BTreeSet<usize> = {
+            let mut first_of: std::collections::BTreeMap<&str, usize> =
+                std::collections::BTreeMap::new();
+            for (idx, item) in items.iter().enumerate() {
+                first_of.entry(item.as_str()).or_insert(idx);
+            }
+            first_of.into_values().collect()
+        };
+        let mut write = 0;
+        for read in 0..items.len() {
+            if first_seen.contains(&read) {
+                items.swap(write, read);
+                write += 1;
+            }
+        }
+        items.truncate(write);
+        *self.mono_cache.write() = Some(items);
     }
 
     /// `mono_cache`.
@@ -252,5 +276,40 @@ mod database_tests {
             items,
             &vec!["foo".to_string(), "bar".to_string(), "baz".to_string(),]
         );
+    }
+
+    #[test]
+    fn test_mono_cache_clone_free_dedup_edges() {
+        // Plan M2.7: the clone-free rewrite keeps the §3.1 contract on the
+        // edge shapes the swap-compaction pass must survive — empty input,
+        // a single symbol, all-duplicates, and a 2k interleaved input whose
+        // first-seen order must survive the moves.
+        let db = Database::default();
+
+        db.set_mono_cache(Vec::new());
+        assert!(db.mono_cache().as_ref().expect("populated").is_empty());
+
+        db.set_mono_cache(vec!["only".to_string()]);
+        assert_eq!(
+            db.mono_cache().as_ref().expect("populated"),
+            &["only".to_string()]
+        );
+
+        db.set_mono_cache(vec!["x".to_string(), "x".to_string(), "x".to_string()]);
+        assert_eq!(
+            db.mono_cache().as_ref().expect("populated"),
+            &["x".to_string()]
+        );
+
+        // Every symbol four times, interleaved: first-seen order is
+        // sym_0..sym_499 exactly.
+        let big: Vec<String> = (0..2_000).map(|i| format!("sym_{}", i % 500)).collect();
+        db.set_mono_cache(big);
+        let cache = db.mono_cache();
+        let items = cache.as_ref().expect("populated");
+        assert_eq!(items.len(), 500);
+        for (i, item) in items.iter().enumerate() {
+            assert_eq!(item, &format!("sym_{i}"));
+        }
     }
 }
