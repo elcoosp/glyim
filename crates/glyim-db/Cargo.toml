@@ -23,6 +23,12 @@ tracing = { workspace = true }
 [dev-dependencies]
 tempfile = "3.27"
 glyim-test = { workspace = true }
+# The M2.7 `set_mono_cache` clone-free pin (tests/mono_cache_alloc.rs)
+# counts real allocation events through the harness's opt-in counting
+# allocator (`counting_allocator!` is exported exactly for consumers to
+# adopt it per binary). dev-only: glyim-bench does not depend on glyim-db,
+# so no cycle exists.
+glyim-bench = { path = "../../tools/glyim-bench" }
 
 [[bench]]
 name = "cache_metrics"
