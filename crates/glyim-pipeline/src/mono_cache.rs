@@ -28,8 +28,16 @@ impl PipelineMonoCache {
         PipelineMonoCache { symbols }
     }
 
-    pub(crate) fn symbols(&self) -> &[String] {
-        &self.symbols
+    /// The symbols, consuming the cache.
+    ///
+    /// Plan M2.7 quick-win companion: the emit phase's only use of a built
+    /// [`PipelineMonoCache`] was to copy [`PipelineMonoCache::symbols`]
+    /// into `Database::set_mono_cache`, re-cloning every mangled symbol a
+    /// second time after `from_items` had already cloned it out of the
+    /// mono items. A consuming accessor moves the owned `Vec<String>`
+    /// straight into the database instead of re-cloning it.
+    pub(crate) fn into_symbols(self) -> Vec<String> {
+        self.symbols
     }
 }
 
