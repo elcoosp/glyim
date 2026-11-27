@@ -2,13 +2,22 @@
 # `from_raw` ID constructors were deleted by the M3.1 R3 codemod (every ID
 # family is built via its sanctioned `from_usize(usize)` factory; the only
 # raw wrap left is `IdxLike::from_u32`, which is `IndexVec` machinery).
-# These entries are the deliberate watchlist: if one of the
-# `#[cfg(test)]`-only escape hatches below is ever re-widened to a
-# production constructor, any external call site trips this lint instead of
-# silently reopening the escape hatch.
-disallowed-methods = [
-    "glyim_span::FileId::from_raw",
-    "glyim_span::ByteIdx::from_raw",
-    "glyim_span::SyntaxContext::from_raw",
-    "glyim_span::ExpnId::from_raw",
-]
+#
+# An earlier revision of this file listed the four remaining
+# `from_raw` escape hatches (`FileId`, `ByteIdx`, `SyntaxContext`,
+# `ExpnId`) here. All four are `#[cfg(test)] pub(crate)` inside
+# `crates/glyim-span` — deliberately absent from every production build —
+# and `clippy::disallowed_methods` can only fire on paths that *resolve in
+# a production compilation unit*. Listing them produced two failure modes
+# instead of a guard: the entries errored inside glyim-span's own test
+# builds (the sanctioned harness that exercises the round-trip), and every
+# other crate emitted "does not refer to a reachable function" per
+# compilation unit, which `-D warnings` turns into a workspace-wide
+# failure. The list is therefore empty, and the defence is the one the
+# M3.1 Round 2 docs name: `cfg(test)` + `pub(crate)` visibility (a
+# production minting path requires editing `crates/glyim-span/src/lib.rs`,
+# which is a review-visible diff) plus the CT-1 ledger ratchet
+# (`tools/glyim-metrics` `ct1_from_raw_ratchet.rs`).
+#
+# If a *production* raw constructor ever returns, re-add it here — entries
+# for reachable functions are the supported configuration.
